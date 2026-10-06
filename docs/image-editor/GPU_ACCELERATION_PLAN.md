@@ -230,6 +230,45 @@ Resource peaks are sampled during the full profile run, including warmups and
 cache priming. Native manual panel inspection and macOS/Linux measurements
 remain pending.
 
+## Layer raster cache measurement
+
+The session's normal composition path now caches premultiplied rasterized layer
+images, including each layer's operations and mask, with a 64 MiB per-session
+limit. The cache preserves valid entries when another image would exceed the
+limit; that image is rendered without storage. Layer content/resource changes
+invalidate the affected entry, while selection, visibility, opacity, and stack
+reordering reuse it. Undo/Redo and document/canvas/source replacement clear or
+synchronize entries. Transient previews and exports continue through the
+uncached renderer. The collector reports `layer_raster_cache_hit`,
+`layer_raster_cache_miss`, and `layer_raster_cache_bypass`.
+
+The schema v2 report
+[`performance-after-layer-raster-cache-windows-2026-10-06.json`](performance-after-layer-raster-cache-windows-2026-10-06.json)
+records a Release run on the same reference PC, with six profiles, three
+warmups, and 30 measured iterations per cold and warm mode. Cold sessions
+rebuild the cache; the warm session reuses it. Every profile reported matching
+cold/warm pixels and 30 cold group-thumbnail renders versus zero warm renders.
+Wall-time averages/p95 are cold after this change, warm after the earlier group
+thumbnail cache, and warm with both caches active:
+
+| CPU profile | Canvas | Cold avg/p95 after layer cache (ms) | Warm avg/p95 after group cache (ms) | Warm avg/p95 after layer cache (ms) | Cold misses / warm hits / bypasses | Retained layer pixels (MiB) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Reference | 1920×1080 | 140.91 / 159.46 | 86.44 / 91.80 | 6.82 / 7.67 | 120 / 120 / 0 | 31.6 |
+| Mask-heavy | 1920×1080 | 610.63 / 656.08 | 386.35 / 429.06 | 24.44 / 30.47 | 120 / 120 / 0 | 31.6 |
+| Stroke-heavy | 1920×1080 | 997.56 / 1,134.70 | 696.62 / 785.30 | 7.32 / 7.99 | 120 / 120 / 0 | 31.6 |
+| Large image | 3840×2160 | 298.32 / 353.80 | 176.30 / 191.32 | 117.75 / 134.37 | 60 / 60 / 120 | 63.3 |
+| Repeated source | 1920×1080 | 68.14 / 79.04 | 39.56 / 43.43 | 7.28 / 9.22 | 120 / 120 / 0 | 31.6 |
+| Export | 1920×1080 | 144.70 / 177.29 | 82.46 / 90.38 | 7.93 / 9.62 | 120 / 120 / 0 | 31.6 |
+
+For `large-image`, cold calls include 60 misses and 60 bypasses; warm calls
+include 60 hits and 60 bypasses. Two additional layers do not fit the remaining
+budget. Retained memory peaked at 63.3 MiB, below the 64 MiB limit. The separate
+PNG+JPEG export iteration averaged 593.09 ms (p95 639.06 ms, maximum 742.37 ms);
+it remains uncached.
+These measurements are observations from one PC and do not set a target or
+guarantee a general speedup. The schema v1 and v2 pre-cache reports and the
+post-group-cache report remain unchanged for historical comparison.
+
 ## Shared Video Editor stage 2 delivery
 
 Video Editor remains the first consumer. Its experimental backend now supports

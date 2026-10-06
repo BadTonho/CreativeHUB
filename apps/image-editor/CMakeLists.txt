@@ -17,6 +17,7 @@ add_library(creative-suite-image-editor-core STATIC
     src/core/document/image_document_object_editor.cpp
     src/core/document/image_document_object_editor.h
     src/core/document/image_document_renderer.cpp
+    src/core/document/image_layer_raster_cache.cpp
     src/core/document/image_document_renderer.h
     src/core/document/image_document_utils.h
     src/core/document/image_layer_mask_editor.cpp

@@ -72,8 +72,10 @@ checks and record the OS, application build, and outcome.
 
    The profiles are `reference`, `mask-heavy`, `stroke-heavy`, `large-image`,
    `repeated-source`, and `export`. The version 2 report measures the session's
-   core view-refresh path with cold and warm thumbnail caches, verifies that
-   both modes produce identical pixels, and measures PNG/JPEG export separately.
+   core view-refresh path with cold and warm group-thumbnail and layer-raster
+   caches, verifies that both modes produce identical pixels, and measures
+   PNG/JPEG export separately. Cold mode creates a fresh session per
+   repetition; warm mode reuses the primed session.
    Stage times are aggregated per iteration, so average and p95 use the same
    measured repetitions; each stage also reports its call count. Stage times
    include nested work and must not be added together. Synthetic `.cimg` and
@@ -110,6 +112,30 @@ Each profile rendered its group thumbnail in all 30 cold iterations and in
 zero warm iterations; cold and warm pixels matched. For `stroke-heavy`, warm
 refresh average / p95 changed from 945.04 / 1,005.65 ms to 696.62 / 785.30 ms.
 The full before/after table is in `GPU_ACCELERATION_PLAN.md`.
+
+The subsequent layer-raster-cache Release report is
+[`performance-after-layer-raster-cache-windows-2026-10-06.json`](performance-after-layer-raster-cache-windows-2026-10-06.json).
+It uses schema v2, the same machine, three warmups, and 30 iterations per
+profile and mode. All six profiles reported matching cold/warm pixels; warm
+refresh average / p95 ranged from 6.82 / 7.67 ms (`reference`) to 117.75 /
+134.37 ms (`large-image`). The 4K profile retained at most 63.3 MiB and
+bypassed storage for images that would exceed the 64 MiB session limit. The
+separate PNG/JPEG export average / p95 / maximum was 593.09 / 639.06 / 742.37
+ms. The detailed same-PC comparison with the post-group-cache run is in
+`GPU_ACCELERATION_PLAN.md`.
+
+For manual cache correctness, render a document with multiple editable layers,
+then change only one layer with paint and eraser strokes and change a mask.
+Confirm that its next composition rerasterizes only that layer and that the
+untouched layers report cache hits. Change selection, visibility, opacity, and
+stack order and confirm unchanged layer pixels are reused. Undo/Redo, edit a
+raster resource, resize the canvas, and replace the document; confirm stale
+pixels are not shown. Compare transient excluded-object/eraser previews and
+PNG/JPEG exports with the uncached composition. Finally, run the `large-image`
+profile and verify bypasses keep retained cache memory at or below 64 MiB.
+Automated coverage for these boundaries is in
+`image_editor_performance_test.cpp` and
+`verify_image_editor_benchmark.cmake`.
 
 These are observations from this PC; the before/after difference is not a
 performance guarantee, target, or general hardware requirement. Stage times are

@@ -454,6 +454,7 @@ struct RenderedView {
 struct RefreshMeasurement {
     QJsonObject report;
     RenderedView representative_view;
+    std::uint64_t maximum_retained_layer_cache_bytes = 0;
 };
 
 bool renderSessionView(ImageDocumentSession& session,
@@ -616,6 +617,11 @@ bool runRefreshMeasurement(const SyntheticFixture& fixture,
         appendIterationSamples(before, after,
             elapsed > 0 ? static_cast<std::uint64_t>(elapsed) : 0U, &samples);
         if (measurement != nullptr) {
+            measurement->maximum_retained_layer_cache_bytes = std::max(
+                measurement->maximum_retained_layer_cache_bytes,
+                session.cachedRasterLayerBytes());
+        }
+        if (measurement != nullptr) {
             if (iteration == 0) measurement->representative_view = view;
             else if (!sameRenderedView(measurement->representative_view, view)) {
                 if (error != nullptr) *error = QStringLiteral(
@@ -733,6 +739,14 @@ QJsonObject runProfile(const ProfileDefinition& profile,
         {QStringLiteral("warm"), warm_refresh.report},
         {QStringLiteral("cache_prime_refreshes_excluded"), 1},
         {QStringLiteral("pixel_outputs_match"), pixels_match},
+        {QStringLiteral("layer_raster_cache"), QJsonObject{
+            {QStringLiteral("limit_bytes"), static_cast<qint64>(
+                ImageLayerRasterCache::maximum_bytes)},
+            {QStringLiteral("cold_retained_bytes_max"), static_cast<qint64>(
+                cold_refresh.maximum_retained_layer_cache_bytes)},
+            {QStringLiteral("warm_retained_bytes_max"), static_cast<qint64>(
+                warm_refresh.maximum_retained_layer_cache_bytes)},
+        }},
     };
     QJsonObject report{
         {QStringLiteral("workload"), workload},
@@ -848,7 +862,7 @@ int main(int argc, char* argv[]) {
         {QStringLiteral("application"), QStringLiteral("Image Editor")},
         {QStringLiteral("application_version"), app.applicationVersion()},
         {QStringLiteral("measurement_method"),
-            QStringLiteral("session_view_refresh_with_cold_and_warm_thumbnail_caches")},
+            QStringLiteral("session_view_refresh_with_cold_and_warm_thumbnail_and_layer_raster_caches")},
         {QStringLiteral("timestamp_utc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
         {QStringLiteral("os"), QSysInfo::prettyProductName()},
         {QStringLiteral("os_kernel"), QSysInfo::kernelType() + QStringLiteral(" ") + QSysInfo::kernelVersion()},

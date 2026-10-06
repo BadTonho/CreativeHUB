@@ -4,6 +4,7 @@
 #include "image_document_history.h"
 #include "image_document_store.h"
 #include "image_raster_import.h"
+#include "image_layer_raster_cache.h"
 
 #include <QHash>
 #include <QImage>
@@ -140,6 +141,9 @@ public:
     [[nodiscard]] bool redo();
 
     [[nodiscard]] QImage renderedImage() const;
+    [[nodiscard]] std::uint64_t cachedRasterLayerBytes() const noexcept {
+        return layer_raster_cache_.retainedBytes();
+    }
     [[nodiscard]] QImage renderedImageWithEraseStroke(
         const QVector<QPointF>& points, int diameter,
         std::optional<QPainterPath> clipping_path = {}) const;
@@ -222,6 +226,7 @@ private:
     ImageDocumentHistory history_;
     mutable QHash<QString, LayerThumbnailCacheEntry> layer_thumbnail_cache_;
     mutable QHash<QString, GroupThumbnailCacheEntry> group_thumbnail_cache_;
+    mutable ImageLayerRasterCache layer_raster_cache_;
     ImageDocumentData opacity_edit_snapshot_;
     bool opacity_edit_active_ = false;
 };

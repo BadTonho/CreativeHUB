@@ -129,6 +129,9 @@ const char* imageEditorPerformanceStageName(
     case ImageEditorPerformanceStage::MaskThumbnail: return "mask_thumbnail";
     case ImageEditorPerformanceStage::ThumbnailCacheHit: return "thumbnail_cache_hit";
     case ImageEditorPerformanceStage::ThumbnailCacheMiss: return "thumbnail_cache_miss";
+    case ImageEditorPerformanceStage::LayerRasterCacheHit: return "layer_raster_cache_hit";
+    case ImageEditorPerformanceStage::LayerRasterCacheMiss: return "layer_raster_cache_miss";
+    case ImageEditorPerformanceStage::LayerRasterCacheBypass: return "layer_raster_cache_bypass";
     case ImageEditorPerformanceStage::CanvasPaint: return "canvas_paint";
     case ImageEditorPerformanceStage::ExportRender: return "export_render";
     case ImageEditorPerformanceStage::JpegFlatten: return "jpeg_flatten";

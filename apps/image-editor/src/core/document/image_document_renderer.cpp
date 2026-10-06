@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <utility>
 
 namespace image_editor {
@@ -291,17 +292,37 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
                    const ImageGroupData& group,
                    const QSize& size,
                    const std::atomic_bool* cancellation_requested,
-                   const QStringList& excluded_object_ids);
+                   const QStringList& excluded_object_ids,
+                   ImageLayerRasterCache* layer_raster_cache = nullptr);
 
 QImage renderRasterLayer(const QHash<QString, QImage>& resources,
                          const ImageLayerData& layer,
                          const QSize& size,
                          const std::atomic_bool* cancellation_requested,
-                         const QStringList& excluded_object_ids) {
+                         const QStringList& excluded_object_ids,
+                         ImageLayerRasterCache* layer_raster_cache = nullptr) {
     ImageEditorPerformanceScope layer_scope(
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::LayerComposition);
     if (exportWasCancelled(cancellation_requested)) return {};
+
+    ImageLayerRasterCache::LookupState cache_state =
+        ImageLayerRasterCache::LookupState::Bypass;
+    std::optional<ImageEditorPerformanceScope> cache_scope;
+    if (layer_raster_cache != nullptr && excluded_object_ids.isEmpty()) {
+        const auto cached = layer_raster_cache->lookup(layer, size, resources);
+        cache_state = cached.state;
+        const auto stage = cache_state == ImageLayerRasterCache::LookupState::Hit
+            ? ImageEditorPerformanceStage::LayerRasterCacheHit
+            : (cache_state == ImageLayerRasterCache::LookupState::Miss
+                ? ImageEditorPerformanceStage::LayerRasterCacheMiss
+                : ImageEditorPerformanceStage::LayerRasterCacheBypass);
+        cache_scope.emplace(ImageEditorPerformanceMetrics::instance(), stage);
+        if (cache_state == ImageLayerRasterCache::LookupState::Hit) {
+            return cached.pixels;
+        }
+    }
+
     QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
     if (pixels.isNull()) return {};
     pixels.fill(Qt::transparent);
@@ -321,6 +342,11 @@ QImage renderRasterLayer(const QHash<QString, QImage>& resources,
                                true, cancellation_requested);
         if (!multiplyLayerMask(&pixels, mask, cancellation_requested)) return {};
     }
+    if (layer_raster_cache != nullptr &&
+        cache_state == ImageLayerRasterCache::LookupState::Miss &&
+        !pixels.isNull()) {
+        layer_raster_cache->insert(layer, size, resources, pixels);
+    }
     return pixels;
 }
 
@@ -329,7 +355,8 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
                    const ImageGroupData& group,
                    const QSize& size,
                    const std::atomic_bool* cancellation_requested,
-                   const QStringList& excluded_object_ids) {
+                   const QStringList& excluded_object_ids,
+                   ImageLayerRasterCache* layer_raster_cache) {
     ImageEditorPerformanceScope group_scope(
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::GroupComposition);
@@ -349,7 +376,8 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
         const auto* layer = findLayer(document, layer_id);
         if (layer == nullptr || !layer->visible || layer->opacity == 0) continue;
         QImage pixels = renderRasterLayer(resources,
-            *layer, size, cancellation_requested, excluded_object_ids);
+            *layer, size, cancellation_requested, excluded_object_ids,
+            layer_raster_cache);
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
             painter.end();
             return {};
@@ -376,7 +404,8 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
                            const QImage& source_image,
                        const ImageDocumentData& document,
                        const std::atomic_bool* cancellation_requested = nullptr,
-                       const QStringList& excluded_object_ids = {}) {
+                       const QStringList& excluded_object_ids = {},
+                       ImageLayerRasterCache* layer_raster_cache = nullptr) {
     ImageEditorPerformanceScope composite_scope(
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::Composite);
@@ -424,13 +453,15 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
             const auto* group = findGroup(document, item.id);
             if (group == nullptr || !group->visible || group->opacity == 0) continue;
             pixels = renderGroup(resources, document, *group, size,
-                                 cancellation_requested, excluded_object_ids);
+                                 cancellation_requested, excluded_object_ids,
+                                 layer_raster_cache);
         } else {
             const auto* layer = findLayer(document, item.id);
             if (layer == nullptr || !layer->visible || layer->opacity == 0) continue;
             opacity = layer->opacity / 100.0;
             pixels = renderRasterLayer(resources,
-                *layer, size, cancellation_requested, excluded_object_ids);
+                *layer, size, cancellation_requested, excluded_object_ids,
+                layer_raster_cache);
         }
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
             painter.end();
@@ -649,9 +680,11 @@ QSize ImageDocumentRenderer::documentSize(const ImageDocumentData& document,
 QImage ImageDocumentRenderer::composite(const ImageDocumentData& document,
     const QImage& source_image, const QHash<QString, QImage>& raster_images,
     const QStringList& excluded_object_ids,
-    const std::atomic_bool* cancellation_requested) {
+    const std::atomic_bool* cancellation_requested,
+    ImageLayerRasterCache* layer_raster_cache) {
     return renderComposite(raster_images, source_image, document,
-                           cancellation_requested, excluded_object_ids);
+                           cancellation_requested, excluded_object_ids,
+                           layer_raster_cache);
 }
 
 QImage ImageDocumentRenderer::selectedLayer(const ImageDocumentData& document,

@@ -419,6 +419,20 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   The same-PC post-cache comparison is recorded in
   [`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](performance-after-group-thumbnail-cache-windows-2026-10-06.json);
   its before/after summary is in `GPU_ACCELERATION_PLAN.md`.
+  Normal session composition also keeps premultiplied rasterized layer images
+  in a per-session cache capped at 64 MiB. Entries contain the layer operations
+  and applied mask; visibility, opacity, stack order, and group composition are
+  applied afterward. The cache validates layer operation/mask revisions,
+  canvas dimensions, and raster resource image keys. Paint, eraser, crop, mask,
+  object-content, and raster relink edits invalidate the affected layer; deleted
+  layers are removed, while Undo/Redo and document/canvas/source replacement
+  clear or synchronize entries. Selection, visibility, opacity, and reordering
+  retain valid entries. If an image cannot fit without exceeding the budget,
+  rendering proceeds uncached and existing entries stay resident. Cache
+  hit/miss/bypass timings use the existing metrics collector. Excluded-object
+  and transient previews, thumbnails, and export snapshots bypass this cache.
+  The same-PC post-cache measurements are in
+  [`performance-after-layer-raster-cache-windows-2026-10-06.json`](performance-after-layer-raster-cache-windows-2026-10-06.json).
 
 ## Layer mask ownership and rendering
 

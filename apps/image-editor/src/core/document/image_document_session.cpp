@@ -40,6 +40,7 @@ void ImageDocumentSession::loadRasterSources() {
     raster_errors_.clear();
     layer_thumbnail_cache_.clear();
     invalidateGroupThumbnailCache();
+    layer_raster_cache_.clear();
     for (const auto& layer : data_.layers) for (const auto& op : layer.operations) {
         if (op.kind != OperationKind::RasterImage) continue;
         const QString path = op.raster.source_path;
@@ -156,6 +157,7 @@ bool ImageDocumentSession::relinkRaster(const QString& id, const PreparedRasterI
     raster_errors_.remove(path);
     layer_thumbnail_cache_.clear();
     invalidateGroupThumbnailCache();
+    layer_raster_cache_.invalidateLayer(layer_id);
     return true;
 }
 
@@ -165,7 +167,8 @@ QImage ImageDocumentSession::renderedImageWithObjects(const QVector<ImageObjectP
     preview.source_image_ = source_image_;
     preview.raster_images_ = raster_images_;
     if (!preview.updateObjectsRendered(objects)) return renderedImage();
-    return preview.renderedImage();
+    return ImageDocumentRenderer::composite(
+        preview.data_, preview.source_image_, preview.raster_images_);
 }
 
 bool ImageDocumentSession::createCanvas(const QSize& size,
@@ -187,6 +190,7 @@ bool ImageDocumentSession::createCanvas(const QSize& size,
     raster_errors_.clear();
     layer_thumbnail_cache_.clear();
     invalidateGroupThumbnailCache();
+    layer_raster_cache_.clear();
     data_ = {};
     data_.base_kind = ImageBaseKind::Canvas;
     data_.source_size = size;
@@ -241,6 +245,7 @@ bool ImageDocumentSession::openImage(const QString& source_path, QString* error)
     raster_errors_.clear();
     layer_thumbnail_cache_.clear();
     invalidateGroupThumbnailCache();
+    layer_raster_cache_.clear();
     data_ = {};
     data_.base_kind = ImageBaseKind::SourceImage;
     data_.source_path = absoluteCleanPath(source_path);
@@ -394,6 +399,7 @@ bool ImageDocumentSession::relinkSource(const QString& source_path, QString* err
     if (absoluteCleanPath(source_path) == data_.source_path && hasSource()) return true;
     data_.source_path = absoluteCleanPath(source_path);
     source_image_ = std::move(decoded);
+    layer_raster_cache_.clear();
     return true;
 }
 
@@ -527,6 +533,7 @@ bool ImageDocumentSession::resizeCanvas(const QSize& size,
     data_ = std::move(candidate);
     layer_thumbnail_cache_.clear();
     invalidateGroupThumbnailCache();
+    layer_raster_cache_.clear();
     return true;
 }
 
@@ -578,7 +585,9 @@ QSize ImageDocumentSession::renderedSize() const {
 }
 
 QImage ImageDocumentSession::renderedImage() const {
-    return ImageDocumentRenderer::composite(data_, source_image_, raster_images_);
+    layer_raster_cache_.synchronize(data_.layers, renderedSize(), raster_images_);
+    return ImageDocumentRenderer::composite(data_, source_image_, raster_images_,
+        {}, nullptr, &layer_raster_cache_);
 }
 
 QImage ImageDocumentSession::renderedImageWithoutShape(const QString& shape_id) const {
@@ -831,6 +840,7 @@ bool ImageDocumentSession::applyCrop(const QRect& crop, QString* error) {
     auto& layer = data_.layers[layerIndex(selected_layer_id_)];
     layer.operations.append(operation);
     if (layer.mask.has_value()) layer.mask->operations.append(operation);
+    layer_raster_cache_.invalidateLayer(selected_layer_id_);
     return true;
 }
 
@@ -903,6 +913,7 @@ bool ImageDocumentSession::applyPaintStroke(const QVector<QPointF>& points,
     operation.paint_stroke.diameter = diameter;
     operation.paint_stroke.clipping_path = std::move(clipping_path);
     data_.layers[layerIndex(selected_layer_id_)].operations.append(std::move(operation));
+    layer_raster_cache_.invalidateLayer(selected_layer_id_);
     return true;
 }
 
@@ -968,6 +979,7 @@ bool ImageDocumentSession::applyEraseStroke(const QVector<QPointF>& points,
     operation.erase_stroke.diameter = diameter;
     operation.erase_stroke.clipping_path = std::move(clipping_path);
     data_.layers[layerIndex(selected_layer_id_)].operations.append(std::move(operation));
+    layer_raster_cache_.invalidateLayer(selected_layer_id_);
     return true;
 }
 
@@ -1151,6 +1163,7 @@ bool ImageDocumentSession::addLayerMask(const QString& layer_id) {
     if (!hasSource() || index <= 0 || data_.layers.at(index).mask.has_value()) return false;
     pushEdit();
     data_.layers[index].mask = ImageLayerMaskData{};
+    layer_raster_cache_.invalidateLayer(layer_id);
     return true;
 }
 
@@ -1159,6 +1172,7 @@ bool ImageDocumentSession::removeLayerMask(const QString& layer_id) {
     if (index <= 0 || !data_.layers.at(index).mask.has_value()) return false;
     pushEdit();
     data_.layers[index].mask.reset();
+    layer_raster_cache_.invalidateLayer(layer_id);
     return true;
 }
 
@@ -1168,6 +1182,7 @@ bool ImageDocumentSession::setLayerMaskEnabled(const QString& layer_id, bool ena
         data_.layers.at(index).mask->enabled == enabled) return false;
     pushEdit();
     data_.layers[index].mask->enabled = enabled;
+    layer_raster_cache_.invalidateLayer(layer_id);
     return true;
 }
 
@@ -1208,6 +1223,7 @@ bool ImageDocumentSession::applyLayerMaskStrokeInternal(
     if (index < 0 || !data_.layers.at(index).mask.has_value()) return false;
     pushEdit();
     data_.layers[index].mask->operations.append(std::move(*operation));
+    layer_raster_cache_.invalidateLayer(selected_layer_id_);
     return true;
 }
 
@@ -1439,6 +1455,7 @@ void ImageDocumentSession::restoreHistorySnapshot(
     }
     layer_thumbnail_cache_.clear();
     invalidateGroupThumbnailCache();
+    layer_raster_cache_.clear();
     selected_group_id_ = groupIndex(snapshot.selected_group_id) >= 0
         ? std::move(snapshot.selected_group_id) : QString{};
     selected_layer_id_ = selected_group_id_.isEmpty() &&
@@ -1463,6 +1480,7 @@ void ImageDocumentSession::commitDocumentEdit(
     selected_group_id_ = std::move(selected_group_id);
     layer_thumbnail_cache_.clear();
     invalidateGroupThumbnailCache();
+    layer_raster_cache_.synchronize(data_.layers, renderedSize(), raster_images_);
 }
 
 bool ImageDocumentSession::applySelectedGroupTransform(const ImageOperation& operation,

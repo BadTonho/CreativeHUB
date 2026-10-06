@@ -1,6 +1,7 @@
 #pragma once
 
 #include "image_document_store.h"
+#include "image_layer_raster_cache.h"
 
 #include <QHash>
 #include <QImage>
@@ -20,7 +21,8 @@ public:
         const QImage& source_image,
         const QHash<QString, QImage>& raster_images,
         const QStringList& excluded_object_ids = {},
-        const std::atomic_bool* cancellation_requested = nullptr);
+        const std::atomic_bool* cancellation_requested = nullptr,
+        ImageLayerRasterCache* layer_raster_cache = nullptr);
     [[nodiscard]] static QImage selectedLayer(
         const ImageDocumentData& document,
         const QImage& source_image,
