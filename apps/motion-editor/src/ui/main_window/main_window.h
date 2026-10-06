@@ -3,8 +3,8 @@
 #include "model/composition_document.h"
 #include "model/motion_project_data.h"
 #include "application/history/composition_history.h"
-#include "../persistence/motion_recovery_store.h"
-#include "../diagnostics/performance_metrics.h"
+#include "persistence/motion_recovery_store.h"
+#include "diagnostics/performance_metrics.h"
 
 #include <creative_suite/shortcuts/shortcut_manager.h>
 #include <creative_suite/system_monitor/performance_usage.h>

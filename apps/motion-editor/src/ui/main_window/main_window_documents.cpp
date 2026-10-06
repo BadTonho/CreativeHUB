@@ -1,17 +1,17 @@
 #include "main_window.h"
 #include "main_window_support.h"
 
-#include "audio_keyframe_generation.h"
-#include "composition_viewer.h"
+#include "ui/workers/audio_keyframe_generation.h"
+#include "ui/viewer/composition_viewer.h"
 #include "export/motion_video_export.h"
 #include "rendering/preview_renderer.h"
 
-#include "../persistence/motion_document_store.h"
-#include "inspector/inspector_widget.h"
-#include "media_pool_widget.h"
-#include "dialogs/new_composition_dialog.h"
-#include "timeline/timeline_navigator.h"
-#include "workspace/motion_workspace.h"
+#include "persistence/motion_document_store.h"
+#include "ui/inspector/inspector_widget.h"
+#include "ui/media_pool/media_pool_widget.h"
+#include "ui/dialogs/new_composition_dialog.h"
+#include "ui/timeline/timeline_navigator.h"
+#include "ui/workspace/motion_workspace.h"
 
 #include <creative_suite/diagnostics/logger.h>
 #include <creative_suite/media/media_importer.h>

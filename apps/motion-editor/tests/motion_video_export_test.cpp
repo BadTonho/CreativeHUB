@@ -1,4 +1,4 @@
-#include "ui/main_window.h"
+#include "ui/main_window/main_window.h"
 #include "export/motion_video_export.h"
 #include "ui/dialogs/motion_video_export_dialog.h"
 

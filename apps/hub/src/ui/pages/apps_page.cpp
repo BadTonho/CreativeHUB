@@ -1,6 +1,7 @@
 #include "apps_page.h"
 #include "../theme/hub_palette.h"
 
+#include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QScrollArea>
@@ -59,7 +60,7 @@ void AppsPage::setupUi() {
     filterLayout->addStretch();
     mainLayout->addLayout(filterLayout);
 
-    // Scroll area for app cards
+    // Scroll area for app cards in grid
     auto* scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
@@ -68,10 +69,10 @@ void AppsPage::setupUi() {
     auto* scrollContainer = new QWidget(scrollArea);
     scrollContainer->setStyleSheet(QStringLiteral("background: transparent;"));
 
-    m_cardsLayout = new QVBoxLayout(scrollContainer);
-    m_cardsLayout->setContentsMargins(0, 8, 0, 8);
-    m_cardsLayout->setSpacing(12);
-    m_cardsLayout->addStretch();
+    m_cardsLayout = new QGridLayout(scrollContainer);
+    m_cardsLayout->setContentsMargins(0, 10, 0, 10);
+    m_cardsLayout->setSpacing(18);
+    m_cardsLayout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
 
     scrollArea->setWidget(scrollContainer);
     mainLayout->addWidget(scrollArea);
@@ -127,7 +128,6 @@ void AppsPage::refreshCards() {
         return;
     }
 
-    // Clean up existing cards
     for (auto* card : m_cardWidgets) {
         m_cardsLayout->removeWidget(card);
         delete card;
@@ -144,21 +144,21 @@ void AppsPage::refreshCards() {
         connect(card, &AppCardWidget::cancelDownloadRequested, this, &AppsPage::cancelDownloadRequested);
 
         m_cardWidgets.push_back(card);
-        // Insert before stretch
-        m_cardsLayout->insertWidget(static_cast<int>(m_cardWidgets.size() - 1), card);
     }
 
     applyFilters();
 }
 
 void AppsPage::applyFilters() {
+    int visibleIndex = 0;
+    constexpr int columns = 3;
+
     for (auto* card : m_cardWidgets) {
         const auto& app = card->appInfo();
 
         bool matchesSearch = true;
         if (!m_searchQuery.isEmpty()) {
             matchesSearch = app.name().toLower().contains(m_searchQuery) ||
-                            app.description().toLower().contains(m_searchQuery) ||
                             app.tagLine().toLower().contains(m_searchQuery);
         }
 
@@ -169,7 +169,16 @@ void AppsPage::applyFilters() {
             matchesCategory = !app.isInstalled();
         }
 
-        card->setVisible(matchesSearch && matchesCategory);
+        const bool visible = matchesSearch && matchesCategory;
+        card->setVisible(visible);
+
+        m_cardsLayout->removeWidget(card);
+        if (visible) {
+            const int row = visibleIndex / columns;
+            const int col = visibleIndex % columns;
+            m_cardsLayout->addWidget(card, row, col);
+            ++visibleIndex;
+        }
     }
 }
 

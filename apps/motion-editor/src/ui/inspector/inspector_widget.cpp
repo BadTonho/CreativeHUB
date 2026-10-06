@@ -1,6 +1,6 @@
 #include "inspector_widget.h"
 
-#include "../media_pool_widget.h"
+#include "ui/media_pool/media_pool_widget.h"
 
 #include <QAbstractItemView>
 #include <QAction>

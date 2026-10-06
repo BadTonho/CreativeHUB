@@ -1,11 +1,11 @@
 #include "main_window.h"
 #include "main_window_support.h"
 
-#include "composition_viewer.h"
-#include "inspector/inspector_widget.h"
-#include "media_pool_widget.h"
-#include "property_curve_editor.h"
-#include "timeline/timeline_navigator.h"
+#include "ui/viewer/composition_viewer.h"
+#include "ui/inspector/inspector_widget.h"
+#include "ui/media_pool/media_pool_widget.h"
+#include "ui/timeline/graph_editor/property_curve_editor.h"
+#include "ui/timeline/timeline_navigator.h"
 
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/diagnostics/logger.h>

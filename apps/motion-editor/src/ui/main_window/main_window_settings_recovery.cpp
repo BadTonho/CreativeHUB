@@ -1,11 +1,11 @@
 #include "main_window.h"
 #include "main_window_support.h"
 
-#include "../persistence/motion_document_store.h"
-#include "../settings/autosave_preferences.h"
-#include "dialogs/autosave_recovery_dialog.h"
-#include "dialogs/general_settings_dialog.h"
-#include "dialogs/shortcut_settings_dialog.h"
+#include "persistence/motion_document_store.h"
+#include "settings/autosave_preferences.h"
+#include "ui/dialogs/autosave_recovery_dialog.h"
+#include "ui/dialogs/general_settings_dialog.h"
+#include "ui/dialogs/shortcut_settings_dialog.h"
 
 #include <creative_suite/diagnostics/logger.h>
 

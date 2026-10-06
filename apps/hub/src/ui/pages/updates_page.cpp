@@ -2,6 +2,7 @@
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
 
+#include <QVBoxLayout>
 #include <QHBoxLayout>
 
 namespace creative_suite::hub {
@@ -49,8 +50,9 @@ void UpdatesPage::setupUi() {
 
     mainLayout->addLayout(headerRow);
 
-    m_contentLayout = new QVBoxLayout();
-    m_contentLayout->setSpacing(12);
+    m_contentLayout = new QGridLayout();
+    m_contentLayout->setSpacing(18);
+    m_contentLayout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
 
     m_emptyStateLabel = new QLabel(this);
     m_emptyStateLabel->setAlignment(Qt::AlignCenter);
@@ -63,7 +65,7 @@ void UpdatesPage::setupUi() {
         "border-radius: 10px;"
     ));
     m_emptyStateLabel->setText(QStringLiteral("✓ Todos os seus aplicativos estão atualizados!"));
-    m_contentLayout->addWidget(m_emptyStateLabel);
+    m_contentLayout->addWidget(m_emptyStateLabel, 0, 0, 1, 3);
 
     mainLayout->addLayout(m_contentLayout);
     mainLayout->addStretch();
@@ -81,20 +83,24 @@ void UpdatesPage::refreshUpdates() {
     m_updateCards.clear();
 
     const auto& apps = m_catalog->apps();
-    int updateCount = 0;
+    int updateIndex = 0;
+    constexpr int columns = 3;
 
     for (const auto& app : apps) {
         if (app.hasUpdate()) {
-            ++updateCount;
             auto* card = new AppCardWidget(this);
             card->setAppInfo(app);
             connect(card, &AppCardWidget::downloadRequested, this, &UpdatesPage::updateAppRequested);
             m_updateCards.push_back(card);
-            m_contentLayout->addWidget(card);
+
+            const int row = updateIndex / columns;
+            const int col = updateIndex % columns;
+            m_contentLayout->addWidget(card, row, col);
+            ++updateIndex;
         }
     }
 
-    const bool hasUpdates = (updateCount > 0);
+    const bool hasUpdates = (updateIndex > 0);
     m_emptyStateLabel->setVisible(!hasUpdates);
     m_updateAllButton->setVisible(hasUpdates);
 }

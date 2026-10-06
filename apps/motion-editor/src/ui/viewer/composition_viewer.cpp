@@ -1,5 +1,5 @@
 #include "composition_viewer.h"
-#include "../diagnostics/performance_metrics.h"
+#include "diagnostics/performance_metrics.h"
 
 #include <QPaintEvent>
 #include <QPainter>

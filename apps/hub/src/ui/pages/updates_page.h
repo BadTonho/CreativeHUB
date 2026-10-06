@@ -4,7 +4,7 @@
 #include "../cards/app_card_widget.h"
 
 #include <QWidget>
-#include <QVBoxLayout>
+#include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <vector>
@@ -27,7 +27,7 @@ private:
     void setupUi();
 
     AppCatalog* m_catalog{nullptr};
-    QVBoxLayout* m_contentLayout{nullptr};
+    QGridLayout* m_contentLayout{nullptr};
     QLabel* m_emptyStateLabel{nullptr};
     QPushButton* m_updateAllButton{nullptr};
     std::vector<AppCardWidget*> m_updateCards;

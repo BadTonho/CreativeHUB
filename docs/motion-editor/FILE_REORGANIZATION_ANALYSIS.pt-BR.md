@@ -1,10 +1,10 @@
 # Análise de reorganização dos arquivos do Motion Studio
 
-**Status:** cinco etapas implementadas em 2026-10-06. Esta é uma nota
+**Status:** seis etapas implementadas em 2026-10-06. Esta é uma nota
 provisória de planejamento, owner-only, em português; não registra uma decisão
 arquitetural definitiva.
 
-## Diagnóstico e resultado das cinco primeiras etapas
+## Diagnóstico e resultado das seis etapas
 
 Antes da divisão, `apps/motion-editor/src/ui/main_window.cpp` tinha **2.814
 linhas físicas**. O arquivo concentrava abertura e salvamento de documentos,
@@ -17,14 +17,14 @@ compila os seguintes arquivos:
 
 | Arquivo | Responsabilidade |
 | --- | --- |
-| `src/ui/main_window.cpp` | Construtor, destrutor e acessores. |
-| `src/ui/main_window_workspace.cpp` | Criação e layout do workspace, mídia e coordenação da timeline. |
-| `src/ui/main_window_documents.cpp` | Criação, abertura, salvamento e fechamento de documentos; inclui o worker de preparação da abertura. |
-| `src/ui/main_window_jobs.cpp` | Coordenação da exportação de vídeo e da geração de keyframes de áudio. |
-| `src/ui/main_window_settings_recovery.cpp` | Configurações, autosave e fluxos de recuperação. |
-| `src/ui/main_window_editing.cpp` | Histórico, curvas, inspector e operações de camada, efeito, transformação e keyframe. |
-| `src/ui/main_window_preview.cpp` | Métricas e solicitação de preview. |
-| `src/ui/main_window_support.h` e `.cpp` | Conversões de caminhos compartilhadas entre as unidades da janela. |
+| `src/ui/main_window/main_window.cpp` | Construtor, destrutor e acessores. |
+| `src/ui/main_window/main_window_workspace.cpp` | Criação e layout do workspace, mídia e coordenação da timeline. |
+| `src/ui/main_window/main_window_documents.cpp` | Criação, abertura, salvamento e fechamento de documentos; inclui o worker de preparação da abertura. |
+| `src/ui/main_window/main_window_jobs.cpp` | Coordenação da exportação de vídeo e da geração de keyframes de áudio. |
+| `src/ui/main_window/main_window_settings_recovery.cpp` | Configurações, autosave e fluxos de recuperação. |
+| `src/ui/main_window/main_window_editing.cpp` | Histórico, curvas, inspector e operações de camada, efeito, transformação e keyframe. |
+| `src/ui/main_window/main_window_preview.cpp` | Métricas e solicitação de preview. |
+| `src/ui/main_window/main_window_support.h` e `.cpp` | Conversões de caminhos compartilhadas entre as unidades da janela. |
 
 Os helpers exclusivos de edição permanecem em `main_window_editing.cpp`.
 `main_window.h` e os testes existentes mantêm suas interfaces.
@@ -63,14 +63,26 @@ explicitamente, preservando o acesso que antes vinha por inclusão indireta.
 Tipos, assinaturas e comportamento permanecem iguais. O arquivo e o alvo do
 teste não mudaram, então `ROADMAP.md` permaneceu inalterado.
 
-### Revisão estrutural após a quinta etapa
+### Revisão estrutural intermediária após a quinta etapa
 
-A revisão dos arquivos restantes não identificou outro agrupamento que
-justifique movimentação nesta etapa. `AudioKeyframeGenerationWorker` permanece
-em `src/ui/` porque é um adaptador de `QThread` e entrega callbacks por Qt; a
-análise de envelope já está isolada em `src/audio/`. Os demais componentes de
-interface restantes não formam um grupo coeso adicional que justifique nova
-movimentação.
+Naquele momento, a revisão não identificou outro agrupamento que justificasse
+movimentação. `AudioKeyframeGenerationWorker` permanece dentro da interface
+porque é um adaptador de `QThread` e entrega callbacks por Qt; a análise de
+envelope já está isolada em `src/audio/`.
+
+### Sexta etapa: pastas para os componentes restantes da UI
+
+Os arquivos da janela principal foram agrupados em `src/ui/main_window/`,
+incluindo os arquivos de implementação divididos e os helpers compartilhados.
+O editor de curvas foi para `src/ui/timeline/graph_editor/`. O viewer, o Media
+Pool e o worker Qt de geração de keyframes foram organizados em
+`src/ui/viewer/`, `src/ui/media_pool/` e `src/ui/workers/`, respectivamente.
+Essas pastas dão espaço para os componentes crescerem sem concentrar arquivos
+de responsabilidades diferentes na raiz de `src/ui/`.
+
+O CMake e os includes foram atualizados. Namespaces, APIs, comportamento e
+formato `.motion` permanecem iguais; os caminhos e alvos dos testes também não
+mudaram, então o índice no `ROADMAP.md` permaneceu inalterado.
 
 ## Estrutura de referência
 
@@ -88,7 +100,12 @@ src/
   ui/
     dialogs/
     inspector/
+    main_window/
+    media_pool/
     timeline/
+      graph_editor/
+    viewer/
+    workers/
     workspace/
 ```
 

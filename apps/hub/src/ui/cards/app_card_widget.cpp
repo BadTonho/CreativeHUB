@@ -13,7 +13,8 @@ namespace creative_suite::hub {
 namespace {
 
 QPixmap createFallbackIcon(const QString& id) {
-    QPixmap pixmap(52, 52);
+    constexpr int size = 64;
+    QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
 
     QPainter painter(&pixmap);
@@ -23,26 +24,26 @@ QPixmap createFallbackIcon(const QString& id) {
     QString initials = QStringLiteral("CS");
 
     if (id == QStringLiteral("video-editor")) {
-        iconBg = QColor(0x99, 0x45, 0xff); // Violet/Purple for video
+        iconBg = QColor(0x99, 0x45, 0xff); // Violet/Purple
         initials = QStringLiteral("Ve");
     } else if (id == QStringLiteral("image-editor")) {
-        iconBg = QColor(0x00, 0x84, 0xff); // Blue for image
+        iconBg = QColor(0x00, 0x84, 0xff); // Blue
         initials = QStringLiteral("Ie");
     } else if (id == QStringLiteral("motion-editor")) {
-        iconBg = QColor(0xec, 0x3b, 0x83); // Pink/Magenta for motion
+        iconBg = QColor(0xec, 0x3b, 0x83); // Pink/Magenta
         initials = QStringLiteral("Mo");
     }
 
     painter.setBrush(iconBg);
     painter.setPen(Qt::NoPen);
-    painter.drawRoundedRect(QRect(0, 0, 52, 52), 10, 10);
+    painter.drawRoundedRect(QRect(0, 0, size, size), 14, 14);
 
     painter.setPen(Qt::white);
     QFont font = painter.font();
-    font.setPointSize(16);
+    font.setPointSize(20);
     font.setBold(true);
     painter.setFont(font);
-    painter.drawText(QRect(0, 0, 52, 52), Qt::AlignCenter, initials);
+    painter.drawText(QRect(0, 0, size, size), Qt::AlignCenter, initials);
 
     return pixmap;
 }
@@ -53,12 +54,13 @@ AppCardWidget::AppCardWidget(QWidget* parent)
     : QFrame(parent)
 {
     setObjectName(QStringLiteral("AppCardWidget"));
+    setFixedSize(236, 264);
     setFrameShape(QFrame::NoFrame);
     setStyleSheet(QString(R"(
         #AppCardWidget {
             background-color: %1;
             border: 1px solid %2;
-            border-radius: 10px;
+            border-radius: 12px;
         }
         #AppCardWidget:hover {
             background-color: %3;
@@ -70,41 +72,40 @@ AppCardWidget::AppCardWidget(QWidget* parent)
     .arg(HubPalette::cardHover.name()));
 
     auto* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(18, 16, 18, 16);
-    mainLayout->setSpacing(12);
+    mainLayout->setContentsMargins(16, 14, 16, 16);
+    mainLayout->setSpacing(8);
 
-    // Top section: Icon, Title, TagLine, and Status Badge
+    // Top row: Status badge aligned right
     auto* topRow = new QHBoxLayout();
-    topRow->setSpacing(14);
-
-    m_iconLabel = new QLabel(this);
-    m_iconLabel->setFixedSize(52, 52);
-    topRow->addWidget(m_iconLabel);
-
-    auto* titleLayout = new QVBoxLayout();
-    titleLayout->setSpacing(2);
-
-    m_titleLabel = new QLabel(this);
-    m_titleLabel->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 700; color: #ffffff; background: transparent;"));
-    titleLayout->addWidget(m_titleLabel);
-
-    m_tagLineLabel = new QLabel(this);
-    m_tagLineLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #9a9aa4; background: transparent;"));
-    titleLayout->addWidget(m_tagLineLabel);
-
-    topRow->addLayout(titleLayout);
+    topRow->setContentsMargins(0, 0, 0, 0);
     topRow->addStretch();
 
     m_statusBadge = new AppStatusBadge(this);
-    topRow->addWidget(m_statusBadge, 0, Qt::AlignTop);
-
+    topRow->addWidget(m_statusBadge);
     mainLayout->addLayout(topRow);
 
-    // Description
-    m_descLabel = new QLabel(this);
-    m_descLabel->setWordWrap(true);
-    m_descLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0bc; line-height: 1.4; background: transparent;"));
-    mainLayout->addWidget(m_descLabel);
+    // Center icon
+    m_iconLabel = new QLabel(this);
+    m_iconLabel->setFixedSize(64, 64);
+    m_iconLabel->setAlignment(Qt::AlignCenter);
+    mainLayout->addWidget(m_iconLabel, 0, Qt::AlignHCenter);
+
+    mainLayout->addSpacing(4);
+
+    // Title
+    m_titleLabel = new QLabel(this);
+    m_titleLabel->setAlignment(Qt::AlignCenter);
+    m_titleLabel->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 700; color: #ffffff; background: transparent;"));
+    mainLayout->addWidget(m_titleLabel);
+
+    // Tagline (short category)
+    m_tagLineLabel = new QLabel(this);
+    m_tagLineLabel->setAlignment(Qt::AlignCenter);
+    m_tagLineLabel->setWordWrap(true);
+    m_tagLineLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #9a9aa8; background: transparent;"));
+    mainLayout->addWidget(m_tagLineLabel);
+
+    mainLayout->addStretch();
 
     // Progress bar (hidden by default)
     m_progressBar = new DownloadProgressBar(this);
@@ -114,16 +115,11 @@ AppCardWidget::AppCardWidget(QWidget* parent)
     });
     mainLayout->addWidget(m_progressBar);
 
-    // Bottom action row
-    auto* bottomRow = new QHBoxLayout();
-    bottomRow->setContentsMargins(0, 4, 0, 0);
-    bottomRow->addStretch();
-
+    // Action button: Full width at the bottom of the card
     m_actionButton = new QPushButton(this);
+    m_actionButton->setFixedHeight(34);
     connect(m_actionButton, &QPushButton::clicked, this, &AppCardWidget::onActionButtonClicked);
-    bottomRow->addWidget(m_actionButton);
-
-    mainLayout->addLayout(bottomRow);
+    mainLayout->addWidget(m_actionButton);
 }
 
 void AppCardWidget::setAppInfo(const AppInfo& app) {
@@ -151,12 +147,11 @@ void AppCardWidget::onActionButtonClicked() {
 void AppCardWidget::updateVisuals() {
     m_titleLabel->setText(m_appInfo.name());
     m_tagLineLabel->setText(m_appInfo.tagLine());
-    m_descLabel->setText(m_appInfo.description());
 
     // Icon loading: check if resource exists, else render styled fallback
     QPixmap iconPix;
     if (!m_appInfo.iconPath().isEmpty() && QFile::exists(m_appInfo.iconPath())) {
-        iconPix = QPixmap(m_appInfo.iconPath()).scaled(52, 52, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        iconPix = QPixmap(m_appInfo.iconPath()).scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     } else {
         iconPix = createFallbackIcon(m_appInfo.id());
     }

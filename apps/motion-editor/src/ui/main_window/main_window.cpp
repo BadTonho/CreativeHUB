@@ -1,7 +1,7 @@
 #include "main_window.h"
 #include "main_window_support.h"
 
-#include "audio_keyframe_generation.h"
+#include "ui/workers/audio_keyframe_generation.h"
 #include "export/motion_video_export.h"
 #include "rendering/preview_renderer.h"
 

@@ -37,7 +37,6 @@ private:
     QLabel* m_iconLabel{nullptr};
     QLabel* m_titleLabel{nullptr};
     QLabel* m_tagLineLabel{nullptr};
-    QLabel* m_descLabel{nullptr};
     AppStatusBadge* m_statusBadge{nullptr};
     QPushButton* m_actionButton{nullptr};
     DownloadProgressBar* m_progressBar{nullptr};

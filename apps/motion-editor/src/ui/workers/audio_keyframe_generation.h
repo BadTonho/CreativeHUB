@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../audio/audio_envelope_analyzer.h"
+#include "audio/audio_envelope_analyzer.h"
 
 #include <QPointer>
 #include <QThread>

@@ -1,13 +1,13 @@
 #include "main_window.h"
 #include "main_window_support.h"
 
-#include "../persistence/motion_document_store.h"
-#include "dialogs/audio_keyframe_dialog.h"
-#include "audio_keyframe_generation.h"
+#include "persistence/motion_document_store.h"
+#include "ui/dialogs/audio_keyframe_dialog.h"
+#include "ui/workers/audio_keyframe_generation.h"
 #include "export/motion_video_export.h"
-#include "media_pool_widget.h"
-#include "dialogs/motion_video_export_dialog.h"
-#include "timeline/timeline_navigator.h"
+#include "ui/media_pool/media_pool_widget.h"
+#include "ui/dialogs/motion_video_export_dialog.h"
+#include "ui/timeline/timeline_navigator.h"
 
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/diagnostics/logger.h>

@@ -1,9 +1,9 @@
 #include "main_window.h"
 
-#include "../settings/autosave_preferences.h"
+#include "settings/autosave_preferences.h"
 #include "rendering/layer_effect_worker_pool.h"
-#include "media_pool_widget.h"
-#include "timeline/timeline_navigator.h"
+#include "ui/media_pool/media_pool_widget.h"
+#include "ui/timeline/timeline_navigator.h"
 
 #include "rendering/preview_renderer.h"
 

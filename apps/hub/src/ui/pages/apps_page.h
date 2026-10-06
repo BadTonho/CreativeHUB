@@ -4,7 +4,7 @@
 #include "../cards/app_card_widget.h"
 
 #include <QWidget>
-#include <QVBoxLayout>
+#include <QGridLayout>
 #include <QScrollArea>
 #include <QPushButton>
 #include <vector>
@@ -42,7 +42,7 @@ private:
     CategoryFilter m_activeFilter{CategoryFilter::All};
     QString m_searchQuery;
 
-    QVBoxLayout* m_cardsLayout{nullptr};
+    QGridLayout* m_cardsLayout{nullptr};
     std::vector<AppCardWidget*> m_cardWidgets;
     std::vector<QPushButton*> m_filterButtons;
 };

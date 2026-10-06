@@ -31,22 +31,22 @@ add_library(creative-suite-motion-editor-core STATIC
     src/rendering/layer_effect_worker_pool.h
     src/settings/autosave_preferences.cpp
     src/settings/autosave_preferences.h
-    src/ui/audio_keyframe_generation.cpp
-    src/ui/audio_keyframe_generation.h
-    src/ui/composition_viewer.cpp
-    src/ui/composition_viewer.h
+    src/ui/workers/audio_keyframe_generation.cpp
+    src/ui/workers/audio_keyframe_generation.h
+    src/ui/viewer/composition_viewer.cpp
+    src/ui/viewer/composition_viewer.h
     src/application/history/composition_history.cpp
     src/application/history/composition_history.h
-    src/ui/main_window.cpp
-    src/ui/main_window.h
-    src/ui/main_window_documents.cpp
-    src/ui/main_window_jobs.cpp
-    src/ui/main_window_settings_recovery.cpp
-    src/ui/main_window_workspace.cpp
-    src/ui/main_window_editing.cpp
-    src/ui/main_window_preview.cpp
-    src/ui/main_window_support.cpp
-    src/ui/main_window_support.h
+    src/ui/main_window/main_window.cpp
+    src/ui/main_window/main_window.h
+    src/ui/main_window/main_window_documents.cpp
+    src/ui/main_window/main_window_jobs.cpp
+    src/ui/main_window/main_window_settings_recovery.cpp
+    src/ui/main_window/main_window_workspace.cpp
+    src/ui/main_window/main_window_editing.cpp
+    src/ui/main_window/main_window_preview.cpp
+    src/ui/main_window/main_window_support.cpp
+    src/ui/main_window/main_window_support.h
     src/ui/dialogs/autosave_recovery_dialog.cpp
     src/ui/dialogs/autosave_recovery_dialog.h
     src/ui/dialogs/audio_keyframe_dialog.cpp
@@ -59,12 +59,12 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/dialogs/new_composition_dialog.h
     src/ui/dialogs/shortcut_settings_dialog.cpp
     src/ui/dialogs/shortcut_settings_dialog.h
-    src/ui/media_pool_widget.cpp
-    src/ui/media_pool_widget.h
+    src/ui/media_pool/media_pool_widget.cpp
+    src/ui/media_pool/media_pool_widget.h
     src/ui/inspector/inspector_widget.cpp
     src/ui/inspector/inspector_widget.h
-    src/ui/property_curve_editor.cpp
-    src/ui/property_curve_editor.h
+    src/ui/timeline/graph_editor/property_curve_editor.cpp
+    src/ui/timeline/graph_editor/property_curve_editor.h
     src/ui/timeline/timeline_controls.cpp
     src/ui/timeline/timeline_controls.h
     src/ui/timeline/timeline_layer_tracks.cpp
