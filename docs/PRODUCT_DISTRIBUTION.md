@@ -145,8 +145,8 @@ GitHub por todos os aplicativos.
 
 ### Lançamento conjunto da suíte — direção em discussão
 
-Cada ciclo de lançamento da suíte deve deixar disponíveis no GitHub Releases
-os quatro aplicativos: Video Editor, Image Editor, Motion Studio e Hub. Isso
+Cada ciclo de lançamento da suíte terá uma única release no GitHub com os
+quatro instaladores: Video Editor, Image Editor, Motion Studio e Hub. Isso
 também vale para um aplicativo que não recebeu mudanças naquele ciclo. A
 intenção é que a distribuição da suíte seja completa e que cada aplicativo
 encontre o mesmo catálogo e as mesmas regras de atualização.
@@ -158,9 +158,8 @@ republicação não cria, por si só, uma nova versão do aplicativo: o catálog
 deve continuar identificando a versão contida no instalador para não anunciar
 uma atualização inexistente a quem já o possui.
 
-Ainda está em aberto o uso de uma release do GitHub por ciclo da suíte ou de
-releases separadas por componente, e como esses lançamentos se relacionam com
-as versões individuais dos aplicativos.
+Ainda está em aberto como a versão da release da suíte se relacionará com as
+versões individuais dos aplicativos.
 
 ### Experiência de atualização — direção em discussão
 
@@ -304,8 +303,6 @@ distribuído.
 - instalação por usuário ou por sistema e requisitos de elevação;
 - esquema e assinatura do catálogo de releases;
 - formatos de pacote e canais de lançamento por sistema operacional;
-- estrutura das releases do GitHub: uma release conjunta ou releases por
-  componente vinculadas ao mesmo ciclo da suíte;
 - escopo da experiência comum além dos quatro aplicativos: se a ferramenta
   independente de recuperação também participará;
 - política de retenção de versões anteriores e rollback;
