@@ -31,6 +31,14 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/composition_history.h
     src/ui/main_window.cpp
     src/ui/main_window.h
+    src/ui/main_window_documents.cpp
+    src/ui/main_window_jobs.cpp
+    src/ui/main_window_settings_recovery.cpp
+    src/ui/main_window_workspace.cpp
+    src/ui/main_window_editing.cpp
+    src/ui/main_window_preview.cpp
+    src/ui/main_window_support.cpp
+    src/ui/main_window_support.h
     src/ui/media_pool_widget.cpp
     src/ui/media_pool_widget.h
     src/ui/new_composition_dialog.cpp
