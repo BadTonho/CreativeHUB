@@ -18,7 +18,7 @@ An opt-in CPU performance collector and synthetic Release benchmark now record
 operation replay, mask/layer/group composition, thumbnails, canvas paint, PNG/
 JPEG export, process CPU, and sampled memory. The first reference-PC results
 are available in
-[`performance-baseline-windows-2026-10-06.json`](performance-baseline-windows-2026-10-06.json).
+[`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json).
 They characterize only the current CPU path; they do not measure GPU parity,
 interaction latency, allocation/transfer costs, or optimization gains.
 
@@ -185,25 +185,32 @@ evidence, unresolved issues, and the next stage here.
 The development benchmark ran all six profiles in Release on the Windows
 reference PC: AMD Ryzen 5 3600, 32 GB RAM, NVIDIA GeForce GTX 1660 SUPER with
 6 GB VRAM, and Windows 11 Version 26H2. The build used MSVC 1944 and Qt 6.7.2.
-Each profile used three warmups and 30 measured iterations. The Release Image
-Editor CTest group passed 11/11, including collector behavior, UI persistence
-and shutdown, render/export pixel equality, JSONL rotation, and benchmark report
-structure. The reproducible full report is
-[`performance-baseline-windows-2026-10-06.json`](performance-baseline-windows-2026-10-06.json).
+Each profile used three warmups and 30 measured iterations in both cold and
+warm view-refresh modes. The full schema v2 report is
+[`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json);
+the prior [schema v1 direct-renderer report](performance-baseline-windows-2026-10-06.json)
+remains available as a historical record and is not directly comparable. The
+table gives wall time average/p95
+for cold and warm refreshes, then composite average/p95 for warm refreshes:
 
-| CPU profile | Canvas | Iteration average / p95 / maximum (ms) | Composite average / p95 (ms) |
-| --- | ---: | ---: | ---: |
-| Reference | 1920×1080 | 145.06 / 171.03 / 176.68 | 91.87 / 110.47 |
-| Mask-heavy | 1920×1080 | 588.43 / 685.74 / 693.67 | 373.15 / 441.85 |
-| Stroke-heavy | 1920×1080 | 1,018.63 / 1,080.30 / 1,088.52 | 653.14 / 702.94 |
-| Large image | 3840×2160 | 309.76 / 355.37 / 409.22 | 199.27 / 225.31 |
-| Repeated source | 1920×1080 | 61.54 / 68.42 / 70.53 | 38.43 / 44.29 |
-| Export (PNG + JPEG) | 1920×1080 | 713.36 / 761.79 / 765.31 | 86.91 / 94.48 |
+| CPU profile | Canvas | Cold refresh avg/p95 (ms) | Warm refresh avg/p95 (ms) | Warm composite avg/p95 (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| Reference | 1920×1080 | 134.85 / 143.83 | 124.80 / 133.63 | 84.76 / 91.68 |
+| Mask-heavy | 1920×1080 | 580.84 / 637.08 | 563.09 / 614.86 | 370.85 / 412.29 |
+| Stroke-heavy | 1920×1080 | 992.77 / 1,031.43 | 945.04 / 1,005.65 | 637.64 / 686.48 |
+| Large image | 3840×2160 | 279.59 / 296.19 | 260.83 / 278.91 | 176.92 / 189.51 |
+| Repeated source | 1920×1080 | 65.29 / 70.16 | 58.19 / 64.59 | 40.03 / 44.55 |
+| Export | 1920×1080 | 134.13 / 144.31 | 126.43 / 140.38 | 85.60 / 94.26 |
 
-These figures are a first CPU baseline, not GPU comparisons, gains, limits, or
-general hardware requirements. Per-process CPU is reported as the latest
-one-second sample; memory peaks are sampled and may miss brief higher values.
-Native manual panel inspection and macOS/Linux measurements remain pending.
+For the export profile, the separate PNG+JPEG export iteration averaged
+579.57 ms (p95 614.07 ms, maximum 629.32 ms). The cold/warm comparison confirms
+layer-thumbnail cache hits in warm mode; group and mask thumbnails are still
+rendered in each refresh. Per-stage values are totals within an iteration, and
+different stages include nested work, so do not sum them. Resource peaks are
+sampled during the full profile run, including warmups and cache priming. These
+results characterize the current CPU path; they are not GPU comparisons,
+optimization gains, limits, or general hardware requirements. Native manual
+panel inspection and macOS/Linux measurements remain pending.
 
 ## Shared Video Editor stage 2 delivery
 

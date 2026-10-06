@@ -388,15 +388,28 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
 - `creative-suite-image-editor-benchmark` is a development executable and has
   no install rule. It creates deterministic synthetic documents for the
   `reference`, `mask-heavy`, `stroke-heavy`, `large-image`, `repeated-source`,
-  and `export` profiles. Its defaults are three warmups and 30 measured
-  iterations per profile. `--profile`, `--warmup`, `--iterations`, and
-  `--output` select the workload and destination. The version 1 JSON report
-  includes build/runtime environment, profile dimensions and composition,
-  per-stage average/p50/p95/maximum timings, wall-time distribution, and
-  sampled CPU/memory observations. It reads no personal media and changes
-  neither `.cimg` nor shared application interfaces. The first Windows
-  reference-PC report is recorded in
-  [`performance-baseline-windows-2026-10-06.json`](performance-baseline-windows-2026-10-06.json).
+  and `export` profiles. It writes synthetic PNGs and a `.cimg` fixture only
+  to a temporary directory, then opens the fixture through
+  `ImageDocumentSession`. Each profile measures the core view-refresh path
+  (`renderedImage`, layer/group thumbnails, and mask thumbnails) in cold and
+  warm modes. Cold mode opens a fresh session for each measured iteration;
+  warm mode primes one session, performs the configured warmups, then reuses
+  that session. The report also verifies that cold and warm output pixels
+  match. PNG/JPEG export is measured separately for the `export` profile.
+- Benchmark schema version 2 reports wall time and each stage's total elapsed
+  time per measured iteration, with average, p50, p95, maximum, iteration
+  count, and total stage-call count. Percentiles use the same complete set of
+  measured iterations as the average; stage timings are nested and must not be
+  summed across stages. Resource samples span each profile run, including
+  warmups and cache priming.
+  Defaults remain three warmups and 30 iterations; `--profile`, `--warmup`,
+  `--iterations`, and `--output` select the workload and destination. It reads
+  no personal media and changes neither `.cimg` nor shared application
+  interfaces. The [schema v1 report](performance-baseline-windows-2026-10-06.json)
+  is retained as a historical direct-renderer result and is not directly
+  comparable to v2. The first Windows reference-PC
+  report using the v2 method is
+  [`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json).
 
 ## Layer mask ownership and rendering
 

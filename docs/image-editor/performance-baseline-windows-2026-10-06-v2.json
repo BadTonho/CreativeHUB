@@ -1,0 +1,1638 @@
+{
+    "application": "Image Editor",
+    "application_version": "0.1.0",
+    "architecture": "x86_64",
+    "build_type": "Release",
+    "compiler": "MSVC 1944",
+    "measurement_method": "session_view_refresh_with_cold_and_warm_thumbnail_caches",
+    "os": "Windows 11 Version 26H2",
+    "os_kernel": "winnt 10.0.26300",
+    "profiles": [
+        {
+            "measured_iterations": 30,
+            "resource_samples": {
+                "private_usage_end_bytes": 35557376,
+                "private_usage_sampled_peak_bytes": 61583360,
+                "private_usage_start_bytes": 14942208,
+                "process_cpu_percent_latest": 177.71231645871956,
+                "working_set_end_bytes": 54284288,
+                "working_set_sampled_peak_bytes": 80220160,
+                "working_set_start_bytes": 33030144
+            },
+            "view_refresh": {
+                "cache_prime_refreshes_excluded": 1,
+                "cold": {
+                    "iteration_wall_time": {
+                        "average_ms": 134.85317333333333,
+                        "iterations": 30,
+                        "maximum_ms": 146.3636,
+                        "p50_ms": 133.5931,
+                        "p95_ms": 143.8304
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 85.34159333333334,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 94.6111,
+                            "p50_ms": 84.5723,
+                            "p95_ms": 89.951
+                        },
+                        "erase_stroke": {
+                            "average_ms": 30.23737,
+                            "call_count_total": 1200,
+                            "iterations": 30,
+                            "maximum_ms": 32.4341,
+                            "p50_ms": 30.0412,
+                            "p95_ms": 32.4265
+                        },
+                        "group_composition": {
+                            "average_ms": 78.69070666666667,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 89.31779999999999,
+                            "p50_ms": 77.1588,
+                            "p95_ms": 86.97579999999999
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 40.12517,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 45.796,
+                            "p50_ms": 39.5789,
+                            "p95_ms": 44.9221
+                        },
+                        "layer_composition": {
+                            "average_ms": 112.98723666666666,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 123.94579999999999,
+                            "p50_ms": 111.7114,
+                            "p95_ms": 121.2059
+                        },
+                        "layer_thumbnail": {
+                            "average_ms": 9.3322,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 10.187199999999999,
+                            "p50_ms": 9.2679,
+                            "p95_ms": 10.0171
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.02996333333333333,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.050699999999999995,
+                            "p50_ms": 0.0286,
+                            "p95_ms": 0.042699999999999995
+                        },
+                        "operation_replay": {
+                            "average_ms": 111.94150333333332,
+                            "call_count_total": 2400,
+                            "iterations": 30,
+                            "maximum_ms": 122.9833,
+                            "p50_ms": 110.63459999999999,
+                            "p95_ms": 119.9096
+                        },
+                        "paint_stroke": {
+                            "average_ms": 80.28694666666667,
+                            "call_count_total": 3600,
+                            "iterations": 30,
+                            "maximum_ms": 89.1233,
+                            "p50_ms": 79.2456,
+                            "p95_ms": 86.6207
+                        },
+                        "raster_image": {
+                            "average_ms": 0.56633,
+                            "call_count_total": 300,
+                            "iterations": 30,
+                            "maximum_ms": 0.7727999999999999,
+                            "p50_ms": 0.5495,
+                            "p95_ms": 0.6486999999999999
+                        },
+                        "shape": {
+                            "average_ms": 0.2830766666666667,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.434,
+                            "p50_ms": 0.2678,
+                            "p95_ms": 0.4062
+                        },
+                        "text": {
+                            "average_ms": 0.50167,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.5737,
+                            "p50_ms": 0.495,
+                            "p95_ms": 0.5589
+                        },
+                        "thumbnail_cache_miss": {
+                            "average_ms": 9.346576666666666,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 10.204799999999999,
+                            "p50_ms": 9.2834,
+                            "p95_ms": 10.037099999999999
+                        }
+                    }
+                },
+                "pixel_outputs_match": true,
+                "warm": {
+                    "iteration_wall_time": {
+                        "average_ms": 124.80097333333333,
+                        "iterations": 30,
+                        "maximum_ms": 134.5651,
+                        "p50_ms": 122.3701,
+                        "p95_ms": 133.6298
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 84.76066666666665,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 92.19709999999999,
+                            "p50_ms": 83.3344,
+                            "p95_ms": 91.6807
+                        },
+                        "erase_stroke": {
+                            "average_ms": 28.4761,
+                            "call_count_total": 720,
+                            "iterations": 30,
+                            "maximum_ms": 31.331899999999997,
+                            "p50_ms": 27.935299999999998,
+                            "p95_ms": 30.552
+                        },
+                        "group_composition": {
+                            "average_ms": 78.65687333333334,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 85.81439999999999,
+                            "p50_ms": 77.3963,
+                            "p95_ms": 83.4258
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 40.00736666666667,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 45.2365,
+                            "p50_ms": 39.2423,
+                            "p95_ms": 42.9976
+                        },
+                        "layer_composition": {
+                            "average_ms": 111.96190333333332,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 120.8976,
+                            "p50_ms": 109.66149999999999,
+                            "p95_ms": 120.8356
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.013819999999999999,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.0368,
+                            "p50_ms": 0.012199999999999999,
+                            "p95_ms": 0.0246
+                        },
+                        "operation_replay": {
+                            "average_ms": 105.74111666666666,
+                            "call_count_total": 270,
+                            "iterations": 30,
+                            "maximum_ms": 114.61649999999999,
+                            "p50_ms": 103.5628,
+                            "p95_ms": 114.2742
+                        },
+                        "paint_stroke": {
+                            "average_ms": 76.03457,
+                            "call_count_total": 2160,
+                            "iterations": 30,
+                            "maximum_ms": 82.5123,
+                            "p50_ms": 74.72919999999999,
+                            "p95_ms": 82.264
+                        },
+                        "raster_image": {
+                            "average_ms": 0.5365166666666666,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 0.6653,
+                            "p50_ms": 0.5325,
+                            "p95_ms": 0.6474
+                        },
+                        "shape": {
+                            "average_ms": 0.2584666666666667,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.34409999999999996,
+                            "p50_ms": 0.24789999999999998,
+                            "p95_ms": 0.3326
+                        },
+                        "text": {
+                            "average_ms": 0.3853933333333333,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.48529999999999995,
+                            "p50_ms": 0.37329999999999997,
+                            "p95_ms": 0.48519999999999996
+                        },
+                        "thumbnail_cache_hit": {
+                            "average_ms": 0.009093333333333333,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 0.0147,
+                            "p50_ms": 0.0094,
+                            "p95_ms": 0.0135
+                        }
+                    }
+                }
+            },
+            "warmup_iterations": 3,
+            "workload": {
+                "editable_layer_count": 4,
+                "group_count": 1,
+                "height": 1080,
+                "includes_png_jpeg_export": false,
+                "layer_count_including_background": 5,
+                "mask_strokes_per_layer": 0,
+                "name": "reference",
+                "operation_count": 70,
+                "raster_repeats_per_layer": 1,
+                "raster_resource_count": 1,
+                "raster_source_height": 512,
+                "raster_source_width": 512,
+                "stroke_points_per_stroke": 64,
+                "width": 1920
+            }
+        },
+        {
+            "measured_iterations": 30,
+            "resource_samples": {
+                "private_usage_end_bytes": 37203968,
+                "private_usage_sampled_peak_bytes": 80424960,
+                "private_usage_start_bytes": 19202048,
+                "process_cpu_percent_latest": 104.72043831786662,
+                "working_set_end_bytes": 56221696,
+                "working_set_sampled_peak_bytes": 99303424,
+                "working_set_start_bytes": 37556224
+            },
+            "view_refresh": {
+                "cache_prime_refreshes_excluded": 1,
+                "cold": {
+                    "iteration_wall_time": {
+                        "average_ms": 580.8415266666667,
+                        "iterations": 30,
+                        "maximum_ms": 644.5881999999999,
+                        "p50_ms": 575.3756999999999,
+                        "p95_ms": 637.0803999999999
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 368.03908666666666,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 403.1624,
+                            "p50_ms": 363.3605,
+                            "p95_ms": 402.96529999999996
+                        },
+                        "erase_stroke": {
+                            "average_ms": 14.128193333333334,
+                            "call_count_total": 600,
+                            "iterations": 30,
+                            "maximum_ms": 16.1981,
+                            "p50_ms": 14.0587,
+                            "p95_ms": 15.861699999999999
+                        },
+                        "group_composition": {
+                            "average_ms": 345.32255999999995,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 381.4498,
+                            "p50_ms": 341.2357,
+                            "p95_ms": 378.84839999999997
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 173.1579933333333,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 203.6524,
+                            "p50_ms": 168.70839999999998,
+                            "p95_ms": 190.9184
+                        },
+                        "layer_composition": {
+                            "average_ms": 528.6619833333333,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 581.1646,
+                            "p50_ms": 523.8473,
+                            "p95_ms": 579.1124
+                        },
+                        "layer_thumbnail": {
+                            "average_ms": 23.313969999999998,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 29.726799999999997,
+                            "p50_ms": 22.537599999999998,
+                            "p95_ms": 27.2897
+                        },
+                        "mask_application": {
+                            "average_ms": 64.61240666666667,
+                            "call_count_total": 300,
+                            "iterations": 30,
+                            "maximum_ms": 68.7663,
+                            "p50_ms": 63.9494,
+                            "p95_ms": 68.43769999999999
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 16.300246666666666,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 20.7334,
+                            "p50_ms": 15.8395,
+                            "p95_ms": 20.029899999999998
+                        },
+                        "operation_replay": {
+                            "average_ms": 483.7977766666666,
+                            "call_count_total": 16980,
+                            "iterations": 30,
+                            "maximum_ms": 542.9679,
+                            "p50_ms": 479.90189999999996,
+                            "p95_ms": 535.7094
+                        },
+                        "paint_stroke": {
+                            "average_ms": 467.98683666666665,
+                            "call_count_total": 28680,
+                            "iterations": 30,
+                            "maximum_ms": 525.9603999999999,
+                            "p50_ms": 463.9219,
+                            "p95_ms": 517.7692999999999
+                        },
+                        "raster_image": {
+                            "average_ms": 0.6011366666666667,
+                            "call_count_total": 300,
+                            "iterations": 30,
+                            "maximum_ms": 0.7667999999999999,
+                            "p50_ms": 0.5962999999999999,
+                            "p95_ms": 0.7066
+                        },
+                        "shape": {
+                            "average_ms": 0.26770333333333335,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.3727,
+                            "p50_ms": 0.2511,
+                            "p95_ms": 0.35059999999999997
+                        },
+                        "text": {
+                            "average_ms": 0.5223766666666666,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.6997,
+                            "p50_ms": 0.49989999999999996,
+                            "p95_ms": 0.6231
+                        },
+                        "thumbnail_cache_miss": {
+                            "average_ms": 23.333183333333334,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 29.7623,
+                            "p50_ms": 22.5541,
+                            "p95_ms": 27.307399999999998
+                        }
+                    }
+                },
+                "pixel_outputs_match": true,
+                "warm": {
+                    "iteration_wall_time": {
+                        "average_ms": 563.0935066666666,
+                        "iterations": 30,
+                        "maximum_ms": 654.1236,
+                        "p50_ms": 556.6881,
+                        "p95_ms": 614.8605
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 370.85177666666664,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 429.5922,
+                            "p50_ms": 363.43829999999997,
+                            "p95_ms": 412.29449999999997
+                        },
+                        "erase_stroke": {
+                            "average_ms": 13.413663333333334,
+                            "call_count_total": 360,
+                            "iterations": 30,
+                            "maximum_ms": 16.0463,
+                            "p50_ms": 13.2196,
+                            "p95_ms": 15.2005
+                        },
+                        "group_composition": {
+                            "average_ms": 349.3206633333333,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 389.8827,
+                            "p50_ms": 344.3456,
+                            "p95_ms": 385.2376
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 175.26964333333333,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 205.28459999999998,
+                            "p50_ms": 172.0918,
+                            "p95_ms": 202.0101
+                        },
+                        "layer_composition": {
+                            "average_ms": 533.41629,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 621.6713,
+                            "p50_ms": 528.6342999999999,
+                            "p95_ms": 584.2283
+                        },
+                        "mask_application": {
+                            "average_ms": 64.85468666666667,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 71.9686,
+                            "p50_ms": 64.0358,
+                            "p95_ms": 71.01939999999999
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 16.949496666666665,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 35.6492,
+                            "p50_ms": 15.870899999999999,
+                            "p95_ms": 21.639799999999997
+                        },
+                        "operation_replay": {
+                            "average_ms": 470.5386033333333,
+                            "call_count_total": 8130,
+                            "iterations": 30,
+                            "maximum_ms": 553.7647999999999,
+                            "p50_ms": 463.18289999999996,
+                            "p95_ms": 521.3788
+                        },
+                        "paint_stroke": {
+                            "average_ms": 455.6736066666666,
+                            "call_count_total": 20280,
+                            "iterations": 30,
+                            "maximum_ms": 535.8838,
+                            "p50_ms": 448.4344,
+                            "p95_ms": 504.6276
+                        },
+                        "raster_image": {
+                            "average_ms": 0.5749133333333333,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 0.8977999999999999,
+                            "p50_ms": 0.5507,
+                            "p95_ms": 0.7638999999999999
+                        },
+                        "shape": {
+                            "average_ms": 0.25720666666666664,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.40449999999999997,
+                            "p50_ms": 0.2486,
+                            "p95_ms": 0.3933
+                        },
+                        "text": {
+                            "average_ms": 0.38799666666666666,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.5155,
+                            "p50_ms": 0.3806,
+                            "p95_ms": 0.4478
+                        },
+                        "thumbnail_cache_hit": {
+                            "average_ms": 0.010856666666666666,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 0.0237,
+                            "p50_ms": 0.01,
+                            "p95_ms": 0.018699999999999998
+                        }
+                    }
+                }
+            },
+            "warmup_iterations": 3,
+            "workload": {
+                "editable_layer_count": 4,
+                "group_count": 1,
+                "height": 1080,
+                "includes_png_jpeg_export": false,
+                "layer_count_including_background": 5,
+                "mask_strokes_per_layer": 64,
+                "name": "mask-heavy",
+                "operation_count": 294,
+                "raster_repeats_per_layer": 1,
+                "raster_resource_count": 1,
+                "raster_source_height": 512,
+                "raster_source_width": 512,
+                "stroke_points_per_stroke": 64,
+                "width": 1920
+            }
+        },
+        {
+            "measured_iterations": 30,
+            "resource_samples": {
+                "private_usage_end_bytes": 52555776,
+                "private_usage_sampled_peak_bytes": 86896640,
+                "private_usage_start_bytes": 19120128,
+                "process_cpu_percent_latest": 166.3782471067167,
+                "working_set_end_bytes": 71045120,
+                "working_set_sampled_peak_bytes": 105308160,
+                "working_set_start_bytes": 38109184
+            },
+            "view_refresh": {
+                "cache_prime_refreshes_excluded": 1,
+                "cold": {
+                    "iteration_wall_time": {
+                        "average_ms": 992.7689599999999,
+                        "iterations": 30,
+                        "maximum_ms": 1075.6312,
+                        "p50_ms": 982.2734999999999,
+                        "p95_ms": 1031.4293
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 640.2374599999999,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 690.9979999999999,
+                            "p50_ms": 633.8222,
+                            "p95_ms": 686.8745
+                        },
+                        "erase_stroke": {
+                            "average_ms": 251.94348666666664,
+                            "call_count_total": 9600,
+                            "iterations": 30,
+                            "maximum_ms": 272.8606,
+                            "p50_ms": 248.98639999999997,
+                            "p95_ms": 262.1818
+                        },
+                        "group_composition": {
+                            "average_ms": 622.32934,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 683.2474,
+                            "p50_ms": 619.4773,
+                            "p95_ms": 650.1102
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 311.45729666666665,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 370.21619999999996,
+                            "p50_ms": 310.80969999999996,
+                            "p95_ms": 325.62629999999996
+                        },
+                        "layer_composition": {
+                            "average_ms": 938.5488933333332,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 1017.4790999999999,
+                            "p50_ms": 930.2065,
+                            "p95_ms": 979.1404
+                        },
+                        "layer_thumbnail": {
+                            "average_ms": 41.02151666666666,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 46.9171,
+                            "p50_ms": 39.8286,
+                            "p95_ms": 46.897099999999995
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.022729999999999997,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.0436,
+                            "p50_ms": 0.0224,
+                            "p95_ms": 0.0428
+                        },
+                        "operation_replay": {
+                            "average_ms": 968.1183533333333,
+                            "call_count_total": 15840,
+                            "iterations": 30,
+                            "maximum_ms": 1049.4645,
+                            "p50_ms": 958.0666,
+                            "p95_ms": 1006.4228999999999
+                        },
+                        "paint_stroke": {
+                            "average_ms": 714.2649266666666,
+                            "call_count_total": 28800,
+                            "iterations": 30,
+                            "maximum_ms": 774.5658999999999,
+                            "p50_ms": 706.6032,
+                            "p95_ms": 742.2891999999999
+                        },
+                        "raster_image": {
+                            "average_ms": 0.59454,
+                            "call_count_total": 300,
+                            "iterations": 30,
+                            "maximum_ms": 1.111,
+                            "p50_ms": 0.5619,
+                            "p95_ms": 0.7421
+                        },
+                        "shape": {
+                            "average_ms": 0.27841999999999995,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.4211,
+                            "p50_ms": 0.2718,
+                            "p95_ms": 0.4097
+                        },
+                        "text": {
+                            "average_ms": 0.5545933333333333,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.6496,
+                            "p50_ms": 0.5445,
+                            "p95_ms": 0.6213
+                        },
+                        "thumbnail_cache_miss": {
+                            "average_ms": 41.04062666666666,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 46.9437,
+                            "p50_ms": 39.8453,
+                            "p95_ms": 46.9145
+                        }
+                    }
+                },
+                "pixel_outputs_match": true,
+                "warm": {
+                    "iteration_wall_time": {
+                        "average_ms": 945.0370633333333,
+                        "iterations": 30,
+                        "maximum_ms": 1027.8173,
+                        "p50_ms": 935.0131,
+                        "p95_ms": 1005.6508
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 637.64033,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 714.2262999999999,
+                            "p50_ms": 632.5889,
+                            "p95_ms": 686.4793
+                        },
+                        "erase_stroke": {
+                            "average_ms": 240.24850666666666,
+                            "call_count_total": 5760,
+                            "iterations": 30,
+                            "maximum_ms": 259.22659999999996,
+                            "p50_ms": 238.54659999999998,
+                            "p95_ms": 255.4641
+                        },
+                        "group_composition": {
+                            "average_ms": 617.51437,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 678.0944,
+                            "p50_ms": 610.6875,
+                            "p95_ms": 675.7452999999999
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 307.36059666666665,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 344.19309999999996,
+                            "p50_ms": 304.7615,
+                            "p95_ms": 333.5331
+                        },
+                        "layer_composition": {
+                            "average_ms": 931.7179266666666,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 1014.8987,
+                            "p50_ms": 922.0047,
+                            "p95_ms": 990.9792
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.012596666666666666,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.0184,
+                            "p50_ms": 0.0123,
+                            "p95_ms": 0.0171
+                        },
+                        "operation_replay": {
+                            "average_ms": 925.55936,
+                            "call_count_total": 270,
+                            "iterations": 30,
+                            "maximum_ms": 1008.1546,
+                            "p50_ms": 915.9848999999999,
+                            "p95_ms": 984.4395
+                        },
+                        "paint_stroke": {
+                            "average_ms": 683.7507,
+                            "call_count_total": 17280,
+                            "iterations": 30,
+                            "maximum_ms": 747.3361,
+                            "p50_ms": 676.9186,
+                            "p95_ms": 730.0458
+                        },
+                        "raster_image": {
+                            "average_ms": 0.5279733333333333,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 0.6967,
+                            "p50_ms": 0.5194,
+                            "p95_ms": 0.6658
+                        },
+                        "shape": {
+                            "average_ms": 0.25325,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.3339,
+                            "p50_ms": 0.2471,
+                            "p95_ms": 0.30529999999999996
+                        },
+                        "text": {
+                            "average_ms": 0.4148233333333333,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.5109,
+                            "p50_ms": 0.3989,
+                            "p95_ms": 0.47719999999999996
+                        },
+                        "thumbnail_cache_hit": {
+                            "average_ms": 0.013186666666666668,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 0.09179999999999999,
+                            "p50_ms": 0.0106,
+                            "p95_ms": 0.016
+                        }
+                    }
+                }
+            },
+            "warmup_iterations": 3,
+            "workload": {
+                "editable_layer_count": 4,
+                "group_count": 1,
+                "height": 1080,
+                "includes_png_jpeg_export": false,
+                "layer_count_including_background": 5,
+                "mask_strokes_per_layer": 0,
+                "name": "stroke-heavy",
+                "operation_count": 518,
+                "raster_repeats_per_layer": 1,
+                "raster_resource_count": 1,
+                "raster_source_height": 512,
+                "raster_source_width": 512,
+                "stroke_points_per_stroke": 64,
+                "width": 1920
+            }
+        },
+        {
+            "measured_iterations": 30,
+            "resource_samples": {
+                "private_usage_end_bytes": 128782336,
+                "private_usage_sampled_peak_bytes": 278609920,
+                "private_usage_start_bytes": 61730816,
+                "process_cpu_percent_latest": 192.9877320215985,
+                "working_set_end_bytes": 147738624,
+                "working_set_sampled_peak_bytes": 297263104,
+                "working_set_start_bytes": 80211968
+            },
+            "view_refresh": {
+                "cache_prime_refreshes_excluded": 1,
+                "cold": {
+                    "iteration_wall_time": {
+                        "average_ms": 279.5929733333333,
+                        "iterations": 30,
+                        "maximum_ms": 304.3623,
+                        "p50_ms": 276.4712,
+                        "p95_ms": 296.188
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 176.31030666666666,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 194.3029,
+                            "p50_ms": 174.70759999999999,
+                            "p95_ms": 185.44
+                        },
+                        "erase_stroke": {
+                            "average_ms": 51.841563333333326,
+                            "call_count_total": 1800,
+                            "iterations": 30,
+                            "maximum_ms": 57.1904,
+                            "p50_ms": 51.6323,
+                            "p95_ms": 55.1988
+                        },
+                        "group_composition": {
+                            "average_ms": 159.95317666666668,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 170.9503,
+                            "p50_ms": 158.83689999999999,
+                            "p95_ms": 167.2608
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 83.00267,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 91.00229999999999,
+                            "p50_ms": 81.9814,
+                            "p95_ms": 89.0852
+                        },
+                        "layer_composition": {
+                            "average_ms": 214.79234,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 235.1139,
+                            "p50_ms": 212.8268,
+                            "p95_ms": 226.5741
+                        },
+                        "layer_thumbnail": {
+                            "average_ms": 20.22807,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 23.5356,
+                            "p50_ms": 20.0302,
+                            "p95_ms": 21.224999999999998
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.02061,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.041299999999999996,
+                            "p50_ms": 0.018099999999999998,
+                            "p95_ms": 0.0384
+                        },
+                        "operation_replay": {
+                            "average_ms": 192.90824666666666,
+                            "call_count_total": 3360,
+                            "iterations": 30,
+                            "maximum_ms": 212.69629999999998,
+                            "p50_ms": 191.4928,
+                            "p95_ms": 204.3816
+                        },
+                        "paint_stroke": {
+                            "average_ms": 137.51022666666665,
+                            "call_count_total": 5400,
+                            "iterations": 30,
+                            "maximum_ms": 151.5776,
+                            "p50_ms": 135.99689999999998,
+                            "p95_ms": 146.6667
+                        },
+                        "raster_image": {
+                            "average_ms": 2.5828666666666664,
+                            "call_count_total": 300,
+                            "iterations": 30,
+                            "maximum_ms": 3.0968999999999998,
+                            "p50_ms": 2.5189,
+                            "p95_ms": 3.026
+                        },
+                        "shape": {
+                            "average_ms": 0.2941333333333333,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.6927,
+                            "p50_ms": 0.2628,
+                            "p95_ms": 0.5015999999999999
+                        },
+                        "text": {
+                            "average_ms": 0.58217,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.6762,
+                            "p50_ms": 0.581,
+                            "p95_ms": 0.6599999999999999
+                        },
+                        "thumbnail_cache_miss": {
+                            "average_ms": 20.24709,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 23.5581,
+                            "p50_ms": 20.048099999999998,
+                            "p95_ms": 21.2379
+                        }
+                    }
+                },
+                "pixel_outputs_match": true,
+                "warm": {
+                    "iteration_wall_time": {
+                        "average_ms": 260.83445333333333,
+                        "iterations": 30,
+                        "maximum_ms": 307.6984,
+                        "p50_ms": 256.38599999999997,
+                        "p95_ms": 278.9114
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 176.92112,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 198.57489999999999,
+                            "p50_ms": 173.0575,
+                            "p95_ms": 189.51309999999998
+                        },
+                        "erase_stroke": {
+                            "average_ms": 51.05379333333333,
+                            "call_count_total": 1080,
+                            "iterations": 30,
+                            "maximum_ms": 60.5912,
+                            "p50_ms": 50.1252,
+                            "p95_ms": 56.456799999999994
+                        },
+                        "group_composition": {
+                            "average_ms": 161.31609333333333,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 192.29989999999998,
+                            "p50_ms": 157.1615,
+                            "p95_ms": 173.1697
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 83.86965333333333,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 109.07369999999999,
+                            "p50_ms": 81.9356,
+                            "p95_ms": 95.9388
+                        },
+                        "layer_composition": {
+                            "average_ms": 215.61339333333333,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 257.00649999999996,
+                            "p50_ms": 211.42149999999998,
+                            "p95_ms": 231.5399
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.017813333333333334,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.0276,
+                            "p50_ms": 0.0186,
+                            "p95_ms": 0.0235
+                        },
+                        "operation_replay": {
+                            "average_ms": 190.47528333333332,
+                            "call_count_total": 270,
+                            "iterations": 30,
+                            "maximum_ms": 227.2852,
+                            "p50_ms": 186.8165,
+                            "p95_ms": 206.3635
+                        },
+                        "paint_stroke": {
+                            "average_ms": 136.19682,
+                            "call_count_total": 3240,
+                            "iterations": 30,
+                            "maximum_ms": 163.1962,
+                            "p50_ms": 133.63809999999998,
+                            "p95_ms": 146.698
+                        },
+                        "raster_image": {
+                            "average_ms": 2.49938,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 3.1571,
+                            "p50_ms": 2.4253,
+                            "p95_ms": 2.8764
+                        },
+                        "shape": {
+                            "average_ms": 0.2549666666666667,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.3589,
+                            "p50_ms": 0.2418,
+                            "p95_ms": 0.3075
+                        },
+                        "text": {
+                            "average_ms": 0.39037666666666665,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.4985,
+                            "p50_ms": 0.37539999999999996,
+                            "p95_ms": 0.4788
+                        },
+                        "thumbnail_cache_hit": {
+                            "average_ms": 0.012546666666666666,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 0.025099999999999997,
+                            "p50_ms": 0.0126,
+                            "p95_ms": 0.016999999999999998
+                        }
+                    }
+                }
+            },
+            "warmup_iterations": 3,
+            "workload": {
+                "editable_layer_count": 4,
+                "group_count": 1,
+                "height": 2160,
+                "includes_png_jpeg_export": false,
+                "layer_count_including_background": 5,
+                "mask_strokes_per_layer": 0,
+                "name": "large-image",
+                "operation_count": 102,
+                "raster_repeats_per_layer": 1,
+                "raster_resource_count": 1,
+                "raster_source_height": 2048,
+                "raster_source_width": 2048,
+                "stroke_points_per_stroke": 64,
+                "width": 3840
+            }
+        },
+        {
+            "measured_iterations": 30,
+            "resource_samples": {
+                "private_usage_end_bytes": 53321728,
+                "private_usage_sampled_peak_bytes": 96030720,
+                "private_usage_start_bytes": 36724736,
+                "process_cpu_percent_latest": 404.8997403458945,
+                "working_set_end_bytes": 72138752,
+                "working_set_sampled_peak_bytes": 113946624,
+                "working_set_start_bytes": 54996992
+            },
+            "view_refresh": {
+                "cache_prime_refreshes_excluded": 1,
+                "cold": {
+                    "iteration_wall_time": {
+                        "average_ms": 65.29162,
+                        "iterations": 30,
+                        "maximum_ms": 88.2209,
+                        "p50_ms": 63.8338,
+                        "p95_ms": 70.1606
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 40.679406666666665,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 57.5922,
+                            "p50_ms": 39.8249,
+                            "p95_ms": 43.6779
+                        },
+                        "erase_stroke": {
+                            "average_ms": 5.5550299999999995,
+                            "call_count_total": 300,
+                            "iterations": 30,
+                            "maximum_ms": 7.6475,
+                            "p50_ms": 5.436,
+                            "p95_ms": 6.3324
+                        },
+                        "group_composition": {
+                            "average_ms": 34.40013999999999,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 44.732299999999995,
+                            "p50_ms": 33.6401,
+                            "p95_ms": 36.8748
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 17.933176666666665,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 22.394399999999997,
+                            "p50_ms": 17.556,
+                            "p95_ms": 19.4001
+                        },
+                        "layer_composition": {
+                            "average_ms": 46.48625333333333,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 64.6308,
+                            "p50_ms": 45.1875,
+                            "p95_ms": 50.221399999999996
+                        },
+                        "layer_thumbnail": {
+                            "average_ms": 6.635806666666666,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 8.1848,
+                            "p50_ms": 6.6248,
+                            "p95_ms": 7.9771
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.015986666666666666,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.041999999999999996,
+                            "p50_ms": 0.0138,
+                            "p95_ms": 0.037399999999999996
+                        },
+                        "operation_replay": {
+                            "average_ms": 42.403953333333334,
+                            "call_count_total": 1740,
+                            "iterations": 30,
+                            "maximum_ms": 59.3923,
+                            "p50_ms": 41.4706,
+                            "p95_ms": 46.247
+                        },
+                        "paint_stroke": {
+                            "average_ms": 11.243636666666667,
+                            "call_count_total": 900,
+                            "iterations": 30,
+                            "maximum_ms": 15.2121,
+                            "p50_ms": 10.8886,
+                            "p95_ms": 12.988199999999999
+                        },
+                        "raster_image": {
+                            "average_ms": 25.555133333333334,
+                            "call_count_total": 2400,
+                            "iterations": 30,
+                            "maximum_ms": 36.4623,
+                            "p50_ms": 25.0703,
+                            "p95_ms": 27.1928
+                        },
+                        "thumbnail_cache_miss": {
+                            "average_ms": 6.652256666666667,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 8.2075,
+                            "p50_ms": 6.6391,
+                            "p95_ms": 7.996499999999999
+                        }
+                    }
+                },
+                "pixel_outputs_match": true,
+                "warm": {
+                    "iteration_wall_time": {
+                        "average_ms": 58.18504666666666,
+                        "iterations": 30,
+                        "maximum_ms": 65.7136,
+                        "p50_ms": 57.551199999999994,
+                        "p95_ms": 64.59479999999999
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 40.02672333333333,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 44.805,
+                            "p50_ms": 39.6838,
+                            "p95_ms": 44.5548
+                        },
+                        "erase_stroke": {
+                            "average_ms": 5.101596666666667,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 6.0379,
+                            "p50_ms": 4.9677,
+                            "p95_ms": 5.8636
+                        },
+                        "group_composition": {
+                            "average_ms": 34.056763333333336,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 38.8559,
+                            "p50_ms": 33.5064,
+                            "p95_ms": 37.8452
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 18.123726666666663,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 21.133499999999998,
+                            "p50_ms": 17.768,
+                            "p95_ms": 20.308899999999998
+                        },
+                        "layer_composition": {
+                            "average_ms": 45.89611333333333,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 52.860099999999996,
+                            "p50_ms": 45.3517,
+                            "p95_ms": 51.654599999999995
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.013373333333333333,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.0189,
+                            "p50_ms": 0.0133,
+                            "p95_ms": 0.018699999999999998
+                        },
+                        "operation_replay": {
+                            "average_ms": 39.60686333333333,
+                            "call_count_total": 270,
+                            "iterations": 30,
+                            "maximum_ms": 46.082499999999996,
+                            "p50_ms": 39.1177,
+                            "p95_ms": 44.7835
+                        },
+                        "paint_stroke": {
+                            "average_ms": 10.434543333333332,
+                            "call_count_total": 540,
+                            "iterations": 30,
+                            "maximum_ms": 12.851999999999999,
+                            "p50_ms": 10.2784,
+                            "p95_ms": 12.2601
+                        },
+                        "raster_image": {
+                            "average_ms": 24.020106666666667,
+                            "call_count_total": 1440,
+                            "iterations": 30,
+                            "maximum_ms": 27.319499999999998,
+                            "p50_ms": 23.825599999999998,
+                            "p95_ms": 26.4345
+                        },
+                        "thumbnail_cache_hit": {
+                            "average_ms": 0.010796666666666666,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 0.0163,
+                            "p50_ms": 0.0109,
+                            "p95_ms": 0.0159
+                        }
+                    }
+                }
+            },
+            "warmup_iterations": 3,
+            "workload": {
+                "editable_layer_count": 4,
+                "group_count": 1,
+                "height": 1080,
+                "includes_png_jpeg_export": false,
+                "layer_count_including_background": 5,
+                "mask_strokes_per_layer": 0,
+                "name": "repeated-source",
+                "operation_count": 48,
+                "raster_repeats_per_layer": 8,
+                "raster_resource_count": 1,
+                "raster_source_height": 2048,
+                "raster_source_width": 2048,
+                "stroke_points_per_stroke": 64,
+                "width": 1920
+            }
+        },
+        {
+            "export": {
+                "iteration_wall_time": {
+                    "average_ms": 579.57272,
+                    "iterations": 30,
+                    "maximum_ms": 629.3188,
+                    "p50_ms": 575.0944999999999,
+                    "p95_ms": 614.0703
+                },
+                "stage_time_per_iteration": {
+                    "composite": {
+                        "average_ms": 177.18195999999998,
+                        "call_count_total": 60,
+                        "iterations": 30,
+                        "maximum_ms": 198.8998,
+                        "p50_ms": 175.9535,
+                        "p95_ms": 197.0571
+                    },
+                    "erase_stroke": {
+                        "average_ms": 39.043173333333336,
+                        "call_count_total": 960,
+                        "iterations": 30,
+                        "maximum_ms": 48.259299999999996,
+                        "p50_ms": 38.1678,
+                        "p95_ms": 44.6396
+                    },
+                    "export_encode": {
+                        "average_ms": 397.9672,
+                        "call_count_total": 60,
+                        "iterations": 30,
+                        "maximum_ms": 427.5156,
+                        "p50_ms": 394.98199999999997,
+                        "p95_ms": 417.89759999999995
+                    },
+                    "export_render": {
+                        "average_ms": 177.18488333333332,
+                        "call_count_total": 60,
+                        "iterations": 30,
+                        "maximum_ms": 198.9032,
+                        "p50_ms": 175.9562,
+                        "p95_ms": 197.06
+                    },
+                    "group_composition": {
+                        "average_ms": 80.62034999999999,
+                        "call_count_total": 60,
+                        "iterations": 30,
+                        "maximum_ms": 89.8351,
+                        "p50_ms": 79.69749999999999,
+                        "p95_ms": 88.2564
+                    },
+                    "jpeg_flatten": {
+                        "average_ms": 2.091333333333333,
+                        "call_count_total": 30,
+                        "iterations": 30,
+                        "maximum_ms": 2.6058999999999997,
+                        "p50_ms": 2.0286999999999997,
+                        "p95_ms": 2.5219
+                    },
+                    "layer_composition": {
+                        "average_ms": 156.34943333333334,
+                        "call_count_total": 240,
+                        "iterations": 30,
+                        "maximum_ms": 178.26739999999998,
+                        "p50_ms": 155.2981,
+                        "p95_ms": 174.45159999999998
+                    },
+                    "operation_replay": {
+                        "average_ms": 147.88120333333333,
+                        "call_count_total": 360,
+                        "iterations": 30,
+                        "maximum_ms": 169.4511,
+                        "p50_ms": 146.712,
+                        "p95_ms": 165.02339999999998
+                    },
+                    "paint_stroke": {
+                        "average_ms": 107.24023666666666,
+                        "call_count_total": 2880,
+                        "iterations": 30,
+                        "maximum_ms": 119.61439999999999,
+                        "p50_ms": 106.09639999999999,
+                        "p95_ms": 118.43769999999999
+                    },
+                    "raster_image": {
+                        "average_ms": 0.8727033333333333,
+                        "call_count_total": 240,
+                        "iterations": 30,
+                        "maximum_ms": 1.1154,
+                        "p50_ms": 0.8535999999999999,
+                        "p95_ms": 1.0569
+                    },
+                    "shape": {
+                        "average_ms": 0.26849666666666666,
+                        "call_count_total": 60,
+                        "iterations": 30,
+                        "maximum_ms": 0.38589999999999997,
+                        "p50_ms": 0.2587,
+                        "p95_ms": 0.382
+                    },
+                    "text": {
+                        "average_ms": 0.38659999999999994,
+                        "call_count_total": 60,
+                        "iterations": 30,
+                        "maximum_ms": 0.4971,
+                        "p50_ms": 0.37429999999999997,
+                        "p95_ms": 0.4633
+                    }
+                }
+            },
+            "measured_iterations": 30,
+            "resource_samples": {
+                "private_usage_end_bytes": 37580800,
+                "private_usage_sampled_peak_bytes": 71708672,
+                "private_usage_start_bytes": 21381120,
+                "process_cpu_percent_latest": 106.53222313634761,
+                "working_set_end_bytes": 56868864,
+                "working_set_sampled_peak_bytes": 90804224,
+                "working_set_start_bytes": 40226816
+            },
+            "view_refresh": {
+                "cache_prime_refreshes_excluded": 1,
+                "cold": {
+                    "iteration_wall_time": {
+                        "average_ms": 134.12750333333332,
+                        "iterations": 30,
+                        "maximum_ms": 153.15349999999998,
+                        "p50_ms": 131.1154,
+                        "p95_ms": 144.3065
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 84.80974333333333,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 92.3308,
+                            "p50_ms": 83.5376,
+                            "p95_ms": 91.2869
+                        },
+                        "erase_stroke": {
+                            "average_ms": 30.092633333333332,
+                            "call_count_total": 1200,
+                            "iterations": 30,
+                            "maximum_ms": 33.9983,
+                            "p50_ms": 29.493299999999998,
+                            "p95_ms": 33.189
+                        },
+                        "group_composition": {
+                            "average_ms": 78.3513,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 88.80879999999999,
+                            "p50_ms": 76.25269999999999,
+                            "p95_ms": 85.15039999999999
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 40.106513333333325,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 51.9437,
+                            "p50_ms": 38.936,
+                            "p95_ms": 44.416
+                        },
+                        "layer_composition": {
+                            "average_ms": 112.29485,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 127.7123,
+                            "p50_ms": 109.3397,
+                            "p95_ms": 122.39959999999999
+                        },
+                        "layer_thumbnail": {
+                            "average_ms": 9.174093333333333,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 11.920499999999999,
+                            "p50_ms": 8.929499999999999,
+                            "p95_ms": 10.3555
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.012683333333333333,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.0298,
+                            "p50_ms": 0.0115,
+                            "p95_ms": 0.0219
+                        },
+                        "operation_replay": {
+                            "average_ms": 110.93503,
+                            "call_count_total": 2400,
+                            "iterations": 30,
+                            "maximum_ms": 125.8462,
+                            "p50_ms": 108.09009999999999,
+                            "p95_ms": 120.28359999999999
+                        },
+                        "paint_stroke": {
+                            "average_ms": 79.39144,
+                            "call_count_total": 3600,
+                            "iterations": 30,
+                            "maximum_ms": 89.9149,
+                            "p50_ms": 77.1026,
+                            "p95_ms": 87.68459999999999
+                        },
+                        "raster_image": {
+                            "average_ms": 0.5743966666666667,
+                            "call_count_total": 300,
+                            "iterations": 30,
+                            "maximum_ms": 0.6591,
+                            "p50_ms": 0.5666,
+                            "p95_ms": 0.641
+                        },
+                        "shape": {
+                            "average_ms": 0.29512666666666665,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.6125999999999999,
+                            "p50_ms": 0.2719,
+                            "p95_ms": 0.5201
+                        },
+                        "text": {
+                            "average_ms": 0.5118766666666666,
+                            "call_count_total": 90,
+                            "iterations": 30,
+                            "maximum_ms": 0.6127,
+                            "p50_ms": 0.5019,
+                            "p95_ms": 0.5912999999999999
+                        },
+                        "thumbnail_cache_miss": {
+                            "average_ms": 9.188823333333334,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 11.9355,
+                            "p50_ms": 8.9412,
+                            "p95_ms": 10.3726
+                        }
+                    }
+                },
+                "pixel_outputs_match": true,
+                "warm": {
+                    "iteration_wall_time": {
+                        "average_ms": 126.43343666666667,
+                        "iterations": 30,
+                        "maximum_ms": 141.4522,
+                        "p50_ms": 124.4391,
+                        "p95_ms": 140.3803
+                    },
+                    "stage_time_per_iteration": {
+                        "composite": {
+                            "average_ms": 85.59560666666667,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 97.4024,
+                            "p50_ms": 83.5448,
+                            "p95_ms": 94.26249999999999
+                        },
+                        "erase_stroke": {
+                            "average_ms": 29.053173333333334,
+                            "call_count_total": 720,
+                            "iterations": 30,
+                            "maximum_ms": 33.3437,
+                            "p50_ms": 28.4775,
+                            "p95_ms": 32.0789
+                        },
+                        "group_composition": {
+                            "average_ms": 79.97861333333334,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 90.9208,
+                            "p50_ms": 78.8335,
+                            "p95_ms": 89.655
+                        },
+                        "group_thumbnail": {
+                            "average_ms": 40.80397,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 48.5436,
+                            "p50_ms": 40.2147,
+                            "p95_ms": 45.797399999999996
+                        },
+                        "layer_composition": {
+                            "average_ms": 113.84303,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 128.45589999999999,
+                            "p50_ms": 111.359,
+                            "p95_ms": 126.23849999999999
+                        },
+                        "mask_thumbnail": {
+                            "average_ms": 0.013463333333333332,
+                            "call_count_total": 30,
+                            "iterations": 30,
+                            "maximum_ms": 0.0438,
+                            "p50_ms": 0.011899999999999999,
+                            "p95_ms": 0.018699999999999998
+                        },
+                        "operation_replay": {
+                            "average_ms": 107.66989333333332,
+                            "call_count_total": 270,
+                            "iterations": 30,
+                            "maximum_ms": 121.3766,
+                            "p50_ms": 105.3659,
+                            "p95_ms": 119.83099999999999
+                        },
+                        "paint_stroke": {
+                            "average_ms": 77.39216333333333,
+                            "call_count_total": 2160,
+                            "iterations": 30,
+                            "maximum_ms": 86.53779999999999,
+                            "p50_ms": 75.7546,
+                            "p95_ms": 86.15979999999999
+                        },
+                        "raster_image": {
+                            "average_ms": 0.53547,
+                            "call_count_total": 180,
+                            "iterations": 30,
+                            "maximum_ms": 0.7026,
+                            "p50_ms": 0.5145,
+                            "p95_ms": 0.6295
+                        },
+                        "shape": {
+                            "average_ms": 0.2520233333333333,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.4073,
+                            "p50_ms": 0.24559999999999998,
+                            "p95_ms": 0.3342
+                        },
+                        "text": {
+                            "average_ms": 0.38515666666666665,
+                            "call_count_total": 60,
+                            "iterations": 30,
+                            "maximum_ms": 0.49939999999999996,
+                            "p50_ms": 0.3787,
+                            "p95_ms": 0.4456
+                        },
+                        "thumbnail_cache_hit": {
+                            "average_ms": 0.01017,
+                            "call_count_total": 150,
+                            "iterations": 30,
+                            "maximum_ms": 0.0168,
+                            "p50_ms": 0.0106,
+                            "p95_ms": 0.0132
+                        }
+                    }
+                }
+            },
+            "warmup_iterations": 3,
+            "workload": {
+                "editable_layer_count": 4,
+                "group_count": 1,
+                "height": 1080,
+                "includes_png_jpeg_export": true,
+                "layer_count_including_background": 5,
+                "mask_strokes_per_layer": 0,
+                "name": "export",
+                "operation_count": 70,
+                "raster_repeats_per_layer": 1,
+                "raster_resource_count": 1,
+                "raster_source_height": 512,
+                "raster_source_width": 512,
+                "stroke_points_per_stroke": 64,
+                "width": 1920
+            }
+        }
+    ],
+    "qt_version": "6.7.2",
+    "sampling_interval_ms": 1000,
+    "schema_version": 2,
+    "seed": 3,
+    "timestamp_utc": "2026-10-06T19:52:26.409Z"
+}

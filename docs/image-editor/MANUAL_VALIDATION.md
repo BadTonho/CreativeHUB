@@ -71,32 +71,45 @@ checks and record the OS, application build, and outcome.
    ```
 
    The profiles are `reference`, `mask-heavy`, `stroke-heavy`, `large-image`,
-   `repeated-source`, and `export`. The version 1 report includes build and OS
-   metadata, each profile's dimensions and composition, iteration wall time,
-   per-stage average/p50/p95/maximum, and sampled process resources. Use
-   synthetic content only; compare repeat runs on the same machine and do not
-   infer a performance guarantee from one PC.
+   `repeated-source`, and `export`. The version 2 report measures the session's
+   core view-refresh path with cold and warm thumbnail caches, verifies that
+   both modes produce identical pixels, and measures PNG/JPEG export separately.
+   Stage times are aggregated per iteration, so average and p95 use the same
+   measured repetitions; each stage also reports its call count. Stage times
+   include nested work and must not be added together. Synthetic `.cimg` and
+   PNG fixtures live only in a temporary directory. Use synthetic content only;
+   compare repeat runs on the same machine and do not infer a performance
+   guarantee from one PC.
 
 The first Windows reference-PC Release baseline (Ryzen 5 3600, 32 GB RAM,
 GeForce GTX 1660 SUPER 6 GB, Windows 11) is in
-[`performance-baseline-windows-2026-10-06.json`](performance-baseline-windows-2026-10-06.json).
+[`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json).
 It was recorded on 2026-10-06 with Windows 11 Version 26H2, x86_64, MSVC 1944,
-and Qt 6.7.2. All profiles used three warmups and 30 measured iterations. The
-table shows iteration wall time (average / p95 / maximum), composite stage
-average / p95, and sampled peak working set in MiB:
+and Qt 6.7.2. All profiles used three warmups and 30 measured iterations for
+each refresh mode. Warm mode also uses one cache-priming refresh outside the
+measurement. The table shows cold and warm view-refresh average / p95, warm
+composite average / p95, and sampled peak working set across each profile run,
+including warmups and cache priming:
 
-| Profile | Canvas | Wall time avg / p95 / max (ms) | Composite avg / p95 (ms) | Sampled peak working set (MiB) |
-| --- | ---: | ---: | ---: | ---: |
-| Reference | 1920×1080 | 145.06 / 171.03 / 176.68 | 91.87 / 110.47 | 56.5 |
-| Mask-heavy | 1920×1080 | 588.43 / 685.74 / 693.67 | 373.15 / 441.85 | 72.8 |
-| Stroke-heavy | 1920×1080 | 1,018.63 / 1,080.30 / 1,088.52 | 653.14 / 702.94 | 57.5 |
-| Large image | 3840×2160 | 309.76 / 355.37 / 409.22 | 199.27 / 225.31 | 198.4 |
-| Repeated source | 1920×1080 | 61.54 / 68.42 / 70.53 | 38.43 / 44.29 | 79.8 |
-| Export | 1920×1080 | 713.36 / 761.79 / 765.31 | 86.91 / 94.48 | 73.6 |
+| Profile | Canvas | Cold avg / p95 (ms) | Warm avg / p95 (ms) | Warm composite avg / p95 (ms) | Sampled peak working set (MiB) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Reference | 1920×1080 | 134.85 / 143.83 | 124.80 / 133.63 | 84.76 / 91.68 | 76.5 |
+| Mask-heavy | 1920×1080 | 580.84 / 637.08 | 563.09 / 614.86 | 370.85 / 412.29 | 94.7 |
+| Stroke-heavy | 1920×1080 | 992.77 / 1,031.43 | 945.04 / 1,005.65 | 637.64 / 686.48 | 100.4 |
+| Large image | 3840×2160 | 279.59 / 296.19 | 260.83 / 278.91 | 176.92 / 189.51 | 283.5 |
+| Repeated source | 1920×1080 | 65.29 / 70.16 | 58.19 / 64.59 | 40.03 / 44.55 | 108.7 |
+| Export | 1920×1080 | 134.13 / 144.31 | 126.43 / 140.38 | 85.60 / 94.26 | 86.6 |
+
+The separate PNG/JPEG export profile averaged 579.57 ms per iteration (p95
+614.07 ms, maximum 629.32 ms).
 
 These are observations of the current CPU renderer, not optimization gains,
-performance targets, or general hardware requirements. The recorded process
-CPU value is a one-second sample, and memory peaks are sampled observations.
+performance targets, or general hardware requirements. Stage times are
+per-iteration totals and include nested rendering work; do not sum stages. The
+recorded process CPU value is a one-second sample, and memory peaks are sampled
+observations. The prior [v1 direct-renderer baseline](performance-baseline-windows-2026-10-06.json)
+remains unchanged for historical reference and is not directly comparable to
+these session-based measurements.
 The Release Image Editor test group passed 11/11 on this Windows system,
 including the benchmark report smoke test and image/export equality with
 collection enabled or disabled. Native manual inspection of the panel and
