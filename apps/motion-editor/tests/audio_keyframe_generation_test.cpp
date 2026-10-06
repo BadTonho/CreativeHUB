@@ -14,6 +14,7 @@
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QTemporaryDir>
 #include <QTimer>
 
@@ -106,9 +107,9 @@ int main(int argc, char** argv)
     const auto fixture_directory = pathFromQString(temporary_directory.path());
     const auto audio_path = fixture_directory / "two-level-stereo.wav";
     std::vector<float> samples;
-    samples.reserve(48'000U * 2U);
-    for (int frame = 0; frame < 48'000; ++frame) {
-        const float amplitude = frame < 24'000 ? 0.25F : 0.5F;
+    samples.reserve(96'000U * 2U);
+    for (int frame = 0; frame < 96'000; ++frame) {
+        const float amplitude = frame < 48'000 ? 0.25F : 0.5F;
         samples.push_back(amplitude);
         samples.push_back(amplitude);
     }
@@ -119,16 +120,25 @@ int main(int argc, char** argv)
         audio_path, FrameRate{24, 1}, 48, cancel_requested);
     require(envelope.rms_by_frame.size() == 48,
             "audio is analyzed at the exact composition frame rate");
-    require(near(envelope.rms_by_frame.front(), 0.25),
-            "the first section retains its RMS level");
-    require(near(envelope.rms_by_frame[24], 0.5),
-            "the second section retains its higher RMS level");
-    require(near(envelope.peak_rms, 0.5), "the peak RMS is recorded for normalization");
+    require(envelope.rms_by_frame.front() > 0.0 &&
+                near(envelope.rms_by_frame[24] / envelope.rms_by_frame.front(), 2.0),
+            "the second section has twice the converted mono RMS");
+    require(near(envelope.peak_rms, envelope.rms_by_frame[24]),
+            "the peak RMS is recorded for normalization");
+
+    const auto mono_path = fixture_directory / "mono-level.wav";
+    writeWave(mono_path, 48'000, 1, std::vector<float>(48'000U, 0.25F));
+    const auto mono_envelope = motion::audio::AudioEnvelopeAnalyzer::analyze(
+        mono_path, FrameRate{24, 1}, 24, cancel_requested);
+    require(mono_envelope.rms_by_frame.size() == 24 &&
+                near(mono_envelope.rms_by_frame.front(), 0.25) &&
+                near(mono_envelope.peak_rms, 0.25),
+            "mono audio produces its expected per-frame RMS at 48 kHz");
 
     const auto shorter_analysis = motion::audio::AudioEnvelopeAnalyzer::analyze(
         audio_path, FrameRate{24, 1}, 12, cancel_requested);
     require(shorter_analysis.rms_by_frame.size() == 12 &&
-                near(shorter_analysis.peak_rms, 0.5),
+                near(shorter_analysis.peak_rms, envelope.peak_rms),
             "normalization scans the complete source when the layer ends earlier");
     const auto normalized_short_track = motion::audio::generateAudioKeyframes(
         shorter_analysis, 12, TransformProperty::Scale, 1.0, 2.0, 12);
