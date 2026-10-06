@@ -3,6 +3,8 @@
 #include "theme/hub_palette.h"
 #include "theme/hub_style.h"
 #include "../diagnostics/hub_logger.h"
+#include "../model/activity_manager.h"
+#include "../model/backup_manager.h"
 #ifdef Q_OS_WIN
 #include <creative_suite/updater/update_dialog.h>
 #include <creative_suite/updater/update_service.h>
@@ -16,6 +18,7 @@
 #include <QTimer>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QFileInfo>
 
 namespace creative_suite::hub {
 
@@ -303,6 +306,12 @@ void MainWindow::onOpenApp(const QString& appId) {
             QStringLiteral("Não foi possível encontrar ou executar o arquivo '%1'. Certifique-se de que o aplicativo foi compilado.")
                 .arg(app.executableName())
         );
+    } else {
+        ActivityManager::instance().addActivity(
+            QStringLiteral("Aplicativo Aberto"),
+            QStringLiteral("O %1 foi iniciado com sucesso.").arg(app.name()),
+            QStringLiteral("system")
+        );
     }
 }
 
@@ -332,6 +341,11 @@ void MainWindow::onOpenProject(const QString& filePath, const QString& appId) {
             );
         } else {
             m_recentProjectsManager.addOrUpdateProject(filePath, targetAppId);
+            ActivityManager::instance().addActivity(
+                QStringLiteral("Projeto Aberto"),
+                QStringLiteral("Projeto '%1' aberto no %2.").arg(QFileInfo(filePath).fileName(), app.name()),
+                QStringLiteral("project")
+            );
             if (m_projectsPage) {
                 m_projectsPage->refreshList();
             }
@@ -341,6 +355,11 @@ void MainWindow::onOpenProject(const QString& filePath, const QString& appId) {
         const bool opened = QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
         if (opened) {
             m_recentProjectsManager.addOrUpdateProject(filePath, targetAppId);
+            ActivityManager::instance().addActivity(
+                QStringLiteral("Projeto Aberto"),
+                QStringLiteral("Projeto '%1' aberto no sistema.").arg(QFileInfo(filePath).fileName()),
+                QStringLiteral("project")
+            );
             if (m_projectsPage) {
                 m_projectsPage->refreshList();
             }

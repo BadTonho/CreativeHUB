@@ -19,6 +19,11 @@ add_library(creative-suite-hub-core STATIC
     src/model/recent_projects_manager.cpp
     src/model/storage_manager.h
     src/model/storage_manager.cpp
+    src/model/activity_item.h
+    src/model/activity_manager.h
+    src/model/activity_manager.cpp
+    src/model/backup_manager.h
+    src/model/backup_manager.cpp
     src/diagnostics/hub_logger.h
     src/diagnostics/hub_logger.cpp
     src/application/app_launcher.h
@@ -41,6 +46,8 @@ add_library(creative-suite-hub-core STATIC
     src/ui/header/header_bar.cpp
     src/ui/header/expandable_search_bar.h
     src/ui/header/expandable_search_bar.cpp
+    src/ui/popups/activity_popup.h
+    src/ui/popups/activity_popup.cpp
     src/ui/sidebar/sidebar_button.h
     src/ui/sidebar/sidebar_button.cpp
     src/ui/sidebar/sidebar_widget.h

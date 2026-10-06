@@ -1,8 +1,11 @@
 #include "header_bar.h"
 #include "../theme/hub_palette.h"
+#include "../popups/activity_popup.h"
+#include "../../model/activity_manager.h"
 
 #include <QHBoxLayout>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPixmap>
 #include <QFile>
 
@@ -99,6 +102,90 @@ HeaderBar::HeaderBar(QWidget* parent)
     m_searchBar = new ExpandableSearchBar(this);
     connect(m_searchBar, &ExpandableSearchBar::searchTextChanged, this, &HeaderBar::searchTextChanged);
     layout->addWidget(m_searchBar);
+
+    // Activity / Notification Bell button
+    m_bellButton = new QPushButton(this);
+    m_bellButton->setFixedSize(36, 36);
+    m_bellButton->setCursor(Qt::PointingHandCursor);
+    m_bellButton->setToolTip(QStringLiteral("Central de Atividades e Notificações"));
+    m_bellButton->setStyleSheet(QStringLiteral(
+        "QPushButton {"
+        "   background-color: #1a1a1a;"
+        "   border: 1px solid #2e2e2e;"
+        "   border-radius: 8px;"
+        "}"
+        "QPushButton:hover {"
+        "   background-color: #242424;"
+        "   border-color: #404040;"
+        "}"
+        "QPushButton:pressed {"
+        "   background-color: #161616;"
+        "}"
+    ));
+    connect(m_bellButton, &QPushButton::clicked, this, &HeaderBar::onBellClicked);
+    layout->addWidget(m_bellButton);
+
+    m_activityPopup = new ActivityPopup(this);
+
+    connect(&ActivityManager::instance(), &ActivityManager::activitiesChanged,
+            this, &HeaderBar::updateBellIcon);
+
+    updateBellIcon();
+}
+
+void HeaderBar::updateBellIcon() {
+    if (!m_bellButton) return;
+
+    const bool hasUnread = ActivityManager::instance().unreadCount() > 0;
+
+    constexpr int size = 20;
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+
+    QPainter p(&pixmap);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    QPen pen(QColor(0xd0, 0xd0, 0xd0), 1.6);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+
+    QPainterPath bell;
+    bell.moveTo(10, 4);
+    bell.cubicTo(7.5, 4, 6, 6.5, 6, 11);
+    bell.lineTo(4, 13.5);
+    bell.lineTo(16, 13.5);
+    bell.lineTo(14, 11);
+    bell.cubicTo(14, 6.5, 12.5, 4, 10, 4);
+    p.drawPath(bell);
+
+    // Clapper at bottom
+    p.drawLine(8.5, 15, 11.5, 15);
+
+    // Top loop
+    p.drawArc(QRectF(8.5, 2, 3, 3), 0, 180 * 16);
+
+    // Unread indicator dot
+    if (hasUnread) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0xff, 0xff, 0xff));
+        p.drawEllipse(QPointF(14.5, 4.5), 2.5, 2.5);
+    }
+
+    m_bellButton->setIcon(QIcon(pixmap));
+    m_bellButton->setIconSize(QSize(18, 18));
+}
+
+void HeaderBar::onBellClicked() {
+    if (!m_activityPopup) return;
+
+    if (m_activityPopup->isVisible()) {
+        m_activityPopup->hide();
+    } else {
+        const QPoint globalPos = m_bellButton->mapToGlobal(QPoint(m_bellButton->width(), m_bellButton->height()));
+        m_activityPopup->showAt(globalPos);
+    }
 }
 
 } // namespace creative_suite::hub

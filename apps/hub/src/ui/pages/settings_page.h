@@ -19,10 +19,13 @@ private slots:
     void onOpenLogFolder();
     void onClearCache();
     void onOpenCacheFolder();
+    void onBrowseBackupPath();
+    void onOpenBackupFolder();
 
 private:
     void setupUi();
     void refreshCacheSize();
+    void refreshBackupStats();
 
     QLineEdit* m_installPathEdit{nullptr};
     QCheckBox* m_autostartCheck{nullptr};
@@ -30,6 +33,8 @@ private:
     QLineEdit* m_logPathEdit{nullptr};
     QLabel* m_cacheSizeLabel{nullptr};
     QLabel* m_cacheStatusNote{nullptr};
+    QLineEdit* m_backupPathEdit{nullptr};
+    QLabel* m_backupStatsLabel{nullptr};
 };
 
 } // namespace creative_suite::hub

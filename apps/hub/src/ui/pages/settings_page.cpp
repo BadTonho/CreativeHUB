@@ -3,17 +3,21 @@
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
 #include "../../model/storage_manager.h"
+#include "../../model/backup_manager.h"
+#include "../../model/activity_manager.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
+#include <QLineEdit>
+#include <QCheckBox>
 #include <QFrame>
 #include <QFileDialog>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QFileInfo>
 #include <QStandardPaths>
-
 #include <QScrollArea>
 
 namespace creative_suite::hub {
@@ -229,12 +233,69 @@ void SettingsPage::setupUi() {
 
     mainLayout->addWidget(storageCard);
 
+    // 5. Project Backup Vault
+    auto* backupCard = new QFrame(scrollContainer);
+    backupCard->setStyleSheet(QStringLiteral(
+        "QFrame {"
+        "   background-color: #161616;"
+        "   border: 1px solid #262626;"
+        "   border-radius: 12px;"
+        "   padding: 14px 18px;"
+        "}"
+    ));
+    auto* backupLayout = new QVBoxLayout(backupCard);
+    backupLayout->setContentsMargins(18, 18, 18, 18);
+    backupLayout->setSpacing(12);
+
+    auto* backupSectionTitle = new QLabel(QStringLiteral("COFRE DE BACKUP DE PROJETOS"), backupCard);
+    backupSectionTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 1.2px; background: transparent;"));
+    backupLayout->addWidget(backupSectionTitle);
+
+    auto* backupDesc = new QLabel(QStringLiteral("Defina o diretório padrão onde cópias de segurança e snapshots dos seus projetos serão armazenados com carimbo de data e hora."), backupCard);
+    backupDesc->setStyleSheet(QStringLiteral("color: #aaaaaa; font-size: 12px; background: transparent;"));
+    backupDesc->setWordWrap(true);
+    backupLayout->addWidget(backupDesc);
+
+    auto* backupRow = new QHBoxLayout();
+    backupRow->setSpacing(10);
+
+    m_backupPathEdit = new QLineEdit(backupCard);
+    m_backupPathEdit->setReadOnly(true);
+    m_backupPathEdit->setText(BackupManager::instance().backupDirectory());
+    m_backupPathEdit->setStyleSheet(HubStyle::searchInputStyle());
+    backupRow->addWidget(m_backupPathEdit, 1);
+
+    auto* browseBackupBtn = new QPushButton(QStringLiteral("Alterar Pasta"), backupCard);
+    browseBackupBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
+    browseBackupBtn->setCursor(Qt::PointingHandCursor);
+    connect(browseBackupBtn, &QPushButton::clicked, this, &SettingsPage::onBrowseBackupPath);
+    backupRow->addWidget(browseBackupBtn);
+
+    backupLayout->addLayout(backupRow);
+
+    auto* backupStatsRow = new QHBoxLayout();
+    m_backupStatsLabel = new QLabel(backupCard);
+    m_backupStatsLabel->setStyleSheet(QStringLiteral("color: #ffffff; font-size: 12px; font-weight: 600; background: transparent;"));
+    backupStatsRow->addWidget(m_backupStatsLabel);
+    backupStatsRow->addStretch();
+
+    auto* openBackupFolderBtn = new QPushButton(QStringLiteral("Abrir Pasta de Backups"), backupCard);
+    openBackupFolderBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
+    openBackupFolderBtn->setCursor(Qt::PointingHandCursor);
+    connect(openBackupFolderBtn, &QPushButton::clicked, this, &SettingsPage::onOpenBackupFolder);
+    backupStatsRow->addWidget(openBackupFolderBtn);
+
+    backupLayout->addLayout(backupStatsRow);
+
+    mainLayout->addWidget(backupCard);
+
     mainLayout->addStretch();
 
     scrollArea->setWidget(scrollContainer);
     rootLayout->addWidget(scrollArea);
 
     refreshCacheSize();
+    refreshBackupStats();
 }
 
 void SettingsPage::refreshCacheSize() {
@@ -244,19 +305,53 @@ void SettingsPage::refreshCacheSize() {
     }
 }
 
+void SettingsPage::refreshBackupStats() {
+    const int count = BackupManager::instance().totalBackupsCount();
+    const qint64 bytes = BackupManager::instance().totalBackupsSize();
+    if (m_backupStatsLabel) {
+        m_backupStatsLabel->setText(QStringLiteral("%1 cópias de segurança salvas • %2 ocupados")
+            .arg(QString::number(count), StorageManager::formatBytes(bytes)));
+    }
+    if (m_backupPathEdit) {
+        m_backupPathEdit->setText(BackupManager::instance().backupDirectory());
+    }
+}
+
 void SettingsPage::onClearCache() {
+    const qint64 beforeBytes = StorageManager::calculateTotalCacheSize();
     StorageManager::clearSuiteCache();
     refreshCacheSize();
     if (m_cacheStatusNote) {
         m_cacheStatusNote->setText(QStringLiteral("✓ Cache da suíte liberado com sucesso!"));
         m_cacheStatusNote->setVisible(true);
     }
+    ActivityManager::instance().addActivity(
+        QStringLiteral("Cache Liberado"),
+        QStringLiteral("Foram liberados %1 de arquivos de cache da suíte.").arg(StorageManager::formatBytes(beforeBytes)),
+        QStringLiteral("cache")
+    );
 }
 
 void SettingsPage::onOpenCacheFolder() {
     const QString cachePath = StorageManager::defaultCachePath();
     QDir().mkpath(cachePath);
     QDesktopServices::openUrl(QUrl::fromLocalFile(cachePath));
+}
+
+void SettingsPage::onBrowseBackupPath() {
+    const QString dir = QFileDialog::getExistingDirectory(
+        this,
+        QStringLiteral("Selecionar pasta para backups de projetos"),
+        m_backupPathEdit ? m_backupPathEdit->text() : BackupManager::instance().backupDirectory()
+    );
+    if (!dir.isEmpty()) {
+        BackupManager::instance().setBackupDirectory(dir);
+        refreshBackupStats();
+    }
+}
+
+void SettingsPage::onOpenBackupFolder() {
+    BackupManager::instance().openBackupDirectory();
 }
 
 void SettingsPage::onBrowseInstallPath() {
