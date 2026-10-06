@@ -2,31 +2,34 @@
 #include "../theme/hub_palette.h"
 
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QFrame>
 
 namespace creative_suite::hub {
 
 SidebarWidget::SidebarWidget(QWidget* parent)
     : QWidget(parent)
 {
-    setFixedWidth(220);
+    setFixedWidth(232);
     setStyleSheet(QStringLiteral(
         "SidebarWidget {"
         "   background-color: %1;"
-        "   border-right: 1px solid #2e2e38;"
+        "   border-right: 1px solid #20202c;"
         "}"
     ).arg(HubPalette::sidebarBackground.name()));
 
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 16, 0, 16);
-    layout->setSpacing(4);
+    layout->setContentsMargins(12, 18, 12, 16);
+    layout->setSpacing(6);
 
     auto* sectionLabel = new QLabel(QStringLiteral("BIBLIOTECA"), this);
     sectionLabel->setStyleSheet(QStringLiteral(
-        "color: #6c6c78;"
-        "font-size: 11px;"
-        "font-weight: 700;"
-        "padding-left: 16px;"
+        "color: #555568;"
+        "font-size: 10px;"
+        "font-weight: 800;"
+        "letter-spacing: 1.2px;"
+        "padding-left: 8px;"
         "margin-bottom: 6px;"
         "background: transparent;"
     ));
@@ -49,19 +52,38 @@ SidebarWidget::SidebarWidget(QWidget* parent)
 
     layout->addStretch();
 
-    // Version tag at the bottom
+    // Sleek status footer card
+    auto* footerCard = new QFrame(this);
+    footerCard->setStyleSheet(QStringLiteral(
+        "QFrame {"
+        "   background-color: #1a1a24;"
+        "   border: 1px solid #272738;"
+        "   border-radius: 8px;"
+        "   padding: 4px 8px;"
+        "}"
+    ));
+    auto* footerLayout = new QHBoxLayout(footerCard);
+    footerLayout->setContentsMargins(6, 6, 6, 6);
+    footerLayout->setSpacing(8);
+
+    auto* statusDot = new QLabel(QStringLiteral("●"), footerCard);
+    statusDot->setStyleSheet(QStringLiteral("color: #10b981; font-size: 10px; background: transparent;"));
+    footerLayout->addWidget(statusDot);
+
 #ifndef CREATIVE_SUITE_VERSION_HUB
 #define CREATIVE_SUITE_VERSION_HUB "0.1.0"
 #endif
     auto* versionLabel = new QLabel(
-        QStringLiteral("Hub v%1").arg(QStringLiteral(CREATIVE_SUITE_VERSION_HUB)), this);
+        QStringLiteral("Hub v%1 • Ativo").arg(QStringLiteral(CREATIVE_SUITE_VERSION_HUB)), footerCard);
     versionLabel->setStyleSheet(QStringLiteral(
-        "color: #555560;"
-        "font-size: 10px;"
-        "padding-left: 16px;"
+        "color: #88889c;"
+        "font-size: 11px;"
+        "font-weight: 600;"
         "background: transparent;"
     ));
-    layout->addWidget(versionLabel);
+    footerLayout->addWidget(versionLabel, 1);
+
+    layout->addWidget(footerCard);
 
     selectButton(0);
 }

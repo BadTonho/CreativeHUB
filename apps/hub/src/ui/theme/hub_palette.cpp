@@ -11,4 +11,17 @@ QString HubPalette::toRgbaString(const QColor& color, double alpha) {
         .arg(a);
 }
 
+QColor HubPalette::appAccentColor(const QString& appId) {
+    if (appId == QStringLiteral("video-editor")) {
+        return accentVideo;
+    }
+    if (appId == QStringLiteral("image-editor")) {
+        return accentImage;
+    }
+    if (appId == QStringLiteral("motion-editor")) {
+        return accentMotion;
+    }
+    return accentHub;
+}
+
 } // namespace creative_suite::hub
