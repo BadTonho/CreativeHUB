@@ -232,8 +232,9 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
             });
     connect(new_document_tab_button_, &QToolButton::clicked,
             this, [this]() { openNewTabMenu(); });
-    connect(qApp, &QApplication::focusChanged, this,
-            [this](QWidget*, QWidget*) { updateDeleteActions(); });
+    focus_changed_connection_ = connect(
+        qApp, &QApplication::focusChanged, this,
+        [this](QWidget*, QWidget*) { updateDeleteActions(); });
     connect(layer_panel_, &LayerPanel::deletionSelectionChanged, this,
             [this]() {
                 const auto selected_items = layer_panel_->selectedStackItems();
@@ -420,6 +421,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
 }
 
 ImageEditorWindow::~ImageEditorWindow() {
+    if (autosave_timer_ != nullptr) autosave_timer_->stop();
+    // Destroying the focused canvas child can emit focusChanged after the tab
+    // state is released, so disconnect this application-wide callback first.
+    QObject::disconnect(focus_changed_connection_);
     for (auto* tab : document_tabs_) delete tab;
 }
 

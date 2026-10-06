@@ -10,6 +10,7 @@
 #include <QByteArray>
 #include <QHash>
 #include <QMainWindow>
+#include <QMetaObject>
 #include <QStringList>
 #include <QVector>
 
@@ -144,6 +145,7 @@ private:
     ShapePalette* shape_palette_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
+    QMetaObject::Connection focus_changed_connection_;
     QAction* relink_action_ = nullptr;
     QAction* import_layer_action_ = nullptr;
     QAction* relink_raster_action_ = nullptr;

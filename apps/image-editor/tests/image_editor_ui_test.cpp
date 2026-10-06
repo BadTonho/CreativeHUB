@@ -64,6 +64,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <memory>
 #include <utility>
 #include <QTest>
 #include <QSignalSpy>
@@ -474,6 +475,33 @@ bool testTextEditorGrowthLayout() {
         }
         QTest::keyClick(editor, Qt::Key_Escape);
     }
+    return true;
+}
+
+bool testWindowTeardownWithFocusedTextEditor(const QString& directory) {
+    const QString source_path = directory + QStringLiteral("/window-teardown-source.png");
+    QImage source(64, 48, QImage::Format_ARGB32_Premultiplied);
+    source.fill(Qt::white);
+    if (!source.save(source_path, "PNG")) return false;
+
+    auto window = std::make_unique<image_editor::ImageEditorWindow>();
+    window->show();
+    if (!window->openImagePath(source_path)) return false;
+    QCoreApplication::processEvents();
+    auto* canvas = window->findChild<image_editor::ImageCanvas*>();
+    auto* editor = window->findChild<QPlainTextEdit*>(
+        QStringLiteral("imageCanvasTextEditor"));
+    if (canvas == nullptr || editor == nullptr) return false;
+
+    image_editor::ImageTextData text;
+    text.position = QPointF(8, 8);
+    text.content = QStringLiteral("close while editing");
+    canvas->beginTextEditing(text, false);
+    QCoreApplication::processEvents();
+    if (!editor->isVisible() || QApplication::focusWidget() != editor) return false;
+
+    window.reset();
+    QCoreApplication::processEvents();
     return true;
 }
 
@@ -2862,6 +2890,7 @@ int main(int argc, char* argv[]) {
     if (!testTextEditorGrowthLayout()) return 1;
     if (application.arguments().contains(QStringLiteral("--text-layout-only"))) return 0;
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    if (!testWindowTeardownWithFocusedTextEditor(temporary.path())) return 1;
     if (!testDeletionUi(temporary.path())) return 1;
     if (!testRasterImagesUi(temporary.path())) return 1;
     if (!testLayerMasksUi(temporary.path())) {
