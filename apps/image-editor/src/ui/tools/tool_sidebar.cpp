@@ -285,8 +285,10 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         else if (active_tool_ == Tool::Text) setActiveTool(Tool::None);
     });
     connect(color_button_, &QToolButton::clicked, this, [this]() {
+        QColor initial_color = brush_color_;
+        if (initial_color.alpha() == 0) initial_color.setAlpha(255);
         const QColor selected = QColorDialog::getColor(
-            brush_color_, this, QStringLiteral("Brush Color"),
+            initial_color, this, QStringLiteral("Brush Color"),
             QColorDialog::ShowAlphaChannel);
         setBrushColor(selected);
     });

@@ -68,8 +68,11 @@ persistence, and recovery.
   Eyedropper mode and pointer mapping, delegates the lookup, and emits the
   sampled color; the window updates the paint swatch and brush. Sampling reads
   the committed composite, ignores canvas presentation overlays and the
-  transparency checkerboard, and does not create a document edit or history
-  entry.
+  transparency checkerboard. Pixels with zero alpha are ignored because they
+  have no visible color; nonzero alpha is preserved. Sampling does not create a
+  document edit or history entry. Opening the brush color picker from a
+  zero-alpha brush color starts with an opaque color so the user can recover
+  the swatch by choosing a hue.
 - Tool families use subdirectories such as `brush/`, `crop/`, `selection/`,
   `shapes/`, and `text/` to keep the tools area navigable as it grows.
 

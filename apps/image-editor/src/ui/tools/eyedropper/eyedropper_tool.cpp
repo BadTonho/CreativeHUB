@@ -14,7 +14,9 @@ std::optional<QColor> EyedropperTool::sample(
                              0, image.width() - 1);
     const int y = std::clamp(static_cast<int>(std::floor(image_position.y())),
                              0, image.height() - 1);
-    return image.pixelColor(x, y);
+    const QColor sampled = image.pixelColor(x, y);
+    if (sampled.alpha() == 0) return std::nullopt;
+    return sampled;
 }
 
 } // namespace image_editor

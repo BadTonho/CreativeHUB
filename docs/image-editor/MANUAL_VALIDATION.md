@@ -48,16 +48,21 @@ Windows UI. macOS and Linux packaging checks remain deferred.
    Select **Eyedropper** and sample a pixel covered by a masked, partially
    opaque layer. Confirm the paint color swatch matches the visible composite,
    including its alpha, rather than the checkerboard or selection overlays.
+   Sample a fully transparent pixel and confirm the current paint color stays
+   unchanged because the pixel has no visible color.
 2. Click in the canvas area outside the image. Confirm the color remains
-   unchanged. Sample another point and confirm the Eyedropper remains active.
+   unchanged. Sample another visible point and confirm the Eyedropper remains
+   active.
 3. Select Paint and draw a short stroke. Confirm it uses the sampled RGBA color.
    Sampling alone must not mark the document modified or enable Undo.
+4. If the swatch is fully transparent, click it and choose a new hue without
+   changing the alpha control first. Confirm the swatch becomes visible again.
 
-Automated coverage for the button, sampling, outside-image behavior, paint-color
-handoff, and absence of edit signals during sampling is in
-`image_editor_ui_test.cpp` (`testEyedropperTool`,
-`creative-suite-image-editor-ui`). Native visual and cross-platform checks are
-pending.
+Automated coverage for the button, transparent-pixel handling, color-picker
+recovery, outside-image behavior, paint-color handoff, and absence of edit
+signals during sampling is in `image_editor_ui_test.cpp`
+(`testEyedropperTool`, `creative-suite-image-editor-ui`). Native visual and
+cross-platform checks are pending.
 
 ## Performance collection and benchmark
 
