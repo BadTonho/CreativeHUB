@@ -28,13 +28,10 @@ HeaderBar::HeaderBar(QWidget* parent)
 
     layout->addStretch();
 
-    // Search bar
-    m_searchEdit = new QLineEdit(this);
-    m_searchEdit->setPlaceholderText(QStringLiteral("Buscar aplicativos..."));
-    m_searchEdit->setFixedWidth(260);
-    m_searchEdit->setStyleSheet(HubStyle::searchInputStyle());
-    connect(m_searchEdit, &QLineEdit::textChanged, this, &HeaderBar::searchTextChanged);
-    layout->addWidget(m_searchEdit);
+    // Expandable search bar with animated reveal
+    m_searchBar = new ExpandableSearchBar(this);
+    connect(m_searchBar, &ExpandableSearchBar::searchTextChanged, this, &HeaderBar::searchTextChanged);
+    layout->addWidget(m_searchBar);
 
     // Refresh / Check for updates button
     m_refreshButton = new QPushButton(QStringLiteral("Verificar Atualizações"), this);

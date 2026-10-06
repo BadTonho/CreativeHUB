@@ -26,6 +26,8 @@ add_library(creative-suite-hub-core STATIC
     src/ui/cards/app_card_widget.cpp
     src/ui/header/header_bar.h
     src/ui/header/header_bar.cpp
+    src/ui/header/expandable_search_bar.h
+    src/ui/header/expandable_search_bar.cpp
     src/ui/sidebar/sidebar_button.h
     src/ui/sidebar/sidebar_button.cpp
     src/ui/sidebar/sidebar_widget.h

@@ -1,8 +1,9 @@
 #pragma once
 
+#include "expandable_search_bar.h"
+
 #include <QWidget>
 #include <QLabel>
-#include <QLineEdit>
 #include <QPushButton>
 
 namespace creative_suite::hub {
@@ -19,7 +20,7 @@ signals:
 
 private:
     QLabel* m_brandTitle{nullptr};
-    QLineEdit* m_searchEdit{nullptr};
+    ExpandableSearchBar* m_searchBar{nullptr};
     QPushButton* m_refreshButton{nullptr};
 };
 
