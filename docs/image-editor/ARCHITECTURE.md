@@ -63,6 +63,11 @@ persistence, and recovery.
   `ImageCanvas` maps pointer coordinates, supplies the image/view context, and
   forwards its stable public signals. `ImageEditorWindow` retains shared text
   options and commits confirmed edits through the document session.
+- The `ToolSidebar` Eyedropper samples RGBA from the active canvas's committed
+  composite. `ImageCanvas` maps the click to document pixels and emits the
+  sampled color; the window updates the paint swatch and brush. Sampling ignores
+  canvas presentation overlays and the transparency checkerboard and does not
+  create a document edit or history entry.
 - Tool families use subdirectories such as `brush/`, `crop/`, `selection/`,
   `shapes/`, and `text/` to keep the tools area navigable as it grows.
 

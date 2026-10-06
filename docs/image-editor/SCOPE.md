@@ -13,7 +13,8 @@ to an original image or created as a self-contained canvas. It provides a
 locked Background, editable raster layers, one-level groups, visibility,
 opacity, ordering, crop, quarter-turn rotation, flips, painting, erasing,
 editable line/rectangle/ellipse shapes, editable text, raster layer masks, imported image layers, object selection and
-transforms, Undo/Redo, local autosave and recovery, and bounded technical error
+transforms, an RGBA Eyedropper that samples the visible composite into the paint
+color, Undo/Redo, local autosave and recovery, and bounded technical error
 logging. Text supports multiline content, family, pixel size, color, horizontal
 alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows

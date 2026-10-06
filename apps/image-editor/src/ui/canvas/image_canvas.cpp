@@ -197,6 +197,31 @@ void ImageCanvas::setAreaSelectionMode(bool enabled) {
     update();
 }
 
+void ImageCanvas::setEyedropperMode(bool enabled) {
+    if (eyedropper_mode_ == enabled) return;
+    if (enabled && text_tool_.editing()) finishTextEditing(true);
+    resetBrushTools(true);
+    eyedropper_mode_ = enabled;
+    if (enabled) {
+        crop_mode_ = false;
+        paint_mode_ = false;
+        eraser_mode_ = false;
+        shape_creation_mode_ = false;
+        text_creation_mode_ = false;
+        object_selection_mode_ = false;
+        area_selection_mode_ = false;
+        static_cast<void>(crop_tool_.cancelGesture());
+        static_cast<void>(area_selection_tool_.cancelGesture());
+        static_cast<void>(shape_tool_.cancelGesture());
+        static_cast<void>(text_tool_.cancelFrame());
+        clearObjectInteraction();
+        transient_image_ = {};
+        resizing_brush_ = false;
+    }
+    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    update();
+}
+
 void ImageCanvas::setAreaSelectionOptions(AreaSelectionShape shape,
                                           AreaSelectionCombineMode combine_mode) {
     const auto tool_shape = shape == AreaSelectionShape::Ellipse
@@ -633,6 +658,18 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         return;
     }
     const auto modifiers = event->modifiers();
+    if (eyedropper_mode_ && event->button() == Qt::LeftButton) {
+        if (!image_.isNull() && imageTargetRect().contains(event->position())) {
+            const QPointF image_point = widgetToImageCoordinates(event->position());
+            const int x = std::clamp(static_cast<int>(std::floor(image_point.x())),
+                                     0, image_.width() - 1);
+            const int y = std::clamp(static_cast<int>(std::floor(image_point.y())),
+                                     0, image_.height() - 1);
+            emit colorSampled(image_.pixelColor(x, y));
+        }
+        event->accept();
+        return;
+    }
     if ((paint_mode_ || eraser_mode_) && !crop_mode_ && event->button() == Qt::LeftButton &&
         modifiers.testFlag(Qt::ControlModifier) && modifiers.testFlag(Qt::AltModifier) &&
         imageTargetRect().contains(event->position())) {

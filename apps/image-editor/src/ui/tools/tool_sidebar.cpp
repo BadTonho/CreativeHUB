@@ -116,6 +116,33 @@ QIcon areaSelectionToolIcon() {
     return QIcon(icon);
 }
 
+QIcon eyedropperToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    QPainterPath pipette;
+    pipette.moveTo(8.0, 19.0);
+    pipette.lineTo(19.0, 8.0);
+    pipette.lineTo(24.0, 13.0);
+    pipette.lineTo(13.0, 24.0);
+    pipette.closeSubpath();
+    painter.setPen(QPen(QColor(31, 38, 48), 1.8, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(QColor(91, 184, 221));
+    painter.drawPath(pipette);
+    painter.setPen(QPen(QColor(242, 224, 232), 2.0, Qt::SolidLine,
+                        Qt::RoundCap));
+    painter.drawLine(QPointF(10.0, 22.0), QPointF(5.0, 27.0));
+    painter.setPen(QPen(QColor(247, 194, 83), 2.0, Qt::SolidLine,
+                        Qt::RoundCap));
+    painter.drawLine(QPointF(18.0, 9.0), QPointF(23.0, 4.0));
+    painter.drawLine(QPointF(22.0, 5.0), QPointF(27.0, 10.0));
+    painter.end();
+    return QIcon(icon);
+}
+
 QIcon textToolIcon() {
     QPixmap icon(32, 32);
     icon.fill(Qt::transparent);
@@ -206,6 +233,17 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     area_selection_button_->setFixedSize(40, 40);
     layout->addWidget(area_selection_button_, 0, Qt::AlignHCenter);
 
+    eyedropper_button_ = new QToolButton(this);
+    eyedropper_button_->setObjectName(QStringLiteral("eyedropperToolButton"));
+    eyedropper_button_->setToolTip(QStringLiteral("Eyedropper"));
+    eyedropper_button_->setAccessibleName(QStringLiteral("Eyedropper tool"));
+    eyedropper_button_->setIcon(eyedropperToolIcon());
+    eyedropper_button_->setIconSize(QSize(24, 24));
+    eyedropper_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    eyedropper_button_->setCheckable(true);
+    eyedropper_button_->setFixedSize(40, 40);
+    layout->addWidget(eyedropper_button_, 0, Qt::AlignHCenter);
+
     layout->addStretch(1);
 
     color_button_ = new QToolButton(this);
@@ -238,6 +276,10 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         if (active) setActiveTool(Tool::AreaSelect);
         else if (active_tool_ == Tool::AreaSelect) setActiveTool(Tool::None);
     });
+    connect(eyedropper_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::Eyedropper);
+        else if (active_tool_ == Tool::Eyedropper) setActiveTool(Tool::None);
+    });
     connect(text_button_, &QToolButton::toggled, this, [this](bool active) {
         if (active) setActiveTool(Tool::Text);
         else if (active_tool_ == Tool::Text) setActiveTool(Tool::None);
@@ -246,10 +288,7 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         const QColor selected = QColorDialog::getColor(
             brush_color_, this, QStringLiteral("Brush Color"),
             QColorDialog::ShowAlphaChannel);
-        if (!selected.isValid() || selected == brush_color_) return;
-        brush_color_ = selected;
-        updateColorButton();
-        emit brushColorChanged(brush_color_);
+        setBrushColor(selected);
     });
 
     updateColorButton();
@@ -300,6 +339,11 @@ void ToolSidebar::setAreaSelectionToolActive(bool active) {
         (active_tool_ == Tool::AreaSelect ? Tool::None : active_tool_));
 }
 
+void ToolSidebar::setEyedropperToolActive(bool active) {
+    setActiveTool(active ? Tool::Eyedropper :
+        (active_tool_ == Tool::Eyedropper ? Tool::None : active_tool_));
+}
+
 void ToolSidebar::setTextToolActive(bool active) {
     setActiveTool(active ? Tool::Text :
         (active_tool_ == Tool::Text ? Tool::None : active_tool_));
@@ -319,12 +363,14 @@ void ToolSidebar::setActiveTool(Tool tool) {
         const QSignalBlocker text_blocker(text_button_);
         const QSignalBlocker select_shapes_blocker(select_shapes_button_);
         const QSignalBlocker area_selection_blocker(area_selection_button_);
+        const QSignalBlocker eyedropper_blocker(eyedropper_button_);
         paint_button_->setChecked(tool == Tool::Paint);
         eraser_button_->setChecked(tool == Tool::Eraser);
         shapes_button_->setChecked(tool == Tool::Shapes);
         text_button_->setChecked(tool == Tool::Text);
         select_shapes_button_->setChecked(tool == Tool::Select);
         area_selection_button_->setChecked(tool == Tool::AreaSelect);
+        eyedropper_button_->setChecked(tool == Tool::Eyedropper);
     }
     updateControls();
     if (changed) emit activeToolChanged(active_tool_);
@@ -354,8 +400,19 @@ bool ToolSidebar::areaSelectionToolActive() const noexcept {
     return active_tool_ == Tool::AreaSelect;
 }
 
+bool ToolSidebar::eyedropperToolActive() const noexcept {
+    return active_tool_ == Tool::Eyedropper;
+}
+
 QColor ToolSidebar::brushColor() const {
     return brush_color_;
+}
+
+void ToolSidebar::setBrushColor(const QColor& color) {
+    if (!color.isValid() || color == brush_color_) return;
+    brush_color_ = color;
+    updateColorButton();
+    emit brushColorChanged(brush_color_);
 }
 
 void ToolSidebar::updateControls() {
@@ -366,6 +423,7 @@ void ToolSidebar::updateControls() {
     text_button_->setEnabled(document_available_);
     select_shapes_button_->setEnabled(document_available_);
     area_selection_button_->setEnabled(document_available_);
+    eyedropper_button_->setEnabled(document_available_);
     paint_button_->setToolTip(editable_layer_available
         ? QStringLiteral("Paint")
         : (document_available_
@@ -388,6 +446,9 @@ void ToolSidebar::updateControls() {
     text_button_->setToolTip(document_available_
         ? QStringLiteral("Text")
         : QStringLiteral("Open an image to add text"));
+    eyedropper_button_->setToolTip(document_available_
+        ? QStringLiteral("Eyedropper")
+        : QStringLiteral("Open an image to sample a color"));
     color_button_->setEnabled(true);
 }
 

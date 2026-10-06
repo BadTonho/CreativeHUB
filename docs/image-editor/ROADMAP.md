@@ -1,7 +1,9 @@
 # Image Editor Roadmap
 
-Status: **standalone minimum and multi-document tabs implemented; basic editable text, raster layer masks, linked image layers, canvas resizing, and regression
-coverage implemented; manual text validation, packaging, and linked-image
+Status: **standalone minimum and multi-document tabs implemented; basic
+editable text, raster layer masks, linked image layers, canvas resizing, the
+RGBA Eyedropper, and regression coverage implemented; manual text validation,
+packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
 This roadmap covers the independent application under `apps/image-editor/`.
@@ -277,6 +279,16 @@ coverage is indexed below.
 The tool extraction does not change the `.cimg` format. Manual visual
 acceptance remains with the maintainer; automated coverage is indexed below.
 
+### Eyedropper tool (approved 2026-10-06)
+
+- [x] Add an Eyedropper sidebar tool that samples RGBA from the committed
+  visible composite and updates the paint color while remaining active.
+- [x] Ignore clicks outside the image and keep sampling separate from document
+  edits, Undo/Redo, and the `.cimg` format.
+- [x] Cover RGBA handoff to Paint and confirm sampling emits no edit request.
+- [ ] Record native visual validation with masks, layer opacity, and transparent
+  canvas pixels in [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+
 ### 4. Future expansion
 
 - [ ] Revisit retouching, color adjustments, and larger effect sets only
@@ -416,6 +428,7 @@ results.
 | Flattened export, Quick Export, export dialogs, and UI job lifecycle | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | Integration coverage checks JPEG/PNG options and preferences, transparency, selected layer/group scope, progress, and cancellation. Direct controller checks cover success and output failure while worker tests cover rendering/finalization cancellation. The export controller owns worker/thread/progress/cancel lifecycle; the window keeps path, JPEG preference, scope, snapshot, and user feedback. The focused export test and configured Windows Release CTest suite passed (12/12) on 2026-10-05. Cross-platform package checks remain pending. |
 | Canvas, tools, layers, shortcuts, UI interactions, and window teardown | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`), including `testWindowTeardownWithFocusedTextEditor` | Automated UI coverage now destroys the window while its text editor has focus, exercising the focus-change callback during child teardown. The Windows Release UI test passed ten consecutive runs and the complete CTest suite passed 72/72 on 2026-10-05. The owner reports current UI workflows exercised on Windows 11; cross-platform visual checks remain pending. |
 | Tool options toolbar state and shape palette selection | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) directly exercises control synchronization, state updates, emitted requests, and palette selection; existing window integration covers brush, shape, text, and area-selection workflows | The Image Editor app and test targets compiled in Windows Release; the Image Editor CTest suite passed (12/12), and the configured workspace suite passed (70/70) on 2026-10-05. Existing Qt object names and manual tool-options and shape-palette steps in `MANUAL_VALIDATION.md` remain the compatibility checks. |
+| Eyedropper color sampling | `image_editor_ui_test.cpp` (`testEyedropperTool`; `creative-suite-image-editor-ui`) covers RGBA sampling, persistent tool activation, ignored outside clicks, paint-color handoff, and no history change before painting | Manual composite sampling with masks, opacity, and transparency is documented in `MANUAL_VALIDATION.md`; owner visual validation remains pending. |
 | Multiple document tabs and per-tab recovery | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`), especially `testDocumentTabs` and `testMultiDocumentRecovery`, plus `creative-suite-image-editor-window-close` (`testWindowCloseAcrossDirtyTabs`): current/new-tab creation and opening, duplicate `.cimg` selection, active-tab replacement, reordering and switching with per-tab session/history/selection/zoom isolation, import targeting, Save/Discard/Cancel, failed-save retention, last-tab empty state, multi-snapshot restore and autosave; full-window close across dirty tabs, including cancellation partway through, active-tab restoration, recovery snapshot retention/cleanup, and persisted Save/Discard choices | The isolated Windows Release close test passed five consecutive runs. After the window-teardown fix, the Image Editor UI test passed ten consecutive runs and the complete Release CTest suite passed 72/72 on 2026-10-05. Native visual checks and macOS/Linux validation remain pending (**P2 validation**). |
 | Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumers: `application_media_services_test.cpp` (`creative-suite-main-editor-application-media`), `main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`), and `project_file_test.cpp` (`creative-suite-main-editor-project`) | Automated producer/consumer regression tests pass in Debug and Release. The owner reports the basic linked edit/save workflow working on Windows, but the full scenario and cross-platform acceptance remain pending (**P1 validation**). |
 | Linked image import, geometry, sources, v11 raster references, v12 canvas bounds, v13 clipped strokes, export and publication | `image_editor_raster_test.cpp` (`creative-suite-image-editor-raster`), `image_editor_ui_test.cpp`, Video Editor `main_window_integration_test.cpp` | Existing automated coverage checks PNG publication and host refresh; Area Selection's linked PNG acceptance is documented in `MANUAL_VALIDATION.md`. macOS/Linux and manual acceptance remain pending. |
