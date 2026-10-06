@@ -5,7 +5,6 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QScrollArea>
-#include <QFrame>
 
 namespace creative_suite::hub {
 
@@ -32,6 +31,7 @@ void AppsPage::setupUi() {
     auto* scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scrollArea->setStyleSheet(QStringLiteral("background: transparent;"));
 
     auto* scrollContainer = new QWidget(scrollArea);
@@ -39,88 +39,29 @@ void AppsPage::setupUi() {
 
     auto* containerLayout = new QVBoxLayout(scrollContainer);
     containerLayout->setContentsMargins(28, 24, 28, 24);
-    containerLayout->setSpacing(22);
+    containerLayout->setSpacing(20);
 
-    // 1. Hero Showcase Banner
-    auto* heroCard = new QFrame(scrollContainer);
-    heroCard->setObjectName(QStringLiteral("HeroCard"));
-    heroCard->setStyleSheet(QStringLiteral(
-        "#HeroCard {"
-        "   background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #1a1638, stop:0.5 #141322, stop:1 #0f0f18);"
-        "   border: 1px solid #2d2854;"
-        "   border-radius: 16px;"
-        "}"
+    // Header Row: Title & Subtitle on left, Filter Pills on right
+    auto* headerRow = new QHBoxLayout();
+    headerRow->setSpacing(12);
+
+    auto* titleCol = new QVBoxLayout();
+    titleCol->setSpacing(4);
+
+    auto* titleLabel = new QLabel(QStringLiteral("Aplicativos da Suíte"), scrollContainer);
+    titleLabel->setStyleSheet(QStringLiteral(
+        "font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"
     ));
-    auto* heroLayout = new QVBoxLayout(heroCard);
-    heroLayout->setContentsMargins(26, 22, 26, 22);
-    heroLayout->setSpacing(10);
+    titleCol->addWidget(titleLabel);
 
-    auto* heroBadge = new QLabel(QStringLiteral("★ ECOSSISTEMA CRIATIVO INTEGRADO"), heroCard);
-    heroBadge->setStyleSheet(QStringLiteral(
-        "background-color: rgba(99, 102, 241, 0.22);"
-        "color: #a5b4fc;"
-        "border: 1px solid rgba(99, 102, 241, 0.4);"
-        "border-radius: 10px;"
-        "padding: 3px 10px;"
-        "font-size: 10px;"
-        "font-weight: 800;"
-        "letter-spacing: 0.8px;"
-        "background: transparent;"
+    auto* subLabel = new QLabel(QStringLiteral("Gerencie, abra e atualize seus aplicativos de criação."), scrollContainer);
+    subLabel->setStyleSheet(QStringLiteral(
+        "font-size: 13px; color: #8e8e9e; background: transparent;"
     ));
-    heroLayout->addWidget(heroBadge, 0, Qt::AlignLeft);
+    titleCol->addWidget(subLabel);
 
-    auto* heroTitle = new QLabel(QStringLiteral("Crie sem limites."), heroCard);
-    heroTitle->setStyleSheet(QStringLiteral(
-        "font-size: 24px; font-weight: 900; color: #ffffff; background: transparent; letter-spacing: -0.3px;"
-    ));
-    heroLayout->addWidget(heroTitle);
-
-    auto* heroSub = new QLabel(
-        QStringLiteral("Aplicativos de alta performance para edição audiovisual, imagens raster e motion design profissional."),
-        heroCard
-    );
-    heroSub->setWordWrap(true);
-    heroSub->setStyleSheet(QStringLiteral(
-        "font-size: 13px; color: #9da3b8; background: transparent; line-height: 1.4;"
-    ));
-    heroLayout->addWidget(heroSub);
-
-    // Feature highlights pills row
-    auto* pillsRow = new QHBoxLayout();
-    pillsRow->setSpacing(8);
-    const QStringList highlights = {
-        QStringLiteral("✦ Motor Nativo C++ / GPU"),
-        QStringLiteral("✦ Suíte Compartilhada"),
-        QStringLiteral("✦ 100% Local e Seguro")
-    };
-    for (const auto& tag : highlights) {
-        auto* tagLabel = new QLabel(tag, heroCard);
-        tagLabel->setStyleSheet(QStringLiteral(
-            "background-color: rgba(255, 255, 255, 0.05);"
-            "color: #cbd5e1;"
-            "border: 1px solid rgba(255, 255, 255, 0.08);"
-            "border-radius: 6px;"
-            "padding: 3px 9px;"
-            "font-size: 11px;"
-            "font-weight: 600;"
-        ));
-        pillsRow->addWidget(tagLabel);
-    }
-    pillsRow->addStretch();
-    heroLayout->addLayout(pillsRow);
-
-    containerLayout->addWidget(heroCard);
-
-    // 2. Section Header & Filter Pills
-    auto* sectionRow = new QHBoxLayout();
-    sectionRow->setSpacing(12);
-
-    auto* sectionTitle = new QLabel(QStringLiteral("EXPLORAR APLICATIVOS"), scrollContainer);
-    sectionTitle->setStyleSheet(QStringLiteral(
-        "font-size: 11px; font-weight: 800; color: #6b6b7c; letter-spacing: 1px; background: transparent;"
-    ));
-    sectionRow->addWidget(sectionTitle);
-    sectionRow->addStretch();
+    headerRow->addLayout(titleCol);
+    headerRow->addStretch();
 
     const QStringList filterNames = {
         QStringLiteral("Todos"),
@@ -132,18 +73,18 @@ void AppsPage::setupUi() {
         auto* btn = new QPushButton(filterNames[i], scrollContainer);
         btn->setCursor(Qt::PointingHandCursor);
         m_filterButtons.push_back(btn);
-        sectionRow->addWidget(btn);
+        headerRow->addWidget(btn);
 
         connect(btn, &QPushButton::clicked, this, [this, i]() {
             onFilterTabClicked(i);
         });
     }
 
-    containerLayout->addLayout(sectionRow);
+    containerLayout->addLayout(headerRow);
 
-    // 3. App Cards Grid
+    // App Cards Grid
     m_cardsLayout = new QGridLayout();
-    m_cardsLayout->setContentsMargins(0, 0, 0, 0);
+    m_cardsLayout->setContentsMargins(0, 8, 0, 0);
     m_cardsLayout->setSpacing(20);
     m_cardsLayout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
 
@@ -166,7 +107,7 @@ void AppsPage::onFilterTabClicked(int index) {
                 "   background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);"
                 "   color: #ffffff;"
                 "   border-radius: 14px;"
-                "   padding: 5px 16px;"
+                "   padding: 6px 16px;"
                 "   font-size: 12px;"
                 "   font-weight: 700;"
                 "   border: 1px solid rgba(255, 255, 255, 0.15);"
@@ -178,7 +119,7 @@ void AppsPage::onFilterTabClicked(int index) {
                 "   background-color: #1a1a24;"
                 "   color: #8c8c9e;"
                 "   border-radius: 14px;"
-                "   padding: 5px 16px;"
+                "   padding: 6px 16px;"
                 "   font-size: 12px;"
                 "   font-weight: 600;"
                 "   border: 1px solid #282836;"
