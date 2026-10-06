@@ -2,7 +2,7 @@
 
 #include "model/composition_document.h"
 #include "model/motion_project_data.h"
-#include "composition_history.h"
+#include "application/history/composition_history.h"
 #include "../persistence/motion_recovery_store.h"
 #include "../diagnostics/performance_metrics.h"
 

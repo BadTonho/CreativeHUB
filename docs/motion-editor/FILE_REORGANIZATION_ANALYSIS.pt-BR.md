@@ -1,10 +1,10 @@
 # Análise de reorganização dos arquivos do Motion Studio
 
-**Status:** três etapas implementadas em 2026-10-06. Esta é uma nota
+**Status:** quatro etapas implementadas em 2026-10-06. Esta é uma nota
 provisória de planejamento, owner-only, em português; não registra uma decisão
 arquitetural definitiva.
 
-## Diagnóstico e resultado das três primeiras etapas
+## Diagnóstico e resultado das quatro primeiras etapas
 
 Antes da divisão, `apps/motion-editor/src/ui/main_window.cpp` tinha **2.814
 linhas físicas**. O arquivo concentrava abertura e salvamento de documentos,
@@ -46,16 +46,17 @@ composição, atalhos e configurações gerais foram agrupados em
 headers apontam para os novos caminhos. As classes, suas interfaces e o
 comportamento da interface permanecem iguais.
 
+### Quarta etapa: histórico de edição
+
+`CompositionHistory` foi movido de `src/ui/` para
+`src/application/history/`, onde seu papel de histórico da aplicação fica mais
+claro. O namespace, os tipos, as assinaturas e o comportamento foram mantidos.
+O CMake, a janela principal e os dois testes consumidores apontam para o novo
+caminho. A cobertura manual do histórico permanece pendente conforme o roadmap.
+
 ## Outras oportunidades identificadas
 
-Estas sugestões permanecem fora do escopo executado nas três primeiras etapas.
-
-### Avaliar o histórico de edição
-
-`composition_history.*` não é um widget. Uma etapa futura pode avaliar se sua
-responsabilidade fica mais clara em uma área da aplicação, como
-`src/application/history/`. As pastas `timeline/`, `workspace/` e `inspector/`
-já oferecem agrupamentos por domínio.
+Estas sugestões permanecem fora do escopo executado nas quatro primeiras etapas.
 
 ### Consolidar caminhos canônicos do timeline
 
@@ -69,6 +70,7 @@ atualizar consumidores e decidir se esses encaminhadores ainda são necessários
 src/
   audio/
   application/
+    history/
   diagnostics/
   export/
   model/

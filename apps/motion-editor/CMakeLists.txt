@@ -35,8 +35,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/audio_keyframe_generation.h
     src/ui/composition_viewer.cpp
     src/ui/composition_viewer.h
-    src/ui/composition_history.cpp
-    src/ui/composition_history.h
+    src/application/history/composition_history.cpp
+    src/application/history/composition_history.h
     src/ui/main_window.cpp
     src/ui/main_window.h
     src/ui/main_window_documents.cpp
