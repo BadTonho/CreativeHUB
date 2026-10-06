@@ -20,7 +20,7 @@ public:
     void refreshUpdates();
 
 signals:
-    void appDetailsRequested(const QString& appId);
+    void appDetailsRequested(const QString& appId, const QRect& originRect = QRect());
     void checkUpdatesRequested();
     void updateAppRequested(const QString& appId);
     void updateAllRequested();

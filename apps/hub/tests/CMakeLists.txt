@@ -18,6 +18,11 @@ target_link_libraries(hub-card-widget-test PRIVATE creative-suite-hub-core Qt6::
 target_compile_features(hub-card-widget-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-card-widget-test COMMAND hub-card-widget-test)
 
+add_executable(hub-details-modal-test test_app_details_modal.cpp)
+target_link_libraries(hub-details-modal-test PRIVATE creative-suite-hub-core Qt6::Widgets)
+target_compile_features(hub-details-modal-test PRIVATE cxx_std_20)
+add_creative_suite_test(NAME hub-details-modal-test COMMAND hub-details-modal-test)
+
 if(WIN32)
     get_target_property(QT_HUB_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
     if(NOT QT_HUB_CORE_DLL)
@@ -30,7 +35,8 @@ if(WIN32)
             hub-catalog-test
             hub-launcher-test
             hub-logger-test
-            hub-card-widget-test)
+            hub-card-widget-test
+            hub-details-modal-test)
         add_custom_command(TARGET ${TEST_TARGET} POST_BUILD
             COMMAND "${QT_HUB_DEPLOY_TOOL}"
                 --no-translations

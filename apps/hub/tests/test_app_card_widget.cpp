@@ -1,12 +1,12 @@
 #include "ui/cards/app_card_widget.h"
 #include <QApplication>
+#include <QMouseEvent>
 #include <cassert>
 #include <iostream>
 
 using namespace creative_suite::hub;
 
 int main(int argc, char* argv[]) {
-    // QApplication required for QWidget
     QApplication app(argc, argv);
 
     AppInfo info(
@@ -26,40 +26,23 @@ int main(int argc, char* argv[]) {
     AppCardWidget card;
     card.setAppInfo(info);
 
-    // Initial state: collapsed
-    assert(!card.isExpanded());
-    assert(card.cardHeight() == AppCardWidget::kCollapsedHeight);
+    // Verify compact block dimensions
+    assert(card.width() == AppCardWidget::kCardWidth);
+    assert(card.height() == AppCardWidget::kCardHeight);
 
-    bool receivedExpandedSignal = false;
-    bool lastExpandedState = false;
-    QObject::connect(&card, &AppCardWidget::expansionToggled, [&receivedExpandedSignal, &lastExpandedState](const QString&, bool expanded) {
-        receivedExpandedSignal = true;
-        lastExpandedState = expanded;
+    bool receivedDetailsSignal = false;
+    QString receivedAppId;
+    QObject::connect(&card, &AppCardWidget::detailsRequested, [&receivedDetailsSignal, &receivedAppId](const QString& id) {
+        receivedDetailsSignal = true;
+        receivedAppId = id;
     });
 
-    // Expand non-animated
-    card.expand(false);
-    assert(card.isExpanded());
-    assert(card.cardHeight() == AppCardWidget::kExpandedHeight);
-    assert(receivedExpandedSignal);
-    assert(lastExpandedState == true);
+    // Simulate clicking on the card body
+    QMouseEvent event(QEvent::MouseButtonRelease, QPointF(50, 50), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(&card, &event);
 
-    // Collapse non-animated
-    receivedExpandedSignal = false;
-    card.collapse(false);
-    assert(!card.isExpanded());
-    assert(card.cardHeight() == AppCardWidget::kCollapsedHeight);
-    assert(receivedExpandedSignal);
-    assert(lastExpandedState == false);
-
-    // Toggle
-    card.toggleExpanded(false);
-    assert(card.isExpanded());
-    assert(card.cardHeight() == AppCardWidget::kExpandedHeight);
-
-    card.toggleExpanded(false);
-    assert(!card.isExpanded());
-    assert(card.cardHeight() == AppCardWidget::kCollapsedHeight);
+    assert(receivedDetailsSignal);
+    assert(receivedAppId == QStringLiteral("video-editor"));
 
     std::cout << "All AppCardWidget tests passed successfully!" << std::endl;
     return 0;

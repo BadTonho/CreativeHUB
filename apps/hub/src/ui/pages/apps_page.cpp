@@ -142,14 +142,12 @@ void AppsPage::refreshCards() {
         connect(card, &AppCardWidget::openRequested, this, &AppsPage::openAppRequested);
         connect(card, &AppCardWidget::downloadRequested, this, &AppsPage::downloadAppRequested);
         connect(card, &AppCardWidget::cancelDownloadRequested, this, &AppsPage::cancelDownloadRequested);
-        connect(card, &AppCardWidget::expansionToggled, this, [this, card](const QString&, bool isExpanded) {
-            if (isExpanded) {
-                for (auto* other : m_cardWidgets) {
-                    if (other != card && other->isExpanded()) {
-                        other->collapse(true);
-                    }
-                }
+        connect(card, &AppCardWidget::detailsRequested, this, [this, card](const QString& appId) {
+            QRect originRect = card->rect();
+            if (window()) {
+                originRect = QRect(card->mapTo(window(), QPoint(0, 0)), card->size());
             }
+            emit appDetailsRequested(appId, originRect);
         });
 
         m_cardWidgets.push_back(card);

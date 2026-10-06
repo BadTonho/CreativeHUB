@@ -21,7 +21,7 @@ public:
     void refreshCards();
 
 signals:
-    void appDetailsRequested(const QString& appId);
+    void appDetailsRequested(const QString& appId, const QRect& originRect = QRect());
     void openAppRequested(const QString& appId);
     void downloadAppRequested(const QString& appId);
     void cancelDownloadRequested(const QString& appId);

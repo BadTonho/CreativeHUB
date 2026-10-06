@@ -7,6 +7,7 @@
 #include "pages/apps_page.h"
 #include "pages/updates_page.h"
 #include "pages/settings_page.h"
+#include "dialogs/app_details_modal.h"
 
 #include <QMainWindow>
 #include <QStackedWidget>
@@ -20,8 +21,11 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private slots:
-    void onShowAppDetails(const QString& appId);
+    void onShowAppDetails(const QString& appId, const QRect& originRect = QRect());
     void onOpenApp(const QString& appId);
     void onDownloadApp(const QString& appId);
     void onCancelDownload(const QString& appId);
@@ -42,6 +46,7 @@ private:
     AppsPage* m_appsPage{nullptr};
     UpdatesPage* m_updatesPage{nullptr};
     SettingsPage* m_settingsPage{nullptr};
+    AppDetailsModal* m_detailsModal{nullptr};
 
     // Download simulation timer for visual feedback
     QTimer* m_downloadTimer{nullptr};

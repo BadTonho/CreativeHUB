@@ -7,6 +7,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
+#include <QResizeEvent>
 
 namespace creative_suite::hub {
 
@@ -22,6 +23,13 @@ MainWindow::MainWindow(QWidget* parent)
 
     setupUi();
     scanInstalledApps();
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    if (m_detailsModal) {
+        m_detailsModal->setGeometry(rect());
+    }
 }
 
 void MainWindow::setupUi() {
@@ -75,6 +83,24 @@ void MainWindow::setupUi() {
     bodyLayout->addWidget(m_pagesStack, 1);
     rootLayout->addLayout(bodyLayout, 1);
 
+    // Animated In-Window Popup Modal
+    m_detailsModal = new AppDetailsModal(this);
+    m_detailsModal->setGeometry(rect());
+    connect(m_detailsModal, &AppDetailsModal::actionRequested, this, [this](const QString& id) {
+        auto opt = m_catalog.findApp(id);
+        if (opt.has_value()) {
+            if (opt->isInstalled()) {
+                if (opt->hasUpdate()) {
+                    onDownloadApp(id);
+                } else {
+                    onOpenApp(id);
+                }
+            } else {
+                onDownloadApp(id);
+            }
+        }
+    });
+
     // Download simulation timer for UI visual demo
     m_downloadTimer = new QTimer(this);
     connect(m_downloadTimer, &QTimer::timeout, this, &MainWindow::simulateDownloadStep);
@@ -96,7 +122,7 @@ void MainWindow::scanInstalledApps() {
     }
 }
 
-void MainWindow::onShowAppDetails(const QString& appId) {
+void MainWindow::onShowAppDetails(const QString& appId, const QRect& originRect) {
     auto appOpt = m_catalog.findApp(appId);
     if (!appOpt.has_value()) {
         return;
@@ -105,26 +131,14 @@ void MainWindow::onShowAppDetails(const QString& appId) {
     HubLogger::instance().logInfo(
         QStringLiteral("MainWindow"),
         QStringLiteral("onShowAppDetails"),
-        QStringLiteral("Exibindo detalhes do aplicativo"),
+        QStringLiteral("Exibindo popup animado com os detalhes do aplicativo"),
         appId
     );
 
-    AppDetailsDialog dialog(*appOpt, this);
-    connect(&dialog, &AppDetailsDialog::actionRequested, this, [this](const QString& id) {
-        auto opt = m_catalog.findApp(id);
-        if (opt.has_value()) {
-            if (opt->isInstalled()) {
-                if (opt->hasUpdate()) {
-                    onDownloadApp(id);
-                } else {
-                    onOpenApp(id);
-                }
-            } else {
-                onDownloadApp(id);
-            }
-        }
-    });
-    dialog.exec();
+    if (m_detailsModal) {
+        m_detailsModal->setGeometry(rect());
+        m_detailsModal->showApp(*appOpt, originRect);
+    }
 }
 
 void MainWindow::onRefreshApps() {
