@@ -3,6 +3,8 @@
 #include "theme/hub_palette.h"
 #include "theme/hub_style.h"
 #include "../diagnostics/hub_logger.h"
+#include "../model/activity_manager.h"
+#include "../model/backup_manager.h"
 #ifdef Q_OS_WIN
 #include <creative_suite/updater/update_dialog.h>
 #include <creative_suite/updater/update_service.h>
@@ -16,6 +18,7 @@
 #include <QTimer>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QFileInfo>
 
 namespace creative_suite::hub {
 
@@ -68,6 +71,11 @@ void MainWindow::setupUi() {
         if (m_pagesStack) {
             m_pagesStack->setCurrentIndex(index);
         }
+        if (index == 3 && m_storagePage) {
+            m_storagePage->refreshStorageInfo();
+        } else if (index == 4 && m_backupsPage) {
+            m_backupsPage->refreshBackupsList();
+        }
     });
     bodyLayout->addWidget(m_sidebarWidget);
 
@@ -90,6 +98,12 @@ void MainWindow::setupUi() {
     connect(m_updatesPage, &UpdatesPage::checkUpdatesRequested, this, &MainWindow::onRefreshApps);
     connect(m_updatesPage, &UpdatesPage::updateAppRequested, this, &MainWindow::onDownloadApp);
     m_pagesStack->addWidget(m_updatesPage);
+
+    m_storagePage = new StoragePage(this);
+    m_pagesStack->addWidget(m_storagePage);
+
+    m_backupsPage = new BackupsPage(this);
+    m_pagesStack->addWidget(m_backupsPage);
 
     m_settingsPage = new SettingsPage(this);
     m_pagesStack->addWidget(m_settingsPage);
@@ -303,6 +317,12 @@ void MainWindow::onOpenApp(const QString& appId) {
             QStringLiteral("Não foi possível encontrar ou executar o arquivo '%1'. Certifique-se de que o aplicativo foi compilado.")
                 .arg(app.executableName())
         );
+    } else {
+        ActivityManager::instance().addActivity(
+            QStringLiteral("Aplicativo Aberto"),
+            QStringLiteral("O %1 foi iniciado com sucesso.").arg(app.name()),
+            QStringLiteral("system")
+        );
     }
 }
 
@@ -332,6 +352,11 @@ void MainWindow::onOpenProject(const QString& filePath, const QString& appId) {
             );
         } else {
             m_recentProjectsManager.addOrUpdateProject(filePath, targetAppId);
+            ActivityManager::instance().addActivity(
+                QStringLiteral("Projeto Aberto"),
+                QStringLiteral("Projeto '%1' aberto no %2.").arg(QFileInfo(filePath).fileName(), app.name()),
+                QStringLiteral("project")
+            );
             if (m_projectsPage) {
                 m_projectsPage->refreshList();
             }
@@ -341,6 +366,11 @@ void MainWindow::onOpenProject(const QString& filePath, const QString& appId) {
         const bool opened = QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
         if (opened) {
             m_recentProjectsManager.addOrUpdateProject(filePath, targetAppId);
+            ActivityManager::instance().addActivity(
+                QStringLiteral("Projeto Aberto"),
+                QStringLiteral("Projeto '%1' aberto no sistema.").arg(QFileInfo(filePath).fileName()),
+                QStringLiteral("project")
+            );
             if (m_projectsPage) {
                 m_projectsPage->refreshList();
             }

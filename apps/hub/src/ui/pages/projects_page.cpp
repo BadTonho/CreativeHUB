@@ -1,12 +1,15 @@
 #include "projects_page.h"
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
+#include "../../model/backup_manager.h"
 
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMenu>
 #include <QPainter>
 #include <QDateTime>
+#include <QMessageBox>
+#include <QTimer>
 
 namespace creative_suite::hub {
 
@@ -102,6 +105,13 @@ void ProjectsPage::setupUi() {
     titleCol->addWidget(subLabel);
 
     headerRow->addLayout(titleCol, 1);
+
+    auto* openBackupsBtn = new QPushButton(QStringLiteral("Cofre de Backups"), scrollContainer);
+    openBackupsBtn->setCursor(Qt::PointingHandCursor);
+    openBackupsBtn->setFixedHeight(36);
+    openBackupsBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
+    connect(openBackupsBtn, &QPushButton::clicked, this, &ProjectsPage::onOpenBackupFolder);
+    headerRow->addWidget(openBackupsBtn);
 
     auto* openProjectBtn = new QPushButton(QStringLiteral("Abrir Projeto..."), scrollContainer);
     openProjectBtn->setCursor(Qt::PointingHandCursor);
@@ -272,6 +282,17 @@ QWidget* ProjectsPage::createProjectCard(const RecentProject& project) {
         dateLabel->setStyleSheet(QStringLiteral("color: #666666; font-size: 11px; background: transparent;"));
         layout->addWidget(dateLabel);
     }
+
+    // "Backup" button
+    auto* backupBtn = new QPushButton(QStringLiteral("Backup"), card);
+    backupBtn->setCursor(Qt::PointingHandCursor);
+    backupBtn->setFixedHeight(30);
+    backupBtn->setToolTip(QStringLiteral("Criar cópia de segurança com data e hora no cofre de backups"));
+    backupBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
+    connect(backupBtn, &QPushButton::clicked, this, [this, project, backupBtn]() {
+        onBackupProject(project.filePath, backupBtn);
+    });
+    layout->addWidget(backupBtn);
 
     // "Abrir" button
     auto* openBtn = new QPushButton(QStringLiteral("Abrir"), card);
@@ -465,6 +486,35 @@ void ProjectsPage::onNewProjectMenu() {
     });
 
     menu->exec(QCursor::pos());
+}
+
+void ProjectsPage::onOpenBackupFolder() {
+    BackupManager::instance().openBackupDirectory();
+}
+
+void ProjectsPage::onBackupProject(const QString& filePath, QPushButton* triggerBtn) {
+    QString outBackupPath;
+    QString outError;
+    const bool success = BackupManager::instance().createBackup(filePath, &outBackupPath, &outError);
+
+    if (success) {
+        if (triggerBtn) {
+            triggerBtn->setText(QStringLiteral("✓ Salvo"));
+            triggerBtn->setEnabled(false);
+            QTimer::singleShot(2500, triggerBtn, [triggerBtn]() {
+                if (triggerBtn) {
+                    triggerBtn->setText(QStringLiteral("Backup"));
+                    triggerBtn->setEnabled(true);
+                }
+            });
+        }
+    } else {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Falha no Backup"),
+            QStringLiteral("Não foi possível gerar a cópia de segurança:\n%1").arg(outError)
+        );
+    }
 }
 
 void ProjectsPage::resizeEvent(QResizeEvent* event) {

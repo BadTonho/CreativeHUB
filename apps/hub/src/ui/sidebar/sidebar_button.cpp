@@ -3,6 +3,7 @@
 
 #include <QHBoxLayout>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPolygonF>
 
 namespace creative_suite::hub {
@@ -58,6 +59,62 @@ QIcon createProjectsIcon(const QColor& color) {
     p.drawRoundedRect(QRectF(2.5, 4.5, 15, 11), 2, 2);
     p.drawLine(QPointF(2.5, 8.5), QPointF(17.5, 8.5));
     p.drawLine(QPointF(7.5, 4.5), QPointF(9.5, 6.5));
+    return QIcon(pixmap);
+}
+
+QIcon createStorageIcon(const QColor& color) {
+    constexpr int size = 20;
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+    QPainter p(&pixmap);
+    p.setRenderHint(QPainter::Antialiasing);
+    QPen pen(color, 1.6);
+    pen.setCapStyle(Qt::RoundCap);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+
+    // Three storage drives / disk shelves
+    p.drawRoundedRect(QRectF(2.5, 2.5, 15, 4), 1.5, 1.5);
+    p.drawRoundedRect(QRectF(2.5, 8.0, 15, 4), 1.5, 1.5);
+    p.drawRoundedRect(QRectF(2.5, 13.5, 15, 4), 1.5, 1.5);
+
+    p.setPen(Qt::NoPen);
+    p.setBrush(color);
+    p.drawEllipse(QRectF(14, 3.8, 1.5, 1.5));
+    p.drawEllipse(QRectF(14, 9.3, 1.5, 1.5));
+    p.drawEllipse(QRectF(14, 14.8, 1.5, 1.5));
+
+    return QIcon(pixmap);
+}
+
+QIcon createBackupsIcon(const QColor& color) {
+    constexpr int size = 20;
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+    QPainter p(&pixmap);
+    p.setRenderHint(QPainter::Antialiasing);
+    QPen pen(color, 1.8);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+
+    // Shield outline
+    QPainterPath shield;
+    shield.moveTo(10, 2.5);
+    shield.lineTo(16.5, 4.8);
+    shield.cubicTo(16.5, 10.5, 10, 16.5, 10, 17.5);
+    shield.cubicTo(10, 16.5, 3.5, 10.5, 3.5, 4.8);
+    shield.closeSubpath();
+    p.drawPath(shield);
+
+    // Inner checkmark
+    QPainterPath check;
+    check.moveTo(7.5, 9.5);
+    check.lineTo(9.5, 11.5);
+    check.lineTo(13, 7.5);
+    p.drawPath(check);
+
     return QIcon(pixmap);
 }
 
@@ -135,6 +192,10 @@ void SidebarButton::updateVisuals() {
         setIcon(createProjectsIcon(iconColor));
     } else if (m_title.contains(QStringLiteral("Atualizações"))) {
         setIcon(createUpdatesIcon(iconColor));
+    } else if (m_title.contains(QStringLiteral("Armazenamento")) || m_title.contains(QStringLiteral("Cache"))) {
+        setIcon(createStorageIcon(iconColor));
+    } else if (m_title.contains(QStringLiteral("Backups")) || m_title.contains(QStringLiteral("Cofre"))) {
+        setIcon(createBackupsIcon(iconColor));
     } else if (m_title.contains(QStringLiteral("Configurações"))) {
         setIcon(createSettingsIcon(iconColor));
     }

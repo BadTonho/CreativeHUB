@@ -38,6 +38,16 @@ target_link_libraries(hub-storage-manager-test PRIVATE creative-suite-hub-core Q
 target_compile_features(hub-storage-manager-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-storage-manager-test COMMAND hub-storage-manager-test)
 
+add_executable(hub-activity-manager-test test_activity_manager.cpp)
+target_link_libraries(hub-activity-manager-test PRIVATE creative-suite-hub-core Qt6::Core)
+target_compile_features(hub-activity-manager-test PRIVATE cxx_std_20)
+add_creative_suite_test(NAME hub-activity-manager-test COMMAND hub-activity-manager-test)
+
+add_executable(hub-backup-manager-test test_backup_manager.cpp)
+target_link_libraries(hub-backup-manager-test PRIVATE creative-suite-hub-core Qt6::Core)
+target_compile_features(hub-backup-manager-test PRIVATE cxx_std_20)
+add_creative_suite_test(NAME hub-backup-manager-test COMMAND hub-backup-manager-test)
+
 if(WIN32)
     get_target_property(QT_HUB_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
     if(NOT QT_HUB_CORE_DLL)
@@ -54,7 +64,9 @@ if(WIN32)
             hub-details-modal-test
             hub-changelog-reader-test
             hub-recent-projects-test
-            hub-storage-manager-test)
+            hub-storage-manager-test
+            hub-activity-manager-test
+            hub-backup-manager-test)
         add_custom_command(TARGET ${TEST_TARGET} POST_BUILD
             COMMAND "${QT_HUB_DEPLOY_TOOL}"
                 --no-translations

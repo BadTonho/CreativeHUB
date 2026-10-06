@@ -34,11 +34,13 @@ protected:
 private slots:
     void onBrowseAndOpenProject();
     void onNewProjectMenu();
+    void onOpenBackupFolder();
     void onFilterTabClicked(int index);
     void onSearchTextChanged(const QString& text);
 
 private:
     void setupUi();
+    void onBackupProject(const QString& filePath, QPushButton* triggerBtn);
     QWidget* createProjectCard(const RecentProject& project);
 
     enum class AppCategoryFilter {
