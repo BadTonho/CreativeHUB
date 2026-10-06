@@ -8,8 +8,9 @@ run.
 
 Run this checklist against generated setup executables in a disposable
 per-user profile. Record the Windows build, app versions, selected install
-path, and result. The current status is **pending** because Inno Setup Compiler
-(`ISCC.exe`) is not available in the current environment.
+path, and result. The installers compile successfully with Inno Setup 6.7.3;
+the current status is **pending** because the lifecycle checklist has not yet
+been run in a disposable profile.
 
 1. Install Image Editor into a user-chosen directory. Confirm the Hub detects
    the registered path and installed version.

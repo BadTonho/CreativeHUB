@@ -61,5 +61,11 @@ launch, the Hub can offer that retained backup for restoration.
 The generated installer should be validated on Windows in a disposable user
 profile before publication, including a clean install, an update to a chosen
 directory, cancellation/failure recovery, and Hub restoration. The repository
-does not include the Inno Setup compiler, so local builds without ISCC cannot
-produce the `.exe` assets.
+does not include the Inno Setup compiler, so the packaging machine must have
+Inno Setup installed and `ISCC.exe` available on `PATH` or passed with
+`-InnoCompiler`. The release script locates the Visual Studio C++ runtime,
+copies its redistributable DLLs into each app's directory, and removes the
+machine-wide redistributable installer from the per-user package. Microsoft
+supports local deployment for installs that do not have administrator rights,
+but notes that the app owner must service those files; see the
+[deployment-method guidance](https://learn.microsoft.com/en-us/cpp/windows/choosing-a-deployment-method?view=msvc-170).

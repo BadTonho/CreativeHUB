@@ -22,6 +22,55 @@ $scriptTemplate = Join-Path $PSScriptRoot "creative-suite-app.iss"
 $versions = Get-Content -LiteralPath $versionFile -Raw | ConvertFrom-Json
 $notes = Get-Content -LiteralPath $notesFile -Raw | ConvertFrom-Json
 $appIds = @("hub", "video-editor", "image-editor", "motion-editor")
+
+function ConvertTo-InnoString([string] $Value) {
+    return '"' + $Value.Replace('"', '""') + '"'
+}
+
+function Get-VisualStudioVcInstallDirectory {
+    if (-not [string]::IsNullOrWhiteSpace($env:VCINSTALLDIR)) {
+        return $env:VCINSTALLDIR
+    }
+
+    $programFilesX86 = [System.Environment]::GetFolderPath("ProgramFilesX86")
+    $vswherePath = Join-Path $programFilesX86 "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path -LiteralPath $vswherePath -PathType Leaf)) {
+        return $null
+    }
+
+    $installationPath = & $vswherePath -latest -products "*" `
+        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$installationPath)) {
+        return $null
+    }
+
+    $vcDirectory = Join-Path ([string]$installationPath.Trim()) "VC"
+    if (-not (Test-Path -LiteralPath $vcDirectory -PathType Container)) {
+        return $null
+    }
+    return $vcDirectory.TrimEnd('\') + '\'
+}
+
+function Get-VisualStudioCrtDirectory([string] $VcInstallDirectory) {
+    if ([string]::IsNullOrWhiteSpace($VcInstallDirectory)) { return $null }
+
+    $redistRoot = Join-Path $VcInstallDirectory "Redist\MSVC"
+    if (-not (Test-Path -LiteralPath $redistRoot -PathType Container)) { return $null }
+
+    $redistVersions = Get-ChildItem -LiteralPath $redistRoot -Directory |
+        Where-Object { $_.Name -match '^\d+\.\d+' } |
+        Sort-Object { [version]$_.Name } -Descending
+    foreach ($redistVersion in $redistVersions) {
+        $x64Directory = Join-Path $redistVersion.FullName "x64"
+        $crtDirectory = Get-ChildItem -LiteralPath $x64Directory -Directory `
+            -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue |
+            Sort-Object Name | Select-Object -First 1
+        if ($crtDirectory) { return $crtDirectory.FullName }
+    }
+
+    return $null
+}
+
 $resolvedBuildDirectory = (Resolve-Path -LiteralPath $BuildDirectory).Path
 $resolvedOutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Path $resolvedOutputDirectory -Force | Out-Null
@@ -95,8 +144,24 @@ foreach ($appId in $appIds) {
         $stageDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("creative-suite-stage-" + [guid]::NewGuid().ToString("N"))
         try {
             New-Item -ItemType Directory -Path $stageDirectory | Out-Null
-            & cmake --install $resolvedBuildDirectory --config Release --prefix $stageDirectory --component $appId
-            if ($LASTEXITCODE -ne 0) { throw "CMake staging failed for '$appId' with exit code $LASTEXITCODE." }
+            $originalVcInstallDirectory = $env:VCINSTALLDIR
+            try {
+                $vcInstallDirectory = Get-VisualStudioVcInstallDirectory
+                if (-not [string]::IsNullOrWhiteSpace([string]$vcInstallDirectory)) {
+                    $env:VCINSTALLDIR = $vcInstallDirectory
+                    Write-Host "Using Visual Studio C++ runtime files from $vcInstallDirectory"
+                }
+                & cmake --install $resolvedBuildDirectory --config Release --prefix $stageDirectory --component $appId
+                if ($LASTEXITCODE -ne 0) { throw "CMake staging failed for '$appId' with exit code $LASTEXITCODE." }
+            }
+            finally {
+                if ($null -eq $originalVcInstallDirectory) {
+                    Remove-Item Env:VCINSTALLDIR -ErrorAction SilentlyContinue
+                }
+                else {
+                    $env:VCINSTALLDIR = $originalVcInstallDirectory
+                }
+            }
             if (-not (Test-Path -LiteralPath (Join-Path $stageDirectory (Join-Path "bin" $application.executable)) -PathType Leaf)) {
                 throw "The staged '$appId' executable is missing: $($application.executable)"
             }
@@ -108,17 +173,40 @@ foreach ($appId in $appIds) {
                     (New-Object System.Text.UTF8Encoding($false)))
             }
 
+            $crtDirectory = Get-VisualStudioCrtDirectory $vcInstallDirectory
+            if (-not $crtDirectory) {
+                throw "The official x64 Visual C++ redistributable files could not be located for '$appId'."
+            }
+            $crtFiles = Get-ChildItem -LiteralPath $crtDirectory -File |
+                Where-Object { $_.Extension -in @(".dll", ".manifest") }
+            if (-not $crtFiles) {
+                throw "The official x64 Visual C++ runtime folder is empty: $crtDirectory"
+            }
+            Copy-Item -LiteralPath $crtFiles.FullName -Destination (Join-Path $stageDirectory "bin") -Force
+
+            $redistributableInstaller = Join-Path $stageDirectory "bin\vc_redist.x64.exe"
+            if (Test-Path -LiteralPath $redistributableInstaller -PathType Leaf) {
+                Remove-Item -LiteralPath $redistributableInstaller -Force
+            }
+
             $compilerCommand = Get-Command $InnoCompiler -ErrorAction SilentlyContinue
             if (-not $compilerCommand) { throw "Inno Setup Compiler '$InnoCompiler' is required to build the changed '$appId' installer." }
-            & $compilerCommand.Source `
-                "/DAppId=$appId" `
-                "/DAppName=$($application.name)" `
-                "/DAppVersion=$($application.version)" `
-                "/DAppExecutable=$($application.executable)" `
-                "/DAppOutputName=$([System.IO.Path]::GetFileNameWithoutExtension($application.installer_asset))" `
-                "/DSourceDir=$stageDirectory" `
-                "/DOutputDir=$resolvedOutputDirectory" `
-                $scriptTemplate
+            $compileScriptPath = Join-Path $stageDirectory "creative-suite-app-build.iss"
+            $compileScriptLines = @(
+                "#define AppId $(ConvertTo-InnoString $appId)"
+                "#define AppName $(ConvertTo-InnoString ([string]$application.name))"
+                "#define AppVersion $(ConvertTo-InnoString ([string]$application.version))"
+                "#define AppExecutable $(ConvertTo-InnoString ([string]$application.executable))"
+                "#define AppOutputName $(ConvertTo-InnoString ([System.IO.Path]::GetFileNameWithoutExtension($application.installer_asset)))"
+                "#define SourceDir $(ConvertTo-InnoString $stageDirectory)"
+                "#define OutputDir $(ConvertTo-InnoString $resolvedOutputDirectory)"
+                "#include $(ConvertTo-InnoString $scriptTemplate)"
+            )
+            [System.IO.File]::WriteAllLines(
+                $compileScriptPath,
+                $compileScriptLines,
+                (New-Object System.Text.UTF8Encoding($false)))
+            & $compilerCommand.Source $compileScriptPath
             if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed for '$appId' with exit code $LASTEXITCODE." }
             if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
                 throw "Inno Setup did not create the expected asset '$($application.installer_asset)'."

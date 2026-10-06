@@ -43,6 +43,6 @@ Windows build, installer versions, selected install paths, steps, and outcome.
 7. Update the Hub itself and verify that editor versions and installation
    directories remain unchanged.
 
-**Current result:** pending. Inno Setup Compiler (`ISCC.exe`) is unavailable in
-the current environment, so no installer lifecycle or rollback result is
-claimed yet.
+**Current result:** Inno Setup 6.7.3 compiled all four installers. The manual
+install, update, cancellation, rollback, and Hub restoration checklist remains
+pending until it is run in a disposable Windows user profile.

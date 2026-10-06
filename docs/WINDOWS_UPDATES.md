@@ -1,9 +1,10 @@
 # Windows Update System
 
-Status: **first implementation in progress**. The catalog, shared Qt updater,
+Status: **first Windows implementation built**. The catalog, shared Qt updater,
 application integrations, release packaging script, and automated updater tests
-are implemented. A Windows installer lifecycle run is still pending because the
-Inno Setup compiler is not available in the current environment.
+are implemented. Inno Setup 6.7.3 successfully compiled all four full Windows
+installers. A manual installer lifecycle run in a disposable Windows user
+profile is still pending.
 
 This is the current contract for the Hub, Video Editor, Image Editor, and Motion
 Studio. Linux and macOS packaging and update behavior are future work.
@@ -84,6 +85,14 @@ healthy. If that confirmation is still pending when the Hub opens, the Hub can
 offer restoration of the retained previous version. The complete GitHub
 installer remains the recovery route if the installed updater cannot continue.
 
+The Windows package includes the official Visual C++ runtime DLLs beside each
+application executable so a per-user setup does not need to install a
+machine-wide prerequisite. Microsoft supports this local deployment method,
+but does not recommend it for most deployments because the application owner
+must service those copies. A runtime refresh therefore requires rebuilding and
+advancing the version of each affected app installer. See Microsoft's
+[Visual C++ deployment methods](https://learn.microsoft.com/en-us/cpp/windows/choosing-a-deployment-method?view=msvc-170).
+
 Update continuity is a release requirement: every still-supported Windows
 version must be able to reach the latest compatible version directly or
 through updater-managed intermediate releases. A catalog or updater compatibility
@@ -127,6 +136,11 @@ an interrupted or failed installer, rollback, Hub restoration, and verifying
 that each editor updates only itself. These checks remain **pending** until
 they are run against generated installers in a disposable Windows user
 profile.
+
+The current Release build passed **79/79 CTest tests**. Inno Setup 6.7.3
+compiled the four installers and the script generated `updates.json` with the
+measured package sizes and SHA-256 digests. The artifacts are in the ignored
+local directory `build/windows-release-assets`; they have not been published.
 
 To build release assets, use the command and previous-release verification
 requirements in [`../packaging/windows/README.md`](../packaging/windows/README.md).

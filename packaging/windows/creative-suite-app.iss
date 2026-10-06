@@ -1,10 +1,24 @@
+#ifndef AppId
 #define AppId ""
+#endif
+#ifndef AppName
 #define AppName ""
+#endif
+#ifndef AppVersion
 #define AppVersion ""
+#endif
+#ifndef AppExecutable
 #define AppExecutable ""
+#endif
+#ifndef AppOutputName
 #define AppOutputName ""
+#endif
+#ifndef SourceDir
 #define SourceDir ""
+#endif
+#ifndef OutputDir
 #define OutputDir ""
+#endif
 
 [Setup]
 AppId={#AppId}
@@ -23,7 +37,7 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma2
 SolidCompression=yes
 Uninstallable=yes
@@ -67,12 +81,12 @@ begin
       begin
         SourceName := SourceDir + '\' + FindRec.Name;
         DestName := DestDir + '\' + FindRec.Name;
-        if (FindRec.Attributes and faDirectory) <> 0 then
+        if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
         begin
           if not CopyDirectoryContents(SourceName, DestName) then
             Exit;
         end
-        else if not FileCopy(SourceName, DestName, False) then
+        else if not CopyFile(SourceName, DestName, False) then
           Exit;
       end;
     until not FindNext(FindRec);
