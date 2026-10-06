@@ -42,6 +42,66 @@ passed in Debug and Release (5/5 each), and the full Release suite passed
 (61/61). The owner then reopened the affected WebP successfully in the rebuilt
 Windows UI. macOS and Linux packaging checks remain deferred.
 
+## Performance collection and benchmark
+
+The collector is disabled by default. Use a disposable document for the UI
+checks and record the OS, application build, and outcome.
+
+1. Open **Settings > Collect Performance Metrics**. Confirm the checkmark is
+   off initially, then enable it. Open the modeless **View > Performance
+   Metrics** panel and exercise paint, eraser, mask, layer/group, thumbnail,
+   canvas, and PNG/JPEG export work. Confirm the panel refreshes about once per
+   second and reports count, average, p95, and maximum for stages that ran.
+2. Confirm CPU, working set, and private memory appear when the operating
+   system supplies them; unavailable values should show `N/A` without stopping
+   timing collection. Close and reopen the application and confirm the Settings
+   preference persists.
+3. Find `logs/image-editor-performance.jsonl` under the application-local
+   data directory. Confirm records are valid JSON Lines, contain no document
+   path, document name, or image pixels, and rotate at 2 MiB with no more than
+   three files. Disable collection and confirm a final summary is written,
+   panel status changes, and no further summaries appear.
+4. Compare rendering and PNG/JPEG export from the same synthetic or disposable
+   document with collection off and on. Pixels and export results must match.
+5. For repeatable CPU measurements, run the Release benchmark from the
+   repository root:
+
+   ```powershell
+   .\build\apps\image-editor\Release\creative-suite-image-editor-benchmark.exe --profile all --warmup 3 --iterations 30 --output report.json
+   ```
+
+   The profiles are `reference`, `mask-heavy`, `stroke-heavy`, `large-image`,
+   `repeated-source`, and `export`. The version 1 report includes build and OS
+   metadata, each profile's dimensions and composition, iteration wall time,
+   per-stage average/p50/p95/maximum, and sampled process resources. Use
+   synthetic content only; compare repeat runs on the same machine and do not
+   infer a performance guarantee from one PC.
+
+The first Windows reference-PC Release baseline (Ryzen 5 3600, 32 GB RAM,
+GeForce GTX 1660 SUPER 6 GB, Windows 11) is in
+[`performance-baseline-windows-2026-10-06.json`](performance-baseline-windows-2026-10-06.json).
+It was recorded on 2026-10-06 with Windows 11 Version 26H2, x86_64, MSVC 1944,
+and Qt 6.7.2. All profiles used three warmups and 30 measured iterations. The
+table shows iteration wall time (average / p95 / maximum), composite stage
+average / p95, and sampled peak working set in MiB:
+
+| Profile | Canvas | Wall time avg / p95 / max (ms) | Composite avg / p95 (ms) | Sampled peak working set (MiB) |
+| --- | ---: | ---: | ---: | ---: |
+| Reference | 1920×1080 | 145.06 / 171.03 / 176.68 | 91.87 / 110.47 | 56.5 |
+| Mask-heavy | 1920×1080 | 588.43 / 685.74 / 693.67 | 373.15 / 441.85 | 72.8 |
+| Stroke-heavy | 1920×1080 | 1,018.63 / 1,080.30 / 1,088.52 | 653.14 / 702.94 | 57.5 |
+| Large image | 3840×2160 | 309.76 / 355.37 / 409.22 | 199.27 / 225.31 | 198.4 |
+| Repeated source | 1920×1080 | 61.54 / 68.42 / 70.53 | 38.43 / 44.29 | 79.8 |
+| Export | 1920×1080 | 713.36 / 761.79 / 765.31 | 86.91 / 94.48 | 73.6 |
+
+These are observations of the current CPU renderer, not optimization gains,
+performance targets, or general hardware requirements. The recorded process
+CPU value is a one-second sample, and memory peaks are sampled observations.
+The Release Image Editor test group passed 11/11 on this Windows system,
+including the benchmark report smoke test and image/export equality with
+collection enabled or disabled. Native manual inspection of the panel and
+settings remains pending; follow the checklist above.
+
 ## Contextual deletion
 
 Automated coverage: `image_editor_deletion_ui_test.cpp` in

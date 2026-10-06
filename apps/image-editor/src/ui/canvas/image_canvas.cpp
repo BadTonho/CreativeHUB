@@ -2,6 +2,7 @@
 
 #include "image_document_store.h"
 #include "../transparency_checkerboard.h"
+#include "../../core/diagnostics/image_editor_performance_metrics.h"
 
 #include <QEvent>
 #include <QCursor>
@@ -545,6 +546,9 @@ void ImageCanvas::finishTextEditing(bool commit) {
 }
 
 void ImageCanvas::paintEvent(QPaintEvent*) {
+    ImageEditorPerformanceScope paint_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::CanvasPaint);
     QPainter painter(this);
     painter.fillRect(rect(), QColor(34, 37, 43));
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);

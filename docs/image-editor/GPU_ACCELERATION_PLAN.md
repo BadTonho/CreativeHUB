@@ -14,6 +14,14 @@ composition. The canvas displays the composed image; standalone exports render
 immutable snapshots on a worker, while linked PNG publication remains
 synchronous. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
+An opt-in CPU performance collector and synthetic Release benchmark now record
+operation replay, mask/layer/group composition, thumbnails, canvas paint, PNG/
+JPEG export, process CPU, and sampled memory. The first reference-PC results
+are available in
+[`performance-baseline-windows-2026-10-06.json`](performance-baseline-windows-2026-10-06.json).
+They characterize only the current CPU path; they do not measure GPU parity,
+interaction latency, allocation/transfer costs, or optimization gains.
+
 The [Video Editor plan](../video-editor/GPU_ACCELERATION_PLAN.md) establishes
 Video Editor as the first consumer of the shared OpenGL compositor. Reuse its resource/backend services
 when their contract fits; Image Editor needs transparent output, document pixel
@@ -37,9 +45,11 @@ are disposable caches, not persisted document or Undo state.
 
 ## Stage 1 — Rendering contract and experimental adapter
 
-- Profile operation replay, mask application, group composition, thumbnails,
-  gesture preview, and export separately using representative documents.
-  Record allocation/transfer costs before introducing complex optimizations.
+- Extend the current opt-in timing/resource collector to any new GPU stages.
+  The six-profile CPU baseline records operation replay, mask application,
+  group composition, thumbnails, canvas paint, and export on the reference PC.
+  Add gesture-response, allocation, and transfer measurements before introducing
+  complex optimizations.
 - Define a shared raster input/output contract with explicit alpha convention,
   channel layout, stride, origin, pixel coordinates, sampling, and clear color.
   Preserve transparent output and the existing antialiasing/smoothing behavior.
@@ -169,6 +179,31 @@ evidence, unresolved issues, and the next stage here.
   acceptance remain planned. Coordinate shared work with the
   [Motion Studio](../motion-editor/GPU_ACCELERATION_PLAN.md) and
   [Video Editor](../video-editor/GPU_ACCELERATION_PLAN.md) plans.
+
+## Image Editor CPU measurement baseline
+
+The development benchmark ran all six profiles in Release on the Windows
+reference PC: AMD Ryzen 5 3600, 32 GB RAM, NVIDIA GeForce GTX 1660 SUPER with
+6 GB VRAM, and Windows 11 Version 26H2. The build used MSVC 1944 and Qt 6.7.2.
+Each profile used three warmups and 30 measured iterations. The Release Image
+Editor CTest group passed 11/11, including collector behavior, UI persistence
+and shutdown, render/export pixel equality, JSONL rotation, and benchmark report
+structure. The reproducible full report is
+[`performance-baseline-windows-2026-10-06.json`](performance-baseline-windows-2026-10-06.json).
+
+| CPU profile | Canvas | Iteration average / p95 / maximum (ms) | Composite average / p95 (ms) |
+| --- | ---: | ---: | ---: |
+| Reference | 1920×1080 | 145.06 / 171.03 / 176.68 | 91.87 / 110.47 |
+| Mask-heavy | 1920×1080 | 588.43 / 685.74 / 693.67 | 373.15 / 441.85 |
+| Stroke-heavy | 1920×1080 | 1,018.63 / 1,080.30 / 1,088.52 | 653.14 / 702.94 |
+| Large image | 3840×2160 | 309.76 / 355.37 / 409.22 | 199.27 / 225.31 |
+| Repeated source | 1920×1080 | 61.54 / 68.42 / 70.53 | 38.43 / 44.29 |
+| Export (PNG + JPEG) | 1920×1080 | 713.36 / 761.79 / 765.31 | 86.91 / 94.48 |
+
+These figures are a first CPU baseline, not GPU comparisons, gains, limits, or
+general hardware requirements. Per-process CPU is reported as the latest
+one-second sample; memory peaks are sampled and may miss brief higher values.
+Native manual panel inspection and macOS/Linux measurements remain pending.
 
 ## Shared Video Editor stage 2 delivery
 

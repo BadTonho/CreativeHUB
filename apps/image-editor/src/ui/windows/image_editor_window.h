@@ -2,8 +2,12 @@
 
 #include "image_document_session.h"
 #include "image_editor_logger.h"
+#include "image_editor_performance_log.h"
+#include "image_editor_performance_metrics.h"
 #include "recovery_store.h"
 #include "../tools/tool_sidebar.h"
+
+#include <creative_suite/system_monitor/performance_usage.h>
 
 #include <creative_suite/shortcuts/shortcut_manager.h>
 
@@ -15,6 +19,8 @@
 #include <QVector>
 
 #include <memory>
+#include <optional>
+#include <cstdint>
 
 class QAction;
 class QCloseEvent;
@@ -32,6 +38,7 @@ namespace image_editor {
 class ImageCanvas;
 class ImageToolOptionsBar;
 class LayerPanel;
+class PerformanceMetricsPanel;
 class ShapePalette;
 class ToolSidebar;
 struct ImageEditorDocumentTab;
@@ -39,7 +46,8 @@ struct ImageEditorDocumentTab;
 class ImageEditorWindow final : public QMainWindow {
 public:
     explicit ImageEditorWindow(QWidget* parent = nullptr,
-                                QString recovery_data_directory = {});
+                                QString recovery_data_directory = {},
+                                QString performance_log_directory = {});
     ~ImageEditorWindow() override;
     [[nodiscard]] bool importImagePaths(const QStringList& paths,
         std::optional<QPointF> center = {}, const QString& relink_id = {});
@@ -127,11 +135,16 @@ private:
     void deleteSelectedObjects();
     void deleteSelection();
     void updateDeleteActions();
+    void setPerformanceMetricsEnabled(bool enabled);
+    void updatePerformanceMetrics();
+    void writePerformanceMetricsSummary(
+        const ImageEditorPerformanceSnapshot& snapshot);
     void reportError(const QString& operation,
                      const QString& cause,
                      const QString& path = {});
 
     ImageEditorLogger logger_;
+    ImageEditorPerformanceLog performance_log_;
     RecoveryStore recovery_store_;
     ToolSidebar* tool_sidebar_ = nullptr;
     QTabBar* document_tab_bar_ = nullptr;
@@ -145,6 +158,17 @@ private:
     ShapePalette* shape_palette_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
+    QTimer* performance_metrics_timer_ = nullptr;
+    QDockWidget* performance_metrics_dock_ = nullptr;
+    PerformanceMetricsPanel* performance_metrics_panel_ = nullptr;
+    QAction* performance_metrics_action_ = nullptr;
+    system_monitor::PerformanceSampler performance_sampler_;
+    system_monitor::PerformanceSnapshot latest_performance_resources_;
+    std::optional<std::uint64_t> peak_working_set_bytes_;
+    std::optional<std::uint64_t> peak_private_usage_bytes_;
+    int performance_log_ticks_ = 0;
+    std::uint64_t performance_log_sample_count_ = 0;
+    bool performance_log_error_reported_ = false;
     QMetaObject::Connection focus_changed_connection_;
     QAction* relink_action_ = nullptr;
     QAction* import_layer_action_ = nullptr;

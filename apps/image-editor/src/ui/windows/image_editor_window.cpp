@@ -1,6 +1,7 @@
 #include "image_editor_window.h"
 
 #include "image_canvas.h"
+#include "image_document_renderer.h"
 #include "image_document_store.h"
 #include "image_export_dialog.h"
 #include "image_export_controller.h"
@@ -12,6 +13,7 @@
 #include "layer_panel.h"
 #include "options/image_tool_options_bar.h"
 #include "shapes/shape_palette.h"
+#include "../diagnostics/performance_metrics_panel.h"
 
 #include <QAction>
 #include <QApplication>
@@ -22,10 +24,13 @@
 #include <QCloseEvent>
 #include <QDialog>
 #include <QDockWidget>
+#include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -40,6 +45,7 @@
 #include <QSettings>
 #include <QSize>
 #include <QStatusBar>
+#include <QSysInfo>
 #include <QStackedWidget>
 #include <QTabBar>
 #include <QTextEdit>
@@ -50,6 +56,7 @@
 
 #include <memory>
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace image_editor {
@@ -166,10 +173,35 @@ bool saveJpegExportPreferences(const ImageExportOptions& options,
     return false;
 }
 
+QJsonValue optionalMetricValue(const std::optional<std::uint64_t>& value) {
+    return value.has_value()
+        ? QJsonValue(static_cast<qint64>(*value)) : QJsonValue(QJsonValue::Null);
+}
+
+QJsonValue optionalMetricValue(const std::optional<double>& value) {
+    return value.has_value() && std::isfinite(*value)
+        ? QJsonValue(*value) : QJsonValue(QJsonValue::Null);
+}
+
+std::uint64_t operationCount(const ImageDocumentData& document) {
+    std::uint64_t count = static_cast<std::uint64_t>(document.operations.size());
+    for (const auto& layer : document.layers) {
+        count += static_cast<std::uint64_t>(layer.operations.size());
+        if (layer.mask.has_value())
+            count += static_cast<std::uint64_t>(layer.mask->operations.size());
+    }
+    for (const auto& group : document.groups)
+        count += static_cast<std::uint64_t>(group.operations.size());
+    return count;
+}
+
 } // namespace
 
-ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_directory)
+ImageEditorWindow::ImageEditorWindow(QWidget* parent,
+                                     QString recovery_data_directory,
+                                     QString performance_log_directory)
     : QMainWindow(parent),
+      performance_log_(std::move(performance_log_directory)),
       recovery_store_(std::move(recovery_data_directory)) {
     empty_document_state_ = std::make_unique<ImageEditorDocumentTab>();
     setWindowTitle(QStringLiteral("Image Editor"));
@@ -216,6 +248,15 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
     createToolOptionsBar();
     createLayerPanel();
     createActions();
+    performance_metrics_timer_ = new QTimer(this);
+    performance_metrics_timer_->setObjectName(QStringLiteral("imageEditorPerformanceMetricsTimer"));
+    performance_metrics_timer_->setInterval(1000);
+    connect(performance_metrics_timer_, &QTimer::timeout,
+            this, &ImageEditorWindow::updatePerformanceMetrics);
+    if (performance_metrics_action_ != nullptr && performance_metrics_action_->isChecked())
+        setPerformanceMetricsEnabled(true);
+    else
+        performance_metrics_panel_->setCollectionEnabled(false);
     connect(document_tab_bar_, &QTabBar::currentChanged, this,
             [this](int index) { activateDocumentTab(index); });
     connect(document_tab_bar_, &QTabBar::tabCloseRequested, this,
@@ -422,6 +463,13 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
 
 ImageEditorWindow::~ImageEditorWindow() {
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
+    if (performance_metrics_timer_ != nullptr) performance_metrics_timer_->stop();
+    auto& metrics = ImageEditorPerformanceMetrics::instance();
+    if (metrics.enabled()) {
+        updatePerformanceMetrics();
+        writePerformanceMetricsSummary(metrics.snapshot());
+    }
+    metrics.setEnabled(false);
     // Destroying the focused canvas child can emit focusChanged after the tab
     // state is released, so disconnect this application-wide callback first.
     QObject::disconnect(focus_changed_connection_);
@@ -1673,8 +1721,36 @@ void ImageEditorWindow::createActions() {
     registerShortcutAction(layers_view_action, {});
     view_menu->addAction(layers_view_action);
 
+    performance_metrics_dock_ = new QDockWidget(
+        QStringLiteral("Performance Metrics"), this);
+    performance_metrics_dock_->setObjectName(
+        QStringLiteral("imageEditorPerformanceMetricsDock"));
+    performance_metrics_panel_ = new PerformanceMetricsPanel(performance_metrics_dock_);
+    performance_metrics_dock_->setWidget(performance_metrics_panel_);
+    addDockWidget(Qt::BottomDockWidgetArea, performance_metrics_dock_);
+    performance_metrics_dock_->hide();
+    auto* performance_panel_action = performance_metrics_dock_->toggleViewAction();
+    performance_panel_action->setObjectName(
+        QStringLiteral("togglePerformanceMetricsPanelAction"));
+    view_menu->addAction(performance_panel_action);
+
     auto* settings_menu = menuBar()->addMenu(QStringLiteral("Settings"));
     settings_menu->setObjectName(QStringLiteral("settingsMenu"));
+    performance_metrics_action_ = settings_menu->addAction(
+        QStringLiteral("Collect Performance Metrics"));
+    performance_metrics_action_->setObjectName(
+        QStringLiteral("collectPerformanceMetricsAction"));
+    performance_metrics_action_->setCheckable(true);
+    {
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("ImageEditor/Performance"));
+        performance_metrics_action_->setChecked(settings.value(
+            QStringLiteral("enabled"), false).toBool());
+        settings.endGroup();
+    }
+    connect(performance_metrics_action_, &QAction::toggled,
+            this, [this](bool enabled) { setPerformanceMetricsEnabled(enabled); });
+    settings_menu->addSeparator();
     auto* shortcuts_action = settings_menu->addAction(
         QStringLiteral("Keyboard Shortcuts..."));
     shortcuts_action->setObjectName(QStringLiteral("keyboardShortcutsAction"));
@@ -2449,6 +2525,121 @@ void ImageEditorWindow::maybeOfferRecovery() {
                 QStringLiteral("The recovered document needs its source image to be relinked."));
             relinkSource();
         }
+    }
+}
+
+void ImageEditorWindow::setPerformanceMetricsEnabled(bool enabled) {
+    if (performance_metrics_action_ != nullptr) {
+        const QSignalBlocker blocker(performance_metrics_action_);
+        performance_metrics_action_->setChecked(enabled);
+    }
+
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("ImageEditor/Performance"));
+    settings.setValue(QStringLiteral("enabled"), enabled);
+    settings.endGroup();
+    settings.sync();
+    if (settings.status() != QSettings::NoError) {
+        logger_.logError(QStringLiteral("save_performance_metrics_preference"),
+            QStringLiteral("The performance collection preference could not be saved."));
+    }
+
+    auto& metrics = ImageEditorPerformanceMetrics::instance();
+    if (enabled) {
+        metrics.setEnabled(false);
+        metrics.reset();
+        metrics.setEnabled(true);
+        performance_sampler_.reset();
+        latest_performance_resources_ = {};
+        peak_working_set_bytes_.reset();
+        peak_private_usage_bytes_.reset();
+        performance_log_ticks_ = 0;
+        performance_log_sample_count_ = 0;
+        performance_log_error_reported_ = false;
+        performance_metrics_panel_->setCollectionEnabled(true);
+        if (performance_metrics_timer_ != nullptr)
+            performance_metrics_timer_->start();
+        updatePerformanceMetrics();
+        return;
+    }
+
+    if (performance_metrics_timer_ != nullptr) performance_metrics_timer_->stop();
+    updatePerformanceMetrics();
+    writePerformanceMetricsSummary(metrics.snapshot());
+    metrics.setEnabled(false);
+    performance_metrics_panel_->setCollectionEnabled(false);
+    performance_metrics_panel_->setSnapshot(metrics.snapshot(),
+        latest_performance_resources_, peak_working_set_bytes_, peak_private_usage_bytes_);
+}
+
+void ImageEditorWindow::updatePerformanceMetrics() {
+    auto& metrics = ImageEditorPerformanceMetrics::instance();
+    if (!metrics.enabled()) return;
+
+    latest_performance_resources_ = performance_sampler_.sample();
+    const auto update_peak = [](std::optional<std::uint64_t>* peak,
+                                const std::optional<std::uint64_t>& value) {
+        if (peak == nullptr || !value.has_value()) return;
+        if (!peak->has_value() || *value > **peak) *peak = value;
+    };
+    update_peak(&peak_working_set_bytes_,
+                latest_performance_resources_.process_working_set_bytes);
+    update_peak(&peak_private_usage_bytes_,
+                latest_performance_resources_.process_private_usage_bytes);
+
+    const auto snapshot = metrics.snapshot();
+    performance_metrics_panel_->setSnapshot(snapshot,
+        latest_performance_resources_, peak_working_set_bytes_, peak_private_usage_bytes_);
+    ++performance_log_ticks_;
+    if (performance_log_ticks_ % 5 != 0) return;
+    writePerformanceMetricsSummary(snapshot);
+}
+
+void ImageEditorWindow::writePerformanceMetricsSummary(
+    const ImageEditorPerformanceSnapshot& snapshot) {
+    std::uint64_t sample_count = 0;
+    for (const auto& timing : snapshot.timings) sample_count += timing.count;
+    if (sample_count == 0 || sample_count == performance_log_sample_count_) return;
+
+    QJsonObject entry{
+        {QStringLiteral("schema_version"), 1},
+        {QStringLiteral("record_type"), QStringLiteral("session_snapshot")},
+        {QStringLiteral("timestamp_utc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+        {QStringLiteral("application_version"), QCoreApplication::applicationVersion()},
+        {QStringLiteral("os"), QSysInfo::prettyProductName()},
+        {QStringLiteral("architecture"), QSysInfo::currentCpuArchitecture()},
+        {QStringLiteral("collection_interval_seconds"), 5},
+        {QStringLiteral("process_cpu_percent"), optionalMetricValue(
+            latest_performance_resources_.process_cpu_percent)},
+        {QStringLiteral("process_working_set_bytes"), optionalMetricValue(
+            latest_performance_resources_.process_working_set_bytes)},
+        {QStringLiteral("process_private_usage_bytes"), optionalMetricValue(
+            latest_performance_resources_.process_private_usage_bytes)},
+        {QStringLiteral("sampled_peak_working_set_bytes"), optionalMetricValue(
+            peak_working_set_bytes_)},
+        {QStringLiteral("sampled_peak_private_usage_bytes"), optionalMetricValue(
+            peak_private_usage_bytes_)},
+        {QStringLiteral("metrics"), imageEditorPerformanceSnapshotToJson(snapshot)},
+    };
+    if (hasActiveDocumentTab() && activeSession().hasSource()) {
+        const auto& document = activeSession().data();
+        const QSize canvas_size = ImageDocumentRenderer::documentSize(
+            document, document.source_size);
+        entry.insert(QStringLiteral("active_document"), QJsonObject{
+            {QStringLiteral("canvas_width"), canvas_size.width()},
+            {QStringLiteral("canvas_height"), canvas_size.height()},
+            {QStringLiteral("layer_count"), document.layers.size()},
+            {QStringLiteral("group_count"), document.groups.size()},
+            {QStringLiteral("operation_count"), static_cast<qint64>(operationCount(document))},
+        });
+    }
+
+    QString error;
+    if (performance_log_.append(entry, &error)) {
+        performance_log_sample_count_ = sample_count;
+    } else if (!performance_log_error_reported_) {
+        performance_log_error_reported_ = true;
+        logger_.logError(QStringLiteral("write_performance_metrics"), error);
     }
 }
 

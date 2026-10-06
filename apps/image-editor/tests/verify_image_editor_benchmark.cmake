@@ -1,0 +1,55 @@
+if(NOT DEFINED BENCHMARK_EXECUTABLE OR NOT DEFINED OUTPUT_ROOT)
+    message(FATAL_ERROR "Benchmark executable and output root are required")
+endif()
+
+file(MAKE_DIRECTORY "${OUTPUT_ROOT}")
+string(RANDOM LENGTH 12 ALPHABET 0123456789abcdef run_id)
+set(report_path "${OUTPUT_ROOT}/image-editor-benchmark-${run_id}.json")
+if(WIN32)
+    set(qt_platform "windows")
+else()
+    set(qt_platform "offscreen")
+endif()
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env "QT_QPA_PLATFORM=${qt_platform}"
+        "${BENCHMARK_EXECUTABLE}"
+        --profile reference --warmup 0 --iterations 1 --output "${report_path}"
+    RESULT_VARIABLE result
+    OUTPUT_VARIABLE stdout
+    ERROR_VARIABLE stderr
+    TIMEOUT 120
+)
+if(NOT "${result}" STREQUAL "0")
+    file(REMOVE "${report_path}")
+    message(FATAL_ERROR "Benchmark smoke run failed: ${result}\n${stdout}\n${stderr}")
+endif()
+if(NOT EXISTS "${report_path}")
+    message(FATAL_ERROR "Benchmark did not create its JSON report")
+endif()
+file(READ "${report_path}" report)
+file(REMOVE "${report_path}")
+
+string(JSON schema_version ERROR_VARIABLE json_error GET "${report}" schema_version)
+if(json_error OR NOT schema_version EQUAL 1)
+    message(FATAL_ERROR "Benchmark report schema_version is not 1: ${json_error}")
+endif()
+string(JSON profile_count ERROR_VARIABLE json_error LENGTH "${report}" profiles)
+if(json_error OR NOT profile_count EQUAL 1)
+    message(FATAL_ERROR "Benchmark report does not contain one requested profile: ${json_error}")
+endif()
+string(JSON profile_name ERROR_VARIABLE json_error GET "${report}" profiles 0 workload name)
+if(json_error OR NOT profile_name STREQUAL "reference")
+    message(FATAL_ERROR "Benchmark report has the wrong profile: ${json_error}")
+endif()
+string(JSON width ERROR_VARIABLE json_error GET "${report}" profiles 0 workload width)
+if(json_error OR NOT width EQUAL 1920)
+    message(FATAL_ERROR "Benchmark report omitted reference canvas dimensions: ${json_error}")
+endif()
+string(JSON iteration_count ERROR_VARIABLE json_error GET "${report}" profiles 0 iteration_wall_time count)
+if(json_error OR NOT iteration_count EQUAL 1)
+    message(FATAL_ERROR "Benchmark report omitted iteration statistics: ${json_error}")
+endif()
+string(JSON stages_type ERROR_VARIABLE json_error TYPE "${report}" profiles 0 metrics stages)
+if(json_error OR NOT stages_type STREQUAL "OBJECT")
+    message(FATAL_ERROR "Benchmark report omitted stage measurements: ${json_error}")
+endif()

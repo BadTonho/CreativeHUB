@@ -15,6 +15,27 @@ set_tests_properties(creative-suite-image-editor-core PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(creative-suite-image-editor-performance-tests
+    image_editor_performance_test.cpp
+)
+target_link_libraries(creative-suite-image-editor-performance-tests PRIVATE
+    creative-suite-image-editor-core
+    Qt6::Test
+)
+target_compile_features(creative-suite-image-editor-performance-tests PRIVATE cxx_std_20)
+add_dependencies(creative-suite-image-editor-performance-tests
+    creative-suite-image-editor-benchmark)
+add_creative_suite_test(
+    NAME creative-suite-image-editor-performance
+    COMMAND creative-suite-image-editor-performance-tests)
+
+add_creative_suite_test(
+    NAME creative-suite-image-editor-benchmark-report
+    COMMAND "${CMAKE_COMMAND}"
+        "-DBENCHMARK_EXECUTABLE=$<TARGET_FILE:creative-suite-image-editor-benchmark>"
+        "-DOUTPUT_ROOT=${CMAKE_BINARY_DIR}/ctest-temp"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/verify_image_editor_benchmark.cmake")
+
 add_executable(creative-suite-image-editor-mask-tests image_editor_mask_test.cpp)
 add_executable(creative-suite-image-editor-raster-tests image_editor_raster_test.cpp)
 target_link_libraries(creative-suite-image-editor-raster-tests PRIVATE creative-suite-image-editor-core Qt6::Test)
@@ -60,6 +81,8 @@ add_executable(creative-suite-image-editor-ui-tests
     image_editor_deletion_ui_test.cpp
     ../src/ui/windows/image_editor_window.cpp
     ../src/ui/windows/image_editor_window.h
+    ../src/ui/diagnostics/performance_metrics_panel.cpp
+    ../src/ui/diagnostics/performance_metrics_panel.h
     ../src/ui/export/image_export_controller.cpp
     ../src/ui/export/image_export_controller.h
     ../src/ui/export/image_export_worker.cpp
@@ -113,6 +136,7 @@ target_include_directories(creative-suite-image-editor-ui-tests PRIVATE
 target_link_libraries(creative-suite-image-editor-ui-tests PRIVATE
     creative-suite-image-editor-core
     creative-suite::shortcuts
+    creative-suite::system-monitor
     Qt6::Widgets
     Qt6::Test
 )
@@ -155,6 +179,8 @@ add_executable(creative-suite-image-editor-export-ui-tests
     image_editor_export_ui_test.cpp
     ../src/ui/windows/image_editor_window.cpp
     ../src/ui/windows/image_editor_window.h
+    ../src/ui/diagnostics/performance_metrics_panel.cpp
+    ../src/ui/diagnostics/performance_metrics_panel.h
     ../src/ui/export/image_export_controller.cpp
     ../src/ui/export/image_export_controller.h
     ../src/ui/export/image_export_worker.cpp
@@ -208,6 +234,7 @@ target_include_directories(creative-suite-image-editor-export-ui-tests PRIVATE
 target_link_libraries(creative-suite-image-editor-export-ui-tests PRIVATE
     creative-suite-image-editor-core
     creative-suite::shortcuts
+    creative-suite::system-monitor
     Qt6::Widgets
     Qt6::Test
 )

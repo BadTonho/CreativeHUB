@@ -14,13 +14,14 @@ persistence, and recovery.
 - `src/core/document/` contains the editable document session, stateless image
   renderer, image exporter, and `.cimg` serialization.
 - `src/core/recovery/` contains local recovery snapshot persistence.
-- `src/core/diagnostics/` contains bounded technical error logging.
+- `src/core/diagnostics/` contains bounded technical error logging and the
+  optional performance collector and JSON Lines summary writer.
 - `src/ui/import/` contains the UI controller for cancellable raster decode
   jobs; image format decoding remains in the core document module.
-- `src/ui/canvas/`, `src/ui/dialogs/`, `src/ui/layers/`, `src/ui/tools/`, and
-  `src/ui/windows/` contain the canvas widget, creation dialogs, layer dock
-  panel, tool sidebar and tool families, and main application window
-  respectively.
+- `src/ui/canvas/`, `src/ui/diagnostics/`, `src/ui/dialogs/`, `src/ui/layers/`,
+  `src/ui/tools/`, and `src/ui/windows/` contain the canvas widget, performance
+  panel, creation dialogs, layer dock panel, tool sidebar and tool families,
+  and main application window respectively.
 - `src/ui/tools/brush/brush_tool.*` shares stroke collection, cursor rendering,
   and stroke-overlay drawing between the brush tools. `paint_tool.*` and
   `eraser_tool.*` own their gesture and preview rules; they return preview or
@@ -365,6 +366,37 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
   is shown; expected dialog cancellation is not an error.
+- Performance collection is an opt-in runtime diagnostic controlled by
+  **Settings > Collect Performance Metrics**. It is disabled by default. The
+  core `ImageEditorPerformanceMetrics` singleton records replay and operation
+  types, masks, layer/group composition, thumbnails and cache results, canvas
+  paint, and export rendering/encoding stages. Each stage retains at most the
+  latest 2,048 timing samples while keeping total count, total time, and maximum
+  for the active collection session; snapshots report average, p50, p95, and
+  maximum. A modeless Performance Metrics dock refreshes once per second and
+  samples process CPU, working set, and private memory through the existing
+  `system-monitor` library. Unavailable resource readings are shown as `N/A`.
+- Every five seconds with new measured activity, the window appends a
+  cumulative summary to `logs/image-editor-performance.jsonl` in the
+  application-local data directory. It also flushes a final summary when
+  collection is disabled or the application closes. This is separate from the
+  error log and rotates at 2 MiB per file with three files retained. Records
+  contain stage timings, process resource values, OS/build metadata, and only
+  active-document dimensions and item counts; they exclude paths, document
+  names, and pixels. Disabling collection stops further timing, sampling, and
+  summary writes.
+- `creative-suite-image-editor-benchmark` is a development executable and has
+  no install rule. It creates deterministic synthetic documents for the
+  `reference`, `mask-heavy`, `stroke-heavy`, `large-image`, `repeated-source`,
+  and `export` profiles. Its defaults are three warmups and 30 measured
+  iterations per profile. `--profile`, `--warmup`, `--iterations`, and
+  `--output` select the workload and destination. The version 1 JSON report
+  includes build/runtime environment, profile dimensions and composition,
+  per-stage average/p50/p95/maximum timings, wall-time distribution, and
+  sampled CPU/memory observations. It reads no personal media and changes
+  neither `.cimg` nor shared application interfaces. The first Windows
+  reference-PC report is recorded in
+  [`performance-baseline-windows-2026-10-06.json`](performance-baseline-windows-2026-10-06.json).
 
 ## Layer mask ownership and rendering
 

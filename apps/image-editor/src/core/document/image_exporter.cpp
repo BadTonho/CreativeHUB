@@ -1,6 +1,7 @@
 #include "image_exporter.h"
 #include "image_document_renderer.h"
 #include "image_document_utils.h"
+#include "../diagnostics/image_editor_performance_metrics.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -84,15 +85,23 @@ ImageExportResult exportImageSnapshot(
     if (progress) progress(ImageExportPhase::Rendering);
 
     QImage rendered;
-    if (options.scope == ImageExportScope::SelectedLayer) {
-        rendered = ImageDocumentRenderer::selectedLayer(snapshot.document, snapshot.source_image,
-            snapshot.raster_images, snapshot.selected_layer_id, cancellation_requested);
-    } else if (options.scope == ImageExportScope::SelectedGroup) {
-        rendered = ImageDocumentRenderer::selectedGroup(snapshot.document, snapshot.source_image,
-            snapshot.raster_images, snapshot.selected_group_id, cancellation_requested);
-    } else {
-        rendered = ImageDocumentRenderer::composite(snapshot.document, snapshot.source_image,
-            snapshot.raster_images, {}, cancellation_requested);
+    {
+        ImageEditorPerformanceScope render_scope(
+            ImageEditorPerformanceMetrics::instance(),
+            ImageEditorPerformanceStage::ExportRender);
+        if (options.scope == ImageExportScope::SelectedLayer) {
+            rendered = ImageDocumentRenderer::selectedLayer(snapshot.document,
+                snapshot.source_image, snapshot.raster_images,
+                snapshot.selected_layer_id, cancellation_requested);
+        } else if (options.scope == ImageExportScope::SelectedGroup) {
+            rendered = ImageDocumentRenderer::selectedGroup(snapshot.document,
+                snapshot.source_image, snapshot.raster_images,
+                snapshot.selected_group_id, cancellation_requested);
+        } else {
+            rendered = ImageDocumentRenderer::composite(snapshot.document,
+                snapshot.source_image, snapshot.raster_images, {},
+                cancellation_requested);
+        }
     }
     if (exportWasCancelled(cancellation_requested)) {
         return {ImageExportStatus::Cancelled, {}};
@@ -100,8 +109,10 @@ ImageExportResult exportImageSnapshot(
     if (rendered.isNull()) {
         return failed(QStringLiteral("The image could not be rendered for export."));
     }
-
     if (format == "jpeg") {
+        ImageEditorPerformanceScope flatten_scope(
+            ImageEditorPerformanceMetrics::instance(),
+            ImageEditorPerformanceStage::JpegFlatten);
         QImage flattened(rendered.size(), QImage::Format_RGB32);
         if (flattened.isNull()) {
             return failed(QStringLiteral("Not enough memory to prepare the JPEG image."));
@@ -127,6 +138,9 @@ ImageExportResult exportImageSnapshot(
     }
     QImageWriter writer(&output, format);
     if (format == "jpeg") writer.setQuality(options.jpeg_quality);
+    ImageEditorPerformanceScope encode_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::ExportEncode);
     if (!writer.write(rendered)) {
         const QString cause = writer.errorString();
         output.cancelWriting();

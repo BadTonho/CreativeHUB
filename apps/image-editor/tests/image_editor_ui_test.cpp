@@ -2746,6 +2746,109 @@ bool testWindowCloseAcrossDirtyTabs(const QString& directory) {
     return true;
 }
 
+bool testPerformanceMetricsUi(const QString& temporary_directory) {
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("ImageEditor/Performance"));
+    const bool original_enabled = settings.value(QStringLiteral("enabled"), false).toBool();
+    settings.setValue(QStringLiteral("enabled"), false);
+    settings.endGroup();
+    settings.sync();
+
+    auto& metrics = image_editor::ImageEditorPerformanceMetrics::instance();
+    metrics.setEnabled(false);
+    metrics.reset();
+
+    QImage source(96, 64, QImage::Format_ARGB32_Premultiplied);
+    source.fill(QColor(70, 100, 160));
+    const QString source_path = QDir(temporary_directory).filePath(
+        QStringLiteral("performance-metrics-ui.png"));
+    if (!source.save(source_path)) return false;
+
+    const QString performance_log_directory = QDir(temporary_directory)
+        .filePath(QStringLiteral("performance-logs"));
+    image_editor::ImageEditorWindow window(nullptr, temporary_directory,
+        performance_log_directory);
+    auto* collection_action = window.findChild<QAction*>(
+        QStringLiteral("collectPerformanceMetricsAction"));
+    auto* panel_action = window.findChild<QAction*>(
+        QStringLiteral("togglePerformanceMetricsPanelAction"));
+    auto* dock = window.findChild<QDockWidget*>(
+        QStringLiteral("imageEditorPerformanceMetricsDock"));
+    auto* table = window.findChild<QTableWidget*>(
+        QStringLiteral("performanceMetricsTable"));
+    if (collection_action == nullptr || panel_action == nullptr || dock == nullptr ||
+        table == nullptr || collection_action->isChecked()) return false;
+
+    window.show();
+    collection_action->setChecked(true);
+    if (!metrics.enabled() || !window.openImagePath(source_path)) return false;
+    panel_action->trigger();
+    QTest::qWait(1100);
+    QCoreApplication::processEvents();
+    const bool panel_visible = dock->isVisible();
+
+    bool composite_visible = false;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        if (table->item(row, 0)->text() == QStringLiteral("composite")) {
+            composite_visible = table->item(row, 1)->text() != QStringLiteral("—");
+            break;
+        }
+    }
+    const auto before_disable = metrics.snapshot().timing(
+        image_editor::ImageEditorPerformanceStage::Composite).count;
+    collection_action->setChecked(false);
+    const auto disabled_snapshot = metrics.snapshot();
+    metrics.record(image_editor::ImageEditorPerformanceStage::Composite, 10);
+    const auto after_disabled_record = metrics.snapshot().timing(
+        image_editor::ImageEditorPerformanceStage::Composite).count;
+    QSettings check_settings;
+    check_settings.beginGroup(QStringLiteral("ImageEditor/Performance"));
+    const bool preference_saved = !check_settings.value(
+        QStringLiteral("enabled"), true).toBool();
+    check_settings.endGroup();
+
+    const QString performance_log_path = QDir(performance_log_directory)
+        .filePath(QStringLiteral("image-editor-performance.jsonl"));
+    QFile performance_log(performance_log_path);
+    const bool final_summary_written = performance_log.open(QIODevice::ReadOnly);
+    const QByteArray performance_record = final_summary_written
+        ? performance_log.readLine() : QByteArray{};
+    const bool private_path_omitted = !performance_record.contains(source_path.toUtf8()) &&
+        !performance_record.contains(QByteArray("performance-metrics-ui.png"));
+    const qint64 log_size_after_disable = performance_log.size();
+    performance_log.close();
+    QTest::qWait(1100);
+    QFile unchanged_log(performance_log_path);
+    const bool log_stopped = unchanged_log.open(QIODevice::ReadOnly) &&
+        unchanged_log.size() == log_size_after_disable;
+
+    window.close();
+    QCoreApplication::processEvents();
+    settings.beginGroup(QStringLiteral("ImageEditor/Performance"));
+    settings.setValue(QStringLiteral("enabled"), original_enabled);
+    settings.endGroup();
+    settings.sync();
+
+    const bool result = panel_visible && composite_visible && before_disable > 0 &&
+        !metrics.enabled() && preference_saved &&
+        final_summary_written && QJsonDocument::fromJson(performance_record).isObject() &&
+        private_path_omitted && log_stopped &&
+        disabled_snapshot.timing(image_editor::ImageEditorPerformanceStage::Composite).count == before_disable &&
+        after_disabled_record == before_disable;
+    if (!result) {
+        std::cerr << "Performance UI check details: panel=" << panel_visible
+                  << ", composite=" << composite_visible
+                  << ", count=" << before_disable
+                  << ", enabled=" << metrics.enabled()
+                  << ", preference=" << preference_saved
+                  << ", log=" << final_summary_written
+                  << ", json=" << QJsonDocument::fromJson(performance_record).isObject()
+                  << ", path-omitted=" << private_path_omitted
+                  << ", log-stopped=" << log_stopped << '\n';
+    }
+    return result;
+}
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -2890,6 +2993,10 @@ int main(int argc, char* argv[]) {
     if (!testTextEditorGrowthLayout()) return 1;
     if (application.arguments().contains(QStringLiteral("--text-layout-only"))) return 0;
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    if (!testPerformanceMetricsUi(temporary.path())) {
+        std::cerr << "Performance collection settings, panel, or shutdown failed.\n";
+        return 1;
+    }
     if (!testWindowTeardownWithFocusedTextEditor(temporary.path())) return 1;
     if (!testDeletionUi(temporary.path())) return 1;
     if (!testRasterImagesUi(temporary.path())) return 1;

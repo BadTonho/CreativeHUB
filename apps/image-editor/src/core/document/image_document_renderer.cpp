@@ -1,5 +1,6 @@
 #include "image_document_renderer.h"
 #include "image_document_utils.h"
+#include "../diagnostics/image_editor_performance_metrics.h"
 
 #include <QFont>
 #include <QPainter>
@@ -15,6 +16,22 @@
 
 namespace image_editor {
 namespace {
+
+ImageEditorPerformanceStage operationPerformanceStage(OperationKind kind) noexcept {
+    switch (kind) {
+    case OperationKind::PaintStroke: return ImageEditorPerformanceStage::PaintStroke;
+    case OperationKind::EraseStroke: return ImageEditorPerformanceStage::EraseStroke;
+    case OperationKind::Shape: return ImageEditorPerformanceStage::Shape;
+    case OperationKind::Text: return ImageEditorPerformanceStage::Text;
+    case OperationKind::RasterImage: return ImageEditorPerformanceStage::RasterImage;
+    case OperationKind::Crop:
+    case OperationKind::Rotate:
+    case OperationKind::FlipHorizontal:
+    case OperationKind::FlipVertical:
+        return ImageEditorPerformanceStage::Transform;
+    }
+    return ImageEditorPerformanceStage::OperationReplay;
+}
 
 QImage paintStroke(QImage image, const ImagePaintStroke& stroke) {
     image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
@@ -130,12 +147,18 @@ QImage applyOperations(QImage image,
                        bool fixed_canvas,
                        const std::atomic_bool* cancellation_requested = nullptr,
                        const QHash<QString, QImage>& resources = {}) {
+    ImageEditorPerformanceScope replay_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::OperationReplay);
     const QSize canvas_size = image.size();
     for (const auto& operation : operations) {
         if (cancellation_requested != nullptr &&
             cancellation_requested->load(std::memory_order_relaxed)) {
             return {};
         }
+        ImageEditorPerformanceScope operation_scope(
+            ImageEditorPerformanceMetrics::instance(),
+            operationPerformanceStage(operation.kind));
         switch (operation.kind) {
         case OperationKind::RasterImage: {
             const QImage source = resources.value(operation.raster.id, resources.value(operation.raster.source_path));
@@ -242,6 +265,9 @@ QVector<ImageOperation> maskRenderOperations(const ImageLayerMaskData& mask) {
 // antialiased edges and transparent areas introduced by fixed-canvas transforms.
 bool multiplyLayerMask(QImage* pixels, const QImage& mask,
                        const std::atomic_bool* cancellation_requested = nullptr) {
+    ImageEditorPerformanceScope mask_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::MaskApplication);
     if (pixels == nullptr || pixels->isNull() || mask.size() != pixels->size()) return false;
     *pixels = pixels->convertToFormat(QImage::Format_ARGB32_Premultiplied);
     for (int y = 0; y < pixels->height(); ++y) {
@@ -272,6 +298,9 @@ QImage renderRasterLayer(const QHash<QString, QImage>& resources,
                          const QSize& size,
                          const std::atomic_bool* cancellation_requested,
                          const QStringList& excluded_object_ids) {
+    ImageEditorPerformanceScope layer_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::LayerComposition);
     if (exportWasCancelled(cancellation_requested)) return {};
     QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
     if (pixels.isNull()) return {};
@@ -301,6 +330,9 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
                    const QSize& size,
                    const std::atomic_bool* cancellation_requested,
                    const QStringList& excluded_object_ids) {
+    ImageEditorPerformanceScope group_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::GroupComposition);
     QImage composite(size, QImage::Format_ARGB32_Premultiplied);
     if (composite.isNull()) return {};
     composite.fill(Qt::transparent);
@@ -345,6 +377,9 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
                        const ImageDocumentData& document,
                        const std::atomic_bool* cancellation_requested = nullptr,
                        const QStringList& excluded_object_ids = {}) {
+    ImageEditorPerformanceScope composite_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::Composite);
     if (source_image.isNull() || exportWasCancelled(cancellation_requested)) return {};
 
     QImage background = applyOperations(
@@ -413,6 +448,9 @@ QImage renderSelectedLayer(const QHash<QString, QImage>& resources,
                            const ImageDocumentData& document,
                            const QString& selected_layer_id,
                            const std::atomic_bool* cancellation_requested = nullptr) {
+    ImageEditorPerformanceScope selected_layer_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::SelectedLayerRender);
     if (source_image.isNull() || selected_layer_id.isEmpty() ||
         exportWasCancelled(cancellation_requested)) return {};
 
@@ -476,6 +514,9 @@ QImage renderSelectedGroup(const QHash<QString, QImage>& resources,
                            const ImageDocumentData& document,
                            const QString& selected_group_id,
                            const std::atomic_bool* cancellation_requested = nullptr) {
+    ImageEditorPerformanceScope selected_group_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::SelectedGroupRender);
     if (source_image.isNull() || selected_group_id.isEmpty() ||
         exportWasCancelled(cancellation_requested)) return {};
     const auto* group = findGroup(document, selected_group_id);
@@ -630,6 +671,9 @@ QImage ImageDocumentRenderer::selectedGroup(const ImageDocumentData& document,
 QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,
     const QImage& source_image, const QHash<QString, QImage>& raster_images,
     const ImageLayerData& layer, const QSize& maximum_size) {
+    ImageEditorPerformanceScope thumbnail_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::LayerThumbnail);
     if (maximum_size.width() <= 0 || maximum_size.height() <= 0) return {};
     const QSize canvas_size = documentSize(document, source_image.size());
     QImage thumbnail;
@@ -663,6 +707,9 @@ QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,
 QImage ImageDocumentRenderer::groupThumbnail(const ImageDocumentData& document,
     const QHash<QString, QImage>& raster_images, const ImageGroupData& group,
     const QSize& maximum_size) {
+    ImageEditorPerformanceScope thumbnail_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::GroupThumbnail);
     if (maximum_size.width() <= 0 || maximum_size.height() <= 0) return {};
     const QImage rendered = renderGroup(raster_images, document, group,
         documentSize(document, document.source_size), nullptr, {});
@@ -674,6 +721,9 @@ QImage ImageDocumentRenderer::groupThumbnail(const ImageDocumentData& document,
 QHash<QString, QImage> ImageDocumentRenderer::maskThumbnails(
     const ImageDocumentData& document, const QImage& source_image,
     const QHash<QString, QImage>& raster_images, const QSize& maximum_size) {
+    ImageEditorPerformanceScope thumbnail_scope(
+        ImageEditorPerformanceMetrics::instance(),
+        ImageEditorPerformanceStage::MaskThumbnail);
     QHash<QString, QImage> thumbnails;
     if (source_image.isNull() || maximum_size.isEmpty()) return thumbnails;
     const QSize size = documentSize(document, source_image.size());

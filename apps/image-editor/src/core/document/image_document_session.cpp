@@ -1,4 +1,5 @@
 #include "image_document_session.h"
+#include "../diagnostics/image_editor_performance_metrics.h"
 #include "image_document_geometry.h"
 #include "image_document_object_editor.h"
 #include "image_document_renderer.h"
@@ -719,6 +720,9 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
     const QSize canvas_size = renderedSize();
     const qint64 source_cache_key = source_image_.cacheKey();
     for (const auto& layer : data_.layers) {
+        ImageEditorPerformanceScope cache_scope(
+            ImageEditorPerformanceMetrics::instance(),
+            ImageEditorPerformanceStage::ThumbnailCacheHit);
         const QVector<ImageOperation>& operations = layer.background
             ? data_.operations : layer.operations;
         auto cached = layer_thumbnail_cache_.find(layer.id);
@@ -729,6 +733,9 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
             cached->maximum_size == maximum_size &&
             cached->source_cache_key == source_cache_key &&
             cached->background == layer.background && cached->mask == layer.mask;
+        cache_scope.setStage(cache_matches
+            ? ImageEditorPerformanceStage::ThumbnailCacheHit
+            : ImageEditorPerformanceStage::ThumbnailCacheMiss);
         if (!cache_matches) {
             LayerThumbnailCacheEntry entry;
             entry.operations = operations;

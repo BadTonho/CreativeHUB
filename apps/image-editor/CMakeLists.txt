@@ -31,6 +31,10 @@ add_library(creative-suite-image-editor-core STATIC
     src/core/document/image_document_session.h
     src/core/diagnostics/image_editor_logger.cpp
     src/core/diagnostics/image_editor_logger.h
+    src/core/diagnostics/image_editor_performance_metrics.cpp
+    src/core/diagnostics/image_editor_performance_metrics.h
+    src/core/diagnostics/image_editor_performance_log.cpp
+    src/core/diagnostics/image_editor_performance_log.h
     src/core/recovery/recovery_store.cpp
     src/core/recovery/recovery_store.h
 )
@@ -53,6 +57,8 @@ add_executable(creative-suite-image-editor
     resources/app_icon.qrc
     src/ui/windows/image_editor_window.cpp
     src/ui/windows/image_editor_window.h
+    src/ui/diagnostics/performance_metrics_panel.cpp
+    src/ui/diagnostics/performance_metrics_panel.h
     src/ui/export/image_export_controller.cpp
     src/ui/export/image_export_controller.h
     src/ui/export/image_export_worker.cpp
@@ -110,6 +116,7 @@ target_link_libraries(creative-suite-image-editor PRIVATE
     creative-suite-image-editor-core
     creative-suite::shortcuts
     creative-suite::updater
+    creative-suite::system-monitor
     Qt6::Widgets
 )
 target_compile_definitions(creative-suite-image-editor PRIVATE
@@ -239,6 +246,23 @@ if(WIN32)
         DESTINATION plugins/imageformats
         CONFIGURATIONS Debug
     )
+endif()
+
+add_executable(creative-suite-image-editor-benchmark
+    tools/image_editor_benchmark.cpp
+)
+target_link_libraries(creative-suite-image-editor-benchmark PRIVATE
+    creative-suite-image-editor-core
+    creative-suite::system-monitor
+    Qt6::Gui
+)
+target_compile_definitions(creative-suite-image-editor-benchmark PRIVATE
+    CREATIVE_SUITE_APP_VERSION="${CREATIVE_SUITE_VERSION_IMAGE_EDITOR}")
+target_compile_features(creative-suite-image-editor-benchmark PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-image-editor-benchmark PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-image-editor-benchmark PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 if(BUILD_TESTING)
