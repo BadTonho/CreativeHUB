@@ -46,6 +46,7 @@ public:
     void setTextCreationMode(bool enabled);
     void setObjectSelectionMode(bool enabled);
     void setAreaSelectionMode(bool enabled);
+    void setEyedropperMode(bool enabled);
     void setAreaSelectionOptions(AreaSelectionShape shape,
                                  AreaSelectionCombineMode combine_mode);
     void clearAreaSelection();
@@ -71,6 +72,7 @@ public:
     [[nodiscard]] bool cropMode() const noexcept { return crop_mode_; }
     [[nodiscard]] bool paintMode() const noexcept { return paint_mode_; }
     [[nodiscard]] bool eraserMode() const noexcept { return eraser_mode_; }
+    [[nodiscard]] bool eyedropperMode() const noexcept { return eyedropper_mode_; }
     [[nodiscard]] double zoomFactor() const noexcept { return zoom_; }
 
 signals:
@@ -86,6 +88,7 @@ signals:
     void erasePreviewCleared();
     void eraseStrokeSelected(const QVector<QPointF>& image_points, int diameter);
     void brushDiameterChanged(int diameter);
+    void colorSampled(const QColor& color);
     void shapeCreated(const image_editor::ImageShapeData& shape);
     void textCommitted(const image_editor::ImageTextData& text, bool existing);
     void textEditingStarted(const image_editor::ImageTextData& text, bool existing);
@@ -146,6 +149,7 @@ private:
     bool text_creation_mode_ = false;
     bool object_selection_mode_ = false;
     bool area_selection_mode_ = false;
+    bool eyedropper_mode_ = false;
     bool resizing_brush_ = false;
     bool shift_constrain_held_ = false;
     bool panning_ = false;

@@ -2849,6 +2849,73 @@ bool testPerformanceMetricsUi(const QString& temporary_directory) {
     return result;
 }
 
+bool testEyedropperTool() {
+    const QColor expected_color(73, 131, 199, 157);
+    image_editor::ToolSidebar tool_sidebar;
+    auto* eyedropper_button = tool_sidebar.findChild<QToolButton*>(
+        QStringLiteral("eyedropperToolButton"));
+    if (eyedropper_button == nullptr || eyedropper_button->isEnabled()) {
+        std::cerr << "The Eyedropper must be disabled without an open document.\n";
+        return false;
+    }
+
+    image_editor::ImageCanvas canvas;
+    canvas.resize(400, 300);
+    QImage pixels(16, 16, QImage::Format_ARGB32);
+    pixels.fill(expected_color);
+    canvas.setImage(pixels);
+    QObject::connect(&tool_sidebar, &image_editor::ToolSidebar::activeToolChanged,
+        &canvas, [&canvas](image_editor::ToolSidebar::Tool tool) {
+            canvas.setEyedropperMode(tool == image_editor::ToolSidebar::Tool::Eyedropper);
+            canvas.setPaintMode(tool == image_editor::ToolSidebar::Tool::Paint);
+        });
+    QObject::connect(&canvas, &image_editor::ImageCanvas::colorSampled,
+        &tool_sidebar, &image_editor::ToolSidebar::setBrushColor);
+    QObject::connect(&tool_sidebar, &image_editor::ToolSidebar::brushColorChanged,
+        &canvas, [&canvas](const QColor& color) { canvas.setBrush(color, 12); });
+    tool_sidebar.setDocumentAvailable(true);
+    tool_sidebar.setPaintingAllowed(true);
+    canvas.show();
+    QCoreApplication::processEvents();
+
+    QSignalSpy sampled(&canvas, &image_editor::ImageCanvas::colorSampled);
+    QSignalSpy painted(&canvas, &image_editor::ImageCanvas::paintStrokeSelected);
+    eyedropper_button->click();
+    const QPoint sample_position = canvas.rect().center();
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, sample_position);
+    QCoreApplication::processEvents();
+    const bool valid_sample = sampled.size() == 1 &&
+        sampled.at(0).at(0).value<QColor>() == expected_color &&
+        tool_sidebar.brushColor() == expected_color &&
+        tool_sidebar.eyedropperToolActive() && canvas.eyedropperMode() &&
+        painted.isEmpty();
+
+    const qreal target_left =
+        (canvas.width() - pixels.width() * canvas.zoomFactor()) / 2.0;
+    const qreal target_top =
+        (canvas.height() - pixels.height() * canvas.zoomFactor()) / 2.0;
+    const QPoint outside_position(static_cast<int>(std::floor(target_left / 2.0)),
+                                  static_cast<int>(std::floor(target_top / 2.0)));
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, outside_position);
+    QCoreApplication::processEvents();
+    const bool outside_click_ignored = sampled.size() == 1 &&
+        tool_sidebar.brushColor() == expected_color && painted.isEmpty();
+
+    tool_sidebar.setActiveTool(image_editor::ToolSidebar::Tool::Paint);
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, sample_position);
+    QCoreApplication::processEvents();
+    const bool paint_uses_sampled_color = painted.size() == 1 &&
+        painted.at(0).at(1).value<QColor>() == expected_color &&
+        !tool_sidebar.eyedropperToolActive() && !canvas.eyedropperMode();
+
+    if (!valid_sample || !outside_click_ignored || !paint_uses_sampled_color) {
+        std::cerr << "Eyedropper check failed: sample=" << sampled.size()
+                  << ", outside-ignored=" << outside_click_ignored
+                  << ", paint-color=" << paint_uses_sampled_color << '\n';
+    }
+    return valid_sample && outside_click_ignored && paint_uses_sampled_color;
+}
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -2864,6 +2931,10 @@ int main(int argc, char* argv[]) {
     if (application.arguments().contains(QStringLiteral("--window-close-tabs"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testWindowCloseAcrossDirtyTabs(temporary.path()) ? 0 : 1;
+    }
+    if (application.arguments().contains(QStringLiteral("--eyedropper-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testEyedropperTool() ? 0 : 1;
     }
 
     {
@@ -2997,6 +3068,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Performance collection settings, panel, or shutdown failed.\n";
         return 1;
     }
+    if (!testEyedropperTool()) return 1;
     if (!testWindowTeardownWithFocusedTextEditor(temporary.path())) return 1;
     if (!testDeletionUi(temporary.path())) return 1;
     if (!testRasterImagesUi(temporary.path())) return 1;
@@ -3499,6 +3571,8 @@ int main(int argc, char* argv[]) {
     auto* paint_button = window.findChild<QToolButton*>(QStringLiteral("paintToolButton"));
     auto* eraser_button = window.findChild<QToolButton*>(QStringLiteral("eraserToolButton"));
     auto* shapes_button = window.findChild<QToolButton*>(QStringLiteral("shapesToolButton"));
+    auto* eyedropper_button = window.findChild<QToolButton*>(
+        QStringLiteral("eyedropperToolButton"));
     auto* color_button = window.findChild<QToolButton*>(QStringLiteral("paintBrushColorButton"));
     auto* tool_options_toolbar = window.findChild<QToolBar*>(
         QStringLiteral("toolOptionsToolBar"));
@@ -3514,17 +3588,20 @@ int main(int argc, char* argv[]) {
     auto* redo_action = window.findChild<QAction*>(QStringLiteral("redoAction"));
     auto* crop_action = window.findChild<QAction*>(QStringLiteral("cropSelectionAction"));
     if (tool_sidebar == nullptr || paint_button == nullptr || eraser_button == nullptr ||
-        shapes_button == nullptr ||
+        shapes_button == nullptr || eyedropper_button == nullptr ||
         color_button == nullptr || tool_size_label == nullptr || eraser_preview == nullptr ||
         tool_options_toolbar == nullptr || paint_options_action == nullptr ||
         paint_size_options == nullptr ||
         brush_size_slider == nullptr || brush_size == nullptr || redo_action == nullptr ||
-        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 7 ||
+        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 8 ||
         paint_button->isChecked() || paint_options_action->isVisible() ||
         paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible() || tool_options_toolbar->height() < 40 ||
         !color_button->isVisible() ||
         !color_button->isEnabled() || color_button->y() <= paint_button->y() ||
+        !eyedropper_button->isVisible() || !eyedropper_button->isEnabled() ||
+        eyedropper_button->toolTip() != QStringLiteral("Eyedropper") ||
+        eyedropper_button->icon().isNull() ||
         color_button->geometry().bottom() < tool_sidebar->height() - 20 ||
         color_button->text().size() != 0 || color_button->toolTip() != QStringLiteral("Paint color") ||
         color_button->icon().isNull() ||

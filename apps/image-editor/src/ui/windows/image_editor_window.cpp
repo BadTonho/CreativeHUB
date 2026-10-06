@@ -478,6 +478,8 @@ ImageEditorWindow::~ImageEditorWindow() {
 
 void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
     if (canvas == nullptr) return;
+    connect(canvas, &ImageCanvas::colorSampled, tool_sidebar_,
+            &ToolSidebar::setBrushColor);
     connect(canvas, &ImageCanvas::cropSelected, this,
             [this](const QRect& crop) { handleCrop(crop); });
     connect(canvas, &ImageCanvas::paintStrokeSelected, this,
@@ -1233,6 +1235,7 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         crop_action_->isChecked()) {
         crop_action_->setChecked(false);
     }
+    activeCanvas()->setEyedropperMode(false);
     if (paint_tool_action_ != nullptr) {
         const QSignalBlocker blocker(paint_tool_action_);
         paint_tool_action_->setChecked(tool == ToolSidebar::Tool::Paint);
@@ -1268,7 +1271,15 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
     const bool has_source = activeSession().hasSource();
     // Mode setters also update the cursor, so disable the other modes before
     // enabling the selected one; otherwise a later disable can hide its cursor.
-    if (tool == ToolSidebar::Tool::Paint && has_source) {
+    if (tool == ToolSidebar::Tool::Eyedropper && has_source) {
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setEyedropperMode(true);
+    } else if (tool == ToolSidebar::Tool::Paint && has_source) {
         activeCanvas()->setTextCreationMode(false);
         activeCanvas()->setEraserMode(false);
         activeCanvas()->setAreaSelectionMode(false);

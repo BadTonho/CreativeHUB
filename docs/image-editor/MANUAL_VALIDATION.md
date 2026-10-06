@@ -42,6 +42,23 @@ passed in Debug and Release (5/5 each), and the full Release suite passed
 (61/61). The owner then reopened the affected WebP successfully in the rebuilt
 Windows UI. macOS and Linux packaging checks remain deferred.
 
+## Eyedropper
+
+1. Open a disposable image with transparent pixels and multiple visible layers.
+   Select **Eyedropper** and sample a pixel covered by a masked, partially
+   opaque layer. Confirm the paint color swatch matches the visible composite,
+   including its alpha, rather than the checkerboard or selection overlays.
+2. Click in the canvas area outside the image. Confirm the color remains
+   unchanged. Sample another point and confirm the Eyedropper remains active.
+3. Select Paint and draw a short stroke. Confirm it uses the sampled RGBA color.
+   Sampling alone must not mark the document modified or enable Undo.
+
+Automated coverage for the button, sampling, outside-image behavior, paint-color
+handoff, and absence of edit signals during sampling is in
+`image_editor_ui_test.cpp` (`testEyedropperTool`,
+`creative-suite-image-editor-ui`). Native visual and cross-platform checks are
+pending.
+
 ## Performance collection and benchmark
 
 The collector is disabled by default. Use a disposable document for the UI
