@@ -2639,13 +2639,33 @@ int main(int argc, char* argv[]) {
         shape_stroke->setChecked(false);
         area_shape->setCurrentIndex(area_shape->findData(1));
         area_mode->setCurrentIndex(area_mode->findData(2));
+        options.setSelectionOptionsVisible(true);
         options.setDeleteSelectedObjectsEnabled(true);
-        delete_objects->click();
+        if (!delete_objects->isEnabled() ||
+            !QMetaObject::invokeMethod(delete_objects, "clicked", Qt::DirectConnection,
+                                       Q_ARG(bool, false))) {
+            std::cerr << "The delete request button did not expose its click signal.\n";
+            return 1;
+        }
         if (preview_changed.count() != 1 || stroke_changed.count() != 1 ||
             stroke_width_changed.count() != 1 || text_size_changed.count() != 1 ||
             area_changed.count() != 2 || area_changed.at(0).at(0).toInt() != 1 ||
             area_changed.at(1).at(1).toInt() != 2 || delete_requested.count() != 1) {
-            std::cerr << "Tool options controls did not report their requested changes.\n";
+            std::cerr << "Tool options signals: preview=" << preview_changed.count()
+                      << ", stroke=" << stroke_changed.count()
+                      << ", width=" << stroke_width_changed.count()
+                      << ", text-size=" << text_size_changed.count()
+                      << ", area=" << area_changed.count()
+                      << ", delete=" << delete_requested.count();
+            if (area_changed.count() > 0) {
+                std::cerr << ", first-area=" << area_changed.at(0).at(0).toInt()
+                          << '/' << area_changed.at(0).at(1).toInt();
+            }
+            if (area_changed.count() > 1) {
+                std::cerr << ", second-area=" << area_changed.at(1).at(0).toInt()
+                          << '/' << area_changed.at(1).at(1).toInt();
+            }
+            std::cerr << '\n';
             return 1;
         }
 

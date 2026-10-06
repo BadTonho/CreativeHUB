@@ -377,10 +377,11 @@ janela flutuante e os botões de forma. A janela conserva tamanhos, estilos e
 opções compartilhadas, e encaminha as solicitações à ferramenta ou ao
 documento ativo. Os nomes dos objetos Qt e os fluxos de interação existentes
 foram preservados. Há cobertura direta dos sinais e da sincronização dos
-controles, além dos testes de integração existentes. A compilação e a execução
-dos testes foram adiadas a pedido do mantenedor para permitir trabalho paralelo
-no Motion Editor; `git diff --check` passou. A validação de compilação e testes
-continua pendente.
+controles, além dos testes de integração existentes. O aplicativo e os alvos de
+teste do Image Editor foram compilados em Release no Windows; a suíte CTest do
+Image Editor passou (12/12) e a suíte CTest configurada do workspace passou
+(70/70) em 2026-10-05. `git diff --check` passou. A validação visual manual
+continua com o mantenedor.
 
 ## Referências
 

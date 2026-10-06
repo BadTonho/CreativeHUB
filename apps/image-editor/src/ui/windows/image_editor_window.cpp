@@ -35,6 +35,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QSettings>
 #include <QSize>
