@@ -31,6 +31,7 @@ constexpr int kLayerMaskDocumentVersion = 10;
 constexpr int kLinkedRasterDocumentVersion = 11;
 constexpr int kCanvasSizeDocumentVersion = 12;
 constexpr int kStrokeClipDocumentVersion = 13;
+constexpr int kBucketFillDocumentVersion = 14;
 constexpr int kDocumentVersion = ImageDocumentStore::kCurrentDocumentVersion;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr int kMaximumStoredCoordinate = 1'000'000;
@@ -277,6 +278,19 @@ QJsonObject encodeOperation(const ImageOperation& operation, const QString& docu
         }
         break;
     }
+    case OperationKind::BucketFill: {
+        const auto& fill = operation.bucket_fill;
+        encoded.insert("kind", "bucket_fill");
+        encoded.insert("seed_x", fill.seed.x());
+        encoded.insert("seed_y", fill.seed.y());
+        encoded.insert("color", fill.color.name(QColor::HexArgb));
+        encoded.insert("tolerance", fill.tolerance);
+        if (fill.clipping_path.has_value()) {
+            encoded.insert("clip_path", encodeClipPath(*fill.clipping_path));
+            encoded.insert("clip_rule", static_cast<int>(fill.clipping_path->fillRule()));
+        }
+        break;
+    }
     case OperationKind::Shape: {
         const auto& shape = operation.shape;
         encoded.insert("kind", "shape");
@@ -517,6 +531,27 @@ bool decodeOperations(const QJsonValue& value,
                 }
                 operation.erase_stroke.points.append(QPointF(x, y));
             }
+        } else if (kind == "bucket_fill" && version >= kBucketFillDocumentVersion && fixed_canvas) {
+            const QString color_text = object.value("color").toString();
+            const QColor color(color_text);
+            int seed_x = 0;
+            int seed_y = 0;
+            int tolerance = -1;
+            if (!isInteger(object.value("seed_x"), &seed_x) ||
+                !isInteger(object.value("seed_y"), &seed_y) ||
+                std::abs(static_cast<qint64>(seed_x)) > kMaximumStoredCoordinate ||
+                std::abs(static_cast<qint64>(seed_y)) > kMaximumStoredCoordinate ||
+                !isArgbHexColor(color_text) || !color.isValid() ||
+                !isInteger(object.value("tolerance"), &tolerance) ||
+                tolerance < 0 || tolerance > 255 ||
+                !decodeStrokeClip(object, version, &operation.bucket_fill.clipping_path)) {
+                assignError(error, QStringLiteral("The document contains an invalid bucket fill."));
+                return false;
+            }
+            operation.kind = OperationKind::BucketFill;
+            operation.bucket_fill.seed = QPoint(seed_x, seed_y);
+            operation.bucket_fill.color = color;
+            operation.bucket_fill.tolerance = tolerance;
         } else if (kind == "shape" && version >= kShapeDocumentVersion && fixed_canvas) {
             const QString id = object.value("id").toString();
             const QString shape_type = object.value("shape_type").toString();
@@ -704,6 +739,9 @@ bool validateLayers(const ImageDocumentData& document,
                                   &mask_size, true, &mask_operations, error)) return false;
             for (const auto& operation : mask_operations) {
                 if (operation.kind == OperationKind::RasterImage || operation.kind == OperationKind::Shape || operation.kind == OperationKind::Text ||
+                    (operation.kind == OperationKind::BucketFill &&
+                     (qRed(operation.bucket_fill.color.rgb()) != qGreen(operation.bucket_fill.color.rgb()) ||
+                      qRed(operation.bucket_fill.color.rgb()) != qBlue(operation.bucket_fill.color.rgb()))) ||
                     (operation.kind == OperationKind::PaintStroke &&
                      (operation.paint_stroke.color.red() != operation.paint_stroke.color.green() ||
                       operation.paint_stroke.color.red() != operation.paint_stroke.color.blue()))) {

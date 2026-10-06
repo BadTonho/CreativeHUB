@@ -486,6 +486,10 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
             [this, canvas](const QVector<QPointF>& points, const QColor& color, int diameter) {
                 handlePaintStroke(points, color, diameter, canvas->areaSelectionClipPath());
             });
+    connect(canvas, &ImageCanvas::bucketFillRequested, this,
+            [this, canvas](const QPoint& seed, int tolerance, const QColor& color) {
+                handleBucketFill(seed, tolerance, color, canvas->areaSelectionClipPath());
+            });
     connect(canvas, &ImageCanvas::erasePreviewRequested, this,
             [this, canvas](const QVector<QPointF>& points, int diameter) {
                 if (activeCanvas() == nullptr) return;
@@ -916,6 +920,13 @@ void ImageEditorWindow::createToolOptionsBar() {
                                 : ImageCanvas::AreaSelectionCombineMode::Replace));
                 }
             });
+    connect(tool_options_bar_, &ImageToolOptionsBar::bucketFillToleranceChanged,
+            this, [this](int tolerance) {
+                bucket_fill_tolerance_ = std::clamp(tolerance, 0, 255);
+                for (auto* tab : document_tabs_)
+                    if (tab != nullptr && tab->canvas != nullptr)
+                        tab->canvas->setBucketFillTolerance(bucket_fill_tolerance_);
+            });
     connect(tool_options_bar_, &ImageToolOptionsBar::deleteSelectedObjectsRequested,
             this, &ImageEditorWindow::deleteSelectedObjects);
     connect(shape_palette_, &ShapePalette::shapeKindSelected,
@@ -943,6 +954,9 @@ void ImageEditorWindow::updateToolOptions() {
     tool_options_bar_->setAreaSelectionOptionsState(
         tool_active && active_tool == ToolSidebar::Tool::AreaSelect,
         area_selection_shape_, area_selection_mode_);
+    tool_options_bar_->setBucketFillOptionsState(
+        tool_active && active_tool == ToolSidebar::Tool::BucketFill,
+        bucket_fill_tolerance_);
     const auto placements = tool_active
         ? activeSession().visibleObjects() : QVector<ImageObjectPlacement>{};
     const bool has_selected_shape = std::any_of(
@@ -1236,6 +1250,7 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         crop_action_->setChecked(false);
     }
     activeCanvas()->setEyedropperMode(false);
+    activeCanvas()->setBucketFillMode(false);
     if (paint_tool_action_ != nullptr) {
         const QSignalBlocker blocker(paint_tool_action_);
         paint_tool_action_->setChecked(tool == ToolSidebar::Tool::Paint);
@@ -1279,6 +1294,15 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         activeCanvas()->setObjectSelectionMode(false);
         activeCanvas()->setPaintMode(false);
         activeCanvas()->setEyedropperMode(true);
+    } else if (tool == ToolSidebar::Tool::BucketFill && has_source) {
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setBucketFillTolerance(bucket_fill_tolerance_);
+        activeCanvas()->setBucketFillMode(true);
     } else if (tool == ToolSidebar::Tool::Paint && has_source) {
         activeCanvas()->setTextCreationMode(false);
         activeCanvas()->setEraserMode(false);
@@ -2485,6 +2509,20 @@ void ImageEditorWindow::handleEraseStroke(const QVector<QPointF>& points, int di
         statusBar()->showMessage(QStringLiteral("Erase stroke applied"), 1800);
     } else if (!error.isEmpty()) {
         reportError(QStringLiteral("erase_stroke"), error, activeSession().sourcePath());
+    }
+}
+
+void ImageEditorWindow::handleBucketFill(
+    const QPoint& seed, int tolerance, const QColor& color,
+    std::optional<QPainterPath> clipping_path) {
+    if (activeCanvas() == nullptr || !activeSession().hasSource()) return;
+    QString error;
+    const bool changed = activeSession().applyBucketFill(
+        seed, color, tolerance, &error, std::move(clipping_path), editingMask());
+    if (changed) {
+        updateView(true);
+    } else if (!error.isEmpty()) {
+        reportError(QStringLiteral("bucket_fill"), error);
     }
 }
 

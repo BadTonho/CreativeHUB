@@ -12,7 +12,7 @@ persistence, and recovery.
 
 - `src/app/` contains the executable entry point.
 - `src/core/document/` contains the editable document session, stateless image
-  renderer, image exporter, and `.cimg` serialization.
+  renderer, bucket-fill algorithm, image exporter, and `.cimg` serialization.
 - `src/core/recovery/` contains local recovery snapshot persistence.
 - `src/core/diagnostics/` contains bounded technical error logging and the
   optional performance collector and JSON Lines summary writer.
@@ -31,6 +31,11 @@ persistence, and recovery.
   `ImageCanvas` supplies positions in image-edge coordinates and the view
   context, then forwards the existing `cropSelected` signal. `ImageEditorWindow`
   still applies the crop through the document session and history.
+- `src/ui/tools/bucket_fill/bucket_fill_tool.*` maps an in-image pointer to a
+  bucket-fill seed. `ImageCanvas` retains mode and event dispatch; the session
+  detects the connected region in the active layer or selected mask, applies
+  the optional area-selection clip, and appends one persistent fill operation
+  only when pixels change.
 - `src/ui/tools/selection/area_selection_tool.*` owns each canvas's temporary
   Area Selection path, gesture geometry, Replace/Add/Subtract operations,
   cancellation, bounds clipping, complexity limit, and preview overlay.
@@ -172,10 +177,11 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   stable UUIDs to paint and eraser strokes; version 8 adds one-level groups.
   Version 9 adds text, version 10 adds raster layer masks, version 11 adds
   linked raster images, version 12 adds independent current canvas bounds with
-  a base-image offset, and version 13 adds persisted selection clips on paint
-  and eraser strokes. Area Selection itself remains temporary per tab. The
+  a base-image offset, version 13 adds persisted selection clips on paint and
+  eraser strokes, and version 14 adds editable bucket fills on raster layers
+  and masks. Area Selection itself remains temporary per tab. The
   original base dimensions remain available for relink validation. The codec
-  continues to accept versions 1–12 and generates in-memory IDs for older
+  continues to accept versions 1–13 and generates in-memory IDs for older
   strokes. The data format is specified in [`FORMAT.md`](FORMAT.md).
 - `ImageExportSnapshot` captures the current source image, document data, and
   selected layer and group IDs; its implicitly shared image and document
@@ -247,6 +253,13 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   the image. On release, the system pointer returns to the press point; normal
   hover tracking resumes on subsequent mouse movement. The gesture updates the
   window controls without changing the document or history.
+- Bucket Fill uses document-space pointer conversion and the active Area
+  Selection. Its tolerance ranges from 0 to 255 and starts at 0. Fill detection
+  is four-connected and compares the maximum RGBA channel difference from the
+  seed. It reads only the target layer content or mask, ignores layer visibility
+  and opacity, and uses the brush RGBA color with source-over compositing. No-op
+  fills do not create Undo entries; individual fills cannot be moved with
+  Object Selection.
 - `AreaSelectionTool` keeps the temporary selection and draws its live
   Replace/Add/Subtract preview. `ImageCanvas` continues to own mode exclusivity,
   coordinate conversion, and canvas-resize translation, while its public
@@ -266,11 +279,12 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   creation or an active selection gesture. Each object transform, shape style
   edit, or object deletion is one Undo/Redo edit.
 - `ToolSidebar` contains mutually exclusive, checkable, icon-only Paint,
-  Eraser, Shapes, and Selection tools in a compact rail; all can be inactive.
+  Bucket Fill, Eraser, Shapes, and Selection tools in a compact rail; all can be inactive.
   Selection uses a mouse-pointer icon.
   The always-visible color swatch remains specific to Paint. `ImageEditorWindow`
   owns a persistent top tool options bar; it is empty when no tool is active and
-  shows synchronized size controls (1–1024 pixels) for Paint and Eraser, plus
+  shows synchronized size controls (1–1024 pixels) for Paint and Eraser, a
+  tolerance control for Bucket Fill, plus
   stroke, fill, colors, and width controls for Shapes and selected shapes.
   The Shapes sidebar button opens a movable, non-modal palette next to the
   button on first use. Icon-only Line, Rectangle, and Ellipse choices set the
@@ -281,7 +295,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   completed shape creates and selects a new editable `Shape N` layer directly
   above the selected layer, including Background; the new layer contains only
   that shape. Shape creation and layer insertion are one Undo/Redo edit. Shapes
-  remains available with Background selected, while Paint and Eraser require
+  remains available with Background selected, while Paint, Bucket Fill, and Eraser require
   an editable layer. When a child layer is selected, a new shape is inserted
   inside that group. When a group is selected, it is inserted at the root above
   the group. Stroke and fill controls edit all selected shapes.
@@ -371,7 +385,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 13; host links live in the Video Editor's
+  The `.cimg` schema is version 14; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message

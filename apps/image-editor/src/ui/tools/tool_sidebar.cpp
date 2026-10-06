@@ -66,6 +66,29 @@ QIcon eraserToolIcon() {
     return QIcon(icon);
 }
 
+QIcon bucketFillToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPainterPath bucket;
+    bucket.moveTo(7, 9);
+    bucket.lineTo(13, 5);
+    bucket.lineTo(25, 17);
+    bucket.lineTo(19, 23);
+    bucket.closeSubpath();
+    painter.setPen(QPen(QColor(28, 33, 40), 1.5));
+    painter.setBrush(QColor(210, 220, 233));
+    painter.drawPath(bucket);
+    painter.setPen(QPen(QColor(246, 180, 76), 2.0, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(QPointF(18, 22), QPointF(15, 26));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(84, 183, 231));
+    painter.drawEllipse(QRectF(21, 23, 5, 6));
+    painter.end();
+    return QIcon(icon);
+}
+
 QIcon shapesToolIcon() {
     QPixmap icon(32, 32);
     icon.fill(Qt::transparent);
@@ -178,6 +201,17 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     paint_button_->setFixedSize(40, 40);
     layout->addWidget(paint_button_, 0, Qt::AlignHCenter);
 
+    bucket_fill_button_ = new QToolButton(this);
+    bucket_fill_button_->setObjectName(QStringLiteral("bucketFillToolButton"));
+    bucket_fill_button_->setToolTip(QStringLiteral("Bucket Fill"));
+    bucket_fill_button_->setAccessibleName(QStringLiteral("Bucket Fill tool"));
+    bucket_fill_button_->setIcon(bucketFillToolIcon());
+    bucket_fill_button_->setIconSize(QSize(24, 24));
+    bucket_fill_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    bucket_fill_button_->setCheckable(true);
+    bucket_fill_button_->setFixedSize(40, 40);
+    layout->addWidget(bucket_fill_button_, 0, Qt::AlignHCenter);
+
     eraser_button_ = new QToolButton(this);
     eraser_button_->setObjectName(QStringLiteral("eraserToolButton"));
     eraser_button_->setToolTip(QStringLiteral("Eraser"));
@@ -259,6 +293,10 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         if (active) setActiveTool(Tool::Paint);
         else if (active_tool_ == Tool::Paint) setActiveTool(Tool::None);
     });
+    connect(bucket_fill_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::BucketFill);
+        else if (active_tool_ == Tool::BucketFill) setActiveTool(Tool::None);
+    });
     connect(eraser_button_, &QToolButton::toggled, this, [this](bool active) {
         if (active) setActiveTool(Tool::Eraser);
         else if (active_tool_ == Tool::Eraser) setActiveTool(Tool::None);
@@ -301,7 +339,8 @@ void ToolSidebar::setDocumentAvailable(bool available) {
     document_available_ = available;
     if (!document_available_ ||
         (!painting_allowed_ &&
-         (active_tool_ == Tool::Paint || active_tool_ == Tool::Eraser))) {
+         (active_tool_ == Tool::Paint || active_tool_ == Tool::BucketFill ||
+          active_tool_ == Tool::Eraser))) {
         setActiveTool(Tool::None);
     }
     updateControls();
@@ -310,7 +349,8 @@ void ToolSidebar::setDocumentAvailable(bool available) {
 void ToolSidebar::setPaintingAllowed(bool allowed) {
     painting_allowed_ = allowed;
     if (!painting_allowed_ &&
-        (active_tool_ == Tool::Paint || active_tool_ == Tool::Eraser)) {
+        (active_tool_ == Tool::Paint || active_tool_ == Tool::BucketFill ||
+         active_tool_ == Tool::Eraser)) {
         setActiveTool(Tool::None);
     }
     updateControls();
@@ -319,6 +359,11 @@ void ToolSidebar::setPaintingAllowed(bool allowed) {
 void ToolSidebar::setPaintToolActive(bool active) {
     setActiveTool(active ? Tool::Paint :
         (active_tool_ == Tool::Paint ? Tool::None : active_tool_));
+}
+
+void ToolSidebar::setBucketFillToolActive(bool active) {
+    setActiveTool(active ? Tool::BucketFill :
+        (active_tool_ == Tool::BucketFill ? Tool::None : active_tool_));
 }
 
 void ToolSidebar::setEraserToolActive(bool active) {
@@ -352,7 +397,8 @@ void ToolSidebar::setTextToolActive(bool active) {
 }
 
 void ToolSidebar::setActiveTool(Tool tool) {
-    const bool requires_editable_layer = tool == Tool::Paint || tool == Tool::Eraser;
+    const bool requires_editable_layer = tool == Tool::Paint ||
+        tool == Tool::BucketFill || tool == Tool::Eraser;
     if (!document_available_ || (requires_editable_layer && !painting_allowed_)) {
         tool = Tool::None;
     }
@@ -360,6 +406,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
     active_tool_ = tool;
     {
         const QSignalBlocker paint_blocker(paint_button_);
+        const QSignalBlocker bucket_fill_blocker(bucket_fill_button_);
         const QSignalBlocker eraser_blocker(eraser_button_);
         const QSignalBlocker shapes_blocker(shapes_button_);
         const QSignalBlocker text_blocker(text_button_);
@@ -367,6 +414,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
         const QSignalBlocker area_selection_blocker(area_selection_button_);
         const QSignalBlocker eyedropper_blocker(eyedropper_button_);
         paint_button_->setChecked(tool == Tool::Paint);
+        bucket_fill_button_->setChecked(tool == Tool::BucketFill);
         eraser_button_->setChecked(tool == Tool::Eraser);
         shapes_button_->setChecked(tool == Tool::Shapes);
         text_button_->setChecked(tool == Tool::Text);
@@ -380,6 +428,10 @@ void ToolSidebar::setActiveTool(Tool tool) {
 
 bool ToolSidebar::paintToolActive() const noexcept {
     return active_tool_ == Tool::Paint;
+}
+
+bool ToolSidebar::bucketFillToolActive() const noexcept {
+    return active_tool_ == Tool::BucketFill;
 }
 
 bool ToolSidebar::eraserToolActive() const noexcept {
@@ -420,6 +472,7 @@ void ToolSidebar::setBrushColor(const QColor& color) {
 void ToolSidebar::updateControls() {
     const bool editable_layer_available = document_available_ && painting_allowed_;
     paint_button_->setEnabled(editable_layer_available);
+    bucket_fill_button_->setEnabled(editable_layer_available);
     eraser_button_->setEnabled(editable_layer_available);
     shapes_button_->setEnabled(document_available_);
     text_button_->setEnabled(document_available_);
@@ -431,6 +484,11 @@ void ToolSidebar::updateControls() {
         : (document_available_
             ? QStringLiteral("Select or create an editable layer to paint")
             : QStringLiteral("Open an image to paint")));
+    bucket_fill_button_->setToolTip(editable_layer_available
+        ? QStringLiteral("Bucket Fill")
+        : (document_available_
+            ? QStringLiteral("Select or create an editable layer to fill")
+            : QStringLiteral("Open an image to use Bucket Fill")));
     eraser_button_->setToolTip(editable_layer_available
         ? QStringLiteral("Eraser")
         : (document_available_

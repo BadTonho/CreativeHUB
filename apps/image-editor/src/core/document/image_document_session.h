@@ -60,6 +60,12 @@ public:
                                         int diameter,
                                         QString* error = nullptr,
                                         std::optional<QPainterPath> clipping_path = {});
+    [[nodiscard]] bool applyBucketFill(const QPoint& seed,
+                                      const QColor& color,
+                                      int tolerance,
+                                      QString* error = nullptr,
+                                      std::optional<QPainterPath> clipping_path = {},
+                                      bool mask_target = false);
     [[nodiscard]] QString addShape(ImageShapeData shape, QString* error = nullptr);
     [[nodiscard]] bool updateShape(const ImageShapeData& shape,
                                    QString* error = nullptr);

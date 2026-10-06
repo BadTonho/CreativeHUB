@@ -35,6 +35,14 @@ public:
         const QHash<QString, QImage>& raster_images,
         const QString& group_id,
         const std::atomic_bool* cancellation_requested = nullptr);
+    // Renders the selected layer's editable pixels before visibility, opacity,
+    // group composition, or its content mask is applied. Mask targets start white.
+    [[nodiscard]] static QImage editableLayerTarget(
+        const ImageDocumentData& document,
+        const QImage& source_image,
+        const QHash<QString, QImage>& raster_images,
+        const QString& layer_id,
+        bool mask_target);
 
     [[nodiscard]] static QImage layerThumbnail(
         const ImageDocumentData& document,

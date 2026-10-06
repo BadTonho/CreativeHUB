@@ -2,6 +2,18 @@ add_executable(creative-suite-image-editor-core-tests
     image_editor_core_test.cpp
 )
 
+add_executable(creative-suite-image-editor-bucket-fill-tests
+    image_editor_bucket_fill_test.cpp
+)
+target_link_libraries(creative-suite-image-editor-bucket-fill-tests PRIVATE
+    creative-suite-image-editor-core Qt6::Test)
+target_compile_features(creative-suite-image-editor-bucket-fill-tests PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME creative-suite-image-editor-bucket-fill
+    COMMAND creative-suite-image-editor-bucket-fill-tests)
+set_tests_properties(creative-suite-image-editor-bucket-fill PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 target_link_libraries(creative-suite-image-editor-core-tests PRIVATE
     creative-suite-image-editor-core
     Qt6::Test
@@ -105,6 +117,8 @@ add_executable(creative-suite-image-editor-ui-tests
     ../src/ui/tools/brush/paint_tool.h
     ../src/ui/tools/brush/eraser_tool.cpp
     ../src/ui/tools/brush/eraser_tool.h
+    ../src/ui/tools/bucket_fill/bucket_fill_tool.cpp
+    ../src/ui/tools/bucket_fill/bucket_fill_tool.h
     ../src/ui/tools/crop/crop_tool.cpp
     ../src/ui/tools/crop/crop_tool.h
     ../src/ui/tools/eyedropper/eyedropper_tool.cpp
@@ -161,6 +175,12 @@ set_tests_properties(creative-suite-image-editor-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 add_creative_suite_test(
+    NAME creative-suite-image-editor-bucket-fill-ui
+    COMMAND creative-suite-image-editor-ui-tests --bucket-fill-only)
+set_tests_properties(creative-suite-image-editor-bucket-fill-ui PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+add_creative_suite_test(
     NAME creative-suite-image-editor-window-close
     COMMAND creative-suite-image-editor-ui-tests --window-close-tabs)
 set_tests_properties(creative-suite-image-editor-window-close PROPERTIES
@@ -205,6 +225,8 @@ add_executable(creative-suite-image-editor-export-ui-tests
     ../src/ui/tools/brush/paint_tool.h
     ../src/ui/tools/brush/eraser_tool.cpp
     ../src/ui/tools/brush/eraser_tool.h
+    ../src/ui/tools/bucket_fill/bucket_fill_tool.cpp
+    ../src/ui/tools/bucket_fill/bucket_fill_tool.h
     ../src/ui/tools/crop/crop_tool.cpp
     ../src/ui/tools/crop/crop_tool.h
     ../src/ui/tools/eyedropper/eyedropper_tool.cpp
@@ -265,6 +287,7 @@ if(WIN32)
 
     foreach(TEST_TARGET IN ITEMS
             creative-suite-image-editor-core-tests
+            creative-suite-image-editor-bucket-fill-tests
             creative-suite-image-editor-mask-tests
             creative-suite-image-editor-raster-tests
             creative-suite-image-editor-format-tests
