@@ -734,11 +734,11 @@ void PlaybackWorker::setComposition(
                 spec.source_start_frame < 0 || spec.segment_frame_count <= 0) {
                 continue;
             }
-            composition_start = std::min(composition_start, spec.timeline_start_frame);
+            composition_start = std::min<std::int64_t>(composition_start, spec.timeline_start_frame);
             if (spec.timeline_start_frame <=
                     std::numeric_limits<std::int64_t>::max() -
                         spec.segment_frame_count) {
-                composition_end = std::max(
+                composition_end = std::max<std::int64_t>(
                     composition_end,
                     spec.timeline_start_frame + spec.segment_frame_count);
             }
