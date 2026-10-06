@@ -148,6 +148,16 @@ Pay special attention to:
 - macOS signing and notarization;
 - package formats and Linux distribution variants.
 
+Update continuity is a project-wide requirement. Every application version on
+a supported operating system and architecture must retain a path to the latest
+compatible release, either directly or through updater-managed intermediate
+releases. If an installed updater cannot continue, a supported recovery tool or
+a complete installer from the official distribution channel must provide a
+recovery path. A failed or interrupted update must preserve the working
+installation and must not strand the user without a way to update. Releases
+that change updater or catalog compatibility must include a migration path and
+regression coverage from every still-supported version.
+
 ## 8. Code Quality
 
 - Prefer small modules with clear responsibilities.
