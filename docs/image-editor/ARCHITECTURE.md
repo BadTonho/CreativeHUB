@@ -395,7 +395,13 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   warm modes. Cold mode opens a fresh session for each measured iteration;
   warm mode primes one session, performs the configured warmups, then reuses
   that session. The report also verifies that cold and warm output pixels
-  match. PNG/JPEG export is measured separately for the `export` profile.
+  match. The session caches one group thumbnail per group and requested size;
+  render-affecting edits, opacity changes, document/resource replacement, and
+  history restoration invalidate that cache. Selection changes do not.
+  Group cache lookups use the existing thumbnail hit/miss metrics, and the
+  `group_thumbnail` stage is recorded only when the renderer runs. Mask
+  thumbnails remain uncached. PNG/JPEG export is measured separately for the
+  `export` profile.
 - Benchmark schema version 2 reports wall time and each stage's total elapsed
   time per measured iteration, with average, p50, p95, maximum, iteration
   count, and total stage-call count. Percentiles use the same complete set of
@@ -410,6 +416,9 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   comparable to v2. The first Windows reference-PC
   report using the v2 method is
   [`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json).
+  The same-PC post-cache comparison is recorded in
+  [`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](performance-after-group-thumbnail-cache-windows-2026-10-06.json);
+  its before/after summary is in `GPU_ACCELERATION_PLAN.md`.
 
 ## Layer mask ownership and rendering
 

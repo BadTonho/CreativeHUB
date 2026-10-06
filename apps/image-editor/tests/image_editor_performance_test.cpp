@@ -1,5 +1,6 @@
 #include "image_editor_performance_log.h"
 #include "image_editor_performance_metrics.h"
+#include "image_document_session.h"
 #include "image_document_renderer.h"
 #include "image_exporter.h"
 
@@ -129,6 +130,91 @@ private slots:
             QCOMPARE(measured_export, baseline_export);
         }
         QVERIFY(metrics.snapshot().timing(ImageEditorPerformanceStage::ExportEncode).count > 0);
+    }
+
+    void groupThumbnailCacheReusesAndInvalidatesResults() {
+        ImageDocumentSession session;
+        QString error;
+        QVERIFY2(session.createCanvas(QSize(32, 32), Qt::transparent, &error),
+                 qPrintable(error));
+        const QString first_layer = session.selectedLayerId();
+        QVERIFY2(session.applyPaintStroke({QPointF(8, 16)}, Qt::red, 8, &error),
+                 qPrintable(error));
+        const QString second_layer = session.addLayer();
+        QVERIFY(!second_layer.isEmpty());
+        QVERIFY2(session.applyPaintStroke({QPointF(24, 16)}, Qt::blue, 8, &error),
+                 qPrintable(error));
+        const QString group_id = session.groupLayers(
+            {first_layer, second_layer}, &error);
+        QVERIFY2(!group_id.isEmpty(), qPrintable(error));
+
+        auto& metrics = ImageEditorPerformanceMetrics::instance();
+        metrics.setEnabled(false);
+        metrics.reset();
+        metrics.setEnabled(true);
+
+        const QSize thumbnail_size(24, 24);
+        const auto render_group_thumbnail = [&]() {
+            return session.renderedLayerThumbnails(thumbnail_size).value(group_id);
+        };
+        const QImage original = render_group_thumbnail();
+        QVERIFY(!original.isNull());
+        QCOMPARE(metrics.snapshot().timing(
+                     ImageEditorPerformanceStage::GroupThumbnail).count,
+                 std::uint64_t{1});
+
+        const auto first_render_metrics = metrics.snapshot();
+        QCOMPARE(render_group_thumbnail(), original);
+        auto snapshot = metrics.snapshot();
+        QCOMPARE(snapshot.timing(ImageEditorPerformanceStage::GroupThumbnail).count,
+                 std::uint64_t{1});
+        QVERIFY(snapshot.timing(ImageEditorPerformanceStage::ThumbnailCacheHit).count >
+                first_render_metrics.timing(
+                    ImageEditorPerformanceStage::ThumbnailCacheHit).count);
+
+        const QImage smaller = session.renderedLayerThumbnails(QSize(16, 16)).value(group_id);
+        QVERIFY(!smaller.isNull());
+        QCOMPARE(smaller.size(), QSize(16, 16));
+        QCOMPARE(metrics.snapshot().timing(
+                     ImageEditorPerformanceStage::GroupThumbnail).count,
+                 std::uint64_t{2});
+        QCOMPARE(render_group_thumbnail(), original);
+        QCOMPARE(metrics.snapshot().timing(
+                     ImageEditorPerformanceStage::GroupThumbnail).count,
+                 std::uint64_t{3});
+
+        session.beginLayerOpacityEdit();
+        QVERIFY(session.setGroupOpacity(group_id, 75));
+        const QImage opacity_75 = render_group_thumbnail();
+        QVERIFY(session.setGroupOpacity(group_id, 40));
+        const QImage opacity_40 = render_group_thumbnail();
+        session.endLayerOpacityEdit();
+        QVERIFY(opacity_75 != opacity_40);
+        QVERIFY(opacity_40 != original);
+        QCOMPARE(metrics.snapshot().timing(
+                     ImageEditorPerformanceStage::GroupThumbnail).count,
+                 std::uint64_t{5});
+
+        QVERIFY(session.undo());
+        QCOMPARE(render_group_thumbnail(), original);
+        QVERIFY(session.redo());
+        QCOMPARE(render_group_thumbnail(), opacity_40);
+
+        QVERIFY(session.setLayerVisible(second_layer, false));
+        const QImage hidden_layer = render_group_thumbnail();
+        QVERIFY(hidden_layer != opacity_40);
+        QVERIFY(session.undo());
+        QCOMPARE(render_group_thumbnail(), opacity_40);
+
+        QVERIFY(session.selectLayer(second_layer));
+        QVERIFY(session.addLayerMask(second_layer));
+        QVERIFY2(session.applyLayerMaskEraseStroke(
+                     {QPointF(24, 16)}, 6, &error), qPrintable(error));
+        const QImage masked_layer = render_group_thumbnail();
+        QVERIFY(masked_layer != opacity_40);
+        QVERIFY(metrics.snapshot().timing(
+                    ImageEditorPerformanceStage::GroupThumbnail).count >=
+                std::uint64_t{10});
     }
 
     void performanceLogRotatesWithinThreeFiles() {

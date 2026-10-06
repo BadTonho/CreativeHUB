@@ -173,7 +173,13 @@ private:
         QImage thumbnail;
     };
 
+    struct GroupThumbnailCacheEntry {
+        QSize maximum_size;
+        QImage thumbnail;
+    };
+
     void initializeDefaultLayers();
+    void invalidateGroupThumbnailCache() const noexcept;
     [[nodiscard]] qsizetype layerIndex(const QString& layer_id) const noexcept;
     void pushEdit();
     void recordEditSnapshot(ImageDocumentData before,
@@ -215,6 +221,7 @@ private:
     bool force_dirty_ = false;
     ImageDocumentHistory history_;
     mutable QHash<QString, LayerThumbnailCacheEntry> layer_thumbnail_cache_;
+    mutable QHash<QString, GroupThumbnailCacheEntry> group_thumbnail_cache_;
     ImageDocumentData opacity_edit_snapshot_;
     bool opacity_edit_active_ = false;
 };

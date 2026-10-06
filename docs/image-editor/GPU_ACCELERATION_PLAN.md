@@ -190,8 +190,9 @@ warm view-refresh modes. The full schema v2 report is
 [`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json);
 the prior [schema v1 direct-renderer report](performance-baseline-windows-2026-10-06.json)
 remains available as a historical record and is not directly comparable. The
-table gives wall time average/p95
-for cold and warm refreshes, then composite average/p95 for warm refreshes:
+v2 report and the table below are the initial measurements before group
+thumbnail caching. The table gives wall time average/p95 for cold and warm
+refreshes, then composite average/p95 for warm refreshes:
 
 | CPU profile | Canvas | Cold refresh avg/p95 (ms) | Warm refresh avg/p95 (ms) | Warm composite avg/p95 (ms) |
 | --- | ---: | ---: | ---: | ---: |
@@ -203,14 +204,31 @@ for cold and warm refreshes, then composite average/p95 for warm refreshes:
 | Export | 1920×1080 | 134.13 / 144.31 | 126.43 / 140.38 | 85.60 / 94.26 |
 
 For the export profile, the separate PNG+JPEG export iteration averaged
-579.57 ms (p95 614.07 ms, maximum 629.32 ms). The cold/warm comparison confirms
-layer-thumbnail cache hits in warm mode; group and mask thumbnails are still
-rendered in each refresh. Per-stage values are totals within an iteration, and
-different stages include nested work, so do not sum them. Resource peaks are
-sampled during the full profile run, including warmups and cache priming. These
-results characterize the current CPU path; they are not GPU comparisons,
-optimization gains, limits, or general hardware requirements. Native manual
-panel inspection and macOS/Linux measurements remain pending.
+579.57 ms (p95 614.07 ms, maximum 629.32 ms).
+
+The post-cache Release run is recorded in
+[`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](performance-after-group-thumbnail-cache-windows-2026-10-06.json).
+It used the same machine, schema v2, three warmups, and 30 measured iterations.
+All six profiles reported 30 cold group-thumbnail renders and zero warm
+group-thumbnail renders; cold and warm pixels matched. The table compares warm
+refresh wall time before and after caching:
+
+| CPU profile | Warm avg/p95 before (ms) | Warm avg/p95 after (ms) |
+| --- | ---: | ---: |
+| Reference | 124.80 / 133.63 | 86.44 / 91.80 |
+| Mask-heavy | 563.09 / 614.86 | 386.35 / 429.06 |
+| Stroke-heavy | 945.04 / 1,005.65 | 696.62 / 785.30 |
+| Large image | 260.83 / 278.91 | 176.30 / 191.32 |
+| Repeated source | 58.19 / 64.59 | 39.56 / 43.43 |
+| Export | 126.43 / 140.38 | 82.46 / 90.38 |
+
+These are observations of two runs on one Windows PC, not guaranteed gains or
+general hardware requirements. Cold refreshes still render each group's
+thumbnail. Mask thumbnails remain uncached. Per-stage values are totals within
+an iteration, and different stages include nested work, so do not sum them.
+Resource peaks are sampled during the full profile run, including warmups and
+cache priming. Native manual panel inspection and macOS/Linux measurements
+remain pending.
 
 ## Shared Video Editor stage 2 delivery
 

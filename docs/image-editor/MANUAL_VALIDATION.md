@@ -81,8 +81,8 @@ checks and record the OS, application build, and outcome.
    compare repeat runs on the same machine and do not infer a performance
    guarantee from one PC.
 
-The first Windows reference-PC Release baseline (Ryzen 5 3600, 32 GB RAM,
-GeForce GTX 1660 SUPER 6 GB, Windows 11) is in
+The initial, pre-group-cache Windows reference-PC Release baseline (Ryzen 5 3600,
+32 GB RAM, GeForce GTX 1660 SUPER 6 GB, Windows 11) is in
 [`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json).
 It was recorded on 2026-10-06 with Windows 11 Version 26H2, x86_64, MSVC 1944,
 and Qt 6.7.2. All profiles used three warmups and 30 measured iterations for
@@ -103,17 +103,26 @@ including warmups and cache priming:
 The separate PNG/JPEG export profile averaged 579.57 ms per iteration (p95
 614.07 ms, maximum 629.32 ms).
 
-These are observations of the current CPU renderer, not optimization gains,
-performance targets, or general hardware requirements. Stage times are
+After adding the session group-thumbnail cache, the same six profiles were run
+again with the same settings. The post-cache report is
+[`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](performance-after-group-thumbnail-cache-windows-2026-10-06.json).
+Each profile rendered its group thumbnail in all 30 cold iterations and in
+zero warm iterations; cold and warm pixels matched. For `stroke-heavy`, warm
+refresh average / p95 changed from 945.04 / 1,005.65 ms to 696.62 / 785.30 ms.
+The full before/after table is in `GPU_ACCELERATION_PLAN.md`.
+
+These are observations from this PC; the before/after difference is not a
+performance guarantee, target, or general hardware requirement. Stage times are
 per-iteration totals and include nested rendering work; do not sum stages. The
 recorded process CPU value is a one-second sample, and memory peaks are sampled
 observations. The prior [v1 direct-renderer baseline](performance-baseline-windows-2026-10-06.json)
 remains unchanged for historical reference and is not directly comparable to
 these session-based measurements.
-The Release Image Editor test group passed 11/11 on this Windows system,
-including the benchmark report smoke test and image/export equality with
-collection enabled or disabled. Native manual inspection of the panel and
-settings remains pending; follow the checklist above.
+The Release Image Editor test group passed 11/11 and the configured CTest suite
+passed 86/86 on this Windows system, including the benchmark cache smoke test
+and image/export equality with collection enabled or disabled. Native manual
+inspection of the panel and settings remains pending; follow the checklist
+above.
 
 ## Contextual deletion
 

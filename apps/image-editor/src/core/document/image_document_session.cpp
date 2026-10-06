@@ -39,6 +39,7 @@ void ImageDocumentSession::loadRasterSources() {
     raster_images_.clear();
     raster_errors_.clear();
     layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
     for (const auto& layer : data_.layers) for (const auto& op : layer.operations) {
         if (op.kind != OperationKind::RasterImage) continue;
         const QString path = op.raster.source_path;
@@ -124,6 +125,7 @@ bool ImageDocumentSession::importRasterImages(const QVector<PreparedRasterImage>
     selected_group_id_.clear();
     ImageLayerStackEditor::rebuildLayerOrder(data_);
     layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
     return true;
 }
 
@@ -153,6 +155,7 @@ bool ImageDocumentSession::relinkRaster(const QString& id, const PreparedRasterI
     raster_images_.insert(id, image.image);
     raster_errors_.remove(path);
     layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
     return true;
 }
 
@@ -183,6 +186,7 @@ bool ImageDocumentSession::createCanvas(const QSize& size,
     raster_images_.clear();
     raster_errors_.clear();
     layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
     data_ = {};
     data_.base_kind = ImageBaseKind::Canvas;
     data_.source_size = size;
@@ -236,6 +240,7 @@ bool ImageDocumentSession::openImage(const QString& source_path, QString* error)
     raster_images_.clear();
     raster_errors_.clear();
     layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
     data_ = {};
     data_.base_kind = ImageBaseKind::SourceImage;
     data_.source_path = absoluteCleanPath(source_path);
@@ -521,6 +526,7 @@ bool ImageDocumentSession::resizeCanvas(const QSize& size,
     pushEdit();
     data_ = std::move(candidate);
     layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
     return true;
 }
 
@@ -714,6 +720,7 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
     if (maximum_size.width() <= 0 || maximum_size.height() <= 0) return thumbnails;
     if (!hasSource()) {
         layer_thumbnail_cache_.clear();
+        invalidateGroupThumbnailCache();
         return thumbnails;
     }
 
@@ -756,8 +763,37 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
         else ++cached;
     }
     for (const auto& group : data_.groups) {
-        thumbnails.insert(group.id, ImageDocumentRenderer::groupThumbnail(
-            data_, raster_images_, group, maximum_size));
+        ImageEditorPerformanceScope cache_scope(
+            ImageEditorPerformanceMetrics::instance(),
+            ImageEditorPerformanceStage::ThumbnailCacheHit);
+        auto cached = group_thumbnail_cache_.find(group.id);
+        const bool cache_matches = cached != group_thumbnail_cache_.end() &&
+            cached->maximum_size == maximum_size;
+        cache_scope.setStage(cache_matches
+            ? ImageEditorPerformanceStage::ThumbnailCacheHit
+            : ImageEditorPerformanceStage::ThumbnailCacheMiss);
+
+        QImage thumbnail;
+        if (cache_matches) {
+            thumbnail = cached->thumbnail;
+        } else {
+            thumbnail = ImageDocumentRenderer::groupThumbnail(
+                data_, raster_images_, group, maximum_size);
+            if (!thumbnail.isNull()) {
+                GroupThumbnailCacheEntry entry;
+                entry.maximum_size = maximum_size;
+                entry.thumbnail = thumbnail;
+                group_thumbnail_cache_.insert(group.id, std::move(entry));
+            } else {
+                group_thumbnail_cache_.remove(group.id);
+            }
+        }
+        thumbnails.insert(group.id, std::move(thumbnail));
+    }
+    for (auto cached = group_thumbnail_cache_.begin();
+         cached != group_thumbnail_cache_.end();) {
+        if (!thumbnails.contains(cached.key())) cached = group_thumbnail_cache_.erase(cached);
+        else ++cached;
     }
     return thumbnails;
 }
@@ -1106,6 +1142,7 @@ bool ImageDocumentSession::setLayerOpacity(const QString& layer_id, int opacity)
         data_.layers.at(index).opacity == opacity) return false;
     if (!opacity_edit_active_) pushEdit();
     data_.layers[index].opacity = opacity;
+    invalidateGroupThumbnailCache();
     return true;
 }
 
@@ -1267,6 +1304,7 @@ bool ImageDocumentSession::setGroupOpacity(const QString& group_id, int opacity)
     if (!opacity_edit_active_) pushEdit();
     group = findGroup(data_, group_id);
     group->opacity = opacity;
+    invalidateGroupThumbnailCache();
     return true;
 }
 
@@ -1379,6 +1417,10 @@ void ImageDocumentSession::initializeDefaultLayers() {
     selected_group_id_.clear();
 }
 
+void ImageDocumentSession::invalidateGroupThumbnailCache() const noexcept {
+    group_thumbnail_cache_.clear();
+}
+
 void ImageDocumentSession::recordEditSnapshot(ImageDocumentData before,
                                               QString selected_layer_id,
                                               QString selected_group_id) {
@@ -1396,6 +1438,7 @@ void ImageDocumentSession::restoreHistorySnapshot(
             raster_images_.insert(it.key(), it.value());
     }
     layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
     selected_group_id_ = groupIndex(snapshot.selected_group_id) >= 0
         ? std::move(snapshot.selected_group_id) : QString{};
     selected_layer_id_ = selected_group_id_.isEmpty() &&
@@ -1408,6 +1451,7 @@ void ImageDocumentSession::restoreHistorySnapshot(
 void ImageDocumentSession::pushEdit() {
     endLayerOpacityEdit();
     recordEditSnapshot(data_, selected_layer_id_, selected_group_id_);
+    invalidateGroupThumbnailCache();
 }
 
 void ImageDocumentSession::commitDocumentEdit(
@@ -1418,6 +1462,7 @@ void ImageDocumentSession::commitDocumentEdit(
     selected_layer_id_ = std::move(selected_layer_id);
     selected_group_id_ = std::move(selected_group_id);
     layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
 }
 
 bool ImageDocumentSession::applySelectedGroupTransform(const ImageOperation& operation,
@@ -1445,6 +1490,7 @@ bool ImageDocumentSession::applySelectedGroupTransform(const ImageOperation& ope
     pushEdit();
     findGroup(data_, selected_group_id_)->operations.append(std::move(checked));
     layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
     return true;
 }
 
