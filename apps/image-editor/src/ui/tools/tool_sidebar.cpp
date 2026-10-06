@@ -89,6 +89,22 @@ QIcon bucketFillToolIcon() {
     return QIcon(icon);
 }
 
+QIcon linearGradientToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(34, 39, 48), 2.0, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(QPointF(7, 24), QPointF(25, 8));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(73, 174, 226));
+    painter.drawEllipse(QPointF(7, 24), 3.2, 3.2);
+    painter.setBrush(QColor(232, 238, 245));
+    painter.drawEllipse(QPointF(25, 8), 3.2, 3.2);
+    painter.end();
+    return QIcon(icon);
+}
+
 QIcon shapesToolIcon() {
     QPixmap icon(32, 32);
     icon.fill(Qt::transparent);
@@ -212,6 +228,17 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     bucket_fill_button_->setFixedSize(40, 40);
     layout->addWidget(bucket_fill_button_, 0, Qt::AlignHCenter);
 
+    linear_gradient_button_ = new QToolButton(this);
+    linear_gradient_button_->setObjectName(QStringLiteral("linearGradientToolButton"));
+    linear_gradient_button_->setToolTip(QStringLiteral("Linear Gradient"));
+    linear_gradient_button_->setAccessibleName(QStringLiteral("Linear Gradient tool"));
+    linear_gradient_button_->setIcon(linearGradientToolIcon());
+    linear_gradient_button_->setIconSize(QSize(24, 24));
+    linear_gradient_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    linear_gradient_button_->setCheckable(true);
+    linear_gradient_button_->setFixedSize(40, 40);
+    layout->addWidget(linear_gradient_button_, 0, Qt::AlignHCenter);
+
     eraser_button_ = new QToolButton(this);
     eraser_button_->setObjectName(QStringLiteral("eraserToolButton"));
     eraser_button_->setToolTip(QStringLiteral("Eraser"));
@@ -297,6 +324,10 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         if (active) setActiveTool(Tool::BucketFill);
         else if (active_tool_ == Tool::BucketFill) setActiveTool(Tool::None);
     });
+    connect(linear_gradient_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::LinearGradient);
+        else if (active_tool_ == Tool::LinearGradient) setActiveTool(Tool::None);
+    });
     connect(eraser_button_, &QToolButton::toggled, this, [this](bool active) {
         if (active) setActiveTool(Tool::Eraser);
         else if (active_tool_ == Tool::Eraser) setActiveTool(Tool::None);
@@ -340,6 +371,7 @@ void ToolSidebar::setDocumentAvailable(bool available) {
     if (!document_available_ ||
         (!painting_allowed_ &&
          (active_tool_ == Tool::Paint || active_tool_ == Tool::BucketFill ||
+          active_tool_ == Tool::LinearGradient ||
           active_tool_ == Tool::Eraser))) {
         setActiveTool(Tool::None);
     }
@@ -350,6 +382,7 @@ void ToolSidebar::setPaintingAllowed(bool allowed) {
     painting_allowed_ = allowed;
     if (!painting_allowed_ &&
         (active_tool_ == Tool::Paint || active_tool_ == Tool::BucketFill ||
+         active_tool_ == Tool::LinearGradient ||
          active_tool_ == Tool::Eraser)) {
         setActiveTool(Tool::None);
     }
@@ -364,6 +397,11 @@ void ToolSidebar::setPaintToolActive(bool active) {
 void ToolSidebar::setBucketFillToolActive(bool active) {
     setActiveTool(active ? Tool::BucketFill :
         (active_tool_ == Tool::BucketFill ? Tool::None : active_tool_));
+}
+
+void ToolSidebar::setLinearGradientToolActive(bool active) {
+    setActiveTool(active ? Tool::LinearGradient :
+        (active_tool_ == Tool::LinearGradient ? Tool::None : active_tool_));
 }
 
 void ToolSidebar::setEraserToolActive(bool active) {
@@ -398,7 +436,8 @@ void ToolSidebar::setTextToolActive(bool active) {
 
 void ToolSidebar::setActiveTool(Tool tool) {
     const bool requires_editable_layer = tool == Tool::Paint ||
-        tool == Tool::BucketFill || tool == Tool::Eraser;
+        tool == Tool::BucketFill || tool == Tool::LinearGradient ||
+        tool == Tool::Eraser;
     if (!document_available_ || (requires_editable_layer && !painting_allowed_)) {
         tool = Tool::None;
     }
@@ -407,6 +446,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
     {
         const QSignalBlocker paint_blocker(paint_button_);
         const QSignalBlocker bucket_fill_blocker(bucket_fill_button_);
+        const QSignalBlocker linear_gradient_blocker(linear_gradient_button_);
         const QSignalBlocker eraser_blocker(eraser_button_);
         const QSignalBlocker shapes_blocker(shapes_button_);
         const QSignalBlocker text_blocker(text_button_);
@@ -415,6 +455,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
         const QSignalBlocker eyedropper_blocker(eyedropper_button_);
         paint_button_->setChecked(tool == Tool::Paint);
         bucket_fill_button_->setChecked(tool == Tool::BucketFill);
+        linear_gradient_button_->setChecked(tool == Tool::LinearGradient);
         eraser_button_->setChecked(tool == Tool::Eraser);
         shapes_button_->setChecked(tool == Tool::Shapes);
         text_button_->setChecked(tool == Tool::Text);
@@ -432,6 +473,10 @@ bool ToolSidebar::paintToolActive() const noexcept {
 
 bool ToolSidebar::bucketFillToolActive() const noexcept {
     return active_tool_ == Tool::BucketFill;
+}
+
+bool ToolSidebar::linearGradientToolActive() const noexcept {
+    return active_tool_ == Tool::LinearGradient;
 }
 
 bool ToolSidebar::eraserToolActive() const noexcept {
@@ -473,6 +518,7 @@ void ToolSidebar::updateControls() {
     const bool editable_layer_available = document_available_ && painting_allowed_;
     paint_button_->setEnabled(editable_layer_available);
     bucket_fill_button_->setEnabled(editable_layer_available);
+    linear_gradient_button_->setEnabled(editable_layer_available);
     eraser_button_->setEnabled(editable_layer_available);
     shapes_button_->setEnabled(document_available_);
     text_button_->setEnabled(document_available_);
@@ -489,6 +535,11 @@ void ToolSidebar::updateControls() {
         : (document_available_
             ? QStringLiteral("Select or create an editable layer to fill")
             : QStringLiteral("Open an image to use Bucket Fill")));
+    linear_gradient_button_->setToolTip(editable_layer_available
+        ? QStringLiteral("Linear Gradient")
+        : (document_available_
+            ? QStringLiteral("Select or create an editable layer to apply a gradient")
+            : QStringLiteral("Open an image to use Linear Gradient")));
     eraser_button_->setToolTip(editable_layer_available
         ? QStringLiteral("Eraser")
         : (document_available_

@@ -32,6 +32,7 @@ constexpr int kLinkedRasterDocumentVersion = 11;
 constexpr int kCanvasSizeDocumentVersion = 12;
 constexpr int kStrokeClipDocumentVersion = 13;
 constexpr int kBucketFillDocumentVersion = 14;
+constexpr int kLinearGradientDocumentVersion = 15;
 constexpr int kDocumentVersion = ImageDocumentStore::kCurrentDocumentVersion;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr int kMaximumStoredCoordinate = 1'000'000;
@@ -288,6 +289,20 @@ QJsonObject encodeOperation(const ImageOperation& operation, const QString& docu
         if (fill.clipping_path.has_value()) {
             encoded.insert("clip_path", encodeClipPath(*fill.clipping_path));
             encoded.insert("clip_rule", static_cast<int>(fill.clipping_path->fillRule()));
+        }
+        break;
+    }
+    case OperationKind::LinearGradient: {
+        const auto& gradient = operation.linear_gradient;
+        encoded.insert("kind", "linear_gradient");
+        encoded.insert("start_x", gradient.start.x());
+        encoded.insert("start_y", gradient.start.y());
+        encoded.insert("end_x", gradient.end.x());
+        encoded.insert("end_y", gradient.end.y());
+        encoded.insert("color", gradient.color.name(QColor::HexArgb));
+        if (gradient.clipping_path.has_value()) {
+            encoded.insert("clip_path", encodeClipPath(*gradient.clipping_path));
+            encoded.insert("clip_rule", static_cast<int>(gradient.clipping_path->fillRule()));
         }
         break;
     }
@@ -552,6 +567,34 @@ bool decodeOperations(const QJsonValue& value,
             operation.bucket_fill.seed = QPoint(seed_x, seed_y);
             operation.bucket_fill.color = color;
             operation.bucket_fill.tolerance = tolerance;
+        } else if (kind == "linear_gradient" &&
+                   version >= kLinearGradientDocumentVersion && fixed_canvas) {
+            const auto start_x = object.value("start_x");
+            const auto start_y = object.value("start_y");
+            const auto end_x = object.value("end_x");
+            const auto end_y = object.value("end_y");
+            const QString color_text = object.value("color").toString();
+            const QColor color(color_text);
+            if (!start_x.isDouble() || !start_y.isDouble() ||
+                !end_x.isDouble() || !end_y.isDouble() ||
+                !std::isfinite(start_x.toDouble()) || !std::isfinite(start_y.toDouble()) ||
+                !std::isfinite(end_x.toDouble()) || !std::isfinite(end_y.toDouble()) ||
+                std::abs(start_x.toDouble()) > kMaximumStoredCoordinate ||
+                std::abs(start_y.toDouble()) > kMaximumStoredCoordinate ||
+                std::abs(end_x.toDouble()) > kMaximumStoredCoordinate ||
+                std::abs(end_y.toDouble()) > kMaximumStoredCoordinate ||
+                (start_x.toDouble() == end_x.toDouble() &&
+                 start_y.toDouble() == end_y.toDouble()) ||
+                !isArgbHexColor(color_text) || !color.isValid() ||
+                !decodeStrokeClip(object, version,
+                                  &operation.linear_gradient.clipping_path)) {
+                assignError(error, QStringLiteral("The document contains an invalid linear gradient."));
+                return false;
+            }
+            operation.kind = OperationKind::LinearGradient;
+            operation.linear_gradient.start = QPointF(start_x.toDouble(), start_y.toDouble());
+            operation.linear_gradient.end = QPointF(end_x.toDouble(), end_y.toDouble());
+            operation.linear_gradient.color = color;
         } else if (kind == "shape" && version >= kShapeDocumentVersion && fixed_canvas) {
             const QString id = object.value("id").toString();
             const QString shape_type = object.value("shape_type").toString();
@@ -742,6 +785,9 @@ bool validateLayers(const ImageDocumentData& document,
                     (operation.kind == OperationKind::BucketFill &&
                      (qRed(operation.bucket_fill.color.rgb()) != qGreen(operation.bucket_fill.color.rgb()) ||
                       qRed(operation.bucket_fill.color.rgb()) != qBlue(operation.bucket_fill.color.rgb()))) ||
+                    (operation.kind == OperationKind::LinearGradient &&
+                     (qRed(operation.linear_gradient.color.rgb()) != qGreen(operation.linear_gradient.color.rgb()) ||
+                      qRed(operation.linear_gradient.color.rgb()) != qBlue(operation.linear_gradient.color.rgb()))) ||
                     (operation.kind == OperationKind::PaintStroke &&
                      (operation.paint_stroke.color.red() != operation.paint_stroke.color.green() ||
                       operation.paint_stroke.color.red() != operation.paint_stroke.color.blue()))) {

@@ -1,5 +1,6 @@
 #include "image_document_renderer.h"
 #include "image_bucket_fill.h"
+#include "image_linear_gradient.h"
 #include "image_document_utils.h"
 #include "../diagnostics/image_editor_performance_metrics.h"
 
@@ -24,6 +25,7 @@ ImageEditorPerformanceStage operationPerformanceStage(OperationKind kind) noexce
     case OperationKind::PaintStroke: return ImageEditorPerformanceStage::PaintStroke;
     case OperationKind::EraseStroke: return ImageEditorPerformanceStage::EraseStroke;
     case OperationKind::BucketFill: return ImageEditorPerformanceStage::PaintStroke;
+    case OperationKind::LinearGradient: return ImageEditorPerformanceStage::LinearGradient;
     case OperationKind::Shape: return ImageEditorPerformanceStage::Shape;
     case OperationKind::Text: return ImageEditorPerformanceStage::Text;
     case OperationKind::RasterImage: return ImageEditorPerformanceStage::RasterImage;
@@ -245,6 +247,11 @@ QImage applyOperations(QImage image,
             if (!ImageBucketFill::apply(&image, operation.bucket_fill, &changed)) return {};
             break;
         }
+        case OperationKind::LinearGradient: {
+            bool changed = false;
+            if (!ImageLinearGradient::apply(&image, operation.linear_gradient, &changed)) return {};
+            break;
+        }
         case OperationKind::Shape:
             image = drawShape(std::move(image), operation.shape);
             break;
@@ -269,6 +276,10 @@ QVector<ImageOperation> maskRenderOperations(const ImageLayerMaskData& mask) {
             const QColor color = operation.bucket_fill.color;
             const int gray = qGray(color.rgb());
             operation.bucket_fill.color = QColor(gray, gray, gray, color.alpha());
+        } else if (operation.kind == OperationKind::LinearGradient) {
+            const QColor color = operation.linear_gradient.color;
+            const int gray = qGray(color.rgb());
+            operation.linear_gradient.color = QColor(gray, gray, gray, color.alpha());
         }
     }
     return operations;
@@ -636,6 +647,20 @@ QImage renderLayerThumbnail(const QHash<QString, QImage>& resources,
             if (operation.bucket_fill.clipping_path.has_value()) {
                 scaled_operation.bucket_fill.clipping_path = QTransform::fromScale(
                     scale_x, scale_y).map(*operation.bucket_fill.clipping_path);
+            }
+            break;
+        case OperationKind::LinearGradient:
+            scaled_operation.linear_gradient.start.setX(
+                operation.linear_gradient.start.x() * scale_x);
+            scaled_operation.linear_gradient.start.setY(
+                operation.linear_gradient.start.y() * scale_y);
+            scaled_operation.linear_gradient.end.setX(
+                operation.linear_gradient.end.x() * scale_x);
+            scaled_operation.linear_gradient.end.setY(
+                operation.linear_gradient.end.y() * scale_y);
+            if (operation.linear_gradient.clipping_path.has_value()) {
+                scaled_operation.linear_gradient.clipping_path = QTransform::fromScale(
+                    scale_x, scale_y).map(*operation.linear_gradient.clipping_path);
             }
             break;
         case OperationKind::EraseStroke: {

@@ -43,6 +43,10 @@ ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent), text_tool_(this) {
 }
 
 void ImageCanvas::setImage(QImage image, bool resetView) {
+    if (linear_gradient_tool_.gestureActive()) {
+        linear_gradient_tool_.cancelGesture();
+        emit linearGradientPreviewCleared();
+    }
     resetBrushTools(true);
     image_ = std::move(image);
     transient_image_ = {};
@@ -245,6 +249,32 @@ void ImageCanvas::setBucketFillMode(bool enabled) {
 
 void ImageCanvas::setBucketFillTolerance(int tolerance) {
     bucket_fill_tolerance_ = std::clamp(tolerance, 0, 255);
+}
+
+void ImageCanvas::setLinearGradientMode(bool enabled) {
+    if (linear_gradient_mode_ == enabled &&
+        (!enabled || !text_tool_.editing())) return;
+    if (enabled && text_tool_.editing()) finishTextEditing(true);
+    if (enabled) {
+        resetBrushTools(true);
+        crop_mode_ = paint_mode_ = eraser_mode_ = shape_creation_mode_ = false;
+        text_creation_mode_ = object_selection_mode_ = area_selection_mode_ = false;
+        eyedropper_mode_ = bucket_fill_mode_ = false;
+        resizing_brush_ = false;
+        static_cast<void>(crop_tool_.cancelGesture());
+        static_cast<void>(area_selection_tool_.cancelGesture());
+        static_cast<void>(shape_tool_.cancelGesture());
+        static_cast<void>(text_tool_.cancelFrame());
+        clearObjectInteraction();
+        transient_image_ = {};
+    } else if (linear_gradient_tool_.gestureActive()) {
+        linear_gradient_tool_.cancelGesture();
+        transient_image_ = {};
+        emit linearGradientPreviewCleared();
+    }
+    linear_gradient_mode_ = enabled;
+    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    update();
 }
 
 void ImageCanvas::setAreaSelectionOptions(AreaSelectionShape shape,
@@ -701,6 +731,18 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (linear_gradient_mode_ && event->button() == Qt::LeftButton) {
+        if (!image_.isNull() && imageTargetRect().contains(event->position()) &&
+            linear_gradient_tool_.beginGesture(
+                widgetToImageCoordinates(event->position()), image_.size(), brush_color_)) {
+            emit linearGradientPreviewRequested(
+                linear_gradient_tool_.start(), linear_gradient_tool_.end(),
+                linear_gradient_tool_.color());
+            update();
+        }
+        event->accept();
+        return;
+    }
     if ((paint_mode_ || eraser_mode_) && !crop_mode_ && event->button() == Qt::LeftButton &&
         modifiers.testFlag(Qt::ControlModifier) && modifiers.testFlag(Qt::AltModifier) &&
         imageTargetRect().contains(event->position())) {
@@ -792,6 +834,16 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (linear_gradient_tool_.gestureActive()) {
+        if (linear_gradient_tool_.updateGesture(widgetToImageCoordinates(event->position()))) {
+            emit linearGradientPreviewRequested(
+                linear_gradient_tool_.start(), linear_gradient_tool_.end(),
+                linear_gradient_tool_.color());
+            update();
+        }
+        event->accept();
+        return;
+    }
     if (resizing_brush_) {
         const QPointF displacement = event->position() - brush_resize_start_;
         const int adjustment = static_cast<int>(std::round(displacement.x()));
@@ -861,6 +913,19 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton && linear_gradient_tool_.gestureActive()) {
+        const auto gradient = linear_gradient_tool_.finishGesture(
+            widgetToImageCoordinates(event->position()));
+        if (gradient) {
+            emit linearGradientRequested(
+                gradient->start, gradient->end, gradient->color);
+        }
+        transient_image_ = {};
+        emit linearGradientPreviewCleared();
+        update();
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::MiddleButton && panning_) {
         panning_ = false;
         setCursor(crop_mode_ ? Qt::CrossCursor
@@ -995,6 +1060,14 @@ void ImageCanvas::keyPressEvent(QKeyEvent* event) {
     }
     if (event->key() == Qt::Key_Escape && shape_tool_.gestureActive()) {
         static_cast<void>(shape_tool_.cancelGesture());
+        update();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Escape && linear_gradient_tool_.gestureActive()) {
+        linear_gradient_tool_.cancelGesture();
+        transient_image_ = {};
+        emit linearGradientPreviewCleared();
         update();
         event->accept();
         return;

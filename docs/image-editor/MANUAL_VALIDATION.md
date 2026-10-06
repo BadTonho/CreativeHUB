@@ -90,9 +90,36 @@ Automated coverage is in `image_editor_bucket_fill_test.cpp`
 (`creative-suite-image-editor-bucket-fill`) and
 `image_editor_ui_test.cpp` (`testBucketFillTool`,
 `creative-suite-image-editor-ui`). It checks connectivity, RGBA tolerance,
-selection clipping, mask conversion, no-op history, Undo/Redo, v14 round-trip,
+selection clipping, mask conversion, no-op history, Undo/Redo, v15 round-trip,
 tool activation, tolerance updates, and ignored outside-image clicks. Native
 visual checks remain pending.
+
+## Linear Gradient
+
+Use a disposable `.cimg` document with a colored editable layer and a second
+visible layer below it.
+
+1. Select **Linear Gradient**, then drag across the canvas. Confirm the live
+   preview shows the brush color fading to transparency and that the far end
+   reveals the lower layer. Reverse the drag and confirm the opaque start and
+   transparent end follow the gesture direction. Drag beyond the canvas edge
+   and confirm the endpoint clamps at the image border.
+2. Create an Area Selection and drag a gradient across its edge. Confirm the
+   gradient stays inside the selection. Select a layer mask thumbnail, drag a
+   colored gradient, and confirm the mask receives grayscale coverage on only
+   the selected layer.
+3. Press Escape during a drag and confirm no edit is committed. Make a short
+   gradient, then use Undo and Redo. Save and reopen the document and confirm
+   both the layer and mask gradients persist. A click with no drag should add
+   no history entry.
+
+Automated coverage is in `image_editor_gradient_test.cpp`
+(`creative-suite-image-editor-gradient`) and `image_editor_ui_test.cpp`
+(`testLinearGradientTool`; `creative-suite-image-editor-gradient-ui`). It checks
+premultiplied interpolation, endpoint clamping, selection clipping, zero-length
+gestures, composed preview equivalence, mask grayscale, Undo/Redo, v15
+round-trip, v14 compatibility, tool activation, drag preview, and outside
+clicks. Native visual checks remain pending.
 
 ## Performance collection and benchmark
 

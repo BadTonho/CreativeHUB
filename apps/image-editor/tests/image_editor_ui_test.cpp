@@ -3047,6 +3047,82 @@ bool testBucketFillTool() {
     return activated && click_emitted && outside_ignored;
 }
 
+bool testLinearGradientTool() {
+    image_editor::ToolSidebar sidebar;
+    auto* button = sidebar.findChild<QToolButton*>(
+        QStringLiteral("linearGradientToolButton"));
+    if (button == nullptr || button->isEnabled()) {
+        std::cerr << "Linear Gradient should be disabled without an editable layer.\n";
+        return false;
+    }
+
+    image_editor::ImageCanvas canvas;
+    canvas.resize(400, 300);
+    QImage pixels(16, 16, QImage::Format_ARGB32);
+    pixels.fill(Qt::transparent);
+    canvas.setImage(pixels);
+    canvas.setBrush(QColor(30, 120, 210, 192), 12);
+    QObject::connect(&sidebar, &image_editor::ToolSidebar::activeToolChanged,
+        &canvas, [&canvas](image_editor::ToolSidebar::Tool tool) {
+            canvas.setLinearGradientMode(
+                tool == image_editor::ToolSidebar::Tool::LinearGradient);
+        });
+    sidebar.setDocumentAvailable(true);
+    sidebar.setPaintingAllowed(true);
+    canvas.show();
+    QCoreApplication::processEvents();
+
+    QSignalSpy previews(&canvas,
+        &image_editor::ImageCanvas::linearGradientPreviewRequested);
+    QSignalSpy gradients(&canvas,
+        &image_editor::ImageCanvas::linearGradientRequested);
+    QSignalSpy cleared(&canvas,
+        &image_editor::ImageCanvas::linearGradientPreviewCleared);
+    button->click();
+    const QPoint start = canvas.rect().center();
+    const QPoint end(start.x() + 35, start.y() + 12);
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseMove(&canvas, end, 1);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
+    QCoreApplication::processEvents();
+    const bool activated = sidebar.linearGradientToolActive() &&
+        canvas.linearGradientMode() && button->isEnabled();
+    const bool previewed = previews.size() >= 2 &&
+        previews.back().at(0).value<QPointF>() != previews.back().at(1).value<QPointF>() &&
+        previews.back().at(2).value<QColor>() == QColor(30, 120, 210, 192);
+    const bool committed = gradients.size() == 1 &&
+        gradients.front().at(0).value<QPointF>() != gradients.front().at(1).value<QPointF>() &&
+        gradients.front().at(2).value<QColor>() == QColor(30, 120, 210, 192);
+    const bool preview_cleared = cleared.size() == 1;
+
+    const qreal target_left =
+        (canvas.width() - pixels.width() * canvas.zoomFactor()) / 2.0;
+    const qreal target_top =
+        (canvas.height() - pixels.height() * canvas.zoomFactor()) / 2.0;
+    const QPoint outside(static_cast<int>(std::floor(target_left / 2.0)),
+                         static_cast<int>(std::floor(target_top / 2.0)));
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, outside);
+    QTest::mouseMove(&canvas, start, 1);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    QCoreApplication::processEvents();
+    const bool outside_ignored = gradients.size() == 1;
+
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    QCoreApplication::processEvents();
+    const bool zero_length_ignored = gradients.size() == 1;
+    if (!activated || !previewed || !committed || !preview_cleared ||
+        !outside_ignored || !zero_length_ignored) {
+        std::cerr << "Linear Gradient UI failed: active=" << activated
+                  << ", preview=" << previewed << ", committed=" << committed
+                  << ", cleared=" << preview_cleared
+                  << ", outside=" << outside_ignored
+                  << ", zero-length=" << zero_length_ignored << '\n';
+    }
+    return activated && previewed && committed && preview_cleared &&
+        outside_ignored && zero_length_ignored;
+}
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -3070,6 +3146,10 @@ int main(int argc, char* argv[]) {
     if (application.arguments().contains(QStringLiteral("--bucket-fill-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testBucketFillTool() ? 0 : 1;
+    }
+    if (application.arguments().contains(QStringLiteral("--gradient-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testLinearGradientTool() ? 0 : 1;
     }
 
     {
@@ -3205,6 +3285,7 @@ int main(int argc, char* argv[]) {
     }
     if (!testEyedropperTool()) return 1;
     if (!testBucketFillTool()) return 1;
+    if (!testLinearGradientTool()) return 1;
     if (!testWindowTeardownWithFocusedTextEditor(temporary.path())) return 1;
     if (!testDeletionUi(temporary.path())) return 1;
     if (!testRasterImagesUi(temporary.path())) return 1;
