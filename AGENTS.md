@@ -225,6 +225,17 @@ Important decisions must be recorded in the documentation, indicating whether th
   explicitly requests them. Build only the application(s) and targets needed
   for the requested change and its required verification; do not rebuild
   unrelated applications or the whole suite without need.
+- Before building an application for the user to run, identify the executable
+  path used by their actual launch method, such as the Hub, a Visual Studio
+  launch profile, a shortcut, or a directly launched executable. Do not assume
+  that a README example, a test build directory, or a temporary build tree is
+  the executable the user is running. If the launch path cannot be determined
+  from repository configuration or the running process, ask the user which
+  launch method they use before building. Build that application and
+  configuration at its expected output path; do not silently copy an
+  executable from another build tree. After building, verify the full output
+  path and modification time and report the exact path. Do not claim the user's
+  app is updated unless the output matches the executable they launch.
 - Treat documentation as part of the implementation. Keep it aligned with the current code, architecture, behavior, and decisions, and update every affected document in the same change whenever code, UI, behavior, an API, a data format, build configuration, dependency, or project status changes. Verify the updated documentation against the implementation before considering the work complete.
 - Update the documentation whenever an architectural decision is made.
 - Whenever an application's version changes, create a version-specific changelog
