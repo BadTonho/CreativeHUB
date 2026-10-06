@@ -10,7 +10,7 @@ regra geral do repositório.
 
 ## Objetivo
 
-Planejar como os três editores, um Hub e uma ferramenta de recuperação poderão
+Planejar como os três editores, o Hub e uma ferramenta de recuperação poderão
 funcionar dentro da mesma suíte e do mesmo repositório. A recuperação deverá
 estar disponível como um executável independente e também como uma função
 integrada à interface do Hub. As atualizações serão distribuídas pelo GitHub
@@ -28,7 +28,7 @@ usuários.
 | Video Editor | Edição e exportação de vídeo e áudio | Aplicativo em desenvolvimento |
 | Image Editor | Edição raster e documentos de imagem | Aplicativo em desenvolvimento |
 | Motion Studio | Animação, composição e exportação de vídeo | Aplicativo em desenvolvimento |
-| Hub | Descobrir, iniciar e atualizar os aplicativos instalados | Planejado; ainda não é um alvo do produto |
+| Hub | Descobrir, iniciar e atualizar os aplicativos instalados | Em desenvolvimento |
 | Recuperação de aplicativos | Diagnosticar e reparar instalações ou atualizações interrompidas; disponível no Hub e em um executável independente | Planejada; ainda não é um alvo do produto |
 
 Os três editores são aplicativos independentes. Cada um continua sendo dono de
@@ -92,8 +92,9 @@ O Hub poderá:
 
 As primeiras versões devem priorizar descoberta e lançamento de aplicativos.
 O Hub não precisa ser a única entrada para atualizações: a direção em discussão
-é que cada editor apresente a mesma experiência de atualização ao ser aberto.
-O Hub pode reutilizar esse mecanismo comum para manter ou reparar a suíte.
+é que cada um dos quatro aplicativos — Video Editor, Image Editor, Motion Studio
+e Hub — apresente a mesma experiência de atualização ao ser aberto. O Hub pode
+reutilizar esse mecanismo comum para manter ou reparar a suíte.
 
 ### Recuperação de aplicativos
 
@@ -140,17 +141,17 @@ não ao manifesto imutável do executável.
 
 O GitHub Releases é a direção inicial de distribuição. O desenho deve permitir
 trocar o local do catálogo ou dos arquivos no futuro sem espalhar URLs do
-GitHub por todos os editores.
+GitHub por todos os aplicativos.
 
 ### Lançamento conjunto da suíte — direção em discussão
 
 Cada ciclo de lançamento da suíte deve deixar disponíveis no GitHub Releases
-os três editores: Video Editor, Image Editor e Motion Studio. Isso também vale
-para um editor que não recebeu mudanças naquele ciclo. A intenção é que a
-distribuição da suíte seja completa e que cada aplicativo encontre o mesmo
-catálogo e as mesmas regras de atualização.
+os quatro aplicativos: Video Editor, Image Editor, Motion Studio e Hub. Isso
+também vale para um aplicativo que não recebeu mudanças naquele ciclo. A
+intenção é que a distribuição da suíte seja completa e que cada aplicativo
+encontre o mesmo catálogo e as mesmas regras de atualização.
 
-Ainda não foi decidido como publicar um editor sem mudanças: anexar novamente
+Ainda não foi decidido como publicar um aplicativo sem mudanças: anexar novamente
 os mesmos bytes, referenciar seu artefato publicado anteriormente ou gerar um
 novo pacote. Também estão em aberto o uso de uma release do GitHub por ciclo da
 suíte ou releases separadas por componente, e como esses lançamentos se
@@ -159,17 +160,17 @@ atualização aparente para um aplicativo inalterado sem definir essa semântica
 
 ### Experiência de atualização — direção em discussão
 
-Ao abrir qualquer editor, o aplicativo deve consultar se há uma versão
-compatível mais recente e mostrar que existe uma atualização. A pessoa decide
-se quer iniciar o download; não há autorização nesta ideia para baixar ou
-instalar silenciosamente. Ainda falta decidir se instalar depois do download
-exige uma segunda confirmação.
+Ao abrir qualquer um dos quatro aplicativos, o aplicativo deve consultar se há
+uma versão compatível mais recente e mostrar que existe uma atualização. A
+pessoa decide se quer iniciar o download; não há autorização nesta ideia para
+baixar ou instalar silenciosamente. Ainda falta decidir se instalar depois do
+download exige uma segunda confirmação.
 
-Os três editores devem usar o mesmo mecanismo e apresentar o mesmo
+Os quatro aplicativos devem usar o mesmo mecanismo e apresentar o mesmo
 comportamento. A implementação pode ser compartilhada, mas ainda não está
 decidido se ficará numa biblioteca comum, num serviço do Hub ou num helper
-independente. O ponto de entrada dentro de cada editor não deve criar regras
-próprias de versão, verificação ou compatibilidade.
+independente. O ponto de entrada dentro de cada aplicativo não deve criar
+regras próprias de versão, verificação ou compatibilidade.
 
 ### Catálogo de releases
 
@@ -190,7 +191,7 @@ formato aprovado. Seu contrato deve atender aos editores, ao Hub e à ferramenta
 de recuperação, que podem iniciar a mesma operação de atualização.
 
 Tags independentes por componente continuam possíveis, desde que cada ciclo de
-lançamento da suíte aponte para um artefato distribuível de cada editor,
+lançamento da suíte aponte para um artefato distribuível de cada aplicativo,
 inclusive quando ele não mudou. Um padrão como `video-editor/vX.Y.Z` ou uma
 referência de suíte pode ser avaliado quando o fluxo de release for criado. A
 nomenclatura final das tags e dos canais ainda não foi decidida.
@@ -226,10 +227,10 @@ aberto.
 O fluxo abaixo é uma base de discussão para atualizações iniciadas pelo usuário
 e reversíveis:
 
-1. Ao abrir um editor, o mecanismo comum lê o manifesto local e consulta o
-   catálogo de releases.
+1. Ao abrir qualquer um dos quatro aplicativos, o mecanismo comum lê o
+   manifesto local e consulta o catálogo de releases.
 2. Compara versões e requisitos de plataforma e compatibilidade.
-3. Se houver uma versão compatível, o editor mostra a atualização disponível.
+3. Se houver uma versão compatível, o aplicativo mostra a atualização disponível.
    O download só começa após a pessoa escolher essa ação.
 4. Confere assinatura, hash, tamanho e identidade do componente.
 5. Registra a operação e preserva a versão anterior necessária para rollback.
@@ -269,14 +270,15 @@ pasta fixa do Windows nem misturar diretórios temporários com dados permanente
 
 1. **Documentar contratos:** estabilizar IDs temporários, metadados locais,
    diretórios de dados e limites de propriedade entre componentes.
-2. **Publicar editores manualmente:** validar instalação limpa e atualização
-   de uma versão anterior, mantendo um artefato distribuível de cada editor.
+2. **Publicar aplicativos manualmente:** validar instalação limpa e atualização
+   de uma versão anterior, mantendo um artefato distribuível para cada um dos
+   quatro aplicativos.
 3. **Automatizar releases:** criar builds por plataforma, testes de pacote,
-   checksums, assinaturas e catálogo versionado que represente os três editores
-   em cada ciclo da suíte.
-4. **Criar o Hub inicial e a consulta comum:** descobrir instalações, exibir
-   versões e iniciar os editores; mostrar em cada editor quando há uma
-   atualização compatível, sem baixar até a escolha da pessoa.
+   checksums, assinaturas e catálogo versionado que represente os quatro
+   aplicativos em cada ciclo da suíte.
+4. **Concluir o Hub e a consulta comum:** descobrir instalações, exibir versões
+   e iniciar os editores; mostrar em cada aplicativo quando há uma atualização
+   compatível, sem baixar até a escolha da pessoa.
 5. **Habilitar downloads e instalação:** implementar staging, verificação,
    registro, cancelamento seguro e rollback em uma plataforma antes de ampliar.
 6. **Criar a recuperação de aplicativo:** implementar um núcleo compartilhado
@@ -302,8 +304,8 @@ distribuído.
   seu artefato, referenciar o último ou gerar um novo pacote;
 - estrutura das releases do GitHub: uma release conjunta ou releases por
   componente vinculadas ao mesmo ciclo da suíte;
-- escopo da experiência comum: somente os três editores ou também o Hub e a
-  ferramenta independente de recuperação;
+- escopo da experiência comum além dos quatro aplicativos: se a ferramenta
+  independente de recuperação também participará;
 - política de retenção de versões anteriores e rollback;
 - confirmação separada para baixar e instalar uma atualização;
 - mecanismo de atualização do próprio Hub;
@@ -318,10 +320,11 @@ uma linguagem, framework, instalador ou protocolo entre processos.
 
 ## Critérios antes de oferecer downloads e instalação pelo aplicativo
 
-- Cada ciclo publicado da suíte lista um artefato válido para os três editores,
-  sem anunciar uma nova versão de um editor inalterado por engano.
-- Todos os editores consultam a mesma fonte e aplicam os mesmos critérios de
-  versão, assinatura, plataforma e compatibilidade.
+- Cada ciclo publicado da suíte lista um artefato válido para os quatro
+  aplicativos, sem anunciar uma nova versão de um aplicativo inalterado por
+  engano.
+- Todos os quatro aplicativos consultam a mesma fonte e aplicam os mesmos
+  critérios de versão, assinatura, plataforma e compatibilidade.
 - Nenhum artefato é baixado antes da ação escolhida pela pessoa.
 - Atualizar uma instalação existente sem alterar documentos, preferências ou
   snapshots do usuário.
