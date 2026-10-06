@@ -1,10 +1,25 @@
 #include "ui/dialogs/app_details_modal.h"
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QTemporaryDir>
+#include <QFile>
+#include <QDir>
 #include <cassert>
 #include <iostream>
 
 using namespace creative_suite::hub;
+
+namespace {
+
+void createTestChangelog(const QString& path, const QString& content) {
+    QFile file(path);
+    bool ok = file.open(QIODevice::WriteOnly | QIODevice::Text);
+    assert(ok);
+    file.write(content.toUtf8());
+    file.close();
+}
+
+} // namespace
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
@@ -25,6 +40,7 @@ int main(int argc, char* argv[]) {
 
     QWidget parent;
     parent.resize(800, 600);
+    parent.show();
 
     AppDetailsModal modal(&parent);
     assert(!modal.isVisible());
@@ -35,6 +51,29 @@ int main(int argc, char* argv[]) {
 
     assert(modal.isVisible());
     assert(modal.cardGeometry().isValid());
+    assert(modal.emptyChangelogLabel() != nullptr);
+
+    // Test changelog integration with a mock folder containing version notes
+    QTemporaryDir mockChangelogDir;
+    assert(mockChangelogDir.isValid());
+    QDir().mkpath(mockChangelogDir.path() + QStringLiteral("/video-editor"));
+    createTestChangelog(
+        mockChangelogDir.path() + QStringLiteral("/video-editor/0.1.0.md"),
+        QStringLiteral("# Notas 0.1.0\n- Novas funcionalidades implementadas.")
+    );
+    createTestChangelog(
+        mockChangelogDir.path() + QStringLiteral("/video-editor/0.2.0.md"),
+        QStringLiteral("# Notas 0.2.0\n- Melhorias de estabilidade.")
+    );
+
+    modal.setChangelogBasePath(mockChangelogDir.path());
+
+    assert(modal.changelogBrowser() != nullptr);
+    assert(modal.changelogBrowser()->isVisible());
+    assert(modal.versionCombo() != nullptr);
+    assert(modal.versionCombo()->isVisible());
+    assert(modal.versionCombo()->count() == 2);
+    assert(modal.changelogBrowser()->toPlainText().contains(QStringLiteral("Novas funcionalidades")));
 
     bool closedSignalReceived = false;
     QObject::connect(&modal, &AppDetailsModal::closed, [&closedSignalReceived]() {

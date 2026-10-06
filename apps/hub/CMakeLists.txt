@@ -10,6 +10,8 @@ add_library(creative-suite-hub-core STATIC
     src/model/app_info.h
     src/model/app_info.cpp
     src/model/download_item.h
+    src/model/changelog_reader.h
+    src/model/changelog_reader.cpp
     src/model/app_catalog.h
     src/model/app_catalog.cpp
     src/diagnostics/hub_logger.h

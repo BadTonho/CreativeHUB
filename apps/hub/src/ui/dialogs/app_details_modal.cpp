@@ -11,6 +11,8 @@
 #include <QMouseEvent>
 #include <QKeyEvent>
 #include <QEasingCurve>
+#include <QComboBox>
+#include <QTextBrowser>
 #include <algorithm>
 
 namespace creative_suite::hub {
@@ -201,6 +203,102 @@ void AppDetailsModal::setupUi() {
     techLayout->addWidget(m_exeLabel);
 
     contentLayout->addWidget(techCard);
+
+    // Changelog section
+    auto* changelogHeaderRow = new QHBoxLayout();
+    changelogHeaderRow->setContentsMargins(0, 4, 0, 0);
+
+    auto* changelogTitle = new QLabel(QStringLiteral("NOTAS DE VERSÃO"), scrollContent);
+    changelogTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #787888; letter-spacing: 0.5px;"));
+    changelogHeaderRow->addWidget(changelogTitle);
+    changelogHeaderRow->addStretch();
+
+    m_versionBadge = new QLabel(scrollContent);
+    m_versionBadge->setStyleSheet(QStringLiteral(
+        "background-color: #2e2e3c; color: #a4a4b8; font-size: 11px; font-weight: 600; "
+        "border-radius: 6px; padding: 2px 8px;"
+    ));
+    m_versionBadge->setVisible(false);
+    changelogHeaderRow->addWidget(m_versionBadge);
+
+    m_versionCombo = new QComboBox(scrollContent);
+    m_versionCombo->setCursor(Qt::PointingHandCursor);
+    m_versionCombo->setFixedHeight(26);
+    m_versionCombo->setStyleSheet(QStringLiteral(
+        "QComboBox {"
+        "   background-color: #24242c;"
+        "   border: 1px solid #383846;"
+        "   border-radius: 6px;"
+        "   color: #e0e0ea;"
+        "   font-size: 11px;"
+        "   font-weight: 600;"
+        "   padding: 2px 10px 2px 8px;"
+        "}"
+        "QComboBox:hover {"
+        "   border-color: #4e4e5e;"
+        "}"
+        "QComboBox::drop-down {"
+        "   border: none;"
+        "   width: 16px;"
+        "}"
+        "QComboBox QAbstractItemView {"
+        "   background-color: #1e1e24;"
+        "   border: 1px solid #383846;"
+        "   selection-background-color: #3b82f6;"
+        "   color: #e0e0ea;"
+        "   font-size: 11px;"
+        "}"
+    ));
+    m_versionCombo->setVisible(false);
+    connect(m_versionCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index >= 0 && m_versionCombo) {
+            const QString ver = m_versionCombo->itemData(index).toString();
+            loadChangelogForVersion(ver);
+        }
+    });
+    changelogHeaderRow->addWidget(m_versionCombo);
+
+    contentLayout->addLayout(changelogHeaderRow);
+
+    m_changelogCard = new QFrame(scrollContent);
+    m_changelogCard->setObjectName(QStringLiteral("ChangelogCard"));
+    m_changelogCard->setStyleSheet(QStringLiteral(
+        "#ChangelogCard {"
+        "   background-color: #24242c;"
+        "   border: 1px solid #32323c;"
+        "   border-radius: 8px;"
+        "   padding: 10px 14px;"
+        "}"
+    ));
+    auto* changelogLayout = new QVBoxLayout(m_changelogCard);
+    changelogLayout->setContentsMargins(10, 10, 10, 10);
+    changelogLayout->setSpacing(6);
+
+    m_changelogBrowser = new QTextBrowser(m_changelogCard);
+    m_changelogBrowser->setOpenExternalLinks(true);
+    m_changelogBrowser->setReadOnly(true);
+    m_changelogBrowser->setMinimumHeight(130);
+    m_changelogBrowser->document()->setDocumentMargin(2);
+    m_changelogBrowser->setStyleSheet(QStringLiteral(
+        "QTextBrowser {"
+        "   background: transparent;"
+        "   border: none;"
+        "   color: #d0d0dc;"
+        "   font-size: 12px;"
+        "   line-height: 1.4;"
+        "   selection-background-color: #3b82f6;"
+        "}"
+    ));
+    changelogLayout->addWidget(m_changelogBrowser);
+
+    m_emptyChangelogLabel = new QLabel(m_changelogCard);
+    m_emptyChangelogLabel->setWordWrap(true);
+    m_emptyChangelogLabel->setStyleSheet(QStringLiteral(
+        "color: #7e7e8e; font-size: 12px; font-style: italic; background: transparent;"
+    ));
+    changelogLayout->addWidget(m_emptyChangelogLabel);
+
+    contentLayout->addWidget(m_changelogCard);
     contentLayout->addStretch();
 
     scrollArea->setWidget(scrollContent);
@@ -219,8 +317,8 @@ void AppDetailsModal::setupUi() {
 }
 
 QRect AppDetailsModal::targetCardRect() const {
-    const int cardW = std::clamp(width() - 80, 480, 620);
-    const int cardH = std::clamp(height() - 60, 420, 520);
+    const int cardW = std::clamp(width() - 80, 500, 660);
+    const int cardH = std::clamp(height() - 60, 440, 580);
     const int x = (width() - cardW) / 2;
     const int y = (height() - cardH) / 2;
     return QRect(x, y, cardW, cardH);
@@ -250,6 +348,34 @@ void AppDetailsModal::clearFeatures() {
             delete widget;
         }
         delete item;
+    }
+}
+
+void AppDetailsModal::setChangelogBasePath(const QString& path) {
+    m_changelogReader.setBasePath(path);
+    if (!m_app.id().isEmpty()) {
+        updateVisuals();
+    }
+}
+
+void AppDetailsModal::loadChangelogForVersion(const QString& version) {
+    if (!m_changelogBrowser) {
+        return;
+    }
+    const QString md = m_changelogReader.loadChangelog(m_app.id(), version);
+    if (!md.trimmed().isEmpty()) {
+        m_changelogBrowser->setMarkdown(md);
+        m_changelogBrowser->setVisible(true);
+        if (m_emptyChangelogLabel) {
+            m_emptyChangelogLabel->setVisible(false);
+        }
+    } else {
+        m_changelogBrowser->setVisible(false);
+        if (m_emptyChangelogLabel) {
+            m_emptyChangelogLabel->setText(
+                QStringLiteral("Não foi possível carregar as notas da versão %1.").arg(version));
+            m_emptyChangelogLabel->setVisible(true);
+        }
     }
 }
 
@@ -401,6 +527,67 @@ void AppDetailsModal::updateVisuals() {
     }
 
     m_exeLabel->setText(QStringLiteral("<b>Arquivo executável:</b> %1").arg(m_app.executableName()));
+
+    // Populate changelog section
+    const QStringList versions = m_changelogReader.availableVersions(m_app.id());
+    if (!versions.isEmpty()) {
+        if (m_emptyChangelogLabel) {
+            m_emptyChangelogLabel->setVisible(false);
+        }
+        if (m_changelogBrowser) {
+            m_changelogBrowser->setVisible(true);
+        }
+
+        if (m_versionCombo) {
+            m_versionCombo->blockSignals(true);
+            m_versionCombo->clear();
+            for (const auto& ver : versions) {
+                m_versionCombo->addItem(QStringLiteral("v%1").arg(ver), ver);
+            }
+            m_versionCombo->blockSignals(false);
+        }
+
+        int selectedIdx = 0;
+        const QString preferredVer = !m_app.installedVersion().isEmpty() ? m_app.installedVersion() : m_app.latestVersion();
+        const int matchIdx = versions.indexOf(preferredVer);
+        if (matchIdx >= 0) {
+            selectedIdx = matchIdx;
+        }
+
+        if (versions.size() > 1 && m_versionCombo) {
+            if (m_versionBadge) {
+                m_versionBadge->setVisible(false);
+            }
+            m_versionCombo->setVisible(true);
+            m_versionCombo->setCurrentIndex(selectedIdx);
+        } else {
+            if (m_versionCombo) {
+                m_versionCombo->setVisible(false);
+            }
+            if (m_versionBadge) {
+                m_versionBadge->setText(QStringLiteral("v%1").arg(versions.first()));
+                m_versionBadge->setVisible(true);
+            }
+        }
+
+        loadChangelogForVersion(versions.value(selectedIdx));
+    } else {
+        if (m_versionCombo) {
+            m_versionCombo->setVisible(false);
+        }
+        if (m_versionBadge) {
+            m_versionBadge->setVisible(false);
+        }
+        if (m_changelogBrowser) {
+            m_changelogBrowser->setVisible(false);
+        }
+        if (m_emptyChangelogLabel) {
+            m_emptyChangelogLabel->setText(
+                QStringLiteral("Nenhuma nota de versão registrada para o %1 ainda. As notas de lançamento serão disponibilizadas aqui conforme novas versões forem lançadas.")
+                .arg(m_app.name()));
+            m_emptyChangelogLabel->setVisible(true);
+        }
+    }
 }
 
 void AppDetailsModal::paintEvent(QPaintEvent*) {

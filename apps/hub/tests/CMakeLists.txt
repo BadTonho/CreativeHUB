@@ -23,6 +23,11 @@ target_link_libraries(hub-details-modal-test PRIVATE creative-suite-hub-core Qt6
 target_compile_features(hub-details-modal-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-details-modal-test COMMAND hub-details-modal-test)
 
+add_executable(hub-changelog-reader-test test_changelog_reader.cpp)
+target_link_libraries(hub-changelog-reader-test PRIVATE creative-suite-hub-core Qt6::Core)
+target_compile_features(hub-changelog-reader-test PRIVATE cxx_std_20)
+add_creative_suite_test(NAME hub-changelog-reader-test COMMAND hub-changelog-reader-test)
+
 if(WIN32)
     get_target_property(QT_HUB_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
     if(NOT QT_HUB_CORE_DLL)
@@ -36,7 +41,8 @@ if(WIN32)
             hub-launcher-test
             hub-logger-test
             hub-card-widget-test
-            hub-details-modal-test)
+            hub-details-modal-test
+            hub-changelog-reader-test)
         add_custom_command(TARGET ${TEST_TARGET} POST_BUILD
             COMMAND "${QT_HUB_DEPLOY_TOOL}"
                 --no-translations

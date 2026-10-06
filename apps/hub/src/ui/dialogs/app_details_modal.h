@@ -1,10 +1,13 @@
 #pragma once
 
 #include "../../model/app_info.h"
+#include "../../model/changelog_reader.h"
 #include <QWidget>
 #include <QFrame>
 #include <QLabel>
 #include <QPushButton>
+#include <QComboBox>
+#include <QTextBrowser>
 #include <QPointer>
 #include <QPropertyAnimation>
 #include <QVBoxLayout>
@@ -28,6 +31,13 @@ public:
     [[nodiscard]] double backdropOpacity() const noexcept { return m_backdropOpacity; }
     void setBackdropOpacity(double opacity);
 
+    void setChangelogBasePath(const QString& path);
+    void loadChangelogForVersion(const QString& version);
+
+    [[nodiscard]] QTextBrowser* changelogBrowser() const noexcept { return m_changelogBrowser; }
+    [[nodiscard]] QComboBox* versionCombo() const noexcept { return m_versionCombo; }
+    [[nodiscard]] QLabel* emptyChangelogLabel() const noexcept { return m_emptyChangelogLabel; }
+
 signals:
     void actionRequested(const QString& appId);
     void closed();
@@ -49,6 +59,7 @@ private:
     QRect m_originRect;
     double m_backdropOpacity{0.0};
     bool m_isClosing{false};
+    ChangelogReader m_changelogReader;
 
     QFrame* m_cardFrame{nullptr};
     QLabel* m_iconLabel{nullptr};
@@ -61,6 +72,13 @@ private:
     QPushButton* m_actionButton{nullptr};
     QPushButton* m_closeIconButton{nullptr};
     QPushButton* m_closeBottomButton{nullptr};
+
+    // Changelog section widgets
+    QLabel* m_versionBadge{nullptr};
+    QComboBox* m_versionCombo{nullptr};
+    QFrame* m_changelogCard{nullptr};
+    QTextBrowser* m_changelogBrowser{nullptr};
+    QLabel* m_emptyChangelogLabel{nullptr};
 
     QPointer<QPropertyAnimation> m_geometryAnim;
     QPointer<QPropertyAnimation> m_opacityAnim;
