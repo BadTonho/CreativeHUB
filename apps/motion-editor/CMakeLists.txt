@@ -10,6 +10,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/audio/audio_envelope_analyzer.h
     src/diagnostics/performance_metrics.cpp
     src/diagnostics/performance_metrics.h
+    src/export/motion_video_export.cpp
+    src/export/motion_video_export.h
     src/model/composition_document.cpp
     src/model/composition_document.h
     src/model/motion_project_data.h
@@ -17,6 +19,16 @@ add_library(creative-suite-motion-editor-core STATIC
     src/persistence/motion_recovery_store.h
     src/persistence/motion_document_store.cpp
     src/persistence/motion_document_store.h
+    src/rendering/preview_renderer.cpp
+    src/rendering/preview_renderer.h
+    src/rendering/composition_frame_renderer.cpp
+    src/rendering/composition_frame_renderer.h
+    src/rendering/layer_content_renderer.cpp
+    src/rendering/layer_content_renderer.h
+    src/rendering/layer_effect_processor.cpp
+    src/rendering/layer_effect_processor.h
+    src/rendering/layer_effect_worker_pool.cpp
+    src/rendering/layer_effect_worker_pool.h
     src/settings/autosave_preferences.cpp
     src/settings/autosave_preferences.h
     src/ui/autosave_recovery_dialog.cpp
@@ -49,22 +61,10 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/general_settings_dialog.h
     src/ui/inspector/inspector_widget.cpp
     src/ui/inspector/inspector_widget.h
-    src/ui/preview_renderer.cpp
-    src/ui/preview_renderer.h
     src/ui/property_curve_editor.cpp
     src/ui/property_curve_editor.h
-    src/ui/composition_frame_renderer.cpp
-    src/ui/composition_frame_renderer.h
-    src/ui/motion_video_export.cpp
-    src/ui/motion_video_export.h
     src/ui/motion_video_export_dialog.cpp
     src/ui/motion_video_export_dialog.h
-    src/ui/layer_content_renderer.cpp
-    src/ui/layer_content_renderer.h
-    src/ui/layer_effect_processor.cpp
-    src/ui/layer_effect_processor.h
-    src/ui/layer_effect_worker_pool.cpp
-    src/ui/layer_effect_worker_pool.h
     src/ui/timeline/timeline_controls.cpp
     src/ui/timeline/timeline_controls.h
     src/ui/timeline/timeline_layer_tracks.cpp

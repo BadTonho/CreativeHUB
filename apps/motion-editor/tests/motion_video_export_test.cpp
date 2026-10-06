@@ -1,5 +1,5 @@
 #include "ui/main_window.h"
-#include "ui/motion_video_export.h"
+#include "export/motion_video_export.h"
 #include "ui/motion_video_export_dialog.h"
 
 #include <creative_suite/media/video_encoder.h>

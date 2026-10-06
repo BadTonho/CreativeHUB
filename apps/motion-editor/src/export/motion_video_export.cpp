@@ -1,6 +1,6 @@
 #include "motion_video_export.h"
 
-#include "composition_frame_renderer.h"
+#include "rendering/composition_frame_renderer.h"
 
 #include <creative_suite/diagnostics/logger.h>
 #include <creative_suite/media/media_error.h>

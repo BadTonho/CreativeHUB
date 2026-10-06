@@ -1,6 +1,6 @@
 #pragma once
 
-#include "motion_video_export.h"
+#include "export/motion_video_export.h"
 
 #include <QDialog>
 

@@ -1,10 +1,10 @@
 # Análise de reorganização dos arquivos do Motion Studio
 
-**Status:** primeira etapa implementada em 2026-10-06. Esta é uma nota
+**Status:** primeira e segunda etapas implementadas em 2026-10-06. Esta é uma nota
 provisória de planejamento, owner-only, em português; não registra uma decisão
 arquitetural definitiva.
 
-## Diagnóstico e resultado da primeira etapa
+## Diagnóstico e resultado das duas primeiras etapas
 
 Antes da divisão, `apps/motion-editor/src/ui/main_window.cpp` tinha **2.814
 linhas físicas**. O arquivo concentrava abertura e salvamento de documentos,
@@ -29,19 +29,18 @@ compila os seguintes arquivos:
 Os helpers exclusivos de edição permanecem em `main_window_editing.cpp`.
 `main_window.h` e os testes existentes mantêm suas interfaces.
 
+### Segunda etapa: renderização e exportação
+
+Os cinco componentes de preview, composição de frames, conteúdo de camadas,
+efeitos e workers de efeitos agora ficam em `src/rendering/`. O exportador
+`motion_video_export.*` fica em `src/export/`; o diálogo de exportação
+permanece em `src/ui/`. Os consumidores e os includes dos testes foram
+atualizados. Namespaces, tipos, assinaturas, comportamento e formato `.motion`
+permanecem iguais, e os componentes continuam específicos do Motion Studio.
+
 ## Outras oportunidades identificadas
 
-Estas sugestões permanecem fora do escopo executado nesta etapa.
-
-### Separar processamento de renderização e exportação da interface
-
-Se uma mudança futura trouxer benefício claro, considerar mover
-`preview_renderer.*`, `composition_frame_renderer.*`,
-`layer_content_renderer.*`, `layer_effect_processor.*` e
-`layer_effect_worker_pool.*` para `src/rendering/`, e
-`motion_video_export.*` para `src/export/`. O diálogo de exportação continuaria
-na interface. Essa mudança de pasta não implicaria promover componentes do
-Motion Studio para uma biblioteca compartilhada.
+Estas sugestões permanecem fora do escopo executado nas duas primeiras etapas.
 
 ### Agrupar diálogos e avaliar o histórico
 
@@ -62,10 +61,10 @@ src/
   audio/
   application/
   diagnostics/
-  export/       # oportunidade futura
+  export/
   model/
   persistence/
-  rendering/    # oportunidade futura
+  rendering/
   settings/
   ui/
     dialogs/    # oportunidade futura

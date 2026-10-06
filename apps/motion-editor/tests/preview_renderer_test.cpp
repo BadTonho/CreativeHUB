@@ -1,8 +1,8 @@
-#include "ui/preview_renderer.h"
-#include "ui/composition_frame_renderer.h"
-#include "ui/layer_content_renderer.h"
-#include "ui/layer_effect_processor.h"
-#include "ui/layer_effect_worker_pool.h"
+#include "rendering/preview_renderer.h"
+#include "rendering/composition_frame_renderer.h"
+#include "rendering/layer_content_renderer.h"
+#include "rendering/layer_effect_processor.h"
+#include "rendering/layer_effect_worker_pool.h"
 #include "diagnostics/performance_metrics.h"
 
 #include <creative_suite/diagnostics/logger.h>

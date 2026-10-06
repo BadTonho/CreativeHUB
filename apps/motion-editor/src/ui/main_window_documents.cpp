@@ -3,8 +3,8 @@
 
 #include "audio_keyframe_generation.h"
 #include "composition_viewer.h"
-#include "motion_video_export.h"
-#include "preview_renderer.h"
+#include "export/motion_video_export.h"
+#include "rendering/preview_renderer.h"
 
 #include "../persistence/motion_document_store.h"
 #include "inspector/inspector_widget.h"

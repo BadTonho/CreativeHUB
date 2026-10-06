@@ -1,11 +1,11 @@
 #include "main_window.h"
 
 #include "../settings/autosave_preferences.h"
-#include "layer_effect_worker_pool.h"
+#include "rendering/layer_effect_worker_pool.h"
 #include "media_pool_widget.h"
 #include "timeline_navigator.h"
 
-#include "preview_renderer.h"
+#include "rendering/preview_renderer.h"
 
 #include <creative_suite/diagnostics/logger.h>
 

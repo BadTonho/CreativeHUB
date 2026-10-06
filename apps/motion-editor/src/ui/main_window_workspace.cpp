@@ -5,7 +5,7 @@
 #include "inspector/inspector_widget.h"
 #include "media_pool_widget.h"
 #include "property_curve_editor.h"
-#include "preview_renderer.h"
+#include "rendering/preview_renderer.h"
 #include "timeline_navigator.h"
 #include "workspace/motion_workspace.h"
 

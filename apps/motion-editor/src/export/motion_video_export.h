@@ -1,7 +1,7 @@
 #pragma once
 
 #include "model/composition_document.h"
-#include "preview_renderer.h"
+#include "rendering/preview_renderer.h"
 
 #include <creative_suite/media/video_encoder.h>
 
