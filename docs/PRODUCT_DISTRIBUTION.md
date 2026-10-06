@@ -151,12 +151,16 @@ também vale para um aplicativo que não recebeu mudanças naquele ciclo. A
 intenção é que a distribuição da suíte seja completa e que cada aplicativo
 encontre o mesmo catálogo e as mesmas regras de atualização.
 
-Ainda não foi decidido como publicar um aplicativo sem mudanças: anexar novamente
-os mesmos bytes, referenciar seu artefato publicado anteriormente ou gerar um
-novo pacote. Também estão em aberto o uso de uma release do GitHub por ciclo da
-suíte ou releases separadas por componente, e como esses lançamentos se
-relacionam com as versões individuais dos aplicativos. Não se deve criar uma
-atualização aparente para um aplicativo inalterado sem definir essa semântica.
+Quando um aplicativo não mudar, a decisão é anexar novamente o mesmo
+instalador, sem reconstruí-lo. Assim, quem baixar a release mais recente da
+suíte encontrará os instaladores dos quatro aplicativos no mesmo lugar. Essa
+republicação não cria, por si só, uma nova versão do aplicativo: o catálogo
+deve continuar identificando a versão contida no instalador para não anunciar
+uma atualização inexistente a quem já o possui.
+
+Ainda está em aberto o uso de uma release do GitHub por ciclo da suíte ou de
+releases separadas por componente, e como esses lançamentos se relacionam com
+as versões individuais dos aplicativos.
 
 ### Experiência de atualização — direção em discussão
 
@@ -300,8 +304,6 @@ distribuído.
 - instalação por usuário ou por sistema e requisitos de elevação;
 - esquema e assinatura do catálogo de releases;
 - formatos de pacote e canais de lançamento por sistema operacional;
-- representação de um editor inalterado em cada lançamento da suíte: repetir
-  seu artefato, referenciar o último ou gerar um novo pacote;
 - estrutura das releases do GitHub: uma release conjunta ou releases por
   componente vinculadas ao mesmo ciclo da suíte;
 - escopo da experiência comum além dos quatro aplicativos: se a ferramenta
