@@ -63,6 +63,15 @@ explicitamente, preservando o acesso que antes vinha por inclusão indireta.
 Tipos, assinaturas e comportamento permanecem iguais. O arquivo e o alvo do
 teste não mudaram, então `ROADMAP.md` permaneceu inalterado.
 
+### Revisão estrutural após a quinta etapa
+
+A revisão dos arquivos restantes não identificou outro agrupamento que
+justifique movimentação nesta etapa. `AudioKeyframeGenerationWorker` permanece
+em `src/ui/` porque é um adaptador de `QThread` e entrega callbacks por Qt; a
+análise de envelope já está isolada em `src/audio/`. Os demais componentes de
+interface restantes não formam um grupo coeso adicional que justifique nova
+movimentação.
+
 ## Estrutura de referência
 
 ```text

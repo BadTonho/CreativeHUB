@@ -2,19 +2,26 @@
 #include "model/composition_document.h"
 #include "model/motion_project_data.h"
 #include "persistence/motion_document_store.h"
+#include "ui/audio_keyframe_generation.h"
 #include "ui/dialogs/audio_keyframe_dialog.h"
 #include "application/history/composition_history.h"
 #include "ui/main_window.h"
 
+#include <creative_suite/diagnostics/logger.h>
+
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QThread>
 #include <QTemporaryDir>
 #include <QTimer>
 
@@ -24,9 +31,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -86,9 +96,43 @@ std::filesystem::path pathFromQString(const QString& path)
     return std::filesystem::path(std::u8string(first, first + bytes.size()));
 }
 
+std::string pathToUtf8(const std::filesystem::path& path)
+{
+    const auto encoded = path.generic_u8string();
+    return {reinterpret_cast<const char*>(encoded.data()), encoded.size()};
+}
+
 bool near(double actual, double expected, double tolerance = 0.002)
 {
     return std::abs(actual - expected) <= tolerance;
+}
+
+template <typename Predicate>
+bool waitForWorker(motion::ui::AudioKeyframeGenerationWorker& worker,
+                   Predicate completed,
+                   int timeout_ms = 10'000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!completed() && timer.elapsed() < timeout_ms) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
+        QThread::msleep(1);
+    }
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
+    if (!completed()) {
+        worker.cancelAndWait();
+        worker.wait();
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
+        return false;
+    }
+    worker.wait();
+    return true;
+}
+
+std::string readTextFile(const std::filesystem::path& path)
+{
+    std::ifstream input(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
 } // namespace
@@ -189,6 +233,108 @@ int main(int argc, char** argv)
         invalid_rejected = true;
     }
     require(invalid_rejected, "an invalid audio source is rejected");
+
+    auto& logger = creative_suite::diagnostics::Logger::instance();
+    require(logger.initialize(fixture_directory / "diagnostics"),
+            "a temporary diagnostics log is initialized for worker checks");
+    const auto make_worker_request = [&](const std::filesystem::path& path,
+                                         LayerId id) {
+        motion::ui::AudioKeyframeGenerationRequest request;
+        request.audio_path = path;
+        request.layer_id = id;
+        request.frame_rate = FrameRate{24, 1};
+        request.layer_duration_frames = 72;
+        request.analysis_frame_limit = 48;
+        request.property = TransformProperty::Scale;
+        request.minimum_value = 1.0;
+        request.maximum_value = 2.0;
+        request.maximum_keyframe_count = 100;
+        return request;
+    };
+
+    QObject worker_receiver;
+    std::optional<motion::ui::AudioKeyframeGenerationResult> successful_result;
+    std::vector<int> worker_progress;
+    bool success_callbacks_on_receiver_thread = true;
+    motion::ui::AudioKeyframeGenerationWorker successful_worker(
+        &worker_receiver, make_worker_request(audio_path, 41),
+        [&](int progress) {
+            success_callbacks_on_receiver_thread = success_callbacks_on_receiver_thread &&
+                QThread::currentThread() == worker_receiver.thread();
+            worker_progress.push_back(progress);
+        },
+        [&](motion::ui::AudioKeyframeGenerationResult result) {
+            success_callbacks_on_receiver_thread = success_callbacks_on_receiver_thread &&
+                QThread::currentThread() == worker_receiver.thread();
+            successful_result = std::move(result);
+        });
+    successful_worker.start();
+    require(waitForWorker(successful_worker, [&] {
+                return successful_result.has_value() && !worker_progress.empty();
+            }),
+            "the successful audio keyframe worker completes before timeout");
+    require(successful_result->succeeded && !successful_result->cancelled &&
+                !successful_result->silent && successful_result->audio_path == audio_path &&
+                successful_result->layer_id == 41 &&
+                successful_result->property == TransformProperty::Scale &&
+                successful_result->keyframes.size() == 49 &&
+                successful_result->keyframes.back().frame == 48,
+            "the worker returns keyframes and preserves request identity on success");
+    require(!worker_progress.empty() &&
+                std::all_of(worker_progress.begin(), worker_progress.end(),
+                    [](int progress) { return progress >= 0 && progress <= 100; }),
+            "the worker reports bounded audio analysis progress");
+    require(success_callbacks_on_receiver_thread,
+            "worker progress and completion callbacks run on the receiver thread");
+
+    const auto log_before_cancel = readTextFile(logger.log_path());
+    std::optional<motion::ui::AudioKeyframeGenerationResult> cancelled_result;
+    bool cancellation_callback_on_receiver_thread = true;
+    motion::ui::AudioKeyframeGenerationWorker cancelled_worker(
+        &worker_receiver, make_worker_request(audio_path, 42), {},
+        [&](motion::ui::AudioKeyframeGenerationResult result) {
+            cancellation_callback_on_receiver_thread =
+                QThread::currentThread() == worker_receiver.thread();
+            cancelled_result = std::move(result);
+        });
+    cancelled_worker.cancel();
+    cancelled_worker.start();
+    require(waitForWorker(cancelled_worker, [&] { return cancelled_result.has_value(); }),
+            "the pre-cancelled audio keyframe worker completes before timeout");
+    require(cancelled_result->cancelled && !cancelled_result->succeeded &&
+                cancelled_result->error_message.empty() &&
+                cancelled_result->keyframes.empty() &&
+                cancellation_callback_on_receiver_thread,
+            "cancellation before worker start returns a cancelled result without an error");
+    require(readTextFile(logger.log_path()) == log_before_cancel,
+            "expected cancellation does not add an error log entry");
+
+    std::optional<motion::ui::AudioKeyframeGenerationResult> failed_result;
+    bool failure_callback_on_receiver_thread = true;
+    constexpr LayerId failed_layer_id = 73;
+    motion::ui::AudioKeyframeGenerationWorker failed_worker(
+        &worker_receiver, make_worker_request(invalid_path, failed_layer_id), {},
+        [&](motion::ui::AudioKeyframeGenerationResult result) {
+            failure_callback_on_receiver_thread =
+                QThread::currentThread() == worker_receiver.thread();
+            failed_result = std::move(result);
+        });
+    failed_worker.start();
+    require(waitForWorker(failed_worker, [&] { return failed_result.has_value(); }),
+            "the failing audio keyframe worker completes before timeout");
+    require(!failed_result->succeeded && !failed_result->cancelled &&
+                !failed_result->error_message.empty() &&
+                failed_result->audio_path == invalid_path &&
+                failed_result->layer_id == failed_layer_id &&
+                failure_callback_on_receiver_thread,
+            "worker failure returns the technical error and preserves request identity");
+    const auto failure_log = readTextFile(logger.log_path());
+    require(failure_log.find("subsystem=\"motion_audio\"") != std::string::npos &&
+                failure_log.find("operation=\"generate_keyframes\"") != std::string::npos &&
+                failure_log.find("path=\"" + pathToUtf8(invalid_path) + "\"") !=
+                    std::string::npos &&
+                failure_log.find("layer_id=\"73\"") != std::string::npos,
+            "worker failure logs its operation, audio path, and layer ID");
 
     std::atomic_bool already_cancelled{true};
     bool cancellation_observed = false;
