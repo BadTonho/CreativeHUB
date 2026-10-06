@@ -1,10 +1,10 @@
 # Análise de reorganização dos arquivos do Motion Studio
 
-**Status:** primeira e segunda etapas implementadas em 2026-10-06. Esta é uma nota
+**Status:** três etapas implementadas em 2026-10-06. Esta é uma nota
 provisória de planejamento, owner-only, em português; não registra uma decisão
 arquitetural definitiva.
 
-## Diagnóstico e resultado das duas primeiras etapas
+## Diagnóstico e resultado das três primeiras etapas
 
 Antes da divisão, `apps/motion-editor/src/ui/main_window.cpp` tinha **2.814
 linhas físicas**. O arquivo concentrava abertura e salvamento de documentos,
@@ -38,15 +38,24 @@ permanece em `src/ui/`. Os consumidores e os includes dos testes foram
 atualizados. Namespaces, tipos, assinaturas, comportamento e formato `.motion`
 permanecem iguais, e os componentes continuam específicos do Motion Studio.
 
+### Terceira etapa: diálogos
+
+Os diálogos de recuperação, geração de keyframes de áudio, exportação, nova
+composição, atalhos e configurações gerais foram agrupados em
+`src/ui/dialogs/`. O CMake, a janela principal e os testes que incluem esses
+headers apontam para os novos caminhos. As classes, suas interfaces e o
+comportamento da interface permanecem iguais.
+
 ## Outras oportunidades identificadas
 
-Estas sugestões permanecem fora do escopo executado nas duas primeiras etapas.
+Estas sugestões permanecem fora do escopo executado nas três primeiras etapas.
 
-### Agrupar diálogos e avaliar o histórico
+### Avaliar o histórico de edição
 
-Uma futura limpeza pode agrupar os diálogos em `src/ui/dialogs/` e avaliar se
-`composition_history.*` fica mais claro em uma área da aplicação. As pastas
-`timeline/`, `workspace/` e `inspector/` já oferecem agrupamentos por domínio.
+`composition_history.*` não é um widget. Uma etapa futura pode avaliar se sua
+responsabilidade fica mais clara em uma área da aplicação, como
+`src/application/history/`. As pastas `timeline/`, `workspace/` e `inspector/`
+já oferecem agrupamentos por domínio.
 
 ### Consolidar caminhos canônicos do timeline
 
@@ -67,7 +76,7 @@ src/
   rendering/
   settings/
   ui/
-    dialogs/    # oportunidade futura
+    dialogs/
     inspector/
     timeline/
     workspace/

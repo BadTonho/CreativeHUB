@@ -2,11 +2,11 @@
 #include "main_window_support.h"
 
 #include "../persistence/motion_document_store.h"
-#include "audio_keyframe_dialog.h"
+#include "dialogs/audio_keyframe_dialog.h"
 #include "audio_keyframe_generation.h"
 #include "export/motion_video_export.h"
 #include "media_pool_widget.h"
-#include "motion_video_export_dialog.h"
+#include "dialogs/motion_video_export_dialog.h"
 #include "timeline_navigator.h"
 
 #include <creative_suite/animation/animation.h>

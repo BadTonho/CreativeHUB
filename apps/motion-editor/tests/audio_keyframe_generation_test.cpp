@@ -2,7 +2,7 @@
 #include "model/composition_document.h"
 #include "model/motion_project_data.h"
 #include "persistence/motion_document_store.h"
-#include "ui/audio_keyframe_dialog.h"
+#include "ui/dialogs/audio_keyframe_dialog.h"
 #include "ui/composition_history.h"
 #include "ui/main_window.h"
 

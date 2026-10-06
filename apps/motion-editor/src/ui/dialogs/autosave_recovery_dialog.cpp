@@ -1,6 +1,6 @@
 #include "autosave_recovery_dialog.h"
 
-#include "../settings/autosave_preferences.h"
+#include "settings/autosave_preferences.h"
 
 #include <QCheckBox>
 #include <QAbstractItemView>

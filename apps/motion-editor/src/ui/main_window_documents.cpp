@@ -9,7 +9,7 @@
 #include "../persistence/motion_document_store.h"
 #include "inspector/inspector_widget.h"
 #include "media_pool_widget.h"
-#include "new_composition_dialog.h"
+#include "dialogs/new_composition_dialog.h"
 #include "timeline_navigator.h"
 #include "workspace/motion_workspace.h"
 

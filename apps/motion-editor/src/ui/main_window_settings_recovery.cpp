@@ -3,9 +3,9 @@
 
 #include "../persistence/motion_document_store.h"
 #include "../settings/autosave_preferences.h"
-#include "autosave_recovery_dialog.h"
-#include "general_settings_dialog.h"
-#include "shortcut_settings_dialog.h"
+#include "dialogs/autosave_recovery_dialog.h"
+#include "dialogs/general_settings_dialog.h"
+#include "dialogs/shortcut_settings_dialog.h"
 
 #include <creative_suite/diagnostics/logger.h>
 

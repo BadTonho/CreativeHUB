@@ -31,10 +31,6 @@ add_library(creative-suite-motion-editor-core STATIC
     src/rendering/layer_effect_worker_pool.h
     src/settings/autosave_preferences.cpp
     src/settings/autosave_preferences.h
-    src/ui/autosave_recovery_dialog.cpp
-    src/ui/autosave_recovery_dialog.h
-    src/ui/audio_keyframe_dialog.cpp
-    src/ui/audio_keyframe_dialog.h
     src/ui/audio_keyframe_generation.cpp
     src/ui/audio_keyframe_generation.h
     src/ui/composition_viewer.cpp
@@ -51,20 +47,24 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/main_window_preview.cpp
     src/ui/main_window_support.cpp
     src/ui/main_window_support.h
+    src/ui/dialogs/autosave_recovery_dialog.cpp
+    src/ui/dialogs/autosave_recovery_dialog.h
+    src/ui/dialogs/audio_keyframe_dialog.cpp
+    src/ui/dialogs/audio_keyframe_dialog.h
+    src/ui/dialogs/general_settings_dialog.cpp
+    src/ui/dialogs/general_settings_dialog.h
+    src/ui/dialogs/motion_video_export_dialog.cpp
+    src/ui/dialogs/motion_video_export_dialog.h
+    src/ui/dialogs/new_composition_dialog.cpp
+    src/ui/dialogs/new_composition_dialog.h
+    src/ui/dialogs/shortcut_settings_dialog.cpp
+    src/ui/dialogs/shortcut_settings_dialog.h
     src/ui/media_pool_widget.cpp
     src/ui/media_pool_widget.h
-    src/ui/new_composition_dialog.cpp
-    src/ui/new_composition_dialog.h
-    src/ui/shortcut_settings_dialog.cpp
-    src/ui/shortcut_settings_dialog.h
-    src/ui/general_settings_dialog.cpp
-    src/ui/general_settings_dialog.h
     src/ui/inspector/inspector_widget.cpp
     src/ui/inspector/inspector_widget.h
     src/ui/property_curve_editor.cpp
     src/ui/property_curve_editor.h
-    src/ui/motion_video_export_dialog.cpp
-    src/ui/motion_video_export_dialog.h
     src/ui/timeline/timeline_controls.cpp
     src/ui/timeline/timeline_controls.h
     src/ui/timeline/timeline_layer_tracks.cpp

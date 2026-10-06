@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../model/composition_document.h"
+#include "model/composition_document.h"
 
 #include <creative_suite/animation/animation.h>
 

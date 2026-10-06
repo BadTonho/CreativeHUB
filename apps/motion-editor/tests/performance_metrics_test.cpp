@@ -1,6 +1,6 @@
 #include "diagnostics/performance_metrics.h"
 #include "settings/autosave_preferences.h"
-#include "ui/general_settings_dialog.h"
+#include "ui/dialogs/general_settings_dialog.h"
 
 #include <QApplication>
 #include <QCheckBox>
