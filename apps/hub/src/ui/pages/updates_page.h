@@ -20,6 +20,7 @@ public:
     void refreshUpdates();
 
 signals:
+    void checkUpdatesRequested();
     void updateAppRequested(const QString& appId);
     void updateAllRequested();
 
@@ -29,6 +30,7 @@ private:
     AppCatalog* m_catalog{nullptr};
     QGridLayout* m_contentLayout{nullptr};
     QLabel* m_emptyStateLabel{nullptr};
+    QPushButton* m_checkUpdatesButton{nullptr};
     QPushButton* m_updateAllButton{nullptr};
     std::vector<AppCardWidget*> m_updateCards;
 };

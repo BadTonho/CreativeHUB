@@ -42,6 +42,12 @@ void UpdatesPage::setupUi() {
     headerRow->addLayout(titleCol);
     headerRow->addStretch();
 
+    // Check for updates button (now located in Updates page)
+    m_checkUpdatesButton = new QPushButton(QStringLiteral("Verificar Atualizações"), this);
+    m_checkUpdatesButton->setStyleSheet(HubStyle::secondaryButtonStyle());
+    connect(m_checkUpdatesButton, &QPushButton::clicked, this, &UpdatesPage::checkUpdatesRequested);
+    headerRow->addWidget(m_checkUpdatesButton);
+
     m_updateAllButton = new QPushButton(QStringLiteral("Atualizar Todos"), this);
     m_updateAllButton->setStyleSheet(HubStyle::primaryButtonStyle());
     m_updateAllButton->setVisible(false);

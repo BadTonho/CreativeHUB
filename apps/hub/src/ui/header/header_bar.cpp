@@ -1,6 +1,5 @@
 #include "header_bar.h"
 #include "../theme/hub_palette.h"
-#include "../theme/hub_style.h"
 
 #include <QHBoxLayout>
 
@@ -32,12 +31,6 @@ HeaderBar::HeaderBar(QWidget* parent)
     m_searchBar = new ExpandableSearchBar(this);
     connect(m_searchBar, &ExpandableSearchBar::searchTextChanged, this, &HeaderBar::searchTextChanged);
     layout->addWidget(m_searchBar);
-
-    // Refresh / Check for updates button
-    m_refreshButton = new QPushButton(QStringLiteral("Verificar Atualizações"), this);
-    m_refreshButton->setStyleSheet(HubStyle::secondaryButtonStyle());
-    connect(m_refreshButton, &QPushButton::clicked, this, &HeaderBar::refreshRequested);
-    layout->addWidget(m_refreshButton);
 }
 
 } // namespace creative_suite::hub

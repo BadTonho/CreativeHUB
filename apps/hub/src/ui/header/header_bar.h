@@ -4,7 +4,6 @@
 
 #include <QWidget>
 #include <QLabel>
-#include <QPushButton>
 
 namespace creative_suite::hub {
 
@@ -16,12 +15,10 @@ public:
 
 signals:
     void searchTextChanged(const QString& query);
-    void refreshRequested();
 
 private:
     QLabel* m_brandTitle{nullptr};
     ExpandableSearchBar* m_searchBar{nullptr};
-    QPushButton* m_refreshButton{nullptr};
 };
 
 } // namespace creative_suite::hub

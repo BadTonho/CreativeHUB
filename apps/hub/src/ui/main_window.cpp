@@ -38,7 +38,6 @@ void MainWindow::setupUi() {
             m_appsPage->setFilterQuery(text);
         }
     });
-    connect(m_headerBar, &HeaderBar::refreshRequested, this, &MainWindow::onRefreshApps);
     rootLayout->addWidget(m_headerBar);
 
     // Body: Sidebar + Stacked Pages
@@ -63,6 +62,7 @@ void MainWindow::setupUi() {
     m_pagesStack->addWidget(m_appsPage);
 
     m_updatesPage = new UpdatesPage(&m_catalog, this);
+    connect(m_updatesPage, &UpdatesPage::checkUpdatesRequested, this, &MainWindow::onRefreshApps);
     connect(m_updatesPage, &UpdatesPage::updateAppRequested, this, &MainWindow::onDownloadApp);
     m_pagesStack->addWidget(m_updatesPage);
 

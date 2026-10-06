@@ -85,14 +85,15 @@ O Hub poderá:
 
 - encontrar instalações registradas e ler seus metadados;
 - iniciar o editor escolhido e encaminhar argumentos documentados, se houver;
-- consultar um catálogo de versões publicadas;
-- baixar, verificar, preparar e aplicar atualizações;
+- apresentar o estado da suíte e oferecer os mesmos recursos de atualização
+  disponíveis nos editores;
 - abrir a área de diagnóstico e recuperação de aplicativos;
 - mostrar versões disponíveis, compatibilidade e resultado da operação.
 
 As primeiras versões devem priorizar descoberta e lançamento de aplicativos.
-Atualização automática só deve ser adicionada depois de haver um fluxo de
-instalação reversível e validado nas plataformas suportadas.
+O Hub não precisa ser a única entrada para atualizações: a direção em discussão
+é que cada editor apresente a mesma experiência de atualização ao ser aberto.
+O Hub pode reutilizar esse mecanismo comum para manter ou reparar a suíte.
 
 ### Recuperação de aplicativos
 
@@ -141,6 +142,35 @@ O GitHub Releases é a direção inicial de distribuição. O desenho deve permi
 trocar o local do catálogo ou dos arquivos no futuro sem espalhar URLs do
 GitHub por todos os editores.
 
+### Lançamento conjunto da suíte — direção em discussão
+
+Cada ciclo de lançamento da suíte deve deixar disponíveis no GitHub Releases
+os três editores: Video Editor, Image Editor e Motion Studio. Isso também vale
+para um editor que não recebeu mudanças naquele ciclo. A intenção é que a
+distribuição da suíte seja completa e que cada aplicativo encontre o mesmo
+catálogo e as mesmas regras de atualização.
+
+Ainda não foi decidido como publicar um editor sem mudanças: anexar novamente
+os mesmos bytes, referenciar seu artefato publicado anteriormente ou gerar um
+novo pacote. Também estão em aberto o uso de uma release do GitHub por ciclo da
+suíte ou releases separadas por componente, e como esses lançamentos se
+relacionam com as versões individuais dos aplicativos. Não se deve criar uma
+atualização aparente para um aplicativo inalterado sem definir essa semântica.
+
+### Experiência de atualização — direção em discussão
+
+Ao abrir qualquer editor, o aplicativo deve consultar se há uma versão
+compatível mais recente e mostrar que existe uma atualização. A pessoa decide
+se quer iniciar o download; não há autorização nesta ideia para baixar ou
+instalar silenciosamente. Ainda falta decidir se instalar depois do download
+exige uma segunda confirmação.
+
+Os três editores devem usar o mesmo mecanismo e apresentar o mesmo
+comportamento. A implementação pode ser compartilhada, mas ainda não está
+decidido se ficará numa biblioteca comum, num serviço do Hub ou num helper
+independente. O ponto de entrada dentro de cada editor não deve criar regras
+próprias de versão, verificação ou compatibilidade.
+
 ### Catálogo de releases
 
 Uma proposta é manter um catálogo versionado com uma entrada por componente,
@@ -156,12 +186,14 @@ versão, canal, sistema operacional e arquitetura. Cada entrada poderá conter:
 O catálogo precisa ter uma versão de esquema própria. Mudanças incompatíveis
 no catálogo devem ser detectáveis pelo Hub e pela ferramenta de recuperação.
 Esse catálogo e os campos acima são uma proposta para prototipagem, não um
-formato aprovado.
+formato aprovado. Seu contrato deve atender aos editores, ao Hub e à ferramenta
+de recuperação, que podem iniciar a mesma operação de atualização.
 
-Tags independentes por componente podem permitir releases sem acoplar os cinco
-produtos. Um padrão como `video-editor/vX.Y.Z` ou `creative-hub/vX.Y.Z` pode ser
-avaliado quando o fluxo de release for criado. A nomenclatura final das tags e
-dos canais ainda não foi decidida.
+Tags independentes por componente continuam possíveis, desde que cada ciclo de
+lançamento da suíte aponte para um artefato distribuível de cada editor,
+inclusive quando ele não mudou. Um padrão como `video-editor/vX.Y.Z` ou uma
+referência de suíte pode ser avaliado quando o fluxo de release for criado. A
+nomenclatura final das tags e dos canais ainda não foi decidida.
 
 ### Verificação e confiança
 
@@ -191,11 +223,14 @@ aberto.
 
 ## Fluxo futuro de atualização
 
-O fluxo abaixo é uma base de discussão para atualizações reversíveis:
+O fluxo abaixo é uma base de discussão para atualizações iniciadas pelo usuário
+e reversíveis:
 
-1. O Hub lê o manifesto local e consulta o catálogo de releases.
+1. Ao abrir um editor, o mecanismo comum lê o manifesto local e consulta o
+   catálogo de releases.
 2. Compara versões e requisitos de plataforma e compatibilidade.
-3. Baixa o artefato para uma área temporária de staging.
+3. Se houver uma versão compatível, o editor mostra a atualização disponível.
+   O download só começa após a pessoa escolher essa ação.
 4. Confere assinatura, hash, tamanho e identidade do componente.
 5. Registra a operação e preserva a versão anterior necessária para rollback.
 6. Aplica a atualização em uma etapa recuperável, sem sobrescrever arquivos
@@ -204,11 +239,11 @@ O fluxo abaixo é uma base de discussão para atualizações reversíveis:
 8. Se a aplicação falhar, interromper ou não passar pela validação definida,
    permite reparar ou retornar à versão anterior.
 
-O Hub não deve substituir arquivos de um editor que ainda esteja em execução.
-Se o Hub precisar atualizar a si próprio, a substituição deve ocorrer por um
-helper externo ou por um mecanismo seguro da plataforma depois que o processo
-encerrar. A ferramenta de recuperação pode atuar como esse helper se um
-protótipo confirmar que essa responsabilidade cabe nela.
+O mecanismo comum não deve substituir arquivos de um editor que ainda esteja
+em execução. Se um editor precisar atualizar a si próprio, a substituição deve
+ocorrer por um helper externo ou por um mecanismo seguro da plataforma depois
+que o processo encerrar. A ferramenta de recuperação pode atuar como esse
+helper se um protótipo confirmar que essa responsabilidade cabe nela.
 
 O registro de operação deve ser pequeno, versionado e resistente a interrupção
 de energia ou encerramento forçado. As etapas precisam poder ser retomadas ou
@@ -221,8 +256,8 @@ localizações e regras de retenção distintas. Atualizar ou reparar um program
 não deve limpar esses dados. Caches podem ser recriados pelo editor; projetos
 e snapshots de recuperação não podem ser tratados como arquivos descartáveis.
 
-O Hub deve enviar apenas o necessário para consultar atualizações. Verificação
-de atualização não precisa transmitir nomes de projetos, mídia, textos,
+O mecanismo comum deve enviar apenas o necessário para consultar atualizações.
+Essa verificação não precisa transmitir nomes de projetos, mídia, textos,
 caminhos locais ou conteúdo dos documentos. Telemetria não é necessária para o
 modelo inicial.
 
@@ -234,20 +269,23 @@ pasta fixa do Windows nem misturar diretórios temporários com dados permanente
 
 1. **Documentar contratos:** estabilizar IDs temporários, metadados locais,
    diretórios de dados e limites de propriedade entre componentes.
-2. **Publicar editores manualmente:** validar artefatos independentes, versão,
-   instalação limpa e atualização de uma versão anterior.
+2. **Publicar editores manualmente:** validar instalação limpa e atualização
+   de uma versão anterior, mantendo um artefato distribuível de cada editor.
 3. **Automatizar releases:** criar builds por plataforma, testes de pacote,
-   checksums, assinaturas e catálogo versionado.
-4. **Criar o Hub inicial:** descobrir instalações, exibir versões e iniciar os
-   editores; adicionar consulta ao catálogo em modo somente leitura.
-5. **Habilitar atualizações:** implementar staging, verificação, registro,
-   cancelamento seguro e rollback em uma plataforma antes de ampliar.
+   checksums, assinaturas e catálogo versionado que represente os três editores
+   em cada ciclo da suíte.
+4. **Criar o Hub inicial e a consulta comum:** descobrir instalações, exibir
+   versões e iniciar os editores; mostrar em cada editor quando há uma
+   atualização compatível, sem baixar até a escolha da pessoa.
+5. **Habilitar downloads e instalação:** implementar staging, verificação,
+   registro, cancelamento seguro e rollback em uma plataforma antes de ampliar.
 6. **Criar a recuperação de aplicativo:** implementar um núcleo compartilhado
    de diagnóstico e reparo, exposto dentro do Hub e em um executável
    independente. Ele lê o registro de operações e restaura uma versão
    verificada sem tocar nos documentos do usuário.
 7. **Ampliar plataformas e canais:** validar Windows, macOS e Linux, além de
-   canais beta/estável, antes de oferecer atualização automática ampla.
+   canais beta/estável, antes de ampliar a distribuição e a atualização para
+   toda a suíte.
 
 Essa sequência pode ser ajustada conforme as necessidades dos editores. Cada
 etapa deve produzir um fluxo utilizável e testável, em vez de exigir que o Hub
@@ -260,8 +298,14 @@ distribuído.
 - instalação por usuário ou por sistema e requisitos de elevação;
 - esquema e assinatura do catálogo de releases;
 - formatos de pacote e canais de lançamento por sistema operacional;
+- representação de um editor inalterado em cada lançamento da suíte: repetir
+  seu artefato, referenciar o último ou gerar um novo pacote;
+- estrutura das releases do GitHub: uma release conjunta ou releases por
+  componente vinculadas ao mesmo ciclo da suíte;
+- escopo da experiência comum: somente os três editores ou também o Hub e a
+  ferramenta independente de recuperação;
 - política de retenção de versões anteriores e rollback;
-- política de atualização automática ou confirmação manual;
+- confirmação separada para baixar e instalar uma atualização;
 - mecanismo de atualização do próprio Hub;
 - funções exatas, interface integrada ao Hub, empacotamento do executável
   independente e nível de privilégio da recuperação;
@@ -272,8 +316,13 @@ Essas decisões devem ser tomadas com protótipos e testes de instalação,
 atualização interrompida, rollback e reparo. A documentação não escolhe ainda
 uma linguagem, framework, instalador ou protocolo entre processos.
 
-## Critérios antes de lançar atualizações automáticas
+## Critérios antes de oferecer downloads e instalação pelo aplicativo
 
+- Cada ciclo publicado da suíte lista um artefato válido para os três editores,
+  sem anunciar uma nova versão de um editor inalterado por engano.
+- Todos os editores consultam a mesma fonte e aplicam os mesmos critérios de
+  versão, assinatura, plataforma e compatibilidade.
+- Nenhum artefato é baixado antes da ação escolhida pela pessoa.
 - Atualizar uma instalação existente sem alterar documentos, preferências ou
   snapshots do usuário.
 - Rejeitar artefatos com hash, assinatura, identidade ou plataforma incorretos.
