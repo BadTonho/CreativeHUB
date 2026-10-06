@@ -16,6 +16,8 @@ int main() {
     auto found = catalog.findApp(QStringLiteral("video-editor"));
     assert(found.has_value());
     assert(found->name() == QStringLiteral("Video Editor"));
+    assert(!found->features().isEmpty());
+    assert(!found->projectFormat().isEmpty());
 
     catalog.updateAppStatus(QStringLiteral("video-editor"), AppStatus::Installed);
     auto updated = catalog.findApp(QStringLiteral("video-editor"));

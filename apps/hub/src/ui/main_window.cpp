@@ -1,4 +1,5 @@
 #include "main_window.h"
+#include "dialogs/app_details_dialog.h"
 #include "theme/hub_palette.h"
 #include "theme/hub_style.h"
 #include "../diagnostics/hub_logger.h"
@@ -56,12 +57,14 @@ void MainWindow::setupUi() {
     m_pagesStack = new QStackedWidget(this);
 
     m_appsPage = new AppsPage(&m_catalog, this);
+    connect(m_appsPage, &AppsPage::appDetailsRequested, this, &MainWindow::onShowAppDetails);
     connect(m_appsPage, &AppsPage::openAppRequested, this, &MainWindow::onOpenApp);
     connect(m_appsPage, &AppsPage::downloadAppRequested, this, &MainWindow::onDownloadApp);
     connect(m_appsPage, &AppsPage::cancelDownloadRequested, this, &MainWindow::onCancelDownload);
     m_pagesStack->addWidget(m_appsPage);
 
     m_updatesPage = new UpdatesPage(&m_catalog, this);
+    connect(m_updatesPage, &UpdatesPage::appDetailsRequested, this, &MainWindow::onShowAppDetails);
     connect(m_updatesPage, &UpdatesPage::checkUpdatesRequested, this, &MainWindow::onRefreshApps);
     connect(m_updatesPage, &UpdatesPage::updateAppRequested, this, &MainWindow::onDownloadApp);
     m_pagesStack->addWidget(m_updatesPage);
@@ -91,6 +94,37 @@ void MainWindow::scanInstalledApps() {
     if (m_updatesPage) {
         m_updatesPage->refreshUpdates();
     }
+}
+
+void MainWindow::onShowAppDetails(const QString& appId) {
+    auto appOpt = m_catalog.findApp(appId);
+    if (!appOpt.has_value()) {
+        return;
+    }
+
+    HubLogger::instance().logInfo(
+        QStringLiteral("MainWindow"),
+        QStringLiteral("onShowAppDetails"),
+        QStringLiteral("Exibindo detalhes do aplicativo"),
+        appId
+    );
+
+    AppDetailsDialog dialog(*appOpt, this);
+    connect(&dialog, &AppDetailsDialog::actionRequested, this, [this](const QString& id) {
+        auto opt = m_catalog.findApp(id);
+        if (opt.has_value()) {
+            if (opt->isInstalled()) {
+                if (opt->hasUpdate()) {
+                    onDownloadApp(id);
+                } else {
+                    onOpenApp(id);
+                }
+            } else {
+                onDownloadApp(id);
+            }
+        }
+    });
+    dialog.exec();
 }
 
 void MainWindow::onRefreshApps() {

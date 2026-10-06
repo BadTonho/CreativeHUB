@@ -7,6 +7,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QFile>
+#include <QMouseEvent>
 
 namespace creative_suite::hub {
 
@@ -56,6 +57,7 @@ AppCardWidget::AppCardWidget(QWidget* parent)
     setObjectName(QStringLiteral("AppCardWidget"));
     setFixedSize(236, 264);
     setFrameShape(QFrame::NoFrame);
+    setCursor(Qt::PointingHandCursor);
     setStyleSheet(QString(R"(
         #AppCardWidget {
             background-color: %1;
@@ -197,6 +199,18 @@ void AppCardWidget::updateVisuals() {
             m_progressBar->setVisible(false);
             break;
     }
+}
+
+void AppCardWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        const QPoint pos = event->pos();
+        if (m_actionButton && m_actionButton->geometry().contains(pos)) {
+            // Cliques dentro do botão de ação são tratados pelo botão
+        } else {
+            emit detailsRequested(m_appInfo.id());
+        }
+    }
+    QFrame::mouseReleaseEvent(event);
 }
 
 } // namespace creative_suite::hub

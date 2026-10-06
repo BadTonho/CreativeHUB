@@ -20,6 +20,7 @@ public:
     void refreshUpdates();
 
 signals:
+    void appDetailsRequested(const QString& appId);
     void checkUpdatesRequested();
     void updateAppRequested(const QString& appId);
     void updateAllRequested();

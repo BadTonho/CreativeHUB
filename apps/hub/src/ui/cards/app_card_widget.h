@@ -22,9 +22,13 @@ public:
     void setDownloadingProgress(double percentage, const QString& statusText);
 
 signals:
+    void detailsRequested(const QString& appId);
     void openRequested(const QString& appId);
     void downloadRequested(const QString& appId);
     void cancelDownloadRequested(const QString& appId);
+
+protected:
+    void mouseReleaseEvent(QMouseEvent* event) override;
 
 private slots:
     void onActionButtonClicked();

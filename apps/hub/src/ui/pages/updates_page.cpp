@@ -97,6 +97,7 @@ void UpdatesPage::refreshUpdates() {
             auto* card = new AppCardWidget(this);
             card->setAppInfo(app);
             connect(card, &AppCardWidget::downloadRequested, this, &UpdatesPage::updateAppRequested);
+            connect(card, &AppCardWidget::detailsRequested, this, &UpdatesPage::appDetailsRequested);
             m_updateCards.push_back(card);
 
             const int row = updateIndex / columns;

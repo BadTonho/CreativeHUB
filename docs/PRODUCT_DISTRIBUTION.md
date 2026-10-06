@@ -119,9 +119,10 @@ atualizações, traduções ou alterações de marca. Exemplos provisórios são
 `app-recovery`; esses nomes ainda precisam ser revisados antes de uma primeira
 publicação pública.
 
-As versões dos componentes devem poder avançar independentemente. Uma versão
-do editor não deve implicar uma nova versão do Hub quando não houver mudança no
-Hub. Formatos de documento, catálogos de distribuição e protocolos entre
+As versões dos quatro aplicativos devem poder avançar independentemente. Uma
+release da suíte terá uma versão própria, que não altera por si só as versões
+dos aplicativos. Republicar um instalador sem mudanças preserva a versão desse
+app. Formatos de documento, catálogos de distribuição e protocolos entre
 processos mantêm números de esquema próprios.
 
 Um manifesto embutido em cada instalação poderá descrever:
@@ -154,33 +155,36 @@ encontre o mesmo catálogo e as mesmas regras de atualização.
 Quando um aplicativo não mudar, a decisão é anexar novamente o mesmo
 instalador, sem reconstruí-lo. Assim, quem baixar a release mais recente da
 suíte encontrará os instaladores dos quatro aplicativos no mesmo lugar. Essa
-republicação não cria, por si só, uma nova versão do aplicativo: o catálogo
-deve continuar identificando a versão contida no instalador para não anunciar
-uma atualização inexistente a quem já o possui.
-
-Ainda está em aberto como a versão da release da suíte se relacionará com as
-versões individuais dos aplicativos.
+republicação não cria uma nova versão do aplicativo. A release da suíte terá
+sua própria versão, independente das versões individuais dos quatro apps.
+Cada app avança sua versão quando ele próprio muda; o mecanismo de atualização
+compara a versão instalada do app com a versão desse app no catálogo, não com a
+versão da release da suíte. Assim, um novo ciclo da suíte não anuncia uma
+atualização inexistente para um app que continua igual.
 
 ### Experiência de atualização — direção em discussão
 
 Ao abrir qualquer um dos quatro aplicativos, o aplicativo deve consultar se há
 uma versão compatível mais recente e mostrar que existe uma atualização. A
-pessoa decide se quer iniciar o download; não há autorização nesta ideia para
-baixar ou instalar silenciosamente. Ainda falta decidir se instalar depois do
-download exige uma segunda confirmação.
+pessoa confirma se quer iniciar o download. Depois que o download termina, a
+instalação fica agendada e acontece automaticamente quando o aplicativo fecha.
+O aplicativo pode pedir que a pessoa o feche para concluir a atualização; não
+há uma segunda confirmação de instalação.
 
-Os quatro aplicativos devem usar o mesmo mecanismo e apresentar o mesmo
-comportamento. A implementação pode ser compartilhada, mas ainda não está
-decidido se ficará numa biblioteca comum, num serviço do Hub ou num helper
-independente. O ponto de entrada dentro de cada aplicativo não deve criar
-regras próprias de versão, verificação ou compatibilidade.
+Os quatro aplicativos e a ferramenta independente de recuperação devem usar a
+mesma base de atualização. O GitHub Releases será a fonte de distribuição para
+todos, inclusive para o Hub e a ferramenta de recuperação. O ponto de entrada
+em cada aplicativo não deve criar regras próprias de versão, verificação ou
+compatibilidade. A divisão exata dessa base entre biblioteca, serviço e helper
+ainda será definida no desenho técnico.
 
 ### Catálogo de releases
 
 Uma proposta é manter um catálogo versionado com uma entrada por componente,
 versão, canal, sistema operacional e arquitetura. Cada entrada poderá conter:
 
-- identificador do componente, versão e canal;
+- versão da release da suíte;
+- identificador do componente, versão individual do app e canal;
 - plataforma, arquitetura e requisitos mínimos;
 - endereço do artefato de instalação;
 - tamanho e hash SHA-256 do artefato;
@@ -188,10 +192,10 @@ versão, canal, sistema operacional e arquitetura. Cada entrada poderá conter:
 - notas e data da release.
 
 O catálogo precisa ter uma versão de esquema própria. Mudanças incompatíveis
-no catálogo devem ser detectáveis pelo Hub e pela ferramenta de recuperação.
-Esse catálogo e os campos acima são uma proposta para prototipagem, não um
-formato aprovado. Seu contrato deve atender aos editores, ao Hub e à ferramenta
-de recuperação, que podem iniciar a mesma operação de atualização.
+no catálogo devem ser detectáveis pelos quatro aplicativos e pela ferramenta
+de recuperação. Esse catálogo e os campos acima são uma proposta para
+prototipagem, não um formato aprovado. Seu contrato deve atender a todos esses
+consumidores, que usam a mesma base de atualização.
 
 Tags independentes por componente continuam possíveis, desde que cada ciclo de
 lançamento da suíte aponte para um artefato distribuível de cada aplicativo,
@@ -201,11 +205,46 @@ nomenclatura final das tags e dos canais ainda não foi decidida.
 
 ### Verificação e confiança
 
-O Hub deve verificar o artefato antes de executá-lo ou instalá-lo. Um hash ajuda
-a detectar corrupção durante o download; a autenticidade exige também uma
-origem confiável para o catálogo e uma assinatura cuja chave pública esteja
-protegida no cliente. A assinatura de código exigida por cada sistema
+O mecanismo comum deve verificar o artefato antes de executá-lo ou instalá-lo.
+Um hash ajuda a detectar corrupção durante o download; a autenticidade exige
+também uma origem confiável para o catálogo e uma assinatura cuja chave pública
+esteja protegida no cliente. A assinatura de código exigida por cada sistema
 operacional é uma camada adicional, com requisitos próprios.
+
+#### Windows: duas verificações com objetivos diferentes
+
+Para a primeira implementação no Windows, a proposta é verificar tanto a
+assinatura Authenticode do instalador e dos executáveis quanto a assinatura do
+catálogo de releases. Authenticode identifica o publicador e detecta alterações
+nos binários; usar SHA-256 e um carimbo de tempo RFC 3161 mantém a assinatura
+verificável depois que o certificado expirar. O atualizador também deve conferir
+se o publicador é o esperado.
+
+A assinatura do catálogo usa uma chave do projeto para autorizar versões,
+artefatos e hashes. O atualizador contém apenas a chave pública e a usa para
+validar os metadados antes de aceitar o download. A assinatura Authenticode e a
+assinatura do catálogo têm funções diferentes e devem usar chaves separadas; um
+hash publicado junto ao arquivo no GitHub, sozinho, não autentica a release.
+
+O provedor de assinatura ainda não foi escolhido. A documentação atual da
+Microsoft recomenda Azure Artifact Signing para distribuição fora da Store,
+mas a elegibilidade depende do tipo e do país da identidade. No momento, a
+validação de identidade pública para pessoas físicas é limitada a residentes
+dos Estados Unidos e Canadá; a lista para organizações é diferente.
+Como o projeto é open source, vale verificar a elegibilidade do SignPath
+Foundation, que oferece assinatura sem custo para projetos que atendam às
+condições publicadas. Entre elas estão licença aprovada pela OSI, manutenção
+ativa e já haver uma versão pública no formato que será assinado. O certificado
+é emitido em nome da SignPath Foundation, não do projeto. Um certificado OV de
+uma autoridade certificadora é outra opção para distribuição pública e pode
+identificar o titular do projeto. Certificados autoassinados ficam restritos a
+desenvolvimento e testes locais. Um certificado EV não deve ser escolhido
+apenas esperando evitar avisos iniciais do SmartScreen, pois esse benefício
+deixou de existir.
+
+Referências: [Windows code-signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options),
+[Authenticode time stamps](https://learn.microsoft.com/en-us/windows/win32/seccrypto/time-stamping-authenticode-signatures)
+e [SignPath Foundation eligibility](https://signpath.org/terms.html).
 
 Tokens de publicação e chaves privadas devem ficar apenas nos segredos do
 processo de release. Eles nunca devem ser embutidos nos aplicativos, no
@@ -225,29 +264,63 @@ representativos. Empacotamento, assinatura, notarização, elevação de
 permissões e instalação por usuário ou por sistema continuam decisões em
 aberto.
 
+### Sugestão inicial de empacotamento — ainda não decidida
+
+O atualizador será implementado e validado primeiro no Windows, porque o
+trabalho de Linux ainda está em andamento e o mantenedor não tem acesso a uma
+máquina Mac para validar macOS. Para distribuição direta pelo GitHub Releases,
+estas são opções para avaliar; somente a proposta de Windows é imediata.
+
+- **Windows:** instalador `.exe` assinado e instalado por usuário, para que o
+  atualizador comum possa concluir a troca depois que o app fechar. O MSIX com
+  App Installer é uma alternativa se for desejável delegar parte das
+  atualizações ao Windows; ele oferece verificações ao abrir o app, mas exige
+  pacotes assinados por um certificado confiável.
+- **macOS:** `.dmg` contendo o app `.app` assinado com Developer ID; notarizar
+  a imagem de disco distribuída. A Apple também aceita instaladores e arquivos
+  ZIP no fluxo de notarização.
+- **Linux:** AppImage como arquivo direto do GitHub Release. A atualização
+  continuaria sob controle da base comum; o formato também permite mecanismos
+  próprios de atualização, que não precisam substituir o catálogo da suíte.
+
+Flatpak pode ser avaliado depois, caso um repositório e atualizações com deltas
+passem a ser desejáveis.
+
+Para os canais, a sugestão é começar oferecendo apenas `stable` no atualizador
+e acrescentar `beta` depois de validar instalação, atualização ao fechar o app
+e rollback. Essas são recomendações para protótipos, não decisões aprovadas.
+
+Referências oficiais: [Microsoft App Installer updates](https://learn.microsoft.com/en-us/windows/msix/app-installer/how-to-create-appinstaller-file),
+[Apple notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution),
+[AppImage updates](https://docs.appimage.org/packaging-guide/optional/updates.html)
+e [Flatpak repositories](https://docs.flatpak.org/en/latest/repositories.html).
+
 ## Fluxo futuro de atualização
 
 O fluxo abaixo é uma base de discussão para atualizações iniciadas pelo usuário
 e reversíveis:
 
 1. Ao abrir qualquer um dos quatro aplicativos, o mecanismo comum lê o
-   manifesto local e consulta o catálogo de releases.
+   manifesto local e consulta o catálogo no GitHub Releases. A ferramenta de
+   recuperação usa a mesma base quando iniciada.
 2. Compara versões e requisitos de plataforma e compatibilidade.
 3. Se houver uma versão compatível, o aplicativo mostra a atualização disponível.
-   O download só começa após a pessoa escolher essa ação.
+   O download só começa após a pessoa confirmar.
 4. Confere assinatura, hash, tamanho e identidade do componente.
-5. Registra a operação e preserva a versão anterior necessária para rollback.
-6. Aplica a atualização em uma etapa recuperável, sem sobrescrever arquivos
-   parcialmente.
+5. Registra a operação e preserva no máximo uma versão anterior do aplicativo
+   para rollback.
+6. Quando o download termina, agenda a instalação. Se o aplicativo estiver
+   aberto, pode pedir que a pessoa o feche e aplica a atualização
+   automaticamente quando o processo encerrar, sem nova confirmação.
 7. Confirma o resultado e registra a versão ativa.
 8. Se a aplicação falhar, interromper ou não passar pela validação definida,
    permite reparar ou retornar à versão anterior.
 
-O mecanismo comum não deve substituir arquivos de um editor que ainda esteja
-em execução. Se um editor precisar atualizar a si próprio, a substituição deve
-ocorrer por um helper externo ou por um mecanismo seguro da plataforma depois
-que o processo encerrar. A ferramenta de recuperação pode atuar como esse
-helper se um protótipo confirmar que essa responsabilidade cabe nela.
+O mecanismo comum não deve substituir arquivos de um aplicativo que ainda
+esteja em execução. Se um aplicativo precisar atualizar a si próprio, a
+substituição deve ocorrer por um helper externo ou por um mecanismo seguro da
+plataforma depois que o processo encerrar. A ferramenta de recuperação usa a
+mesma base, mas seu possível papel como helper ainda depende de validação.
 
 O registro de operação deve ser pequeno, versionado e resistente a interrupção
 de energia ou encerramento forçado. As etapas precisam poder ser retomadas ou
@@ -274,23 +347,24 @@ pasta fixa do Windows nem misturar diretórios temporários com dados permanente
 1. **Documentar contratos:** estabilizar IDs temporários, metadados locais,
    diretórios de dados e limites de propriedade entre componentes.
 2. **Publicar aplicativos manualmente:** validar instalação limpa e atualização
-   de uma versão anterior, mantendo um artefato distribuível para cada um dos
-   quatro aplicativos.
+   de uma versão anterior, mantendo os quatro instaladores na mesma release do
+   GitHub.
 3. **Automatizar releases:** criar builds por plataforma, testes de pacote,
    checksums, assinaturas e catálogo versionado que represente os quatro
    aplicativos em cada ciclo da suíte.
 4. **Concluir o Hub e a consulta comum:** descobrir instalações, exibir versões
    e iniciar os editores; mostrar em cada aplicativo quando há uma atualização
-   compatível, sem baixar até a escolha da pessoa.
-5. **Habilitar downloads e instalação:** implementar staging, verificação,
-   registro, cancelamento seguro e rollback em uma plataforma antes de ampliar.
+   compatível.
+5. **Habilitar downloads e instalação no Windows:** implementar confirmação de
+   download, instalação ao fechar o aplicativo, verificação, registro,
+   cancelamento seguro e rollback com retenção de uma versão anterior.
 6. **Criar a recuperação de aplicativo:** implementar um núcleo compartilhado
    de diagnóstico e reparo, exposto dentro do Hub e em um executável
    independente. Ele lê o registro de operações e restaura uma versão
    verificada sem tocar nos documentos do usuário.
-7. **Ampliar plataformas e canais:** validar Windows, macOS e Linux, além de
-   canais beta/estável, antes de ampliar a distribuição e a atualização para
-   toda a suíte.
+7. **Ampliar plataformas e canais:** levar a implementação a Linux quando a
+   versão da plataforma estiver pronta e validar macOS quando houver acesso a
+   uma máquina Mac. Adicionar canais beta depois de validar a base estável.
 
 Essa sequência pode ser ajustada conforme as necessidades dos editores. Cada
 etapa deve produzir um fluxo utilizável e testável, em vez de exigir que o Hub
@@ -303,27 +377,27 @@ distribuído.
 - instalação por usuário ou por sistema e requisitos de elevação;
 - esquema e assinatura do catálogo de releases;
 - formatos de pacote e canais de lançamento por sistema operacional;
-- escopo da experiência comum além dos quatro aplicativos: se a ferramenta
-  independente de recuperação também participará;
-- política de retenção de versões anteriores e rollback;
-- confirmação separada para baixar e instalar uma atualização;
-- mecanismo de atualização do próprio Hub;
+- provedor e elegibilidade para assinatura Authenticode pública no Windows;
+- mecanismo técnico de atualização do próprio Hub e da ferramenta de
+  recuperação, incluindo o papel possível do helper;
 - funções exatas, interface integrada ao Hub, empacotamento do executável
   independente e nível de privilégio da recuperação;
 - suporte a instalações offline e espelhos de download;
 - chaves de assinatura, rotação e resposta a comprometimento.
 
 Essas decisões devem ser tomadas com protótipos e testes de instalação,
-atualização interrompida, rollback e reparo. A documentação não escolhe ainda
-uma linguagem, framework, instalador ou protocolo entre processos.
+atualização interrompida, rollback e reparo. A documentação ainda não escolhe
+linguagem, framework, instalador, algoritmo de assinatura do catálogo ou
+protocolo entre processos.
 
 ## Critérios antes de oferecer downloads e instalação pelo aplicativo
 
 - Cada ciclo publicado da suíte lista um artefato válido para os quatro
   aplicativos, sem anunciar uma nova versão de um aplicativo inalterado por
   engano.
-- Todos os quatro aplicativos consultam a mesma fonte e aplicam os mesmos
-  critérios de versão, assinatura, plataforma e compatibilidade.
+- Os quatro aplicativos e a ferramenta de recuperação consultam a mesma fonte
+  e aplicam os mesmos critérios de versão, assinatura, plataforma e
+  compatibilidade.
 - Nenhum artefato é baixado antes da ação escolhida pela pessoa.
 - Atualizar uma instalação existente sem alterar documentos, preferências ou
   snapshots do usuário.

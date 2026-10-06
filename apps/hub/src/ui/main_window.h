@@ -21,6 +21,7 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
 
 private slots:
+    void onShowAppDetails(const QString& appId);
     void onOpenApp(const QString& appId);
     void onDownloadApp(const QString& appId);
     void onCancelDownload(const QString& appId);

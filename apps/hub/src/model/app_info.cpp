@@ -12,7 +12,9 @@ AppInfo::AppInfo(QString id,
                  QString latestVersion,
                  QString executableName,
                  QString iconPath,
-                 AppStatus status)
+                 AppStatus status,
+                 QStringList features,
+                 QString projectFormat)
     : m_id(std::move(id))
     , m_name(std::move(name))
     , m_tagLine(std::move(tagLine))
@@ -22,6 +24,8 @@ AppInfo::AppInfo(QString id,
     , m_executableName(std::move(executableName))
     , m_iconPath(std::move(iconPath))
     , m_status(status)
+    , m_features(std::move(features))
+    , m_projectFormat(std::move(projectFormat))
 {
 }
 

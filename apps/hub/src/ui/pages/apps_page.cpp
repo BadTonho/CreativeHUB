@@ -142,6 +142,7 @@ void AppsPage::refreshCards() {
         connect(card, &AppCardWidget::openRequested, this, &AppsPage::openAppRequested);
         connect(card, &AppCardWidget::downloadRequested, this, &AppsPage::downloadAppRequested);
         connect(card, &AppCardWidget::cancelDownloadRequested, this, &AppsPage::cancelDownloadRequested);
+        connect(card, &AppCardWidget::detailsRequested, this, &AppsPage::appDetailsRequested);
 
         m_cardWidgets.push_back(card);
     }

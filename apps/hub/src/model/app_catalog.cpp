@@ -17,36 +17,60 @@ void AppCatalog::populateDefaultApps() {
         QStringLiteral("video-editor"),
         QStringLiteral("Video Editor"),
         QStringLiteral("Edição audiovisual e pós-produção"),
-        QStringLiteral("Editor de vídeo multitrilha, efeitos visuais, áudio profissional e exportação."),
+        QStringLiteral("Um editor de vídeo completo e ágil, com linha do tempo multitrilha, mixagem de áudio, aceleração por GPU opcional, transições, sobreposição de texto e exportação para formatos comuns."),
         QStringLiteral(""),
         QStringLiteral("0.1.6"),
         QStringLiteral("creative-suite-video-editor.exe"),
         QStringLiteral(":/icons/video-editor.png"),
-        AppStatus::NotInstalled
+        AppStatus::NotInstalled,
+        QStringList{
+            QStringLiteral("Linha do tempo multitrilha com suporte fluido a vídeo e áudio"),
+            QStringLiteral("Efeitos de transição, transformações de camada e keyframes"),
+            QStringLiteral("Mixagem e monitoramento de canais de áudio com scrubbing responsivo"),
+            QStringLiteral("Aceleração opcional por GPU na linha do tempo e exportação em até 4K UHD"),
+            QStringLiteral("Salvamento automático, histórico resiliente e recuperação de projetos")
+        },
+        QStringLiteral(".csp (Creative Suite Project)")
     );
 
     m_apps.emplace_back(
         QStringLiteral("image-editor"),
         QStringLiteral("Image Editor"),
         QStringLiteral("Edição de imagens e gráficos em camadas"),
-        QStringLiteral("Edição raster em camadas, máscaras, desenho de formas e formatos compatíveis."),
+        QStringLiteral("Aplicativo de edição raster focada em manipulação de camadas, grupos, ferramentas de seleção inteligente, desenho de formas geométricas e suporte a camadas de imagens vinculadas."),
         QStringLiteral(""),
         QStringLiteral("0.1.3"),
         QStringLiteral("creative-suite-image-editor.exe"),
         QStringLiteral(":/icons/image-editor.png"),
-        AppStatus::NotInstalled
+        AppStatus::NotInstalled,
+        QStringList{
+            QStringLiteral("Pintura digital e edição raster organizada em camadas e grupos"),
+            QStringLiteral("Máscaras ajustáveis com suporte a imagens vinculadas"),
+            QStringLiteral("Ferramentas de seleção de objetos, formas vetoriais e texto"),
+            QStringLiteral("Histórico bounded de desfazer/refazer com alta performance"),
+            QStringLiteral("Exportação otimizada em formatos PNG e JPEG de alta qualidade")
+        },
+        QStringLiteral(".cimg (Creative Suite Image Document)")
     );
 
     m_apps.emplace_back(
         QStringLiteral("motion-editor"),
         QStringLiteral("Motion Studio"),
         QStringLiteral("Motion design e animação gráfica"),
-        QStringLiteral("Composição em camadas, animação por curvas Bezier, keyframes e efeitos."),
+        QStringLiteral("Ambiente especializado para motion design e composição avançada, combinando animação por keyframes, curvas Bezier precisas (Graph Editor), máscaras e exportação acelerada."),
         QStringLiteral(""),
         QStringLiteral("0.1.1"),
         QStringLiteral("creative-suite-motion-editor.exe"),
         QStringLiteral(":/icons/motion-studio.png"),
-        AppStatus::NotInstalled
+        AppStatus::NotInstalled,
+        QStringList{
+            QStringLiteral("Composição dinâmica em camadas com suporte a mídias e formas"),
+            QStringLiteral("Editor de curvas Bezier (Graph Editor) para controle fino de interpolação"),
+            QStringLiteral("Efeitos encadeados de desfoque gaussiano e ajustes de cor"),
+            QStringLiteral("Exportação de vídeo renderizado com alta fidelidade visual"),
+            QStringLiteral("Estrutura independente e nativa compartilhando o núcleo da suíte")
+        },
+        QStringLiteral(".motion (Creative Suite Motion File)")
     );
 
     emit catalogReloaded();
