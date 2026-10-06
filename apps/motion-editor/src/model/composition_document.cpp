@@ -35,6 +35,21 @@ constexpr int kMaximumTextSizePixels = 4'096;
 constexpr int kMaximumStrokeWidthPixels = 4'096;
 constexpr std::size_t kMaximumLayerEffectCount = 256;
 
+std::vector<creative_suite::animation::Keyframe>* mutableKeyframesFor(
+    creative_suite::animation::TransformKeyframes& keyframes,
+    creative_suite::animation::TransformProperty property) noexcept
+{
+    using creative_suite::animation::TransformProperty;
+    switch (property) {
+    case TransformProperty::PositionX: return &keyframes.position_x;
+    case TransformProperty::PositionY: return &keyframes.position_y;
+    case TransformProperty::Scale: return &keyframes.scale;
+    case TransformProperty::Rotation: return &keyframes.rotation;
+    case TransformProperty::Opacity: return &keyframes.opacity;
+    }
+    return nullptr;
+}
+
 int fourFifths(int value) noexcept
 {
     return std::clamp((value / 5) * 4 + ((value % 5) * 4) / 5,
@@ -524,6 +539,22 @@ bool CompositionDocument::setLayerEffects(
     auto* layer = findLayer(id);
     if (layer == nullptr || !validLayerEffects(effects)) return false;
     layer->effects = effects;
+    return true;
+}
+
+bool CompositionDocument::replaceLayerKeyframes(
+    LayerId id,
+    creative_suite::animation::TransformProperty property,
+    const std::vector<creative_suite::animation::Keyframe>& keyframes)
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr) return false;
+    auto candidate = layer->keyframes;
+    auto* target = mutableKeyframesFor(candidate, property);
+    if (target == nullptr) return false;
+    *target = keyframes;
+    if (!creative_suite::animation::validTransformKeyframes(candidate)) return false;
+    layer->keyframes = std::move(candidate);
     return true;
 }
 

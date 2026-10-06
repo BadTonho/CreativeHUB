@@ -6,6 +6,8 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
 
 add_library(creative-suite-motion-editor-core STATIC
+    src/audio/audio_envelope_analyzer.cpp
+    src/audio/audio_envelope_analyzer.h
     src/diagnostics/performance_metrics.cpp
     src/diagnostics/performance_metrics.h
     src/model/composition_document.cpp
@@ -19,6 +21,10 @@ add_library(creative-suite-motion-editor-core STATIC
     src/settings/autosave_preferences.h
     src/ui/autosave_recovery_dialog.cpp
     src/ui/autosave_recovery_dialog.h
+    src/ui/audio_keyframe_dialog.cpp
+    src/ui/audio_keyframe_dialog.h
+    src/ui/audio_keyframe_generation.cpp
+    src/ui/audio_keyframe_generation.h
     src/ui/composition_viewer.cpp
     src/ui/composition_viewer.h
     src/ui/composition_history.cpp

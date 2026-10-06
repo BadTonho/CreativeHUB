@@ -48,6 +48,10 @@ Each `layers` entry stores:
 - the source frame rate, visibility, base 2D transform, and stored transform
   keyframes for position X/Y, scale, rotation, and opacity.
 
+Keyframes generated from audio by the optional Motion Studio tool use these
+same transform tracks. The `.motion` document stores the resulting keyframes;
+it does not store or embed the source audio file.
+
 Version 2 adds typed content to native Text and Shape layers. A Text layer has
 a `text_content` object with UTF-8 `text` and `font_family`, integer
 `font_size_pixels`, RGBA byte-array `color`, `alignment` (`left`, `center`, or

@@ -80,10 +80,15 @@ not a maximum supported canvas, duration, layer count, or frame rate. Do not
 claim numeric minimum hardware requirements or playback throughput until
 measurements on this and additional systems have been recorded.
 
-After the 2D MVP passes its performance and cross-platform validation, audio-
-reactive 2D animation is the first expansion to investigate. It is not part of
-the approved MVP. 3D, nested compositions, node-based workflows, particles,
-animated masks, and advanced effect graphs remain later research.
+Audio-reactive 2D animation remains outside the approved MVP and is the first
+planned expansion. At the maintainer's direction, implementation of its first
+optional tool has started before the MVP's performance and cross-platform
+validation is complete. This tool analyzes a local audio file and bakes its
+frame-level RMS envelope into linear keyframes for one selected transform
+property. The source audio is not persisted, and the tool does not add audio
+playback, mixing, or audio export. MVP and release acceptance gates remain
+open. 3D, nested compositions, node-based workflows, particles, animated masks,
+and advanced effect graphs remain later research.
 
 ### MVP acceptance
 

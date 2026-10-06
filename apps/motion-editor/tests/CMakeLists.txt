@@ -132,6 +132,23 @@ set_tests_properties(creative-suite-motion-editor-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(creative-suite-motion-editor-audio-keyframes-tests
+    audio_keyframe_generation_test.cpp
+)
+target_link_libraries(creative-suite-motion-editor-audio-keyframes-tests PRIVATE
+    creative-suite-motion-editor-core
+    Qt6::Widgets
+)
+target_compile_features(creative-suite-motion-editor-audio-keyframes-tests PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME creative-suite-motion-editor-audio-keyframes
+    COMMAND creative-suite-motion-editor-audio-keyframes-tests)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-audio-keyframes-tests)
+set_tests_properties(creative-suite-motion-editor-audio-keyframes PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 90
+)
+
 if(MSVC)
     target_compile_options(creative-suite-motion-editor-document-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-history-tests PRIVATE /W4 /permissive-)
@@ -142,6 +159,7 @@ if(MSVC)
     target_compile_options(creative-suite-motion-editor-export-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE /W4 /permissive-)
+    target_compile_options(creative-suite-motion-editor-audio-keyframes-tests PRIVATE /W4 /permissive-)
 else()
     target_compile_options(creative-suite-motion-editor-document-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-history-tests PRIVATE -Wall -Wextra -Wpedantic)
@@ -152,6 +170,7 @@ else()
     target_compile_options(creative-suite-motion-editor-export-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(creative-suite-motion-editor-audio-keyframes-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 if(WIN32)
@@ -167,6 +186,7 @@ if(WIN32)
             creative-suite-motion-editor-performance-tests
             creative-suite-motion-editor-export-tests
             creative-suite-motion-editor-startup-tests
+            creative-suite-motion-editor-audio-keyframes-tests
             creative-suite-motion-editor-ui-tests)
         add_custom_command(TARGET ${TEST_TARGET} POST_BUILD
             COMMAND "${QT_MOTION_TEST_DEPLOY_TOOL}"

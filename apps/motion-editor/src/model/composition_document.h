@@ -203,6 +203,10 @@ public:
     [[nodiscard]] bool setLayerEffects(
         LayerId id,
         const std::vector<LayerEffect>& effects);
+    [[nodiscard]] bool replaceLayerKeyframes(
+        LayerId id,
+        creative_suite::animation::TransformProperty property,
+        const std::vector<creative_suite::animation::Keyframe>& keyframes);
     [[nodiscard]] bool setLayerKeyframe(
         LayerId id,
         creative_suite::animation::TransformProperty property,

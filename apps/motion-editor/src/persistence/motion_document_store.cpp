@@ -42,7 +42,8 @@ constexpr auto kRecoveryFormatIdentifier = "creative-suite.motion-studio-recover
 constexpr qsizetype kMaximumLayerCount = 100'000;
 constexpr qsizetype kMaximumMediaCount = 100'000;
 constexpr qsizetype kMaximumBinCount = 100'000;
-constexpr qsizetype kMaximumKeyframeCount = 2'000'000;
+constexpr qsizetype kMaximumKeyframeCount = static_cast<qsizetype>(
+    MotionDocumentStore::maximum_keyframe_count);
 constexpr qsizetype kMaximumEffectCount = 1'000'000;
 constexpr qsizetype kMaximumStringBytes = 32'768;
 

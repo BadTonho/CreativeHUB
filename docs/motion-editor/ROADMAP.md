@@ -309,6 +309,7 @@ readiness checks remain in this roadmap and
 | Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; exported Color Adjustment pixels in `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`); shared evaluator coverage in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp`; shared color processing in `libs/tests/effects_test.cpp` (`creative-suite-effects`) | Offscreen tests cover preview, shared Color Adjustment delegation, export output, cancellation, timing, and interaction behavior. Real-hardware visual output and graphics-driver validation remain pending (**P2 validation**). |
 | Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`) | Tests cover metrics aggregation, not actual playback throughput. The 1080p/30 fps, 10-second, five-layer benchmark on the reference PC and other systems remains pending (**P2 validation**). |
 | Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated output, cancellation, failure, and cancellation-exception message coverage exists; throughput, installed codecs, output profiles, and cross-platform behavior remain pending (**P1/P2 validation**). |
+| Optional audio-to-transform keyframe generation | `audio_keyframe_generation_test.cpp` (`creative-suite-motion-editor-audio-keyframes`) | Regression source covers per-frame RMS, whole-file peak normalization past the layer boundary, empty and silent sources, invalid audio, cancellation, atomic track replacement, Undo/Redo, and `.motion` round-trip. It was not compiled or run in this implementation pass; manual interaction remains pending. |
 | Startup and application UI | `motion_editor_startup_test.cpp` (`creative-suite-motion-editor-startup`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Startup and Media Pool bin filtering have offscreen coverage; the current UI has no separate media-search control. After tightening the seek test to wait for the final still frame, the full UI suite passed 10 repeated Debug runs on 2026-10-01. Broader visual, graphics-driver, and platform checks remain pending (**P2 validation**). |
 | Motion Studio to Video Editor editable handoff | No current integration test; handoff remains a later roadmap milestone | Planned, not implemented. Define producer/consumer tests when the contract is implemented; not a current regression gap. |
 
@@ -329,9 +330,12 @@ readiness checks remain in this roadmap and
 - **P2 — performance and platform acceptance:** metrics tests do not substitute
   for a controlled benchmark. Record the approved workload on the reference PC
   and complete the remaining Windows, macOS, and Linux checks.
-- **Planned, not implemented:** audio-reactive 2D animation and linked editing
-  from the Video Editor are future work, not missing tests for current
-  behavior.
+- **In progress:** the first optional audio-reactive tool analyzes a local
+  audio file and bakes its RMS envelope into a selected transform track.
+  Regression sources have been added; execution and manual acceptance remain
+  pending. Audio playback, mixing, and audio export remain outside this tool.
+- **Planned, not implemented:** editable linked composition handoff from the
+  Video Editor remains future work, not a missing test for current behavior.
 
 Frame rates are stored as exact rational values from the supported common-rate
 list. Creating a composition does not ask for or set its duration. The ruler
@@ -562,9 +566,12 @@ gate.
 
 ### 5. Future research
 
-- [ ] After the 2D MVP passes its performance and cross-platform validation,
-  investigate audio-reactive 2D animation as the first expansion. Define its
-  product boundary separately before implementation.
+- [ ] Implement the first optional audio-reactive 2D tool before MVP acceptance
+  (in progress),
+  per maintainer direction: analyze a local audio file and bake its RMS envelope
+  into one selected transform-property track. Keep audio playback, mixing, and
+  audio export out of this delivery. The `.motion` schema remains unchanged;
+  runtime and manual acceptance have not been performed in this change.
 - [ ] Revisit animated masks, advanced effects and effect graphs, nested
   compositions, particles, 3D features, and node-based workflows only after the core 2D motion workflows
   meet their performance targets and a clear use case justifies their added

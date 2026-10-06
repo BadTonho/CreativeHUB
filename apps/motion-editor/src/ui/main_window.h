@@ -42,7 +42,9 @@ class MotionWorkspace;
 class PropertyCurveEditor;
 class PreviewRenderer;
 class TimelineNavigator;
+class AudioKeyframeGenerationWorker;
 class MotionVideoExportWorker;
+struct AudioKeyframeGenerationResult;
 struct MotionExportResult;
 
 class MainWindow final : public QMainWindow {
@@ -72,6 +74,8 @@ private:
     [[nodiscard]] bool saveToPath(const std::filesystem::path& path);
     void startVideoExport();
     void finishVideoExport(MotionExportResult result);
+    void generateKeyframesFromAudio();
+    void finishAudioKeyframeGeneration(AudioKeyframeGenerationResult result);
     [[nodiscard]] bool confirmReplaceDocument();
     void updateDocumentState();
     void updateHistoryActions();
@@ -156,6 +160,7 @@ private:
     QAction* save_composition_action_ = nullptr;
     QAction* save_composition_as_action_ = nullptr;
     QAction* export_video_action_ = nullptr;
+    QAction* generate_audio_keyframes_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
     QAction* new_text_layer_action_ = nullptr;
     QAction* new_rectangle_layer_action_ = nullptr;
@@ -210,6 +215,8 @@ private:
     QProgressDialog* open_progress_ = nullptr;
     QProgressDialog* export_progress_ = nullptr;
     std::unique_ptr<MotionVideoExportWorker> export_worker_;
+    QProgressDialog* audio_keyframe_progress_ = nullptr;
+    std::unique_ptr<AudioKeyframeGenerationWorker> audio_keyframe_worker_;
     std::shared_ptr<std::atomic_bool> open_cancel_requested_;
     std::uint64_t open_generation_ = 0;
     creative_suite::shortcuts::ShortcutManager shortcut_manager_{

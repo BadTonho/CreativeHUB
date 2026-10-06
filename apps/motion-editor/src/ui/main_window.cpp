@@ -2,6 +2,8 @@
 
 #include "composition_viewer.h"
 #include "autosave_recovery_dialog.h"
+#include "audio_keyframe_dialog.h"
+#include "audio_keyframe_generation.h"
 #include "media_pool_widget.h"
 #include "new_composition_dialog.h"
 #include "property_curve_editor.h"
@@ -401,6 +403,14 @@ MainWindow::MainWindow(QWidget* parent,
     connect(new_ellipse_layer_action_, &QAction::triggered, this, [this] {
         createContentLayer(model::LayerKind::Shape, model::ShapeKind::Ellipse);
     });
+    layer_menu->addSeparator();
+    generate_audio_keyframes_action_ = layer_menu->addAction(
+        QStringLiteral("Generate Keyframes from Audio..."));
+    generate_audio_keyframes_action_->setObjectName(
+        QStringLiteral("motion-generate-audio-keyframes-action"));
+    generate_audio_keyframes_action_->setEnabled(false);
+    connect(generate_audio_keyframes_action_, &QAction::triggered,
+            this, [this] { generateKeyframesFromAudio(); });
 
     auto* edit_menu = menuBar()->addMenu(QStringLiteral("Edit"));
     undo_action_ = edit_menu->addAction(QStringLiteral("Undo"));
@@ -565,6 +575,7 @@ MainWindow::~MainWindow()
 {
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
     if (performance_metrics_timer_ != nullptr) performance_metrics_timer_->stop();
+    if (audio_keyframe_worker_) audio_keyframe_worker_->cancelAndWait();
     if (export_worker_) export_worker_->cancelAndWait();
     if (preview_renderer_) preview_renderer_->stopAndWait();
 }
@@ -581,6 +592,7 @@ MediaPoolWidget* MainWindow::mediaPoolWidget() const noexcept
 
 void MainWindow::createNewComposition()
 {
+    if (audio_keyframe_worker_) return;
     finishPendingTransformEdit();
     NewCompositionDialog dialog(this);
     if (dialog.exec() != QDialog::Accepted) return;
@@ -619,6 +631,7 @@ void MainWindow::createNewComposition()
 
 void MainWindow::openComposition()
 {
+    if (audio_keyframe_worker_) return;
     finishPendingTransformEdit();
     if (open_cancel_requested_) return;
     QFileDialog dialog(this, QStringLiteral("Open Composition"));
@@ -768,7 +781,7 @@ void MainWindow::startVideoExport()
 {
     finishPendingTransformEdit();
     finishPendingContentEdit();
-    if (!document_ || !media_pool_ || export_worker_) return;
+    if (!document_ || !media_pool_ || export_worker_ || audio_keyframe_worker_) return;
 
     MotionVideoExportDialog dialog(document_->canvasSize(), document_->frameRate(), this);
     if (dialog.exec() != QDialog::Accepted) return;
@@ -814,7 +827,7 @@ void MainWindow::startVideoExport()
         [owner](MotionExportResult result) mutable {
             if (!owner.isNull()) owner->finishVideoExport(std::move(result));
         });
-    export_video_action_->setEnabled(false);
+    updateDocumentState();
     export_progress_->show();
     export_worker_->start();
 }
@@ -841,6 +854,163 @@ void MainWindow::finishVideoExport(MotionExportResult result)
         QMessageBox::warning(this, QStringLiteral("Video Export Failed"),
             QStringLiteral("The video could not be exported. See the Motion Studio log for details."));
     }
+}
+
+void MainWindow::generateKeyframesFromAudio()
+{
+    finishPendingTransformEdit();
+    if (!document_ || audio_keyframe_worker_ || export_worker_) return;
+    const auto selected = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (selected == document_->layers().end() || selected->duration_frames <= 0) return;
+
+    AudioKeyframeDialog dialog(QString::fromUtf8(
+        selected->name.data(), static_cast<qsizetype>(selected->name.size())), this);
+    if (dialog.exec() != QDialog::Accepted) return;
+    const auto settings = dialog.settings();
+
+    const auto maximum_keyframes = persistence::MotionDocumentStore::maximum_keyframe_count;
+    std::size_t other_keyframes = 0;
+    const auto add_other_keyframes = [&other_keyframes, maximum_keyframes](std::size_t count) {
+        other_keyframes = count > maximum_keyframes - other_keyframes
+            ? maximum_keyframes : other_keyframes + count;
+    };
+    for (const auto& layer : document_->layers()) {
+        if (layer.id != selected->id) {
+            add_other_keyframes(layer.keyframes.position_x.size());
+            add_other_keyframes(layer.keyframes.position_y.size());
+            add_other_keyframes(layer.keyframes.scale.size());
+            add_other_keyframes(layer.keyframes.rotation.size());
+            add_other_keyframes(layer.keyframes.opacity.size());
+            continue;
+        }
+        if (settings.property != TransformProperty::PositionX)
+            add_other_keyframes(layer.keyframes.position_x.size());
+        if (settings.property != TransformProperty::PositionY)
+            add_other_keyframes(layer.keyframes.position_y.size());
+        if (settings.property != TransformProperty::Scale)
+            add_other_keyframes(layer.keyframes.scale.size());
+        if (settings.property != TransformProperty::Rotation)
+            add_other_keyframes(layer.keyframes.rotation.size());
+        if (settings.property != TransformProperty::Opacity)
+            add_other_keyframes(layer.keyframes.opacity.size());
+    }
+    const auto available_keyframes = other_keyframes < maximum_keyframes
+        ? maximum_keyframes - other_keyframes : 0;
+    const auto analysis_limit = std::min<std::uint64_t>(
+        static_cast<std::uint64_t>(selected->duration_frames),
+        static_cast<std::uint64_t>(available_keyframes) + 1U);
+    if (analysis_limit == 0) {
+        QMessageBox::warning(this, QStringLiteral("Audio Keyframes"),
+            QStringLiteral("This composition has reached its supported keyframe limit."));
+        return;
+    }
+
+    AudioKeyframeGenerationRequest request;
+    request.audio_path = pathFromQString(settings.audio_path);
+    request.layer_id = selected->id;
+    request.frame_rate = document_->frameRate();
+    request.layer_duration_frames = selected->duration_frames;
+    request.analysis_frame_limit = static_cast<std::int64_t>(analysis_limit);
+    request.property = settings.property;
+    request.minimum_value = settings.minimum_value;
+    request.maximum_value = settings.maximum_value;
+    request.maximum_keyframe_count = available_keyframes;
+
+    audio_keyframe_progress_ = new QProgressDialog(
+        QStringLiteral("Analyzing audio..."), QStringLiteral("Cancel"), 0, 100, this);
+    audio_keyframe_progress_->setObjectName(QStringLiteral("motion-audio-keyframe-progress"));
+    audio_keyframe_progress_->setWindowTitle(QStringLiteral("Generate Audio Keyframes"));
+    audio_keyframe_progress_->setWindowModality(Qt::WindowModal);
+    audio_keyframe_progress_->setAutoClose(false);
+    audio_keyframe_progress_->setAutoReset(false);
+    audio_keyframe_progress_->setMinimumDuration(250);
+    audio_keyframe_progress_->setValue(0);
+    connect(audio_keyframe_progress_, &QProgressDialog::canceled, this, [this] {
+        if (!audio_keyframe_worker_) return;
+        audio_keyframe_worker_->cancel();
+        audio_keyframe_progress_->setLabelText(QStringLiteral("Canceling audio analysis..."));
+        audio_keyframe_progress_->setCancelButton(nullptr);
+    });
+
+    QPointer<MainWindow> owner(this);
+    audio_keyframe_worker_ = std::make_unique<AudioKeyframeGenerationWorker>(
+        this, std::move(request),
+        [owner](int progress) {
+            if (owner.isNull() || owner->audio_keyframe_progress_ == nullptr) return;
+            owner->audio_keyframe_progress_->setLabelText(
+                QStringLiteral("Analyzing audio... %1%").arg(progress));
+            owner->audio_keyframe_progress_->setValue(progress);
+        },
+        [owner](AudioKeyframeGenerationResult result) mutable {
+            if (!owner.isNull()) owner->finishAudioKeyframeGeneration(std::move(result));
+        });
+    updateDocumentState();
+    audio_keyframe_progress_->show();
+    audio_keyframe_worker_->start();
+}
+
+void MainWindow::finishAudioKeyframeGeneration(AudioKeyframeGenerationResult result)
+{
+    if (audio_keyframe_worker_) {
+        audio_keyframe_worker_->wait();
+        audio_keyframe_worker_.reset();
+    }
+    if (audio_keyframe_progress_ != nullptr) {
+        audio_keyframe_progress_->close();
+        audio_keyframe_progress_->deleteLater();
+        audio_keyframe_progress_ = nullptr;
+    }
+    updateDocumentState();
+
+    if (result.cancelled) {
+        statusBar()->showMessage(QStringLiteral("Audio keyframe generation canceled."), 5000);
+        return;
+    }
+    if (!result.succeeded) {
+        QMessageBox::warning(this, QStringLiteral("Audio Keyframes Failed"),
+            QStringLiteral("Keyframes could not be generated. See the Motion Studio log for details."));
+        return;
+    }
+    if (result.silent) {
+        statusBar()->showMessage(
+            QStringLiteral("No audio samples or signal were found; the layer was not changed."),
+            6000);
+        return;
+    }
+    if (!document_) return;
+    const auto selected = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [&result](const auto& layer) { return layer.id == result.layer_id; });
+    if (selected == document_->layers().end()) return;
+
+    auto before = captureEditState();
+    try {
+        if (!document_->replaceLayerKeyframes(
+                result.layer_id, result.property, result.keyframes)) {
+            throw std::runtime_error("The generated keyframes failed document validation.");
+        }
+    } catch (const std::exception& error) {
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Error,
+            "motion_audio", "apply_keyframes", error.what(),
+            {{"path", pathForLog(result.audio_path)},
+             {"layer_id", std::to_string(result.layer_id)}});
+        QMessageBox::warning(this, QStringLiteral("Audio Keyframes Failed"),
+            QStringLiteral("Keyframes could not be applied. See the Motion Studio log for details."));
+        return;
+    }
+
+    (void)recordCompositionEdit(std::move(before));
+    selected_layer_id_ = result.layer_id;
+    timeline_->setLayerExpanded(result.layer_id, true);
+    timeline_->setTransformGroupExpanded(result.layer_id, true);
+    selectCurveSegment(result.layer_id, result.property, 0);
+    refreshTimeline();
+    syncTransformInspector();
+    updateDocumentState();
+    requestPreview();
+    statusBar()->showMessage(
+        QStringLiteral("Generated %1 audio keyframes.").arg(result.keyframes.size()), 6000);
 }
 
 bool MainWindow::confirmReplaceDocument()
@@ -897,18 +1067,30 @@ void MainWindow::updateDocumentState()
 {
     const bool has_document = document_.has_value();
     const bool dirty = documentIsDirty();
+    bool selected_layer_exists = false;
+    if (has_document) {
+        selected_layer_exists = std::any_of(
+            document_->layers().begin(), document_->layers().end(), [this](const auto& layer) {
+                return layer.id == selected_layer_id_ && layer.duration_frames > 0;
+            });
+    }
     if (import_media_action_ != nullptr) import_media_action_->setEnabled(has_document);
     if (new_text_layer_action_ != nullptr) new_text_layer_action_->setEnabled(has_document);
     if (new_rectangle_layer_action_ != nullptr)
         new_rectangle_layer_action_->setEnabled(has_document);
     if (new_ellipse_layer_action_ != nullptr)
         new_ellipse_layer_action_->setEnabled(has_document);
+    if (generate_audio_keyframes_action_ != nullptr) {
+        generate_audio_keyframes_action_->setEnabled(
+            selected_layer_exists && !audio_keyframe_worker_ && !export_worker_);
+    }
     if (save_composition_action_ != nullptr) save_composition_action_->setEnabled(has_document);
     if (save_composition_as_action_ != nullptr)
         save_composition_as_action_->setEnabled(has_document);
     if (export_video_action_ != nullptr) {
         const bool has_layers = has_document && !document_->layers().empty();
-        export_video_action_->setEnabled(has_layers && !export_worker_);
+        export_video_action_->setEnabled(
+            has_layers && !export_worker_ && !audio_keyframe_worker_);
     }
     updateHistoryActions();
     if (!has_document) {
@@ -1176,6 +1358,15 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (!confirmReplaceDocument()) {
         event->ignore();
         return;
+    }
+    if (audio_keyframe_worker_) {
+        audio_keyframe_worker_->cancelAndWait();
+        audio_keyframe_worker_.reset();
+    }
+    if (audio_keyframe_progress_ != nullptr) {
+        audio_keyframe_progress_->close();
+        audio_keyframe_progress_->deleteLater();
+        audio_keyframe_progress_ = nullptr;
     }
     if (export_worker_) {
         export_worker_->cancelAndWait();
@@ -2039,6 +2230,7 @@ void MainWindow::selectLayer(model::LayerId id)
     } else {
         inspector_->selectTransformTab();
     }
+    updateDocumentState();
 }
 
 void MainWindow::createContentLayer(model::LayerKind kind, model::ShapeKind shape)

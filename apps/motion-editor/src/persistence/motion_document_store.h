@@ -3,6 +3,7 @@
 #include "../model/motion_project_data.h"
 
 #include <filesystem>
+#include <cstddef>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -43,6 +44,7 @@ private:
 class MotionDocumentStore final {
 public:
     static constexpr int current_format_version = 4;
+    static constexpr std::size_t maximum_keyframe_count = 2'000'000;
     static constexpr const char* format_identifier = "creative-suite.motion-studio";
 
     [[nodiscard]] static model::MotionProjectData load(
