@@ -13,6 +13,8 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 
+#include <QScrollArea>
+
 namespace creative_suite::hub {
 
 SettingsPage::SettingsPage(QWidget* parent)
@@ -22,27 +24,41 @@ SettingsPage::SettingsPage(QWidget* parent)
 }
 
 void SettingsPage::setupUi() {
-    auto* mainLayout = new QVBoxLayout(this);
+    auto* rootLayout = new QVBoxLayout(this);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
+
+    auto* scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setStyleSheet(QStringLiteral("background: transparent;"));
+
+    auto* scrollContainer = new QWidget(scrollArea);
+    scrollContainer->setStyleSheet(QStringLiteral("background: transparent;"));
+
+    auto* mainLayout = new QVBoxLayout(scrollContainer);
     mainLayout->setContentsMargins(28, 24, 28, 24);
     mainLayout->setSpacing(20);
 
     // Title & Subtitle
-    auto* titleLabel = new QLabel(QStringLiteral("Configurações do Hub"), this);
+    auto* titleLabel = new QLabel(QStringLiteral("Configurações do Hub"), scrollContainer);
     titleLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"));
     mainLayout->addWidget(titleLabel);
 
-    auto* subLabel = new QLabel(QStringLiteral("Personalize caminhos de instalação, notificações e preferências do sistema."), this);
+    auto* subLabel = new QLabel(QStringLiteral("Personalize caminhos de instalação, notificações e preferências do sistema."), scrollContainer);
+    subLabel->setWordWrap(true);
     subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #8e8e9e; background: transparent; margin-bottom: 4px;"));
     mainLayout->addWidget(subLabel);
 
     // Section 1: Instalação (Card)
-    auto* installCard = new QFrame(this);
+    auto* installCard = new QFrame(scrollContainer);
     installCard->setStyleSheet(QStringLiteral(
         "QFrame {"
         "   background-color: #161616;"
         "   border: 1px solid #262626;"
         "   border-radius: 12px;"
-        "   padding: 12px 16px;"
+        "   padding: 14px 18px;"
         "}"
     ));
     auto* installLayout = new QVBoxLayout(installCard);
@@ -58,10 +74,12 @@ void SettingsPage::setupUi() {
     const QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + QStringLiteral("/apps");
     m_installPathEdit = new QLineEdit(defaultPath, installCard);
     m_installPathEdit->setReadOnly(true);
+    m_installPathEdit->setFixedHeight(36);
     m_installPathEdit->setStyleSheet(HubStyle::searchInputStyle());
     pathRow->addWidget(m_installPathEdit, 1);
 
     auto* browseBtn = new QPushButton(QStringLiteral("Alterar..."), installCard);
+    browseBtn->setFixedHeight(36);
     browseBtn->setCursor(Qt::PointingHandCursor);
     browseBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(browseBtn, &QPushButton::clicked, this, &SettingsPage::onBrowseInstallPath);
@@ -71,13 +89,13 @@ void SettingsPage::setupUi() {
     mainLayout->addWidget(installCard);
 
     // Section 2: Geral (Card)
-    auto* generalCard = new QFrame(this);
+    auto* generalCard = new QFrame(scrollContainer);
     generalCard->setStyleSheet(QStringLiteral(
         "QFrame {"
         "   background-color: #161616;"
         "   border: 1px solid #262626;"
         "   border-radius: 12px;"
-        "   padding: 12px 16px;"
+        "   padding: 14px 18px;"
         "}"
     ));
     auto* generalLayout = new QVBoxLayout(generalCard);
@@ -88,6 +106,7 @@ void SettingsPage::setupUi() {
     generalLayout->addWidget(generalSectionLabel);
 
     m_autostartCheck = new QCheckBox(QStringLiteral("Iniciar o Creative Suite Hub junto com o Windows"), generalCard);
+    m_autostartCheck->setMinimumHeight(24);
     m_autostartCheck->setStyleSheet(QStringLiteral(
         "QCheckBox { color: #d0d0d0; font-size: 13px; font-weight: 500; spacing: 8px; }"
         "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #383838; background: #1a1a1a; }"
@@ -97,6 +116,7 @@ void SettingsPage::setupUi() {
 
     m_notificationsCheck = new QCheckBox(QStringLiteral("Notificar automaticamente sobre novas versões disponíveis"), generalCard);
     m_notificationsCheck->setChecked(true);
+    m_notificationsCheck->setMinimumHeight(24);
     m_notificationsCheck->setStyleSheet(QStringLiteral(
         "QCheckBox { color: #d0d0d0; font-size: 13px; font-weight: 500; spacing: 8px; }"
         "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #383838; background: #1a1a1a; }"
@@ -107,13 +127,13 @@ void SettingsPage::setupUi() {
     mainLayout->addWidget(generalCard);
 
     // Section 3: Diagnósticos e Logs (Card)
-    auto* diagCard = new QFrame(this);
+    auto* diagCard = new QFrame(scrollContainer);
     diagCard->setStyleSheet(QStringLiteral(
         "QFrame {"
         "   background-color: #161616;"
         "   border: 1px solid #262626;"
         "   border-radius: 12px;"
-        "   padding: 12px 16px;"
+        "   padding: 14px 18px;"
         "}"
     ));
     auto* diagLayout = new QVBoxLayout(diagCard);
@@ -128,10 +148,12 @@ void SettingsPage::setupUi() {
 
     m_logPathEdit = new QLineEdit(HubLogger::instance().logFilePath(), diagCard);
     m_logPathEdit->setReadOnly(true);
+    m_logPathEdit->setFixedHeight(36);
     m_logPathEdit->setStyleSheet(HubStyle::searchInputStyle());
     logRow->addWidget(m_logPathEdit, 1);
 
     auto* openLogBtn = new QPushButton(QStringLiteral("Abrir Pasta"), diagCard);
+    openLogBtn->setFixedHeight(36);
     openLogBtn->setCursor(Qt::PointingHandCursor);
     openLogBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(openLogBtn, &QPushButton::clicked, this, &SettingsPage::onOpenLogFolder);
@@ -141,6 +163,9 @@ void SettingsPage::setupUi() {
     mainLayout->addWidget(diagCard);
 
     mainLayout->addStretch();
+
+    scrollArea->setWidget(scrollContainer);
+    rootLayout->addWidget(scrollArea);
 }
 
 void SettingsPage::onBrowseInstallPath() {

@@ -5,6 +5,8 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 
+#include <QScrollArea>
+
 namespace creative_suite::hub {
 
 UpdatesPage::UpdatesPage(AppCatalog* catalog, QWidget* parent)
@@ -22,7 +24,20 @@ UpdatesPage::UpdatesPage(AppCatalog* catalog, QWidget* parent)
 }
 
 void UpdatesPage::setupUi() {
-    auto* mainLayout = new QVBoxLayout(this);
+    auto* rootLayout = new QVBoxLayout(this);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
+
+    m_scrollArea = new QScrollArea(this);
+    m_scrollArea->setWidgetResizable(true);
+    m_scrollArea->setFrameShape(QFrame::NoFrame);
+    m_scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_scrollArea->setStyleSheet(QStringLiteral("background: transparent;"));
+
+    auto* scrollContainer = new QWidget(m_scrollArea);
+    scrollContainer->setStyleSheet(QStringLiteral("background: transparent;"));
+
+    auto* mainLayout = new QVBoxLayout(scrollContainer);
     mainLayout->setContentsMargins(28, 24, 28, 24);
     mainLayout->setSpacing(20);
 
@@ -31,11 +46,11 @@ void UpdatesPage::setupUi() {
     auto* titleCol = new QVBoxLayout();
     titleCol->setSpacing(4);
 
-    auto* titleLabel = new QLabel(QStringLiteral("Atualizações Disponíveis"), this);
+    auto* titleLabel = new QLabel(QStringLiteral("Atualizações Disponíveis"), scrollContainer);
     titleLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"));
     titleCol->addWidget(titleLabel);
 
-    auto* subLabel = new QLabel(QStringLiteral("Mantenha seus aplicativos sempre na versão mais estável, rápida e com novos recursos."), this);
+    auto* subLabel = new QLabel(QStringLiteral("Mantenha seus aplicativos sempre na versão mais estável, rápida e com novos recursos."), scrollContainer);
     subLabel->setWordWrap(true);
     subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #8e8e9e; background: transparent;"));
     titleCol->addWidget(subLabel);
@@ -43,7 +58,7 @@ void UpdatesPage::setupUi() {
     headerRow->addLayout(titleCol);
     headerRow->addStretch();
 
-    m_checkUpdatesButton = new QPushButton(QStringLiteral("Verificar Atualizações"), this);
+    m_checkUpdatesButton = new QPushButton(QStringLiteral("Verificar Atualizações"), scrollContainer);
     m_checkUpdatesButton->setStyleSheet(HubStyle::secondaryButtonStyle());
     m_checkUpdatesButton->setCursor(Qt::PointingHandCursor);
     connect(m_checkUpdatesButton, &QPushButton::clicked, this, &UpdatesPage::checkUpdatesRequested);
@@ -55,7 +70,7 @@ void UpdatesPage::setupUi() {
     m_contentLayout->setSpacing(20);
     m_contentLayout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
 
-    m_emptyStateLabel = new QLabel(this);
+    m_emptyStateLabel = new QLabel(scrollContainer);
     m_emptyStateLabel->setAlignment(Qt::AlignCenter);
     m_emptyStateLabel->setStyleSheet(QStringLiteral(
         "color: #d0d0d0;"
@@ -72,6 +87,9 @@ void UpdatesPage::setupUi() {
 
     mainLayout->addLayout(m_contentLayout);
     mainLayout->addStretch();
+
+    m_scrollArea->setWidget(scrollContainer);
+    rootLayout->addWidget(m_scrollArea);
 }
 
 void UpdatesPage::resizeEvent(QResizeEvent* event) {
@@ -93,7 +111,10 @@ void UpdatesPage::refreshUpdates() {
     const auto& apps = m_catalog->apps();
     int updateIndex = 0;
 
-    const int availableWidth = width() - 56;
+    int availableWidth = width() - 56;
+    if (m_scrollArea && m_scrollArea->viewport() && m_scrollArea->viewport()->width() > 0) {
+        availableWidth = m_scrollArea->viewport()->width() - 56;
+    }
     constexpr int cardW = AppCardWidget::kCardWidth;
     constexpr int spacing = 20;
     const int columns = std::max(1, (availableWidth + spacing) / (cardW + spacing));

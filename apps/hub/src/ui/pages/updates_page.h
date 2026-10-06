@@ -5,6 +5,7 @@
 
 #include <QWidget>
 #include <QGridLayout>
+#include <QScrollArea>
 #include <QLabel>
 #include <QPushButton>
 #include <vector>
@@ -31,6 +32,7 @@ private:
     void setupUi();
 
     AppCatalog* m_catalog{nullptr};
+    QScrollArea* m_scrollArea{nullptr};
     QGridLayout* m_contentLayout{nullptr};
     QLabel* m_emptyStateLabel{nullptr};
     QPushButton* m_checkUpdatesButton{nullptr};
