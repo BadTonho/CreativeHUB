@@ -114,10 +114,13 @@ conhecida como funcional, caso seus arquivos ainda estejam disponíveis.
 
 Cada componente precisa de um identificador estável, independente do nome
 visível e do caminho do executável. O identificador não deve mudar entre
-atualizações, traduções ou alterações de marca. Exemplos provisórios são
-`video-editor`, `image-editor`, `motion-studio`, `creative-hub` e
-`app-recovery`; esses nomes ainda precisam ser revisados antes de uma primeira
-publicação pública.
+atualizações, traduções ou alterações de marca. Os IDs internos provisórios
+dos quatro aplicativos são `hub`, `video-editor`, `image-editor` e
+`motion-editor`. O nome visível de cada aplicativo pode mudar sem alterar seu
+ID. Esses IDs podem ser revistos antes da primeira publicação pública; depois
+disso, devem permanecer estáveis ou ter uma migração explícita. Se a ferramenta
+de recuperação for publicada como executável independente, seu ID provisório é
+`app-recovery`.
 
 As versões dos quatro aplicativos devem poder avançar independentemente. Uma
 release da suíte terá uma versão própria, que não altera por si só as versões
@@ -226,6 +229,11 @@ validar os metadados antes de aceitar o download. A assinatura Authenticode e a
 assinatura do catálogo têm funções diferentes e devem usar chaves separadas; um
 hash publicado junto ao arquivo no GitHub, sozinho, não autentica a release.
 
+O nome desejado para o publicador no Windows é **Tonho Studios**. Essa é uma
+preferência de identidade pública, ainda sujeita à validação e às regras do
+provedor; o certificado não deve ser tratado como garantido com esse nome até
+que a elegibilidade seja confirmada.
+
 O provedor de assinatura ainda não foi escolhido. A documentação atual da
 Microsoft recomenda Azure Artifact Signing para distribuição fora da Store,
 mas a elegibilidade depende do tipo e do país da identidade. No momento, a
@@ -245,6 +253,24 @@ deixou de existir.
 Referências: [Windows code-signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options),
 [Authenticode time stamps](https://learn.microsoft.com/en-us/windows/win32/seccrypto/time-stamping-authenticode-signatures)
 e [SignPath Foundation eligibility](https://signpath.org/terms.html).
+
+### SmartScreen com downloads pelo GitHub
+
+A distribuição direta dos instaladores de Windows pelo GitHub Releases foi
+mantida. Nesse caminho, não há garantia de que o SmartScreen deixará de mostrar
+avisos nas primeiras versões, mesmo com assinatura válida. Assinar todos os
+lançamentos com uma identidade pública consistente pode ajudar a construir
+reputação, mas não remove imediatamente os avisos. O objetivo é reduzir os
+alertas ao longo do tempo, sem prometer eliminá-los desde o primeiro download.
+[SmartScreen reputation for Windows app developers](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
+
+### Proteção da chave de assinatura
+
+Builds normais de desenvolvimento não devem acessar chaves privadas de
+assinatura. O processo de publicação deve protegê-las e nunca mover nem apagar
+a chave de origem; qualquer limpeza deve se limitar a cópias temporárias.
+Detalhes de armazenamento e operação da chave ficam fora desta documentação
+pública.
 
 Tokens de publicação e chaves privadas devem ficar apenas nos segredos do
 processo de release. Eles nunca devem ser embutidos nos aplicativos, no
