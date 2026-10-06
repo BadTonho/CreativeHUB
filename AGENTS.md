@@ -225,14 +225,27 @@ Important decisions must be recorded in the documentation, indicating whether th
   explicitly requests them. Build only the application(s) and targets needed
   for the requested change and its required verification; do not rebuild
   unrelated applications or the whole suite without need.
+- On Windows, the canonical development build root for all four applications
+  is `.\build\apps\`, with one subdirectory per
+  application ID: `hub`, `video-editor`, `image-editor`, and `motion-editor`.
+  For a multi-configuration generator, executable outputs belong under
+  `.\build\apps\<application-id>\<Configuration>\`. Keep all four app
+  outputs in this tree. Auxiliary trees such as
+  `build/<feature>-ninja`, test, benchmark, install, or staging directories
+  must not be used or reported as the runnable app output. Never copy an
+  executable from an auxiliary tree into `build/apps` to disguise a failed
+  canonical build; fix the output configuration or report the build failure.
 - Before building an application for the user to run, identify the executable
   path used by their actual launch method, such as the Hub, a Visual Studio
   launch profile, a shortcut, or a directly launched executable. Do not assume
   that a README example, a test build directory, or a temporary build tree is
-  the executable the user is running. If the launch path cannot be determined
-  from repository configuration or the running process, ask the user which
-  launch method they use before building. Build that application and
-  configuration at its expected output path; do not silently copy an
+  the executable the user is running. The Windows development output root is
+  fixed above; inspect the launcher configuration to identify the correct app
+  and configuration within it, and do not ask the user to repeat the output
+  root. If the launch path cannot be determined from repository configuration
+  or the running process, ask only which launch method they use before
+  building. Build that application and configuration at its expected output
+  path; do not silently copy an
   executable from another build tree. After building, verify the full output
   path and modification time and report the exact path. Do not claim the user's
   app is updated unless the output matches the executable they launch.
