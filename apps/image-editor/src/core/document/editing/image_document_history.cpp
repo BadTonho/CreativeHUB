@@ -1,4 +1,4 @@
-#include "image_document_history.h"
+#include "editing/image_document_history.h"
 
 #include <utility>
 

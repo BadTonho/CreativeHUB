@@ -1,5 +1,5 @@
-#include "image_exporter.h"
-#include "image_document_renderer.h"
+#include "import_export/image_exporter.h"
+#include "rendering/image_document_renderer.h"
 #include "image_document_utils.h"
 #include "../diagnostics/image_editor_performance_metrics.h"
 

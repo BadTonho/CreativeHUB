@@ -1,4 +1,4 @@
-#include "image_layer_raster_cache.h"
+#include "rendering/image_layer_raster_cache.h"
 
 #include <algorithm>
 #include <limits>

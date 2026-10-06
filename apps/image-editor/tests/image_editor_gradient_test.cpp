@@ -1,4 +1,4 @@
-#include "image_linear_gradient.h"
+#include "rendering/image_linear_gradient.h"
 #include "image_document_session.h"
 
 #include <QFile>

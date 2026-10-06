@@ -1,6 +1,6 @@
-#include "image_layer_mask_editor.h"
+#include "editing/image_layer_mask_editor.h"
 
-#include "image_document_geometry.h"
+#include "rendering/image_document_geometry.h"
 #include "image_document_utils.h"
 
 #include <QUuid>

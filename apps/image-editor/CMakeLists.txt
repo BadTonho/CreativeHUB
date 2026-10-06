@@ -6,30 +6,31 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
 
 add_library(creative-suite-image-editor-core STATIC
-    src/core/document/image_exporter.h
-    src/core/document/image_exporter.cpp
-    src/core/document/image_document_codec.cpp
-    src/core/document/image_document_codec.h
-    src/core/document/image_document_geometry.cpp
-    src/core/document/image_document_geometry.h
-    src/core/document/image_bucket_fill.cpp
-    src/core/document/image_bucket_fill.h
-    src/core/document/image_linear_gradient.cpp
-    src/core/document/image_linear_gradient.h
-    src/core/document/image_document_history.cpp
-    src/core/document/image_document_history.h
-    src/core/document/image_document_object_editor.cpp
-    src/core/document/image_document_object_editor.h
-    src/core/document/image_document_renderer.cpp
-    src/core/document/image_layer_raster_cache.cpp
-    src/core/document/image_document_renderer.h
+    src/core/document/persistence/image_document_codec.cpp
+    src/core/document/persistence/image_document_codec.h
+    src/core/document/rendering/image_document_geometry.cpp
+    src/core/document/rendering/image_document_geometry.h
+    src/core/document/rendering/image_bucket_fill.cpp
+    src/core/document/rendering/image_bucket_fill.h
+    src/core/document/rendering/image_linear_gradient.cpp
+    src/core/document/rendering/image_linear_gradient.h
+    src/core/document/editing/image_document_history.cpp
+    src/core/document/editing/image_document_history.h
+    src/core/document/editing/image_document_object_editor.cpp
+    src/core/document/editing/image_document_object_editor.h
+    src/core/document/rendering/image_document_renderer.cpp
+    src/core/document/rendering/image_layer_raster_cache.cpp
+    src/core/document/rendering/image_layer_raster_cache.h
+    src/core/document/rendering/image_document_renderer.h
     src/core/document/image_document_utils.h
-    src/core/document/image_layer_mask_editor.cpp
-    src/core/document/image_layer_mask_editor.h
-    src/core/document/image_layer_stack_editor.cpp
-    src/core/document/image_layer_stack_editor.h
-    src/core/document/image_raster_import.cpp
-    src/core/document/image_raster_import.h
+    src/core/document/editing/image_layer_mask_editor.cpp
+    src/core/document/editing/image_layer_mask_editor.h
+    src/core/document/editing/image_layer_stack_editor.cpp
+    src/core/document/editing/image_layer_stack_editor.h
+    src/core/document/import_export/image_exporter.h
+    src/core/document/import_export/image_exporter.cpp
+    src/core/document/import_export/image_raster_import.cpp
+    src/core/document/import_export/image_raster_import.h
     src/core/document/image_document_store.cpp
     src/core/document/image_document_store.h
     src/core/document/image_document_session.cpp

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "image_document_store.h"
-#include "image_layer_raster_cache.h"
+#include "rendering/image_layer_raster_cache.h"
 
 #include <QHash>
 #include <QImage>

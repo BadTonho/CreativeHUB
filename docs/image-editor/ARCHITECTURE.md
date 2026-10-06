@@ -11,9 +11,12 @@ persistence, and recovery.
 ## Source layout
 
 - `src/app/` contains the executable entry point.
-- `src/core/document/` contains the editable document session, stateless image
-  renderer, bucket-fill and linear-gradient algorithms, image exporter, and
-  `.cimg` serialization.
+- `src/core/document/` keeps the document session, persisted document model,
+  and shared document utilities at its root. Its subfolders group implementation
+  by responsibility: `persistence/` contains `.cimg` serialization;
+  `rendering/` contains geometry, compositing, raster cache, and pixel
+  operations; `editing/` contains history and layer/object editors; and
+  `import_export/` contains raster import and image export.
 - `src/core/recovery/` contains local recovery snapshot persistence.
 - `src/core/diagnostics/` contains bounded technical error logging and the
   optional performance collector and JSON Lines summary writer.
@@ -143,8 +146,8 @@ state, edit history, imported-image references, selection, and the mutable
 layer-thumbnail cache. `ImageDocumentRenderer` receives const document and
 image references and produces composites, selected-layer/group renders,
 object-excluded previews, and thumbnail pixels; it owns no cache and does not
-mutate the document. `image_exporter.cpp` validates the export request, asks
-the renderer for the requested pixels, then handles JPEG flattening,
+mutate the document. `import_export/image_exporter.cpp` validates the export
+request, asks the renderer for the requested pixels, then handles JPEG flattening,
 cancellation, progress, and atomic file writing. This split keeps rendering
 and file encoding independent of session history while preserving the session
 and export entry points used by the UI.

@@ -1,7 +1,7 @@
-#include "image_document_renderer.h"
+#include "rendering/image_document_renderer.h"
 #include "image_document_session.h"
 #include "image_editor_performance_metrics.h"
-#include "image_exporter.h"
+#include "import_export/image_exporter.h"
 
 #include <creative_suite/system_monitor/performance_usage.h>
 #include <creative_suite/system_monitor/system_memory_usage.h>

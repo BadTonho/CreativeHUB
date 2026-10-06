@@ -1,4 +1,4 @@
-#include "image_raster_import.h"
+#include "import_export/image_raster_import.h"
 #include "image_document_store.h"
 
 #include <QDir>
