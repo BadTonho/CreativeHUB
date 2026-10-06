@@ -75,6 +75,10 @@ target_include_directories(creative-suite-diagnostics PUBLIC
 )
 target_compile_features(creative-suite-diagnostics PUBLIC cxx_std_20)
 
+if(BUILD_VIDEO_EDITOR OR BUILD_IMAGE_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_CREATIVE_HUB)
+    add_subdirectory(updater)
+endif()
+
 add_library(creative-suite-system-monitor STATIC
     system-monitor/src/performance_usage.cpp
     system-monitor/src/system_memory_usage.cpp
@@ -104,6 +108,7 @@ foreach(shared_target IN ITEMS
         creative-suite-composition
         creative-suite-composition-opengl
         creative-suite-diagnostics
+        creative-suite-updater
         creative-suite-system-monitor)
     if(NOT TARGET ${shared_target})
         continue()

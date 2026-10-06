@@ -19,7 +19,7 @@ void AppCatalog::populateDefaultApps() {
         QStringLiteral("Edição audiovisual e pós-produção"),
         QStringLiteral("Um editor de vídeo completo e ágil, com linha do tempo multitrilha, mixagem de áudio, aceleração por GPU opcional, transições, sobreposição de texto e exportação para formatos comuns."),
         QStringLiteral(""),
-        QStringLiteral("0.1.6"),
+        QStringLiteral(CREATIVE_SUITE_VERSION_VIDEO_EDITOR),
         QStringLiteral("creative-suite-video-editor.exe"),
         QStringLiteral(":/icons/video-editor.png"),
         AppStatus::NotInstalled,
@@ -39,7 +39,7 @@ void AppCatalog::populateDefaultApps() {
         QStringLiteral("Edição de imagens e gráficos em camadas"),
         QStringLiteral("Aplicativo de edição raster focada em manipulação de camadas, grupos, ferramentas de seleção inteligente, desenho de formas geométricas e suporte a camadas de imagens vinculadas."),
         QStringLiteral(""),
-        QStringLiteral("0.1.3"),
+        QStringLiteral(CREATIVE_SUITE_VERSION_IMAGE_EDITOR),
         QStringLiteral("creative-suite-image-editor.exe"),
         QStringLiteral(":/icons/image-editor.png"),
         AppStatus::NotInstalled,
@@ -59,7 +59,7 @@ void AppCatalog::populateDefaultApps() {
         QStringLiteral("Motion design e animação gráfica"),
         QStringLiteral("Ambiente especializado para motion design e composição avançada, combinando animação por keyframes, curvas Bezier precisas (Graph Editor), máscaras e exportação acelerada."),
         QStringLiteral(""),
-        QStringLiteral("0.1.1"),
+        QStringLiteral(CREATIVE_SUITE_VERSION_MOTION_EDITOR),
         QStringLiteral("creative-suite-motion-editor.exe"),
         QStringLiteral(":/icons/motion-studio.png"),
         AppStatus::NotInstalled,
@@ -100,6 +100,16 @@ void AppCatalog::updateAppVersion(const QString& id, const QString& installedVer
     for (auto& app : m_apps) {
         if (app.id() == id) {
             app.setInstalledVersion(installedVersion);
+            emit appUpdated(id);
+            return;
+        }
+    }
+}
+
+void AppCatalog::updateLatestVersion(const QString& id, const QString& latestVersion) {
+    for (auto& app : m_apps) {
+        if (app.id() == id) {
+            app.setLatestVersion(latestVersion);
             emit appUpdated(id);
             return;
         }

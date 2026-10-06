@@ -185,6 +185,9 @@ add_executable(creative-suite-main-editor
 target_link_libraries(creative-suite-main-editor PRIVATE
     creative-suite-main-editor-core
 )
+target_link_libraries(creative-suite-main-editor PRIVATE creative-suite::updater)
+target_compile_definitions(creative-suite-main-editor PRIVATE
+    CREATIVE_SUITE_APP_VERSION="${CREATIVE_SUITE_VERSION_VIDEO_EDITOR}")
 
 target_link_libraries(creative-suite-main-editor-core PUBLIC
     Qt6::Widgets
@@ -245,6 +248,11 @@ set_target_properties(creative-suite-main-editor PROPERTIES
 
 if(WIN32)
     set(APP_ICON_FILE "${CMAKE_SOURCE_DIR}/docs/assets/app-icons/video-editor.ico")
+    set(APP_PRODUCT_NAME "Video Editor")
+    set(APP_INTERNAL_ID "video-editor")
+    set(APP_EXECUTABLE_NAME "creative-suite-video-editor.exe")
+    set(APP_VERSION_STRING "${CREATIVE_SUITE_VERSION_VIDEO_EDITOR}")
+    string(REPLACE "." "," APP_FILE_VERSION "${APP_VERSION_STRING}.0")
     configure_file(
         "${CMAKE_SOURCE_DIR}/cmake/windows_app_icon.rc.in"
         "${CMAKE_CURRENT_BINARY_DIR}/video_editor_app_icon.rc"
@@ -255,7 +263,7 @@ if(WIN32)
     )
 endif()
 
-install(TARGETS creative-suite-main-editor
+install(TARGETS creative-suite-main-editor COMPONENT video-editor
     BUNDLE DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
@@ -266,7 +274,7 @@ qt_generate_deploy_app_script(
     NO_TRANSLATIONS
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
-install(SCRIPT ${deploy_script})
+install(SCRIPT ${deploy_script} COMPONENT video-editor)
 
 # Make the Release executable directly runnable from the CMake build tree on
 # Windows. The Qt location is discovered from the imported Qt target; no local
@@ -301,7 +309,7 @@ if(WIN32)
     list(REMOVE_DUPLICATES FFMPEG_RUNTIME_DLLS)
 
     if(FFMPEG_RUNTIME_DLLS)
-        install(FILES ${FFMPEG_RUNTIME_DLLS}
+        install(FILES ${FFMPEG_RUNTIME_DLLS} COMPONENT video-editor
             DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
 

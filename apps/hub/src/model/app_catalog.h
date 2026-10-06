@@ -18,6 +18,7 @@ public:
 
     void updateAppStatus(const QString& id, AppStatus status);
     void updateAppVersion(const QString& id, const QString& installedVersion);
+    void updateLatestVersion(const QString& id, const QString& latestVersion);
 
     void populateDefaultApps();
 

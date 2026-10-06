@@ -25,6 +25,12 @@ function(creative_suite_deploy_media_runtime target_name)
                     "$<TARGET_FILE_DIR:${target_name}>"
                 VERBATIM
             )
+            if(ARGC GREATER 1)
+                install(FILES ${media_ffmpeg_runtime_dlls}
+                    DESTINATION ${CMAKE_INSTALL_BINDIR}
+                    COMPONENT "${ARGV1}"
+                )
+            endif()
         endif()
     endif()
 endfunction()

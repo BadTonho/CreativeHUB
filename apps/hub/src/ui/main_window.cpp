@@ -3,11 +3,17 @@
 #include "theme/hub_palette.h"
 #include "theme/hub_style.h"
 #include "../diagnostics/hub_logger.h"
+#ifdef Q_OS_WIN
+#include <creative_suite/updater/update_dialog.h>
+#include <creative_suite/updater/update_service.h>
+#endif
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QResizeEvent>
+#include <QStatusBar>
+#include <QTimer>
 
 namespace creative_suite::hub {
 
@@ -23,6 +29,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     setupUi();
     scanInstalledApps();
+    configureUpdateServices();
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event) {
@@ -101,25 +108,146 @@ void MainWindow::setupUi() {
         }
     });
 
-    // Download simulation timer for UI visual demo
-    m_downloadTimer = new QTimer(this);
-    connect(m_downloadTimer, &QTimer::timeout, this, &MainWindow::simulateDownloadStep);
 }
 
 void MainWindow::scanInstalledApps() {
     int updatesCount = 0;
 
     for (const auto& app : m_catalog.apps()) {
+#ifdef Q_OS_WIN
+        const auto registration = creative_suite::updater::readInstalledApplication(app.id());
+        if (registration) {
+            m_launcher.addSearchPath(registration->install_path);
+            const auto comparison = creative_suite::updater::compareVersions(
+                app.latestVersion(), registration->version);
+            m_catalog.updateAppStatus(app.id(),
+                comparison && *comparison > 0 ? AppStatus::UpdateAvailable : AppStatus::Installed);
+            m_catalog.updateAppVersion(app.id(), registration->version);
+        } else if (m_launcher.isInstalled(app)) {
+            m_catalog.updateAppStatus(app.id(), AppStatus::Installed);
+        }
+#else
         if (m_launcher.isInstalled(app)) {
             m_catalog.updateAppStatus(app.id(), AppStatus::Installed);
             m_catalog.updateAppVersion(app.id(), app.latestVersion());
         }
+#endif
+        const auto current = m_catalog.findApp(app.id());
+        if (current && current->hasUpdate()) ++updatesCount;
     }
 
     m_sidebarWidget->setUpdatesCount(updatesCount);
     if (m_updatesPage) {
         m_updatesPage->refreshUpdates();
     }
+}
+
+void MainWindow::configureUpdateServices() {
+#ifdef Q_OS_WIN
+    m_updateRuntime = new creative_suite::updater::UpdateRuntime(QStringLiteral("hub"), this);
+    m_updateRuntime->resumePendingInstalls({QStringLiteral("video-editor"),
+                                            QStringLiteral("image-editor"),
+                                            QStringLiteral("motion-editor")});
+    for (const auto& app : m_catalog.apps()) {
+        auto* service = new creative_suite::updater::UpdateService(
+            creative_suite::updater::defaultConfig(
+                app.id(), app.name(), app.executableName(), app.latestVersion()), this);
+        m_updateServices.insert(app.id(), service);
+        connect(service, &creative_suite::updater::UpdateService::updateAvailable,
+                this, [this, service](const creative_suite::updater::ReleaseEntry& entry) {
+            m_catalog.updateLatestVersion(entry.app_id, entry.version);
+            if (service->config().installed) {
+                m_catalog.updateAppStatus(entry.app_id, AppStatus::UpdateAvailable);
+            }
+            scanInstalledApps();
+        });
+        connect(service, &creative_suite::updater::UpdateService::stateChanged,
+                this, [this, service, app_id = app.id()](creative_suite::updater::UpdateState state) {
+            if (state == creative_suite::updater::UpdateState::Downloading) {
+                m_catalog.updateAppStatus(app_id, AppStatus::Downloading);
+            } else if (state == creative_suite::updater::UpdateState::UpdateAvailable) {
+                m_catalog.updateAppStatus(app_id, service->config().installed
+                    ? AppStatus::UpdateAvailable : AppStatus::NotInstalled);
+            } else if (state == creative_suite::updater::UpdateState::UpToDate &&
+                       service->config().installed) {
+                m_catalog.updateAppStatus(app_id, AppStatus::Installed);
+                m_catalog.updateAppVersion(app_id, service->config().current_version);
+            } else if (state == creative_suite::updater::UpdateState::Failed) {
+                const auto app = m_catalog.findApp(app_id);
+                if (app && service->config().installed) {
+                    const auto comparison = creative_suite::updater::compareVersions(
+                        app->latestVersion(), service->config().current_version);
+                    m_catalog.updateAppStatus(app_id,
+                        comparison && *comparison > 0 ? AppStatus::UpdateAvailable : AppStatus::Installed);
+                } else if (!service->config().installed) {
+                    m_catalog.updateAppStatus(app_id, AppStatus::NotInstalled);
+                }
+            }
+        });
+        connect(service, &creative_suite::updater::UpdateService::operationFailed,
+                this, [this](const QString& message) {
+            statusBar()->showMessage(message, 10000);
+        });
+        connect(service, &creative_suite::updater::UpdateService::downloadReady,
+                this, [this, service](const QString& installer,
+                                      const creative_suite::updater::ReleaseEntry& entry) {
+            if (!m_updateRuntime) return;
+            const auto& config = service->config();
+            if (!m_updateRuntime->installOrWait(entry.app_id, config.install_path,
+                    config.executable_name, installer, entry.sha256_hex, config.installed)) {
+                return;
+            }
+            m_catalog.updateAppStatus(entry.app_id, AppStatus::Installing);
+            statusBar()->showMessage(QStringLiteral("O instalador de %1 foi iniciado.")
+                                     .arg(config.app_name), 8000);
+            QTimer::singleShot(5000, this, &MainWindow::scanInstalledApps);
+        });
+        connect(m_updateRuntime, &creative_suite::updater::UpdateRuntime::installationStateChanged,
+                this, [this](const QString& app_id, creative_suite::updater::UpdateState state) {
+            if (app_id != QStringLiteral("hub") &&
+                (state == creative_suite::updater::UpdateState::WaitingForApplicationToClose ||
+                 state == creative_suite::updater::UpdateState::InstallerStarted)) {
+                m_catalog.updateAppStatus(app_id, AppStatus::Installing);
+            }
+        });
+        connect(m_updateRuntime, &creative_suite::updater::UpdateRuntime::installationFailed,
+                this, [this](const QString& app_id, const QString& message) {
+            statusBar()->showMessage(message, 10000);
+            const auto app = m_catalog.findApp(app_id);
+            if (app && app->isInstalled()) m_catalog.updateAppStatus(app_id, AppStatus::Installed);
+        });
+        service->checkForUpdates();
+    }
+    QTimer::singleShot(0, this, [this] {
+        for (const auto& app : m_catalog.apps()) {
+            const auto registration = creative_suite::updater::readInstalledApplication(app.id());
+            if (!registration || !registration->rollback_available ||
+                !registration->needs_launch_check) continue;
+
+            QMessageBox recovery(this);
+            recovery.setIcon(QMessageBox::Warning);
+            recovery.setWindowTitle(QStringLiteral("Verifique a atualização"));
+            recovery.setText(QStringLiteral("O %1 foi atualizado recentemente, mas ainda não confirmou a inicialização. Ele está abrindo corretamente?")
+                             .arg(app.name()));
+            auto* restore = recovery.addButton(QStringLiteral("Restaurar versão anterior"),
+                                               QMessageBox::AcceptRole);
+            auto* working = recovery.addButton(QStringLiteral("Está funcionando"),
+                                               QMessageBox::RejectRole);
+            recovery.exec();
+            if (recovery.clickedButton() == restore) {
+                QString error;
+                if (creative_suite::updater::restorePreviousVersion(app.id(), &error)) {
+                    QMessageBox::information(this, QStringLiteral("Versão restaurada"),
+                        QStringLiteral("A versão anterior do %1 foi restaurada.").arg(app.name()));
+                } else {
+                    QMessageBox::warning(this, QStringLiteral("Não foi possível restaurar"), error);
+                }
+            } else if (recovery.clickedButton() == working) {
+                creative_suite::updater::markApplicationStartupHealthy(app.id());
+            }
+        }
+    });
+#endif
 }
 
 void MainWindow::onShowAppDetails(const QString& appId, const QRect& originRect) {
@@ -144,6 +272,13 @@ void MainWindow::onShowAppDetails(const QString& appId, const QRect& originRect)
 void MainWindow::onRefreshApps() {
     HubLogger::instance().logInfo(QStringLiteral("MainWindow"), QStringLiteral("onRefreshApps"), QStringLiteral("Verificando aplicativos instalados"));
     scanInstalledApps();
+#ifdef Q_OS_WIN
+    for (auto* service : m_updateServices) {
+        if (service && service->state() != creative_suite::updater::UpdateState::Downloading) {
+            service->checkForUpdates();
+        }
+    }
+#endif
 }
 
 void MainWindow::onOpenApp(const QString& appId) {
@@ -165,56 +300,27 @@ void MainWindow::onOpenApp(const QString& appId) {
 }
 
 void MainWindow::onDownloadApp(const QString& appId) {
-    HubLogger::instance().logInfo(
-        QStringLiteral("MainWindow"),
-        QStringLiteral("onDownloadApp"),
-        QStringLiteral("Iniciando download visual do app"),
-        appId
-    );
-
-    m_activeDownloadingAppId = appId;
-    m_activeDownloadProgress = 0.0;
-    m_catalog.updateAppStatus(appId, AppStatus::Downloading);
-
-    m_downloadTimer->start(100);
+#ifdef Q_OS_WIN
+    auto* service = m_updateServices.value(appId, nullptr);
+    if (!service || !m_updateRuntime) {
+        statusBar()->showMessage(QStringLiteral("O atualizador não está disponível para este aplicativo."), 8000);
+        return;
+    }
+    creative_suite::updater::UpdateDialog dialog(service, m_updateRuntime, this);
+    dialog.exec();
+#else
+    Q_UNUSED(appId);
+    statusBar()->showMessage(QStringLiteral("A instalação pelo Hub estará disponível nesta plataforma em uma etapa futura."), 8000);
+#endif
 }
 
 void MainWindow::onCancelDownload(const QString& appId) {
-    if (m_activeDownloadingAppId == appId) {
-        m_downloadTimer->stop();
-        m_activeDownloadingAppId.clear();
-        m_activeDownloadProgress = 0.0;
-        m_catalog.updateAppStatus(appId, AppStatus::NotInstalled);
-    }
-}
-
-void MainWindow::simulateDownloadStep() {
-    if (m_activeDownloadingAppId.isEmpty()) {
-        m_downloadTimer->stop();
-        return;
-    }
-
-    m_activeDownloadProgress += 4.0;
-    if (m_activeDownloadProgress >= 100.0) {
-        m_downloadTimer->stop();
-        m_catalog.updateAppStatus(m_activeDownloadingAppId, AppStatus::Installed);
-        auto appOpt = m_catalog.findApp(m_activeDownloadingAppId);
-        if (appOpt) {
-            m_catalog.updateAppVersion(m_activeDownloadingAppId, appOpt->latestVersion());
-        }
-        m_activeDownloadingAppId.clear();
-        m_activeDownloadProgress = 0.0;
-        scanInstalledApps();
-    } else {
-        const double mb = (m_activeDownloadProgress / 100.0) * 180.0;
-        const QString text = QStringLiteral("%1 MB / 180 MB • 14.2 MB/s (%2%)")
-            .arg(QString::number(mb, 'f', 1))
-            .arg(static_cast<int>(m_activeDownloadProgress));
-
-        if (m_appsPage) {
-            m_appsPage->refreshCards();
-        }
-    }
+#ifdef Q_OS_WIN
+    auto* service = m_updateServices.value(appId, nullptr);
+    if (service) service->cancelDownload();
+#else
+    Q_UNUSED(appId);
+#endif
 }
 
 } // namespace creative_suite::hub

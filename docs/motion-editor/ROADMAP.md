@@ -313,6 +313,15 @@ readiness checks remain in this roadmap and
 | Startup and application UI | `motion_editor_startup_test.cpp` (`creative-suite-motion-editor-startup`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Startup and Media Pool bin filtering have offscreen coverage; the current UI has no separate media-search control. After tightening the seek test to wait for the final still frame, the full UI suite passed 10 repeated Debug runs on 2026-10-01. Broader visual, graphics-driver, and platform checks remain pending (**P2 validation**). |
 | Motion Studio to Video Editor editable handoff | No current integration test; handoff remains a later roadmap milestone | Planned, not implemented. Define producer/consumer tests when the contract is implemented; not a current regression gap. |
 
+### Windows updater coverage
+
+The shared updater tests in `libs/updater/tests/` cover catalog validation,
+version comparison, download resume/cancellation, network failure, and hash
+rejection (`updater-catalog-test`, `updater-service-test`). Motion Studio must
+update only its own installation. Packaged Windows validation is pending for
+install-path reuse, preserving compositions and preferences, installer
+rollback, and Hub restoration. See [`WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md).
+
 ### Current coverage gaps and pending validation
 
 - **P0 — critical paths mapped:** composition validation,

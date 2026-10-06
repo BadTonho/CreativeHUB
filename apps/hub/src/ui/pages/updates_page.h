@@ -23,7 +23,6 @@ signals:
     void appDetailsRequested(const QString& appId, const QRect& originRect = QRect());
     void checkUpdatesRequested();
     void updateAppRequested(const QString& appId);
-    void updateAllRequested();
 
 private:
     void setupUi();
@@ -32,7 +31,6 @@ private:
     QGridLayout* m_contentLayout{nullptr};
     QLabel* m_emptyStateLabel{nullptr};
     QPushButton* m_checkUpdatesButton{nullptr};
-    QPushButton* m_updateAllButton{nullptr};
     std::vector<AppCardWidget*> m_updateCards;
 };
 

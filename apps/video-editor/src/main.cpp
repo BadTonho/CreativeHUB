@@ -1,6 +1,9 @@
 #include "main_window/main_window.h"
 
 #include "logging/logger.h"
+#ifdef Q_OS_WIN
+#include <creative_suite/updater/update_service.h>
+#endif
 
 #include <QApplication>
 #include <QIcon>
@@ -12,6 +15,10 @@
 #include <string>
 
 namespace {
+
+#ifndef CREATIVE_SUITE_APP_VERSION
+#define CREATIVE_SUITE_APP_VERSION "0.1.6"
+#endif
 
 std::string pathToUtf8(const std::filesystem::path& path) {
     const auto value = path.u8string();
@@ -54,7 +61,7 @@ int main(int argc, char* argv[]) {
         "application",
         "startup",
         "Video Editor started.",
-        {{"version", "Beta 0.1.6"}, {"log_path", pathToUtf8(logger.log_path())}});
+        {{"version", CREATIVE_SUITE_APP_VERSION}, {"log_path", pathToUtf8(logger.log_path())}});
 
     try {
         QSurfaceFormat format;
@@ -66,10 +73,21 @@ int main(int argc, char* argv[]) {
         QApplication application(argc, argv);
         application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
         QApplication::setApplicationName("Video Editor");
-        QApplication::setApplicationVersion("Beta 0.1.6");
+        QApplication::setApplicationVersion(CREATIVE_SUITE_APP_VERSION);
 
         MainWindow window;
+#ifdef Q_OS_WIN
+        creative_suite::updater::UpdateCenter updater(
+            &window,
+            creative_suite::updater::defaultConfig(
+                QStringLiteral("video-editor"), QStringLiteral("Video Editor"),
+                QStringLiteral("creative-suite-video-editor.exe"),
+                QStringLiteral(CREATIVE_SUITE_APP_VERSION)));
+#endif
         window.show();
+#ifdef Q_OS_WIN
+        creative_suite::updater::markApplicationStartupHealthy(QStringLiteral("video-editor"));
+#endif
 
         const int exit_code = application.exec();
         logger.log(

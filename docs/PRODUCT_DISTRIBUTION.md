@@ -13,8 +13,9 @@ regra geral do repositório.
 Planejar como os três editores, o Hub e uma ferramenta de recuperação poderão
 funcionar dentro da mesma suíte e do mesmo repositório. A recuperação deverá
 estar disponível como um executável independente e também como uma função
-integrada à interface do Hub. As atualizações serão distribuídas pelo GitHub
-quando essa etapa for implementada.
+integrada à interface do Hub. A primeira implementação do atualizador para
+Windows está em andamento; seu contrato atual está documentado em
+[`WINDOWS_UPDATES.md`](WINDOWS_UPDATES.md).
 
 O plano deve permitir que cada editor continue evoluindo sem obrigar os outros
 a serem lançados ao mesmo tempo. O Hub e a ferramenta de recuperação devem
@@ -148,85 +149,25 @@ O GitHub Releases é a direção inicial de distribuição. O desenho deve permi
 trocar o local do catálogo ou dos arquivos no futuro sem espalhar URLs do
 GitHub por todos os aplicativos.
 
-### Lançamento conjunto da suíte — direção em discussão
+### Lançamento conjunto da suíte e atualizações do Windows
 
-Cada ciclo de lançamento da suíte terá uma única release no GitHub com os
-quatro instaladores: Video Editor, Image Editor, Motion Studio e Hub. Isso
-também vale para um aplicativo que não recebeu mudanças naquele ciclo. A
-intenção é que a distribuição da suíte seja completa e que cada aplicativo
-encontre o mesmo catálogo e as mesmas regras de atualização.
+O contrato aprovado para Windows e seu estado de implementação estão em
+[`WINDOWS_UPDATES.md`](WINDOWS_UPDATES.md). Cada release manual do GitHub reúne
+`updates.json` e os quatro instaladores completos. Se um aplicativo não mudar,
+seu instalador anterior é verificado e reutilizado byte a byte; a versão do app
+continua independente da versão da release da suíte.
 
-Quando um aplicativo não mudar, a decisão é anexar novamente o mesmo
-instalador, sem reconstruí-lo. Assim, quem baixar a release mais recente da
-suíte encontrará os instaladores dos quatro aplicativos no mesmo lugar. Essa
-republicação não cria uma nova versão do aplicativo. A release da suíte terá
-sua própria versão, independente das versões individuais dos quatro apps.
-Cada app avança sua versão quando ele próprio muda; o mecanismo de atualização
-compara a versão instalada do app com a versão desse app no catálogo, não com a
-versão da release da suíte. Assim, um novo ciclo da suíte não anuncia uma
-atualização inexistente para um app que continua igual.
+Os IDs internos são `hub`, `video-editor`, `image-editor` e `motion-editor`.
+Cada editor atualiza somente a si próprio; o Hub apresenta uma ação individual
+por aplicativo. Todos usam o mesmo catálogo, validação e serviço de download.
+O mesmo instalador completo serve para uma instalação nova e para uma
+atualização. A primeira versão é por usuário no Windows; Linux e macOS ficam
+para etapas futuras.
 
-### Experiência de atualização — direção em discussão
-
-Ao abrir qualquer um dos quatro aplicativos, o aplicativo deve consultar se há
-uma versão compatível mais recente e mostrar que existe uma atualização. A
-pessoa confirma se quer iniciar o download. Depois que o download termina, a
-instalação fica agendada e acontece automaticamente quando o aplicativo fecha.
-O aplicativo pode pedir que a pessoa o feche para concluir a atualização; não
-há uma segunda confirmação de instalação.
-
-Se a pessoa escolher não baixar, o aplicativo continua utilizável e mantém a
-atualização disponível em um botão discreto. Não deve repetir uma janela a cada
-abertura; a oferta permanece até a atualização ser instalada ou substituída por
-uma versão mais recente.
-
-Se o download for interrompido, o atualizador tenta retomá-lo quando possível.
-Se não conseguir, oferece uma nova tentativa. Um download incompleto não pode
-ser instalado, e a falha não impede o uso do aplicativo atual.
-A pessoa também pode cancelar o download em andamento; o arquivo parcial não é
-instalado e a versão já instalada permanece intacta.
-
-Cada editor consulta e atualiza apenas a própria instalação. Um editor não
-inicia atualizações dos outros aplicativos. O Hub pode consultar e gerenciar
-atualizações dos demais componentes instalados. Na primeira versão, o Hub mostra
-uma ação de atualização por aplicativo; uma ação para atualizar tudo fica para
-avaliação futura.
-
-Quando uma atualização é iniciada pelo Hub, um aplicativo fechado pode ser
-instalado assim que o download for concluído e validado. Se o aplicativo estiver
-aberto, a instalação aguarda o encerramento normal desse processo.
-
-Os quatro aplicativos e a ferramenta independente de recuperação devem usar a
-mesma base de atualização. O GitHub Releases será a fonte de distribuição para
-todos, inclusive para o Hub e a ferramenta de recuperação. O ponto de entrada
-em cada aplicativo não deve criar regras próprias de versão, verificação ou
-compatibilidade. A divisão exata dessa base entre biblioteca, serviço e helper
-ainda será definida no desenho técnico.
-
-### Catálogo de releases
-
-Uma proposta é manter um catálogo versionado com uma entrada por componente,
-versão, canal, sistema operacional e arquitetura. Cada entrada poderá conter:
-
-- versão da release da suíte;
-- identificador do componente, versão individual do app e canal;
-- plataforma, arquitetura e requisitos mínimos;
-- endereço do artefato de instalação;
-- tamanho e hash SHA-256 do artefato;
-- assinatura verificável do artefato ou do manifesto;
-- notas e data da release.
-
-O catálogo precisa ter uma versão de esquema própria. Mudanças incompatíveis
-no catálogo devem ser detectáveis pelos quatro aplicativos e pela ferramenta
-de recuperação. Esse catálogo e os campos acima são uma proposta para
-prototipagem, não um formato aprovado. Seu contrato deve atender a todos esses
-consumidores, que usam a mesma base de atualização.
-
-Tags independentes por componente continuam possíveis, desde que cada ciclo de
-lançamento da suíte aponte para um artefato distribuível de cada aplicativo,
-inclusive quando ele não mudou. Um padrão como `video-editor/vX.Y.Z` ou uma
-referência de suíte pode ser avaliado quando o fluxo de release for criado. A
-nomenclatura final das tags e dos canais ainda não foi decidida.
+O catálogo publicado tem esquema 1, contém uma entrada por aplicativo e inclui
+versão, nome do instalador, tamanho, SHA-256 e notas de release. A lista dos
+quatro campos concretos e as regras de validação estão no contrato de
+atualizações acima.
 
 ### Verificação e confiança
 
@@ -308,21 +249,22 @@ commit que o gerou. As notas de release devem apontar limitações conhecidas e
 compatibilidade de formatos.
 
 O suporte a Windows, macOS e Linux precisa ser validado em máquinas ou runners
-representativos. Para a primeira versão do atualizador no Windows, a instalação
-será por usuário, sem exigir elevação para atualizar a instalação dessa conta.
-Formatos de pacote, assinatura e notarização continuam decisões em aberto.
+representativos. No Windows, o pacote `.exe` é gerado com Inno Setup, em modo
+por usuário e sem exigir elevação. Os formatos para macOS e Linux permanecem
+para etapas futuras.
 
-### Sugestões de empacotamento — ainda não decididas
+### Empacotamento do Windows e formatos futuros
 
 O atualizador será implementado e validado primeiro no Windows, porque o
 trabalho de Linux ainda está em andamento e o mantenedor não tem acesso a uma
 máquina Mac para validar macOS. Para distribuição direta pelo GitHub Releases,
-estas são opções para avaliar; somente a proposta de Windows é imediata.
+o instalador do Windows já está definido; as opções para macOS e Linux seguem
+como possibilidades futuras.
 
-- **Windows:** para a primeira versão do atualizador, a instalação será por
-  usuário. O instalador `.exe` continua como opção a validar. O MSIX com App
-  Installer é uma alternativa se for desejável delegar parte das atualizações
-  ao Windows; ele exige pacotes assinados por um certificado confiável.
+- **Windows:** instalador `.exe` do Inno Setup, por usuário. O mesmo instalador
+  completo atende instalação inicial e atualização, reutilizando o diretório
+  registrado em instalações existentes. O fluxo de release está descrito em
+  [`packaging/windows/README.md`](../packaging/windows/README.md).
 - **macOS:** `.dmg` contendo o app `.app` assinado com Developer ID; notarizar
   a imagem de disco distribuída. A Apple também aceita instaladores e arquivos
   ZIP no fluxo de notarização.
@@ -342,18 +284,19 @@ Referências oficiais: [Microsoft App Installer updates](https://learn.microsoft
 [AppImage updates](https://docs.appimage.org/packaging-guide/optional/updates.html)
 e [Flatpak repositories](https://docs.flatpak.org/en/latest/repositories.html).
 
-## Fluxo futuro de atualização
+## Fluxo de atualização do Windows
 
-O fluxo abaixo é uma base de discussão para atualizações iniciadas pelo usuário
-e reversíveis:
+O contrato e o estado de implementação da primeira versão estão em
+[`WINDOWS_UPDATES.md`](WINDOWS_UPDATES.md). O fluxo abaixo resume esse
+comportamento aprovado:
 
-1. Ao abrir qualquer um dos quatro aplicativos, o mecanismo comum lê o
-   manifesto local e consulta o catálogo no GitHub Releases. A ferramenta de
-   recuperação usa a mesma base quando iniciada.
+1. Ao abrir um aplicativo, o mecanismo comum consulta `updates.json` no GitHub
+   Releases e identifica a instalação registrada. O Hub também consulta os
+   três editores e oferece uma ação individual para cada um.
 2. Compara versões e requisitos de plataforma e compatibilidade.
 3. Se houver uma versão compatível, o aplicativo mostra a atualização disponível.
    O download só começa após a pessoa confirmar.
-4. Confere assinatura, hash, tamanho e identidade do componente.
+4. Confere hash, tamanho e identidade do aplicativo antes de aceitar o arquivo.
 5. Registra a operação e preserva no máximo uma versão anterior do aplicativo
    para rollback.
 6. Quando o download termina, agenda a instalação. Se o aplicativo estiver
@@ -366,11 +309,10 @@ e reversíveis:
    ou a ferramenta de recuperação oferece à pessoa a opção de restaurar a
    versão anterior; essa restauração não é automática.
 
-O mecanismo comum não deve substituir arquivos de um aplicativo que ainda
-esteja em execução. Se um aplicativo precisar atualizar a si próprio, a
-substituição deve ocorrer por um helper externo ou por um mecanismo seguro da
-plataforma depois que o processo encerrar. A ferramenta de recuperação usa a
-mesma base, mas seu possível papel como helper ainda depende de validação.
+O mecanismo comum não substitui arquivos de um aplicativo que ainda esteja em
+execução. Ele agenda e inicia o instalador completo externamente depois que o
+processo encerrar; esse mesmo instalador serve para instalação inicial e
+atualização.
 
 O registro de operação deve ser pequeno, versionado e resistente a interrupção
 de energia ou encerramento forçado. As etapas precisam poder ser retomadas ou
@@ -413,13 +355,13 @@ pasta fixa do Windows nem misturar diretórios temporários com dados permanente
 3. **Automatizar releases:** criar builds por plataforma, testes de pacote,
    checksums, assinaturas e catálogo versionado que represente os quatro
    aplicativos em cada ciclo da suíte.
-4. **Concluir o Hub e a consulta comum:** descobrir instalações, exibir versões
-   e iniciar os editores; mostrar em cada aplicativo quando há uma atualização
-   compatível.
-5. **Habilitar downloads e instalação no Windows:** implementar confirmação de
-   download, instalação ao fechar o aplicativo, verificação, registro,
-   cancelamento seguro e rollback automático quando a instalação falhar,
-   mantendo uma versão anterior.
+4. **Integrar as atualizações ao Hub e aos editores:** a consulta comum e os
+   pontos de entrada individuais estão implementados; a validação integrada
+   aos instaladores do Windows continua pendente.
+5. **Validar a instalação e a recuperação no Windows:** gerar os quatro
+   instaladores, testar instalação limpa e atualização, confirmar preservação
+   dos dados e exercitar rollback e restauração pelo Hub em um perfil
+   descartável.
 6. **Criar a recuperação de aplicativo:** implementar um núcleo compartilhado
    de diagnóstico e reparo, exposto dentro do Hub e em um executável
    independente. Ele lê o registro de operações e restaura uma versão
@@ -436,11 +378,11 @@ distribuído.
 ## Decisões ainda em aberto
 
 - nome definitivo da suíte, organização e IDs públicos;
-- esquema e assinatura do catálogo de releases;
+- compatibilidade futura de esquema do catálogo de releases;
 - formatos de pacote e canais de lançamento por sistema operacional;
 - provedor e elegibilidade para assinatura Authenticode pública no Windows;
-- mecanismo técnico de atualização do próprio Hub e da ferramenta de
-  recuperação, incluindo o papel possível do helper;
+- evolução do mecanismo de atualização e eventual executável independente de
+  recuperação;
 - funções exatas, interface integrada ao Hub, empacotamento do executável
   independente e nível de privilégio da recuperação;
 - suporte a instalações offline e espelhos de download;
@@ -468,9 +410,8 @@ protocolo entre processos.
 - Um download interrompido pode ser retomado quando possível; se falhar, a
   pessoa pode tentar novamente, e o app atual continua utilizável.
 - Cancelar um download não instala o arquivo parcial nem altera a versão ativa.
-- Os quatro aplicativos e a ferramenta de recuperação consultam a mesma fonte
-  e aplicam os mesmos critérios de versão, assinatura, plataforma e
-  compatibilidade.
+- Os quatro aplicativos consultam a mesma fonte e aplicam as mesmas regras de
+  versão, tamanho, hash e identidade do aplicativo.
 - Nenhum artefato é baixado antes da ação escolhida pela pessoa.
 - Atualizar uma instalação existente sem alterar documentos, preferências ou
   snapshots do usuário.

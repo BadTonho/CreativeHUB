@@ -102,10 +102,13 @@ add_executable(creative-suite-motion-editor
 )
 target_link_libraries(creative-suite-motion-editor PRIVATE
     creative-suite-motion-editor-core
+    creative-suite::updater
     Qt6::Widgets
 )
+target_compile_definitions(creative-suite-motion-editor PRIVATE
+    CREATIVE_SUITE_APP_VERSION="${CREATIVE_SUITE_VERSION_MOTION_EDITOR}")
 target_compile_features(creative-suite-motion-editor PRIVATE cxx_std_20)
-creative_suite_deploy_media_runtime(creative-suite-motion-editor)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor motion-editor)
 
 if(MSVC)
     target_compile_options(creative-suite-motion-editor-core PRIVATE /W4 /permissive-)
@@ -122,6 +125,11 @@ set_target_properties(creative-suite-motion-editor PROPERTIES
 
 if(WIN32)
     set(APP_ICON_FILE "${CMAKE_SOURCE_DIR}/docs/assets/app-icons/motion-studio.ico")
+    set(APP_PRODUCT_NAME "Motion Studio")
+    set(APP_INTERNAL_ID "motion-editor")
+    set(APP_EXECUTABLE_NAME "creative-suite-motion-editor.exe")
+    set(APP_VERSION_STRING "${CREATIVE_SUITE_VERSION_MOTION_EDITOR}")
+    string(REPLACE "." "," APP_FILE_VERSION "${APP_VERSION_STRING}.0")
     configure_file(
         "${CMAKE_SOURCE_DIR}/cmake/windows_app_icon.rc.in"
         "${CMAKE_CURRENT_BINARY_DIR}/motion_studio_app_icon.rc"
@@ -132,7 +140,7 @@ if(WIN32)
     )
 endif()
 
-install(TARGETS creative-suite-motion-editor
+install(TARGETS creative-suite-motion-editor COMPONENT motion-editor
     BUNDLE DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
@@ -143,7 +151,7 @@ qt_generate_deploy_app_script(
     NO_TRANSLATIONS
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
-install(SCRIPT ${motion_editor_deploy_script})
+install(SCRIPT ${motion_editor_deploy_script} COMPONENT motion-editor)
 
 if(WIN32)
     get_target_property(QT_MOTION_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)

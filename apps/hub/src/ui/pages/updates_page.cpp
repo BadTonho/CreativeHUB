@@ -48,12 +48,6 @@ void UpdatesPage::setupUi() {
     connect(m_checkUpdatesButton, &QPushButton::clicked, this, &UpdatesPage::checkUpdatesRequested);
     headerRow->addWidget(m_checkUpdatesButton);
 
-    m_updateAllButton = new QPushButton(QStringLiteral("Atualizar Todos"), this);
-    m_updateAllButton->setStyleSheet(HubStyle::primaryButtonStyle());
-    m_updateAllButton->setVisible(false);
-    connect(m_updateAllButton, &QPushButton::clicked, this, &UpdatesPage::updateAllRequested);
-    headerRow->addWidget(m_updateAllButton);
-
     mainLayout->addLayout(headerRow);
 
     m_contentLayout = new QGridLayout();
@@ -115,7 +109,6 @@ void UpdatesPage::refreshUpdates() {
 
     const bool hasUpdates = (updateIndex > 0);
     m_emptyStateLabel->setVisible(!hasUpdates);
-    m_updateAllButton->setVisible(hasUpdates);
 }
 
 } // namespace creative_suite::hub

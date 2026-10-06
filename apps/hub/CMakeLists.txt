@@ -1,3 +1,5 @@
+include(GNUInstallDirs)
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
@@ -54,7 +56,13 @@ target_link_libraries(creative-suite-hub-core PUBLIC
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    creative-suite::updater
 )
+target_compile_definitions(creative-suite-hub-core PRIVATE
+    CREATIVE_SUITE_VERSION_HUB="${CREATIVE_SUITE_VERSION_HUB}"
+    CREATIVE_SUITE_VERSION_VIDEO_EDITOR="${CREATIVE_SUITE_VERSION_VIDEO_EDITOR}"
+    CREATIVE_SUITE_VERSION_IMAGE_EDITOR="${CREATIVE_SUITE_VERSION_IMAGE_EDITOR}"
+    CREATIVE_SUITE_VERSION_MOTION_EDITOR="${CREATIVE_SUITE_VERSION_MOTION_EDITOR}")
 
 target_compile_features(creative-suite-hub-core PUBLIC cxx_std_20)
 
@@ -69,6 +77,8 @@ target_link_libraries(creative-suite-hub PRIVATE
 )
 
 target_compile_features(creative-suite-hub PRIVATE cxx_std_20)
+target_compile_definitions(creative-suite-hub PRIVATE
+    CREATIVE_SUITE_APP_VERSION="${CREATIVE_SUITE_VERSION_HUB}")
 
 set_target_properties(creative-suite-hub PROPERTIES
     WIN32_EXECUTABLE TRUE
@@ -77,6 +87,11 @@ set_target_properties(creative-suite-hub PROPERTIES
 
 if(WIN32)
     set(APP_ICON_FILE "${CMAKE_SOURCE_DIR}/docs/assets/app-icons/hub.ico")
+    set(APP_PRODUCT_NAME "Creative Suite Hub")
+    set(APP_INTERNAL_ID "hub")
+    set(APP_EXECUTABLE_NAME "creative-suite-hub.exe")
+    set(APP_VERSION_STRING "${CREATIVE_SUITE_VERSION_HUB}")
+    string(REPLACE "." "," APP_FILE_VERSION "${APP_VERSION_STRING}.0")
     configure_file(
         "${CMAKE_SOURCE_DIR}/cmake/windows_app_icon.rc.in"
         "${CMAKE_CURRENT_BINARY_DIR}/hub_app_icon.rc"
@@ -85,6 +100,20 @@ if(WIN32)
     target_sources(creative-suite-hub PRIVATE
         "${CMAKE_CURRENT_BINARY_DIR}/hub_app_icon.rc"
     )
+endif()
+
+install(TARGETS creative-suite-hub COMPONENT hub
+    BUNDLE DESTINATION .
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+if(WIN32)
+    qt_generate_deploy_app_script(
+        TARGET creative-suite-hub
+        OUTPUT_SCRIPT hub_deploy_script
+        NO_TRANSLATIONS
+        NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT ${hub_deploy_script} COMPONENT hub)
 endif()
 
 if(MSVC)

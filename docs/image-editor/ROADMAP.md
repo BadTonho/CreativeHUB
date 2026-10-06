@@ -419,6 +419,16 @@ results.
 | GPU composition, editing presentation, and export | No GPU implementation or direct GPU boundary tests in this delivery | Planned, not implemented. Required CPU/GPU comparisons, native checks, and PNG producer/consumer gates are recorded in [GPU_ACCELERATION_PLAN.md](GPU_ACCELERATION_PLAN.md). |
 | First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp` (`testTextToolState`, `testTextEditorGrowthLayout`, `testWindowTextGrowth`, and editable-text integration); CTest `creative-suite-image-editor-core`, `creative-suite-image-editor-ui`, and Windows `creative-suite-image-editor-native-text` (one-key shortcut interception, focus retention, click-to-create through the full window, displayed pixels without a forced native redraw, caret placement and hit testing after each character, mouse and keyboard selection, selected-text replacement, horizontal growth with native margins and zoomed font metrics, canvas-edge wrapping, and visible multiline height growth) | `testTextToolState` directly covers frame creation by click/drag, preview, style, confirmation, and cancellation. The owner confirmed that normal typing with the default settings works again in the Windows application. Detailed visual editing checks in `MANUAL_VALIDATION.md` and other-platform acceptance remain with the owner (**P2 validation**). Native Windows mouse-drag selection has automated coverage. Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
 
+### Windows updater coverage
+
+The shared updater tests in `libs/updater/tests/` cover catalog validation,
+version comparison, download resume/cancellation, network failure, and hash
+rejection (`updater-catalog-test`, `updater-service-test`). The Image Editor
+must update only its own installation. The packaged Windows checklist is in
+[`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md); install-path reuse, user-data
+preservation, rollback, and Hub restore remain **pending** packaged-installer
+validation.
+
 ### Current coverage gaps and pending validation
 
 - **P0 — current Windows workflows:** the owner reports all currently

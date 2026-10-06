@@ -1,4 +1,7 @@
 #include "image_editor_window.h"
+#ifdef Q_OS_WIN
+#include <creative_suite/updater/update_service.h>
+#endif
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -6,12 +9,16 @@
 #include <QIcon>
 #include <QMessageBox>
 
+#ifndef CREATIVE_SUITE_APP_VERSION
+#define CREATIVE_SUITE_APP_VERSION "0.1.3"
+#endif
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
     QCoreApplication::setApplicationName(QStringLiteral("Image Editor"));
-    QApplication::setApplicationVersion(QStringLiteral("Beta 0.1.3"));
+    QApplication::setApplicationVersion(QStringLiteral(CREATIVE_SUITE_APP_VERSION));
 
     QCommandLineParser parser;
     parser.addHelpOption();
@@ -50,6 +57,14 @@ int main(int argc, char* argv[]) {
     }
 
     image_editor::ImageEditorWindow window;
+#ifdef Q_OS_WIN
+    creative_suite::updater::UpdateCenter updater(
+        &window,
+        creative_suite::updater::defaultConfig(
+            QStringLiteral("image-editor"), QStringLiteral("Image Editor"),
+            QStringLiteral("creative-suite-image-editor.exe"),
+            QStringLiteral(CREATIVE_SUITE_APP_VERSION)));
+#endif
     if (linked_mode && !window.openLinkedImage(
             parser.value(linked_source),
             parser.value(linked_document),
@@ -57,5 +72,8 @@ int main(int argc, char* argv[]) {
         return 2;
     }
     window.show();
+#ifdef Q_OS_WIN
+    creative_suite::updater::markApplicationStartupHealthy(QStringLiteral("image-editor"));
+#endif
     return application.exec();
 }

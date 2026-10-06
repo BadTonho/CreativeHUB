@@ -20,10 +20,12 @@ int main() {
     assert(!found->projectFormat().isEmpty());
 
     catalog.updateAppStatus(QStringLiteral("video-editor"), AppStatus::Installed);
+    catalog.updateLatestVersion(QStringLiteral("video-editor"), QStringLiteral("0.2.0"));
     auto updated = catalog.findApp(QStringLiteral("video-editor"));
     assert(updated.has_value());
     assert(updated->status() == AppStatus::Installed);
     assert(updated->isInstalled() == true);
+    assert(updated->latestVersion() == QStringLiteral("0.2.0"));
 
     auto notFound = catalog.findApp(QStringLiteral("non-existent-app"));
     assert(!notFound.has_value());

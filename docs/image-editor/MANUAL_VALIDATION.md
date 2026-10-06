@@ -4,6 +4,29 @@ Use local test copies of images so the original assets remain available for
 comparison. Record the OS, Qt version, image dimensions, and result for each
 run.
 
+## Windows updater
+
+Run this checklist against generated setup executables in a disposable
+per-user profile. Record the Windows build, app versions, selected install
+path, and result. The current status is **pending** because Inno Setup Compiler
+(`ISCC.exe`) is not available in the current environment.
+
+1. Install Image Editor into a user-chosen directory. Confirm the Hub detects
+   the registered path and installed version.
+2. Publish a higher Image Editor version and start the update from Image
+   Editor. Confirm the update action is discreet, the notes and progress are
+   visible, cancellation is available, and retry works after a network failure.
+3. Confirm the download resumes after interruption and rejects a wrong hash or
+   incomplete package without changing the installed version.
+4. Confirm the full installer starts after Image Editor closes, reuses the
+   chosen directory, and preserves image documents, preferences, and recovery
+   data. Confirm no other editor is updated.
+5. Force setup failure and confirm the previous files are restored. Then
+   simulate a failed first launch and confirm the Hub offers restoration.
+
+Shared release behavior and other app checks are indexed in
+[`../WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md).
+
 ## Validation record
 
 On 2026-10-01, the owner reported that all currently implemented Image Editor

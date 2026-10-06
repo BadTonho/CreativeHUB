@@ -84,6 +84,7 @@ hardware and drivers. No percentage target is set from this measurement.
 
 | Area | Test coverage |
 | --- | --- |
+| Windows updates | `libs/updater/tests/release_catalog_test.cpp` (`updater-catalog-test`) and `update_service_test.cpp` (`updater-service-test`) cover catalog validation, version comparison, invalid hashes, network failures, resume, and cancellation. | Run the Windows update checklist in [WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md): update only Video Editor, reuse the selected directory, preserve user data, and verify rollback. **Pending packaged-installer validation.** |
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions, generated WAV metadata and audio-only import without a visual frame, invalid-audio rejection, PNG/JPEG/BMP/WebP/TIFF still-image probing, RGBA transparency, 150-frame defaults, and animated-GIF rejection |
 | Playback session | Sequential frames, forward catch-up and random seeks without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, cache-hit preservation of an aligned decoder position and seek-free sequential continuation, rejected-seek sequential fallback, optimized random seeking, EOF, segment limits |
@@ -176,6 +177,17 @@ and its subdirectories; shared-library tests are registered in
 - **Planned, not implemented:** approved YouTube export preset, direct OS file
   drops, and later advanced editing features remain roadmap work, not current
   regression gaps.
+
+## Windows updater manual check
+
+The Video Editor must advertise and update only its own installation. Use a
+disposable Windows profile and the generated setup executable. Confirm that
+the release notes, progress, cancel, and retry controls behave as documented;
+the setup waits for the editor to close, reuses its selected install directory,
+and leaves projects, preferences, and recovery snapshots intact. Then exercise
+an interrupted download, a failed setup, and restoration from the Hub. Record
+the result in the task or release validation record. This check is pending until
+the installer can be generated with Inno Setup.
 
 ## Manual UI validation
 

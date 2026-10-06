@@ -109,8 +109,11 @@ target_include_directories(creative-suite-image-editor PRIVATE
 target_link_libraries(creative-suite-image-editor PRIVATE
     creative-suite-image-editor-core
     creative-suite::shortcuts
+    creative-suite::updater
     Qt6::Widgets
 )
+target_compile_definitions(creative-suite-image-editor PRIVATE
+    CREATIVE_SUITE_APP_VERSION="${CREATIVE_SUITE_VERSION_IMAGE_EDITOR}")
 
 target_compile_features(creative-suite-image-editor PRIVATE cxx_std_20)
 
@@ -129,6 +132,11 @@ set_target_properties(creative-suite-image-editor PROPERTIES
 
 if(WIN32)
     set(APP_ICON_FILE "${CMAKE_SOURCE_DIR}/docs/assets/app-icons/image-editor.ico")
+    set(APP_PRODUCT_NAME "Image Editor")
+    set(APP_INTERNAL_ID "image-editor")
+    set(APP_EXECUTABLE_NAME "creative-suite-image-editor.exe")
+    set(APP_VERSION_STRING "${CREATIVE_SUITE_VERSION_IMAGE_EDITOR}")
+    string(REPLACE "." "," APP_FILE_VERSION "${APP_VERSION_STRING}.0")
     configure_file(
         "${CMAKE_SOURCE_DIR}/cmake/windows_app_icon.rc.in"
         "${CMAKE_CURRENT_BINARY_DIR}/image_editor_app_icon.rc"
@@ -139,7 +147,7 @@ if(WIN32)
     )
 endif()
 
-install(TARGETS creative-suite-image-editor
+install(TARGETS creative-suite-image-editor COMPONENT image-editor
     BUNDLE DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
@@ -150,7 +158,7 @@ qt_generate_deploy_app_script(
     NO_TRANSLATIONS
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
-install(SCRIPT ${image_editor_deploy_script})
+install(SCRIPT ${image_editor_deploy_script} COMPONENT image-editor)
 
 if(WIN32)
     set(CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR "" CACHE PATH
@@ -220,12 +228,14 @@ if(WIN32)
     install(FILES
         "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebp.dll"
         "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiff.dll"
+        COMPONENT image-editor
         DESTINATION plugins/imageformats
         CONFIGURATIONS Release RelWithDebInfo MinSizeRel
     )
     install(FILES
         "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebpd.dll"
         "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiffd.dll"
+        COMPONENT image-editor
         DESTINATION plugins/imageformats
         CONFIGURATIONS Debug
     )

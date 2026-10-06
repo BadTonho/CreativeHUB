@@ -50,7 +50,11 @@ SidebarWidget::SidebarWidget(QWidget* parent)
     layout->addStretch();
 
     // Version tag at the bottom
-    auto* versionLabel = new QLabel(QStringLiteral("Hub v0.1.0 (Beta)"), this);
+#ifndef CREATIVE_SUITE_VERSION_HUB
+#define CREATIVE_SUITE_VERSION_HUB "0.1.0"
+#endif
+    auto* versionLabel = new QLabel(
+        QStringLiteral("Hub v%1").arg(QStringLiteral(CREATIVE_SUITE_VERSION_HUB)), this);
     versionLabel->setStyleSheet(QStringLiteral(
         "color: #555560;"
         "font-size: 10px;"

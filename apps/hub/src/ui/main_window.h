@@ -10,8 +10,13 @@
 #include "dialogs/app_details_modal.h"
 
 #include <QMainWindow>
+#include <QHash>
 #include <QStackedWidget>
-#include <QTimer>
+
+namespace creative_suite::updater {
+class UpdateRuntime;
+class UpdateService;
+}
 
 namespace creative_suite::hub {
 
@@ -30,11 +35,11 @@ private slots:
     void onDownloadApp(const QString& appId);
     void onCancelDownload(const QString& appId);
     void onRefreshApps();
-    void simulateDownloadStep();
 
 private:
     void setupUi();
     void scanInstalledApps();
+    void configureUpdateServices();
 
     AppCatalog m_catalog;
     AppLauncher m_launcher;
@@ -48,10 +53,8 @@ private:
     SettingsPage* m_settingsPage{nullptr};
     AppDetailsModal* m_detailsModal{nullptr};
 
-    // Download simulation timer for visual feedback
-    QTimer* m_downloadTimer{nullptr};
-    QString m_activeDownloadingAppId;
-    double m_activeDownloadProgress{0.0};
+    creative_suite::updater::UpdateRuntime* m_updateRuntime{nullptr};
+    QHash<QString, creative_suite::updater::UpdateService*> m_updateServices;
 };
 
 } // namespace creative_suite::hub
