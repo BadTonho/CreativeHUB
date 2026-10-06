@@ -11,4 +11,8 @@ QString HubPalette::toRgbaString(const QColor& color, double alpha) {
         .arg(a);
 }
 
+QColor HubPalette::appAccentColor(const QString& /*appId*/) {
+    return cardBorderHover;
+}
+
 } // namespace creative_suite::hub

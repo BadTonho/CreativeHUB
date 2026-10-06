@@ -24,21 +24,44 @@ AppsPage::AppsPage(AppCatalog* catalog, QWidget* parent)
 
 void AppsPage::setupUi() {
     auto* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(24, 20, 24, 20);
-    mainLayout->setSpacing(16);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
 
-    // Header title and subtitle
-    auto* titleLabel = new QLabel(QStringLiteral("Aplicativos da Suíte"), this);
-    titleLabel->setStyleSheet(QStringLiteral("font-size: 20px; font-weight: 800; color: #ffffff; background: transparent;"));
-    mainLayout->addWidget(titleLabel);
+    // Scroll area for entire page content
+    auto* scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setStyleSheet(QStringLiteral("background: transparent;"));
 
-    auto* subLabel = new QLabel(QStringLiteral("Gerencie, abra e atualize seus aplicativos de criação."), this);
-    subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #888894; background: transparent;"));
-    mainLayout->addWidget(subLabel);
+    auto* scrollContainer = new QWidget(scrollArea);
+    scrollContainer->setStyleSheet(QStringLiteral("background: transparent;"));
 
-    // Filter pills (Todos, Instalados, Disponíveis)
-    auto* filterLayout = new QHBoxLayout();
-    filterLayout->setSpacing(8);
+    auto* containerLayout = new QVBoxLayout(scrollContainer);
+    containerLayout->setContentsMargins(28, 24, 28, 24);
+    containerLayout->setSpacing(20);
+
+    // Header Row: Title & Subtitle on left, Filter Pills on right
+    auto* headerRow = new QHBoxLayout();
+    headerRow->setSpacing(12);
+
+    auto* titleCol = new QVBoxLayout();
+    titleCol->setSpacing(4);
+
+    auto* titleLabel = new QLabel(QStringLiteral("Aplicativos da Suíte"), scrollContainer);
+    titleLabel->setStyleSheet(QStringLiteral(
+        "font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"
+    ));
+    titleCol->addWidget(titleLabel);
+
+    auto* subLabel = new QLabel(QStringLiteral("Gerencie, abra e atualize seus aplicativos de criação."), scrollContainer);
+    subLabel->setStyleSheet(QStringLiteral(
+        "font-size: 13px; color: #888888; background: transparent;"
+    ));
+    titleCol->addWidget(subLabel);
+
+    headerRow->addLayout(titleCol);
+    headerRow->addStretch();
 
     const QStringList filterNames = {
         QStringLiteral("Todos"),
@@ -47,32 +70,26 @@ void AppsPage::setupUi() {
     };
 
     for (int i = 0; i < filterNames.size(); ++i) {
-        auto* btn = new QPushButton(filterNames[i], this);
+        auto* btn = new QPushButton(filterNames[i], scrollContainer);
         btn->setCursor(Qt::PointingHandCursor);
         m_filterButtons.push_back(btn);
-        filterLayout->addWidget(btn);
+        headerRow->addWidget(btn);
 
         connect(btn, &QPushButton::clicked, this, [this, i]() {
             onFilterTabClicked(i);
         });
     }
 
-    filterLayout->addStretch();
-    mainLayout->addLayout(filterLayout);
+    containerLayout->addLayout(headerRow);
 
-    // Scroll area for app cards in grid
-    auto* scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setStyleSheet(QStringLiteral("background: transparent;"));
-
-    auto* scrollContainer = new QWidget(scrollArea);
-    scrollContainer->setStyleSheet(QStringLiteral("background: transparent;"));
-
-    m_cardsLayout = new QGridLayout(scrollContainer);
-    m_cardsLayout->setContentsMargins(0, 10, 0, 10);
-    m_cardsLayout->setSpacing(18);
+    // App Cards Grid
+    m_cardsLayout = new QGridLayout();
+    m_cardsLayout->setContentsMargins(0, 8, 0, 0);
+    m_cardsLayout->setSpacing(20);
     m_cardsLayout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+
+    containerLayout->addLayout(m_cardsLayout);
+    containerLayout->addStretch();
 
     scrollArea->setWidget(scrollContainer);
     mainLayout->addWidget(scrollArea);
@@ -87,29 +104,30 @@ void AppsPage::onFilterTabClicked(int index) {
         if (static_cast<int>(i) == index) {
             m_filterButtons[i]->setStyleSheet(QStringLiteral(
                 "QPushButton {"
-                "   background-color: %1;"
-                "   color: #ffffff;"
+                "   background-color: #ffffff;"
+                "   color: #000000;"
                 "   border-radius: 14px;"
-                "   padding: 5px 14px;"
+                "   padding: 6px 16px;"
                 "   font-size: 12px;"
-                "   font-weight: 600;"
+                "   font-weight: 700;"
                 "   border: none;"
                 "}"
-            ).arg(HubPalette::accentPrimary.name()));
+            ));
         } else {
             m_filterButtons[i]->setStyleSheet(QStringLiteral(
                 "QPushButton {"
-                "   background-color: #24242c;"
-                "   color: #90909c;"
+                "   background-color: #181818;"
+                "   color: #888888;"
                 "   border-radius: 14px;"
-                "   padding: 5px 14px;"
+                "   padding: 6px 16px;"
                 "   font-size: 12px;"
-                "   font-weight: 500;"
-                "   border: 1px solid #363640;"
+                "   font-weight: 600;"
+                "   border: 1px solid #282828;"
                 "}"
                 "QPushButton:hover {"
-                "   background-color: #2e2e38;"
-                "   color: #d0d0dc;"
+                "   background-color: #222222;"
+                "   color: #ffffff;"
+                "   border-color: #383838;"
                 "}"
             ));
         }

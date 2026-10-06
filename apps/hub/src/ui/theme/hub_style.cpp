@@ -8,7 +8,7 @@ QString HubStyle::globalStyleSheet() {
         QWidget {
             background-color: %1;
             color: %2;
-            font-family: 'Segoe UI', 'SF Pro Text', -apple-system, sans-serif;
+            font-family: 'Inter', 'Segoe UI', -apple-system, Roboto, sans-serif;
             font-size: 13px;
         }
 
@@ -18,23 +18,24 @@ QString HubStyle::globalStyleSheet() {
             margin: 0px;
         }
         QScrollBar::handle:vertical {
-            background: #40404a;
-            min-height: 24px;
+            background: #2a2a2a;
+            min-height: 28px;
             border-radius: 4px;
         }
         QScrollBar::handle:vertical:hover {
-            background: #50505c;
+            background: #3e3e3e;
         }
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
             height: 0px;
         }
 
         QToolTip {
-            background-color: #2b2b32;
-            color: #f0f0f5;
-            border: 1px solid #444450;
-            padding: 6px 10px;
-            border-radius: 6px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            border: 1px solid #333333;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
         }
     )")
     .arg(HubPalette::backgroundDark.name())
@@ -44,69 +45,70 @@ QString HubStyle::globalStyleSheet() {
 QString HubStyle::primaryButtonStyle() {
     return QString(R"(
         QPushButton {
-            background-color: %1;
-            color: #ffffff;
-            font-weight: 600;
+            background-color: #ffffff;
+            color: #000000;
+            font-weight: 700;
             font-size: 12px;
-            padding: 7px 16px;
-            border-radius: 6px;
+            padding: 7px 18px;
+            border-radius: 8px;
             border: none;
         }
         QPushButton:hover {
-            background-color: %2;
+            background-color: #e4e4e4;
         }
         QPushButton:pressed {
-            background-color: %3;
+            background-color: #cccccc;
         }
         QPushButton:disabled {
-            background-color: #383842;
-            color: #70707c;
+            background-color: #202020;
+            color: #555555;
+            border: 1px solid #282828;
         }
-    )")
-    .arg(HubPalette::accentPrimary.name())
-    .arg(HubPalette::accentPrimaryHover.name())
-    .arg(HubPalette::accentPrimaryPressed.name());
+    )");
 }
 
 QString HubStyle::secondaryButtonStyle() {
     return QString(R"(
         QPushButton {
-            background-color: transparent;
-            color: %1;
-            font-weight: 500;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-weight: 600;
             font-size: 12px;
-            padding: 6px 14px;
-            border-radius: 6px;
-            border: 1px solid #484854;
+            padding: 7px 16px;
+            border-radius: 8px;
+            border: 1px solid #2e2e2e;
         }
         QPushButton:hover {
-            background-color: #32323a;
-            border-color: #606070;
+            background-color: #262626;
+            border-color: #444444;
             color: #ffffff;
         }
         QPushButton:pressed {
-            background-color: #282830;
+            background-color: #141414;
         }
-    )")
-    .arg(HubPalette::textPrimary.name());
+        QPushButton:disabled {
+            background-color: #141414;
+            color: #444444;
+            border-color: #202020;
+        }
+    )");
 }
 
 QString HubStyle::searchInputStyle() {
     return QString(R"(
         QLineEdit {
-            background-color: #222228;
+            background-color: #141414;
             color: #ffffff;
-            border: 1px solid #383842;
-            border-radius: 6px;
-            padding: 6px 12px;
+            border: 1px solid #282828;
+            border-radius: 8px;
+            padding: 7px 14px;
             font-size: 12px;
         }
         QLineEdit:focus {
-            border: 1px solid %1;
-            background-color: #26262e;
+            border: 1px solid #555555;
+            background-color: #1c1c1c;
         }
-    )")
-    .arg(HubPalette::accentPrimary.name());
+    )");
 }
 
 } // namespace creative_suite::hub

@@ -5,6 +5,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPainter>
+#include <QLinearGradient>
 #include <QPixmap>
 #include <QFile>
 #include <QMouseEvent>
@@ -21,27 +22,22 @@ QPixmap createFallbackIcon(const QString& id) {
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    QColor iconBg(0x00, 0x7a, 0xff);
+    painter.setBrush(QColor(0x22, 0x22, 0x22));
+    painter.setPen(QColor(0x38, 0x38, 0x38));
+    painter.drawRoundedRect(QRectF(0, 0, size, size), 14, 14);
+
     QString initials = QStringLiteral("CS");
-
     if (id == QStringLiteral("video-editor")) {
-        iconBg = QColor(0x99, 0x45, 0xff);
-        initials = QStringLiteral("Ve");
+        initials = QStringLiteral("V");
     } else if (id == QStringLiteral("image-editor")) {
-        iconBg = QColor(0x00, 0x84, 0xff);
-        initials = QStringLiteral("Ie");
+        initials = QStringLiteral("I");
     } else if (id == QStringLiteral("motion-editor")) {
-        iconBg = QColor(0xec, 0x3b, 0x83);
-        initials = QStringLiteral("Mo");
+        initials = QStringLiteral("M");
     }
-
-    painter.setBrush(iconBg);
-    painter.setPen(Qt::NoPen);
-    painter.drawRoundedRect(QRect(0, 0, size, size), 14, 14);
 
     painter.setPen(Qt::white);
     QFont font = painter.font();
-    font.setPointSize(20);
+    font.setPointSize(22);
     font.setBold(true);
     painter.setFont(font);
     painter.drawText(QRect(0, 0, size, size), Qt::AlignCenter, initials);
@@ -58,21 +54,6 @@ AppCardWidget::AppCardWidget(QWidget* parent)
     setFixedSize(kCardWidth, kCardHeight);
     setFrameShape(QFrame::NoFrame);
     setCursor(Qt::PointingHandCursor);
-
-    setStyleSheet(QString(R"(
-        #AppCardWidget {
-            background-color: %1;
-            border: 1px solid %2;
-            border-radius: 12px;
-        }
-        #AppCardWidget:hover {
-            background-color: %3;
-            border-color: #4a4a58;
-        }
-    )")
-    .arg(HubPalette::cardBackground.name())
-    .arg(HubPalette::cardBorder.name())
-    .arg(HubPalette::cardHover.name()));
 
     setupUi();
 }
@@ -102,14 +83,18 @@ void AppCardWidget::setupUi() {
     // Title
     m_titleLabel = new QLabel(this);
     m_titleLabel->setAlignment(Qt::AlignCenter);
-    m_titleLabel->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 700; color: #ffffff; background: transparent;"));
+    m_titleLabel->setStyleSheet(QStringLiteral(
+        "font-size: 15px; font-weight: 800; color: #ffffff; background: transparent;"
+    ));
     mainLayout->addWidget(m_titleLabel);
 
     // Tagline (short category)
     m_tagLineLabel = new QLabel(this);
     m_tagLineLabel->setAlignment(Qt::AlignCenter);
     m_tagLineLabel->setWordWrap(true);
-    m_tagLineLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #9a9aa8; background: transparent;"));
+    m_tagLineLabel->setStyleSheet(QStringLiteral(
+        "font-size: 11px; color: #8e8e9e; background: transparent; line-height: 1.3;"
+    ));
     mainLayout->addWidget(m_tagLineLabel);
 
     mainLayout->addStretch();
@@ -124,7 +109,8 @@ void AppCardWidget::setupUi() {
 
     // Action button
     m_actionButton = new QPushButton(this);
-    m_actionButton->setFixedHeight(34);
+    m_actionButton->setFixedHeight(36);
+    m_actionButton->setCursor(Qt::PointingHandCursor);
     connect(m_actionButton, &QPushButton::clicked, this, &AppCardWidget::onActionButtonClicked);
     mainLayout->addWidget(m_actionButton);
 }
@@ -171,17 +157,55 @@ void AppCardWidget::updateVisuals() {
     }
     m_statusBadge->setStatus(m_appInfo.status(), versionInfo);
 
+    // Clean monochrome card styling
+    setStyleSheet(QStringLiteral(R"(
+        #AppCardWidget {
+            background-color: #161616;
+            border: 1px solid #262626;
+            border-radius: 14px;
+        }
+        #AppCardWidget:hover {
+            background-color: #1e1e1e;
+            border-color: #484848;
+        }
+    )"));
+
     switch (m_appInfo.status()) {
         case AppStatus::Installed:
             m_actionButton->setText(QStringLiteral("Abrir"));
-            m_actionButton->setStyleSheet(HubStyle::secondaryButtonStyle());
+            m_actionButton->setStyleSheet(QStringLiteral(
+                "QPushButton {"
+                "   background-color: #202020;"
+                "   color: #ffffff;"
+                "   font-weight: 700;"
+                "   font-size: 12px;"
+                "   border: 1px solid #333333;"
+                "   border-radius: 8px;"
+                "}"
+                "QPushButton:hover {"
+                "   background-color: #2a2a2a;"
+                "   border-color: #484848;"
+                "}"
+            ));
             m_actionButton->setEnabled(true);
             m_progressBar->setVisible(false);
             break;
 
         case AppStatus::UpdateAvailable:
             m_actionButton->setText(QStringLiteral("Atualizar"));
-            m_actionButton->setStyleSheet(HubStyle::primaryButtonStyle());
+            m_actionButton->setStyleSheet(QStringLiteral(
+                "QPushButton {"
+                "   background-color: #ffffff;"
+                "   color: #000000;"
+                "   font-weight: 700;"
+                "   font-size: 12px;"
+                "   border: none;"
+                "   border-radius: 8px;"
+                "}"
+                "QPushButton:hover {"
+                "   background-color: #e4e4e4;"
+                "}"
+            ));
             m_actionButton->setEnabled(true);
             m_progressBar->setVisible(false);
             break;
@@ -196,7 +220,22 @@ void AppCardWidget::updateVisuals() {
         case AppStatus::NotInstalled:
         default:
             m_actionButton->setText(QStringLiteral("Baixar"));
-            m_actionButton->setStyleSheet(HubStyle::primaryButtonStyle());
+            m_actionButton->setStyleSheet(QStringLiteral(
+                "QPushButton {"
+                "   background-color: #ffffff;"
+                "   color: #000000;"
+                "   font-weight: 700;"
+                "   font-size: 12px;"
+                "   border: none;"
+                "   border-radius: 8px;"
+                "}"
+                "QPushButton:hover {"
+                "   background-color: #e4e4e4;"
+                "}"
+                "QPushButton:pressed {"
+                "   background-color: #cccccc;"
+                "}"
+            ));
             m_actionButton->setEnabled(true);
             m_progressBar->setVisible(false);
             break;

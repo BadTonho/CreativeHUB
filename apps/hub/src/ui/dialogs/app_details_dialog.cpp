@@ -69,7 +69,7 @@ AppDetailsDialog::AppDetailsDialog(const AppInfo& app, QWidget* parent)
 
     setStyleSheet(QString(R"(
         QDialog {
-            background-color: #1e1e24;
+            background-color: #161616;
             color: #ffffff;
             font-family: 'Segoe UI', -apple-system, sans-serif;
         }
@@ -100,7 +100,7 @@ void AppDetailsDialog::setupUi() {
     titleCol->addWidget(nameLabel);
 
     auto* taglineLabel = new QLabel(m_app.tagLine(), this);
-    taglineLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #a0a0b0;"));
+    taglineLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #888888;"));
     titleCol->addWidget(taglineLabel);
 
     auto* badge = new AppStatusBadge(this);
@@ -138,7 +138,7 @@ void AppDetailsDialog::setupUi() {
     // Separator line
     auto* separator = new QFrame(this);
     separator->setFrameShape(QFrame::HLine);
-    separator->setStyleSheet(QStringLiteral("background-color: #30303c; max-height: 1px; border: none;"));
+    separator->setStyleSheet(QStringLiteral("background-color: #282828; max-height: 1px; border: none;"));
     rootLayout->addWidget(separator);
 
     // Scrollable content area
@@ -155,18 +155,18 @@ void AppDetailsDialog::setupUi() {
 
     // Description section
     auto* descTitle = new QLabel(QStringLiteral("SOBRE O APLICATIVO"), contentWidget);
-    descTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #7a7a88; letter-spacing: 0.5px;"));
+    descTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px;"));
     contentLayout->addWidget(descTitle);
 
     auto* descText = new QLabel(m_app.description(), contentWidget);
     descText->setWordWrap(true);
-    descText->setStyleSheet(QStringLiteral("font-size: 13px; color: #d0d0dc; line-height: 1.5;"));
+    descText->setStyleSheet(QStringLiteral("font-size: 13px; color: #d0d0d0; line-height: 1.5;"));
     contentLayout->addWidget(descText);
 
     // Key Features section
     if (!m_app.features().isEmpty()) {
         auto* featTitle = new QLabel(QStringLiteral("PRINCIPAIS RECURSOS"), contentWidget);
-        featTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #7a7a88; letter-spacing: 0.5px; margin-top: 6px;"));
+        featTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px; margin-top: 6px;"));
         contentLayout->addWidget(featTitle);
 
         for (const auto& feat : m_app.features()) {
@@ -179,7 +179,7 @@ void AppDetailsDialog::setupUi() {
 
             auto* featLabel = new QLabel(feat, contentWidget);
             featLabel->setWordWrap(true);
-            featLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #c4c4d0;"));
+            featLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #c4c4c4;"));
             featRow->addWidget(featLabel, 1);
 
             contentLayout->addLayout(featRow);
@@ -188,13 +188,13 @@ void AppDetailsDialog::setupUi() {
 
     // Technical specs section
     auto* techTitle = new QLabel(QStringLiteral("INFORMAÇÕES TÉCNICAS"), contentWidget);
-    techTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #7a7a88; letter-spacing: 0.5px; margin-top: 6px;"));
+    techTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px; margin-top: 6px;"));
     contentLayout->addWidget(techTitle);
 
     auto* techCard = new QFrame(contentWidget);
     techCard->setStyleSheet(QStringLiteral(
-        "background-color: #24242c;"
-        "border: 1px solid #32323c;"
+        "background-color: #1a1a1a;"
+        "border: 1px solid #282828;"
         "border-radius: 8px;"
         "padding: 10px 14px;"
     ));
@@ -203,12 +203,12 @@ void AppDetailsDialog::setupUi() {
 
     if (!m_app.projectFormat().isEmpty()) {
         auto* formatLabel = new QLabel(QStringLiteral("<b>Formato nativo de projeto:</b> %1").arg(m_app.projectFormat()), techCard);
-        formatLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0bc;"));
+        formatLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0b0;"));
         techLayout->addWidget(formatLabel);
     }
 
     auto* exeLabel = new QLabel(QStringLiteral("<b>Arquivo executável:</b> %1").arg(m_app.executableName()), techCard);
-    exeLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0bc;"));
+    exeLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0b0;"));
     techLayout->addWidget(exeLabel);
 
     contentLayout->addWidget(techCard);

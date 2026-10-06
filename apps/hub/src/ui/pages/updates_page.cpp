@@ -23,48 +23,50 @@ UpdatesPage::UpdatesPage(AppCatalog* catalog, QWidget* parent)
 
 void UpdatesPage::setupUi() {
     auto* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(24, 20, 24, 20);
-    mainLayout->setSpacing(16);
+    mainLayout->setContentsMargins(28, 24, 28, 24);
+    mainLayout->setSpacing(20);
 
     auto* headerRow = new QHBoxLayout();
 
     auto* titleCol = new QVBoxLayout();
-    titleCol->setSpacing(2);
+    titleCol->setSpacing(4);
 
     auto* titleLabel = new QLabel(QStringLiteral("Atualizações Disponíveis"), this);
-    titleLabel->setStyleSheet(QStringLiteral("font-size: 20px; font-weight: 800; color: #ffffff; background: transparent;"));
+    titleLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"));
     titleCol->addWidget(titleLabel);
 
-    auto* subLabel = new QLabel(QStringLiteral("Mantenha seus aplicativos sempre na versão mais estável e rápida."), this);
-    subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #888894; background: transparent;"));
+    auto* subLabel = new QLabel(QStringLiteral("Mantenha seus aplicativos sempre na versão mais estável, rápida e com novos recursos."), this);
+    subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #8e8e9e; background: transparent;"));
     titleCol->addWidget(subLabel);
 
     headerRow->addLayout(titleCol);
     headerRow->addStretch();
 
-    // Check for updates button (now located in Updates page)
     m_checkUpdatesButton = new QPushButton(QStringLiteral("Verificar Atualizações"), this);
     m_checkUpdatesButton->setStyleSheet(HubStyle::secondaryButtonStyle());
+    m_checkUpdatesButton->setCursor(Qt::PointingHandCursor);
     connect(m_checkUpdatesButton, &QPushButton::clicked, this, &UpdatesPage::checkUpdatesRequested);
     headerRow->addWidget(m_checkUpdatesButton);
 
     mainLayout->addLayout(headerRow);
 
     m_contentLayout = new QGridLayout();
-    m_contentLayout->setSpacing(18);
+    m_contentLayout->setSpacing(20);
     m_contentLayout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
 
     m_emptyStateLabel = new QLabel(this);
     m_emptyStateLabel->setAlignment(Qt::AlignCenter);
     m_emptyStateLabel->setStyleSheet(QStringLiteral(
-        "color: #888896;"
+        "color: #d0d0d0;"
         "font-size: 14px;"
-        "padding: 60px 20px;"
-        "background-color: #202026;"
-        "border: 1px dashed #343440;"
-        "border-radius: 10px;"
+        "font-weight: 600;"
+        "line-height: 1.6;"
+        "padding: 56px 24px;"
+        "background-color: #161616;"
+        "border: 1px solid #262626;"
+        "border-radius: 14px;"
     ));
-    m_emptyStateLabel->setText(QStringLiteral("✓ Todos os seus aplicativos estão atualizados!"));
+    m_emptyStateLabel->setText(QStringLiteral("✓ Tudo atualizado!\nSeus aplicativos estão na versão mais recente, estável e rápida."));
     m_contentLayout->addWidget(m_emptyStateLabel, 0, 0, 1, 3);
 
     mainLayout->addLayout(m_contentLayout);
