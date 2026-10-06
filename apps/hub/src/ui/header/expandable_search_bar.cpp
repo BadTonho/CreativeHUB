@@ -62,17 +62,17 @@ void ExpandableSearchBar::setupUi() {
     m_searchButton = new QPushButton(this);
     m_searchButton->setFixedSize(36, 36);
     m_searchButton->setCursor(Qt::PointingHandCursor);
-    m_searchButton->setIcon(createSearchIcon(QColor(0xa0, 0xa0, 0xb0)));
+    m_searchButton->setIcon(createSearchIcon(QColor(0xa0, 0xa0, 0xa0)));
     m_searchButton->setIconSize(QSize(20, 20));
     m_searchButton->setStyleSheet(QStringLiteral(
         "QPushButton {"
-        "   background-color: #222228;"
-        "   border: 1px solid #383842;"
+        "   background-color: #1e1e1e;"
+        "   border: 1px solid #303030;"
         "   border-radius: 18px;"
         "}"
         "QPushButton:hover {"
-        "   background-color: #2e2e36;"
-        "   border-color: #4c4c58;"
+        "   background-color: #282828;"
+        "   border-color: #444444;"
         "}"
     ));
     connect(m_searchButton, &QPushButton::clicked, this, [this]() {
@@ -110,7 +110,7 @@ void ExpandableSearchBar::setupUi() {
     m_closeButton = new QPushButton(this);
     m_closeButton->setFixedSize(28, 28);
     m_closeButton->setCursor(Qt::PointingHandCursor);
-    m_closeButton->setIcon(createCloseIcon(QColor(0x90, 0x90, 0xa0)));
+    m_closeButton->setIcon(createCloseIcon(QColor(0x90, 0x90, 0x90)));
     m_closeButton->setIconSize(QSize(14, 14));
     m_closeButton->setVisible(false);
     m_closeButton->setStyleSheet(QStringLiteral(
@@ -121,7 +121,7 @@ void ExpandableSearchBar::setupUi() {
         "   margin-right: 4px;"
         "}"
         "QPushButton:hover {"
-        "   background-color: #343440;"
+        "   background-color: #2a2a2a;"
         "}"
     ));
     connect(m_closeButton, &QPushButton::clicked, this, [this]() {
@@ -163,7 +163,7 @@ void ExpandableSearchBar::expand() {
 
     setStyleSheet(QStringLiteral(
         "ExpandableSearchBar {"
-        "   background-color: #222228;"
+        "   background-color: #1e1e1e;"
         "   border: 1px solid %1;"
         "   border-radius: 18px;"
         "}"
@@ -200,13 +200,13 @@ void ExpandableSearchBar::collapse() {
             setStyleSheet(QStringLiteral("ExpandableSearchBar { background: transparent; border: none; }"));
             m_searchButton->setStyleSheet(QStringLiteral(
                 "QPushButton {"
-                "   background-color: #222228;"
-                "   border: 1px solid #383842;"
+                "   background-color: #1e1e1e;"
+                "   border: 1px solid #303030;"
                 "   border-radius: 18px;"
                 "}"
                 "QPushButton:hover {"
-                "   background-color: #2e2e36;"
-                "   border-color: #4c4c58;"
+                "   background-color: #282828;"
+                "   border-color: #444444;"
                 "}"
             ));
         }

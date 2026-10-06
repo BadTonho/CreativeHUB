@@ -57,16 +57,16 @@ void UpdatesPage::setupUi() {
     m_emptyStateLabel = new QLabel(this);
     m_emptyStateLabel->setAlignment(Qt::AlignCenter);
     m_emptyStateLabel->setStyleSheet(QStringLiteral(
-        "color: #a5b4fc;"
+        "color: #d0d0d0;"
         "font-size: 14px;"
         "font-weight: 600;"
         "line-height: 1.6;"
         "padding: 56px 24px;"
-        "background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #1a1733, stop:1 #13121e);"
-        "border: 1px solid #2e2a4f;"
+        "background-color: #161616;"
+        "border: 1px solid #262626;"
         "border-radius: 14px;"
     ));
-    m_emptyStateLabel->setText(QStringLiteral("✦ Tudo atualizado!\nSeus aplicativos estão na versão mais recente, estável e rápida."));
+    m_emptyStateLabel->setText(QStringLiteral("✓ Tudo atualizado!\nSeus aplicativos estão na versão mais recente, estável e rápida."));
     m_contentLayout->addWidget(m_emptyStateLabel, 0, 0, 1, 3);
 
     mainLayout->addLayout(m_contentLayout);

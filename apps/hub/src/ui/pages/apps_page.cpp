@@ -56,7 +56,7 @@ void AppsPage::setupUi() {
 
     auto* subLabel = new QLabel(QStringLiteral("Gerencie, abra e atualize seus aplicativos de criação."), scrollContainer);
     subLabel->setStyleSheet(QStringLiteral(
-        "font-size: 13px; color: #8e8e9e; background: transparent;"
+        "font-size: 13px; color: #888888; background: transparent;"
     ));
     titleCol->addWidget(subLabel);
 
@@ -104,30 +104,30 @@ void AppsPage::onFilterTabClicked(int index) {
         if (static_cast<int>(i) == index) {
             m_filterButtons[i]->setStyleSheet(QStringLiteral(
                 "QPushButton {"
-                "   background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);"
-                "   color: #ffffff;"
+                "   background-color: #ffffff;"
+                "   color: #000000;"
                 "   border-radius: 14px;"
                 "   padding: 6px 16px;"
                 "   font-size: 12px;"
                 "   font-weight: 700;"
-                "   border: 1px solid rgba(255, 255, 255, 0.15);"
+                "   border: none;"
                 "}"
             ));
         } else {
             m_filterButtons[i]->setStyleSheet(QStringLiteral(
                 "QPushButton {"
-                "   background-color: #1a1a24;"
-                "   color: #8c8c9e;"
+                "   background-color: #181818;"
+                "   color: #888888;"
                 "   border-radius: 14px;"
                 "   padding: 6px 16px;"
                 "   font-size: 12px;"
                 "   font-weight: 600;"
-                "   border: 1px solid #282836;"
+                "   border: 1px solid #282828;"
                 "}"
                 "QPushButton:hover {"
-                "   background-color: #242432;"
-                "   color: #d0d0e0;"
-                "   border-color: #38384a;"
+                "   background-color: #222222;"
+                "   color: #ffffff;"
+                "   border-color: #383838;"
                 "}"
             ));
         }

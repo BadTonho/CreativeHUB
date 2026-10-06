@@ -15,7 +15,7 @@ SidebarWidget::SidebarWidget(QWidget* parent)
     setStyleSheet(QStringLiteral(
         "SidebarWidget {"
         "   background-color: %1;"
-        "   border-right: 1px solid #20202c;"
+        "   border-right: 1px solid #202020;"
         "}"
     ).arg(HubPalette::sidebarBackground.name()));
 
@@ -25,7 +25,7 @@ SidebarWidget::SidebarWidget(QWidget* parent)
 
     auto* sectionLabel = new QLabel(QStringLiteral("BIBLIOTECA"), this);
     sectionLabel->setStyleSheet(QStringLiteral(
-        "color: #555568;"
+        "color: #555555;"
         "font-size: 10px;"
         "font-weight: 800;"
         "letter-spacing: 1.2px;"
@@ -52,12 +52,12 @@ SidebarWidget::SidebarWidget(QWidget* parent)
 
     layout->addStretch();
 
-    // Sleek status footer card
+    // Sleek monochrome status footer card
     auto* footerCard = new QFrame(this);
     footerCard->setStyleSheet(QStringLiteral(
         "QFrame {"
-        "   background-color: #1a1a24;"
-        "   border: 1px solid #272738;"
+        "   background-color: #161616;"
+        "   border: 1px solid #242424;"
         "   border-radius: 8px;"
         "   padding: 4px 8px;"
         "}"
@@ -67,7 +67,7 @@ SidebarWidget::SidebarWidget(QWidget* parent)
     footerLayout->setSpacing(8);
 
     auto* statusDot = new QLabel(QStringLiteral("●"), footerCard);
-    statusDot->setStyleSheet(QStringLiteral("color: #10b981; font-size: 10px; background: transparent;"));
+    statusDot->setStyleSheet(QStringLiteral("color: #ffffff; font-size: 9px; background: transparent;"));
     footerLayout->addWidget(statusDot);
 
 #ifndef CREATIVE_SUITE_VERSION_HUB
@@ -76,7 +76,7 @@ SidebarWidget::SidebarWidget(QWidget* parent)
     auto* versionLabel = new QLabel(
         QStringLiteral("Hub v%1 • Ativo").arg(QStringLiteral(CREATIVE_SUITE_VERSION_HUB)), footerCard);
     versionLabel->setStyleSheet(QStringLiteral(
-        "color: #88889c;"
+        "color: #888888;"
         "font-size: 11px;"
         "font-weight: 600;"
         "background: transparent;"

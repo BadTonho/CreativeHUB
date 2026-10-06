@@ -35,39 +35,39 @@ void AppStatusBadge::updateAppearance() {
         case AppStatus::Installed:
             text = m_versionInfo.isEmpty() ? QStringLiteral("● Instalado")
                                            : QStringLiteral("● v%1").arg(m_versionInfo);
-            bgColor = QColor(0x0e, 0x28, 0x1a);
-            textColor = QColor(0x34, 0xd3, 0x99);
-            borderColor = QColor(0x13, 0x4e, 0x2e);
+            bgColor = QColor(0x1e, 0x1e, 0x1e);
+            textColor = QColor(0xff, 0xff, 0xff);
+            borderColor = QColor(0x33, 0x33, 0x33);
             break;
 
         case AppStatus::UpdateAvailable:
             text = m_versionInfo.isEmpty() ? QStringLiteral("● Atualização")
                                            : QStringLiteral("● Nova v%1").arg(m_versionInfo);
-            bgColor = QColor(0x11, 0x22, 0x3e);
-            textColor = QColor(0x60, 0xa5, 0xfa);
-            borderColor = QColor(0x1d, 0x3d, 0x6e);
+            bgColor = QColor(0x26, 0x26, 0x26);
+            textColor = QColor(0xff, 0xff, 0xff);
+            borderColor = QColor(0x3e, 0x3e, 0x3e);
             break;
 
         case AppStatus::Downloading:
             text = QStringLiteral("● Baixando...");
-            bgColor = QColor(0x2a, 0x1f, 0x05);
-            textColor = QColor(0xfb, 0xbf, 0x24);
-            borderColor = QColor(0x52, 0x3d, 0x0a);
+            bgColor = QColor(0x22, 0x22, 0x22);
+            textColor = QColor(0xee, 0xee, 0xee);
+            borderColor = QColor(0x38, 0x38, 0x38);
             break;
 
         case AppStatus::Installing:
             text = QStringLiteral("● Instalando...");
-            bgColor = QColor(0x26, 0x12, 0x3d);
-            textColor = QColor(0xc0, 0x84, 0xfc);
-            borderColor = QColor(0x48, 0x20, 0x72);
+            bgColor = QColor(0x22, 0x22, 0x22);
+            textColor = QColor(0xee, 0xee, 0xee);
+            borderColor = QColor(0x38, 0x38, 0x38);
             break;
 
         case AppStatus::NotInstalled:
         default:
             text = QStringLiteral("○ Disponível");
-            bgColor = QColor(0x1a, 0x1a, 0x24);
-            textColor = QColor(0x8e, 0x8e, 0xa0);
-            borderColor = QColor(0x2a, 0x2a, 0x38);
+            bgColor = QColor(0x16, 0x16, 0x16);
+            textColor = QColor(0x88, 0x88, 0x88);
+            borderColor = QColor(0x28, 0x28, 0x28);
             break;
     }
 

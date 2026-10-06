@@ -20,7 +20,7 @@ DownloadProgressBar::DownloadProgressBar(QWidget* parent)
     m_progressBar->setFixedHeight(6);
     m_progressBar->setStyleSheet(QString(R"(
         QProgressBar {
-            background-color: #33333d;
+            background-color: #262626;
             border: none;
             border-radius: 3px;
         }

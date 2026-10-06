@@ -22,33 +22,22 @@ QPixmap createFallbackIcon(const QString& id) {
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    QLinearGradient grad(0, 0, size, size);
+    painter.setBrush(QColor(0x22, 0x22, 0x22));
+    painter.setPen(QColor(0x38, 0x38, 0x38));
+    painter.drawRoundedRect(QRectF(0, 0, size, size), 14, 14);
+
     QString initials = QStringLiteral("CS");
-
     if (id == QStringLiteral("video-editor")) {
-        grad.setColorAt(0.0, QColor(0xa8, 0x55, 0xf7));
-        grad.setColorAt(1.0, QColor(0x7c, 0x3a, 0xed));
-        initials = QStringLiteral("Ve");
+        initials = QStringLiteral("V");
     } else if (id == QStringLiteral("image-editor")) {
-        grad.setColorAt(0.0, QColor(0x38, 0xbd, 0xf8));
-        grad.setColorAt(1.0, QColor(0x02, 0x84, 0xc7));
-        initials = QStringLiteral("Ie");
+        initials = QStringLiteral("I");
     } else if (id == QStringLiteral("motion-editor")) {
-        grad.setColorAt(0.0, QColor(0xf4, 0x3f, 0x5e));
-        grad.setColorAt(1.0, QColor(0xec, 0x48, 0x99));
-        initials = QStringLiteral("Mo");
-    } else {
-        grad.setColorAt(0.0, QColor(0x63, 0x66, 0xf1));
-        grad.setColorAt(1.0, QColor(0x4f, 0x46, 0xe5));
+        initials = QStringLiteral("M");
     }
-
-    painter.setBrush(grad);
-    painter.setPen(Qt::NoPen);
-    painter.drawRoundedRect(QRectF(0, 0, size, size), 16, 16);
 
     painter.setPen(Qt::white);
     QFont font = painter.font();
-    font.setPointSize(21);
+    font.setPointSize(22);
     font.setBold(true);
     painter.setFont(font);
     painter.drawText(QRect(0, 0, size, size), Qt::AlignCenter, initials);
@@ -104,7 +93,7 @@ void AppCardWidget::setupUi() {
     m_tagLineLabel->setAlignment(Qt::AlignCenter);
     m_tagLineLabel->setWordWrap(true);
     m_tagLineLabel->setStyleSheet(QStringLiteral(
-        "font-size: 11px; color: #9da3b4; background: transparent; line-height: 1.3;"
+        "font-size: 11px; color: #8e8e9e; background: transparent; line-height: 1.3;"
     ));
     mainLayout->addWidget(m_tagLineLabel);
 
@@ -168,36 +157,34 @@ void AppCardWidget::updateVisuals() {
     }
     m_statusBadge->setStatus(m_appInfo.status(), versionInfo);
 
-    const QColor accent = HubPalette::appAccentColor(m_appInfo.id());
-
-    // Dynamic card stylesheet with app-specific accent on hover
+    // Clean monochrome card styling
     setStyleSheet(QStringLiteral(R"(
         #AppCardWidget {
-            background: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 #1e1e28, stop:1 #171720);
-            border: 1px solid #292938;
+            background-color: #161616;
+            border: 1px solid #262626;
             border-radius: 14px;
         }
         #AppCardWidget:hover {
-            background: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 #252534, stop:1 #1b1b26);
-            border-color: %1;
+            background-color: #1e1e1e;
+            border-color: #484848;
         }
-    )").arg(accent.name()));
+    )"));
 
     switch (m_appInfo.status()) {
         case AppStatus::Installed:
             m_actionButton->setText(QStringLiteral("Abrir"));
             m_actionButton->setStyleSheet(QStringLiteral(
                 "QPushButton {"
-                "   background-color: #242432;"
+                "   background-color: #202020;"
                 "   color: #ffffff;"
                 "   font-weight: 700;"
                 "   font-size: 12px;"
-                "   border: 1px solid #38384a;"
+                "   border: 1px solid #333333;"
                 "   border-radius: 8px;"
                 "}"
                 "QPushButton:hover {"
-                "   background-color: #2f2f42;"
-                "   border-color: #555570;"
+                "   background-color: #2a2a2a;"
+                "   border-color: #484848;"
                 "}"
             ));
             m_actionButton->setEnabled(true);
@@ -208,15 +195,15 @@ void AppCardWidget::updateVisuals() {
             m_actionButton->setText(QStringLiteral("Atualizar"));
             m_actionButton->setStyleSheet(QStringLiteral(
                 "QPushButton {"
-                "   background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #3b82f6);"
-                "   color: #ffffff;"
+                "   background-color: #ffffff;"
+                "   color: #000000;"
                 "   font-weight: 700;"
                 "   font-size: 12px;"
-                "   border: 1px solid rgba(255, 255, 255, 0.15);"
+                "   border: none;"
                 "   border-radius: 8px;"
                 "}"
                 "QPushButton:hover {"
-                "   background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #1d4ed8, stop:1 #2563eb);"
+                "   background-color: #e4e4e4;"
                 "}"
             ));
             m_actionButton->setEnabled(true);
@@ -235,18 +222,20 @@ void AppCardWidget::updateVisuals() {
             m_actionButton->setText(QStringLiteral("Baixar"));
             m_actionButton->setStyleSheet(QStringLiteral(
                 "QPushButton {"
-                "   background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 %1, stop:1 %2);"
-                "   color: #ffffff;"
+                "   background-color: #ffffff;"
+                "   color: #000000;"
                 "   font-weight: 700;"
                 "   font-size: 12px;"
-                "   border: 1px solid rgba(255, 255, 255, 0.15);"
+                "   border: none;"
                 "   border-radius: 8px;"
                 "}"
                 "QPushButton:hover {"
-                "   opacity: 0.9;"
-                "   border-color: rgba(255, 255, 255, 0.3);"
+                "   background-color: #e4e4e4;"
                 "}"
-            ).arg(HubPalette::accentPrimary.name(), HubPalette::accentPrimaryHover.name()));
+                "QPushButton:pressed {"
+                "   background-color: #cccccc;"
+                "}"
+            ));
             m_actionButton->setEnabled(true);
             m_progressBar->setVisible(false);
             break;

@@ -80,8 +80,8 @@ SidebarButton::SidebarButton(const QString& title, QWidget* parent)
     m_badgeLabel = new QLabel(this);
     m_badgeLabel->setVisible(false);
     m_badgeLabel->setStyleSheet(QStringLiteral(
-        "background-color: #6366f1;"
-        "color: #ffffff;"
+        "background-color: #ffffff;"
+        "color: #000000;"
         "border-radius: 9px;"
         "font-size: 10px;"
         "font-weight: 800;"
@@ -110,7 +110,7 @@ void SidebarButton::setBadgeCount(int count) {
 }
 
 void SidebarButton::updateVisuals() {
-    QColor iconColor = m_active ? QColor(0xa5, 0xb4, 0xfc) : QColor(0x82, 0x82, 0x94);
+    QColor iconColor = m_active ? QColor(0xff, 0xff, 0xff) : QColor(0x88, 0x88, 0x88);
 
     if (m_title.contains(QStringLiteral("Aplicativos"))) {
         setIcon(createAppsIcon(iconColor));
@@ -123,13 +123,13 @@ void SidebarButton::updateVisuals() {
     if (m_active) {
         setStyleSheet(QStringLiteral(R"(
             QPushButton {
-                background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 rgba(99, 102, 241, 0.22), stop:1 rgba(99, 102, 241, 0.08));
+                background-color: #242424;
                 color: #ffffff;
                 font-weight: 700;
                 font-size: 13px;
                 text-align: left;
                 padding-left: 12px;
-                border: 1px solid rgba(99, 102, 241, 0.35);
+                border: 1px solid #383838;
                 border-radius: 8px;
             }
         )"));
@@ -137,7 +137,7 @@ void SidebarButton::updateVisuals() {
         setStyleSheet(QStringLiteral(R"(
             QPushButton {
                 background-color: transparent;
-                color: #9090a2;
+                color: #888888;
                 font-weight: 500;
                 font-size: 13px;
                 text-align: left;
@@ -146,9 +146,9 @@ void SidebarButton::updateVisuals() {
                 border-radius: 8px;
             }
             QPushButton:hover {
-                background-color: #1e1e28;
-                color: #e2e2ec;
-                border-color: #2b2b3a;
+                background-color: #1a1a1a;
+                color: #ffffff;
+                border-color: #282828;
             }
         )"));
     }

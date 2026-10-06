@@ -27,23 +27,18 @@ QPixmap createFallbackIcon(const QString& id) {
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    QColor iconBg(0x00, 0x7a, 0xff);
-    QString initials = QStringLiteral("CS");
-
-    if (id == QStringLiteral("video-editor")) {
-        iconBg = QColor(0x99, 0x45, 0xff);
-        initials = QStringLiteral("Ve");
-    } else if (id == QStringLiteral("image-editor")) {
-        iconBg = QColor(0x00, 0x84, 0xff);
-        initials = QStringLiteral("Ie");
-    } else if (id == QStringLiteral("motion-editor")) {
-        iconBg = QColor(0xec, 0x3b, 0x83);
-        initials = QStringLiteral("Mo");
-    }
-
-    painter.setBrush(iconBg);
-    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0x20, 0x20, 0x20));
+    painter.setPen(QColor(0x33, 0x33, 0x33));
     painter.drawRoundedRect(QRect(0, 0, size, size), 16, 16);
+
+    QString initials = QStringLiteral("CS");
+    if (id == QStringLiteral("video-editor")) {
+        initials = QStringLiteral("V");
+    } else if (id == QStringLiteral("image-editor")) {
+        initials = QStringLiteral("I");
+    } else if (id == QStringLiteral("motion-editor")) {
+        initials = QStringLiteral("M");
+    }
 
     painter.setPen(Qt::white);
     QFont font = painter.font();
@@ -78,13 +73,13 @@ AppDetailsModal::AppDetailsModal(QWidget* parent)
 void AppDetailsModal::setupUi() {
     m_cardFrame = new QFrame(this);
     m_cardFrame->setObjectName(QStringLiteral("ModalCardFrame"));
-    m_cardFrame->setStyleSheet(QString(R"(
-        #ModalCardFrame {
-            background-color: %1;
-            border: 1px solid #383848;
-            border-radius: 14px;
-        }
-    )").arg(HubPalette::cardBackground.name()));
+    m_cardFrame->setStyleSheet(QStringLiteral(
+        "#ModalCardFrame {"
+        "   background-color: #141414;"
+        "   border: 1px solid #282828;"
+        "   border-radius: 14px;"
+        "}"
+    ));
 
     auto* cardLayout = new QVBoxLayout(m_cardFrame);
     cardLayout->setContentsMargins(24, 20, 24, 20);
@@ -106,7 +101,7 @@ void AppDetailsModal::setupUi() {
     titleCol->addWidget(m_nameLabel);
 
     m_taglineLabel = new QLabel(m_cardFrame);
-    m_taglineLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #9a9aa8;"));
+    m_taglineLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #8e8e9e;"));
     titleCol->addWidget(m_taglineLabel);
 
     topHeaderLayout->addLayout(titleCol, 1);
@@ -124,17 +119,17 @@ void AppDetailsModal::setupUi() {
     m_closeIconButton->setCursor(Qt::PointingHandCursor);
     m_closeIconButton->setStyleSheet(QStringLiteral(
         "QPushButton {"
-        "   background-color: rgba(255, 255, 255, 0.08);"
-        "   border: 1px solid rgba(255, 255, 255, 0.12);"
+        "   background-color: #1e1e1e;"
+        "   border: 1px solid #2e2e2e;"
         "   border-radius: 14px;"
-        "   color: #b0b0c0;"
+        "   color: #888888;"
         "   font-size: 13px;"
         "   font-weight: bold;"
         "}"
         "QPushButton:hover {"
-        "   background-color: rgba(255, 60, 60, 0.3);"
-        "   border-color: rgba(255, 80, 80, 0.5);"
+        "   background-color: #2a2a2a;"
         "   color: #ffffff;"
+        "   border-color: #444444;"
         "}"
     ));
     connect(m_closeIconButton, &QPushButton::clicked, this, &AppDetailsModal::closeWithAnimation);
@@ -145,7 +140,7 @@ void AppDetailsModal::setupUi() {
     // Separator
     auto* separator = new QFrame(m_cardFrame);
     separator->setFrameShape(QFrame::HLine);
-    separator->setStyleSheet(QStringLiteral("background-color: #2e2e3a; max-height: 1px; border: none;"));
+    separator->setStyleSheet(QStringLiteral("background-color: #242424; max-height: 1px; border: none;"));
     cardLayout->addWidget(separator);
 
     // Scrollable details section
@@ -162,17 +157,17 @@ void AppDetailsModal::setupUi() {
 
     // About section
     auto* aboutTitle = new QLabel(QStringLiteral("SOBRE O APLICATIVO"), scrollContent);
-    aboutTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #787888; letter-spacing: 0.5px;"));
+    aboutTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px;"));
     contentLayout->addWidget(aboutTitle);
 
     m_descText = new QLabel(scrollContent);
     m_descText->setWordWrap(true);
-    m_descText->setStyleSheet(QStringLiteral("font-size: 13px; color: #d0d0dc; line-height: 1.5;"));
+    m_descText->setStyleSheet(QStringLiteral("font-size: 13px; color: #d0d0d0; line-height: 1.5;"));
     contentLayout->addWidget(m_descText);
 
     // Features section
     auto* featTitle = new QLabel(QStringLiteral("PRINCIPAIS RECURSOS"), scrollContent);
-    featTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #787888; letter-spacing: 0.5px; margin-top: 4px;"));
+    featTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px; margin-top: 4px;"));
     contentLayout->addWidget(featTitle);
 
     m_featuresLayout = new QVBoxLayout();
@@ -181,13 +176,13 @@ void AppDetailsModal::setupUi() {
 
     // Technical specifications
     auto* techTitle = new QLabel(QStringLiteral("INFORMAÇÕES TÉCNICAS"), scrollContent);
-    techTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #787888; letter-spacing: 0.5px; margin-top: 4px;"));
+    techTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px; margin-top: 4px;"));
     contentLayout->addWidget(techTitle);
 
     auto* techCard = new QFrame(scrollContent);
     techCard->setStyleSheet(QStringLiteral(
-        "background-color: #24242c;"
-        "border: 1px solid #32323c;"
+        "background-color: #1a1a1a;"
+        "border: 1px solid #282828;"
         "border-radius: 8px;"
         "padding: 10px 14px;"
     ));
@@ -195,11 +190,11 @@ void AppDetailsModal::setupUi() {
     techLayout->setSpacing(6);
 
     m_formatLabel = new QLabel(techCard);
-    m_formatLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0bc;"));
+    m_formatLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0b0;"));
     techLayout->addWidget(m_formatLabel);
 
     m_exeLabel = new QLabel(techCard);
-    m_exeLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0bc;"));
+    m_exeLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0b0;"));
     techLayout->addWidget(m_exeLabel);
 
     contentLayout->addWidget(techCard);
@@ -209,13 +204,13 @@ void AppDetailsModal::setupUi() {
     changelogHeaderRow->setContentsMargins(0, 4, 0, 0);
 
     auto* changelogTitle = new QLabel(QStringLiteral("NOTAS DE VERSÃO"), scrollContent);
-    changelogTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #787888; letter-spacing: 0.5px;"));
+    changelogTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px;"));
     changelogHeaderRow->addWidget(changelogTitle);
     changelogHeaderRow->addStretch();
 
     m_versionBadge = new QLabel(scrollContent);
     m_versionBadge->setStyleSheet(QStringLiteral(
-        "background-color: #2e2e3c; color: #a4a4b8; font-size: 11px; font-weight: 600; "
+        "background-color: #222222; color: #cccccc; font-size: 11px; font-weight: 600; "
         "border-radius: 6px; padding: 2px 8px;"
     ));
     m_versionBadge->setVisible(false);
@@ -226,26 +221,26 @@ void AppDetailsModal::setupUi() {
     m_versionCombo->setFixedHeight(26);
     m_versionCombo->setStyleSheet(QStringLiteral(
         "QComboBox {"
-        "   background-color: #24242c;"
-        "   border: 1px solid #383846;"
+        "   background-color: #1a1a1a;"
+        "   border: 1px solid #2e2e2e;"
         "   border-radius: 6px;"
-        "   color: #e0e0ea;"
+        "   color: #ffffff;"
         "   font-size: 11px;"
         "   font-weight: 600;"
         "   padding: 2px 10px 2px 8px;"
         "}"
         "QComboBox:hover {"
-        "   border-color: #4e4e5e;"
+        "   border-color: #444444;"
         "}"
         "QComboBox::drop-down {"
         "   border: none;"
         "   width: 16px;"
         "}"
         "QComboBox QAbstractItemView {"
-        "   background-color: #1e1e24;"
-        "   border: 1px solid #383846;"
-        "   selection-background-color: #3b82f6;"
-        "   color: #e0e0ea;"
+        "   background-color: #161616;"
+        "   border: 1px solid #2e2e2e;"
+        "   selection-background-color: #333333;"
+        "   color: #ffffff;"
         "   font-size: 11px;"
         "}"
     ));
@@ -264,8 +259,8 @@ void AppDetailsModal::setupUi() {
     m_changelogCard->setObjectName(QStringLiteral("ChangelogCard"));
     m_changelogCard->setStyleSheet(QStringLiteral(
         "#ChangelogCard {"
-        "   background-color: #24242c;"
-        "   border: 1px solid #32323c;"
+        "   background-color: #1a1a1a;"
+        "   border: 1px solid #282828;"
         "   border-radius: 8px;"
         "   padding: 10px 14px;"
         "}"
@@ -283,10 +278,10 @@ void AppDetailsModal::setupUi() {
         "QTextBrowser {"
         "   background: transparent;"
         "   border: none;"
-        "   color: #d0d0dc;"
+        "   color: #d0d0d0;"
         "   font-size: 12px;"
         "   line-height: 1.4;"
-        "   selection-background-color: #3b82f6;"
+        "   selection-background-color: #333333;"
         "}"
     ));
     changelogLayout->addWidget(m_changelogBrowser);
@@ -294,7 +289,7 @@ void AppDetailsModal::setupUi() {
     m_emptyChangelogLabel = new QLabel(m_changelogCard);
     m_emptyChangelogLabel->setWordWrap(true);
     m_emptyChangelogLabel->setStyleSheet(QStringLiteral(
-        "color: #7e7e8e; font-size: 12px; font-style: italic; background: transparent;"
+        "color: #707070; font-size: 12px; font-style: italic; background: transparent;"
     ));
     changelogLayout->addWidget(m_emptyChangelogLabel);
 
@@ -475,7 +470,7 @@ void AppDetailsModal::updateVisuals() {
     m_taglineLabel->setText(m_app.tagLine());
     m_descText->setText(m_app.description());
 
-    // Action button text and style
+    // Action button text and style (monochrome)
     if (m_app.isInstalled()) {
         if (m_app.hasUpdate()) {
             m_actionButton->setText(QStringLiteral("Atualizar"));
@@ -500,12 +495,12 @@ void AppDetailsModal::updateVisuals() {
         rowLayout->setSpacing(10);
 
         auto* check = new QLabel(QStringLiteral("✓"), rowWidget);
-        check->setStyleSheet(QStringLiteral("color: %1; font-weight: bold; font-size: 13px;").arg(HubPalette::accentPrimary.name()));
+        check->setStyleSheet(QStringLiteral("color: #ffffff; font-weight: bold; font-size: 13px;"));
         rowLayout->addWidget(check);
 
         auto* label = new QLabel(feat, rowWidget);
         label->setWordWrap(true);
-        label->setStyleSheet(QStringLiteral("font-size: 12px; color: #c4c4d2;"));
+        label->setStyleSheet(QStringLiteral("font-size: 12px; color: #c4c4c4;"));
         rowLayout->addWidget(label, 1);
 
         m_featuresLayout->addWidget(rowWidget);
@@ -586,7 +581,7 @@ void AppDetailsModal::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     // Translucent dark background overlay
     const int alpha = static_cast<int>(m_backdropOpacity * 170.0);
-    painter.fillRect(rect(), QColor(10, 10, 14, std::clamp(alpha, 0, 255)));
+    painter.fillRect(rect(), QColor(0, 0, 0, std::clamp(alpha, 0, 255)));
 }
 
 void AppDetailsModal::mouseReleaseEvent(QMouseEvent* event) {

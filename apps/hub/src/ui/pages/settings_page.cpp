@@ -39,8 +39,8 @@ void SettingsPage::setupUi() {
     auto* installCard = new QFrame(this);
     installCard->setStyleSheet(QStringLiteral(
         "QFrame {"
-        "   background-color: #1a1a24;"
-        "   border: 1px solid #282838;"
+        "   background-color: #161616;"
+        "   border: 1px solid #262626;"
         "   border-radius: 12px;"
         "   padding: 12px 16px;"
         "}"
@@ -49,7 +49,7 @@ void SettingsPage::setupUi() {
     installLayout->setSpacing(10);
 
     auto* installSectionLabel = new QLabel(QStringLiteral("PASTA DE INSTALAÇÃO DOS APLICATIVOS"), installCard);
-    installSectionLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #6b6b7c; letter-spacing: 0.8px; background: transparent;"));
+    installSectionLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 0.8px; background: transparent;"));
     installLayout->addWidget(installSectionLabel);
 
     auto* pathRow = new QHBoxLayout();
@@ -74,8 +74,8 @@ void SettingsPage::setupUi() {
     auto* generalCard = new QFrame(this);
     generalCard->setStyleSheet(QStringLiteral(
         "QFrame {"
-        "   background-color: #1a1a24;"
-        "   border: 1px solid #282838;"
+        "   background-color: #161616;"
+        "   border: 1px solid #262626;"
         "   border-radius: 12px;"
         "   padding: 12px 16px;"
         "}"
@@ -84,23 +84,23 @@ void SettingsPage::setupUi() {
     generalLayout->setSpacing(12);
 
     auto* generalSectionLabel = new QLabel(QStringLiteral("COMPORTAMENTO GERAL"), generalCard);
-    generalSectionLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #6b6b7c; letter-spacing: 0.8px; background: transparent;"));
+    generalSectionLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 0.8px; background: transparent;"));
     generalLayout->addWidget(generalSectionLabel);
 
     m_autostartCheck = new QCheckBox(QStringLiteral("Iniciar o Creative Suite Hub junto com o Windows"), generalCard);
     m_autostartCheck->setStyleSheet(QStringLiteral(
-        "QCheckBox { color: #d0d0dc; font-size: 13px; font-weight: 500; spacing: 8px; }"
-        "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #3c3c4e; background: #151520; }"
-        "QCheckBox::indicator:checked { background: #6366f1; border-color: #6366f1; }"
+        "QCheckBox { color: #d0d0d0; font-size: 13px; font-weight: 500; spacing: 8px; }"
+        "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #383838; background: #1a1a1a; }"
+        "QCheckBox::indicator:checked { background: #ffffff; border-color: #ffffff; }"
     ));
     generalLayout->addWidget(m_autostartCheck);
 
     m_notificationsCheck = new QCheckBox(QStringLiteral("Notificar automaticamente sobre novas versões disponíveis"), generalCard);
     m_notificationsCheck->setChecked(true);
     m_notificationsCheck->setStyleSheet(QStringLiteral(
-        "QCheckBox { color: #d0d0dc; font-size: 13px; font-weight: 500; spacing: 8px; }"
-        "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #3c3c4e; background: #151520; }"
-        "QCheckBox::indicator:checked { background: #6366f1; border-color: #6366f1; }"
+        "QCheckBox { color: #d0d0d0; font-size: 13px; font-weight: 500; spacing: 8px; }"
+        "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #383838; background: #1a1a1a; }"
+        "QCheckBox::indicator:checked { background: #ffffff; border-color: #ffffff; }"
     ));
     generalLayout->addWidget(m_notificationsCheck);
 
@@ -110,8 +110,8 @@ void SettingsPage::setupUi() {
     auto* diagCard = new QFrame(this);
     diagCard->setStyleSheet(QStringLiteral(
         "QFrame {"
-        "   background-color: #1a1a24;"
-        "   border: 1px solid #282838;"
+        "   background-color: #161616;"
+        "   border: 1px solid #262626;"
         "   border-radius: 12px;"
         "   padding: 12px 16px;"
         "}"
@@ -120,7 +120,7 @@ void SettingsPage::setupUi() {
     diagLayout->setSpacing(10);
 
     auto* diagSectionLabel = new QLabel(QStringLiteral("DIAGNÓSTICO E REGISTROS DE ERRO"), diagCard);
-    diagSectionLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #6b6b7c; letter-spacing: 0.8px; background: transparent;"));
+    diagSectionLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 0.8px; background: transparent;"));
     diagLayout->addWidget(diagSectionLabel);
 
     auto* logRow = new QHBoxLayout();

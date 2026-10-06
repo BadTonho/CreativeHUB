@@ -3,7 +3,6 @@
 
 #include <QHBoxLayout>
 #include <QPainter>
-#include <QLinearGradient>
 #include <QPixmap>
 #include <QFile>
 
@@ -28,19 +27,15 @@ QPixmap getSuiteLogoPixmap() {
         }
     }
 
-    // Fallback if resource is not found (e.g. standalone test)
+    // Fallback if resource is not found
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    QLinearGradient grad(0, 0, size, size);
-    grad.setColorAt(0.0, QColor(0x63, 0x66, 0xf1));
-    grad.setColorAt(1.0, QColor(0xa8, 0x55, 0xf7));
-
-    painter.setBrush(grad);
-    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0x22, 0x22, 0x22));
+    painter.setPen(QColor(0x38, 0x38, 0x38));
     painter.drawRoundedRect(QRectF(0, 0, size, size), 8, 8);
 
     painter.setPen(Qt::white);
@@ -62,7 +57,7 @@ HeaderBar::HeaderBar(QWidget* parent)
     setStyleSheet(QStringLiteral(
         "HeaderBar {"
         "   background-color: %1;"
-        "   border-bottom: 1px solid #222230;"
+        "   border-bottom: 1px solid #202020;"
         "}"
     ).arg(HubPalette::headerBackground.name()));
 
@@ -84,12 +79,12 @@ HeaderBar::HeaderBar(QWidget* parent)
     ));
     layout->addWidget(m_brandTitle);
 
-    // Hub pill badge
+    // Hub pill badge (monochrome)
     auto* hubBadge = new QLabel(QStringLiteral("HUB"), this);
     hubBadge->setStyleSheet(QStringLiteral(
-        "background-color: rgba(99, 102, 241, 0.18);"
-        "color: #818cf8;"
-        "border: 1px solid rgba(99, 102, 241, 0.35);"
+        "background-color: #1e1e1e;"
+        "color: #ffffff;"
+        "border: 1px solid #333333;"
         "border-radius: 6px;"
         "padding: 2px 7px;"
         "font-size: 10px;"
