@@ -10,6 +10,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName(QStringLiteral("CreativeSuite"));
     QCoreApplication::setApplicationName(QStringLiteral("CreativeSuiteHub"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    app.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
 
     creative_suite::hub::HubLogger::instance().logInfo(
         QStringLiteral("Application"),

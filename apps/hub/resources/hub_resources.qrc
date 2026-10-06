@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/app-icon">
+        <file alias="icon.png">../../../docs/assets/app-icons/hub.png</file>
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="video-editor.png">../../../docs/assets/app-icons/video-editor.png</file>
+        <file alias="image-editor.png">../../../docs/assets/app-icons/image-editor.png</file>
+        <file alias="motion-studio.png">../../../docs/assets/app-icons/motion-studio.png</file>
+        <file alias="hub.png">../../../docs/assets/app-icons/hub.png</file>
+    </qresource>
+</RCC>

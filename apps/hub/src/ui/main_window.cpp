@@ -13,6 +13,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
     setWindowTitle(QStringLiteral("Creative Suite Hub"));
+    setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
     resize(1020, 680);
     setMinimumSize(880, 560);
 

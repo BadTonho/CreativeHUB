@@ -4,7 +4,7 @@ Add-Type -AssemblyName System.Drawing
 
 $iconDirectory = Join-Path $PSScriptRoot '..\docs\assets\app-icons'
 $iconDirectory = [System.IO.Path]::GetFullPath($iconDirectory)
-$iconNames = @('video-editor', 'image-editor', 'motion-studio')
+$iconNames = @('video-editor', 'image-editor', 'motion-studio', 'hub')
 $iconSizes = @(16, 32, 48, 64, 128, 256)
 
 foreach ($iconName in $iconNames) {

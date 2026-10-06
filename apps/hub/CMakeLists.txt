@@ -56,6 +56,7 @@ target_compile_features(creative-suite-hub-core PUBLIC cxx_std_20)
 
 add_executable(creative-suite-hub
     src/main.cpp
+    resources/hub_resources.qrc
 )
 
 target_link_libraries(creative-suite-hub PRIVATE
@@ -69,6 +70,18 @@ set_target_properties(creative-suite-hub PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
+if(WIN32)
+    set(APP_ICON_FILE "${CMAKE_SOURCE_DIR}/docs/assets/app-icons/hub.ico")
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/cmake/windows_app_icon.rc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/hub_app_icon.rc"
+        @ONLY
+    )
+    target_sources(creative-suite-hub PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/hub_app_icon.rc"
+    )
+endif()
 
 if(MSVC)
     target_compile_options(creative-suite-hub-core PRIVATE /W4 /permissive-)
