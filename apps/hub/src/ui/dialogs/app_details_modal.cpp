@@ -398,11 +398,7 @@ void AppDetailsModal::showApp(const AppInfo& app, const QRect& originRect) {
     updateVisuals();
 
     const QRect target = targetCardRect();
-    const int startW = static_cast<int>(target.width() * 0.84);
-    const int startH = static_cast<int>(target.height() * 0.84);
-    const int startX = target.x() + (target.width() - startW) / 2;
-    const int startY = target.y() + (target.height() - startH) / 2;
-    const QRect start(startX, startY, startW, startH);
+    const QRect start(target.x(), target.y() + 8, target.width(), target.height());
 
     setCardGeometry(start);
     setBackdropOpacity(0.0);
@@ -413,13 +409,13 @@ void AppDetailsModal::showApp(const AppInfo& app, const QRect& originRect) {
     setFocus();
 
     m_geometryAnim = new QPropertyAnimation(this, "cardGeometry", this);
-    m_geometryAnim->setDuration(240);
+    m_geometryAnim->setDuration(120);
     m_geometryAnim->setStartValue(start);
     m_geometryAnim->setEndValue(target);
     m_geometryAnim->setEasingCurve(QEasingCurve::OutCubic);
 
     m_opacityAnim = new QPropertyAnimation(this, "backdropOpacity", this);
-    m_opacityAnim->setDuration(220);
+    m_opacityAnim->setDuration(110);
     m_opacityAnim->setStartValue(0.0);
     m_opacityAnim->setEndValue(1.0);
     m_opacityAnim->setEasingCurve(QEasingCurve::OutCubic);
@@ -438,11 +434,7 @@ void AppDetailsModal::closeWithAnimation() {
     setAttribute(Qt::WA_TransparentForMouseEvents, true);
 
     const QRect current = cardGeometry();
-    const int endW = static_cast<int>(current.width() * 0.84);
-    const int endH = static_cast<int>(current.height() * 0.84);
-    const int endX = current.x() + (current.width() - endW) / 2;
-    const int endY = current.y() + (current.height() - endH) / 2;
-    const QRect end(endX, endY, endW, endH);
+    const QRect end(current.x(), current.y() + 6, current.width(), current.height());
 
     if (m_geometryAnim) {
         m_geometryAnim->stop();
@@ -452,13 +444,13 @@ void AppDetailsModal::closeWithAnimation() {
     }
 
     m_geometryAnim = new QPropertyAnimation(this, "cardGeometry", this);
-    m_geometryAnim->setDuration(200);
+    m_geometryAnim->setDuration(90);
     m_geometryAnim->setStartValue(current);
     m_geometryAnim->setEndValue(end);
     m_geometryAnim->setEasingCurve(QEasingCurve::OutCubic);
 
     m_opacityAnim = new QPropertyAnimation(this, "backdropOpacity", this);
-    m_opacityAnim->setDuration(180);
+    m_opacityAnim->setDuration(80);
     m_opacityAnim->setStartValue(m_backdropOpacity);
     m_opacityAnim->setEndValue(0.0);
     m_opacityAnim->setEasingCurve(QEasingCurve::OutCubic);
@@ -592,8 +584,6 @@ void AppDetailsModal::updateVisuals() {
 
 void AppDetailsModal::paintEvent(QPaintEvent*) {
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-
     // Translucent dark background overlay
     const int alpha = static_cast<int>(m_backdropOpacity * 170.0);
     painter.fillRect(rect(), QColor(10, 10, 14, std::clamp(alpha, 0, 255)));
