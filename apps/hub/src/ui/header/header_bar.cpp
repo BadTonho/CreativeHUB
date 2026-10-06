@@ -4,13 +4,31 @@
 #include <QHBoxLayout>
 #include <QPainter>
 #include <QLinearGradient>
+#include <QPixmap>
+#include <QFile>
 
 namespace creative_suite::hub {
 
 namespace {
 
-QPixmap createSuiteLogoPixmap() {
-    constexpr int size = 30;
+QPixmap getSuiteLogoPixmap() {
+    constexpr int size = 32;
+
+    if (QFile::exists(QStringLiteral(":/icons/hub.png"))) {
+        QPixmap iconPix(QStringLiteral(":/icons/hub.png"));
+        if (!iconPix.isNull()) {
+            return iconPix.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+    }
+
+    if (QFile::exists(QStringLiteral(":/app-icon/icon.png"))) {
+        QPixmap iconPix(QStringLiteral(":/app-icon/icon.png"));
+        if (!iconPix.isNull()) {
+            return iconPix.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+    }
+
+    // Fallback if resource is not found (e.g. standalone test)
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
 
@@ -27,10 +45,10 @@ QPixmap createSuiteLogoPixmap() {
 
     painter.setPen(Qt::white);
     QFont font = painter.font();
-    font.setPointSize(10);
+    font.setPointSize(11);
     font.setBold(true);
     painter.setFont(font);
-    painter.drawText(QRect(0, 0, size, size), Qt::AlignCenter, QStringLiteral("CS"));
+    painter.drawText(QRect(0, 0, size, size), Qt::AlignCenter, QStringLiteral("H"));
 
     return pixmap;
 }
@@ -52,10 +70,11 @@ HeaderBar::HeaderBar(QWidget* parent)
     layout->setContentsMargins(22, 10, 22, 10);
     layout->setSpacing(12);
 
-    // Logo icon
+    // Official Hub logo icon
     auto* logoLabel = new QLabel(this);
-    logoLabel->setPixmap(createSuiteLogoPixmap());
-    logoLabel->setFixedSize(30, 30);
+    logoLabel->setPixmap(getSuiteLogoPixmap());
+    logoLabel->setFixedSize(32, 32);
+    logoLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(logoLabel);
 
     // Suite brand label
