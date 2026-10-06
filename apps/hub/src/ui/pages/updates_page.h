@@ -24,6 +24,9 @@ signals:
     void checkUpdatesRequested();
     void updateAppRequested(const QString& appId);
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     void setupUi();
 

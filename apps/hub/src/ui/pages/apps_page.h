@@ -29,6 +29,9 @@ signals:
 private slots:
     void onFilterTabClicked(int index);
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     void setupUi();
     void applyFilters();
@@ -43,6 +46,7 @@ private:
     CategoryFilter m_activeFilter{CategoryFilter::All};
     QString m_searchQuery;
 
+    QScrollArea* m_scrollArea{nullptr};
     QGridLayout* m_cardsLayout{nullptr};
     std::vector<AppCardWidget*> m_cardWidgets;
     std::vector<QPushButton*> m_filterButtons;

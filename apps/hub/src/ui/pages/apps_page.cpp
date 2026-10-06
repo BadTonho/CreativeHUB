@@ -28,22 +28,22 @@ void AppsPage::setupUi() {
     mainLayout->setSpacing(0);
 
     // Scroll area for entire page content
-    auto* scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->setStyleSheet(QStringLiteral("background: transparent;"));
+    m_scrollArea = new QScrollArea(this);
+    m_scrollArea->setWidgetResizable(true);
+    m_scrollArea->setFrameShape(QFrame::NoFrame);
+    m_scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_scrollArea->setStyleSheet(QStringLiteral("background: transparent;"));
 
-    auto* scrollContainer = new QWidget(scrollArea);
+    auto* scrollContainer = new QWidget(m_scrollArea);
     scrollContainer->setStyleSheet(QStringLiteral("background: transparent;"));
 
     auto* containerLayout = new QVBoxLayout(scrollContainer);
     containerLayout->setContentsMargins(28, 24, 28, 24);
     containerLayout->setSpacing(20);
 
-    // Header Row: Title & Subtitle on left, Filter Pills on right
-    auto* headerRow = new QHBoxLayout();
-    headerRow->setSpacing(12);
+    // Header section: Title and Subtitle, with filter buttons on clean dedicated row
+    auto* headerLayout = new QVBoxLayout();
+    headerLayout->setSpacing(14);
 
     auto* titleCol = new QVBoxLayout();
     titleCol->setSpacing(4);
@@ -55,32 +55,38 @@ void AppsPage::setupUi() {
     titleCol->addWidget(titleLabel);
 
     auto* subLabel = new QLabel(QStringLiteral("Gerencie, abra e atualize seus aplicativos de criação."), scrollContainer);
+    subLabel->setWordWrap(true);
     subLabel->setStyleSheet(QStringLiteral(
         "font-size: 13px; color: #888888; background: transparent;"
     ));
     titleCol->addWidget(subLabel);
 
-    headerRow->addLayout(titleCol);
-    headerRow->addStretch();
+    headerLayout->addLayout(titleCol);
+
+    // Filter Buttons in flexible horizontal row right below title
+    auto* filterRow = new QHBoxLayout();
+    filterRow->setSpacing(8);
 
     const QStringList filterNames = {
         QStringLiteral("Todos"),
         QStringLiteral("Instalados"),
-        QStringLiteral("Disponíveis para baixar")
+        QStringLiteral("Disponíveis")
     };
 
     for (int i = 0; i < filterNames.size(); ++i) {
         auto* btn = new QPushButton(filterNames[i], scrollContainer);
         btn->setCursor(Qt::PointingHandCursor);
         m_filterButtons.push_back(btn);
-        headerRow->addWidget(btn);
+        filterRow->addWidget(btn);
 
         connect(btn, &QPushButton::clicked, this, [this, i]() {
             onFilterTabClicked(i);
         });
     }
+    filterRow->addStretch();
+    headerLayout->addLayout(filterRow);
 
-    containerLayout->addLayout(headerRow);
+    containerLayout->addLayout(headerLayout);
 
     // App Cards Grid
     m_cardsLayout = new QGridLayout();
@@ -91,8 +97,8 @@ void AppsPage::setupUi() {
     containerLayout->addLayout(m_cardsLayout);
     containerLayout->addStretch();
 
-    scrollArea->setWidget(scrollContainer);
-    mainLayout->addWidget(scrollArea);
+    m_scrollArea->setWidget(scrollContainer);
+    mainLayout->addWidget(m_scrollArea);
 
     onFilterTabClicked(0);
 }
@@ -174,9 +180,21 @@ void AppsPage::refreshCards() {
     applyFilters();
 }
 
+void AppsPage::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    applyFilters();
+}
+
 void AppsPage::applyFilters() {
     int visibleIndex = 0;
-    constexpr int columns = 3;
+
+    int availableWidth = width() - 56;
+    if (m_scrollArea && m_scrollArea->viewport() && m_scrollArea->viewport()->width() > 0) {
+        availableWidth = m_scrollArea->viewport()->width() - 56;
+    }
+    constexpr int cardW = AppCardWidget::kCardWidth;
+    constexpr int spacing = 20;
+    const int columns = std::max(1, (availableWidth + spacing) / (cardW + spacing));
 
     for (auto* card : m_cardWidgets) {
         const auto& app = card->appInfo();

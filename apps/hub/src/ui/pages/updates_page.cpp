@@ -36,6 +36,7 @@ void UpdatesPage::setupUi() {
     titleCol->addWidget(titleLabel);
 
     auto* subLabel = new QLabel(QStringLiteral("Mantenha seus aplicativos sempre na versão mais estável, rápida e com novos recursos."), this);
+    subLabel->setWordWrap(true);
     subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #8e8e9e; background: transparent;"));
     titleCol->addWidget(subLabel);
 
@@ -73,6 +74,11 @@ void UpdatesPage::setupUi() {
     mainLayout->addStretch();
 }
 
+void UpdatesPage::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    refreshUpdates();
+}
+
 void UpdatesPage::refreshUpdates() {
     if (!m_catalog) {
         return;
@@ -86,7 +92,11 @@ void UpdatesPage::refreshUpdates() {
 
     const auto& apps = m_catalog->apps();
     int updateIndex = 0;
-    constexpr int columns = 3;
+
+    const int availableWidth = width() - 56;
+    constexpr int cardW = AppCardWidget::kCardWidth;
+    constexpr int spacing = 20;
+    const int columns = std::max(1, (availableWidth + spacing) / (cardW + spacing));
 
     for (const auto& app : apps) {
         if (app.hasUpdate()) {
