@@ -1144,21 +1144,33 @@ bool ImageDocumentSession::applyBucketFill(
 std::optional<ImageEditableSelectionTarget>
 ImageDocumentSession::editableSelectionTargetAt(
     const QPoint& canvas_seed, bool mask_target, QString* error) const {
+    auto target_task = makeEditableSelectionTargetTask(canvas_seed, mask_target, error);
+    if (!target_task) return std::nullopt;
+    auto target = target_task();
+    if (!target.has_value()) {
+        assignError(error, QStringLiteral("The active layer could not be rendered for Magic Wand selection."));
+    }
+    return target;
+}
+
+std::function<std::optional<ImageEditableSelectionTarget>()>
+ImageDocumentSession::makeEditableSelectionTargetTask(
+    const QPoint& canvas_seed, bool mask_target, QString* error) const {
     if (error != nullptr) error->clear();
     if (!hasSource() || !selectedLayerIsEditable()) {
         assignError(error, QStringLiteral("Select an editable layer before using the Magic Wand."));
-        return std::nullopt;
+        return {};
     }
     const qsizetype index = layerIndex(selected_layer_id_);
     if (index < 0 || (mask_target && !data_.layers.at(index).mask.has_value())) {
         assignError(error, QStringLiteral("Select a layer mask before using the Magic Wand on a mask."));
-        return std::nullopt;
+        return {};
     }
 
     const QSize size = renderedSize();
     if (canvas_seed.x() < 0 || canvas_seed.y() < 0 ||
         canvas_seed.x() >= size.width() || canvas_seed.y() >= size.height()) {
-        return std::nullopt;
+        return {};
     }
     QVector<QPointF> mapped_seed{
         QPointF(canvas_seed.x() + 0.5, canvas_seed.y() + 0.5)};
@@ -1171,23 +1183,28 @@ ImageDocumentSession::editableSelectionTargetAt(
         std::abs(mapped_seed.front().x()) > 1'000'000.0 ||
         std::abs(mapped_seed.front().y()) > 1'000'000.0) {
         assignError(error, QStringLiteral("The Magic Wand seed exceeds the supported local coordinate range."));
-        return std::nullopt;
+        return {};
     }
     const QPoint local_seed(
         static_cast<int>(std::floor(mapped_seed.front().x())),
         static_cast<int>(std::floor(mapped_seed.front().y())));
     if (local_seed.x() < 0 || local_seed.y() < 0 ||
         local_seed.x() >= size.width() || local_seed.y() >= size.height()) {
-        return std::nullopt;
+        return {};
     }
 
-    QImage pixels = ImageDocumentRenderer::editableLayerTarget(
-        data_, source_image_, raster_images_, selected_layer_id_, mask_target);
-    if (pixels.isNull()) {
-        assignError(error, QStringLiteral("The active layer could not be rendered for Magic Wand selection."));
-        return std::nullopt;
-    }
-    return ImageEditableSelectionTarget{std::move(pixels), local_seed};
+    ImageDocumentData document = data_;
+    QImage source_image = source_image_;
+    QHash<QString, QImage> raster_images = raster_images_;
+    const QString layer_id = selected_layer_id_;
+    return [document = std::move(document), source = std::move(source_image),
+            rasters = std::move(raster_images), layer_id, mask_target,
+            local_seed]() mutable -> std::optional<ImageEditableSelectionTarget> {
+        QImage pixels = ImageDocumentRenderer::editableLayerTarget(
+            document, source, rasters, layer_id, mask_target);
+        if (pixels.isNull()) return std::nullopt;
+        return ImageEditableSelectionTarget{std::move(pixels), local_seed};
+    };
 }
 
 QPainterPath ImageDocumentSession::mapEditableSelectionPathToCanvas(
@@ -1387,19 +1404,33 @@ std::optional<ImageOperation> ImageDocumentSession::prepareBlurStrokeOperation(
 QImage ImageDocumentSession::renderedImageWithBlurStroke(
     const QVector<QPointF>& points, int diameter, int radius,
     std::optional<QPainterPath> clipping_path, bool mask_target) const {
+    auto render_task = makeBlurStrokePreviewTask(
+        points, diameter, radius, std::move(clipping_path), mask_target);
+    return render_task ? render_task() : renderedImage();
+}
+
+std::function<QImage()> ImageDocumentSession::makeBlurStrokePreviewTask(
+    const QVector<QPointF>& points, int diameter, int radius,
+    std::optional<QPainterPath> clipping_path, bool mask_target) const {
     auto operation = prepareBlurStrokeOperation(
         points, diameter, radius, std::move(clipping_path), mask_target, nullptr);
-    if (!operation.has_value()) return renderedImage();
+    if (!operation.has_value()) return {};
     ImageDocumentData preview_document = data_;
     auto* layer = findLayer(preview_document, selected_layer_id_);
-    if (layer == nullptr) return renderedImage();
+    if (layer == nullptr) return {};
     if (mask_target) {
-        if (!layer->mask.has_value()) return renderedImage();
+        if (!layer->mask.has_value()) return {};
         layer->mask->operations.append(std::move(*operation));
     } else {
         layer->operations.append(std::move(*operation));
     }
-    return ImageDocumentRenderer::composite(preview_document, source_image_, raster_images_);
+    QImage source_image = source_image_;
+    QHash<QString, QImage> raster_images = raster_images_;
+    return [document = std::move(preview_document),
+            source = std::move(source_image),
+            rasters = std::move(raster_images)]() {
+        return ImageDocumentRenderer::composite(document, source, rasters);
+    };
 }
 
 bool ImageDocumentSession::applyBlurStroke(

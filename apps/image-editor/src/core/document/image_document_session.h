@@ -14,6 +14,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include <functional>
+
 namespace image_editor {
 
 enum class CanvasAnchor {
@@ -76,6 +78,9 @@ public:
     [[nodiscard]] std::optional<ImageEditableSelectionTarget>
     editableSelectionTargetAt(const QPoint& canvas_seed, bool mask_target,
                               QString* error = nullptr) const;
+    [[nodiscard]] std::function<std::optional<ImageEditableSelectionTarget>()>
+    makeEditableSelectionTargetTask(const QPoint& canvas_seed, bool mask_target,
+                                   QString* error = nullptr) const;
     [[nodiscard]] QPainterPath mapEditableSelectionPathToCanvas(
         QPainterPath path) const;
     [[nodiscard]] bool applyLinearGradient(
@@ -180,6 +185,10 @@ public:
         std::optional<QPainterPath> clipping_path = {},
         bool mask_target = false) const;
     [[nodiscard]] QImage renderedImageWithBlurStroke(
+        const QVector<QPointF>& points, int diameter, int radius,
+        std::optional<QPainterPath> clipping_path = {},
+        bool mask_target = false) const;
+    [[nodiscard]] std::function<QImage()> makeBlurStrokePreviewTask(
         const QVector<QPointF>& points, int diameter, int radius,
         std::optional<QPainterPath> clipping_path = {},
         bool mask_target = false) const;

@@ -369,6 +369,7 @@ void ImageCanvas::setBlurMode(bool enabled) {
         resetBlurTool(true);
     }
     blur_mode_ = enabled;
+    blur_cursor_dirty_rect_ = {};
     setCursor(enabled ? Qt::BlankCursor
                       : ((paint_mode_ || eraser_mode_) ? Qt::BlankCursor
                           : ((crop_mode_ || area_selection_mode_ || eyedropper_mode_ ||
@@ -382,8 +383,10 @@ void ImageCanvas::setBlurOptions(int diameter, int radius) {
         diameter, 1, ImageDocumentStore::kMaximumPaintBrushDiameter);
     blur_radius_ = std::clamp(radius, 0, ImageDocumentStore::kMaximumBlurRadius);
     if (blur_mode_) {
-        updateBrushToolCursor(resizing_brush_
-            ? brush_resize_start_ : mapFromGlobal(QCursor::pos()));
+        const QPointF position = resizing_brush_
+            ? brush_resize_start_ : mapFromGlobal(QCursor::pos());
+        updateBrushToolCursor(position);
+        blur_cursor_dirty_rect_ = blurCursorBounds(position);
     }
     update();
 }
@@ -661,6 +664,15 @@ BrushToolContext ImageCanvas::brushToolContext(const QPointF& position) const {
     return context;
 }
 
+QRect ImageCanvas::blurCursorBounds(const QPointF& position) const {
+    if (!blur_mode_ || !imageTargetRect().contains(position)) return {};
+    const qreal diameter = std::max<qreal>(3.0, blur_diameter_ * zoom_);
+    return QRectF(position.x() - diameter / 2.0 - 3.0,
+                  position.y() - diameter / 2.0 - 3.0,
+                  diameter + 6.0, diameter + 6.0)
+        .toAlignedRect().intersected(rect());
+}
+
 ObjectSelectionToolContext ImageCanvas::objectSelectionToolContext(
     const QPointF& position, Qt::KeyboardModifiers modifiers) const {
     ObjectSelectionToolContext context;
@@ -762,7 +774,7 @@ void ImageCanvas::finishTextEditing(bool commit) {
     text_tool_.finishEditing(commit);
 }
 
-void ImageCanvas::paintEvent(QPaintEvent*) {
+void ImageCanvas::paintEvent(QPaintEvent* event) {
     ImageEditorPerformanceScope paint_scope(
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::CanvasPaint);
@@ -781,16 +793,19 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     constexpr qreal checker_size = 16.0;
     painter.save();
     painter.setClipRect(target);
-    const int first_column = static_cast<int>(std::floor(target.left() / checker_size));
-    const int last_column = static_cast<int>(std::ceil(target.right() / checker_size));
-    const int first_row = static_cast<int>(std::floor(target.top() / checker_size));
-    const int last_row = static_cast<int>(std::ceil(target.bottom() / checker_size));
-    for (int row = first_row; row < last_row; ++row) {
-        for (int column = first_column; column < last_column; ++column) {
-            const QColor color = QColor::fromRgba(((row + column) % 2 == 0)
-                ? ui::kTransparencyCheckerLight : ui::kTransparencyCheckerDark);
-            painter.fillRect(QRectF(column * checker_size, row * checker_size,
-                                    checker_size, checker_size), color);
+    const QRectF dirty_target = target.intersected(QRectF(event->rect()));
+    if (!dirty_target.isEmpty()) {
+        const int first_column = static_cast<int>(std::floor(dirty_target.left() / checker_size));
+        const int last_column = static_cast<int>(std::ceil(dirty_target.right() / checker_size));
+        const int first_row = static_cast<int>(std::floor(dirty_target.top() / checker_size));
+        const int last_row = static_cast<int>(std::ceil(dirty_target.bottom() / checker_size));
+        for (int row = first_row; row < last_row; ++row) {
+            for (int column = first_column; column < last_column; ++column) {
+                const QColor color = QColor::fromRgba(((row + column) % 2 == 0)
+                    ? ui::kTransparencyCheckerLight : ui::kTransparencyCheckerDark);
+                painter.fillRect(QRectF(column * checker_size, row * checker_size,
+                                        checker_size, checker_size), color);
+            }
         }
     }
     painter.restore();
@@ -1003,10 +1018,13 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         return;
     }
     if (blur_tool_.drawing()) {
+        const QRect previous_cursor = blur_cursor_dirty_rect_;
         if (blur_tool_.move(brushToolContext(event->position()))) {
+            blur_cursor_dirty_rect_ = blurCursorBounds(event->position());
             const auto stroke = blur_tool_.currentStroke();
             emit blurPreviewRequested(stroke.points, stroke.diameter, stroke.radius);
-            update();
+            const QRect cursor_damage = previous_cursor.united(blur_cursor_dirty_rect_);
+            if (!cursor_damage.isEmpty()) update(cursor_damage);
         }
         event->accept();
         return;
@@ -1079,7 +1097,11 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         return;
     }
     if (blur_mode_) {
+        const QRect previous_cursor = blur_cursor_dirty_rect_;
         updateBrushToolCursor(event->position());
+        blur_cursor_dirty_rect_ = blurCursorBounds(event->position());
+        const QRect cursor_damage = previous_cursor.united(blur_cursor_dirty_rect_);
+        if (!cursor_damage.isEmpty()) update(cursor_damage);
         event->accept();
         return;
     }
@@ -1235,7 +1257,9 @@ void ImageCanvas::leaveEvent(QEvent* event) {
         paint_tool_.hideCursor();
         eraser_tool_.hideCursor();
         blur_tool_.hideCursor();
-        update();
+        const QRect cursor_damage = blur_cursor_dirty_rect_;
+        blur_cursor_dirty_rect_ = {};
+        if (!cursor_damage.isEmpty()) update(cursor_damage);
     }
     QWidget::leaveEvent(event);
 }

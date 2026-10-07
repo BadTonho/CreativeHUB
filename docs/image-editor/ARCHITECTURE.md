@@ -49,7 +49,9 @@ persistence, and recovery.
   Area Selection state combines the result with Replace/Add/Subtract; the
   selection stays temporary per tab and does not change pixels, history, or
   `.cimg`. Tolerance starts at zero on each application launch and is not
-  stored in preferences.
+  stored in preferences. Layer rendering and region detection run as bounded
+  background work; adjacent scanline runs are coalesced before building the
+  selection path so a uniform transparent canvas has compact geometry.
 - `src/ui/tools/gradient/linear_gradient_tool.*` owns the in-canvas drag from
   color start to transparent end. `ImageCanvas` requests a composed transient
   preview while dragging and forwards the completed gesture; the session maps
@@ -57,8 +59,11 @@ persistence, and recovery.
   layer-mask target, and records one operation only when pixels change.
 - `src/ui/tools/blur/blur_tool.*` owns the temporary blur-brush stroke and its
   size, radius, and selection snapshot. `ImageCanvas` forwards live previews
-  and the completed stroke; the session blurs only the active layer or selected
-  mask in premultiplied RGBA and records one operation when pixels change.
+  and the completed stroke; the window renders one preview at a time on a
+  bounded background pool and keeps only the newest pending stroke state. The
+  session blurs only the active layer or selected mask in premultiplied RGBA
+  and records one operation when pixels change. The brush cursor repaints its
+  previous and current bounds instead of waiting for another canvas event.
 - `src/ui/tools/selection/area_selection_tool.*` owns each canvas's temporary
   Area Selection path, rectangle/ellipse geometry, Replace/Add/Subtract
   operations, cancellation, bounds clipping, and preview overlay.

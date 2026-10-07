@@ -43,6 +43,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRunnable>
 #include <QSignalBlocker>
 #include <QSettings>
 #include <QSize>
@@ -205,6 +206,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
     : QMainWindow(parent),
       performance_log_(std::move(performance_log_directory)),
       recovery_store_(std::move(recovery_data_directory)) {
+    background_task_pool_.setMaxThreadCount(2);
     empty_document_state_ = std::make_unique<ImageEditorDocumentTab>();
     setWindowTitle(QStringLiteral("Image Editor"));
     resize(1180, 760);
@@ -464,6 +466,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
 }
 
 ImageEditorWindow::~ImageEditorWindow() {
+    background_task_pool_.waitForDone();
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
     if (performance_metrics_timer_ != nullptr) performance_metrics_timer_->stop();
     auto& metrics = ImageEditorPerformanceMetrics::instance();
@@ -476,6 +479,79 @@ ImageEditorWindow::~ImageEditorWindow() {
     // state is released, so disconnect this application-wide callback first.
     QObject::disconnect(focus_changed_connection_);
     for (auto* tab : document_tabs_) delete tab;
+}
+
+void ImageEditorWindow::requestBlurPreview(
+    ImageCanvas* canvas, const QVector<QPointF>& points,
+    int diameter, int radius) {
+    if (canvas == nullptr || activeCanvas() != canvas) return;
+    BlurPreviewRequest request;
+    request.canvas = canvas;
+    request.points = points;
+    request.diameter = diameter;
+    request.radius = radius;
+    request.clipping_path = canvas->areaSelectionClipPath();
+    request.mask_target = editingMask();
+    request.sequence = ++blur_preview_sequence_;
+    blur_preview_canvas_ = canvas;
+
+    if (blur_preview_running_) {
+        pending_blur_preview_ = std::move(request);
+        return;
+    }
+    startBlurPreview(std::move(request));
+}
+
+void ImageEditorWindow::cancelBlurPreview(ImageCanvas* canvas) {
+    if (canvas == nullptr) return;
+    canvas->setTransientImage({});
+    if (blur_preview_canvas_ != canvas) return;
+    ++blur_preview_sequence_;
+    pending_blur_preview_.reset();
+    blur_preview_canvas_ = nullptr;
+}
+
+void ImageEditorWindow::startBlurPreview(BlurPreviewRequest request) {
+    if (request.sequence != blur_preview_sequence_ ||
+        request.canvas == nullptr || activeCanvas() != request.canvas) {
+        return;
+    }
+    auto render_task = activeSession().makeBlurStrokePreviewTask(
+        request.points, request.diameter, request.radius,
+        std::move(request.clipping_path), request.mask_target);
+    if (!render_task) return;
+
+    blur_preview_running_ = true;
+    const std::uint64_t sequence = request.sequence;
+    ImageCanvas* const canvas = request.canvas;
+    background_task_pool_.start(QRunnable::create(
+        [this, sequence, canvas, render_task = std::move(render_task)]() mutable {
+            QImage image;
+            try {
+                image = render_task();
+            } catch (...) {
+                // A failed preview is discarded; the committed document remains untouched.
+            }
+            QMetaObject::invokeMethod(this,
+                [this, sequence, canvas, image = std::move(image)]() mutable {
+                    finishBlurPreview(sequence, canvas, std::move(image));
+                }, Qt::QueuedConnection);
+        }));
+}
+
+void ImageEditorWindow::finishBlurPreview(
+    std::uint64_t sequence, ImageCanvas* canvas, QImage image) {
+    blur_preview_running_ = false;
+    if (sequence == blur_preview_sequence_ &&
+        blur_preview_canvas_ == canvas && activeCanvas() == canvas &&
+        !image.isNull()) {
+        canvas->setTransientImage(std::move(image));
+    }
+    if (!pending_blur_preview_.has_value()) return;
+    BlurPreviewRequest next = std::move(*pending_blur_preview_);
+    pending_blur_preview_.reset();
+    if (next.sequence == blur_preview_sequence_ && activeCanvas() == next.canvas)
+        startBlurPreview(std::move(next));
 }
 
 void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
@@ -496,23 +572,53 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
             [this, canvas](const QPoint& seed, int tolerance) {
                 if (activeCanvas() != canvas || !activeSession().hasSource()) return;
                 QString error;
-                auto target = activeSession().editableSelectionTargetAt(
+                auto target_task = activeSession().makeEditableSelectionTargetTask(
                     seed, editingMask(), &error);
-                if (!target.has_value()) {
+                if (!target_task) {
                     if (!error.isEmpty())
                         reportError(QStringLiteral("magic_wand_target"), error);
                     return;
                 }
-                const auto result = MagicWandTool{}.select(
-                    target->pixels, target->seed, tolerance);
-                if (result.status == MagicWandTool::Status::Rejected) {
-                    statusBar()->showMessage(result.rejection_reason, 4000);
-                    return;
-                }
-                if (result.status != MagicWandTool::Status::Selected) return;
-                const QPainterPath canvas_path =
-                    activeSession().mapEditableSelectionPathToCanvas(result.path);
-                static_cast<void>(canvas->applyAreaSelectionPath(canvas_path));
+                const std::uint64_t sequence = ++magic_wand_sequence_;
+                const QString target_layer_id = activeSession().selectedLayerId();
+                const bool mask_target = editingMask();
+                background_task_pool_.start(QRunnable::create(
+                    [this, canvas, sequence, target_layer_id, mask_target,
+                     target_task = std::move(target_task), tolerance]() mutable {
+                        auto target = target_task();
+                        MagicWandTool::Result result;
+                        QString failure;
+                        if (target.has_value()) {
+                            result = MagicWandTool{}.select(
+                                target->pixels, target->seed, tolerance);
+                        } else {
+                            failure = QStringLiteral(
+                                "The active layer could not be rendered for Magic Wand selection.");
+                        }
+                        QMetaObject::invokeMethod(this,
+                            [this, canvas, sequence, target_layer_id, mask_target, failure,
+                             result = std::move(result)]() mutable {
+                                if (sequence != magic_wand_sequence_ ||
+                                    activeCanvas() != canvas || !activeSession().hasSource() ||
+                                    activeSession().selectedLayerId() != target_layer_id ||
+                                    editingMask() != mask_target ||
+                                    tool_sidebar_->activeTool() != ToolSidebar::Tool::MagicWand) {
+                                    return;
+                                }
+                                if (!failure.isEmpty()) {
+                                    reportError(QStringLiteral("magic_wand_render"), failure);
+                                    return;
+                                }
+                                if (result.status == MagicWandTool::Status::Rejected) {
+                                    statusBar()->showMessage(result.rejection_reason, 4000);
+                                    return;
+                                }
+                                if (result.status != MagicWandTool::Status::Selected) return;
+                                const QPainterPath canvas_path =
+                                    activeSession().mapEditableSelectionPathToCanvas(result.path);
+                                static_cast<void>(canvas->applyAreaSelectionPath(canvas_path));
+                            }, Qt::QueuedConnection);
+                    }));
             });
     connect(canvas, &ImageCanvas::linearGradientPreviewRequested, this,
             [this, canvas](const QPointF& start, const QPointF& end, const QColor& color) {
@@ -530,12 +636,10 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
             });
     connect(canvas, &ImageCanvas::blurPreviewRequested, this,
             [this, canvas](const QVector<QPointF>& points, int diameter, int radius) {
-                if (activeCanvas() != canvas) return;
-                canvas->setTransientImage(activeSession().renderedImageWithBlurStroke(
-                    points, diameter, radius, canvas->areaSelectionClipPath(), editingMask()));
+                requestBlurPreview(canvas, points, diameter, radius);
             });
-    connect(canvas, &ImageCanvas::blurPreviewCleared, canvas, [canvas]() {
-        canvas->setTransientImage({});
+    connect(canvas, &ImageCanvas::blurPreviewCleared, this, [this, canvas]() {
+        cancelBlurPreview(canvas);
     });
     connect(canvas, &ImageCanvas::blurStrokeSelected, this,
             [this, canvas](const QVector<QPointF>& points, int diameter, int radius) {

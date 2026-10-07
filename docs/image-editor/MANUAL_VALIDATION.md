@@ -115,7 +115,8 @@ editable layer.
 4. Confirm Magic Wand does not mark the document modified, create Undo history,
    or persist its temporary selection. Rejected oversized regions must leave
    the previous selection intact. Tolerance returns to zero after restarting
-   the application.
+   the application. On a large transparent canvas, confirm selection finishes
+   without striped internal outlines and the interface remains responsive.
 
 Automated coverage is in `image_editor_ui_test.cpp` (`testMagicWandTool`,
 `creative-suite-image-editor-magic-wand-ui`). It checks four-way connectivity,
@@ -159,7 +160,9 @@ lower layer with a distinct color.
 1. Select **Blur**. Confirm Brush Size starts at 12 px and accepts 1–1024 px;
    Radius starts at 10 px and accepts 0–100 px. Drag across the edge and confirm
    the preview softens only pixels on the active layer. The lower layer must not
-   be used as the blur source.
+   be used as the blur source. While hovering and dragging, confirm the brush
+   cursor follows the pointer and the interface remains responsive while the
+   latest preview catches up.
 2. Create an Area Selection and drag across its boundary. Confirm blur writes
    stay inside the selection. Select a layer mask thumbnail, blur a grayscale
    transition, and confirm the mask stays grayscale and affects only its layer.

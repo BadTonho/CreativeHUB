@@ -154,6 +154,7 @@ private:
     [[nodiscard]] CropToolContext cropToolContext() const;
     [[nodiscard]] QPointF widgetToCropImageCoordinates(const QPointF& position) const;
     [[nodiscard]] QPointF widgetToImageCoordinates(const QPointF& position) const;
+    [[nodiscard]] QRect blurCursorBounds(const QPointF& position) const;
     void updateHoverCursor(const QPointF& position);
     [[nodiscard]] BrushToolContext brushToolContext(const QPointF& position) const;
     void dispatchBrushToolEvents(const QVector<BrushToolEvent>& events);
@@ -175,6 +176,7 @@ private:
 
     QImage image_;
     QImage transient_image_;
+    QRect blur_cursor_dirty_rect_;
     double zoom_ = 1.0;
     QPointF pan_;
     bool fit_to_window_ = true;
