@@ -1,8 +1,7 @@
 # Motion Studio Scope and Readiness
 
 Status: **approved 2D MVP product boundary; Windows technical acceptance
-remains in progress. macOS and Linux validation is deferred to release
-readiness**. A standalone
+remains in progress**. A standalone
 Motion Studio shell and in-memory composition/layer model have started using
 provisional C++ and Qt 6. Its workspace creates in-memory canvases and has an
 application-owned Media Pool connected to timeline rows for image and video
@@ -51,11 +50,9 @@ video. Direct linked editing with the Video Editor is a later integration
 milestone.
 
 The product targets Windows, macOS, and Linux. Current hands-on acceptance is
-focused on Windows, where the maintainer reports running tests and exports;
-the exact scenarios and results are not yet inventoried. macOS and Linux
-validation is deferred to a later release-readiness phase. Video Editor
-stability remains a priority, and Motion Studio work can proceed independently
-of Image Editor linked-image acceptance.
+focused on Windows, where the maintainer reports running tests and a video
+export. Video Editor stability remains a priority, and Motion Studio work can
+proceed independently of Image Editor linked-image acceptance.
 
 ## First MVP Boundary
 
@@ -200,9 +197,7 @@ GPU presentation, or driver support. The standalone FFmpeg playback test's
 valid-video decode and seek coverage is conditional on a reference-video
 argument; that prototype fixture is excluded from this audit run. Thus the
 successful decode path is mapped from source here, while GPU runtime behavior
-and measured Windows performance remain open validation work. macOS and Linux
-runtime validation is deferred to release readiness; their product support
-remains a project target.
+and measured Windows performance remain open validation work.
 
 For Motion Studio, the existing neutral video decoder, shared media catalog,
 still-image decoder, RGBA frame model, transform evaluator, and raster
@@ -254,8 +249,7 @@ documented defaults; the recovery wrapper remains at version 1 and accepts
 nested documents through v4. Other interpolation modes, overshoot-capable
 curves, and advanced effects remain open. Final
 encoder/profile selection and output color handling remain Windows technical
-validation work. macOS and Linux export behavior is deferred to release
-readiness. The one-hour ruler range controls
+validation work. The one-hour ruler range controls
 navigation only and does not define the composition's duration. See
 [ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
 implementation details and provisional shared API contracts.
@@ -300,7 +294,6 @@ help inspect a running session; they are not performance benchmarks.
 Representative small, medium,
 and heavy compositions, Windows resource behavior, startup, seek/paint latency,
 memory limits, and export throughput still require measured validation.
-macOS and Linux resource validation is deferred to release readiness.
 On Windows, toggle the option, seek and play compositions, export a job, then
 use **Help > Open Log Folder** to inspect samples and job summaries.
 For a controlled Windows comparison, use the same 1920 × 1080, 60 fps
@@ -350,9 +343,8 @@ recorded above. Remaining Milestone 1 work is to revalidate applicable paths on
 Windows; measure startup, memory, timeline/seek response, preview latency, and
 rendering for representative small, medium, and heavy compositions; and record
 dependency licenses, output-profile and codec findings, measurable resource
-and responsiveness targets, and alternatives. macOS and Linux validation is
-deferred to release readiness. No final language or renderer choice is made by
-this document.
+and responsiveness targets, and alternatives. No final language or renderer
+choice is made by this document.
 Manual Windows validation of autosave and recovery remains pending: verify an
 untitled recovery after restart, saved-project recovery and Ignore behavior,
 missing media, and snapshot management in Settings. See the [roadmap](ROADMAP.md)
