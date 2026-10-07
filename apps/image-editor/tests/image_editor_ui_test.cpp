@@ -3223,6 +3223,100 @@ bool testBlurTool() {
         outside_ignored && escape_cancelled;
 }
 
+bool testBrushSizeControls(const QString& directory) {
+    const QString source_path = directory + QStringLiteral("/brush-size-source.png");
+    QImage source(64, 64, QImage::Format_ARGB32_Premultiplied);
+    source.fill(Qt::transparent);
+    if (!source.save(source_path)) return false;
+
+    image_editor::ImageEditorWindow window;
+    window.resize(900, 700);
+    window.show();
+    if (!window.openImagePath(source_path)) return false;
+    QCoreApplication::processEvents();
+
+    auto* canvas = window.findChild<image_editor::ImageCanvas*>();
+    auto* paint_button = window.findChild<QToolButton*>(QStringLiteral("paintToolButton"));
+    auto* sidebar = window.findChild<image_editor::ToolSidebar*>();
+    auto* options = window.findChild<image_editor::ImageToolOptionsBar*>();
+    auto* slider = window.findChild<QSlider*>(QStringLiteral("paintBrushSizeSlider"));
+    auto* spin = window.findChild<QSpinBox*>(QStringLiteral("paintBrushSizeSpinBox"));
+    if (canvas == nullptr || paint_button == nullptr || sidebar == nullptr || options == nullptr ||
+        slider == nullptr || spin == nullptr)
+        return false;
+    paint_button->click();
+    QCoreApplication::processEvents();
+    if (!canvas->paintMode() || !slider->isEnabled() || !spin->isEnabled()) return false;
+
+    int painted_diameter = 0;
+    QObject::connect(canvas, &image_editor::ImageCanvas::paintStrokeSelected,
+        &window, [&painted_diameter](const QVector<QPointF>&, const QColor&, int diameter) {
+            painted_diameter = diameter;
+        });
+    const auto paintClick = [&]() {
+        painted_diameter = 0;
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, center);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, center);
+        QCoreApplication::processEvents();
+        return painted_diameter;
+    };
+
+    QSignalSpy diameter_changes(options,
+        &image_editor::ImageToolOptionsBar::brushDiameterChanged);
+    slider->setValue(380);
+    const int slider_value = slider->value();
+    const int slider_spin_value = spin->value();
+    const int slider_emitted_diameter = paintClick();
+    const bool slider_value_reached_canvas = slider_spin_value == 380 &&
+        slider_emitted_diameter == 380;
+    spin->setValue(640);
+    const int numeric_slider_value = slider->value();
+    const int numeric_emitted_diameter = paintClick();
+    const bool numeric_value_reached_canvas = numeric_slider_value == 640 &&
+        numeric_emitted_diameter == 640;
+
+    const int before_resize = spin->value();
+    const QPoint resize_start = canvas->rect().center();
+    QTest::mousePress(canvas, Qt::LeftButton,
+                      Qt::ControlModifier | Qt::AltModifier, resize_start);
+    QTest::mouseMove(canvas, resize_start + QPoint(30, 0), 1);
+    QCoreApplication::processEvents();
+    const int resized_value = spin->value();
+    QTest::mouseRelease(canvas, Qt::LeftButton,
+                        Qt::ControlModifier | Qt::AltModifier,
+                        resize_start + QPoint(30, 0));
+    const bool canvas_gesture_increased_size = resized_value > before_resize &&
+        resized_value <= image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter &&
+        slider->value() == resized_value;
+
+    slider->setValue(image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter);
+    const bool maximum_is_reachable = spin->value() ==
+        image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter &&
+        paintClick() == image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter;
+    if (!slider_value_reached_canvas || !numeric_value_reached_canvas ||
+        !canvas_gesture_increased_size || !maximum_is_reachable) {
+        std::cerr << "Brush size UI failed: slider=" << slider_value_reached_canvas
+                  << ", numeric=" << numeric_value_reached_canvas
+                  << ", gesture=" << canvas_gesture_increased_size
+                  << ", maximum=" << maximum_is_reachable
+                  << ", sliderValue=" << slider_value
+                  << ", sliderSpin=" << slider_spin_value
+                  << ", sliderPaint=" << slider_emitted_diameter
+                  << ", numericSlider=" << numeric_slider_value
+                  << ", numericPaint=" << numeric_emitted_diameter
+                  << ", diameterSignals=" << diameter_changes.size()
+                  << ", activeTool=" << static_cast<int>(sidebar->activeTool())
+                  << ", paintChecked=" << paint_button->isChecked()
+                  << ", paintMode=" << canvas->paintMode()
+                  << ", canvasCount=" << window.findChildren<image_editor::ImageCanvas*>().size()
+                  << ", current=" << spin->value()
+                  << ", delivered=" << painted_diameter << '\n';
+    }
+    return slider_value_reached_canvas && numeric_value_reached_canvas &&
+        canvas_gesture_increased_size && maximum_is_reachable;
+}
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -3254,6 +3348,10 @@ int main(int argc, char* argv[]) {
     if (application.arguments().contains(QStringLiteral("--blur-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testBlurTool() ? 0 : 1;
+    }
+    if (application.arguments().contains(QStringLiteral("--brush-size-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testBrushSizeControls(temporary.path()) ? 0 : 1;
     }
 
     {
@@ -3915,7 +4013,7 @@ int main(int argc, char* argv[]) {
         tool_options_toolbar == nullptr || paint_options_action == nullptr ||
         paint_size_options == nullptr ||
         brush_size_slider == nullptr || brush_size == nullptr || redo_action == nullptr ||
-        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 8 ||
+        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 11 ||
         paint_button->isChecked() || paint_options_action->isVisible() ||
         paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible() || tool_options_toolbar->height() < 40 ||

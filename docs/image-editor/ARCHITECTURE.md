@@ -317,6 +317,8 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   shows synchronized size controls (1–1024 pixels) for Paint and Eraser, a
   tolerance control for Bucket Fill, plus
   stroke, fill, colors, and width controls for Shapes and selected shapes.
+  The canvas keeps Paint/Eraser diameter separate from Blur's brush diameter,
+  so refreshing Blur settings cannot overwrite the active paint size.
   The Shapes sidebar button opens a movable, non-modal palette next to the
   button on first use. Icon-only Line, Rectangle, and Ellipse choices set the
   current shape type and activate Shapes; tooltips and accessible names identify

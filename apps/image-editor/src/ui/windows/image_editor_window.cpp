@@ -1280,8 +1280,7 @@ void ImageEditorWindow::updateCanvasBrush() {
     if (activeCanvas() == nullptr || tool_sidebar_ == nullptr) return;
     const int diameter = tool_sidebar_->activeTool() == ToolSidebar::Tool::Eraser
         ? eraser_diameter_
-        : (tool_sidebar_->activeTool() == ToolSidebar::Tool::Blur
-            ? blur_diameter_ : paint_diameter_);
+        : paint_diameter_;
     activeCanvas()->setBrush(tool_sidebar_->brushColor(), diameter);
     activeCanvas()->setBlurOptions(blur_diameter_, blur_radius_);
 }

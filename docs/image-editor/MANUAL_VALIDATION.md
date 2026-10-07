@@ -364,8 +364,10 @@ still pending.
    return. Activate Eraser and confirm the label changes to Eraser Size, Preview
    appears, and the starting size is 12 px. Change Eraser size, switch to Paint,
    and confirm Paint retains its own size; switch back and confirm Eraser does
-   too. Confirm clicking either tool deactivates the other and clicking the
-   active tool turns both off.
+   too. Change Blur's brush size, return to Paint, and confirm both the Paint
+   control and the resulting stroke keep Paint's selected diameter. Confirm
+   clicking either tool deactivates the other and clicking the active tool turns
+   both off.
    Verify the brush outline follows the pointer, a drag paints a continuous
    stroke, and a click paints a dot. Switch to **Edit > Crop Selection** and
    confirm that the active tool deactivates; activate Paint or Eraser and confirm

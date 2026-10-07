@@ -320,7 +320,7 @@ void ImageCanvas::setBlurMode(bool enabled) {
 }
 
 void ImageCanvas::setBlurOptions(int diameter, int radius) {
-    brush_diameter_ = std::clamp(
+    blur_diameter_ = std::clamp(
         diameter, 1, ImageDocumentStore::kMaximumPaintBrushDiameter);
     blur_radius_ = std::clamp(radius, 0, ImageDocumentStore::kMaximumBlurRadius);
     if (blur_mode_) updateBrushToolCursor(mapFromGlobal(QCursor::pos()));
@@ -580,7 +580,7 @@ BrushToolContext ImageCanvas::brushToolContext(const QPointF& position) const {
     context.image_target = imageTargetRect();
     context.zoom = zoom_;
     context.color = brush_color_;
-    context.diameter = brush_diameter_;
+    context.diameter = blur_mode_ ? blur_diameter_ : brush_diameter_;
     context.mask_editing = mask_editing_;
     context.area_selection = areaSelectionClipPath();
     return context;

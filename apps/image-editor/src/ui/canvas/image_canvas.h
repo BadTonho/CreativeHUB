@@ -200,6 +200,7 @@ private:
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;
     int bucket_fill_tolerance_ = 0;
+    int blur_diameter_ = 12;
     int blur_radius_ = 10;
 };
 
