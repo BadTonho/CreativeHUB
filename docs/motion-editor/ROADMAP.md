@@ -3,7 +3,8 @@
 Current application version: **Beta 0.1.0**.
 
 Status: **2D MVP product scope approved; implementation is substantially
-complete, with acceptance and cross-platform validation in progress**. The
+complete, with Windows acceptance in progress. macOS and Linux validation is
+deferred to a later release-readiness phase**. The
 standalone Motion Studio shell, in-memory composition/layer model, navigation
 timeline, Media Pool, image/video/text/shape layers, CPU preview with an
 experimental opt-in GPU composition backend, versioned
@@ -98,30 +99,32 @@ this readiness work.
   presentation path against the Motion Studio MVP. Record evidence that
   transfers and gaps that remain in
   [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). This is a source-level
-  audit; GPU runtime and cross-platform support remain pending validation.
+  audit; GPU runtime and Windows validation remain pending. macOS and Linux
+  runtime validation is deferred to release readiness.
 - [x] Document provisional animation and composition contracts against the
   Motion Studio layer and curve workflows; preserve Video Editor regression
   coverage at the shared-library boundary. Motion Studio now has consumer-side
-  model and preview coverage; the contracts remain provisional pending
-  cross-platform and manual visual validation.
+  model and preview coverage; the contracts remain provisional pending Windows
+  and manual visual validation. macOS and Linux checks are deferred.
 - [x] Extract the FFmpeg playback session behind a neutral observer boundary;
   preserve Video Editor preview metrics in an application adapter.
-- [ ] Revalidate the applicable existing paths on Windows, macOS, and Linux;
-  record GPU runtime support separately from GPU presentation of CPU-composed
-  frames.
+- [ ] Revalidate the applicable existing paths on Windows; record GPU runtime
+  support separately from GPU presentation of CPU-composed frames. macOS and
+  Linux validation is deferred to release readiness.
 - [ ] Measure startup, memory, timeline/seek response, preview latency, and
   render performance for representative small, medium, and heavy compositions.
   Include the approved 1080p/30 fps, 10-second, five-layer reference workload;
-  use the maintainer's PC as the reference system, and document measured
-  targets and unmet limits. Validate additional systems before generalizing
-  hardware requirements.
+  use the maintainer's Windows PC as the reference system, and document
+  measured targets and unmet limits. Validate additional Windows systems
+  before generalizing hardware requirements.
 - [ ] Record dependency and asset licenses, output profile/codec findings, and
   alternatives needed to resolve the identified gaps before choosing a
   renderer or other technology.
 
-**Exit criteria:** existing evidence, Motion-specific gaps, cross-platform
-results, performance targets, and remaining alternatives are documented before
-the Motion Studio implementation choices are finalized.
+**Windows-phase exit criteria:** existing evidence, Motion-specific gaps,
+Windows reference results, performance targets, and remaining alternatives are
+documented. Implementation choices remain provisional until the required
+cross-platform prototype and release-readiness validation are complete.
 
 ### 2. Composition foundation
 
@@ -240,7 +243,7 @@ the Motion Studio implementation choices are finalized.
   Gaussian Blur and Color Adjustment timing and records the effective effect
   worker count without recording layer names or content.
   This diagnostic logging does not replace representative-project profiling or
-  cross-platform validation.
+  later platform validation.
 - [x] Make neutral Color Adjustment an exact byte-preserving no-op while
   retaining per-effect timing records. Replace floating-point Gaussian Blur
   rolling sums with integer accumulation and equivalent rounding, and process
@@ -307,14 +310,14 @@ readiness checks remain in this roadmap and
 | --- | --- | --- |
 | Composition model, validation, layer data, and timing | `composition_document_test.cpp` (`creative-suite-motion-editor-document`) | Pending manual composition and supported-layer checks remain part of MVP acceptance. |
 | Undo/Redo and edit history | `composition_history_test.cpp` (`creative-suite-motion-editor-history`) | Pending manual validation: confirm interactive edit sequences during the broader Windows UI checklist. |
-| `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Invalid-file and cross-platform file/path results are not recorded. |
+| `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Windows invalid-file and path results are not recorded; macOS and Linux checks are deferred. |
 | Autosave and restart recovery | `motion_recovery_store_test.cpp` (`creative-suite-motion-editor-recovery`), `motion_editor_ui_test.cpp` | Automated snapshots and UI recovery paths exist. Basic recovery was reported working on the Windows 11 reference PC on 2026-10-01; detailed restart/recovery scenarios remain pending (**P0 validation**). |
 | Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; exported Color Adjustment pixels in `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`); shared evaluator coverage in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp`; shared color processing in `libs/tests/effects_test.cpp` (`creative-suite-effects`) | Offscreen tests cover preview, shared Color Adjustment delegation, export output, cancellation, timing, and interaction behavior. Real-hardware visual output and graphics-driver validation remain pending (**P2 validation**). |
 | Experimental GPU composition and ordered effects preview | `gpu_composition_test.cpp` (`creative-suite-motion-editor-gpu-composition`), `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), and shared `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`) | Automated coverage checks fallback output, ordered Color Adjustment and Gaussian Blur parity within one RGB level with exact alpha, cancellation, context fallback, and metrics. Manual GPU enabled/disabled checks and native graphics-driver validation remain pending (**P2 validation**). |
-| Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`) | Tests cover metrics aggregation, not actual playback throughput. The 1080p/30 fps, 10-second, five-layer benchmark on the reference PC and other systems remains pending (**P2 validation**). |
-| Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated output, cancellation, failure, and cancellation-exception message coverage exists; throughput, installed codecs, output profiles, and cross-platform behavior remain pending (**P1/P2 validation**). |
+| Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`) | Tests cover metrics aggregation, not actual playback throughput. The 1080p/30 fps, 10-second, five-layer benchmark on the Windows reference PC remains pending (**P2 validation**). |
+| Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated output, cancellation, failure, and cancellation-exception message coverage exists. The maintainer reports running tests and exports on Windows; exact scenarios, profiles, and results are not recorded. Throughput, installed codecs, and output-profile acceptance remain pending on Windows (**P1/P2 validation**); macOS and Linux checks are deferred. |
 | Optional audio-to-transform keyframe generation | `audio_keyframe_generation_test.cpp` (`creative-suite-motion-editor-audio-keyframes`) | Automated coverage includes per-frame RMS, whole-file peak normalization past the layer boundary, empty and silent sources, invalid audio, atomic track replacement, Undo/Redo, `.motion` round-trip, worker success and progress callbacks on the receiver thread, pre-start cancellation without an error log, and failure logging with operation, path, and layer ID. Manual generation and cancellation during an active UI analysis remain pending. |
-| Startup and application UI | `motion_editor_startup_test.cpp` (`creative-suite-motion-editor-startup`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Startup and Media Pool bin filtering have offscreen coverage; the current UI has no separate media-search control. After tightening the seek test to wait for the final still frame, the full UI suite passed 10 repeated Debug runs on 2026-10-01. Broader visual, graphics-driver, and platform checks remain pending (**P2 validation**). |
+| Startup and application UI | `motion_editor_startup_test.cpp` (`creative-suite-motion-editor-startup`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Startup and Media Pool bin filtering have offscreen coverage; the current UI has no separate media-search control. After tightening the seek test to wait for the final still frame, the full UI suite passed 10 repeated Debug runs on 2026-10-01. Broader Windows visual and graphics-driver checks remain pending (**P2 validation**); macOS and Linux checks are deferred. |
 | Motion Studio to Video Editor editable handoff | No current integration test; handoff remains a later roadmap milestone | Planned, not implemented. Define producer/consumer tests when the contract is implemented; not a current regression gap. |
 
 ### Windows updater coverage
@@ -334,15 +337,19 @@ rollback, and Hub restoration. See [`WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md)
   neither automated nor documented manual coverage. The owner reports
   repeatedly migrating the same long-lived project across persisted-format
   versions and says the requested basic persistence/recovery checks worked on
-  the Windows 11 reference PC, with migrations treated as passed. Detailed
+  the Windows 11 reference PC, with migrations treated as passed. The
+  maintainer also reports running tests and exports on Windows; the individual
+  scenarios and results have not yet been inventoried. Detailed
   restart, invalid-file, and recovery scenarios still need individual results
   for full acceptance.
 - **P1 — export acceptance:** automated export behavior is covered; codec
-  availability and the supported output profile still require real packaged
-  builds and cross-platform validation.
+  availability and the supported output profile still require Windows
+  validation with the intended packaged build. macOS and Linux checks are
+  deferred to release readiness.
 - **P2 — performance and platform acceptance:** metrics tests do not substitute
-  for a controlled benchmark. Record the approved workload on the reference PC
-  and complete the remaining Windows, macOS, and Linux checks.
+  for a controlled benchmark. Record the approved workload on the Windows
+  reference PC and complete the remaining Windows checks. macOS and Linux
+  checks are not part of the current validation stage.
 - **In progress:** the first optional audio-reactive tool analyzes a local
   audio file and bakes its RMS envelope into a selected transform track.
   Regression sources have been added; execution and manual acceptance remain
@@ -536,8 +543,9 @@ frames, coalesced requests, and CPU use. Confirm interactive scrubbing remains
 responsive and export output is unchanged.
 Motion Studio export is opaque and video-only; audio and alpha export remain
 open. Then close the application. Overshoot-capable curves, additional
-interpolation modes, advanced effects, platform validation, and performance
-measurement remain open.
+interpolation modes, advanced effects, Windows platform validation, and
+performance measurement remain open. macOS and Linux validation is deferred to
+release readiness.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.
@@ -557,7 +565,8 @@ composition without losing its layer or frame-rate data.
 - [x] Complete the first standalone save/reopen, preview, and rendered-video
   export workflow; Motion Studio currently exports opaque video without audio.
 - [ ] Profile representative compositions and validate export throughput,
-  memory use, and codec behavior across target platforms.
+  memory use, and codec behavior on Windows. Validate macOS and Linux during a
+  later release-readiness phase.
 - [ ] Address measured bottlenecks before expanding the MVP scope.
 - [ ] (Provisional next initiative, after the performance gate) Build editable
   cubic Bezier vector paths and 2D alpha masks. Start with Pen-created paths
