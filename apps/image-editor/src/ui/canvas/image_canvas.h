@@ -8,6 +8,8 @@
 #include "../tools/brush/paint_tool.h"
 #include "../tools/crop/crop_tool.h"
 #include "../tools/eyedropper/eyedropper_tool.h"
+#include "../tools/magic_wand/magic_wand_config.h"
+#include "../tools/magic_wand/magic_wand_tool.h"
 #include "../tools/selection/area_selection_tool.h"
 #include "../tools/selection/object/object_selection_tool.h"
 #include "../tools/shapes/shape_tool.h"
@@ -54,12 +56,16 @@ public:
     void setEyedropperMode(bool enabled);
     void setBucketFillMode(bool enabled);
     void setBucketFillTolerance(int tolerance);
+    void setMagicWandMode(bool enabled);
+    void setMagicWandTolerance(int tolerance);
     void setLinearGradientMode(bool enabled);
     void setBlurMode(bool enabled);
     void setBlurOptions(int diameter, int radius);
     void setAreaSelectionOptions(AreaSelectionShape shape,
                                  AreaSelectionCombineMode combine_mode);
     void clearAreaSelection();
+    [[nodiscard]] AreaSelectionTool::FinishResult applyAreaSelectionPath(
+        const QPainterPath& path);
     void translateAreaSelection(const QPoint& delta);
     void cancelAreaSelectionGesture();
     [[nodiscard]] bool hasAreaSelection() const noexcept;
@@ -84,6 +90,7 @@ public:
     [[nodiscard]] bool paintMode() const noexcept { return paint_mode_; }
     [[nodiscard]] bool eraserMode() const noexcept { return eraser_mode_; }
     [[nodiscard]] bool eyedropperMode() const noexcept { return eyedropper_mode_; }
+    [[nodiscard]] bool magicWandMode() const noexcept { return magic_wand_mode_; }
     [[nodiscard]] bool linearGradientMode() const noexcept { return linear_gradient_mode_; }
     [[nodiscard]] bool blurMode() const noexcept { return blur_mode_; }
     [[nodiscard]] double zoomFactor() const noexcept { return zoom_; }
@@ -104,6 +111,7 @@ signals:
     void blurDiameterChanged(int diameter);
     void colorSampled(const QColor& color);
     void bucketFillRequested(const QPoint& seed, int tolerance, const QColor& color);
+    void magicWandRequested(const QPoint& seed, int tolerance);
     void linearGradientPreviewRequested(const QPointF& start,
                                         const QPointF& end,
                                         const QColor& color);
@@ -181,6 +189,7 @@ private:
     bool lasso_mode_ = false;
     bool eyedropper_mode_ = false;
     bool bucket_fill_mode_ = false;
+    bool magic_wand_mode_ = false;
     bool linear_gradient_mode_ = false;
     bool blur_mode_ = false;
     bool resizing_brush_ = false;
@@ -205,6 +214,7 @@ private:
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;
     int bucket_fill_tolerance_ = 0;
+    int magic_wand_tolerance_ = MagicWandConfig::kDefaultTolerance;
     int blur_diameter_ = 12;
     int blur_radius_ = 10;
 };

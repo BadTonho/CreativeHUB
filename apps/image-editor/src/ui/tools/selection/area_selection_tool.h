@@ -39,6 +39,8 @@ public:
     void updateGesture(const QPointF& image_position) noexcept;
     [[nodiscard]] FinishResult finishGesture(const QPointF& image_position,
                                              const QRectF& image_bounds);
+    [[nodiscard]] FinishResult applySelectionPath(
+        const QPainterPath& path, const QRectF& image_bounds);
     [[nodiscard]] bool cancelGesture() noexcept;
     [[nodiscard]] bool clearSelection() noexcept;
     [[nodiscard]] bool translateSelection(const QPoint& delta) noexcept;

@@ -1,8 +1,11 @@
 #include "image_canvas.h"
 #include "image_editor_window.h"
+#include "rendering/image_document_geometry.h"
 #include "layer_panel.h"
 #include "crop/crop_tool.h"
 #include "eyedropper/eyedropper_tool.h"
+#include "magic_wand/magic_wand_config.h"
+#include "magic_wand/magic_wand_tool.h"
 #include "selection/area_selection_tool.h"
 #include "lasso/lasso_tool.h"
 #include "selection/object/object_selection_tool.h"
@@ -3247,6 +3250,258 @@ bool testBucketFillTool() {
     return activated && click_emitted && outside_ignored;
 }
 
+bool testMagicWandTool() {
+    image_editor::MagicWandTool wand;
+    QImage regions(4, 4, QImage::Format_ARGB32);
+    regions.fill(QColor(180, 30, 40, 255));
+    const QColor exact_color(12, 24, 36, 96);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 2; ++x) regions.setPixelColor(x, y, exact_color);
+    regions.setPixelColor(2, 2, exact_color); // Diagonal contact is not connected.
+    const auto exact = wand.select(regions, QPoint(0, 0), 0);
+    const bool four_connected = exact.status == image_editor::MagicWandTool::Status::Selected &&
+        exact.path.contains(QPointF(0.5, 0.5)) && exact.path.contains(QPointF(1.5, 1.5)) &&
+        !exact.path.contains(QPointF(2.5, 2.5));
+
+    QImage tolerance_pixels(3, 1, QImage::Format_ARGB32);
+    tolerance_pixels.setPixelColor(0, 0, QColor(10, 20, 30, 100));
+    tolerance_pixels.setPixelColor(1, 0, QColor(20, 20, 30, 100));
+    tolerance_pixels.setPixelColor(2, 0, QColor(10, 20, 30, 111));
+    const auto tolerance = wand.select(tolerance_pixels, QPoint(0, 0), 10);
+    const bool rgba_tolerance = tolerance.status == image_editor::MagicWandTool::Status::Selected &&
+        tolerance.path.contains(QPointF(1.5, 0.5)) &&
+        !tolerance.path.contains(QPointF(2.5, 0.5));
+    const auto edge_seed = image_editor::MagicWandTool::seedAt(
+        QPointF(3.99, 2.01), QSize(4, 3));
+    const bool pixel_mapping = edge_seed == QPoint(3, 2) &&
+        !image_editor::MagicWandTool::seedAt(QPointF(4.0, 1.0), QSize(4, 3));
+
+    QImage tall_region(2, 20'001, QImage::Format_ARGB32);
+    tall_region.fill(Qt::white);
+    for (int y = 0; y < tall_region.height(); ++y)
+        tall_region.setPixelColor(0, y, Qt::black);
+    const auto oversized = wand.select(tall_region, QPoint(0, 0), 0);
+    const bool geometry_rejected =
+        oversized.status == image_editor::MagicWandTool::Status::Rejected &&
+        !oversized.rejection_reason.isEmpty();
+
+    image_editor::AreaSelectionTool selection;
+    const QRectF canvas_bounds(0, 0, 8, 8);
+    QPainterPath initial_path;
+    initial_path.addRect(QRectF(0, 0, 2, 2));
+    const auto initial_result = selection.applySelectionPath(initial_path, canvas_bounds);
+    const auto initial_clip = selection.clipPath(canvas_bounds);
+    selection.setOptions(image_editor::AreaSelectionTool::Shape::Rectangle,
+                         image_editor::AreaSelectionTool::CombineMode::Add);
+    QPainterPath added_path;
+    added_path.addRect(QRectF(4, 0, 2, 2));
+    const auto added_result = selection.applySelectionPath(added_path, canvas_bounds);
+    auto combined = selection.clipPath(canvas_bounds);
+    const bool add_mode = added_result.status == image_editor::AreaSelectionTool::FinishStatus::Applied &&
+        combined && combined->contains(QPointF(0.5, 0.5)) &&
+        combined->contains(QPointF(4.5, 0.5));
+    selection.setOptions(image_editor::AreaSelectionTool::Shape::Rectangle,
+                         image_editor::AreaSelectionTool::CombineMode::Subtract);
+    const auto subtracted_result = selection.applySelectionPath(added_path, canvas_bounds);
+    combined = selection.clipPath(canvas_bounds);
+    const bool subtract_mode = subtracted_result.status == image_editor::AreaSelectionTool::FinishStatus::Applied &&
+        combined && combined->contains(QPointF(0.5, 0.5)) &&
+        !combined->contains(QPointF(4.5, 0.5));
+    QPainterPath over_limit_path;
+    for (int index = 0;
+         index <= image_editor::ImageDocumentStore::kMaximumStrokeClipPathElements / 5;
+         ++index) {
+        over_limit_path.addRect(QRectF(0, 0, 1, 1));
+    }
+    const auto rejected_selection = selection.applySelectionPath(
+        over_limit_path, canvas_bounds);
+    const auto preserved_clip = selection.clipPath(canvas_bounds);
+    const bool rejection_preserves_selection =
+        rejected_selection.status == image_editor::AreaSelectionTool::FinishStatus::Rejected &&
+        initial_result.status == image_editor::AreaSelectionTool::FinishStatus::Applied &&
+        initial_clip && preserved_clip && *preserved_clip == *combined;
+
+    image_editor::ImageDocumentSession session;
+    QString error;
+    const bool canvas_created = session.createCanvas(QSize(8, 8), Qt::transparent, &error);
+    const QString active_layer = session.selectedLayerId();
+    const bool mask_added = canvas_created && session.addLayerMask(active_layer);
+    const auto document_before_mask_target = session.data();
+    const bool undo_before_mask_target = session.canUndo();
+    const auto mask_target = mask_added
+        ? session.editableSelectionTargetAt(QPoint(2, 3), true, &error)
+        : std::nullopt;
+    const bool mask_target_is_used = mask_target &&
+        mask_target->pixels.pixelColor(2, 3) == QColor(Qt::white) &&
+        mask_target->seed == QPoint(2, 3) &&
+        session.data() == document_before_mask_target &&
+        session.canUndo() == undo_before_mask_target;
+    const QString second_layer = mask_added ? session.addLayer() : QString{};
+    const QString group_id = !second_layer.isEmpty()
+        ? session.groupLayers({active_layer, second_layer}, &error) : QString{};
+    image_editor::ImageOperation group_rotation;
+    group_rotation.kind = image_editor::OperationKind::Rotate;
+    group_rotation.quarter_turns = 1;
+    const bool group_transformed = !group_id.isEmpty() &&
+        session.applySelectedGroupTransform(group_rotation, &error) &&
+        session.selectLayer(active_layer);
+    const auto transformed_target = group_transformed
+        ? session.editableSelectionTargetAt(QPoint(2, 3), false, &error)
+        : std::nullopt;
+    QPainterPath local_group_path;
+    local_group_path.addRect(QRectF(1, 2, 1, 1));
+    const QPainterPath mapped_group_path =
+        session.mapEditableSelectionPathToCanvas(local_group_path);
+    const image_editor::ImageOperation* applied_group_rotation = nullptr;
+    for (const auto& group : session.data().groups)
+        if (group.id == group_id && !group.operations.isEmpty())
+            applied_group_rotation = &group.operations.front();
+    const QPointF expected_group_seed = applied_group_rotation == nullptr
+        ? QPointF{} : image_editor::ImageDocumentGeometry::transformPoint(
+            QPointF(2.5, 3.5), *applied_group_rotation, QSize(8, 8), true);
+    const QPointF expected_group_path_point = applied_group_rotation == nullptr
+        ? QPointF{} : image_editor::ImageDocumentGeometry::transformPoint(
+            QPointF(1.5, 2.5), *applied_group_rotation, QSize(8, 8), false);
+    const bool group_mapping = transformed_target && applied_group_rotation != nullptr &&
+        transformed_target->seed == QPoint(
+            static_cast<int>(std::floor(expected_group_seed.x())),
+            static_cast<int>(std::floor(expected_group_seed.y()))) &&
+        mapped_group_path.contains(expected_group_path_point);
+
+    image_editor::ToolSidebar sidebar;
+    auto* button = sidebar.findChild<QToolButton*>(QStringLiteral("magicWandToolButton"));
+    sidebar.setDocumentAvailable(true);
+    sidebar.setPaintingAllowed(true);
+    image_editor::ImageToolOptionsBar options;
+    auto* tolerance_control = options.findChild<QSpinBox*>(
+        QStringLiteral("magicWandToleranceSpinBox"));
+    auto* combine_mode = options.findChild<QComboBox*>(
+        QStringLiteral("areaSelectionModeComboBox"));
+    if (button == nullptr || tolerance_control == nullptr || combine_mode == nullptr ||
+        tolerance_control->value() != image_editor::MagicWandConfig::kDefaultTolerance) {
+        std::cerr << "Magic Wand controls were not initialized.\n";
+        return false;
+    }
+
+    image_editor::ImageCanvas canvas;
+    canvas.resize(400, 300);
+    QImage displayed(16, 16, QImage::Format_ARGB32);
+    displayed.fill(QColor(90, 90, 90, 255));
+    for (int y = 6; y < 10; ++y)
+        for (int x = 6; x < 10; ++x) displayed.setPixelColor(x, y, QColor(210, 20, 30));
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 3; ++x) displayed.setPixelColor(x, y, QColor(20, 40, 220));
+    canvas.setImage(displayed);
+    QObject::connect(&sidebar, &image_editor::ToolSidebar::activeToolChanged,
+        &canvas, [&canvas](image_editor::ToolSidebar::Tool tool) {
+            canvas.setMagicWandMode(tool == image_editor::ToolSidebar::Tool::MagicWand);
+        });
+    QObject::connect(&options,
+        &image_editor::ImageToolOptionsBar::magicWandToleranceChanged,
+        &canvas, &image_editor::ImageCanvas::setMagicWandTolerance);
+    QObject::connect(&options,
+        &image_editor::ImageToolOptionsBar::areaSelectionOptionsChanged,
+        &canvas, [&canvas](int shape, int mode) {
+            canvas.setAreaSelectionOptions(
+                shape == 1 ? image_editor::ImageCanvas::AreaSelectionShape::Ellipse
+                           : image_editor::ImageCanvas::AreaSelectionShape::Rectangle,
+                mode == 1 ? image_editor::ImageCanvas::AreaSelectionCombineMode::Add
+                    : (mode == 2 ? image_editor::ImageCanvas::AreaSelectionCombineMode::Subtract
+                                 : image_editor::ImageCanvas::AreaSelectionCombineMode::Replace));
+        });
+    options.setAreaSelectionOptionsState(true, 0, 0, false);
+    options.setMagicWandOptionsState(true, image_editor::MagicWandConfig::kDefaultTolerance);
+    QSignalSpy tolerance_changed(&options,
+        &image_editor::ImageToolOptionsBar::magicWandToleranceChanged);
+    tolerance_control->setValue(18);
+    canvas.show();
+    QCoreApplication::processEvents();
+    QSignalSpy clicks(&canvas, &image_editor::ImageCanvas::magicWandRequested);
+    QObject::connect(&canvas, &image_editor::ImageCanvas::magicWandRequested,
+        &canvas, [&canvas, &displayed, &wand](const QPoint& seed, int tolerance_value) {
+            const auto result = wand.select(displayed, seed, tolerance_value);
+            if (result.status == image_editor::MagicWandTool::Status::Selected)
+                static_cast<void>(canvas.applyAreaSelectionPath(result.path));
+        });
+    button->click();
+    const qreal target_left =
+        (canvas.width() - displayed.width() * canvas.zoomFactor()) / 2.0;
+    const qreal target_top =
+        (canvas.height() - displayed.height() * canvas.zoomFactor()) / 2.0;
+    const auto widgetPointForPixel = [&](int x, int y) {
+        return QPoint(static_cast<int>(std::floor(target_left + (x + 0.5) * canvas.zoomFactor())),
+                      static_cast<int>(std::floor(target_top + (y + 0.5) * canvas.zoomFactor())));
+    };
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, widgetPointForPixel(7, 7));
+    QCoreApplication::processEvents();
+    auto current_selection = canvas.areaSelectionClipPath();
+    const bool first_region_selected = current_selection &&
+        current_selection->contains(QPointF(7.5, 7.5)) &&
+        !current_selection->contains(QPointF(1.5, 1.5));
+    combine_mode->setCurrentIndex(combine_mode->findData(1));
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, widgetPointForPixel(1, 1));
+    QCoreApplication::processEvents();
+    current_selection = canvas.areaSelectionClipPath();
+    const bool add_mode_works = current_selection &&
+        current_selection->contains(QPointF(7.5, 7.5)) &&
+        current_selection->contains(QPointF(1.5, 1.5));
+    combine_mode->setCurrentIndex(combine_mode->findData(2));
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, widgetPointForPixel(1, 1));
+    QCoreApplication::processEvents();
+    current_selection = canvas.areaSelectionClipPath();
+    const bool subtract_mode_works = current_selection &&
+        current_selection->contains(QPointF(7.5, 7.5)) &&
+        !current_selection->contains(QPointF(1.5, 1.5));
+    const QPoint outside(static_cast<int>(std::floor(target_left / 2.0)),
+                         static_cast<int>(std::floor(target_top / 2.0)));
+    const int inside_click_count = clicks.count();
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, outside);
+    QCoreApplication::processEvents();
+    const bool outside_ignored = clicks.count() == inside_click_count;
+    const bool selection_mode_logic = add_mode && subtract_mode;
+    const bool controls_work = button->isEnabled() && sidebar.magicWandToolActive() &&
+        canvas.magicWandMode() && tolerance_changed.count() == 1 &&
+        tolerance_changed.front().front().toInt() == 18 &&
+        !options.findChild<QComboBox*>(QStringLiteral("areaSelectionShapeComboBox"))->isVisible() &&
+        !options.findChild<QWidget*>(QStringLiteral("magicWandOptionsWidget"))->isHidden() &&
+        clicks.count() == 3;
+
+    if (!four_connected || !rgba_tolerance || !pixel_mapping || !geometry_rejected ||
+        !rejection_preserves_selection || !mask_target_is_used || !group_mapping ||
+        !selection_mode_logic || !first_region_selected || !add_mode_works ||
+        !subtract_mode_works || !outside_ignored || !controls_work) {
+        std::cerr << "Magic Wand failed: connected=" << four_connected
+                  << ", rgba=" << rgba_tolerance << ", pixel-map=" << pixel_mapping
+                  << ", geometry=" << geometry_rejected
+                  << ", preserve=" << rejection_preserves_selection
+                  << ", mask=" << mask_target_is_used << ", group=" << group_mapping
+                  << ", modes=" << selection_mode_logic
+                  << ", replace=" << first_region_selected
+                  << ", add=" << add_mode_works << ", subtract=" << subtract_mode_works
+                  << ", outside=" << outside_ignored << ", controls=" << controls_work
+                  << ", clicks=" << clicks.count() << '\n';
+        if (!group_mapping) {
+            std::cerr << "Magic Wand group details: group=" << !group_id.isEmpty()
+                      << ", transformed=" << group_transformed
+                      << ", target=" << transformed_target.has_value()
+                      << ", rotation=" << (applied_group_rotation != nullptr)
+                      << ", expected-seed=" << expected_group_seed.x() << '/'
+                      << expected_group_seed.y();
+            if (transformed_target)
+                std::cerr << ", actual-seed=" << transformed_target->seed.x() << '/'
+                          << transformed_target->seed.y();
+            std::cerr << ", mapped-path-elements=" << mapped_group_path.elementCount()
+                      << ", expected-point=" << expected_group_path_point.x() << '/'
+                      << expected_group_path_point.y() << ", path-hit="
+                      << mapped_group_path.contains(expected_group_path_point) << '\n';
+        }
+    }
+    return four_connected && rgba_tolerance && pixel_mapping && geometry_rejected &&
+        rejection_preserves_selection && mask_target_is_used && group_mapping &&
+        selection_mode_logic && first_region_selected && add_mode_works &&
+        subtract_mode_works && outside_ignored && controls_work;
+}
+
 bool testLinearGradientTool() {
     image_editor::ToolSidebar sidebar;
     auto* button = sidebar.findChild<QToolButton*>(
@@ -3566,6 +3821,10 @@ int main(int argc, char* argv[]) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testBucketFillTool() ? 0 : 1;
     }
+    if (application.arguments().contains(QStringLiteral("--magic-wand-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testMagicWandTool() ? 0 : 1;
+    }
     if (application.arguments().contains(QStringLiteral("--gradient-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testLinearGradientTool() ? 0 : 1;
@@ -3724,6 +3983,7 @@ int main(int argc, char* argv[]) {
     }
     if (!testEyedropperTool()) return 1;
     if (!testBucketFillTool()) return 1;
+    if (!testMagicWandTool()) return 1;
     if (!testLinearGradientTool()) return 1;
     if (!testBlurTool()) return 1;
     if (!testWindowTeardownWithFocusedTextEditor(temporary.path())) return 1;

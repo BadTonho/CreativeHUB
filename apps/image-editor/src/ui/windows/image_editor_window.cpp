@@ -1,5 +1,7 @@
 #include "image_editor_window.h"
 
+#include "../tools/magic_wand/magic_wand_tool.h"
+
 #include "image_canvas.h"
 #include "rendering/image_document_renderer.h"
 #include "image_document_store.h"
@@ -490,6 +492,28 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
             [this, canvas](const QPoint& seed, int tolerance, const QColor& color) {
                 handleBucketFill(seed, tolerance, color, canvas->areaSelectionClipPath());
             });
+    connect(canvas, &ImageCanvas::magicWandRequested, this,
+            [this, canvas](const QPoint& seed, int tolerance) {
+                if (activeCanvas() != canvas || !activeSession().hasSource()) return;
+                QString error;
+                auto target = activeSession().editableSelectionTargetAt(
+                    seed, editingMask(), &error);
+                if (!target.has_value()) {
+                    if (!error.isEmpty())
+                        reportError(QStringLiteral("magic_wand_target"), error);
+                    return;
+                }
+                const auto result = MagicWandTool{}.select(
+                    target->pixels, target->seed, tolerance);
+                if (result.status == MagicWandTool::Status::Rejected) {
+                    statusBar()->showMessage(result.rejection_reason, 4000);
+                    return;
+                }
+                if (result.status != MagicWandTool::Status::Selected) return;
+                const QPainterPath canvas_path =
+                    activeSession().mapEditableSelectionPathToCanvas(result.path);
+                static_cast<void>(canvas->applyAreaSelectionPath(canvas_path));
+            });
     connect(canvas, &ImageCanvas::linearGradientPreviewRequested, this,
             [this, canvas](const QPointF& start, const QPointF& end, const QColor& color) {
                 if (activeCanvas() == nullptr || activeCanvas() != canvas) return;
@@ -970,6 +994,15 @@ void ImageEditorWindow::createToolOptionsBar() {
                     if (tab != nullptr && tab->canvas != nullptr)
                         tab->canvas->setBucketFillTolerance(bucket_fill_tolerance_);
             });
+    connect(tool_options_bar_, &ImageToolOptionsBar::magicWandToleranceChanged,
+            this, [this](int tolerance) {
+                magic_wand_tolerance_ = std::clamp(
+                    tolerance, MagicWandConfig::kMinimumTolerance,
+                    MagicWandConfig::kMaximumTolerance);
+                for (auto* tab : document_tabs_)
+                    if (tab != nullptr && tab->canvas != nullptr)
+                        tab->canvas->setMagicWandTolerance(magic_wand_tolerance_);
+            });
     connect(tool_options_bar_, &ImageToolOptionsBar::deleteSelectedObjectsRequested,
             this, &ImageEditorWindow::deleteSelectedObjects);
     connect(shape_palette_, &ShapePalette::shapeKindSelected,
@@ -998,12 +1031,17 @@ void ImageEditorWindow::updateToolOptions() {
         tool_active && active_tool == ToolSidebar::Tool::Select);
     tool_options_bar_->setAreaSelectionOptionsState(
         tool_active && (active_tool == ToolSidebar::Tool::AreaSelect ||
-                        active_tool == ToolSidebar::Tool::Lasso),
+                        active_tool == ToolSidebar::Tool::Lasso ||
+                        active_tool == ToolSidebar::Tool::MagicWand),
         area_selection_shape_, area_selection_mode_,
-        active_tool != ToolSidebar::Tool::Lasso);
+        active_tool != ToolSidebar::Tool::Lasso &&
+            active_tool != ToolSidebar::Tool::MagicWand);
     tool_options_bar_->setBucketFillOptionsState(
         tool_active && active_tool == ToolSidebar::Tool::BucketFill,
         bucket_fill_tolerance_);
+    tool_options_bar_->setMagicWandOptionsState(
+        tool_active && active_tool == ToolSidebar::Tool::MagicWand,
+        magic_wand_tolerance_);
     tool_options_bar_->setBlurOptionsState(
         tool_active && blur_active, blur_diameter_, blur_radius_);
     const auto placements = tool_active
@@ -1302,6 +1340,7 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
     }
     activeCanvas()->setEyedropperMode(false);
     activeCanvas()->setBucketFillMode(false);
+    activeCanvas()->setMagicWandMode(false);
     activeCanvas()->setLinearGradientMode(false);
     activeCanvas()->setBlurMode(false);
     if (paint_tool_action_ != nullptr) {
@@ -1356,6 +1395,15 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         activeCanvas()->setPaintMode(false);
         activeCanvas()->setBucketFillTolerance(bucket_fill_tolerance_);
         activeCanvas()->setBucketFillMode(true);
+    } else if (tool == ToolSidebar::Tool::MagicWand && has_source) {
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setMagicWandTolerance(magic_wand_tolerance_);
+        activeCanvas()->setMagicWandMode(true);
     } else if (tool == ToolSidebar::Tool::LinearGradient && has_source) {
         activeCanvas()->setTextCreationMode(false);
         activeCanvas()->setEraserMode(false);
@@ -2640,6 +2688,7 @@ void ImageEditorWindow::deactivateCanvasTools() {
     activeCanvas()->setPaintMode(false);
     activeCanvas()->setEraserMode(false);
     activeCanvas()->setAreaSelectionMode(false);
+    activeCanvas()->setMagicWandMode(false);
     activeCanvas()->setCropMode(false);
     activeCanvas()->setShapeCreationMode(false);
     activeCanvas()->setObjectSelectionMode(false);

@@ -74,6 +74,31 @@ AreaSelectionTool::FinishResult AreaSelectionTool::finishGesture(
     return {FinishStatus::Applied, {}};
 }
 
+AreaSelectionTool::FinishResult AreaSelectionTool::applySelectionPath(
+    const QPainterPath& path, const QRectF& image_bounds) {
+    if (path.isEmpty() || image_bounds.isEmpty()) return {};
+    if (path.elementCount() > ImageDocumentStore::kMaximumStrokeClipPathElements) {
+        return {FinishStatus::Rejected,
+                QStringLiteral("The selection would exceed the supported geometry limit.")};
+    }
+
+    const QPainterPath clipped = path.intersected(rectPath(image_bounds));
+    if (clipped.isEmpty()) return {};
+    if (clipped.elementCount() > ImageDocumentStore::kMaximumStrokeClipPathElements) {
+        return {FinishStatus::Rejected,
+                QStringLiteral("The selection would exceed the supported geometry limit.")};
+    }
+    QPainterPath combined = combinedPath(clipped, image_bounds);
+    if (combined.elementCount() > ImageDocumentStore::kMaximumStrokeClipPathElements) {
+        return {FinishStatus::Rejected,
+                QStringLiteral("The selection would exceed the supported geometry limit.")};
+    }
+
+    selection_path_ = std::move(combined);
+    selection_active_ = true;
+    return {FinishStatus::Applied, {}};
+}
+
 bool AreaSelectionTool::cancelGesture() noexcept {
     if (!gesture_active_) return false;
     resetGesture();

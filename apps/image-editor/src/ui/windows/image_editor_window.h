@@ -6,6 +6,7 @@
 #include "image_editor_performance_metrics.h"
 #include "recovery_store.h"
 #include "../tools/tool_sidebar.h"
+#include "../tools/magic_wand/magic_wand_config.h"
 
 #include <creative_suite/system_monitor/performance_usage.h>
 
@@ -183,6 +184,7 @@ private:
     bool importing_ = false;
     bool eraser_preview_enabled_ = false;
     int bucket_fill_tolerance_ = 0;
+    int magic_wand_tolerance_ = MagicWandConfig::kDefaultTolerance;
     std::unique_ptr<ImageEditorDocumentTab> empty_document_state_;
     QAction* new_canvas_action_ = nullptr;
     QAction* resize_canvas_action_ = nullptr;

@@ -35,6 +35,61 @@ bool layerTransformHasCapacity(const ImageLayerData& layer) {
          layer.mask->operations.size() < ImageDocumentStore::kMaximumOperations);
 }
 
+QRectF pathBoundsForOperation(const ImageOperation& operation,
+                              const QSize& canvas_size) {
+    const QRect bounds = operation.transform_bounds.isValid() &&
+        !operation.transform_bounds.isEmpty()
+        ? operation.transform_bounds : QRect(QPoint(), canvas_size);
+    return QRectF(bounds);
+}
+
+QPainterPath mapPixelAreaPathThroughGroup(QPainterPath path,
+                                          const ImageGroupData* parent,
+                                          const QSize& canvas_size) {
+    if (parent == nullptr) return path;
+    const QPainterPath canvas_bounds = ImageDocumentGeometry::imageBoundsPath(canvas_size);
+    for (const ImageOperation& operation : parent->operations) {
+        switch (operation.kind) {
+        case OperationKind::Crop: {
+            QPainterPath crop_path;
+            crop_path.addRect(QRectF(operation.crop));
+            path = path.intersected(crop_path);
+            break;
+        }
+        case OperationKind::Rotate: {
+            const QRectF bounds = pathBoundsForOperation(operation, canvas_size);
+            const QPointF center(bounds.x() + bounds.width() / 2.0,
+                                 bounds.y() + bounds.height() / 2.0);
+            QTransform transform;
+            transform.translate(center.x(), center.y());
+            transform.rotate(operation.quarter_turns * 90.0);
+            transform.translate(-center.x(), -center.y());
+            path = transform.map(path);
+            break;
+        }
+        case OperationKind::FlipHorizontal:
+        case OperationKind::FlipVertical: {
+            const QRectF bounds = pathBoundsForOperation(operation, canvas_size);
+            QTransform transform;
+            if (operation.kind == OperationKind::FlipHorizontal) {
+                transform.translate(2.0 * bounds.x() + bounds.width(), 0.0);
+                transform.scale(-1.0, 1.0);
+            } else {
+                transform.translate(0.0, 2.0 * bounds.y() + bounds.height());
+                transform.scale(1.0, -1.0);
+            }
+            path = transform.map(path);
+            break;
+        }
+        default:
+            break;
+        }
+        path = path.intersected(canvas_bounds);
+        if (path.isEmpty()) break;
+    }
+    return path.intersected(canvas_bounds);
+}
+
 
 } // namespace
 
@@ -1084,6 +1139,65 @@ bool ImageDocumentSession::applyBucketFill(
     operations.append(std::move(operation));
     layer_raster_cache_.invalidateLayer(selected_layer_id_);
     return true;
+}
+
+std::optional<ImageEditableSelectionTarget>
+ImageDocumentSession::editableSelectionTargetAt(
+    const QPoint& canvas_seed, bool mask_target, QString* error) const {
+    if (error != nullptr) error->clear();
+    if (!hasSource() || !selectedLayerIsEditable()) {
+        assignError(error, QStringLiteral("Select an editable layer before using the Magic Wand."));
+        return std::nullopt;
+    }
+    const qsizetype index = layerIndex(selected_layer_id_);
+    if (index < 0 || (mask_target && !data_.layers.at(index).mask.has_value())) {
+        assignError(error, QStringLiteral("Select a layer mask before using the Magic Wand on a mask."));
+        return std::nullopt;
+    }
+
+    const QSize size = renderedSize();
+    if (canvas_seed.x() < 0 || canvas_seed.y() < 0 ||
+        canvas_seed.x() >= size.width() || canvas_seed.y() >= size.height()) {
+        return std::nullopt;
+    }
+    QVector<QPointF> mapped_seed{
+        QPointF(canvas_seed.x() + 0.5, canvas_seed.y() + 0.5)};
+    const auto* parent = findGroup(data_, data_.layers.at(index).parent_group_id);
+    ImageDocumentGeometry::mapStrokeGeometryThroughGroup(
+        &mapped_seed, nullptr, parent, size);
+    if (mapped_seed.size() != 1 ||
+        !std::isfinite(mapped_seed.front().x()) ||
+        !std::isfinite(mapped_seed.front().y()) ||
+        std::abs(mapped_seed.front().x()) > 1'000'000.0 ||
+        std::abs(mapped_seed.front().y()) > 1'000'000.0) {
+        assignError(error, QStringLiteral("The Magic Wand seed exceeds the supported local coordinate range."));
+        return std::nullopt;
+    }
+    const QPoint local_seed(
+        static_cast<int>(std::floor(mapped_seed.front().x())),
+        static_cast<int>(std::floor(mapped_seed.front().y())));
+    if (local_seed.x() < 0 || local_seed.y() < 0 ||
+        local_seed.x() >= size.width() || local_seed.y() >= size.height()) {
+        return std::nullopt;
+    }
+
+    QImage pixels = ImageDocumentRenderer::editableLayerTarget(
+        data_, source_image_, raster_images_, selected_layer_id_, mask_target);
+    if (pixels.isNull()) {
+        assignError(error, QStringLiteral("The active layer could not be rendered for Magic Wand selection."));
+        return std::nullopt;
+    }
+    return ImageEditableSelectionTarget{std::move(pixels), local_seed};
+}
+
+QPainterPath ImageDocumentSession::mapEditableSelectionPathToCanvas(
+    QPainterPath path) const {
+    if (path.isEmpty()) return {};
+    const qsizetype index = layerIndex(selected_layer_id_);
+    if (index < 0) return {};
+    const QSize size = renderedSize();
+    const auto* parent = findGroup(data_, data_.layers.at(index).parent_group_id);
+    return mapPixelAreaPathThroughGroup(std::move(path), parent, size);
 }
 
 std::optional<ImageOperation> ImageDocumentSession::prepareLinearGradientOperation(

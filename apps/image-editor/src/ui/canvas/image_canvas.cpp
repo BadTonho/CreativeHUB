@@ -284,6 +284,39 @@ void ImageCanvas::setBucketFillTolerance(int tolerance) {
     bucket_fill_tolerance_ = std::clamp(tolerance, 0, 255);
 }
 
+void ImageCanvas::setMagicWandMode(bool enabled) {
+    if (magic_wand_mode_ == enabled && (!enabled || !text_tool_.editing())) return;
+    if (enabled && text_tool_.editing()) finishTextEditing(true);
+    if (enabled) {
+        resetBrushTools(true);
+        resetBlurTool(true);
+        crop_mode_ = paint_mode_ = eraser_mode_ = shape_creation_mode_ = false;
+        text_creation_mode_ = object_selection_mode_ = area_selection_mode_ = false;
+        clearLassoMode();
+        eyedropper_mode_ = bucket_fill_mode_ = linear_gradient_mode_ = blur_mode_ = false;
+        resizing_brush_ = false;
+        static_cast<void>(crop_tool_.cancelGesture());
+        static_cast<void>(area_selection_tool_.cancelGesture());
+        static_cast<void>(shape_tool_.cancelGesture());
+        static_cast<void>(text_tool_.cancelFrame());
+        if (linear_gradient_tool_.gestureActive()) {
+            linear_gradient_tool_.cancelGesture();
+            emit linearGradientPreviewCleared();
+        }
+        clearObjectInteraction();
+        transient_image_ = {};
+    }
+    magic_wand_mode_ = enabled;
+    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    update();
+}
+
+void ImageCanvas::setMagicWandTolerance(int tolerance) {
+    magic_wand_tolerance_ = std::clamp(
+        tolerance, MagicWandConfig::kMinimumTolerance,
+        MagicWandConfig::kMaximumTolerance);
+}
+
 void ImageCanvas::setLinearGradientMode(bool enabled) {
     if (enabled && blur_mode_) setBlurMode(false);
     if (linear_gradient_mode_ == enabled &&
@@ -379,6 +412,19 @@ void ImageCanvas::clearAreaSelection() {
     const bool changed = area_selection_tool_.clearSelection();
     if (changed) emit areaSelectionChanged(false);
     update();
+}
+
+AreaSelectionTool::FinishResult ImageCanvas::applyAreaSelectionPath(
+    const QPainterPath& path) {
+    const auto result = area_selection_tool_.applySelectionPath(
+        path, QRectF(QPointF(0.0, 0.0), QSizeF(image_.size())));
+    if (result.status == AreaSelectionTool::FinishStatus::Applied) {
+        emit areaSelectionChanged(true);
+        update();
+    } else if (result.status == AreaSelectionTool::FinishStatus::Rejected) {
+        emit areaSelectionRejected(result.rejection_reason);
+    }
+    return result;
 }
 
 void ImageCanvas::translateAreaSelection(const QPoint& delta) {
@@ -819,6 +865,15 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
             const auto seed = bucket_fill_tool_.seedAt(
                 widgetToImageCoordinates(event->position()), image_.size());
             if (seed) emit bucketFillRequested(*seed, bucket_fill_tolerance_, brush_color_);
+        }
+        event->accept();
+        return;
+    }
+    if (magic_wand_mode_ && event->button() == Qt::LeftButton) {
+        if (!image_.isNull() && imageTargetRect().contains(event->position())) {
+            const auto seed = MagicWandTool::seedAt(
+                widgetToImageCoordinates(event->position()), image_.size());
+            if (seed) emit magicWandRequested(*seed, magic_wand_tolerance_);
         }
         event->accept();
         return;

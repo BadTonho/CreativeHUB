@@ -8,6 +8,8 @@
 
 #include <QHash>
 #include <QImage>
+#include <QPainterPath>
+#include <QPoint>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -18,6 +20,11 @@ enum class CanvasAnchor {
     TopLeft, Top, TopRight,
     Left, Center, Right,
     BottomLeft, Bottom, BottomRight,
+};
+
+struct ImageEditableSelectionTarget {
+    QImage pixels;
+    QPoint seed;
 };
 
 class ImageDocumentSession final {
@@ -66,6 +73,11 @@ public:
                                       QString* error = nullptr,
                                       std::optional<QPainterPath> clipping_path = {},
                                       bool mask_target = false);
+    [[nodiscard]] std::optional<ImageEditableSelectionTarget>
+    editableSelectionTargetAt(const QPoint& canvas_seed, bool mask_target,
+                              QString* error = nullptr) const;
+    [[nodiscard]] QPainterPath mapEditableSelectionPathToCanvas(
+        QPainterPath path) const;
     [[nodiscard]] bool applyLinearGradient(
         const QPointF& start, const QPointF& end, const QColor& color,
         QString* error = nullptr,

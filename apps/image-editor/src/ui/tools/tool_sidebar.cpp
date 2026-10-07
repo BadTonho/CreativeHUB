@@ -7,6 +7,7 @@
 #include <QPixmap>
 #include <QSignalBlocker>
 #include <QToolButton>
+#include <QTransform>
 #include <QVBoxLayout>
 
 namespace image_editor {
@@ -103,6 +104,33 @@ QIcon bucketFillToolIcon() {
     painter.setBrush(QColor(84, 183, 231));
     painter.drawEllipse(QRectF(21, 23, 5, 6));
     painter.end();
+    return QIcon(icon);
+}
+
+QIcon magicWandToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(31, 38, 48), 1.4, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(QColor(170, 190, 210));
+    QTransform transform;
+    transform.translate(15.0, 17.0);
+    transform.rotate(-42.0);
+    painter.save();
+    painter.setTransform(transform);
+    painter.drawRoundedRect(QRectF(-3.0, -11.0, 6.0, 22.0), 2.0, 2.0);
+    painter.setPen(QPen(QColor(48, 54, 62), 1.0));
+    painter.setBrush(QColor(112, 190, 228));
+    painter.drawRoundedRect(QRectF(-3.0, -13.0, 6.0, 7.0), 1.0, 1.0);
+    painter.restore();
+    painter.setPen(QPen(QColor(246, 205, 95), 1.7, Qt::SolidLine,
+                        Qt::RoundCap));
+    painter.drawLine(QPointF(23.0, 4.0), QPointF(23.0, 8.0));
+    painter.drawLine(QPointF(21.0, 6.0), QPointF(25.0, 6.0));
+    painter.drawLine(QPointF(7.0, 7.0), QPointF(7.0, 10.0));
+    painter.drawLine(QPointF(5.5, 8.5), QPointF(8.5, 8.5));
     return QIcon(icon);
 }
 
@@ -268,6 +296,17 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     bucket_fill_button_->setFixedSize(40, 40);
     layout->addWidget(bucket_fill_button_, 0, Qt::AlignHCenter);
 
+    magic_wand_button_ = new QToolButton(this);
+    magic_wand_button_->setObjectName(QStringLiteral("magicWandToolButton"));
+    magic_wand_button_->setToolTip(QStringLiteral("Magic Wand"));
+    magic_wand_button_->setAccessibleName(QStringLiteral("Magic Wand tool"));
+    magic_wand_button_->setIcon(magicWandToolIcon());
+    magic_wand_button_->setIconSize(QSize(24, 24));
+    magic_wand_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    magic_wand_button_->setCheckable(true);
+    magic_wand_button_->setFixedSize(40, 40);
+    layout->addWidget(magic_wand_button_, 0, Qt::AlignHCenter);
+
     linear_gradient_button_ = new QToolButton(this);
     linear_gradient_button_->setObjectName(QStringLiteral("linearGradientToolButton"));
     linear_gradient_button_->setToolTip(QStringLiteral("Linear Gradient"));
@@ -386,6 +425,10 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         if (active) setActiveTool(Tool::BucketFill);
         else if (active_tool_ == Tool::BucketFill) setActiveTool(Tool::None);
     });
+    connect(magic_wand_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::MagicWand);
+        else if (active_tool_ == Tool::MagicWand) setActiveTool(Tool::None);
+    });
     connect(linear_gradient_button_, &QToolButton::toggled, this, [this](bool active) {
         if (active) setActiveTool(Tool::LinearGradient);
         else if (active_tool_ == Tool::LinearGradient) setActiveTool(Tool::None);
@@ -469,6 +512,11 @@ void ToolSidebar::setBucketFillToolActive(bool active) {
         (active_tool_ == Tool::BucketFill ? Tool::None : active_tool_));
 }
 
+void ToolSidebar::setMagicWandToolActive(bool active) {
+    setActiveTool(active ? Tool::MagicWand :
+        (active_tool_ == Tool::MagicWand ? Tool::None : active_tool_));
+}
+
 void ToolSidebar::setLinearGradientToolActive(bool active) {
     setActiveTool(active ? Tool::LinearGradient :
         (active_tool_ == Tool::LinearGradient ? Tool::None : active_tool_));
@@ -516,7 +564,8 @@ void ToolSidebar::setTextToolActive(bool active) {
 
 void ToolSidebar::setActiveTool(Tool tool) {
     const bool requires_editable_layer = tool == Tool::Paint ||
-        tool == Tool::BucketFill || tool == Tool::LinearGradient ||
+        tool == Tool::BucketFill || tool == Tool::MagicWand ||
+        tool == Tool::LinearGradient ||
         tool == Tool::Eraser || tool == Tool::Blur;
     if (!document_available_ || (requires_editable_layer && !painting_allowed_)) {
         tool = Tool::None;
@@ -526,6 +575,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
     {
         const QSignalBlocker paint_blocker(paint_button_);
         const QSignalBlocker bucket_fill_blocker(bucket_fill_button_);
+        const QSignalBlocker magic_wand_blocker(magic_wand_button_);
         const QSignalBlocker linear_gradient_blocker(linear_gradient_button_);
         const QSignalBlocker eraser_blocker(eraser_button_);
         const QSignalBlocker blur_blocker(blur_button_);
@@ -537,6 +587,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
         const QSignalBlocker eyedropper_blocker(eyedropper_button_);
         paint_button_->setChecked(tool == Tool::Paint);
         bucket_fill_button_->setChecked(tool == Tool::BucketFill);
+        magic_wand_button_->setChecked(tool == Tool::MagicWand);
         linear_gradient_button_->setChecked(tool == Tool::LinearGradient);
         eraser_button_->setChecked(tool == Tool::Eraser);
         blur_button_->setChecked(tool == Tool::Blur);
@@ -557,6 +608,10 @@ bool ToolSidebar::paintToolActive() const noexcept {
 
 bool ToolSidebar::bucketFillToolActive() const noexcept {
     return active_tool_ == Tool::BucketFill;
+}
+
+bool ToolSidebar::magicWandToolActive() const noexcept {
+    return active_tool_ == Tool::MagicWand;
 }
 
 bool ToolSidebar::linearGradientToolActive() const noexcept {
@@ -610,6 +665,7 @@ void ToolSidebar::updateControls() {
     const bool editable_layer_available = document_available_ && painting_allowed_;
     paint_button_->setEnabled(editable_layer_available);
     bucket_fill_button_->setEnabled(editable_layer_available);
+    magic_wand_button_->setEnabled(editable_layer_available);
     linear_gradient_button_->setEnabled(editable_layer_available);
     eraser_button_->setEnabled(editable_layer_available);
     blur_button_->setEnabled(editable_layer_available);
@@ -629,6 +685,11 @@ void ToolSidebar::updateControls() {
         : (document_available_
             ? QStringLiteral("Select or create an editable layer to fill")
             : QStringLiteral("Open an image to use Bucket Fill")));
+    magic_wand_button_->setToolTip(editable_layer_available
+        ? QStringLiteral("Magic Wand")
+        : (document_available_
+            ? QStringLiteral("Select an editable layer to use the Magic Wand")
+            : QStringLiteral("Open an image to use the Magic Wand")));
     linear_gradient_button_->setToolTip(editable_layer_available
         ? QStringLiteral("Linear Gradient")
         : (document_available_

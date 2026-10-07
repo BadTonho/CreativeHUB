@@ -94,6 +94,36 @@ selection clipping, mask conversion, no-op history, Undo/Redo, v16 round-trip,
 tool activation, tolerance updates, and ignored outside-image clicks. Native
 visual checks remain pending.
 
+## Magic Wand
+
+Use a disposable layered document with adjacent colors and alpha values on an
+editable layer.
+
+1. Select **Magic Wand**. Confirm its tolerance starts at `0` and accepts
+   values from `0` through `255`. Click a region and confirm only pixels
+   connected through up, down, left, or right are selected; diagonal contact
+   alone must not connect regions. Click outside the image and confirm the
+   selection is unchanged.
+2. Increase tolerance and sample nearby RGBA values. Confirm the maximum
+   difference across red, green, blue, and alpha controls inclusion. The
+   current Area Selection mode must combine the detected region as Replace,
+   Add, or Subtract; an existing selection must not limit the flood search.
+3. Select a layer mask thumbnail and repeat the test. Confirm selection uses
+   the mask's grayscale pixels, and that the visible composite and other
+   layers do not change detection. Repeat inside a transformed group and
+   confirm the selected outline follows the group's displayed geometry.
+4. Confirm Magic Wand does not mark the document modified, create Undo history,
+   or persist its temporary selection. Rejected oversized regions must leave
+   the previous selection intact. Tolerance returns to zero after restarting
+   the application.
+
+Automated coverage is in `image_editor_ui_test.cpp` (`testMagicWandTool`,
+`creative-suite-image-editor-magic-wand-ui`). It checks four-way connectivity,
+RGBA tolerance, pixel-edge mapping, geometry-limit rejection and selection
+preservation, active-mask target pixels, the toolbar and tolerance control,
+Replace/Add/Subtract, and outside-image clicks. Native visual checks remain
+pending.
+
 ## Linear Gradient
 
 Use a disposable `.cimg` document with a colored editable layer and a second

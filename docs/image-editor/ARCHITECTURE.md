@@ -40,6 +40,16 @@ persistence, and recovery.
   detects the connected region in the active layer or selected mask, applies
   the optional area-selection clip, and appends one persistent fill operation
   only when pixels change.
+- `src/ui/tools/magic_wand/` contains the Magic Wand's connected-region
+  selection logic and its dedicated C++ defaults in `magic_wand_config.h`.
+  The canvas maps clicks and emits a selection request; the session supplies
+  raw editable pixels from the active layer or selected mask and maps the
+  resulting pixel-aligned path through parent-group transforms. The tool uses
+  four-way connectivity and maximum-channel RGBA tolerance. The shared
+  Area Selection state combines the result with Replace/Add/Subtract; the
+  selection stays temporary per tab and does not change pixels, history, or
+  `.cimg`. Tolerance starts at zero on each application launch and is not
+  stored in preferences.
 - `src/ui/tools/gradient/linear_gradient_tool.*` owns the in-canvas drag from
   color start to transparent end. `ImageCanvas` requests a composed transient
   preview while dragging and forwards the completed gesture; the session maps

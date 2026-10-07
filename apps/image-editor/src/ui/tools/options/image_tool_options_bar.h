@@ -36,6 +36,7 @@ public:
     void setAreaSelectionOptionsState(bool visible, int shape, int mode,
                                       bool show_shape = true);
     void setBucketFillOptionsState(bool visible, int tolerance);
+    void setMagicWandOptionsState(bool visible, int tolerance);
     void setBlurOptionsState(bool visible, int diameter, int radius);
     void setBlurDiameter(int diameter);
     void hideAllOptions();
@@ -55,6 +56,7 @@ signals:
     void areaSelectionOptionsChanged(int shape, int mode);
     void deleteSelectedObjectsRequested();
     void bucketFillToleranceChanged(int tolerance);
+    void magicWandToleranceChanged(int tolerance);
     void blurDiameterChanged(int diameter);
     void blurRadiusChanged(int radius);
 
@@ -65,6 +67,7 @@ private:
     QWidgetAction* selection_options_action_ = nullptr;
     QWidgetAction* area_selection_options_action_ = nullptr;
     QWidgetAction* bucket_fill_options_action_ = nullptr;
+    QWidgetAction* magic_wand_options_action_ = nullptr;
     QWidgetAction* blur_options_action_ = nullptr;
     QWidget* paint_size_options_ = nullptr;
     QWidget* shape_options_widget_ = nullptr;
@@ -72,6 +75,7 @@ private:
     QWidget* selection_options_widget_ = nullptr;
     QWidget* area_selection_options_widget_ = nullptr;
     QWidget* bucket_fill_options_widget_ = nullptr;
+    QWidget* magic_wand_options_widget_ = nullptr;
     QWidget* blur_options_widget_ = nullptr;
     QLabel* tool_size_label_ = nullptr;
     QSlider* brush_size_slider_ = nullptr;
@@ -91,6 +95,7 @@ private:
     QLabel* area_selection_shape_label_ = nullptr;
     QComboBox* area_selection_mode_combo_ = nullptr;
     QSpinBox* bucket_fill_tolerance_spin_ = nullptr;
+    QSpinBox* magic_wand_tolerance_spin_ = nullptr;
     QSpinBox* blur_diameter_spin_ = nullptr;
     QSpinBox* blur_radius_spin_ = nullptr;
 };

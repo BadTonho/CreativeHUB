@@ -91,6 +91,9 @@ add_executable(creative-suite-image-editor
     src/ui/tools/brush/eraser_tool.h
     src/ui/tools/bucket_fill/bucket_fill_tool.cpp
     src/ui/tools/bucket_fill/bucket_fill_tool.h
+    src/ui/tools/magic_wand/magic_wand_tool.cpp
+    src/ui/tools/magic_wand/magic_wand_tool.h
+    src/ui/tools/magic_wand/magic_wand_config.h
     src/ui/tools/gradient/linear_gradient_tool.cpp
     src/ui/tools/gradient/linear_gradient_tool.h
     src/ui/tools/blur/blur_tool.cpp

@@ -1,5 +1,7 @@
 #include "image_tool_options_bar.h"
 
+#include "../magic_wand/magic_wand_config.h"
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFont>
@@ -204,6 +206,26 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     addAction(bucket_fill_options_action_);
     bucket_fill_options_action_->setVisible(false);
 
+    magic_wand_options_widget_ = new QWidget(this);
+    magic_wand_options_widget_->setObjectName(QStringLiteral("magicWandOptionsWidget"));
+    auto* magic_wand_layout = new QHBoxLayout(magic_wand_options_widget_);
+    magic_wand_layout->setContentsMargins(8, 3, 8, 3);
+    magic_wand_layout->setSpacing(7);
+    magic_wand_layout->addWidget(new QLabel(QStringLiteral("Tolerance"), magic_wand_options_widget_));
+    magic_wand_tolerance_spin_ = new QSpinBox(magic_wand_options_widget_);
+    magic_wand_tolerance_spin_->setObjectName(QStringLiteral("magicWandToleranceSpinBox"));
+    magic_wand_tolerance_spin_->setAccessibleName(QStringLiteral("Magic Wand tolerance"));
+    magic_wand_tolerance_spin_->setRange(
+        MagicWandConfig::kMinimumTolerance, MagicWandConfig::kMaximumTolerance);
+    magic_wand_tolerance_spin_->setValue(MagicWandConfig::kDefaultTolerance);
+    magic_wand_tolerance_spin_->setFixedWidth(72);
+    magic_wand_layout->addWidget(magic_wand_tolerance_spin_);
+    magic_wand_options_action_ = new QWidgetAction(this);
+    magic_wand_options_action_->setObjectName(QStringLiteral("magicWandOptionsAction"));
+    magic_wand_options_action_->setDefaultWidget(magic_wand_options_widget_);
+    addAction(magic_wand_options_action_);
+    magic_wand_options_action_->setVisible(false);
+
     blur_options_widget_ = new QWidget(this);
     blur_options_widget_->setObjectName(QStringLiteral("blurOptionsWidget"));
     auto* blur_layout = new QHBoxLayout(blur_options_widget_);
@@ -274,6 +296,8 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
             this, &ImageToolOptionsBar::deleteSelectedObjectsRequested);
     connect(bucket_fill_tolerance_spin_, qOverload<int>(&QSpinBox::valueChanged),
             this, &ImageToolOptionsBar::bucketFillToleranceChanged);
+    connect(magic_wand_tolerance_spin_, qOverload<int>(&QSpinBox::valueChanged),
+            this, &ImageToolOptionsBar::magicWandToleranceChanged);
     connect(blur_diameter_spin_, qOverload<int>(&QSpinBox::valueChanged),
             this, &ImageToolOptionsBar::blurDiameterChanged);
     connect(blur_radius_spin_, qOverload<int>(&QSpinBox::valueChanged),
@@ -394,6 +418,15 @@ void ImageToolOptionsBar::setBucketFillOptionsState(bool visible, int tolerance)
     bucket_fill_tolerance_spin_->setValue(std::clamp(tolerance, 0, 255));
 }
 
+void ImageToolOptionsBar::setMagicWandOptionsState(bool visible, int tolerance) {
+    magic_wand_options_action_->setVisible(visible);
+    magic_wand_options_widget_->setVisible(visible);
+    const QSignalBlocker blocker(magic_wand_tolerance_spin_);
+    magic_wand_tolerance_spin_->setValue(std::clamp(
+        tolerance, MagicWandConfig::kMinimumTolerance,
+        MagicWandConfig::kMaximumTolerance));
+}
+
 void ImageToolOptionsBar::setBlurOptionsState(bool visible, int diameter, int radius) {
     blur_options_action_->setVisible(visible);
     blur_options_widget_->setVisible(visible);
@@ -420,6 +453,7 @@ void ImageToolOptionsBar::hideAllOptions() {
     setSelectionOptionsVisible(false);
     setAreaSelectionOptionsState(false, 0, 0);
     setBucketFillOptionsState(false, bucket_fill_tolerance_spin_->value());
+    setMagicWandOptionsState(false, magic_wand_tolerance_spin_->value());
     setBlurOptionsState(false, blur_diameter_spin_->value(), blur_radius_spin_->value());
 }
 

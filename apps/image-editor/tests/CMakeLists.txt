@@ -143,6 +143,9 @@ add_executable(creative-suite-image-editor-ui-tests
     ../src/ui/tools/brush/eraser_tool.h
     ../src/ui/tools/bucket_fill/bucket_fill_tool.cpp
     ../src/ui/tools/bucket_fill/bucket_fill_tool.h
+    ../src/ui/tools/magic_wand/magic_wand_tool.cpp
+    ../src/ui/tools/magic_wand/magic_wand_tool.h
+    ../src/ui/tools/magic_wand/magic_wand_config.h
     ../src/ui/tools/gradient/linear_gradient_tool.cpp
     ../src/ui/tools/gradient/linear_gradient_tool.h
     ../src/ui/tools/blur/blur_tool.cpp
@@ -233,6 +236,12 @@ set_tests_properties(creative-suite-image-editor-area-selection-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 add_creative_suite_test(
+    NAME creative-suite-image-editor-magic-wand-ui
+    COMMAND creative-suite-image-editor-ui-tests --magic-wand-only)
+set_tests_properties(creative-suite-image-editor-magic-wand-ui PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+add_creative_suite_test(
     NAME creative-suite-image-editor-brush-size-ui
     COMMAND creative-suite-image-editor-ui-tests --brush-size-only)
 set_tests_properties(creative-suite-image-editor-brush-size-ui PROPERTIES
@@ -285,6 +294,9 @@ add_executable(creative-suite-image-editor-export-ui-tests
     ../src/ui/tools/brush/eraser_tool.h
     ../src/ui/tools/bucket_fill/bucket_fill_tool.cpp
     ../src/ui/tools/bucket_fill/bucket_fill_tool.h
+    ../src/ui/tools/magic_wand/magic_wand_tool.cpp
+    ../src/ui/tools/magic_wand/magic_wand_tool.h
+    ../src/ui/tools/magic_wand/magic_wand_config.h
     ../src/ui/tools/gradient/linear_gradient_tool.cpp
     ../src/ui/tools/gradient/linear_gradient_tool.h
     ../src/ui/tools/blur/blur_tool.cpp

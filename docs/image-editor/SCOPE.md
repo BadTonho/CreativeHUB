@@ -12,7 +12,7 @@ The current application supports one raster document at a time, either linked
 to an original image or created as a self-contained canvas. It provides a
 locked Background, editable raster layers, one-level groups, visibility,
 opacity, ordering, crop, quarter-turn rotation, flips, painting, bucket fill,
-linear gradients, blur, erasing,
+Magic Wand selection, linear gradients, blur, erasing,
 editable line/rectangle/ellipse shapes, editable text, raster layer masks,
 imported image layers, object selection and transforms, an RGBA Eyedropper that
 samples visible composite pixels with nonzero alpha into the paint color,
@@ -45,9 +45,17 @@ results do not create edits.
 Fill detection uses the active layer or selected mask, four-way connectivity,
 per-channel RGBA tolerance, brush color and alpha, and the active selection
 clip. No-op fills do not add history. The selection itself does not dirty or
-serialize with the document. Canvas documents can use standard presets or custom dimensions. Self-contained
-canvas documents currently allow up to 32768 pixels per side and 64 million
-pixels total. These are format limits, not performance claims.
+serialize with the document. Canvas documents can use standard presets or
+custom dimensions. Self-contained canvas documents currently allow up to
+32768 pixels per side and 64 million pixels total. These are format limits,
+not performance claims.
+
+The Magic Wand uses the same raw active-layer or mask target, but makes a
+temporary four-connected selection with per-channel RGBA tolerance. It does
+not clip detection to an existing selection; Replace/Add/Subtract combines the
+new region afterward. Its tolerance is session-only and starts at zero after
+launch. Selections remain per-tab UI state and do not change pixels, history,
+or `.cimg` data.
 **Image > Canvas Size** changes current document bounds without resampling layer
 content. A 3×3 anchor controls placement; new area uses the configured canvas
 background or transparency for source-image documents. The edit is undoable and
