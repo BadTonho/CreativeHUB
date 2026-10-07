@@ -1,8 +1,8 @@
 # Motion Studio Windows Performance Results — 2026-10-07
 
-This report preserves the original Motion Studio measurements and records the
-GPU export integration verification. The original 3,405-frame performance run
-was not repeated during implementation.
+This report preserves the original Motion Studio measurements and records
+subsequent CPU and GPU exports of a 3,405-frame composition after the GPU export
+integration.
 
 ## Test and export run
 
@@ -15,7 +15,8 @@ The 2026-10-07 Windows Release integration build passed all 11 Motion Studio
 CTest targets, including export and GPU composition. These correctness results
 do not measure full-project GPU export throughput.
 
-The Motion Studio log records one completed 1920 × 1080, 60 fps CPU export:
+The original Motion Studio log records a completed 1920 × 1080, 60 fps CPU
+export:
 
 | Metric | Result |
 | --- | ---: |
@@ -35,6 +36,33 @@ about 24%. The export record does not include its layer/effect configuration,
 so its throughput cannot be attributed to the preview composition below.
 This recorded export predates the opt-in GPU export integration and remains a
 historical CPU baseline, not a paired GPU comparison.
+
+## GPU export measurement
+
+The updated Windows Release executable completed a GPU-requested export of
+3,405 frames at 1920 × 1080 and 60 fps. The schema-2 summary confirms that the
+GPU backend handled all frames, with no CPU fallback frames or composition
+failures. A CPU export of the same frame count and output settings was also
+recorded in the updated executable.
+
+| Backend | Schema | Elapsed time | Throughput | Realtime factor | GPU frames | Fallbacks | Failures |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| CPU | 2 | 99.63 s | 34.18 fps | 0.570× | 0 | 0 | 0 |
+| GPU | 2 | 54.96 s | 61.95 fps | 1.032× | 3,405 | 0 | 0 |
+
+This paired run reduced elapsed time by 44.8% and delivered about 1.81× the CPU
+throughput. The log also contains two earlier schema-1 CPU exports of the same
+frame count, resolution, and frame rate (100.76 s and 100.07 s). Those records
+show a consistent CPU baseline, but the diagnostic log contains only one
+schema-2 GPU export, so GPU repeatability has not yet been established by the
+available summaries.
+
+The GPU run uploaded 35.43 GB and read back 28.24 GB across 3,405 compositions.
+Average upload, draw-submission, and readback times were 0.95 ms, 0.18 ms, and
+4.95 ms per composition, respectively. The effect counters also record 860
+GPU Color Adjustment operations and 860 GPU Gaussian Blur operations. The
+full-frame RGBA readback remains a substantial part of the GPU path before CPU
+FFmpeg encoding.
 
 ## Interactive preview
 
@@ -70,9 +98,13 @@ memory pressure.
   and reduces delivered preview rate from about 59 fps to about 11 fps.
 - Color Adjustment and layer composition are too small in these samples to
   justify optimization ahead of Gaussian Blur.
-- The export completed successfully but ran at 0.563× realtime at 60 fps.
+- The original CPU export completed successfully at 0.563× realtime at 60 fps.
   Its render stage is the larger part of measured per-frame work; the export
   log does not reveal whether that work includes the same effects as preview.
+- The updated GPU export completed at 1.032× realtime and about 1.81× the
+  throughput of the schema-2 CPU run, with every frame composed on the GPU and
+  no fallback or composition failures. This is one paired GPU measurement;
+  repeatability should not be inferred from a single GPU run.
 - The preview records use diagnostics schema 4. The current checkout emits
   schema 7, which includes GPU counters. This run therefore provides no GPU
   composition counts or timings and cannot establish whether the experimental
@@ -97,10 +129,13 @@ average upload, draw-submission, and readback times. The output still crosses
 the existing RGBA readback boundary before CPU FFmpeg encoding.
 
 Automated export coverage exercises no-surface CPU fallback, frame parity,
-worker lifecycle, and GPU summary fields. No new run of the maintainer's
-3,405-frame project was recorded, so no GPU speedup is claimed. The prior
-33.79 fps CPU export does not identify its layer/effect setup and should be
-treated only as the existing local baseline.
+worker lifecycle, and GPU summary fields. The available runtime logs now
+include a completed GPU export and its schema-2 CPU comparison. Two earlier
+schema-1 CPU measurements provide additional historical context, but only one
+GPU summary is available in the log; the measured improvement is promising but
+not yet a repeated GPU benchmark result. The export summary does not identify
+the layer/effect setup, so these throughput numbers should not be generalized
+to other compositions or hardware.
 
 For the paired manual measurement, use the same saved 3,405-frame composition,
 output dimensions, frame rate, encoder, and quality for three CPU exports with
