@@ -26,6 +26,18 @@ add_creative_suite_test(
 set_tests_properties(creative-suite-image-editor-gradient PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+add_executable(creative-suite-image-editor-blur-tests
+    image_editor_blur_test.cpp
+)
+target_link_libraries(creative-suite-image-editor-blur-tests PRIVATE
+    creative-suite-image-editor-core Qt6::Test)
+target_compile_features(creative-suite-image-editor-blur-tests PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME creative-suite-image-editor-blur
+    COMMAND creative-suite-image-editor-blur-tests)
+set_tests_properties(creative-suite-image-editor-blur PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 target_link_libraries(creative-suite-image-editor-core-tests PRIVATE
     creative-suite-image-editor-core
     Qt6::Test
@@ -133,6 +145,8 @@ add_executable(creative-suite-image-editor-ui-tests
     ../src/ui/tools/bucket_fill/bucket_fill_tool.h
     ../src/ui/tools/gradient/linear_gradient_tool.cpp
     ../src/ui/tools/gradient/linear_gradient_tool.h
+    ../src/ui/tools/blur/blur_tool.cpp
+    ../src/ui/tools/blur/blur_tool.h
     ../src/ui/tools/crop/crop_tool.cpp
     ../src/ui/tools/crop/crop_tool.h
     ../src/ui/tools/eyedropper/eyedropper_tool.cpp
@@ -176,11 +190,13 @@ if(MSVC)
     target_compile_options(creative-suite-image-editor-mask-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-image-editor-core-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-image-editor-gradient-tests PRIVATE /W4 /permissive-)
+    target_compile_options(creative-suite-image-editor-blur-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-image-editor-ui-tests PRIVATE /W4 /permissive-)
 else()
     target_compile_options(creative-suite-image-editor-mask-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-image-editor-core-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-image-editor-gradient-tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(creative-suite-image-editor-blur-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-image-editor-ui-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
@@ -200,6 +216,12 @@ add_creative_suite_test(
     NAME creative-suite-image-editor-gradient-ui
     COMMAND creative-suite-image-editor-ui-tests --gradient-only)
 set_tests_properties(creative-suite-image-editor-gradient-ui PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+add_creative_suite_test(
+    NAME creative-suite-image-editor-blur-ui
+    COMMAND creative-suite-image-editor-ui-tests --blur-only)
+set_tests_properties(creative-suite-image-editor-blur-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 add_creative_suite_test(
@@ -251,6 +273,8 @@ add_executable(creative-suite-image-editor-export-ui-tests
     ../src/ui/tools/bucket_fill/bucket_fill_tool.h
     ../src/ui/tools/gradient/linear_gradient_tool.cpp
     ../src/ui/tools/gradient/linear_gradient_tool.h
+    ../src/ui/tools/blur/blur_tool.cpp
+    ../src/ui/tools/blur/blur_tool.h
     ../src/ui/tools/crop/crop_tool.cpp
     ../src/ui/tools/crop/crop_tool.h
     ../src/ui/tools/eyedropper/eyedropper_tool.cpp
@@ -313,6 +337,7 @@ if(WIN32)
             creative-suite-image-editor-core-tests
             creative-suite-image-editor-bucket-fill-tests
             creative-suite-image-editor-gradient-tests
+            creative-suite-image-editor-blur-tests
             creative-suite-image-editor-mask-tests
             creative-suite-image-editor-raster-tests
             creative-suite-image-editor-format-tests

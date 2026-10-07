@@ -29,6 +29,7 @@ enum class OperationKind {
     EraseStroke,
     BucketFill,
     LinearGradient,
+    BlurStroke,
     Shape,
     Text,
     RasterImage,
@@ -76,6 +77,15 @@ struct ImageLinearGradientData {
     std::optional<QPainterPath> clipping_path;
 
     bool operator==(const ImageLinearGradientData&) const = default;
+};
+
+struct ImageBlurStrokeData {
+    QVector<QPointF> points;
+    int diameter = 12;
+    int radius = 10;
+    std::optional<QPainterPath> clipping_path;
+
+    bool operator==(const ImageBlurStrokeData&) const = default;
 };
 
 struct ImageShapeData {
@@ -138,6 +148,7 @@ struct ImageOperation {
     ImageEraseStroke erase_stroke;
     ImageBucketFillData bucket_fill;
     ImageLinearGradientData linear_gradient;
+    ImageBlurStrokeData blur_stroke;
     ImageShapeData shape;
     ImageTextData text;
     ImageRasterData raster;
@@ -223,11 +234,12 @@ struct RecoveryDocumentData {
 
 class ImageDocumentStore final {
 public:
-    static constexpr int kCurrentDocumentVersion = 15;
+    static constexpr int kCurrentDocumentVersion = 16;
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr qsizetype kMaximumStrokeClipPathElements = 100'000;
     static constexpr int kMaximumPaintBrushDiameter = 1024;
+    static constexpr int kMaximumBlurRadius = 100;
     static constexpr int kMaximumShapeStrokeWidth = 1024;
     static constexpr int kMaximumTextFontPixelSize = 1024;
     static constexpr qsizetype kMaximumTextLength = 16'384;

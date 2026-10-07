@@ -47,6 +47,7 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
         linear_gradient_tool_.cancelGesture();
         emit linearGradientPreviewCleared();
     }
+    resetBlurTool(true);
     resetBrushTools(true);
     image_ = std::move(image);
     transient_image_ = {};
@@ -64,6 +65,7 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
 }
 
 void ImageCanvas::setCropMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     resetBrushTools(true);
     crop_mode_ = enabled;
     if (enabled) {
@@ -82,6 +84,7 @@ void ImageCanvas::setCropMode(bool enabled) {
 }
 
 void ImageCanvas::setPaintMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     resetBrushTools(true);
     paint_mode_ = enabled;
     if (enabled) {
@@ -101,6 +104,7 @@ void ImageCanvas::setPaintMode(bool enabled) {
 }
 
 void ImageCanvas::setEraserMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     resetBrushTools(true);
     eraser_mode_ = enabled;
     if (enabled) {
@@ -120,6 +124,7 @@ void ImageCanvas::setEraserMode(bool enabled) {
 }
 
 void ImageCanvas::setShapeCreationMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     shape_creation_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
@@ -139,6 +144,7 @@ void ImageCanvas::setShapeCreationMode(bool enabled) {
 }
 
 void ImageCanvas::setTextCreationMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     if (!enabled && text_tool_.editing()) {
         finishTextEditing(true);
     }
@@ -162,6 +168,7 @@ void ImageCanvas::setTextCreationMode(bool enabled) {
 }
 
 void ImageCanvas::setObjectSelectionMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     object_selection_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
@@ -181,6 +188,7 @@ void ImageCanvas::setObjectSelectionMode(bool enabled) {
 }
 
 void ImageCanvas::setAreaSelectionMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     area_selection_mode_ = enabled;
     if (enabled) {
         crop_mode_ = false;
@@ -202,6 +210,7 @@ void ImageCanvas::setAreaSelectionMode(bool enabled) {
 }
 
 void ImageCanvas::setEyedropperMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     if (eyedropper_mode_ == enabled) return;
     if (enabled && text_tool_.editing()) finishTextEditing(true);
     resetBrushTools(true);
@@ -227,6 +236,7 @@ void ImageCanvas::setEyedropperMode(bool enabled) {
 }
 
 void ImageCanvas::setBucketFillMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     if (bucket_fill_mode_ == enabled) return;
     if (enabled && text_tool_.editing()) finishTextEditing(true);
     if (enabled) {
@@ -252,6 +262,7 @@ void ImageCanvas::setBucketFillTolerance(int tolerance) {
 }
 
 void ImageCanvas::setLinearGradientMode(bool enabled) {
+    if (enabled && blur_mode_) setBlurMode(false);
     if (linear_gradient_mode_ == enabled &&
         (!enabled || !text_tool_.editing())) return;
     if (enabled && text_tool_.editing()) finishTextEditing(true);
@@ -274,6 +285,45 @@ void ImageCanvas::setLinearGradientMode(bool enabled) {
     }
     linear_gradient_mode_ = enabled;
     setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    update();
+}
+
+void ImageCanvas::setBlurMode(bool enabled) {
+    if (blur_mode_ == enabled && (!enabled || !text_tool_.editing())) return;
+    if (enabled && text_tool_.editing()) finishTextEditing(true);
+    if (enabled) {
+        resetBrushTools(true);
+        crop_mode_ = paint_mode_ = eraser_mode_ = shape_creation_mode_ = false;
+        text_creation_mode_ = object_selection_mode_ = area_selection_mode_ = false;
+        eyedropper_mode_ = bucket_fill_mode_ = linear_gradient_mode_ = false;
+        resizing_brush_ = false;
+        static_cast<void>(crop_tool_.cancelGesture());
+        static_cast<void>(area_selection_tool_.cancelGesture());
+        static_cast<void>(shape_tool_.cancelGesture());
+        static_cast<void>(text_tool_.cancelFrame());
+        if (linear_gradient_tool_.gestureActive()) {
+            linear_gradient_tool_.cancelGesture();
+            emit linearGradientPreviewCleared();
+        }
+        clearObjectInteraction();
+        transient_image_ = {};
+    } else {
+        resetBlurTool(true);
+    }
+    blur_mode_ = enabled;
+    setCursor(enabled ? Qt::BlankCursor
+                      : ((paint_mode_ || eraser_mode_) ? Qt::BlankCursor
+                          : ((crop_mode_ || area_selection_mode_ || eyedropper_mode_ ||
+                              linear_gradient_mode_ || shape_creation_mode_)
+                                ? Qt::CrossCursor : Qt::ArrowCursor)));
+    update();
+}
+
+void ImageCanvas::setBlurOptions(int diameter, int radius) {
+    brush_diameter_ = std::clamp(
+        diameter, 1, ImageDocumentStore::kMaximumPaintBrushDiameter);
+    blur_radius_ = std::clamp(radius, 0, ImageDocumentStore::kMaximumBlurRadius);
+    if (blur_mode_) updateBrushToolCursor(mapFromGlobal(QCursor::pos()));
     update();
 }
 
@@ -601,6 +651,8 @@ void ImageCanvas::updateBrushToolCursor(const QPointF& position) {
     else paint_tool_.hideCursor();
     if (eraser_mode_) eraser_tool_.updateCursor(context, visible);
     else eraser_tool_.hideCursor();
+    if (blur_mode_) blur_tool_.updateCursor(context, visible);
+    else blur_tool_.hideCursor();
 }
 
 void ImageCanvas::resetBrushTools(bool clear_preview_notification) {
@@ -615,6 +667,16 @@ void ImageCanvas::resetBrushTools(bool clear_preview_notification) {
         emit erasePreviewCleared();
     }
     transient_image_ = {};
+}
+
+void ImageCanvas::resetBlurTool(bool clear_preview_notification) {
+    const bool was_drawing = blur_tool_.drawing();
+    blur_tool_.cancel();
+    blur_tool_.hideCursor();
+    if (was_drawing && clear_preview_notification) {
+        transient_image_ = {};
+        emit blurPreviewCleared();
+    }
 }
 
 void ImageCanvas::updateTextEditorGeometry() {
@@ -673,6 +735,7 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     const auto brush_context = brushToolContext({});
     if (paint_mode_) paint_tool_.paintOverlay(painter, brush_context);
     if (eraser_mode_) eraser_tool_.paintOverlay(painter, brush_context);
+    if (blur_mode_) blur_tool_.paintCursor(painter, brush_context);
 
     shape_tool_.paintOverlay(painter, {target, zoom_});
     text_tool_.paintFramePreview(painter, textToolContext());
@@ -738,6 +801,16 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
             emit linearGradientPreviewRequested(
                 linear_gradient_tool_.start(), linear_gradient_tool_.end(),
                 linear_gradient_tool_.color());
+            update();
+        }
+        event->accept();
+        return;
+    }
+    if (blur_mode_ && event->button() == Qt::LeftButton) {
+        if (!image_.isNull() && imageTargetRect().contains(event->position()) &&
+            blur_tool_.begin(brushToolContext(event->position()), blur_radius_)) {
+            const auto stroke = blur_tool_.currentStroke();
+            emit blurPreviewRequested(stroke.points, stroke.diameter, stroke.radius);
             update();
         }
         event->accept();
@@ -844,6 +917,15 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (blur_tool_.drawing()) {
+        if (blur_tool_.move(brushToolContext(event->position()))) {
+            const auto stroke = blur_tool_.currentStroke();
+            emit blurPreviewRequested(stroke.points, stroke.diameter, stroke.radius);
+            update();
+        }
+        event->accept();
+        return;
+    }
     if (resizing_brush_) {
         const QPointF displacement = event->position() - brush_resize_start_;
         const int adjustment = static_cast<int>(std::round(displacement.x()));
@@ -909,6 +991,11 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (blur_mode_) {
+        updateBrushToolCursor(event->position());
+        event->accept();
+        return;
+    }
     QWidget::mouseMoveEvent(event);
 }
 
@@ -926,10 +1013,22 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (event->button() == Qt::LeftButton && blur_tool_.drawing()) {
+        const auto stroke = blur_tool_.finish(brushToolContext(event->position()));
+        if (stroke) {
+            emit blurStrokeSelected(
+                stroke->points, stroke->diameter, stroke->radius);
+        }
+        transient_image_ = {};
+        emit blurPreviewCleared();
+        update();
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::MiddleButton && panning_) {
         panning_ = false;
         setCursor(crop_mode_ ? Qt::CrossCursor
-                             : ((paint_mode_ || eraser_mode_)
+                             : ((paint_mode_ || eraser_mode_ || blur_mode_)
                                     ? Qt::BlankCursor : Qt::ArrowCursor));
         event->accept();
         return;
@@ -1044,9 +1143,11 @@ void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* event) {
 }
 
 void ImageCanvas::leaveEvent(QEvent* event) {
-    if (!paint_tool_.drawing() && !eraser_tool_.drawing() && !resizing_brush_) {
+    if (!paint_tool_.drawing() && !eraser_tool_.drawing() &&
+        !blur_tool_.drawing() && !resizing_brush_) {
         paint_tool_.hideCursor();
         eraser_tool_.hideCursor();
+        blur_tool_.hideCursor();
         update();
     }
     QWidget::leaveEvent(event);
@@ -1068,6 +1169,12 @@ void ImageCanvas::keyPressEvent(QKeyEvent* event) {
         linear_gradient_tool_.cancelGesture();
         transient_image_ = {};
         emit linearGradientPreviewCleared();
+        update();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Escape && blur_tool_.drawing()) {
+        resetBlurTool(true);
         update();
         event->accept();
         return;

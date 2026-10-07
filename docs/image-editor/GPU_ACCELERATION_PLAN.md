@@ -38,9 +38,9 @@ worker resources and two 16 KiB axis lookup buffers for UHD/portrait 4K. The
 Image Editor export/publication remains CPU; transparent-output and mask semantics
 still require its own covered adapter integration.
 
-GPU rendering is a runtime implementation choice. Keep `.cimg` v15, its
-supported older versions, recovery wrapper v1, and the Video Editor's `.csp`
-contract unchanged. Editable operations remain the source of truth; textures
+GPU rendering is a runtime implementation choice. Keep the current `.cimg`
+format (v16), its supported older versions, recovery wrapper v1, and the Video
+Editor's `.csp` contract unchanged. Editable operations remain the source of truth; textures
 are disposable caches, not persisted document or Undo state.
 
 ## Stage 1 — Rendering contract and experimental adapter

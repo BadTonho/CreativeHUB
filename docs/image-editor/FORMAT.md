@@ -1,6 +1,6 @@
 # Image Editor Document Format
 
-Status: **provisional version 15**. The `.cimg` extension is temporary until a
+Status: **provisional version 16**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
 version 7 adds stable IDs to paint and eraser strokes; version 8 adds
@@ -8,8 +8,9 @@ one-level layer groups; version 9 adds editable text operations; version 10
 adds raster layer masks; version 11 adds linked raster image operations;
 version 12 adds independently resizable canvas bounds; version 13 adds optional
 area-selection clipping to paint and eraser strokes; version 14 adds editable
-bucket-fill operations; version 15 adds editable linear-gradient operations.
-Versions 1 through 14 remain readable and save as v15.
+bucket-fill operations; version 15 adds editable linear-gradient operations;
+version 16 adds editable blur strokes. Versions 1 through 15 remain readable
+and save as v16.
 
 ## Document contents
 
@@ -18,7 +19,7 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `15`. |
+| `version` | integer | Current version is `16`. |
 | `base` | object | A linked source image or a self-contained canvas. |
 | `canvas` | object | Version 12 current document bounds and base-image offset. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
@@ -67,8 +68,8 @@ for relink validation.
 Versions 1 through 11 have no `canvas` object. They load with the canvas equal
 to the dimensions produced by their existing base operations and a zero base
 offset, preserving their previous appearance. Saving any supported version
-writes version 15. Recovery wrapper version 1 accepts document payloads through
-v15.
+writes version 16. Recovery wrapper version 1 accepts document payloads through
+v16.
 
 ## Area-selection stroke clipping (version 13)
 
@@ -125,7 +126,7 @@ no pixel change does not create an operation. Bucket fills are not addressable
 individually through Object Selection. Replaying earlier operations before the
 fill recomputes its target region, so the saved operation remains editable.
 Versions 1 through 13 contain no bucket-fill operations and remain readable;
-saving any supported document writes version 15.
+saving any supported document writes version 16.
 
 ## Linear Gradient (version 15)
 
@@ -156,7 +157,33 @@ Each changed gradient is one undoable operation and cannot be selected or moved
 individually through Object Selection.
 
 Versions 1 through 14 contain no linear-gradient operations and remain
-readable; saving any supported document writes version 15.
+readable; saving any supported document writes version 16.
+
+## Blur Stroke (version 16)
+
+A blur stroke is an ordered `blur_stroke` operation on an editable raster layer
+or its mask. It records the brush path, brush diameter, radius, and optional
+Area Selection clip in the operation's local canvas coordinates:
+
+```json
+{
+  "kind": "blur_stroke",
+  "diameter": 12,
+  "radius": 10,
+  "points": [{"x": 48.5, "y": 72.5}, {"x": 58.5, "y": 74.5}]
+}
+```
+
+The brush diameter is 1–1024 pixels and the radius is 0–100 pixels. Three
+horizontal and vertical box-blur passes filter the preceding layer or mask
+pixels in premultiplied RGBA, limited to the region affected by the stroke.
+Brush coverage and the optional `clip_path`/`clip_rule` limit writes. The
+composition of other layers is not used as a blur source. Mask output remains
+grayscale because the mask's preceding operation sequence is grayscale. A
+zero radius or stroke that changes no pixels is a no-op; each changed stroke
+is one undoable operation and cannot be selected or moved individually through
+Object Selection. Versions 1 through 15 contain no blur operations and remain
+readable; saving any supported document writes version 16.
 
 ## Linked raster images (version 11)
 
@@ -196,7 +223,7 @@ crop, quarter-turn, and flip commands continue to transform rendered content
 and layer masks. Image pixels render at their position in the operation list,
 then the layer mask, layer opacity, and group composition apply.
 
-Recovery retains envelope version 1 and accepts document payloads through v15.
+Recovery retains envelope version 1 and accepts document payloads through v16.
 The Video Editor consumes flattened published PNG files; its .csp schema does
 not change.
 
@@ -215,7 +242,7 @@ starts as opaque white over the fixed canvas; an empty operation array is valid.
 ```
 
 Mask operations reuse `paint_stroke`, `erase_stroke`, `bucket_fill`,
-`linear_gradient`, `crop`, `rotate`,
+`linear_gradient`, `blur_stroke`, `crop`, `rotate`,
 `flip_horizontal`, and `flip_vertical`. Shape, text, and raster image operations are rejected.
 Paint colors must have equal red, green, and blue components; their alpha
 controls blending strength. The editing API converts the selected RGB color using Qt
@@ -223,7 +250,8 @@ controls blending strength. The editing API converts the selected RGB color usin
 unique across document content and masks; existing brush, point, and operation
 limits also apply to masks. Version 14 also permits grayscale `bucket_fill`
 operations on masks; version 15 permits grayscale `linear_gradient` operations.
-Their stored RGB channels must match.
+Their stored RGB channels must match. Version 16 permits `blur_stroke` on masks;
+it has no stored color and preserves the grayscale input pixels.
 
 White reveals, black hides, and gray supplies partial coverage. The renderer
 multiplies the layer's premultiplied channels and alpha by mask luminance,
@@ -236,7 +264,7 @@ to an existing mask's operation sequence. Mask strokes in transformed groups
 are mapped back into the child's coordinates. Creating, removing, toggling,
 and painting a mask are undoable document edits. Mask editing target selection
 is temporary UI state and is not persisted. Versions 1–9 load without masks;
-saving upgrades the document payload to v15. A mask in an older envelope is rejected.
+saving upgrades the document payload to v16. A mask in an older envelope is rejected.
 Recovery, full export, Quick Export, and linked PNG publication include masks.
 
 ## Layer stack
@@ -317,7 +345,7 @@ group to preserve the one-level rule.
 
 The top-level `operations` array preserves the ordered, non-destructive edits
 from versions 1–3 and renders them as part of `Background`. This keeps old
-documents visually unchanged when they are opened and later saved as version 15.
+documents visually unchanged when they are opened and later saved as version 16.
 New edits are stored in the selected raster layer's `operations` array.
 
 Each layer operation is evaluated on the current fixed document canvas. Crop
@@ -415,8 +443,8 @@ Version 1 uses the legacy `source` object. Version 2 adds canvas bases. Version
 layer-local eraser strokes. Version 6 adds editable shapes to layer operations.
 Version 7 adds IDs to paint and eraser operations. When reading versions 1–6,
 the loader generates in-memory IDs for operations that do not contain them;
-the next save writes those IDs in version 15. Versions 1 through 14 remain
-visually compatible. Saving any supported version writes version 15. New text
+the next save writes those IDs in version 16. Versions 1 through 15 remain
+visually compatible. Saving any supported version writes version 16. New text
 layers are named `Text N` and inserted using the same stack placement rule as
 shape layers; they can be grouped, hidden, assigned opacity, selected, moved,
 resized by changing their box width, and deleted as editable operations.
@@ -444,7 +472,7 @@ showing the options dialog.
 Recovery snapshots use a separate `creative-suite-image-recovery` JSON wrapper
 with the document payload, intended `.cimg` destination, and a session identity
 for unsaved canvases. Recovery wrapper version 1 accepts document payloads in
-versions 1 through 14. Autosave and recovery preserve root order, group
+versions 1 through 16. Autosave and recovery preserve root order, group
 children, properties, IDs, and operations.
 
 Unsupported versions, invalid layer stacks, and invalid operation data are

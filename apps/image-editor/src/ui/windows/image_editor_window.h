@@ -123,6 +123,8 @@ private:
     void handleLinearGradient(const QPointF& start, const QPointF& end,
                               const QColor& color,
                               std::optional<QPainterPath> clipping_path = {});
+    void handleBlurStroke(const QVector<QPointF>& points, int diameter, int radius,
+                          std::optional<QPainterPath> clipping_path = {});
     void updateCanvasToolState(ToolSidebar::Tool tool, bool preserveSelection = false);
     void updateCanvasBrush();
     void updateShapeOptions();
@@ -219,6 +221,8 @@ private:
     bool shape_colors_initialized_ = false;
     int paint_diameter_ = 12;
     int eraser_diameter_ = 12;
+    int blur_diameter_ = 12;
+    int blur_radius_ = 10;
     int area_selection_shape_ = 0;
     int area_selection_mode_ = 0;
     creative_suite::shortcuts::ShortcutManager shortcut_manager_{

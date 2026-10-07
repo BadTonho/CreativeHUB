@@ -203,6 +203,35 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     addAction(bucket_fill_options_action_);
     bucket_fill_options_action_->setVisible(false);
 
+    blur_options_widget_ = new QWidget(this);
+    blur_options_widget_->setObjectName(QStringLiteral("blurOptionsWidget"));
+    auto* blur_layout = new QHBoxLayout(blur_options_widget_);
+    blur_layout->setContentsMargins(8, 3, 8, 3);
+    blur_layout->setSpacing(7);
+    blur_layout->addWidget(new QLabel(QStringLiteral("Brush Size"), blur_options_widget_));
+    blur_diameter_spin_ = new QSpinBox(blur_options_widget_);
+    blur_diameter_spin_->setObjectName(QStringLiteral("blurBrushSizeSpinBox"));
+    blur_diameter_spin_->setAccessibleName(QStringLiteral("Blur brush size in pixels"));
+    blur_diameter_spin_->setRange(1, ImageDocumentStore::kMaximumPaintBrushDiameter);
+    blur_diameter_spin_->setValue(12);
+    blur_diameter_spin_->setSuffix(QStringLiteral(" px"));
+    blur_diameter_spin_->setFixedWidth(96);
+    blur_layout->addWidget(blur_diameter_spin_);
+    blur_layout->addWidget(new QLabel(QStringLiteral("Radius"), blur_options_widget_));
+    blur_radius_spin_ = new QSpinBox(blur_options_widget_);
+    blur_radius_spin_->setObjectName(QStringLiteral("blurRadiusSpinBox"));
+    blur_radius_spin_->setAccessibleName(QStringLiteral("Blur radius in pixels"));
+    blur_radius_spin_->setRange(0, ImageDocumentStore::kMaximumBlurRadius);
+    blur_radius_spin_->setValue(10);
+    blur_radius_spin_->setSuffix(QStringLiteral(" px"));
+    blur_radius_spin_->setFixedWidth(88);
+    blur_layout->addWidget(blur_radius_spin_);
+    blur_options_action_ = new QWidgetAction(this);
+    blur_options_action_->setObjectName(QStringLiteral("blurOptionsAction"));
+    blur_options_action_->setDefaultWidget(blur_options_widget_);
+    addAction(blur_options_action_);
+    blur_options_action_->setVisible(false);
+
     connect(brush_size_slider_, &QSlider::valueChanged,
             brush_size_spin_, &QSpinBox::setValue);
     connect(brush_size_spin_, qOverload<int>(&QSpinBox::valueChanged),
@@ -244,6 +273,10 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
             this, &ImageToolOptionsBar::deleteSelectedObjectsRequested);
     connect(bucket_fill_tolerance_spin_, qOverload<int>(&QSpinBox::valueChanged),
             this, &ImageToolOptionsBar::bucketFillToleranceChanged);
+    connect(blur_diameter_spin_, qOverload<int>(&QSpinBox::valueChanged),
+            this, &ImageToolOptionsBar::blurDiameterChanged);
+    connect(blur_radius_spin_, qOverload<int>(&QSpinBox::valueChanged),
+            this, &ImageToolOptionsBar::blurRadiusChanged);
 }
 
 void ImageToolOptionsBar::setBrushOptionsState(bool visible, int diameter,
@@ -357,6 +390,17 @@ void ImageToolOptionsBar::setBucketFillOptionsState(bool visible, int tolerance)
     bucket_fill_tolerance_spin_->setValue(std::clamp(tolerance, 0, 255));
 }
 
+void ImageToolOptionsBar::setBlurOptionsState(bool visible, int diameter, int radius) {
+    blur_options_action_->setVisible(visible);
+    blur_options_widget_->setVisible(visible);
+    const QSignalBlocker diameter_blocker(blur_diameter_spin_);
+    const QSignalBlocker radius_blocker(blur_radius_spin_);
+    blur_diameter_spin_->setValue(std::clamp(
+        diameter, 1, ImageDocumentStore::kMaximumPaintBrushDiameter));
+    blur_radius_spin_->setValue(std::clamp(
+        radius, 0, ImageDocumentStore::kMaximumBlurRadius));
+}
+
 void ImageToolOptionsBar::hideAllOptions() {
     setBrushOptionsState(false, brush_size_spin_->value(), false, false,
                          eraser_preview_check_->isChecked());
@@ -367,6 +411,7 @@ void ImageToolOptionsBar::hideAllOptions() {
     setSelectionOptionsVisible(false);
     setAreaSelectionOptionsState(false, 0, 0);
     setBucketFillOptionsState(false, bucket_fill_tolerance_spin_->value());
+    setBlurOptionsState(false, blur_diameter_spin_->value(), blur_radius_spin_->value());
 }
 
 } // namespace image_editor

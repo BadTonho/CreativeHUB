@@ -2,6 +2,7 @@
 
 #include "image_document_store.h"
 #include "../tools/bucket_fill/bucket_fill_tool.h"
+#include "../tools/blur/blur_tool.h"
 #include "../tools/gradient/linear_gradient_tool.h"
 #include "../tools/brush/eraser_tool.h"
 #include "../tools/brush/paint_tool.h"
@@ -53,6 +54,8 @@ public:
     void setBucketFillMode(bool enabled);
     void setBucketFillTolerance(int tolerance);
     void setLinearGradientMode(bool enabled);
+    void setBlurMode(bool enabled);
+    void setBlurOptions(int diameter, int radius);
     void setAreaSelectionOptions(AreaSelectionShape shape,
                                  AreaSelectionCombineMode combine_mode);
     void clearAreaSelection();
@@ -80,6 +83,7 @@ public:
     [[nodiscard]] bool eraserMode() const noexcept { return eraser_mode_; }
     [[nodiscard]] bool eyedropperMode() const noexcept { return eyedropper_mode_; }
     [[nodiscard]] bool linearGradientMode() const noexcept { return linear_gradient_mode_; }
+    [[nodiscard]] bool blurMode() const noexcept { return blur_mode_; }
     [[nodiscard]] double zoomFactor() const noexcept { return zoom_; }
 
 signals:
@@ -104,6 +108,11 @@ signals:
                                  const QPointF& end,
                                  const QColor& color);
     void linearGradientPreviewCleared();
+    void blurPreviewRequested(const QVector<QPointF>& image_points,
+                              int diameter, int radius);
+    void blurStrokeSelected(const QVector<QPointF>& image_points,
+                            int diameter, int radius);
+    void blurPreviewCleared();
     void shapeCreated(const image_editor::ImageShapeData& shape);
     void textCommitted(const image_editor::ImageTextData& text, bool existing);
     void textEditingStarted(const image_editor::ImageTextData& text, bool existing);
@@ -139,6 +148,7 @@ private:
     void dispatchBrushToolEvents(const QVector<BrushToolEvent>& events);
     void updateBrushToolCursor(const QPointF& position);
     void resetBrushTools(bool clear_preview_notification);
+    void resetBlurTool(bool clear_preview_notification);
     [[nodiscard]] ObjectSelectionToolContext objectSelectionToolContext(
         const QPointF& position, Qt::KeyboardModifiers modifiers) const;
     void dispatchObjectSelectionToolEvents(
@@ -167,6 +177,7 @@ private:
     bool eyedropper_mode_ = false;
     bool bucket_fill_mode_ = false;
     bool linear_gradient_mode_ = false;
+    bool blur_mode_ = false;
     bool resizing_brush_ = false;
     bool shift_constrain_held_ = false;
     bool panning_ = false;
@@ -181,6 +192,7 @@ private:
     EyedropperTool eyedropper_tool_;
     BucketFillTool bucket_fill_tool_;
     LinearGradientTool linear_gradient_tool_;
+    BlurTool blur_tool_;
     AreaSelectionTool area_selection_tool_;
     ObjectSelectionTool object_selection_tool_;
     ShapeTool shape_tool_;
@@ -188,6 +200,7 @@ private:
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;
     int bucket_fill_tolerance_ = 0;
+    int blur_radius_ = 10;
 };
 
 } // namespace image_editor

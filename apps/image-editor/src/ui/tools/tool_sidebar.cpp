@@ -66,6 +66,23 @@ QIcon eraserToolIcon() {
     return QIcon(icon);
 }
 
+QIcon blurToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(229, 238, 246), 2.0, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.drawEllipse(QRectF(5.0, 7.0, 14.0, 14.0));
+    painter.setPen(QPen(QColor(98, 188, 225), 2.0, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.drawLine(QPointF(20.0, 11.0), QPointF(27.0, 11.0));
+    painter.drawLine(QPointF(20.0, 16.0), QPointF(25.0, 16.0));
+    painter.drawLine(QPointF(17.0, 23.0), QPointF(24.0, 23.0));
+    painter.end();
+    return QIcon(icon);
+}
+
 QIcon bucketFillToolIcon() {
     QPixmap icon(32, 32);
     icon.fill(Qt::transparent);
@@ -250,6 +267,17 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     eraser_button_->setFixedSize(40, 40);
     layout->addWidget(eraser_button_, 0, Qt::AlignHCenter);
 
+    blur_button_ = new QToolButton(this);
+    blur_button_->setObjectName(QStringLiteral("blurToolButton"));
+    blur_button_->setToolTip(QStringLiteral("Blur"));
+    blur_button_->setAccessibleName(QStringLiteral("Blur tool"));
+    blur_button_->setIcon(blurToolIcon());
+    blur_button_->setIconSize(QSize(24, 24));
+    blur_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    blur_button_->setCheckable(true);
+    blur_button_->setFixedSize(40, 40);
+    layout->addWidget(blur_button_, 0, Qt::AlignHCenter);
+
     shapes_button_ = new QToolButton(this);
     shapes_button_->setObjectName(QStringLiteral("shapesToolButton"));
     shapes_button_->setToolTip(QStringLiteral("Shapes"));
@@ -332,6 +360,10 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         if (active) setActiveTool(Tool::Eraser);
         else if (active_tool_ == Tool::Eraser) setActiveTool(Tool::None);
     });
+    connect(blur_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::Blur);
+        else if (active_tool_ == Tool::Blur) setActiveTool(Tool::None);
+    });
     connect(shapes_button_, &QToolButton::clicked, this, [this]() {
         const QSignalBlocker blocker(shapes_button_);
         shapes_button_->setChecked(active_tool_ == Tool::Shapes);
@@ -372,7 +404,7 @@ void ToolSidebar::setDocumentAvailable(bool available) {
         (!painting_allowed_ &&
          (active_tool_ == Tool::Paint || active_tool_ == Tool::BucketFill ||
           active_tool_ == Tool::LinearGradient ||
-          active_tool_ == Tool::Eraser))) {
+          active_tool_ == Tool::Eraser || active_tool_ == Tool::Blur))) {
         setActiveTool(Tool::None);
     }
     updateControls();
@@ -383,7 +415,7 @@ void ToolSidebar::setPaintingAllowed(bool allowed) {
     if (!painting_allowed_ &&
         (active_tool_ == Tool::Paint || active_tool_ == Tool::BucketFill ||
          active_tool_ == Tool::LinearGradient ||
-         active_tool_ == Tool::Eraser)) {
+         active_tool_ == Tool::Eraser || active_tool_ == Tool::Blur)) {
         setActiveTool(Tool::None);
     }
     updateControls();
@@ -407,6 +439,11 @@ void ToolSidebar::setLinearGradientToolActive(bool active) {
 void ToolSidebar::setEraserToolActive(bool active) {
     setActiveTool(active ? Tool::Eraser :
         (active_tool_ == Tool::Eraser ? Tool::None : active_tool_));
+}
+
+void ToolSidebar::setBlurToolActive(bool active) {
+    setActiveTool(active ? Tool::Blur :
+        (active_tool_ == Tool::Blur ? Tool::None : active_tool_));
 }
 
 void ToolSidebar::setShapesToolActive(bool active) {
@@ -437,7 +474,7 @@ void ToolSidebar::setTextToolActive(bool active) {
 void ToolSidebar::setActiveTool(Tool tool) {
     const bool requires_editable_layer = tool == Tool::Paint ||
         tool == Tool::BucketFill || tool == Tool::LinearGradient ||
-        tool == Tool::Eraser;
+        tool == Tool::Eraser || tool == Tool::Blur;
     if (!document_available_ || (requires_editable_layer && !painting_allowed_)) {
         tool = Tool::None;
     }
@@ -448,6 +485,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
         const QSignalBlocker bucket_fill_blocker(bucket_fill_button_);
         const QSignalBlocker linear_gradient_blocker(linear_gradient_button_);
         const QSignalBlocker eraser_blocker(eraser_button_);
+        const QSignalBlocker blur_blocker(blur_button_);
         const QSignalBlocker shapes_blocker(shapes_button_);
         const QSignalBlocker text_blocker(text_button_);
         const QSignalBlocker select_shapes_blocker(select_shapes_button_);
@@ -457,6 +495,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
         bucket_fill_button_->setChecked(tool == Tool::BucketFill);
         linear_gradient_button_->setChecked(tool == Tool::LinearGradient);
         eraser_button_->setChecked(tool == Tool::Eraser);
+        blur_button_->setChecked(tool == Tool::Blur);
         shapes_button_->setChecked(tool == Tool::Shapes);
         text_button_->setChecked(tool == Tool::Text);
         select_shapes_button_->setChecked(tool == Tool::Select);
@@ -481,6 +520,10 @@ bool ToolSidebar::linearGradientToolActive() const noexcept {
 
 bool ToolSidebar::eraserToolActive() const noexcept {
     return active_tool_ == Tool::Eraser;
+}
+
+bool ToolSidebar::blurToolActive() const noexcept {
+    return active_tool_ == Tool::Blur;
 }
 
 bool ToolSidebar::shapesToolActive() const noexcept {
@@ -520,6 +563,7 @@ void ToolSidebar::updateControls() {
     bucket_fill_button_->setEnabled(editable_layer_available);
     linear_gradient_button_->setEnabled(editable_layer_available);
     eraser_button_->setEnabled(editable_layer_available);
+    blur_button_->setEnabled(editable_layer_available);
     shapes_button_->setEnabled(document_available_);
     text_button_->setEnabled(document_available_);
     select_shapes_button_->setEnabled(document_available_);
@@ -545,6 +589,11 @@ void ToolSidebar::updateControls() {
         : (document_available_
             ? QStringLiteral("Select or create an editable layer to erase")
             : QStringLiteral("Open an image to erase")));
+    blur_button_->setToolTip(editable_layer_available
+        ? QStringLiteral("Blur")
+        : (document_available_
+            ? QStringLiteral("Select or create an editable layer to blur")
+            : QStringLiteral("Open an image to use Blur")));
     select_shapes_button_->setToolTip(document_available_
         ? QStringLiteral("Selection")
         : QStringLiteral("Open an image to use Selection"));

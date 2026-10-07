@@ -1,5 +1,6 @@
 #include "image_document_session.h"
 #include "rendering/image_bucket_fill.h"
+#include "rendering/image_blur_stroke.h"
 #include "rendering/image_linear_gradient.h"
 #include "../diagnostics/image_editor_performance_metrics.h"
 #include "rendering/image_document_geometry.h"
@@ -505,6 +506,13 @@ bool ImageDocumentSession::resizeCanvas(const QSize& size,
                 if (operation.linear_gradient.clipping_path.has_value()) {
                     operation.linear_gradient.clipping_path =
                         operation.linear_gradient.clipping_path->translated(delta);
+                }
+            } else if (operation.kind == OperationKind::BlurStroke) {
+                for (auto& point : operation.blur_stroke.points)
+                    if (!shift_point(&point)) return false;
+                if (operation.blur_stroke.clipping_path.has_value()) {
+                    operation.blur_stroke.clipping_path =
+                        operation.blur_stroke.clipping_path->translated(delta);
                 }
             } else if (operation.kind == OperationKind::Shape) {
                 if (!shift_point(&operation.shape.start) || !shift_point(&operation.shape.end))
@@ -1178,6 +1186,123 @@ bool ImageDocumentSession::applyLinearGradient(
             &target, operation->linear_gradient, &changed, error)) {
         if (error != nullptr && error->isEmpty()) {
             assignError(error, QStringLiteral("The selected layer could not be rendered for the gradient."));
+        }
+        return false;
+    }
+    if (!changed) return false;
+
+    pushEdit();
+    const qsizetype index = layerIndex(selected_layer_id_);
+    auto& operations = mask_target
+        ? data_.layers[index].mask->operations
+        : data_.layers[index].operations;
+    operations.append(std::move(*operation));
+    layer_raster_cache_.invalidateLayer(selected_layer_id_);
+    return true;
+}
+
+std::optional<ImageOperation> ImageDocumentSession::prepareBlurStrokeOperation(
+    const QVector<QPointF>& points, int diameter, int radius,
+    std::optional<QPainterPath> clipping_path, bool mask_target,
+    QString* error) const {
+    if (error != nullptr) error->clear();
+    if (!hasSource() || !selectedLayerIsEditable()) {
+        assignError(error, QStringLiteral("Select an editable layer before applying blur."));
+        return std::nullopt;
+    }
+    if (points.isEmpty() ||
+        points.size() > ImageDocumentStore::kMaximumPaintStrokePoints) {
+        assignError(error, QStringLiteral("The blur stroke has an invalid number of points."));
+        return std::nullopt;
+    }
+    if (diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter ||
+        radius < 0 || radius > ImageDocumentStore::kMaximumBlurRadius) {
+        assignError(error, QStringLiteral("The blur brush size or radius is out of range."));
+        return std::nullopt;
+    }
+    const qsizetype index = layerIndex(selected_layer_id_);
+    if (index < 0 || (mask_target && !data_.layers.at(index).mask.has_value())) {
+        assignError(error, QStringLiteral("Select an editable layer or layer mask before applying blur."));
+        return std::nullopt;
+    }
+    if (clipping_path.has_value() &&
+        !ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) {
+        assignError(error, QStringLiteral("The blur selection has invalid or excessive geometry."));
+        return std::nullopt;
+    }
+
+    const QSize size = renderedSize();
+    for (const QPointF& point : points) {
+        if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
+            point.x() < 0.0 || point.y() < 0.0 ||
+            point.x() >= size.width() || point.y() >= size.height()) {
+            assignError(error, QStringLiteral("The blur stroke contains a point outside the image."));
+            return std::nullopt;
+        }
+    }
+
+    QVector<QPointF> local_points = points;
+    const auto* layer = &data_.layers.at(index);
+    const auto* parent = findGroup(data_, layer->parent_group_id);
+    ImageDocumentGeometry::mapStrokeGeometryThroughGroup(
+        &local_points, &clipping_path, parent, size);
+    for (const QPointF& point : local_points) {
+        if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
+            std::abs(point.x()) > 1'000'000.0 || std::abs(point.y()) > 1'000'000.0) {
+            assignError(error, QStringLiteral("The blur stroke exceeds the supported local coordinate range."));
+            return std::nullopt;
+        }
+    }
+    if (clipping_path.has_value()) {
+        clipping_path = clipping_path->intersected(ImageDocumentGeometry::imageBoundsPath(size));
+        if (!ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) {
+            assignError(error, QStringLiteral("The blur selection could not be clipped to the canvas."));
+            return std::nullopt;
+        }
+    }
+
+    ImageOperation operation;
+    operation.kind = OperationKind::BlurStroke;
+    operation.blur_stroke.points = std::move(local_points);
+    operation.blur_stroke.diameter = diameter;
+    operation.blur_stroke.radius = radius;
+    operation.blur_stroke.clipping_path = std::move(clipping_path);
+    return operation;
+}
+
+QImage ImageDocumentSession::renderedImageWithBlurStroke(
+    const QVector<QPointF>& points, int diameter, int radius,
+    std::optional<QPainterPath> clipping_path, bool mask_target) const {
+    auto operation = prepareBlurStrokeOperation(
+        points, diameter, radius, std::move(clipping_path), mask_target, nullptr);
+    if (!operation.has_value()) return renderedImage();
+    ImageDocumentData preview_document = data_;
+    auto* layer = findLayer(preview_document, selected_layer_id_);
+    if (layer == nullptr) return renderedImage();
+    if (mask_target) {
+        if (!layer->mask.has_value()) return renderedImage();
+        layer->mask->operations.append(std::move(*operation));
+    } else {
+        layer->operations.append(std::move(*operation));
+    }
+    return ImageDocumentRenderer::composite(preview_document, source_image_, raster_images_);
+}
+
+bool ImageDocumentSession::applyBlurStroke(
+    const QVector<QPointF>& points, int diameter, int radius, QString* error,
+    std::optional<QPainterPath> clipping_path, bool mask_target) {
+    if (error != nullptr) error->clear();
+    auto operation = prepareBlurStrokeOperation(
+        points, diameter, radius, std::move(clipping_path), mask_target, error);
+    if (!operation.has_value() || radius == 0) return false;
+
+    QImage target = ImageDocumentRenderer::editableLayerTarget(
+        data_, source_image_, raster_images_, selected_layer_id_, mask_target);
+    bool changed = false;
+    if (target.isNull() || !ImageBlurStrokeRenderer::apply(
+            &target, operation->blur_stroke, &changed, error)) {
+        if (error != nullptr && error->isEmpty()) {
+            assignError(error, QStringLiteral("The selected layer could not be rendered for blur."));
         }
         return false;
     }

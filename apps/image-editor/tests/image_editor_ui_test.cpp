@@ -3123,6 +3123,106 @@ bool testLinearGradientTool() {
         outside_ignored && zero_length_ignored;
 }
 
+bool testBlurTool() {
+    image_editor::ToolSidebar sidebar;
+    auto* button = sidebar.findChild<QToolButton*>(QStringLiteral("blurToolButton"));
+    if (button == nullptr || button->isEnabled()) {
+        std::cerr << "Blur should be disabled without an editable layer.\n";
+        return false;
+    }
+
+    image_editor::ImageCanvas canvas;
+    canvas.resize(400, 300);
+    QImage pixels(16, 16, QImage::Format_ARGB32_Premultiplied);
+    pixels.fill(Qt::transparent);
+    canvas.setImage(pixels);
+    QObject::connect(&sidebar, &image_editor::ToolSidebar::activeToolChanged,
+        &canvas, [&canvas](image_editor::ToolSidebar::Tool tool) {
+            canvas.setBlurMode(tool == image_editor::ToolSidebar::Tool::Blur);
+        });
+    sidebar.setDocumentAvailable(true);
+    sidebar.setPaintingAllowed(true);
+
+    image_editor::ImageToolOptionsBar options;
+    auto* diameter = options.findChild<QSpinBox*>(QStringLiteral("blurBrushSizeSpinBox"));
+    auto* radius = options.findChild<QSpinBox*>(QStringLiteral("blurRadiusSpinBox"));
+    if (diameter == nullptr || radius == nullptr || diameter->value() != 12 ||
+        radius->value() != 10) {
+        std::cerr << "Blur controls must start at 12 px and 10 px.\n";
+        return false;
+    }
+    QSignalSpy diameter_changed(&options,
+        &image_editor::ImageToolOptionsBar::blurDiameterChanged);
+    QSignalSpy radius_changed(&options,
+        &image_editor::ImageToolOptionsBar::blurRadiusChanged);
+    QObject::connect(&options, &image_editor::ImageToolOptionsBar::blurDiameterChanged,
+        &canvas, [&canvas, radius](int size) {
+            canvas.setBlurOptions(size, radius->value());
+        });
+    QObject::connect(&options, &image_editor::ImageToolOptionsBar::blurRadiusChanged,
+        &canvas, [&canvas, diameter](int value) {
+            canvas.setBlurOptions(diameter->value(), value);
+        });
+    options.setBlurOptionsState(true, 12, 10);
+    diameter->setValue(18);
+    radius->setValue(6);
+    if (diameter_changed.size() != 1 || radius_changed.size() != 1 ||
+        diameter_changed.front().front().toInt() != 18 ||
+        radius_changed.front().front().toInt() != 6) {
+        std::cerr << "Blur size and radius controls did not report their values.\n";
+        return false;
+    }
+
+    canvas.show();
+    QCoreApplication::processEvents();
+    QSignalSpy previews(&canvas, &image_editor::ImageCanvas::blurPreviewRequested);
+    QSignalSpy strokes(&canvas, &image_editor::ImageCanvas::blurStrokeSelected);
+    QSignalSpy cleared(&canvas, &image_editor::ImageCanvas::blurPreviewCleared);
+    button->click();
+    const QPoint start = canvas.rect().center();
+    const QPoint end(start.x() + 40, start.y() + 15);
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseMove(&canvas, end, 1);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
+    QCoreApplication::processEvents();
+    const bool activated = sidebar.blurToolActive() && canvas.blurMode();
+    const bool previewed = previews.size() >= 2 &&
+        previews.back().at(0).value<QVector<QPointF>>().size() >= 2 &&
+        previews.back().at(1).toInt() == 18 && previews.back().at(2).toInt() == 6;
+    const bool committed = strokes.size() == 1 &&
+        strokes.front().at(0).value<QVector<QPointF>>().size() >= 2 &&
+        strokes.front().at(1).toInt() == 18 && strokes.front().at(2).toInt() == 6;
+    const bool preview_cleared = cleared.size() == 1;
+
+    const qreal target_left =
+        (canvas.width() - pixels.width() * canvas.zoomFactor()) / 2.0;
+    const qreal target_top =
+        (canvas.height() - pixels.height() * canvas.zoomFactor()) / 2.0;
+    const QPoint outside(static_cast<int>(std::floor(target_left / 2.0)),
+                         static_cast<int>(std::floor(target_top / 2.0)));
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, outside);
+    QTest::mouseMove(&canvas, start, 1);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    const bool outside_ignored = strokes.size() == 1;
+
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseMove(&canvas, end, 1);
+    QTest::keyClick(&canvas, Qt::Key_Escape);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
+    QCoreApplication::processEvents();
+    const bool escape_cancelled = strokes.size() == 1 && cleared.size() == 2;
+    if (!activated || !previewed || !committed || !preview_cleared ||
+        !outside_ignored || !escape_cancelled) {
+        std::cerr << "Blur UI failed: active=" << activated
+                  << ", preview=" << previewed << ", commit=" << committed
+                  << ", cleared=" << preview_cleared
+                  << ", outside=" << outside_ignored
+                  << ", escape=" << escape_cancelled << '\n';
+    }
+    return activated && previewed && committed && preview_cleared &&
+        outside_ignored && escape_cancelled;
+}
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -3150,6 +3250,10 @@ int main(int argc, char* argv[]) {
     if (application.arguments().contains(QStringLiteral("--gradient-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testLinearGradientTool() ? 0 : 1;
+    }
+    if (application.arguments().contains(QStringLiteral("--blur-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testBlurTool() ? 0 : 1;
     }
 
     {
@@ -3286,6 +3390,7 @@ int main(int argc, char* argv[]) {
     if (!testEyedropperTool()) return 1;
     if (!testBucketFillTool()) return 1;
     if (!testLinearGradientTool()) return 1;
+    if (!testBlurTool()) return 1;
     if (!testWindowTeardownWithFocusedTextEditor(temporary.path())) return 1;
     if (!testDeletionUi(temporary.path())) return 1;
     if (!testRasterImagesUi(temporary.path())) return 1;

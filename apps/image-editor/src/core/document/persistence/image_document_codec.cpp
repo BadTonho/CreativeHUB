@@ -33,6 +33,7 @@ constexpr int kCanvasSizeDocumentVersion = 12;
 constexpr int kStrokeClipDocumentVersion = 13;
 constexpr int kBucketFillDocumentVersion = 14;
 constexpr int kLinearGradientDocumentVersion = 15;
+constexpr int kBlurStrokeDocumentVersion = 16;
 constexpr int kDocumentVersion = ImageDocumentStore::kCurrentDocumentVersion;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr int kMaximumStoredCoordinate = 1'000'000;
@@ -303,6 +304,25 @@ QJsonObject encodeOperation(const ImageOperation& operation, const QString& docu
         if (gradient.clipping_path.has_value()) {
             encoded.insert("clip_path", encodeClipPath(*gradient.clipping_path));
             encoded.insert("clip_rule", static_cast<int>(gradient.clipping_path->fillRule()));
+        }
+        break;
+    }
+    case OperationKind::BlurStroke: {
+        const auto& blur = operation.blur_stroke;
+        encoded.insert("kind", "blur_stroke");
+        encoded.insert("diameter", blur.diameter);
+        encoded.insert("radius", blur.radius);
+        QJsonArray points;
+        for (const auto& point : blur.points) {
+            QJsonObject encoded_point;
+            encoded_point.insert("x", point.x());
+            encoded_point.insert("y", point.y());
+            points.append(encoded_point);
+        }
+        encoded.insert("points", points);
+        if (blur.clipping_path.has_value()) {
+            encoded.insert("clip_path", encodeClipPath(*blur.clipping_path));
+            encoded.insert("clip_rule", static_cast<int>(blur.clipping_path->fillRule()));
         }
         break;
     }
@@ -595,6 +615,48 @@ bool decodeOperations(const QJsonValue& value,
             operation.linear_gradient.start = QPointF(start_x.toDouble(), start_y.toDouble());
             operation.linear_gradient.end = QPointF(end_x.toDouble(), end_y.toDouble());
             operation.linear_gradient.color = color;
+        } else if (kind == "blur_stroke" &&
+                   version >= kBlurStrokeDocumentVersion && fixed_canvas) {
+            const auto encoded_points = object.value("points").toArray();
+            int diameter = 0;
+            int radius = -1;
+            if (encoded_points.isEmpty() ||
+                encoded_points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
+                !isInteger(object.value("diameter"), &diameter) || diameter < 1 ||
+                diameter > ImageDocumentStore::kMaximumPaintBrushDiameter ||
+                !isInteger(object.value("radius"), &radius) || radius < 0 ||
+                radius > ImageDocumentStore::kMaximumBlurRadius ||
+                !decodeStrokeClip(object, version,
+                                  &operation.blur_stroke.clipping_path)) {
+                assignError(error, QStringLiteral("The document contains an invalid blur stroke."));
+                return false;
+            }
+            operation.kind = OperationKind::BlurStroke;
+            operation.blur_stroke.diameter = diameter;
+            operation.blur_stroke.radius = radius;
+            operation.blur_stroke.points.reserve(encoded_points.size());
+            for (const auto& encoded_point_value : encoded_points) {
+                if (!encoded_point_value.isObject()) {
+                    assignError(error, QStringLiteral("The document contains an invalid blur stroke point."));
+                    return false;
+                }
+                const auto encoded_point = encoded_point_value.toObject();
+                const auto x_value = encoded_point.value("x");
+                const auto y_value = encoded_point.value("y");
+                if (!x_value.isDouble() || !y_value.isDouble()) {
+                    assignError(error, QStringLiteral("The document contains an invalid blur stroke point."));
+                    return false;
+                }
+                const double x = x_value.toDouble();
+                const double y = y_value.toDouble();
+                if (!std::isfinite(x) || !std::isfinite(y) ||
+                    std::abs(x) > kMaximumStoredCoordinate ||
+                    std::abs(y) > kMaximumStoredCoordinate) {
+                    assignError(error, QStringLiteral("The document contains an out-of-bounds blur stroke point."));
+                    return false;
+                }
+                operation.blur_stroke.points.append(QPointF(x, y));
+            }
         } else if (kind == "shape" && version >= kShapeDocumentVersion && fixed_canvas) {
             const QString id = object.value("id").toString();
             const QString shape_type = object.value("shape_type").toString();

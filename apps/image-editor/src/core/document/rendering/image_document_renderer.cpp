@@ -1,5 +1,6 @@
 #include "rendering/image_document_renderer.h"
 #include "rendering/image_bucket_fill.h"
+#include "rendering/image_blur_stroke.h"
 #include "rendering/image_linear_gradient.h"
 #include "image_document_utils.h"
 #include "../diagnostics/image_editor_performance_metrics.h"
@@ -26,6 +27,7 @@ ImageEditorPerformanceStage operationPerformanceStage(OperationKind kind) noexce
     case OperationKind::EraseStroke: return ImageEditorPerformanceStage::EraseStroke;
     case OperationKind::BucketFill: return ImageEditorPerformanceStage::PaintStroke;
     case OperationKind::LinearGradient: return ImageEditorPerformanceStage::LinearGradient;
+    case OperationKind::BlurStroke: return ImageEditorPerformanceStage::OperationReplay;
     case OperationKind::Shape: return ImageEditorPerformanceStage::Shape;
     case OperationKind::Text: return ImageEditorPerformanceStage::Text;
     case OperationKind::RasterImage: return ImageEditorPerformanceStage::RasterImage;
@@ -250,6 +252,12 @@ QImage applyOperations(QImage image,
         case OperationKind::LinearGradient: {
             bool changed = false;
             if (!ImageLinearGradient::apply(&image, operation.linear_gradient, &changed)) return {};
+            break;
+        }
+        case OperationKind::BlurStroke: {
+            bool changed = false;
+            if (!ImageBlurStrokeRenderer::apply(
+                    &image, operation.blur_stroke, &changed)) return {};
             break;
         }
         case OperationKind::Shape:
@@ -663,6 +671,22 @@ QImage renderLayerThumbnail(const QHash<QString, QImage>& resources,
                     scale_x, scale_y).map(*operation.linear_gradient.clipping_path);
             }
             break;
+        case OperationKind::BlurStroke: {
+            for (auto& point : scaled_operation.blur_stroke.points) {
+                point.setX(point.x() * scale_x);
+                point.setY(point.y() * scale_y);
+            }
+            const qreal scale = std::min(scale_x, scale_y);
+            scaled_operation.blur_stroke.diameter = std::max(
+                1, qRound(operation.blur_stroke.diameter * scale));
+            scaled_operation.blur_stroke.radius = qRound(
+                operation.blur_stroke.radius * scale);
+            if (operation.blur_stroke.clipping_path.has_value()) {
+                scaled_operation.blur_stroke.clipping_path = QTransform::fromScale(
+                    scale_x, scale_y).map(*operation.blur_stroke.clipping_path);
+            }
+            break;
+        }
         case OperationKind::EraseStroke: {
             for (auto& point : scaled_operation.erase_stroke.points) {
                 point.setX(point.x() * scale_x);

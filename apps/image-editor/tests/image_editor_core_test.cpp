@@ -372,9 +372,9 @@ void testCanvasCreationPersistenceAndRecovery(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The saved canvas document could not be read."));
     const auto document_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(document_json.value("version").toInt() == 15 &&
+    require(document_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion &&
                 document_json.value("base").toObject().value("kind").toString() == "canvas",
-            QStringLiteral("Canvas save did not use the version 15 grouped-layer and canvas representation."));
+            QStringLiteral("Canvas save did not use the current grouped-layer and canvas representation."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -569,15 +569,15 @@ void testCanvasResizingAnchorsPersistenceAndHistory(const QString& root) {
     require(resized_file.open(QIODevice::ReadOnly),
             QStringLiteral("The resized document could not be read."));
     const auto resized_json = QJsonDocument::fromJson(resized_file.readAll()).object();
-    require(resized_json.value("version").toInt() == 15 &&
+    require(resized_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion &&
                 resized_json.value("canvas").toObject().value("width").toInt() == 10 &&
                 resized_json.value("base").toObject().value("width").toInt() == 4,
-            QStringLiteral("The v15 document did not distinguish the resized canvas from its source."));
+            QStringLiteral("The current document did not distinguish the resized canvas from its source."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(resized_document, &error), error);
     require(reopened.data() == structured.data() &&
                 reopened.renderedImage() == structured.renderedImage(),
-            QStringLiteral("A resized v15 document did not preserve its editable rendering."));
+            QStringLiteral("A resized current-version document did not preserve its editable rendering."));
     const QString exported = root + QStringLiteral("/resized-export.png");
     require(reopened.exportImage(exported, &error), error);
     require(QImage(exported).size() == QSize(10, 8),
@@ -587,7 +587,7 @@ void testCanvasResizingAnchorsPersistenceAndHistory(const QString& root) {
     image_editor::ImageDocumentSession old_session;
     require(old_session.openImage(source_path, &error) && old_session.saveDocument(old_format, &error), error);
     QFile old_file(old_format);
-    require(old_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v15 compatibility fixture."));
+    require(old_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the current-version compatibility fixture."));
     QJsonObject old_json = QJsonDocument::fromJson(old_file.readAll()).object();
     old_file.close();
     old_json.insert("version", 11);
@@ -604,14 +604,14 @@ void testCanvasResizingAnchorsPersistenceAndHistory(const QString& root) {
     require(migrated.saveDocument({}, &error), error);
     QFile migrated_file(old_format);
     require(migrated_file.open(QIODevice::ReadOnly) &&
-                QJsonDocument::fromJson(migrated_file.readAll()).object().value("version").toInt() == 15,
-            QStringLiteral("Saving a v11 document did not migrate it to v15."));
+                QJsonDocument::fromJson(migrated_file.readAll()).object().value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Saving a v11 document did not migrate it to the current format."));
 
     const QString missing_document = root + QStringLiteral("/missing-source-resized.cimg");
     QJsonObject missing_json;
     QFile migrated_source_file(resized_document);
     require(migrated_source_file.open(QIODevice::ReadOnly),
-            QStringLiteral("Could not read the saved v15 relink fixture."));
+            QStringLiteral("Could not read the saved current-version relink fixture."));
     missing_json = QJsonDocument::fromJson(migrated_source_file.readAll()).object();
     migrated_source_file.close();
     QJsonObject missing_base = missing_json.value("base").toObject();
@@ -619,7 +619,7 @@ void testCanvasResizingAnchorsPersistenceAndHistory(const QString& root) {
     missing_json.insert("base", missing_base);
     QFile missing_writer(missing_document);
     require(missing_writer.open(QIODevice::WriteOnly),
-            QStringLiteral("Could not write the missing-source v15 fixture."));
+            QStringLiteral("Could not write the missing-source current-version fixture."));
     missing_writer.write(QJsonDocument(missing_json).toJson());
     missing_writer.close();
     image_editor::ImageDocumentSession offline;
@@ -735,8 +735,8 @@ void testLegacyVersionOneDocument(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 1 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 15,
-            QStringLiteral("Saving a version 1 document did not upgrade it to version 15."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Saving a version 1 document did not upgrade it to the current format."));
 }
 
 void testVersionTwoDocumentCompatibility(const QString& root) {
@@ -769,8 +769,8 @@ void testVersionTwoDocumentCompatibility(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 2 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 15,
-            QStringLiteral("Saving a version 2 document did not upgrade it to version 15."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Saving a version 2 document did not upgrade it to the current format."));
 
     base.remove("path");
     base.insert("kind", "canvas");
@@ -842,8 +842,8 @@ void testVersionThreeMigrationToBackground(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The migrated version 3 document could not be reopened."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 15,
-            QStringLiteral("Saving a version 3 document did not upgrade it to version 15."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Saving a version 3 document did not upgrade it to the current format."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(path, &error) && reopened.renderedImage() == original_render,
             QStringLiteral("Upgrading a version 3 document changed its visible pixels."));
@@ -932,10 +932,10 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const int serialized_maximum_diameter = maximum_brush_json.value("layers").toArray()
         .at(1).toObject().value("operations").toArray()
         .at(0).toObject().value("diameter").toInt();
-    require(maximum_brush_json.value("version").toInt() == 15 &&
+    require(maximum_brush_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion &&
                 serialized_maximum_diameter ==
                     image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
-            QStringLiteral("The 1024 px paint diameter was not saved in version 15."));
+            QStringLiteral("The 1024 px paint diameter was not saved in the current format."));
     image_editor::ImageDocumentSession reopened_maximum_brush;
     require(reopened_maximum_brush.openDocument(maximum_brush_path, &error), error);
     require(reopened_maximum_brush.data() == maximum_brush_session.data() &&
@@ -955,11 +955,11 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The painted document could not be read."));
     const QJsonObject saved_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(saved_json.value("version").toInt() == 15 &&
+    require(saved_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion &&
                 saved_json.value("layers").toArray().at(1).toObject()
                     .value("operations").toArray().at(0).toObject()
                     .value("kind").toString() == "paint_stroke",
-            QStringLiteral("Paint was not serialized in the version 15 layer operations."));
+            QStringLiteral("Paint was not serialized in the current layer operations."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -1049,8 +1049,8 @@ void testEraseStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     QFile migrated_v4_file(v4_path);
     require(migrated_v4_file.open(QIODevice::ReadOnly) &&
                 QJsonDocument::fromJson(migrated_v4_file.readAll()).object()
-                        .value("version").toInt() == 15,
-            QStringLiteral("Saving a version 4 document did not migrate it to v15."));
+                        .value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Saving a version 4 document did not migrate it to the current format."));
 
     const QVector<QPointF> erase_points{QPointF(8, 6)};
     const auto before_preview = session.data();
@@ -1106,10 +1106,10 @@ void testEraseStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const QJsonObject maximum_json = QJsonDocument::fromJson(maximum_file.readAll()).object();
     const auto operations = maximum_json.value("layers").toArray().at(1).toObject()
         .value("operations").toArray();
-    require(maximum_json.value("version").toInt() == 15 && operations.size() == 2 &&
+    require(maximum_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion && operations.size() == 2 &&
                 operations.at(1).toObject().value("kind").toString() == "erase_stroke" &&
                 operations.at(1).toObject().value("diameter").toInt() == 1024,
-            QStringLiteral("A maximum-size erase stroke was not serialized as version 15."));
+            QStringLiteral("A maximum-size erase stroke was not serialized in the current format."));
     QJsonObject version_four_with_erase = maximum_json;
     version_four_with_erase.insert("version", 4);
     const QString invalid_v4_path = root + QStringLiteral("/version-four-erase.cimg");
@@ -1318,7 +1318,7 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     require(session.saveDocument(document_path, &error), error);
     QFile document_file(document_path);
     require(document_file.open(QIODevice::ReadOnly),
-            QStringLiteral("The version 15 shape document could not be read."));
+            QStringLiteral("The current-version shape document could not be read."));
     QJsonObject document_json = QJsonDocument::fromJson(document_file.readAll()).object();
     document_file.close();
     const auto saved_layers = document_json.value("layers").toArray();
@@ -1326,7 +1326,7 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
         saved_layers.cbegin(), saved_layers.cend(), [&rectangle_layer](const QJsonValue& value) {
             return value.toObject().value("id").toString() == rectangle_layer;
         });
-    require(document_json.value("version").toInt() == 15 &&
+    require(document_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion &&
                 saved_rectangle_layer != saved_layers.cend() &&
                 (*saved_rectangle_layer).toObject().value("name").toString() == "Shape 1" &&
                 (*saved_rectangle_layer).toObject().value("operations").toArray().size() == 1 &&
@@ -1361,8 +1361,8 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     QFile migrated_v5_file(v5_path);
     require(migrated_v5_file.open(QIODevice::ReadOnly) &&
                 QJsonDocument::fromJson(migrated_v5_file.readAll()).object()
-                        .value("version").toInt() == 15,
-            QStringLiteral("Saving a version 5 document did not migrate it to v15."));
+                        .value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Saving a version 5 document did not migrate it to the current format."));
 
     image_editor::ImageDocumentSession background_shape_session;
     require(background_shape_session.createCanvas(
@@ -1438,14 +1438,14 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     image_editor::ImageDocumentSession recovered;
     require(recovered.restoreRecovery(snapshot_path, &error) &&
                 recovered.data() == session.data() && recovered.renderedImage() == session.renderedImage(),
-            QStringLiteral("Recovery did not preserve version 15 shape operations."));
+            QStringLiteral("Recovery did not preserve current-version shape operations."));
     QFile recovery_file(snapshot_path);
     require(recovery_file.open(QIODevice::ReadOnly),
             QStringLiteral("The shape recovery wrapper could not be read."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 15,
-            QStringLiteral("Shape recovery changed the recovery wrapper version."));
+                recovery_json.value("document").toObject().value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Shape recovery changed the recovery wrapper or payload version."));
 
     image_editor::ImageDocumentSession transformed;
     require(transformed.createCanvas(QSize(64, 48), QColor(0, 0, 0, 0), &error), error);
@@ -1646,11 +1646,11 @@ void testEditableTextRenderingPersistenceAndHistory(const QString& root) {
         saved_text_layers.cbegin(), saved_text_layers.cend(), [&text_layer](const QJsonValue& value) {
             return value.toObject().value("id").toString() == text_layer;
         });
-    require(document_json.value("version").toInt() == 15 &&
+    require(document_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion &&
                 text_layer_json != saved_text_layers.cend() &&
                 text_layer_json->toObject().value("operations").toArray().at(0)
                     .toObject().value("kind").toString() == "text",
-            QStringLiteral("Editable text was not serialized as a version 15 operation."));
+            QStringLiteral("Editable text was not serialized in the current format."));
 
     QJsonObject invalid_text_document = document_json;
     auto invalid_text_layers = invalid_text_document.value("layers").toArray();
@@ -1700,8 +1700,8 @@ void testEditableTextRenderingPersistenceAndHistory(const QString& root) {
             QStringLiteral("Could not read the v9 recovery wrapper."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 15,
-            QStringLiteral("Text recovery changed the wrapper version or omitted the v15 payload."));
+                recovery_json.value("document").toObject().value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Text recovery changed the wrapper or omitted the current-version payload."));
 
     image_editor::ImageDocumentSession legacy;
     require(legacy.createCanvas(QSize(24, 24), Qt::transparent, &error), error);
@@ -1720,8 +1720,8 @@ void testEditableTextRenderingPersistenceAndHistory(const QString& root) {
     image_editor::ImageDocumentSession migrated;
     require(migrated.openDocument(legacy_path, &error) && migrated.saveDocument({}, &error), error);
     require(legacy_file.open(QIODevice::ReadOnly) &&
-                QJsonDocument::fromJson(legacy_file.readAll()).object().value("version").toInt() == 15,
-            QStringLiteral("Saving a version 8 document did not migrate its envelope to v15."));
+                QJsonDocument::fromJson(legacy_file.readAll()).object().value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Saving a version 8 document did not migrate its envelope to the current format."));
 
     image_editor::ImageDocumentSession grouped_text_session;
     require(grouped_text_session.createCanvas(QSize(180, 90), Qt::transparent, &error), error);
@@ -1935,7 +1935,7 @@ void testGeneralObjectOperations(const QString& root) {
     require(v8_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v8 object document."));
     const QJsonObject v8 = QJsonDocument::fromJson(v8_file.readAll()).object();
     v8_file.close();
-    require(v8.value("version").toInt() == 15,
+    require(v8.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
             QStringLiteral("The document did not migrate to cimg v10."));
     QJsonObject v7 = v8;
     v7.insert("version", 7);
@@ -1951,8 +1951,8 @@ void testGeneralObjectOperations(const QString& root) {
     QFile migrated_v7_file(v7_path);
     require(migrated_v7_file.open(QIODevice::ReadOnly) &&
                 QJsonDocument::fromJson(migrated_v7_file.readAll()).object()
-                        .value("version").toInt() == 15,
-            QStringLiteral("Saving a version 7 document did not migrate it to v15."));
+                        .value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Saving a version 7 document did not migrate it to the current format."));
     const auto layer_array = v7.value("layers").toArray();
     const auto operation_array = layer_array.at(1).toObject().value("operations").toArray();
     bool paint_id_persisted = false;
@@ -2006,8 +2006,8 @@ void testGeneralObjectOperations(const QString& root) {
     require(migrated.saveDocument(v6_path, &error), error);
     QFile resaved_v6(v6_path);
     require(resaved_v6.open(QIODevice::ReadOnly) &&
-                QJsonDocument::fromJson(resaved_v6.readAll()).object().value("version").toInt() == 15,
-                QStringLiteral("Saving a v6 document did not upgrade it to v15."));
+                QJsonDocument::fromJson(resaved_v6.readAll()).object().value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+                QStringLiteral("Saving a v6 document did not upgrade it to the current format."));
 }
 
 void testLayerManagementTransformsAndOpacity(const QString& root) {
@@ -2886,7 +2886,7 @@ void testLayerGroups(const QString& root) {
     QFile v8_file(v8_path);
     require(v8_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v8 group document."));
     const QJsonObject v8_json = QJsonDocument::fromJson(v8_file.readAll()).object();
-    require(v8_json.value("version").toInt() == 15 &&
+    require(v8_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion &&
                 v8_json.value("layers").toArray().size() == structure.data().root_stack.size(),
             QStringLiteral("Group save did not write the v9 ordered stack."));
     image_editor::ImageDocumentSession reopened;
@@ -2903,8 +2903,8 @@ void testLayerGroups(const QString& root) {
             QStringLiteral("The group recovery snapshot could not be read."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 15,
-            QStringLiteral("Group recovery changed its wrapper version or lost the v15 payload."));
+                recovery_json.value("document").toObject().value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("Group recovery changed its wrapper or lost the current-version payload."));
 
     image_editor::ImageDocumentData invalid = structure.data();
     invalid.groups.front().layer_ids.append(invalid.layers.front().id);
@@ -3054,15 +3054,15 @@ void testAreaSelectionClipPersistenceAndRendering(const QString& root) {
                 session.redo() && session.renderedImage().pixelColor(8, 8).red() > 200,
             QStringLiteral("Undo/Redo did not preserve clipped paint."));
 
-    const QString document_path = root + QStringLiteral("/area-selection-v15.cimg");
+    const QString document_path = root + QStringLiteral("/area-selection-v16.cimg");
     require(session.saveDocument(document_path, &error), error);
     QFile saved_file(document_path);
     require(saved_file.open(QIODevice::ReadOnly),
             QStringLiteral("The clipped document could not be read."));
     QJsonObject saved_json = QJsonDocument::fromJson(saved_file.readAll()).object();
     saved_file.close();
-    require(saved_json.value("version").toInt() == 15,
-            QStringLiteral("A clipped stroke did not use .cimg v15."));
+    require(saved_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("A clipped stroke did not use the current .cimg version."));
     ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
     require(reopened.data() == session.data() &&
