@@ -64,6 +64,24 @@ set_tests_properties(creative-suite-motion-editor-preview PROPERTIES
     TIMEOUT 90
 )
 
+add_executable(creative-suite-motion-editor-gpu-composition-tests
+    gpu_composition_test.cpp
+)
+target_link_libraries(creative-suite-motion-editor-gpu-composition-tests PRIVATE
+    creative-suite-motion-editor-core
+    Qt6::Gui
+)
+qt_import_plugins(creative-suite-motion-editor-gpu-composition-tests
+    INCLUDE Qt6::QOffscreenIntegrationPlugin)
+target_compile_features(creative-suite-motion-editor-gpu-composition-tests PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME creative-suite-motion-editor-gpu-composition
+    COMMAND creative-suite-motion-editor-gpu-composition-tests)
+set_tests_properties(creative-suite-motion-editor-gpu-composition PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 90
+)
+
 add_executable(creative-suite-motion-editor-performance-tests
     performance_metrics_test.cpp
 )
@@ -71,6 +89,8 @@ target_link_libraries(creative-suite-motion-editor-performance-tests PRIVATE
     creative-suite-motion-editor-core
     Qt6::Widgets
 )
+qt_import_plugins(creative-suite-motion-editor-performance-tests
+    INCLUDE Qt6::QOffscreenIntegrationPlugin)
 target_compile_features(creative-suite-motion-editor-performance-tests PRIVATE cxx_std_20)
 add_creative_suite_test(
     NAME creative-suite-motion-editor-performance
@@ -85,6 +105,8 @@ target_link_libraries(creative-suite-motion-editor-export-tests PRIVATE
     creative-suite-motion-editor-core
     Qt6::Widgets
 )
+qt_import_plugins(creative-suite-motion-editor-export-tests
+    INCLUDE Qt6::QOffscreenIntegrationPlugin)
 target_compile_features(creative-suite-motion-editor-export-tests PRIVATE cxx_std_20)
 target_compile_definitions(creative-suite-motion-editor-export-tests PRIVATE
     MOTION_EDITOR_EXPORT_TEST_MEDIA_DIR="${PROJECT_SOURCE_DIR}/prototypes/testdata"
@@ -155,6 +177,7 @@ if(MSVC)
     target_compile_options(creative-suite-motion-editor-persistence-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-recovery-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-preview-tests PRIVATE /W4 /permissive-)
+    target_compile_options(creative-suite-motion-editor-gpu-composition-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-performance-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-export-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE /W4 /permissive-)
@@ -166,6 +189,7 @@ else()
     target_compile_options(creative-suite-motion-editor-persistence-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-recovery-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-preview-tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(creative-suite-motion-editor-gpu-composition-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-performance-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-export-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE -Wall -Wextra -Wpedantic)
@@ -183,6 +207,7 @@ if(WIN32)
 
     foreach(TEST_TARGET IN ITEMS
             creative-suite-motion-editor-preview-tests
+            creative-suite-motion-editor-gpu-composition-tests
             creative-suite-motion-editor-performance-tests
             creative-suite-motion-editor-export-tests
             creative-suite-motion-editor-startup-tests

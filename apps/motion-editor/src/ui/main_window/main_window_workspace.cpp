@@ -10,8 +10,10 @@
 #include "ui/workspace/motion_workspace.h"
 
 #include <creative_suite/diagnostics/logger.h>
+#include <creative_suite/composition/opengl_frame_compositor.h>
 #include <creative_suite/media/media_importer.h>
 #include <creative_suite/media/media_library.h>
+#include "settings/gpu_composition_preferences.h"
 
 #include <QAction>
 #include <QApplication>
@@ -23,6 +25,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QOffscreenSurface>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QStatusBar>
@@ -281,6 +284,21 @@ void MainWindow::createWorkspace()
     empty_state_ = nullptr;
     empty_state_new_composition_button_ = nullptr;
 
+    bool gpu_composition_enabled = settings::gpuCompositionEnabled();
+    if (gpu_composition_enabled) {
+        gpu_composition_surface_ =
+            creative_suite::composition::OpenGlFrameCompositor::createSurface();
+        if (!gpu_composition_surface_) {
+            gpu_composition_enabled = false;
+            diagnostics::PerformanceMetrics::instance().recordGpuComposition(
+                false, true, 0, 0, 0, 0, 0);
+            creative_suite::diagnostics::Logger::instance().log(
+                creative_suite::diagnostics::Level::Error,
+                "motion_preview", "create_gpu_surface",
+                "Could not create the OpenGL offscreen surface; using CPU composition",
+                {{"setting", "CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1"}});
+        }
+    }
     preview_renderer_ = std::make_unique<PreviewRenderer>(this,
         [this](std::uint64_t generation,
                PreviewRequestMode mode,
@@ -300,7 +318,7 @@ void MainWindow::createWorkspace()
             } else {
                 diagnostics::PerformanceMetrics::instance().recordStaleResult(generation);
             }
-        });
+        }, nullptr, nullptr, gpu_composition_enabled, gpu_composition_surface_.get());
     if (!was_maximized && !was_full_screen) setGeometry(previous_geometry);
 }
 void MainWindow::restoreWorkspaceLayout()

@@ -66,6 +66,12 @@ int main(int argc, char* argv[])
     metrics.recordForwardDecode(false, 12'000'000);
     metrics.recordForwardDecodeFallback();
     metrics.recordDiscardedIntermediateFrame();
+    metrics.recordGpuComposition(true, false, 4096, 8192,
+                                 1'000'000, 2'000'000, 3'000'000);
+    metrics.recordGpuComposition(false, true, 1024, 0,
+                                 500'000, 600'000, 0);
+    metrics.recordGpuColorAdjustment(3, 1, true, 450'000);
+    metrics.recordGpuGaussianBlur(2, 1, true, 770'000);
     metrics.recordRenderedFrame();
     metrics.recordRenderedFrame();
     for (const std::uint64_t value : {1'000'000ULL, 2'000'000ULL, 3'000'000ULL,
@@ -88,7 +94,18 @@ int main(int argc, char* argv[])
                 snapshot->forward_decode_attempts == 2 &&
                 snapshot->forward_decode_completions == 1 &&
                 snapshot->forward_decode_fallbacks == 1 &&
-                snapshot->discarded_intermediate_frames == 1,
+                snapshot->discarded_intermediate_frames == 1 &&
+                snapshot->gpu_composition_frames == 1 &&
+                snapshot->gpu_composition_fallbacks == 1 &&
+                snapshot->gpu_composition_failures == 1 &&
+                snapshot->gpu_composition_uploaded_bytes == 5120 &&
+                snapshot->gpu_composition_readback_bytes == 8192 &&
+                snapshot->gpu_color_adjustment_effects == 3 &&
+                snapshot->gpu_color_adjustment_fallbacks == 1 &&
+                snapshot->gpu_color_adjustment_failures == 1 &&
+                snapshot->gpu_gaussian_blur_effects == 2 &&
+                snapshot->gpu_gaussian_blur_fallbacks == 1 &&
+                snapshot->gpu_gaussian_blur_failures == 1,
             "preview counters aggregate requests, rendered frames, coalescing, and stale work");
     const auto& decode = snapshot->timings[
         static_cast<std::size_t>(motion::diagnostics::PreviewTimingStage::Decode)];
@@ -122,7 +139,7 @@ int main(int argc, char* argv[])
         serialized_context << key << '=' << value << '\n';
     const auto context_text = serialized_context.str();
     require(context_text.find("process_cpu_percent=27.500000") != std::string::npos &&
-                context_text.find("schema_version=4") != std::string::npos &&
+                context_text.find("schema_version=7") != std::string::npos &&
                 context_text.find("decode_p95_ms=") != std::string::npos &&
                 context_text.find("timestamp_seek_attempts=2") != std::string::npos &&
                 context_text.find("timestamp_seek_successes=1") != std::string::npos &&
@@ -131,6 +148,20 @@ int main(int argc, char* argv[])
                 context_text.find("forward_decode_completions=1") != std::string::npos &&
                 context_text.find("forward_decode_fallbacks=1") != std::string::npos &&
                 context_text.find("discarded_intermediate_frames=1") != std::string::npos &&
+                context_text.find("gpu_composition_frames=1") != std::string::npos &&
+                context_text.find("gpu_composition_fallbacks=1") != std::string::npos &&
+                context_text.find("gpu_composition_failures=1") != std::string::npos &&
+                context_text.find("gpu_composition_uploaded_bytes=5120") != std::string::npos &&
+                context_text.find("gpu_composition_readback_bytes=8192") != std::string::npos &&
+                context_text.find("gpu_color_adjustment_effects=3") != std::string::npos &&
+                context_text.find("gpu_color_adjustment_fallbacks=1") != std::string::npos &&
+                context_text.find("gpu_color_adjustment_failures=1") != std::string::npos &&
+                context_text.find("gpu_gaussian_blur_effects=2") != std::string::npos &&
+                context_text.find("gpu_gaussian_blur_fallbacks=1") != std::string::npos &&
+                context_text.find("gpu_gaussian_blur_failures=1") != std::string::npos &&
+                context_text.find("gpu_gaussian_blur_average_ms=0.770000") != std::string::npos &&
+                context_text.find("gpu_color_adjustment_average_ms=0.450000") != std::string::npos &&
+                context_text.find("gpu_composition_upload_average_ms=0.750000") != std::string::npos &&
                 context_text.find("timestamp_seek_average_ms=7.500000") != std::string::npos &&
                 context_text.find("forward_decode_count=2") != std::string::npos &&
                 context_text.find("gaussian_blur_apply_count=2") != std::string::npos &&

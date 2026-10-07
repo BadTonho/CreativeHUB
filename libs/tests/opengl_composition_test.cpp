@@ -112,6 +112,154 @@ void parity(OpenGlFrameCompositor& gpu) {
     for (const auto dimensions : {std::pair{1920, 1080}, {960, 540}, {480, 270}})
         compare(gpu, dimensions.first, dimensions.second, {{&opaque}}, "preview quality");
 }
+void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
+    auto source = fixture(23, 13, true, 7);
+    auto adjusted = source;
+    const std::vector<effects::ColorAdjustmentParameters> adjustments{
+        {18.0, 132.0, 74.0}, {-7.0, 83.0, 145.0}, {2.0, 105.0, 91.0}};
+    for (const auto& parameters : adjustments) {
+        require(effects::applyColorAdjustment(adjusted, parameters) ==
+                    effects::ProcessingResult::Completed,
+                "CPU reference adjustment failed");
+    }
+    CompositionLayer layer{&source};
+    layer.gpu_color_adjustments = adjustments;
+    const auto cpu = FrameCompositor::compose(source.width, source.height, {{&adjusted}});
+    OpenGlCompositionTimings timings;
+    const auto output = gpu.compose(source.width, source.height, {layer}, {}, &timings);
+    require(cpu && output.status == OpenGlCompositionStatus::Complete && output.frame,
+        "GPU color adjustment composition failed: " + output.operation + ": " + output.cause);
+    for (std::size_t i = 0; i < cpu->rgba_pixels.size(); ++i) {
+        const auto delta = std::abs(static_cast<int>(cpu->rgba_pixels[i]) -
+                                    static_cast<int>(output.frame->rgba_pixels[i]));
+        require(delta <= (i % 4 == 3 ? 0 : 1),
+            "GPU color adjustment exceeded the one-channel RGB tolerance or changed alpha");
+    }
+    require(timings.color_adjustment_count == adjustments.size() &&
+                timings.color_adjustment_submission_nanoseconds > 0,
+            "GPU color adjustment work is measured");
+
+    int cancellation_checks = 0;
+    const auto cancelled = gpu.compose(source.width, source.height, {layer},
+        [&] { return ++cancellation_checks >= 5; });
+    require(cancelled.status == OpenGlCompositionStatus::Cancelled && !cancelled.frame,
+        "cancelled GPU color adjustment does not publish a partial frame");
+}
+
+void referenceBlur(media::RgbaFrame& frame, double sigma) {
+    const int radius = static_cast<int>(std::lround(sigma));
+    if (radius <= 0) return;
+    for (int y = 0; y < frame.height; ++y) {
+        auto* row = frame.rgba_pixels.data() + static_cast<std::size_t>(y) * frame.stride;
+        for (int x = 0; x < frame.width; ++x) {
+            auto* pixel = row + static_cast<std::size_t>(x) * 4;
+            for (int channel = 0; channel < 3; ++channel)
+                pixel[channel] = static_cast<std::uint8_t>(
+                    (static_cast<unsigned>(pixel[channel]) * pixel[3] + 127U) / 255U);
+        }
+    }
+    auto scratch = frame;
+    const int window = radius * 2 + 1;
+    for (int pass = 0; pass < 3; ++pass) {
+        for (const bool horizontal : {true, false}) {
+            for (int y = 0; y < frame.height; ++y) {
+                for (int x = 0; x < frame.width; ++x) {
+                    auto* output = (horizontal ? scratch : frame).rgba_pixels.data() +
+                        static_cast<std::size_t>(y) * frame.stride + x * 4;
+                    std::array<unsigned, 4> sum{};
+                    for (int offset = -radius; offset <= radius; ++offset) {
+                        const int sx = horizontal ? std::clamp(x + offset, 0, frame.width - 1) : x;
+                        const int sy = horizontal ? y : std::clamp(y + offset, 0, frame.height - 1);
+                        const auto* input = (horizontal ? frame : scratch).rgba_pixels.data() +
+                            static_cast<std::size_t>(sy) * frame.stride + sx * 4;
+                        for (int channel = 0; channel < 4; ++channel) sum[channel] += input[channel];
+                    }
+                    for (int channel = 0; channel < 4; ++channel)
+                        output[channel] = static_cast<std::uint8_t>((sum[channel] + window / 2) / window);
+                }
+            }
+        }
+    }
+    for (int y = 0; y < frame.height; ++y) {
+        auto* row = frame.rgba_pixels.data() + static_cast<std::size_t>(y) * frame.stride;
+        for (int x = 0; x < frame.width; ++x) {
+            auto* pixel = row + static_cast<std::size_t>(x) * 4;
+            if (pixel[3] == 0) pixel[0] = pixel[1] = pixel[2] = 0;
+            else for (int channel = 0; channel < 3; ++channel)
+                pixel[channel] = static_cast<std::uint8_t>(std::min(255U,
+                    (static_cast<unsigned>(pixel[channel]) * 255U + pixel[3] / 2U) / pixel[3]));
+        }
+    }
+}
+
+void orderedEffectParity(OpenGlFrameCompositor& gpu) {
+    auto source = fixture(23, 13, true, 7);
+    const std::vector<std::vector<GpuCompositionEffect>> stacks{
+        {effects::ColorAdjustmentParameters{18.0, 132.0, 74.0},
+         GpuGaussianBlurParameters{1.0},
+         effects::ColorAdjustmentParameters{-7.0, 83.0, 145.0}},
+        {GpuGaussianBlurParameters{2.5},
+         effects::ColorAdjustmentParameters{2.0, 105.0, 91.0},
+         GpuGaussianBlurParameters{4.0}},
+        {GpuGaussianBlurParameters{0.0}}};
+    for (std::size_t stack_index = 0; stack_index < stacks.size(); ++stack_index) {
+        auto expected = source;
+        for (const auto& effect : stacks[stack_index]) {
+            if (const auto* adjustment = std::get_if<effects::ColorAdjustmentParameters>(&effect)) {
+                require(effects::applyColorAdjustment(expected, *adjustment) ==
+                            effects::ProcessingResult::Completed,
+                        "CPU reference ordered adjustment failed");
+            } else {
+                referenceBlur(expected, std::get<GpuGaussianBlurParameters>(effect).radius_pixels);
+            }
+        }
+        CompositionLayer layer{&source};
+        layer.gpu_effects = stacks[stack_index];
+        OpenGlCompositionTimings timings;
+        const auto output = gpu.compose(source.width, source.height, {layer}, {}, &timings);
+        require(output.status == OpenGlCompositionStatus::Complete && output.frame,
+            "Ordered GPU effects failed: " + output.operation + ": " + output.cause);
+        for (int y = 0; y < expected.height; ++y) {
+            for (int x = 0; x < expected.width; ++x) {
+                for (int channel = 0; channel < 4; ++channel) {
+                    const auto cpu_value = expected.rgba_pixels[
+                        static_cast<std::size_t>(y) * expected.stride + x * 4 + channel];
+                    const auto gpu_value = output.frame->rgba_pixels[
+                        static_cast<std::size_t>(y) * output.frame->stride + x * 4 + channel];
+                    const int delta = std::abs(static_cast<int>(cpu_value) -
+                                               static_cast<int>(gpu_value));
+                    require(delta <= (channel == 3 ? 0 : 1),
+                        "Ordered GPU effects exceeded one RGB level or changed alpha");
+                }
+            }
+        }
+        if (stack_index == 0)
+            require(timings.gaussian_blur_count == 1 && timings.color_adjustment_count == 2 &&
+                    timings.gaussian_blur_submission_nanoseconds > 0,
+                "Ordered effect counters and submission timings are recorded");
+        if (stack_index == 2)
+            require(timings.gaussian_blur_count == 0,
+                "A zero-radius blur skips GPU work");
+    }
+
+    CompositionLayer layer{&source};
+    layer.gpu_effects = {GpuGaussianBlurParameters{3.0}};
+    int checks = 0;
+    const auto cancelled = gpu.compose(source.width, source.height, {layer},
+        [&] { return ++checks >= 5; });
+    require(cancelled.status == OpenGlCompositionStatus::Cancelled && !cancelled.frame,
+        "Cancellation during blur discards the partial frame");
+
+    media::RgbaFrame over_budget{4096, 4097, 4096 * 4,
+        std::vector<std::uint8_t>(static_cast<std::size_t>(4096) * 4097 * 4, 0)};
+    CompositionLayer oversized_effect{&over_budget};
+    oversized_effect.gpu_effects = {GpuGaussianBlurParameters{1.0}};
+    const auto over_budget_result = gpu.compose(16, 12, {oversized_effect});
+    require(over_budget_result.status == OpenGlCompositionStatus::Unsupported &&
+                over_budget_result.operation == "check-effect-memory" &&
+                !over_budget_result.frame,
+        "Gaussian Blur rejects a scratch target beyond the 64 MiB worker limit");
+}
 void cancellationAndLimits(OpenGlFrameCompositor& gpu) {
     auto f = fixture(16, 12, true);
     const std::vector<CompositionLayer> layers{{&f}, {&f}};
@@ -344,7 +492,9 @@ int main(int argc, char** argv) {
                     }
                     require(initial.status == OpenGlCompositionStatus::Complete,
                         "native initialization failed: " + initial.operation + ": " + initial.cause);
-                    parity(gpu);
+    parity(gpu);
+    colorAdjustmentParity(gpu);
+    orderedEffectParity(gpu);
                     if (activation == 0) highResolution(gpu);
                     cancellationAndLimits(gpu);
                     directCancellation(gpu);

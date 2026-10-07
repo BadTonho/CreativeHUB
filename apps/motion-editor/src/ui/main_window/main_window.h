@@ -30,6 +30,7 @@ class QCloseEvent;
 class QProgressDialog;
 class QTimer;
 class QComboBox;
+class QOffscreenSurface;
 
 namespace creative_suite::media { struct MediaImportBatchResult; }
 
@@ -191,6 +192,7 @@ private:
     QComboBox* curve_preset_combo_ = nullptr;
     QLabel* curve_custom_label_ = nullptr;
     TimelineNavigator* timeline_ = nullptr;
+    std::unique_ptr<QOffscreenSurface> gpu_composition_surface_;
     std::unique_ptr<PreviewRenderer> preview_renderer_;
     std::optional<std::filesystem::path> document_path_;
     std::optional<model::MotionProjectData> saved_data_;

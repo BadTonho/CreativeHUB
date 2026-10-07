@@ -1,12 +1,14 @@
 #pragma once
 
 #include <creative_suite/animation/animation.h>
+#include <creative_suite/effects/effects.h>
 #include <creative_suite/media/video_frame.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <variant>
 #include <vector>
 
 namespace creative_suite::composition {
@@ -79,6 +81,16 @@ struct FullFrameCopyEligibility {
     bool source_pixels_opaque = false;
 };
 
+// Parameters for the shared OpenGL preview effects. radius_pixels follows
+// Motion's existing sigma parameter; the renderer rounds it to the same box
+// radius used by the CPU implementation.
+struct GpuGaussianBlurParameters {
+    double radius_pixels = 0.0;
+};
+
+using GpuCompositionEffect = std::variant<effects::ColorAdjustmentParameters,
+    GpuGaussianBlurParameters>;
+
 struct CompositionLayer {
     // Borrowed for the duration of compose(); frame pixels use RGBA8 straight
     // alpha, with no color-space conversion performed by the compositor.
@@ -86,6 +98,14 @@ struct CompositionLayer {
     animation::Transform2D transform;
     AlphaCoveragePtr alpha_coverage;
     PreparedAlphaCoverageGeometryPtr prepared_alpha_geometry;
+    // Optional ordered Color Adjustment passes for OpenGL preview composition.
+    // The CPU compositor ignores this list; callers must provide an already
+    // processed frame when rendering through the CPU path.
+    std::vector<effects::ColorAdjustmentParameters> gpu_color_adjustments;
+    // Ordered stack used when effects must run before composition (for example
+    // when Gaussian Blur is interleaved with Color Adjustment). The CPU
+    // compositor ignores this list; callers supply a processed frame on CPU.
+    std::vector<GpuCompositionEffect> gpu_effects;
 };
 
 struct CompositionLayerTimings {

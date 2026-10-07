@@ -15,6 +15,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QOffscreenSurface>
 #include <QPushButton>
 #include <QStatusBar>
 #include <QTimer>
@@ -336,6 +337,8 @@ MainWindow::~MainWindow()
     if (audio_keyframe_worker_) audio_keyframe_worker_->cancelAndWait();
     if (export_worker_) export_worker_->cancelAndWait();
     if (preview_renderer_) preview_renderer_->stopAndWait();
+    preview_renderer_.reset();
+    gpu_composition_surface_.reset();
 }
 const model::CompositionDocument* MainWindow::compositionDocument() const noexcept
 {

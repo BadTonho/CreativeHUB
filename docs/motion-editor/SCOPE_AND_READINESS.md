@@ -11,10 +11,14 @@ keyframes are editable, with a Graph Editor for bounded cubic Bezier easing.
 Native text, rectangle, and ellipse layers have content
 inspectors and static content; their transforms and transform keyframes work
 through the same timeline and preview path. Motion Studio rasterizes that
-content with Qt painting on its preview worker before using the shared CPU
-compositor. Per-layer Gaussian Blur and Color Adjustment are applied on that
-same CPU worker before transforms, and the same renderer is used for playback
-and video export. Manual Save, Save As, and Open use a versioned `.motion`
+content with Qt painting on its preview worker before composition with the
+shared CPU compositor by default or the experimental OpenGL adapter when
+`CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`; failures fall back to CPU. The GPU
+composition shader applies Color Adjustment-only stacks before blending;
+stacks containing enabled Gaussian Blur use the shared ordered GPU effect path
+when supported, with bounded scratch storage and CPU fallback. Video export remains CPU
+composed. Manual Save, Save As, and Open use a
+versioned `.motion`
 document that includes the Media Pool. The writer emits v4, reads v1-v3 with
 empty effect stacks, reads v1 and v2 with old keyframes migrated as Linear,
 and reads v1 text or shape records with default content. The recovery wrapper
@@ -129,7 +133,7 @@ provide a recoverable reference if a linked document or dependency is missing.
 | Capability | Current Video Editor location and behavior | Motion Studio readiness direction |
 | --- | --- | --- |
 | Media and decoding | `libs/media/` contains neutral metadata, an in-memory catalog, import processing, FFmpeg video probing/decoding, Qt-backed still-image decoding, and RGBA frames. Each editor owns its pool UI, worker lifecycle, and project/document integration. | Motion Studio already reuses the shared catalog and import processing in its own Media Pool. Imported items are in-memory and remain references to original files; the pool clears when replacing a composition. GIF import is unsupported. |
-| Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, frame compositor, and a provisional OpenGL preview surface. | Motion Studio rasterizes native text and shape content to transparent RGBA8 on its own preview worker, then uses `libs/composition/` for CPU composition. This app-owned Qt renderer is provisional and does not establish a final renderer choice or GPU layer composition. |
+| Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, shared OpenGL composition and texture preview paths. | Motion Studio rasterizes native text and shape content to transparent RGBA8 on its preview worker, then uses `libs/composition/` by default or the optional `libs/composition-opengl` adapter. This app-owned Qt renderer and experimental opt-in GPU path are provisional and do not establish a final renderer choice. |
 | Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | Motion Studio uses `libs/animation/` to evaluate Linear and bounded cubic Bezier transform segments consistently in preview, playback, and export. Its Graph Editor, presets, property tracks, and inspector remain application-owned. |
 | Timeline and history | Timeline model, commands, and bounded undo/redo are application-specific. | Motion Studio owns its composition timeline and editing history; share lower-level behavior only where a second real consumer uses the same contract. |
 | Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 12, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
@@ -260,9 +264,12 @@ memory; canvas dimensions and exact frame-rate numerator/denominator; layer and
 effect counts; request, rendered-frame, coalesced-request, and stale-result
 counters; and count, average, maximum, p95, and p99 durations for video decode,
 text/shape rasterization, effects, CPU composition, total frame render, and
-request-to-viewer-paint latency. Schema v4 reports actual application counts
+request-to-viewer-paint latency. Schema v5 reports actual application counts
 and separate timing summaries for Gaussian Blur and Color Adjustment, plus the
-effective effect-worker count. It also reports actual timestamp-seek outcomes
+effective effect-worker count. Schema v7 also reports opt-in GPU composition,
+Color Adjustment, and Gaussian Blur effect counts, fallbacks, failures,
+uploaded/readback bytes, and upload/draw/effect/readback timings,
+as well as actual timestamp-seek outcomes
 and duration, playback forward-decode attempts/completions/fallbacks, and
 discarded intermediate frames. Seek and forward-decode durations are
 submeasurements of total decode time and should not be added to it. The
@@ -281,8 +288,9 @@ frames per second, and realtime factor. Cancellation is an informational
 outcome; technical export failures continue through the existing error log.
 
 Performance records do not include project/media paths, layer names, or text
-content. GPU metrics are not collected. These diagnostics help inspect a running
-session; they are not performance benchmarks. Representative small, medium,
+content. GPU utilization and device memory are not sampled. These diagnostics
+help inspect a running session; they are not performance benchmarks.
+Representative small, medium,
 and heavy compositions, cross-platform resource behavior, startup, seek/paint
 latency, memory limits, and export throughput still require measured validation.
 On Windows, toggle the option, seek and play compositions, export a job, then

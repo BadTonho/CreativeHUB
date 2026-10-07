@@ -26,6 +26,10 @@ struct OpenGlCompositionTimings {
     std::uint64_t readback_bytes = 0;
     std::uint64_t uploaded_layers = 0;
     std::uint64_t producer_fence_submission_nanoseconds = 0;
+    std::uint64_t color_adjustment_submission_nanoseconds = 0;
+    std::uint64_t color_adjustment_count = 0;
+    std::uint64_t gaussian_blur_submission_nanoseconds = 0;
+    std::uint64_t gaussian_blur_count = 0;
 };
 
 struct OpenGlCompositionResult {
@@ -34,6 +38,9 @@ struct OpenGlCompositionResult {
     std::string operation;
     std::string cause;
     std::int64_t error_code = 0;
+    // Layer index in the submitted composition when a layer effect failed;
+    // -1 means the failure was not associated with one layer.
+    int layer_index = -1;
 };
 
 // Known storage requested by this compositor, not driver-measured VRAM.

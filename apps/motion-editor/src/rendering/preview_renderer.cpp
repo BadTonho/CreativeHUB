@@ -14,11 +14,14 @@ PreviewRenderer::PreviewRenderer(
     QObject* result_receiver,
     ResultHandler result_handler,
     RenderFunction render_function,
-    diagnostics::PerformanceMetrics* metrics)
+    diagnostics::PerformanceMetrics* metrics,
+    bool gpu_composition_enabled,
+    QOffscreenSurface* gpu_surface)
     : result_receiver_(result_receiver)
     , result_handler_(std::move(result_handler))
     , render_function_(std::move(render_function))
-    , frame_renderer_(std::make_unique<CompositionFrameRenderer>())
+    , frame_renderer_(std::make_unique<CompositionFrameRenderer>(
+          true, gpu_composition_enabled, gpu_surface))
     , metrics_(metrics != nullptr ? metrics : &diagnostics::PerformanceMetrics::instance())
 {
     setObjectName(QStringLiteral("motion-preview-renderer"));
@@ -191,7 +194,7 @@ void PreviewRenderer::run()
             },
             Qt::QueuedConnection);
     }
-    frame_renderer_->reset();
+    frame_renderer_->shutdown();
 }
 
 creative_suite::media::RgbaFramePtr PreviewRenderer::render(

@@ -5,7 +5,8 @@ Current application version: **Beta 0.1.0**.
 Status: **2D MVP product scope approved; implementation is substantially
 complete, with acceptance and cross-platform validation in progress**. The
 standalone Motion Studio shell, in-memory composition/layer model, navigation
-timeline, Media Pool, image/video/text/shape layers, CPU preview, versioned
+timeline, Media Pool, image/video/text/shape layers, CPU preview with an
+experimental opt-in GPU composition backend, versioned
 native save/open, and first-pass rendered video export are implemented under
 `apps/motion-editor/`.
 Configurable preview performance metrics and per-job export summaries are also
@@ -48,17 +49,18 @@ technically clear.
 
 ## GPU acceleration planning
 
-The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records four future
-deliveries: layer composition, GPU effects, preview/export integration, and
-adoption by the other applications. Video Editor is the first consumer of the
-implemented optional shared OpenGL compositor; Motion's later integration will
-reuse it with CPU fallback.
+The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records four deliveries:
+layer composition, GPU effects, preview/export integration, and adoption by the
+other applications. Video Editor is the first consumer of the shared OpenGL
+compositor; Motion now has an opt-in experimental preview integration with CPU
+fallback.
 
-**Status: documentation only; implementation deferred.** Motion Studio still
-uses CPU composition and CPU effects. The plan records existing diagnostic
-observations, provisional backend alternatives, regression requirements, and
-the steps for resuming implementation. No GPU speedup or driver acceptance is
-claimed.
+**Status: experimental preview composition, Color Adjustment, and Gaussian Blur
+implemented; export integration deferred.** Color Adjustment-only stacks run in
+the composition shader, while stacks containing Gaussian Blur use the shared
+ordered GPU effect path when supported. Preview requires
+`CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1` and reads the composed result back to
+RGBA for the existing viewer. No GPU speedup or driver acceptance is claimed.
 
 ## Milestones
 
@@ -213,7 +215,8 @@ the Motion Studio implementation choices are finalized.
 - [x] Add native Text, Rectangle, and Ellipse layers with content inspectors,
   static text/shape content, alpha-aware solid colors, and the existing
   transform/keyframe system. Rasterize their RGBA frames on the Motion Studio
-  preview worker and composite them through the shared CPU compositor.
+  preview worker and composite them through the shared CPU compositor by
+  default; an experimental opt-in OpenGL path can compose the same raster data.
   New layers start at the playhead, centered, and last five seconds at the exact
   composition rate. Save them in `.motion` v2; continue opening v1 documents by
   applying default text or rectangle content and upgrading them on save. Keep
@@ -307,6 +310,7 @@ readiness checks remain in this roadmap and
 | `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Invalid-file and cross-platform file/path results are not recorded. |
 | Autosave and restart recovery | `motion_recovery_store_test.cpp` (`creative-suite-motion-editor-recovery`), `motion_editor_ui_test.cpp` | Automated snapshots and UI recovery paths exist. Basic recovery was reported working on the Windows 11 reference PC on 2026-10-01; detailed restart/recovery scenarios remain pending (**P0 validation**). |
 | Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; exported Color Adjustment pixels in `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`); shared evaluator coverage in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp`; shared color processing in `libs/tests/effects_test.cpp` (`creative-suite-effects`) | Offscreen tests cover preview, shared Color Adjustment delegation, export output, cancellation, timing, and interaction behavior. Real-hardware visual output and graphics-driver validation remain pending (**P2 validation**). |
+| Experimental GPU composition and ordered effects preview | `gpu_composition_test.cpp` (`creative-suite-motion-editor-gpu-composition`), `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), and shared `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`) | Automated coverage checks fallback output, ordered Color Adjustment and Gaussian Blur parity within one RGB level with exact alpha, cancellation, context fallback, and metrics. Manual GPU enabled/disabled checks and native graphics-driver validation remain pending (**P2 validation**). |
 | Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`) | Tests cover metrics aggregation, not actual playback throughput. The 1080p/30 fps, 10-second, five-layer benchmark on the reference PC and other systems remains pending (**P2 validation**). |
 | Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated output, cancellation, failure, and cancellation-exception message coverage exists; throughput, installed codecs, output profiles, and cross-platform behavior remain pending (**P1/P2 validation**). |
 | Optional audio-to-transform keyframe generation | `audio_keyframe_generation_test.cpp` (`creative-suite-motion-editor-audio-keyframes`) | Automated coverage includes per-frame RMS, whole-file peak normalization past the layer boundary, empty and silent sources, invalid audio, atomic track replacement, Undo/Redo, `.motion` round-trip, worker success and progress callbacks on the receiver thread, pre-start cancellation without an error log, and failure logging with operation, path, and layer ID. Manual generation and cancellation during an active UI analysis remain pending. |
@@ -425,7 +429,8 @@ before the target. One-frame advances keep the decoder's existing fast path;
 backward seeks, larger gaps, and interactive scrubbing use timestamp seeking.
 An unsuccessful forward decode falls back to timestamp seeking unless it was
 cancelled. Export retains its existing decode path. Preview performance schema
-v4 reports actual timestamp-seek outcomes and time, forward-decode attempts,
+v6 reports GPU composition and Color Adjustment outcomes and upload,
+draw-submission, effect, and readback metrics, as well as actual timestamp-seek outcomes and time, forward-decode attempts,
 completions and fallbacks, and discarded intermediate frames. These counters
 are diagnostics; they do not change the automatic effect-worker policy.
 

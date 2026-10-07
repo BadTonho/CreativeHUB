@@ -3,7 +3,7 @@ include(GNUInstallDirs)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL Widgets)
 
 add_library(creative-suite-motion-editor-core STATIC
     src/audio/audio_envelope_analyzer.cpp
@@ -31,6 +31,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/rendering/layer_effect_worker_pool.h
     src/settings/autosave_preferences.cpp
     src/settings/autosave_preferences.h
+    src/settings/gpu_composition_preferences.cpp
+    src/settings/gpu_composition_preferences.h
     src/ui/workers/audio_keyframe_generation.cpp
     src/ui/workers/audio_keyframe_generation.h
     src/ui/viewer/composition_viewer.cpp
@@ -85,6 +87,7 @@ target_include_directories(creative-suite-motion-editor-core PUBLIC
 target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::animation
     creative-suite::composition
+    creative-suite::composition-opengl
     creative-suite::effects
     creative-suite::diagnostics
     creative-suite::system-monitor
@@ -93,6 +96,7 @@ target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::video-media
     creative-suite::video-encoding
     Qt6::Widgets
+    Qt6::OpenGL
 )
 target_compile_features(creative-suite-motion-editor-core PUBLIC cxx_std_20)
 
