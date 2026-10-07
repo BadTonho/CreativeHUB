@@ -129,6 +129,7 @@ int main(int argc, char* argv[])
         }, {}, &metrics, true, nullptr);
     auto fallback_request = request();
     fallback_request.layers.front().effects = {
+        motion::model::GaussianBlurEffect{true, 2.5},
         motion::model::ColorAdjustmentEffect{true, 18.0, 132.0, 74.0},
         motion::model::ColorAdjustmentEffect{true, -7.0, 83.0, 145.0}};
     const auto failed_context_generation = fallback_renderer.submit(fallback_request);
@@ -158,8 +159,10 @@ int main(int argc, char* argv[])
                 fallback_snapshot->gpu_composition_fallbacks == 1 &&
                 fallback_snapshot->gpu_composition_failures == 1 &&
                 fallback_snapshot->gpu_color_adjustment_fallbacks == 4 &&
-                fallback_snapshot->gpu_color_adjustment_failures == 1,
-            "context failure falls back for color effects and later worker requests stay CPU");
+                fallback_snapshot->gpu_color_adjustment_failures == 1 &&
+                fallback_snapshot->gpu_gaussian_blur_fallbacks == 2 &&
+                fallback_snapshot->gpu_gaussian_blur_failures == 1,
+            "context failure falls back for ordered effects and later worker requests stay CPU");
 
     std::ifstream log_file(logger.log_path(), std::ios::binary);
     const std::string log_contents(
@@ -253,9 +256,13 @@ int main(int argc, char* argv[])
                     "Motion GPU Color Adjustment records enabled effect counts without fallback");
         }
 
-        color_layer.effects.insert(color_layer.effects.begin(),
-            motion::model::GaussianBlurEffect{true, 1.0});
-        const motion::ui::PreviewRequest mixed_request{{2, 2}, {24, 1}, {color_layer}};
+        auto mixed_request = request();
+        mixed_request.layers.front().effects = {
+            motion::model::ColorAdjustmentEffect{true, 18.0, 132.0, 74.0},
+            motion::model::GaussianBlurEffect{true, 1.0},
+            motion::model::ColorAdjustmentEffect{false, 100.0, 0.0, 0.0},
+            motion::model::GaussianBlurEffect{true, 2.5},
+            motion::model::ColorAdjustmentEffect{true, -7.0, 83.0, 145.0}};
         metrics.reset();
         QObject mixed_receiver;
         std::uint64_t mixed_generation = 0;
@@ -270,17 +277,30 @@ int main(int argc, char* argv[])
         const auto mixed_expected_generation = mixed_renderer.submit(mixed_request);
         require(waitFor([&] { return mixed_generation == mixed_expected_generation; }) &&
                     mixed_frame != nullptr,
-                "mixed CPU Gaussian Blur stack still renders through the preview");
+                "mixed ordered Gaussian Blur stack renders through the preview");
         motion::ui::CompositionFrameRenderer mixed_cpu_renderer(false);
         const auto mixed_cpu_frame = mixed_cpu_renderer.render(mixed_request);
-        require(mixed_cpu_frame != nullptr && mixed_cpu_frame->rgba_pixels == mixed_frame->rgba_pixels,
-                "mixed Gaussian Blur and Color Adjustment stack remains byte-identical to CPU");
+        require(mixed_cpu_frame != nullptr && mixed_cpu_frame->rgba_pixels.size() ==
+                    mixed_frame->rgba_pixels.size(),
+                "mixed effect CPU reference and GPU preview have matching dimensions");
+        for (std::size_t index = 0; index < mixed_cpu_frame->rgba_pixels.size(); ++index) {
+            const auto delta = std::abs(static_cast<int>(mixed_cpu_frame->rgba_pixels[index]) -
+                                        static_cast<int>(mixed_frame->rgba_pixels[index]));
+            require(delta <= (index % 4 == 3 ? 0 : 1),
+                    "ordered GPU effects match CPU within one RGB level and exact alpha");
+        }
         mixed_renderer.stopAndWait();
         const auto mixed_snapshot = metrics.takeSnapshotAndReset();
         require(mixed_snapshot.has_value() &&
-                    mixed_snapshot->gpu_color_adjustment_effects == 0 &&
-                    mixed_snapshot->gpu_color_adjustment_fallbacks == 3,
-                "Gaussian Blur sends the entire ordered effect stack through CPU");
+                    mixed_snapshot->gpu_color_adjustment_effects ==
+                        (gpu_backend_available ? 2U : 0U) &&
+                    mixed_snapshot->gpu_color_adjustment_fallbacks ==
+                        (gpu_backend_available ? 0U : 2U) &&
+                    mixed_snapshot->gpu_gaussian_blur_effects ==
+                        (gpu_backend_available ? 2U : 0U) &&
+                    mixed_snapshot->gpu_gaussian_blur_fallbacks ==
+                        (gpu_backend_available ? 0U : 2U),
+                "ordered mixed effects use GPU when available and record CPU fallback otherwise");
     }
 
     return EXIT_SUCCESS;

@@ -120,15 +120,18 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
 
     std::vector<creative_suite::composition::CompositionLayer> composition_layers;
     std::vector<creative_suite::media::RgbaFramePtr> owned_frames;
-    struct PendingGpuColorAdjustment {
+    struct PendingGpuEffects {
         std::size_t composition_index = 0;
         model::LayerId layer_id = 0;
         creative_suite::media::RgbaFramePtr source;
         std::vector<model::LayerEffect> effects;
     };
-    std::vector<PendingGpuColorAdjustment> pending_gpu_adjustments;
+    std::vector<PendingGpuEffects> pending_gpu_effects;
+    std::vector<model::LayerId> composition_layer_ids;
     std::uint64_t cpu_color_adjustment_fallbacks = 0;
     std::uint64_t gpu_color_adjustment_count = 0;
+    std::uint64_t cpu_gaussian_blur_fallbacks = 0;
+    std::uint64_t gpu_gaussian_blur_count = 0;
     bool gpu_color_adjustment_failed = false;
     std::string gpu_failure_operation;
     std::int64_t gpu_failure_code = 0;
@@ -137,6 +140,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     std::set<model::LayerId> active_content_ids;
     composition_layers.reserve(request.layers.size());
     owned_frames.reserve(request.layers.size());
+    composition_layer_ids.reserve(request.layers.size());
     const long double timeline_rate =
         static_cast<long double>(request.frame_rate.numerator) /
         static_cast<long double>(request.frame_rate.denominator);
@@ -307,6 +311,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
 
         if (frame == nullptr) continue;
         std::vector<creative_suite::effects::ColorAdjustmentParameters> gpu_adjustments;
+        std::vector<creative_suite::composition::GpuCompositionEffect> gpu_effects;
         const bool has_enabled_effects = hasEnabledLayerEffects(layer.effects);
         const bool gpu_color_only_stack = try_gpu_effects && has_enabled_effects &&
             model::validLayerEffects(layer.effects) &&
@@ -317,6 +322,12 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                         std::is_same_v<Effect, model::ColorAdjustmentEffect>;
                 }, effect);
             });
+        const bool gpu_ordered_stack = try_gpu_effects && has_enabled_effects &&
+            model::validLayerEffects(layer.effects) &&
+            std::any_of(layer.effects.begin(), layer.effects.end(), [](const auto& effect) {
+                const auto* blur = std::get_if<model::GaussianBlurEffect>(&effect);
+                return blur && blur->enabled;
+            });
         if (gpu_color_only_stack) {
             gpu_adjustments.reserve(layer.effects.size());
             for (const auto& effect : layer.effects) {
@@ -326,14 +337,38 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                         color->contrast_percent, color->saturation_percent});
                 }
             }
+        } else if (gpu_ordered_stack) {
+            gpu_effects.reserve(layer.effects.size());
+            for (const auto& effect : layer.effects) {
+                std::visit([&](const auto& value) {
+                    using Effect = std::decay_t<decltype(value)>;
+                    if (!value.enabled) return;
+                    if constexpr (std::is_same_v<Effect, model::GaussianBlurEffect>) {
+                        gpu_effects.emplace_back(
+                            creative_suite::composition::GpuGaussianBlurParameters{
+                                value.radius_pixels});
+                    } else {
+                        gpu_effects.emplace_back(
+                            creative_suite::effects::ColorAdjustmentParameters{
+                                value.brightness, value.contrast_percent,
+                                value.saturation_percent});
+                    }
+                }, effect);
+            }
         } else if (gpu_composition_enabled_ && has_enabled_effects) {
             cpu_color_adjustment_fallbacks += static_cast<std::uint64_t>(
                 std::count_if(layer.effects.begin(), layer.effects.end(), [](const auto& effect) {
                     return std::holds_alternative<model::ColorAdjustmentEffect>(effect) &&
                         std::get<model::ColorAdjustmentEffect>(effect).enabled;
                 }));
+            cpu_gaussian_blur_fallbacks += static_cast<std::uint64_t>(
+                std::count_if(layer.effects.begin(), layer.effects.end(), [](const auto& effect) {
+                    return std::holds_alternative<model::GaussianBlurEffect>(effect) &&
+                        std::get<model::GaussianBlurEffect>(effect).enabled;
+                }));
         }
-        if (has_enabled_effects && !gpu_color_only_stack) {
+        const bool gpu_stack = gpu_color_only_stack || gpu_ordered_stack;
+        if (has_enabled_effects && !gpu_stack) {
             try {
                 StageTimer effects_timer(
                     record_preview_metrics_, diagnostics::PreviewTimingStage::Effects);
@@ -382,11 +417,21 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         }
         const auto composition_index = composition_layers.size();
         composition_layers.push_back(CompositionLayer{frame.get(), transform, {}, {},
-            std::move(gpu_adjustments)});
-        if (!composition_layers.back().gpu_color_adjustments.empty()) {
+            std::move(gpu_adjustments), std::move(gpu_effects)});
+        composition_layer_ids.push_back(layer.id);
+        if (!composition_layers.back().gpu_color_adjustments.empty() ||
+            !composition_layers.back().gpu_effects.empty()) {
             gpu_color_adjustment_count +=
                 composition_layers.back().gpu_color_adjustments.size();
-            pending_gpu_adjustments.push_back({composition_index, layer.id, frame,
+            for (const auto& effect : composition_layers.back().gpu_effects) {
+                if (std::holds_alternative<creative_suite::effects::ColorAdjustmentParameters>(effect))
+                    ++gpu_color_adjustment_count;
+                else if (std::lround(std::get<
+                             creative_suite::composition::GpuGaussianBlurParameters>(effect)
+                                 .radius_pixels) > 0)
+                    ++gpu_gaussian_blur_count;
+            }
+            pending_gpu_effects.push_back({composition_index, layer.id, frame,
                 layer.effects});
         }
     }
@@ -442,6 +487,16 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                     gpu_timings.color_adjustment_count, cpu_color_adjustment_fallbacks, false,
                     gpu_timings.color_adjustment_submission_nanoseconds);
             }
+            if (record_preview_metrics_ &&
+                (gpu_timings.gaussian_blur_count != 0 || cpu_gaussian_blur_fallbacks != 0)) {
+                diagnostics::PerformanceMetrics::instance().recordGpuGaussianBlur(
+                    gpu_timings.gaussian_blur_count, cpu_gaussian_blur_fallbacks, false,
+                    gpu_timings.gaussian_blur_submission_nanoseconds);
+                if (gpu_timings.gaussian_blur_count != 0)
+                    diagnostics::PerformanceMetrics::instance().recordEffectTiming(
+                        diagnostics::PreviewEffectKind::GaussianBlur,
+                        gpu_timings.gaussian_blur_submission_nanoseconds);
+            }
             if (record_preview_metrics_) {
                 diagnostics::PerformanceMetrics::instance().recordGpuComposition(
                     true, false, gpu_timings.uploaded_bytes, gpu_timings.readback_bytes,
@@ -457,6 +512,10 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         gpu_color_adjustment_failed = gpu_failed;
         gpu_failure_operation = gpu_result.operation;
         gpu_failure_code = gpu_result.error_code;
+        const std::string failing_layer_id = gpu_result.layer_index >= 0 &&
+            static_cast<std::size_t>(gpu_result.layer_index) < composition_layer_ids.size()
+            ? std::to_string(composition_layer_ids[static_cast<std::size_t>(gpu_result.layer_index)])
+            : std::string("unknown");
         gpu_composition_disabled_after_failure_ = true;
         creative_suite::diagnostics::Logger::instance().log(
             gpu_failed ? creative_suite::diagnostics::Level::Error
@@ -468,6 +527,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
              {"error_code", std::to_string(gpu_result.error_code)},
              {"canvas_width", std::to_string(request.canvas_size.width)},
              {"canvas_height", std::to_string(request.canvas_size.height)},
+             {"layer_id", failing_layer_id},
+             {"layer_index", std::to_string(gpu_result.layer_index)},
              {"status", gpu_result.status == OpenGlCompositionStatus::Unsupported
                     ? "unsupported" : "failed"}});
         if (record_preview_metrics_) {
@@ -479,6 +540,10 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 0, cpu_color_adjustment_fallbacks + gpu_color_adjustment_count,
                 gpu_color_adjustment_failed && gpu_color_adjustment_count != 0,
                 gpu_timings.color_adjustment_submission_nanoseconds);
+            diagnostics::PerformanceMetrics::instance().recordGpuGaussianBlur(
+                0, cpu_gaussian_blur_fallbacks + gpu_gaussian_blur_count,
+                gpu_failed && gpu_gaussian_blur_count != 0,
+                gpu_timings.gaussian_blur_submission_nanoseconds);
         }
     }
     if (gpu_composition_enabled_ && !try_gpu_effects &&
@@ -486,7 +551,12 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         diagnostics::PerformanceMetrics::instance().recordGpuColorAdjustment(
             0, cpu_color_adjustment_fallbacks, false, 0);
     }
-    for (const auto& pending : pending_gpu_adjustments) {
+    if (gpu_composition_enabled_ && !try_gpu_effects &&
+        cpu_gaussian_blur_fallbacks != 0 && record_preview_metrics_) {
+        diagnostics::PerformanceMetrics::instance().recordGpuGaussianBlur(
+            0, cpu_gaussian_blur_fallbacks, false, 0);
+    }
+    for (const auto& pending : pending_gpu_effects) {
         if (should_cancel && should_cancel()) return {};
         try {
             auto processed = std::make_shared<creative_suite::media::RgbaFrame>(
@@ -506,6 +576,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             owned_frames.push_back(processed);
             composition_layers[pending.composition_index].frame = processed.get();
             composition_layers[pending.composition_index].gpu_color_adjustments.clear();
+            composition_layers[pending.composition_index].gpu_effects.clear();
         } catch (const std::exception& error) {
             if (should_cancel && should_cancel()) return {};
             if (fail_on_media_error) {

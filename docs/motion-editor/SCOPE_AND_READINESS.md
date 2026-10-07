@@ -15,7 +15,8 @@ content with Qt painting on its preview worker before composition with the
 shared CPU compositor by default or the experimental OpenGL adapter when
 `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`; failures fall back to CPU. The GPU
 composition shader applies Color Adjustment-only stacks before blending;
-enabled Gaussian Blur keeps its whole stack on CPU. Video export remains CPU
+stacks containing enabled Gaussian Blur use the shared ordered GPU effect path
+when supported, with bounded scratch storage and CPU fallback. Video export remains CPU
 composed. Manual Save, Save As, and Open use a
 versioned `.motion`
 document that includes the Media Pool. The writer emits v4, reads v1-v3 with
@@ -265,9 +266,9 @@ counters; and count, average, maximum, p95, and p99 durations for video decode,
 text/shape rasterization, effects, CPU composition, total frame render, and
 request-to-viewer-paint latency. Schema v5 reports actual application counts
 and separate timing summaries for Gaussian Blur and Color Adjustment, plus the
-effective effect-worker count. Schema v6 also reports opt-in GPU composition and
-Color Adjustment effect counts, fallbacks, failures, uploaded/readback bytes,
-and upload/draw/effect/readback timings,
+effective effect-worker count. Schema v7 also reports opt-in GPU composition,
+Color Adjustment, and Gaussian Blur effect counts, fallbacks, failures,
+uploaded/readback bytes, and upload/draw/effect/readback timings,
 as well as actual timestamp-seek outcomes
 and duration, playback forward-decode attempts/completions/fallbacks, and
 discarded intermediate frames. Seek and forward-decode durations are

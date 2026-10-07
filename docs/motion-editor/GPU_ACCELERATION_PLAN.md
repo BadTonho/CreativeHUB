@@ -1,15 +1,15 @@
 # GPU Acceleration Plan
 
-Status: **experimental preview composition and Color Adjustment implemented
-on 2026-10-06; native driver acceptance pending**.
+Status: **experimental preview composition, Color Adjustment, and Gaussian Blur
+implemented on 2026-10-06; native driver acceptance pending**.
 The first consumer of the shared GPU compositor is Video Editor. Each stage has a separate delivery and
 acceptance gate; completing one stage does not imply that the whole renderer
 has moved to the GPU.
 
 The shared OpenGL adapter is implemented for the Video Editor's opt-in timeline
 preview and per-job offline export through 4K; Motion Studio now has an opt-in
-experimental preview integration. Motion's Gaussian Blur and offline export
-remain on CPU; Color Adjustment-only preview stacks can use the GPU. Motion
+experimental preview integration. Motion's offline export remains on CPU;
+preview stacks containing Color Adjustment and Gaussian Blur can use the GPU. Motion
 reuses the shared adapter and does not create another composition engine. See
 [Video Editor's delivery](../video-editor/GPU_ACCELERATION_PLAN.md).
 
@@ -22,21 +22,24 @@ Video Editor's [export contract](../video-editor/GPU_EXPORT.md) now covers isola
 per-job worker resources, CPU fallback and separate schema-1 metrics. Shared RGBA
 and direct paths use two 16 KiB axis lookup buffers for UHD/portrait 4K. Its
 [export measurements](../video-editor/GPU_EXPORT_RESULTS.md) are additional reuse
-evidence; Motion Studio Gaussian Blur and export remain CPU while preview
-composition and Color Adjustment are experimental and opt-in.
+evidence; Motion Studio GPU effects and export remain experimental, with GPU
+effects limited to opt-in preview.
 
 The preview worker rasterizes text/shapes and processes effects. By default,
 effects and composition use the CPU. With
 `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`, Color Adjustment-only stacks are
-applied in the shared OpenGL composition shader, with the source uploaded once
-and no per-effect intermediate texture or readback. A stack containing enabled
-Gaussian Blur remains entirely on the CPU to preserve effect order. The GPU
-compositor reads the completed frame back to RGBA for the existing viewer.
+applied in the shared OpenGL composition shader. Stacks with Gaussian Blur use
+an ordered shared effect sequence before layer blending; one reusable RGBA8
+scratch texture is bounded to 64 MiB per worker. Blur matches Motion's three
+horizontal/vertical box-filter pairs, premultiplied-alpha processing, clamped
+edges, and per-pass RGBA8 rounding. The GPU compositor reads the completed
+frame back to RGBA for the existing viewer.
 Unsupported contexts and GPU failures fall back to CPU; after the first GPU
 failure, the worker keeps using CPU for effects and composition for the rest of
 its lifetime to avoid repeated errors. Offline export remains CPU-only.
-Diagnostics schema 6 reports GPU composition and Color Adjustment counts,
-fallbacks, failures, upload/readback bytes, and effect/composition timings.
+Diagnostics schema 7 reports GPU composition, Color Adjustment, and Gaussian
+Blur counts, fallbacks, failures, upload/readback bytes, and stage timings.
+Effect timings for OpenGL are CPU-side submission time, not GPU execution time.
 
 A read-only inspection of existing local diagnostic intervals on 2026-10-02
 found 1920 x 1080, two-layer samples with composition averages around
@@ -110,9 +113,9 @@ must stay experimental until these results are recorded.
   stack in the OpenGL layer shader before source-over composition. Quantize RGB
   after each pass to match the CPU effect's RGBA8 behavior; preserve source alpha.
 - The shared composition layer accepts up to the Motion document limit of 256
-  adjustments in a stack. A stack with enabled Gaussian Blur uses the CPU for
-  every effect in that stack. The existing opt-in setting controls the GPU path;
-  CPU remains the default and export backend.
+  adjustments in a stack. Stage 2B extends this contract with ordered mixed
+  Color Adjustment and Gaussian Blur stacks. The existing opt-in setting
+  controls the GPU path; CPU remains the default and export backend.
 - Automated parity covers varied and repeated adjustments, transparent source
   pixels, unchanged alpha, cancellation, mixed-stack CPU fallback, and GPU
   initialization fallback. RGB tolerance is one channel level; alpha is exact.
@@ -120,16 +123,20 @@ must stay experimental until these results are recorded.
   draw-submission time for GPU adjustments. This time does not represent GPU
   execution time.
 
-### 2B — Gaussian Blur (planned)
+### 2B — Gaussian Blur in preview (implemented experimentally)
 
-- Add Gaussian Blur after Color Adjustment while preserving the CPU renderer as
-  the parity and fallback implementation.
-- Preserve ordered/repeated/disabled effects, parameters, alpha semantics,
-  cancellation, and the existing CPU fallback.
-- Keep effect intermediate textures on the GPU, with bounded temporary storage.
+- Extend the shared OpenGL layer contract with an ordered Color Adjustment and
+  Gaussian Blur sequence; preserve the CPU renderer as the parity reference and
+  fallback.
+- Preserve repeated and disabled effects, parameters, alpha semantics,
+  cancellation, and layer order. The CPU export path is unchanged.
+- Reuse one RGBA8 scratch texture per worker, capped at 64 MiB; unsupported or
+  failed effect requests fall back to CPU processing and composition.
 - Define a shared effect boundary only when its responsibilities are clear;
   retain Motion-owned UI, document parameters, and history.
-- Compare CPU/GPU output and profile each effect and the complete frame.
+- Compare CPU/GPU output within one RGB level with exact alpha. Profile each
+  effect and complete frame; the current shader's CPU submission metric does
+  not measure GPU execution.
 
 **Stage 2 exit:** covered effect parity and measured gains without regressions
 in preview, playback, or document behavior.
@@ -189,21 +196,26 @@ while worker contexts can render to framebuffer objects. See the
   Color Adjustment in the shared OpenGL compositor. CPU remains the default,
   fallback, and export path. Native-driver acceptance and performance gains
   remain unclaimed pending recorded measurements.
+- 2026-10-06: added ordered GPU Gaussian Blur for preview stacks, with a bounded
+  scratch target, CPU fallback, and schema-7 metrics. Focused Motion regressions
+  pass; the shared OpenGL shader parity test is skipped when this environment
+  cannot create a worker context. No performance gain is claimed.
 
 ## Resuming implementation
 
 1. Read `AGENTS.md`, this plan, `REUSE_PLAN.md`, `SCOPE_AND_READINESS.md`, and
    the current renderer/compositor contracts; inspect the working tree.
-2. Recheck current Qt/platform capabilities and diagnostic evidence. Preserve
-   CPU output and fallback behavior while introducing Stage 1A in a small change.
-3. Add the deterministic boundary tests and native manual checks in the same
-   implementation change. Use Stage 1B to record acceptance results before
-   enabling the backend by default or claiming performance improvements.
+2. For Stage 3, inspect texture ownership and viewer-context sharing before
+   changing the RGBA readback boundary. Keep worker resource ownership and CPU
+   fallback intact.
+3. Add deterministic boundary tests and native manual checks with each stage.
+   Record acceptance before enabling the backend by default or claiming
+   performance improvements.
 4. Update this file after each delivery with implemented items, build/test
    evidence, unresolved issues, and the next stage. Leave later stages marked
    planned until their code and acceptance work exist.
 
-## Stage 1 manual checklist
+## GPU preview manual checklist
 
 Record build, OS, GPU, driver, setting, actions, and outcome for each item.
 
@@ -213,13 +225,12 @@ Record build, OS, GPU, driver, setting, actions, and outcome for each item.
    content, and clockwise/counterclockwise rotation.
 2. Seek rapidly, play/pause/loop, edit keys, replace the composition, and close
    during rendering. Confirm fresh frames and no freeze or resource errors.
-3. Include Color Adjustment-only stacks and stacks that also contain Gaussian
-   Blur. Confirm the former run through the GPU path and the latter use the
-   ordered CPU effect stack before GPU composition. Export remains the CPU
-   baseline.
-4. Use an unavailable/unsupported context or a source larger than the driver
-   texture limit. Confirm CPU output and an actionable fallback log, without
-   repeated errors for every frame.
+3. Include Color Adjustment-only stacks and ordered mixed stacks with repeated
+   Gaussian Blur. Confirm blur edges and alpha match the CPU output, then verify
+   GPU processing when available. Export remains the CPU baseline.
+4. Use an unavailable/unsupported context or a source/effect target beyond the
+   device or 64 MiB temporary limit. Confirm CPU output and an actionable
+   fallback log, without repeated errors for every frame.
 5. Compare the stage timing records and full-render/request-to-paint metrics
    under identical workloads; include upload and readback costs in the result.
 

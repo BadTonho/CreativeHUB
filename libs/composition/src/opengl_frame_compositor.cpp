@@ -8,6 +8,7 @@
 #include <QOpenGLFunctions_3_2_Core>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVersionFunctionsFactory>
+#include <QVector3D>
 #include <QThread>
 
 #include <algorithm>
@@ -24,13 +25,15 @@ namespace creative_suite::composition {
 namespace {
 using Clock = std::chrono::steady_clock;
 constexpr std::uint64_t maximum_texture_bytes = 256ULL * 1024 * 1024;
+constexpr std::uint64_t maximum_effect_scratch_bytes = 64ULL * 1024 * 1024;
 std::uint64_t elapsed(Clock::time_point start) {
     return static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start).count());
 }
 OpenGlCompositionResult result(OpenGlCompositionStatus status,
-    const char* operation = "", std::string cause = {}, std::int64_t code = 0) {
-    return {status, {}, operation, std::move(cause), code};
+    const char* operation = "", std::string cause = {}, std::int64_t code = 0,
+    int layer_index = -1) {
+    return {status, {}, operation, std::move(cause), code, layer_index};
 }
 bool usable(const CompositionLayer& layer) {
     if (!layer.frame || !animation::validTransform(layer.transform)) return false;
@@ -91,6 +94,59 @@ void main() {
     for (int i = 0; i < color_adjustment_count; ++i)
         source.rgb = adjustColor(source.rgb, color_adjustments[i]);
     color = vec4(source.rgb, source.a * opacity);
+}
+)GLSL";
+constexpr char effect_fragment_shader[] = R"GLSL(#version 150 core
+uniform sampler2D source_image;
+uniform int effect_kind;
+uniform vec3 color_parameters;
+uniform int blur_radius;
+uniform bool horizontal_pass;
+uniform bool premultiply_alpha;
+uniform bool unpremultiply_alpha;
+out vec4 color;
+vec3 adjustColor(vec3 rgb) {
+    rgb += color_parameters.x;
+    rgb = (rgb - vec3(0.5)) * color_parameters.y + vec3(0.5);
+    float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+    rgb = vec3(luma) + (rgb - vec3(luma)) * color_parameters.z;
+    return floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+}
+void main() {
+    ivec2 size = textureSize(source_image, 0);
+    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    if (effect_kind == 0) {
+        vec4 source = texelFetch(source_image, pixel, 0);
+        source.rgb = adjustColor(source.rgb);
+        color = source;
+        return;
+    }
+    if (premultiply_alpha) {
+        vec4 source = texelFetch(source_image, pixel, 0);
+        ivec3 bytes = ivec3(floor(source.rgb * 255.0 + 0.5));
+        int alpha = int(floor(source.a * 255.0 + 0.5));
+        bytes = (bytes * alpha + ivec3(127)) / 255;
+        color = vec4(vec3(bytes) / 255.0, source.a);
+        return;
+    }
+    if (unpremultiply_alpha) {
+        vec4 source = texelFetch(source_image, pixel, 0);
+        int alpha = int(floor(source.a * 255.0 + 0.5));
+        ivec3 bytes = ivec3(floor(source.rgb * 255.0 + 0.5));
+        if (alpha == 0) bytes = ivec3(0);
+        else bytes = min(ivec3(255), (bytes * 255 + ivec3(alpha / 2)) / alpha);
+        color = vec4(vec3(bytes) / 255.0, source.a);
+        return;
+    }
+    ivec2 step = horizontal_pass ? ivec2(1, 0) : ivec2(0, 1);
+    ivec4 sum = ivec4(0);
+    for (int offset = -blur_radius; offset <= blur_radius; ++offset) {
+        ivec2 sample_pixel = clamp(pixel + step * offset, ivec2(0), size - ivec2(1));
+        sum += ivec4(floor(texelFetch(source_image, sample_pixel, 0) * 255.0 + 0.5));
+    }
+    int divisor = blur_radius * 2 + 1;
+    ivec4 averaged = (sum + ivec4(divisor / 2)) / divisor;
+    color = vec4(averaged) / 255.0;
 }
 )GLSL";
 } // namespace
@@ -178,8 +234,11 @@ struct OpenGlFrameCompositor::Impl {
     std::unique_ptr<QOpenGLContext> context;
     QOpenGLFunctions_3_2_Core* gl = nullptr;
     std::unique_ptr<QOpenGLShaderProgram> program;
+    std::unique_ptr<QOpenGLShaderProgram> effect_program;
     std::unique_ptr<QOpenGLFramebufferObject> output;
+    std::unique_ptr<QOpenGLFramebufferObject> effect_scratch;
     GLuint texture = 0;
+    GLuint effect_source_fbo = 0;
     GLuint vao = 0;
     GLuint lookup_buffers[3]{};
     std::uint64_t peak_known_bytes = 0;
@@ -229,7 +288,10 @@ struct OpenGlFrameCompositor::Impl {
                 target.output.reset();
             }
             output.reset();
+            effect_scratch.reset();
             program.reset();
+            effect_program.reset();
+            if (effect_source_fbo) gl->glDeleteFramebuffers(1, &effect_source_fbo);
             if (texture) gl->glDeleteTextures(1, &texture);
             if (vao) gl->glDeleteVertexArrays(1, &vao);
             gl->glDeleteBuffers(3, lookup_buffers);
@@ -285,8 +347,15 @@ struct OpenGlFrameCompositor::Impl {
             !program->link())
             return result(OpenGlCompositionStatus::Failed, "compile-shaders",
                 program->log().toStdString());
+        effect_program = std::make_unique<QOpenGLShaderProgram>();
+        if (!effect_program->addShaderFromSourceCode(QOpenGLShader::Vertex, vertex_shader) ||
+            !effect_program->addShaderFromSourceCode(QOpenGLShader::Fragment,
+                effect_fragment_shader) || !effect_program->link())
+            return result(OpenGlCompositionStatus::Failed, "compile-effect-shaders",
+                effect_program->log().toStdString());
         gl->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &texture_limit);
         gl->glGenTextures(1, &texture);
+        gl->glGenFramebuffers(1, &effect_source_fbo);
         gl->glGenVertexArrays(1, &vao);
         GLint block_size = 0, fragment_blocks = 0;
         gl->glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &block_size);
@@ -360,6 +429,9 @@ struct OpenGlFrameCompositor::Impl {
         std::uint64_t bytes = static_cast<std::uint64_t>(source_width) * source_height * 4;
         if (output && output->isValid()) bytes += static_cast<std::uint64_t>(output->width()) * output->height() * 4;
         for (const auto& target : targets) if (target.output && target.output->isValid()) bytes += target.bytes;
+        if (effect_scratch && effect_scratch->isValid())
+            bytes += static_cast<std::uint64_t>(effect_scratch->width()) *
+                effect_scratch->height() * 4;
         const std::uint64_t geometry = (lookup_buffers[0] ? 16384ULL : 0) +
             (lookup_buffers[1] ? 16384ULL : 0) + (lookup_buffers[2] ? 4096ULL : 0);
         return {bytes, geometry, std::max(peak_known_bytes, bytes + geometry)};
@@ -582,10 +654,16 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         if (!bounded(width, height, p.texture_limit))
             return result(OpenGlCompositionStatus::Unsupported, "check-limits",
                 "Canvas exceeds the device texture limit or 256 MiB texture budget.");
-        for (const auto& layer : layers) {
+        for (std::size_t layer_index = 0; layer_index < layers.size(); ++layer_index) {
+            const auto& layer = layers[layer_index];
+            if (!layer.gpu_color_adjustments.empty() && !layer.gpu_effects.empty())
+                return result(OpenGlCompositionStatus::Unsupported, "check-effects",
+                    "A layer cannot combine legacy and ordered GPU effect lists.", 0,
+                    static_cast<int>(layer_index));
             if (layer.gpu_color_adjustments.size() > 256)
                 return result(OpenGlCompositionStatus::Unsupported, "check-effects",
-                    "Color adjustment stack exceeds the 256-effect GPU limit.");
+                    "Color adjustment stack exceeds the 256-effect GPU limit.", 0,
+                    static_cast<int>(layer_index));
             for (const auto& adjustment : layer.gpu_color_adjustments) {
                 if (!std::isfinite(adjustment.brightness) || adjustment.brightness < -100.0 ||
                     adjustment.brightness > 100.0 ||
@@ -594,8 +672,42 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     !std::isfinite(adjustment.saturation_percent) ||
                     adjustment.saturation_percent < 0.0 || adjustment.saturation_percent > 200.0)
                     return result(OpenGlCompositionStatus::Unsupported, "check-effects",
-                        "Color adjustment parameters are outside the shared effect contract.");
+                        "Color adjustment parameters are outside the shared effect contract.", 0,
+                        static_cast<int>(layer_index));
             }
+            if (layer.gpu_effects.size() > 256)
+                return result(OpenGlCompositionStatus::Unsupported, "check-effects",
+                    "Ordered effect stack exceeds the 256-effect GPU limit.", 0,
+                    static_cast<int>(layer_index));
+            bool has_gpu_effect_work = false;
+            for (const auto& effect : layer.gpu_effects) {
+                if (const auto* adjustment = std::get_if<effects::ColorAdjustmentParameters>(&effect)) {
+                    if (!std::isfinite(adjustment->brightness) || adjustment->brightness < -100.0 ||
+                        adjustment->brightness > 100.0 ||
+                        !std::isfinite(adjustment->contrast_percent) ||
+                        adjustment->contrast_percent < 0.0 || adjustment->contrast_percent > 200.0 ||
+                        !std::isfinite(adjustment->saturation_percent) ||
+                        adjustment->saturation_percent < 0.0 || adjustment->saturation_percent > 200.0)
+                        return result(OpenGlCompositionStatus::Unsupported, "check-effects",
+                            "Color adjustment parameters are outside the shared effect contract.", 0,
+                            static_cast<int>(layer_index));
+                    has_gpu_effect_work = true;
+                } else {
+                    const auto& blur = std::get<GpuGaussianBlurParameters>(effect);
+                    if (!std::isfinite(blur.radius_pixels) || blur.radius_pixels < 0.0 ||
+                        blur.radius_pixels > 100.0)
+                        return result(OpenGlCompositionStatus::Unsupported, "check-effects",
+                            "Gaussian Blur parameters are outside the shared effect contract.", 0,
+                            static_cast<int>(layer_index));
+                    has_gpu_effect_work = has_gpu_effect_work || std::lround(blur.radius_pixels) > 0;
+                }
+            }
+            if (has_gpu_effect_work && usable(layer) &&
+                static_cast<std::uint64_t>(layer.frame->width) * layer.frame->height * 4 >
+                    maximum_effect_scratch_bytes)
+                return result(OpenGlCompositionStatus::Unsupported, "check-effect-memory",
+                    "Ordered GPU effects exceed the 64 MiB per-worker temporary texture limit.",
+                    0, static_cast<int>(layer_index));
             if (usable(layer) && layer.transform.opacity > 0 &&
                 layer.transform.rotation_degrees != 0 && !p.precise_geometry)
                 return result(OpenGlCompositionStatus::Unsupported, "check-precision",
@@ -665,7 +777,8 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             if (!usable(layer) || layer.transform.opacity == 0) continue;
             const auto& f = *layer.frame;
             p.program->setUniformValue("color_adjustment_count",
-                static_cast<int>(layer.gpu_color_adjustments.size()));
+                layer.gpu_effects.empty()
+                    ? static_cast<int>(layer.gpu_color_adjustments.size()) : 0);
             const auto color_adjustment_started = layer.gpu_color_adjustments.empty()
                 ? Clock::time_point{} : Clock::now();
             if (!layer.gpu_color_adjustments.empty()) {
@@ -713,6 +826,150 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             measured.uploaded_bytes += static_cast<std::uint64_t>(f.width) * f.height * 4;
             ++measured.uploaded_layers;
             if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
+            GLuint layer_texture = p.texture;
+            const bool has_gpu_effect_work = std::any_of(layer.gpu_effects.begin(),
+                layer.gpu_effects.end(), [](const auto& effect) {
+                    if (std::holds_alternative<effects::ColorAdjustmentParameters>(effect))
+                        return true;
+                    return std::lround(std::get<GpuGaussianBlurParameters>(effect).radius_pixels) > 0;
+                });
+            if (has_gpu_effect_work) {
+                const int layer_index = static_cast<int>(&layer - layers.data());
+                if (!p.effect_scratch || p.effect_scratch->width() != f.width ||
+                    p.effect_scratch->height() != f.height) {
+                    p.effect_scratch.reset();
+                    QOpenGLFramebufferObjectFormat format;
+                    format.setInternalTextureFormat(GL_RGBA8);
+                    p.effect_scratch = std::make_unique<QOpenGLFramebufferObject>(
+                        f.width, f.height, format);
+                    if (!p.effect_scratch->isValid())
+                        return result(OpenGlCompositionStatus::Failed, "allocate-effect-target",
+                            "Cannot allocate the bounded RGBA8 effect target.", 0, layer_index);
+                    p.rememberResourcePeak();
+                }
+                gl->glBindFramebuffer(GL_FRAMEBUFFER, p.effect_source_fbo);
+                gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                    GL_TEXTURE_2D, p.texture, 0);
+                if (gl->glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                    return result(OpenGlCompositionStatus::Failed, "attach-effect-source",
+                        "Cannot attach the uploaded layer texture as an effect target.",
+                        gl->glGetError(), layer_index);
+                if (!p.effect_program->bind())
+                    return result(OpenGlCompositionStatus::Failed, "bind-effect-shader",
+                        "Cannot bind the ordered effect shader.", 0, layer_index);
+                gl->glDisable(GL_BLEND);
+                gl->glDisable(GL_DITHER);
+                gl->glDisable(GL_FRAMEBUFFER_SRGB);
+                gl->glViewport(0, 0, f.width, f.height);
+                p.effect_program->setUniformValue("source_image", 0);
+                const auto render_effect_pass = [&](GLuint source_texture,
+                                                    GLuint destination_texture,
+                                                    GLuint destination_fbo) {
+                    if (cancelled()) return false;
+                    gl->glBindFramebuffer(GL_FRAMEBUFFER, destination_fbo);
+                    if (destination_fbo == p.effect_source_fbo) {
+                        gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                            GL_TEXTURE_2D, destination_texture, 0);
+                        if (gl->glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                            return false;
+                    }
+                    gl->glActiveTexture(GL_TEXTURE0);
+                    gl->glBindTexture(GL_TEXTURE_2D, source_texture);
+                    gl->glDrawArrays(GL_TRIANGLES, 0, 3);
+                    return gl->glGetError() == GL_NO_ERROR;
+                };
+                GLuint current_texture = p.texture;
+                for (const auto& effect : layer.gpu_effects) {
+                    const auto effect_started = Clock::now();
+                    if (const auto* adjustment =
+                            std::get_if<effects::ColorAdjustmentParameters>(&effect)) {
+                        p.effect_program->setUniformValue("effect_kind", 0);
+                        p.effect_program->setUniformValue("color_parameters",
+                            QVector3D(static_cast<float>(adjustment->brightness / 100.0),
+                                static_cast<float>(adjustment->contrast_percent / 100.0),
+                                static_cast<float>(adjustment->saturation_percent / 100.0)));
+                        p.effect_program->setUniformValue("premultiply_alpha", false);
+                        p.effect_program->setUniformValue("unpremultiply_alpha", false);
+                        p.effect_program->setUniformValue("horizontal_pass", true);
+                        p.effect_program->setUniformValue("blur_radius", 0);
+                        const GLuint destination = current_texture == p.texture
+                            ? p.effect_scratch->texture() : p.texture;
+                        const GLuint framebuffer = destination == p.texture
+                            ? p.effect_source_fbo : p.effect_scratch->handle();
+                        if (!render_effect_pass(current_texture, destination, framebuffer)) {
+                            if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
+                            return result(OpenGlCompositionStatus::Failed, "apply-color-adjustment",
+                                "OpenGL failed to process an ordered Color Adjustment.",
+                                gl->glGetError(), layer_index);
+                        }
+                        current_texture = destination;
+                        ++measured.color_adjustment_count;
+                        measured.color_adjustment_submission_nanoseconds += elapsed(effect_started);
+                    } else {
+                        const auto& blur = std::get<GpuGaussianBlurParameters>(effect);
+                        const int radius = static_cast<int>(std::lround(blur.radius_pixels));
+                        if (radius <= 0) continue;
+                        p.effect_program->setUniformValue("effect_kind", 1);
+                        p.effect_program->setUniformValue("blur_radius", radius);
+                        p.effect_program->setUniformValue("premultiply_alpha", true);
+                        p.effect_program->setUniformValue("unpremultiply_alpha", false);
+                        p.effect_program->setUniformValue("horizontal_pass", true);
+                        GLuint destination = current_texture == p.texture
+                            ? p.effect_scratch->texture() : p.texture;
+                        GLuint framebuffer = destination == p.texture
+                            ? p.effect_source_fbo : p.effect_scratch->handle();
+                        if (!render_effect_pass(current_texture, destination, framebuffer)) {
+                            if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
+                            return result(OpenGlCompositionStatus::Failed, "premultiply-blur-input",
+                                "OpenGL failed to premultiply Gaussian Blur input.",
+                                gl->glGetError(), layer_index);
+                        }
+                        current_texture = destination;
+                        p.effect_program->setUniformValue("premultiply_alpha", false);
+                        for (int pass = 0; pass < 3; ++pass) {
+                            for (const bool horizontal : {true, false}) {
+                                p.effect_program->setUniformValue("horizontal_pass", horizontal);
+                                destination = current_texture == p.texture
+                                    ? p.effect_scratch->texture() : p.texture;
+                                framebuffer = destination == p.texture
+                                    ? p.effect_source_fbo : p.effect_scratch->handle();
+                                if (!render_effect_pass(current_texture, destination, framebuffer)) {
+                                    if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
+                                    return result(OpenGlCompositionStatus::Failed,
+                                        horizontal ? "blur-horizontal" : "blur-vertical",
+                                        "OpenGL failed during a Gaussian Blur pass.",
+                                        gl->glGetError(), layer_index);
+                                }
+                                current_texture = destination;
+                            }
+                        }
+                        p.effect_program->setUniformValue("unpremultiply_alpha", true);
+                        destination = current_texture == p.texture
+                            ? p.effect_scratch->texture() : p.texture;
+                        framebuffer = destination == p.texture
+                            ? p.effect_source_fbo : p.effect_scratch->handle();
+                        if (!render_effect_pass(current_texture, destination, framebuffer)) {
+                            if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
+                            return result(OpenGlCompositionStatus::Failed, "unpremultiply-blur-output",
+                                "OpenGL failed to restore straight alpha after Gaussian Blur.",
+                                gl->glGetError(), layer_index);
+                        }
+                        current_texture = destination;
+                        p.effect_program->setUniformValue("unpremultiply_alpha", false);
+                        ++measured.gaussian_blur_count;
+                        measured.gaussian_blur_submission_nanoseconds += elapsed(effect_started);
+                    }
+                }
+                layer_texture = current_texture;
+                if (!output->bind() || !p.program->bind())
+                    return result(OpenGlCompositionStatus::Failed, "restore-composition-target",
+                        "Cannot restore the composition framebuffer after effects.", 0, layer_index);
+                gl->glViewport(0, 0, width, height);
+                gl->glEnable(GL_BLEND);
+                gl->glBlendEquation(GL_FUNC_ADD);
+                gl->glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
+                    GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            }
             const auto draw_started = Clock::now();
             std::uint64_t geometry_upload_ns = 0;
             const auto& t = layer.transform;
@@ -762,6 +1019,8 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             set_geometry("displayed_size", displayed_width, displayed_height);
             set_geometry("rotation_cs", std::cos(radians), std::sin(radians));
             p.program->setUniformValue("opacity", static_cast<float>(t.opacity));
+            gl->glActiveTexture(GL_TEXTURE0);
+            gl->glBindTexture(GL_TEXTURE_2D, layer_texture);
             gl->glDrawArrays(GL_TRIANGLES, 0, 3);
             if (!layer.gpu_color_adjustments.empty())
                 measured.color_adjustment_submission_nanoseconds +=
