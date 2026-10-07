@@ -303,8 +303,9 @@ coverage is indexed below.
   changes. No keyboard shortcut or saved preference is added.
 - [x] Cover algorithm limits, RGBA connectivity, toolbar interaction, masks,
   and selection combination in the focused Magic Wand UI verification.
-- [x] Coalesce identical scanline runs into compact rectangles and move layer
-  rendering and region detection off the UI thread for large uniform regions.
+- [x] Coalesce identical scanline runs, simplify their union to remove internal
+  row edges from the selection outline, and move layer rendering and region
+  detection off the UI thread for large uniform regions.
 - [ ] Complete native visual checks for layer/mask targets and transformed
   groups, including a large transparent canvas, in
   [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).

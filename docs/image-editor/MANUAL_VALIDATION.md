@@ -115,8 +115,10 @@ editable layer.
 4. Confirm Magic Wand does not mark the document modified, create Undo history,
    or persist its temporary selection. Rejected oversized regions must leave
    the previous selection intact. Tolerance returns to zero after restarting
-   the application. On a large transparent canvas, confirm selection finishes
-   without striped internal outlines and the interface remains responsive.
+   the application. Select a curved Paint stroke with Magic Wand and confirm
+   the outline follows only the stroke's exterior, without scanline stripes.
+   On a large transparent canvas, confirm selection finishes and the interface
+   remains responsive.
 
 Automated coverage is in `image_editor_ui_test.cpp` (`testMagicWandTool`,
 `creative-suite-image-editor-magic-wand-ui`). It checks four-way connectivity,

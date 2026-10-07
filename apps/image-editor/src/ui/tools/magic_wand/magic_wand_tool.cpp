@@ -170,6 +170,14 @@ MagicWandTool::Result MagicWandTool::select(
         region.addRect(QRectF(rectangle));
     }
     if (region.isEmpty()) return {};
+
+    // The scanline rectangles describe one filled region, but their shared
+    // edges are not selection boundaries. Merge the subpaths so the canvas
+    // overlay draws only the exterior contour (and any real holes).
+    region = region.simplified();
+    if (region.elementCount() > ImageDocumentStore::kMaximumStrokeClipPathElements) {
+        return {Status::Rejected, {}, geometryLimitMessage()};
+    }
     return {Status::Selected, std::move(region), {}};
 }
 

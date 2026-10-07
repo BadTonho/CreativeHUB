@@ -50,8 +50,9 @@ persistence, and recovery.
   selection stays temporary per tab and does not change pixels, history, or
   `.cimg`. Tolerance starts at zero on each application launch and is not
   stored in preferences. Layer rendering and region detection run as bounded
-  background work; adjacent scanline runs are coalesced before building the
-  selection path so a uniform transparent canvas has compact geometry.
+  background work; adjacent scanline runs are coalesced and their path is
+  simplified into the region's exterior contour, so shared row edges do not
+  appear as stripes in the canvas selection overlay.
 - `src/ui/tools/gradient/linear_gradient_tool.*` owns the in-canvas drag from
   color start to transparent end. `ImageCanvas` requests a composed transient
   preview while dragging and forwards the completed gesture; the session maps
