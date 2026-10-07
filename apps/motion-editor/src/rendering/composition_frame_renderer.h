@@ -24,6 +24,15 @@ struct CompositionGpuMetrics {
     std::uint64_t upload_nanoseconds = 0;
     std::uint64_t draw_submission_nanoseconds = 0;
     std::uint64_t readback_nanoseconds = 0;
+    std::uint64_t readback_submit_nanoseconds = 0;
+    std::uint64_t readback_wait_nanoseconds = 0;
+    std::uint64_t readback_copy_nanoseconds = 0;
+    std::uint64_t readback_frames_submitted = 0;
+    std::uint64_t readback_frames_collected = 0;
+    std::uint64_t readback_fence_waits = 0;
+    std::uint64_t readback_peak_pending_frames = 0;
+    std::uint64_t readback_peak_pending_bytes = 0;
+    std::uint64_t readback_slots = 0;
     std::uint64_t color_adjustment_count = 0;
     std::uint64_t gaussian_blur_count = 0;
 
@@ -42,11 +51,14 @@ public:
     CompositionFrameRenderer(bool record_preview_metrics,
                              bool gpu_composition_enabled,
                              QOffscreenSurface* gpu_surface,
-                             CompositionGpuMetrics* gpu_metrics = nullptr) noexcept
+                             CompositionGpuMetrics* gpu_metrics = nullptr,
+                             std::uint64_t async_readback_staging_budget_bytes =
+                                 128ULL * 1024 * 1024) noexcept
         : record_preview_metrics_(record_preview_metrics),
           gpu_composition_enabled_(gpu_composition_enabled),
           gpu_surface_(gpu_surface),
-          gpu_metrics_(gpu_metrics) {}
+          gpu_metrics_(gpu_metrics),
+          async_readback_staging_budget_bytes_(async_readback_staging_budget_bytes) {}
 
     void reset();
     // Releases thread-affine OpenGL resources. Call from the renderer worker.
@@ -55,7 +67,19 @@ public:
         const PreviewRequest& request,
         const CancellationPredicate& should_cancel = {},
         bool fail_on_media_error = false,
-        PreviewRequestMode mode = PreviewRequestMode::Interactive);
+        PreviewRequestMode mode = PreviewRequestMode::Interactive,
+        std::optional<creative_suite::composition::OpenGlReadbackTicket>* async_ticket = nullptr,
+        bool* async_failure = nullptr);
+    // Drop outstanding PBO tickets and disable GPU composition after a failed
+    // asynchronous export transfer. Call on the renderer worker thread.
+    void recoverAsyncReadbackFailure();
+    [[nodiscard]] creative_suite::composition::OpenGlReadbackResult collectAsyncReadback(
+        creative_suite::composition::OpenGlReadbackTicket ticket,
+        const CancellationPredicate& should_cancel = {});
+    [[nodiscard]] unsigned asyncReadbackSlotCount() const noexcept
+    {
+        return async_readback_slots_;
+    }
 
 private:
     void reportDecodeError(
@@ -77,6 +101,9 @@ private:
     QOffscreenSurface* gpu_surface_ = nullptr; // borrowed from the GUI thread owner
     CompositionGpuMetrics* gpu_metrics_ = nullptr; // borrowed for one render job
     std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor> gpu_compositor_;
+    bool async_readback_prepared_ = false;
+    unsigned async_readback_slots_ = 0;
+    std::uint64_t async_readback_staging_budget_bytes_ = 128ULL * 1024 * 1024;
 };
 
 } // namespace motion::ui

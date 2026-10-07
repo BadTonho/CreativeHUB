@@ -111,14 +111,43 @@ void CompositionFrameRenderer::shutdown()
     // OpenGlFrameCompositor must be destroyed on the same worker that created it.
     gpu_compositor_.reset();
 }
+void CompositionFrameRenderer::recoverAsyncReadbackFailure()
+{
+    if (gpu_compositor_) gpu_compositor_->discardAsyncReadbacks();
+    gpu_composition_disabled_after_failure_ = true;
+}
+creative_suite::composition::OpenGlReadbackResult
+CompositionFrameRenderer::collectAsyncReadback(
+    creative_suite::composition::OpenGlReadbackTicket ticket,
+    const CancellationPredicate& should_cancel)
+{
+    if (!gpu_compositor_) return {
+        creative_suite::composition::OpenGlCompositionStatus::Failed, {}, {},
+        "collect-pbo-ticket", "The export OpenGL compositor is unavailable."};
+    auto collected = gpu_compositor_->collectAsyncReadback(ticket, should_cancel);
+    if (gpu_metrics_ != nullptr &&
+        collected.status == creative_suite::composition::OpenGlCompositionStatus::Complete) {
+        ++gpu_metrics_->readback_frames_collected;
+        gpu_metrics_->readback_nanoseconds += collected.fence_wait_nanoseconds +
+            collected.copy_nanoseconds;
+        gpu_metrics_->readback_wait_nanoseconds += collected.fence_wait_nanoseconds;
+        gpu_metrics_->readback_copy_nanoseconds += collected.copy_nanoseconds;
+        if (collected.fence_wait_nanoseconds > 0) ++gpu_metrics_->readback_fence_waits;
+    }
+    return collected;
+}
 creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     const PreviewRequest& request,
     const CancellationPredicate& should_cancel,
     bool fail_on_media_error,
-    PreviewRequestMode mode)
+    PreviewRequestMode mode,
+    std::optional<creative_suite::composition::OpenGlReadbackTicket>* async_ticket,
+    bool* async_failure)
 {
     using creative_suite::composition::CompositionLayer;
     using creative_suite::media::VideoPlaybackSession;
+    if (async_ticket) async_ticket->reset();
+    if (async_failure) *async_failure = false;
 
     if (request.layers.empty()) {
         content_frames_.clear();
@@ -478,12 +507,74 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                     gpu_compositor_ = std::make_unique<
                         creative_suite::composition::OpenGlFrameCompositor>(gpu_surface_);
                 }
-                gpu_result = gpu_compositor_->compose(
-                    request.canvas_size.width,
-                    request.canvas_size.height,
-                    composition_layers,
-                    should_cancel,
-                    &gpu_timings);
+                bool use_synchronous_gpu = true;
+                if (async_ticket != nullptr) {
+                    if (!async_readback_prepared_) {
+                        async_readback_prepared_ = true;
+                        const auto frame_bytes = static_cast<std::uint64_t>(
+                            request.canvas_size.width) * request.canvas_size.height * 4;
+                        const auto pbo_budget =
+                            frame_bytes < async_readback_staging_budget_bytes_
+                                ? async_readback_staging_budget_bytes_ - frame_bytes : 0;
+                        const auto prepared = gpu_compositor_->prepareAsyncReadback(
+                            request.canvas_size.width, request.canvas_size.height,
+                            pbo_budget, 2, &async_readback_slots_);
+                        if (prepared.status == OpenGlCompositionStatus::Complete &&
+                            async_readback_slots_ > 0) {
+                            use_synchronous_gpu = false;
+                            if (gpu_metrics_ != nullptr)
+                                gpu_metrics_->readback_slots = async_readback_slots_;
+                        } else {
+                            async_readback_slots_ = 0;
+                            creative_suite::diagnostics::Logger::instance().log(
+                                creative_suite::diagnostics::Level::Warning,
+                                "motion_export", "async_readback_unavailable",
+                                prepared.cause.empty()
+                                    ? "Asynchronous GPU readback is unavailable; using synchronous GPU readback."
+                                    : prepared.cause,
+                                {{"gpu_operation", prepared.operation},
+                                 {"error_code", std::to_string(prepared.error_code)},
+                                 {"canvas_width", std::to_string(request.canvas_size.width)},
+                                 {"canvas_height", std::to_string(request.canvas_size.height)}});
+                        }
+                    } else {
+                        use_synchronous_gpu = async_readback_slots_ == 0;
+                    }
+                    if (!use_synchronous_gpu) {
+                        const auto submitted = gpu_compositor_->submitAsyncReadback(
+                            request.canvas_size.width, request.canvas_size.height,
+                            composition_layers, should_cancel);
+                        gpu_timings = submitted.composition_timings;
+                        if (submitted.status == OpenGlCompositionStatus::Complete) {
+                            if (gpu_metrics_ != nullptr) {
+                                gpu_metrics_->record(submitted.composition_timings);
+                                gpu_metrics_->readback_bytes += submitted.bytes;
+                                gpu_metrics_->readback_submit_nanoseconds +=
+                                    submitted.submission_nanoseconds;
+                                ++gpu_metrics_->readback_frames_submitted;
+                                ++gpu_metrics_->composition_frames;
+                            }
+                            if (async_ticket) *async_ticket = submitted.ticket;
+                            return {};
+                        }
+                        if (submitted.status == OpenGlCompositionStatus::Cancelled ||
+                            (should_cancel && should_cancel())) return {};
+                        if (async_failure) *async_failure = true;
+                        gpu_result.status = submitted.status;
+                        gpu_result.operation = submitted.operation;
+                        gpu_result.cause = submitted.cause;
+                        gpu_result.error_code = submitted.error_code;
+                        use_synchronous_gpu = false;
+                    }
+                }
+                if (use_synchronous_gpu) {
+                    gpu_result = gpu_compositor_->compose(
+                        request.canvas_size.width,
+                        request.canvas_size.height,
+                        composition_layers,
+                        should_cancel,
+                        &gpu_timings);
+                }
             } catch (const std::exception& error) {
                 gpu_result.status = OpenGlCompositionStatus::Failed;
                 gpu_result.operation = "compose";

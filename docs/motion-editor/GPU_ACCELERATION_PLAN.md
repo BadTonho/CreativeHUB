@@ -43,10 +43,16 @@ GUI-owned offscreen surface and keeps it alive until its worker has destroyed
 the worker-owned context and compositor.
 Diagnostics schema 7 reports GPU composition, Color Adjustment, and Gaussian
 Blur counts, fallbacks, failures, upload/readback bytes, and stage timings.
-Export summary schema 2 records the requested/used backend, rendered GPU and
+Export summary schema 3 records the requested/used backend, rendered GPU and
 CPU-fallback frame counts, failures, uploaded/readback bytes, and average
-upload, draw-submission, and readback times. Effect timings for OpenGL are
-CPU-side submission time, not GPU execution time.
+upload, draw-submission, and readback times. Export uses up to two PBOs and
+fences with a FIFO frame queue, while a dedicated consumer thread owns the
+FFmpeg encoder. The PBO pool and one RGBA frame in transfer or encoding are
+bounded to 128 MiB per export; slot count falls with resolution. If one PBO
+cannot fit, the exporter keeps synchronous GPU readback. If an asynchronous
+transfer fails, pending and remaining frames are rerendered on CPU in order for
+the rest of the job. Submission, fence wait, and copy metrics are CPU wall
+times; they do not measure GPU execution time.
 
 A read-only inspection of existing local diagnostic intervals on 2026-10-02
 found 1920 x 1080, two-layer samples with composition averages around
@@ -87,10 +93,13 @@ does not contain GPU counters and cannot establish GPU-path performance.
   On GPU initialization or rendering failure, log the cause and compose the
   same request on the CPU. Hardware limits must also allow a CPU fallback.
 - Reuse bounded GPU allocations. Document source uploads and output readback
-  explicitly rather than claiming a path without CPU/GPU transfers.
+  explicitly rather than claiming a path without CPU/GPU transfers. Preview
+  retains synchronous readback; export can use two PBO slots within a 128 MiB
+  staging budget.
 - GPU frame/resource timing and byte totals are included in Motion preview
   diagnostics schema 7. Export-specific totals are collected per job in
-  `export_summary` schema 2; they do not share the preview interval collector.
+  `export_summary` schema 3; asynchronous submission, fence wait, copy,
+  encoder queue, and staging metrics do not share the preview interval collector.
 - Keep `.motion` v4, recovery v1, `.cimg` v11, and `.csp` unchanged.
 
 ### 1B — Regression coverage and measured acceptance (in progress)
@@ -109,8 +118,9 @@ does not contain GPU counters and cannot establish GPU-path performance.
 - Exercise rapid seeks, playback, cancellation, composition replacement,
   repeated opening/closing, context failure, and resource cleanup.
 - Use existing composition, full-render, and request-to-paint metrics, plus
-  backend upload/draw/readback measurements. Profile before adding caches,
-  asynchronous transfers, or changing the default backend.
+  backend upload/draw/readback measurements. Export now overlaps asynchronous
+  PBO transfers with FFmpeg encoding; measure end-to-end performance before
+  changing the default backend or adding caches.
 - Record three runs per backend for the approved 1080p/30 fps, 10-second,
   five-layer workload, including the reference Windows PC, driver, CPU/memory,
   stage times, and delivered/coalesced frames. Include small and heavy projects.
@@ -158,7 +168,7 @@ must stay experimental until these results are recorded.
 **Stage 2 exit:** covered effect parity and measured gains without regressions
 in preview, playback, or document behavior.
 
-## Stage 3 — Preview presentation and export (export integration implemented)
+## Stage 3 — Preview presentation and export (async export readback implemented)
 
 - Share or reference completed textures across worker and viewer contexts;
   define ownership, synchronization, cancellation, and release rules.
@@ -169,10 +179,21 @@ in preview, playback, or document behavior.
   encoding remains separate.
 - [x] Preserve atomic publication, cancellation, prior output, and export
   errors, with per-job backend/fallback metrics.
-- [x] Add export regression coverage for output parity, missing-surface CPU
-  fallback, worker lifecycle, and schema-2 summaries.
-- [ ] Record three paired CPU/GPU exports of the same 3,405-frame Windows
-  composition. Native macOS/Linux driver and performance checks remain pending.
+- [x] Add bounded two-PBO FIFO readback, fence collection, and a dedicated
+  FFmpeg consumer. Keep the PBO pool, one in-flight RGBA frame, and queued
+  frames within 128 MiB; reduce slots by resolution and use synchronous GPU
+  readback when a PBO does not fit.
+- [x] Recover from an asynchronous transfer failure by discarding pending GPU
+  tickets and rerendering unencoded frames on CPU in output order.
+- [x] Add export regression coverage for output parity, FIFO/reuse/backpressure,
+  staging fallback, mid-pipeline CPU recovery, cancellation with outstanding
+  readbacks, encoder-thread errors, destination preservation, worker lifecycle,
+  and schema-3 summaries.
+- [ ] Measure three post-change GPU exports of the same 3,405-frame Windows
+  project. Use the previous 54.96 s synchronous-GPU result as baseline; the
+  median must be 52.21 s or lower (5% improvement) without visual or
+  cancellation regressions. Native macOS/Linux driver and performance checks
+  remain pending.
 - [ ] Share GPU textures with the preview viewer and remove full-frame readback
   only if measurements justify the added ownership and synchronization rules.
 
@@ -226,9 +247,20 @@ while worker contexts can render to framebuffer objects. See the
   cannot create a worker context. No performance gain is claimed.
 - 2026-10-07: integrated the same opt-in compositor into offline export with a
   dedicated offscreen surface per export worker, CPU fallback, and per-job
-  `export_summary` schema-2 GPU metrics. Motion Studio Release built and all 11
-  Motion CTest targets passed on Windows. The 3,405-frame CPU/GPU performance
-  comparison and native macOS/Linux driver checks remain pending.
+  `export_summary` schema-2 GPU metrics.
+- 2026-10-07: added a two-PBO, FIFO/fence readback pipeline and a dedicated
+  FFmpeg consumer thread. Staging is capped at 128 MiB, initialization falls
+  back to synchronous GPU readback, and mid-pipeline errors recover outstanding
+  and remaining frames on CPU before atomic publication. Summary schema 3
+  records submission, fence wait, copy, queue, and staging metrics. The focused
+  compositor, Motion Studio, and Video Editor OpenGL regressions pass (13/13
+  affected CTest cases, including injected encoder failure) on Windows. The
+  canonical Release executable links and remains running when launched; the
+  generated post-build `windeployqt` step
+  still exits with a `qtpaths` query error. `Qt6OpenGL.dll` is present and
+  matches the Qt 6.7.2 runtime file. Three-run performance acceptance remains
+  pending; the prior 54.96 s GPU run is the baseline, with a 52.21 s median
+  target.
 
 ## Resuming implementation
 
@@ -262,11 +294,14 @@ Record build, OS, GPU, driver, setting, actions, and outcome for each item.
    fallback log, without repeated errors for every frame.
 5. Compare the stage timing records and full-render/request-to-paint metrics
    under identical workloads; include upload and readback costs in the result.
-6. For export, repeat the same saved 3,405-frame project and settings three
-   times with the variable unset and three times with it set to `1`. Record the
-   schema-2 backend, GPU/fallback frames, failures, transfer bytes, stage
-   timings, achieved FPS, and output parity. Claim a speedup only when the
-   end-to-end improvement repeats; keep the path opt-in otherwise.
+6. For export, use the same saved 3,405-frame project, dimensions, encoder, and
+   quality as the prior 54.96 s synchronous-GPU measurement. Run it three times
+   with `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. Record schema-3 elapsed time,
+   achieved FPS, async slots/submitted/collected frames, fence waits, staging
+   peaks, encoder queue, fallbacks, transfer bytes, and output parity. Accept
+   async readback only if the median is 52.21 s or lower with no visual or
+   cancellation regression; otherwise retain synchronous GPU readback as the
+   selected route and record the outcome. Keep GPU mode opt-in.
 
 This checklist records pending native-driver acceptance; automated boundary
 coverage does not establish platform acceptance by itself.

@@ -96,6 +96,27 @@ struct OpenGlTextureCompositionResult {
     std::int64_t error_code = 0;
 };
 
+// Opaque identity for a submitted asynchronous RGBA readback. Tickets are
+// valid only for the compositor that created them and must be collected FIFO.
+struct OpenGlReadbackTicket {
+    std::uint64_t value = 0;
+    friend bool operator==(const OpenGlReadbackTicket&, const OpenGlReadbackTicket&) = default;
+};
+
+struct OpenGlReadbackResult {
+    OpenGlCompositionStatus status = OpenGlCompositionStatus::Failed;
+    OpenGlReadbackTicket ticket;
+    std::optional<media::RgbaFrame> frame;
+    std::string operation;
+    std::string cause;
+    std::int64_t error_code = 0;
+    OpenGlCompositionTimings composition_timings;
+    std::uint64_t submission_nanoseconds = 0;
+    std::uint64_t fence_wait_nanoseconds = 0;
+    std::uint64_t copy_nanoseconds = 0;
+    std::uint64_t bytes = 0;
+};
+
 // Optional Qt/OpenGL adapter. The CPU compositor and frame contract remain Qt
 // independent. Source pixels and the GUI-created surface are borrowed.
 class OpenGlFrameCompositor final {
@@ -124,6 +145,24 @@ public:
         int width, int height, const std::vector<CompositionLayer>& layers,
         const CancellationPredicate& cancel = {},
         OpenGlCompositionTimings* timings = nullptr);
+
+    // Configure a bounded PBO pool on the compositor worker. The returned
+    // slot count is at most two and accounts for the supplied staging budget.
+    // Unsupported means callers should retain the synchronous GPU path.
+    [[nodiscard]] OpenGlCompositionResult prepareAsyncReadback(
+        int width, int height, std::uint64_t staging_budget_bytes,
+        unsigned maximum_slots = 2, unsigned* prepared_slots = nullptr,
+        bool fail_allocation_for_testing = false);
+    [[nodiscard]] OpenGlReadbackResult submitAsyncReadback(
+        int width, int height, const std::vector<CompositionLayer>& layers,
+        const CancellationPredicate& cancel = {});
+    [[nodiscard]] OpenGlReadbackResult collectAsyncReadback(
+        OpenGlReadbackTicket ticket, const CancellationPredicate& cancel = {},
+        bool fail_collection_for_testing = false);
+    // Worker-only. Completes outstanding transfers before making their PBOs
+    // reusable. Used during cancellation and GPU-to-CPU recovery.
+    void discardAsyncReadbacks() noexcept;
+    [[nodiscard]] unsigned asyncReadbackSlotCount() const noexcept;
 
     // No pixel readback. Busy means bounded backpressure, not a technical error.
     // A shared budget also includes targets from retiring compositor sessions.

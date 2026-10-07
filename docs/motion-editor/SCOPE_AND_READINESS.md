@@ -284,13 +284,14 @@ The cross-platform CPU and memory sampler is owned by the shared
 Video Editor continues to use its existing preference and log schema through
 compatibility headers. Motion Studio keeps its stage aggregation, one-second
 activity policy, and export summaries application-owned. Export jobs log one
-schema-2 summary on completion, failure, or cancellation with elapsed time,
+schema-3 summary on completion, failure, or cancellation with elapsed time,
 rendered frames, render and encode/write timings, output dimensions/rate,
 achieved frames per second, and realtime factor. The summary also records the
 GPU request and used backend, GPU/fallback frame counts, failures,
-upload/readback bytes, and upload/draw/readback averages. Cancellation is an
-informational outcome; technical export failures continue through the existing
-error log.
+upload/readback bytes, upload/draw/readback averages, async PBO submissions and
+collections, CPU-side fence-wait/copy timings, staging peaks, and encoder queue
+metrics. Cancellation is an informational outcome; technical export failures
+continue through the existing error log.
 
 Performance records do not include project/media paths, layer names, or text
 content. GPU utilization and device memory are not sampled. These diagnostics
@@ -303,11 +304,12 @@ seek/paint latency, memory limits, and the approved five-layer benchmark still
 require measured validation.
 On Windows, toggle the environment variable, seek and play compositions, export
 a job, then use **Help > Open Log Folder** to inspect preview samples and
-schema-2 export summaries. For GPU export, use the same saved 3,405-frame
-composition and settings for three runs with the variable unset and three runs
-with `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. Compare median end-to-end FPS,
-render/write timing, backend/fallback counts, transfer bytes, and output parity.
-Claim a performance improvement only if it repeats; GPU mode remains opt-in.
+schema-3 export summaries. The previous 54.96 s synchronous-GPU export is the
+baseline for the asynchronous-readback change. Use the same saved 3,405-frame
+composition and settings for three post-change GPU runs. Compare median
+end-to-end FPS, async readback and queue metrics, backend/fallback counts,
+transfer bytes, and output parity. The target is a median of 52.21 s or less;
+GPU mode remains opt-in until the improvement repeats.
 Native macOS and Linux driver validation is pending.
 For a controlled Windows comparison, use the same 1920 × 1080, 60 fps
 composition with radius-10 Gaussian Blur and neutral Color Adjustment in

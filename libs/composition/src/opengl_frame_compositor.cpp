@@ -16,6 +16,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <numbers>
 #include <mutex>
@@ -261,6 +262,17 @@ struct OpenGlFrameCompositor::Impl {
     QOpenGLFramebufferObject* selected_output = nullptr;
     std::uint64_t session = 0;
     bool retiring = false;
+    struct ReadbackSlot {
+        GLuint buffer = 0;
+        GLsync fence = nullptr;
+        std::uint64_t ticket = 0;
+        std::uint64_t bytes = 0;
+        int width = 0;
+        int height = 0;
+        bool busy = false;
+    };
+    std::vector<ReadbackSlot> readback_slots;
+    std::uint64_t next_readback_ticket = 0;
 
     explicit Impl(QOffscreenSurface* s, OpenGlPrecisionPolicy policy, QOpenGLContext* sharing,
         std::shared_ptr<OpenGlTexturePoolBudget> pool_budget)
@@ -295,6 +307,11 @@ struct OpenGlFrameCompositor::Impl {
             if (texture) gl->glDeleteTextures(1, &texture);
             if (vao) gl->glDeleteVertexArrays(1, &vao);
             gl->glDeleteBuffers(3, lookup_buffers);
+            for (auto& slot : readback_slots) {
+                if (slot.fence) gl->glDeleteSync(slot.fence);
+                if (slot.buffer) gl->glDeleteBuffers(1, &slot.buffer);
+            }
+            readback_slots.clear();
             context->doneCurrent();
         }
         for (auto& target : targets) {
@@ -466,6 +483,244 @@ OpenGlCompositionResult OpenGlFrameCompositor::compose(int width, int height,
     const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
     OpenGlCompositionTimings* timings) {
     return render(width, height, layers, cancel, timings, true);
+}
+
+OpenGlCompositionResult OpenGlFrameCompositor::prepareAsyncReadback(
+    int width, int height, std::uint64_t staging_budget_bytes,
+    unsigned maximum_slots, unsigned* prepared_slots,
+    bool fail_allocation_for_testing) {
+    if (prepared_slots) *prepared_slots = 0;
+    auto& p = *impl_;
+    struct Guard { Impl& p; ~Guard() { if (p.context) p.context->doneCurrent(); } } guard{p};
+    try {
+        auto active = p.activate();
+        if (active.status != OpenGlCompositionStatus::Complete) return active;
+        if (!bounded(width, height, p.texture_limit))
+            return result(OpenGlCompositionStatus::Unsupported, "check-pbo-limits",
+                "Canvas exceeds the device limits for asynchronous readback.");
+        const auto frame_bytes = static_cast<std::uint64_t>(width) * height * 4;
+        maximum_slots = std::min(maximum_slots, 2U);
+        const auto affordable = frame_bytes == 0 ? 0 : staging_budget_bytes / frame_bytes;
+        const auto slot_count = static_cast<unsigned>(std::min<std::uint64_t>(maximum_slots, affordable));
+        if (slot_count == 0 || frame_bytes > static_cast<std::uint64_t>(
+                std::numeric_limits<GLsizeiptr>::max()))
+            return result(OpenGlCompositionStatus::Unsupported, "pbo-budget",
+                "The export staging budget cannot hold an asynchronous readback slot.");
+        if (fail_allocation_for_testing)
+            return result(OpenGlCompositionStatus::Failed, "allocate-pbo",
+                "Injected asynchronous readback allocation failure for regression coverage.");
+        if (std::any_of(p.readback_slots.begin(), p.readback_slots.end(),
+                [](const auto& slot) { return slot.busy; }))
+            return result(OpenGlCompositionStatus::Busy, "pbo-reconfigure",
+                "Pending readback tickets must be collected before resizing the PBO pool.");
+        if (p.output && p.output->width() == width && p.output->height() == height &&
+            p.readback_slots.size() == slot_count &&
+            std::all_of(p.readback_slots.begin(), p.readback_slots.end(),
+                [frame_bytes](const auto& slot) { return slot.bytes == frame_bytes; })) {
+            if (prepared_slots) *prepared_slots = slot_count;
+            return result(OpenGlCompositionStatus::Complete);
+        }
+
+        if (!p.output || p.output->width() != width || p.output->height() != height) {
+            QOpenGLFramebufferObjectFormat format;
+            format.setInternalTextureFormat(GL_RGBA8);
+            p.output = std::make_unique<QOpenGLFramebufferObject>(width, height, format);
+            if (!p.output->isValid()) return result(OpenGlCompositionStatus::Failed,
+                "allocate-framebuffer", "Cannot allocate the output RGBA8 framebuffer.");
+            p.rememberResourcePeak();
+        }
+        for (auto& slot : p.readback_slots) {
+            if (slot.fence) p.gl->glDeleteSync(slot.fence);
+            if (slot.buffer) p.gl->glDeleteBuffers(1, &slot.buffer);
+        }
+        p.readback_slots.clear();
+        p.readback_slots.resize(slot_count);
+        while (p.gl->glGetError() != GL_NO_ERROR) {}
+        for (auto& slot : p.readback_slots) {
+            p.gl->glGenBuffers(1, &slot.buffer);
+            p.gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, slot.buffer);
+            p.gl->glBufferData(GL_PIXEL_PACK_BUFFER,
+                static_cast<GLsizeiptr>(frame_bytes), nullptr, GL_STREAM_READ);
+            slot.bytes = frame_bytes;
+            slot.width = width;
+            slot.height = height;
+            if (!slot.buffer || p.gl->glGetError() != GL_NO_ERROR) {
+                for (auto& allocated : p.readback_slots) {
+                    if (allocated.buffer) p.gl->glDeleteBuffers(1, &allocated.buffer);
+                }
+                p.readback_slots.clear();
+                return result(OpenGlCompositionStatus::Failed, "allocate-pbo",
+                    "The driver could not allocate the bounded pixel-pack buffer pool.",
+                    p.gl->glGetError());
+            }
+        }
+        p.gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        if (prepared_slots) *prepared_slots = slot_count;
+        return result(OpenGlCompositionStatus::Complete);
+    } catch (const std::exception& error) {
+        return result(OpenGlCompositionStatus::Failed, "prepare-pbo", error.what());
+    }
+}
+
+OpenGlReadbackResult OpenGlFrameCompositor::submitAsyncReadback(
+    int width, int height, const std::vector<CompositionLayer>& layers,
+    const CancellationPredicate& cancel) {
+    auto& p = *impl_;
+    struct Guard { Impl& p; ~Guard() { if (p.context) p.context->doneCurrent(); } } guard{p};
+    const auto cancelled = [&] { return cancel && cancel(); };
+    try {
+        if (cancelled()) return {OpenGlCompositionStatus::Cancelled};
+        auto active = p.activate();
+        if (active.status != OpenGlCompositionStatus::Complete)
+            return {active.status, {}, {}, std::move(active.operation), std::move(active.cause), active.error_code};
+        const auto free_slot = std::find_if(p.readback_slots.begin(), p.readback_slots.end(),
+            [](const auto& slot) { return !slot.busy; });
+        if (free_slot == p.readback_slots.end())
+            return {OpenGlCompositionStatus::Busy, {}, {}, "pbo-backpressure",
+                "All bounded asynchronous readback slots are occupied."};
+        if (free_slot->width != width || free_slot->height != height || !p.output ||
+            p.output->width() != width || p.output->height() != height)
+            return {OpenGlCompositionStatus::Unsupported, {}, {}, "pbo-size",
+                "The asynchronous readback pool was not prepared for this canvas."};
+        p.selected_output = p.output.get();
+        OpenGlCompositionTimings composition_timings;
+        auto rendered = render(width, height, layers, cancel, &composition_timings, false);
+        p.selected_output = nullptr;
+        if (rendered.status != OpenGlCompositionStatus::Complete) {
+            OpenGlReadbackResult failed{rendered.status, {}, {}, std::move(rendered.operation),
+                std::move(rendered.cause), rendered.error_code};
+            failed.composition_timings = composition_timings;
+            return failed;
+        }
+        if (cancelled()) return {OpenGlCompositionStatus::Cancelled};
+        const auto submit_started = Clock::now();
+        if (!p.output->bind())
+            return {OpenGlCompositionStatus::Failed, {}, {}, "bind-pbo-source",
+                "Cannot bind the completed composition framebuffer."};
+        p.gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, free_slot->buffer);
+        p.gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        p.gl->glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+        p.gl->glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        free_slot->fence = p.gl->glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        p.gl->glFlush();
+        p.gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        const auto code = p.gl->glGetError();
+        if (!free_slot->fence || code) {
+            if (free_slot->fence) p.gl->glDeleteSync(free_slot->fence);
+            free_slot->fence = nullptr;
+            return {OpenGlCompositionStatus::Failed, {}, {}, "submit-pbo-readback",
+                "The driver could not submit the asynchronous framebuffer readback.", code};
+        }
+        free_slot->ticket = ++p.next_readback_ticket;
+        free_slot->busy = true;
+        OpenGlReadbackResult submitted{OpenGlCompositionStatus::Complete, {free_slot->ticket}};
+        submitted.composition_timings = composition_timings;
+        submitted.submission_nanoseconds = elapsed(submit_started);
+        submitted.bytes = free_slot->bytes;
+        return submitted;
+    } catch (const std::exception& error) {
+        p.selected_output = nullptr;
+        return {OpenGlCompositionStatus::Failed, {}, {}, "submit-pbo-readback", error.what()};
+    }
+}
+
+OpenGlReadbackResult OpenGlFrameCompositor::collectAsyncReadback(
+    OpenGlReadbackTicket ticket, const CancellationPredicate& cancel,
+    bool fail_collection_for_testing) {
+    auto& p = *impl_;
+    struct Guard { Impl& p; ~Guard() { if (p.context) p.context->doneCurrent(); } } guard{p};
+    try {
+        auto active = p.activate();
+        if (active.status != OpenGlCompositionStatus::Complete)
+            return {active.status, {}, {}, std::move(active.operation), std::move(active.cause), active.error_code};
+        const auto slot = std::find_if(p.readback_slots.begin(), p.readback_slots.end(),
+            [ticket](const auto& item) { return item.busy && item.ticket == ticket.value; });
+        if (slot == p.readback_slots.end())
+            return {OpenGlCompositionStatus::Unsupported, {}, {}, "collect-pbo-ticket",
+                "The asynchronous readback ticket is unknown or has already been released."};
+        const auto oldest = std::min_element(p.readback_slots.begin(), p.readback_slots.end(),
+            [](const auto& a, const auto& b) {
+                if (a.busy != b.busy) return a.busy;
+                return a.busy && a.ticket < b.ticket;
+            });
+        if (oldest == p.readback_slots.end() || oldest != slot)
+            return {OpenGlCompositionStatus::Busy, {}, {}, "collect-pbo-order",
+                "Asynchronous readback tickets must be collected in submission order."};
+        if (fail_collection_for_testing)
+            return {OpenGlCompositionStatus::Failed, ticket, {}, "map-pbo",
+                "Injected asynchronous readback collection failure for regression coverage.", -1};
+
+        const auto wait_started = Clock::now();
+        for (;;) {
+            if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
+            const auto status = p.gl->glClientWaitSync(slot->fence,
+                GL_SYNC_FLUSH_COMMANDS_BIT, 1'000'000);
+            if (status == GL_ALREADY_SIGNALED || status == GL_CONDITION_SATISFIED) break;
+            if (status == GL_WAIT_FAILED)
+                return {OpenGlCompositionStatus::Failed, {}, {}, "wait-pbo-fence",
+                    "The driver failed while waiting for the asynchronous readback fence.",
+                    p.gl->glGetError()};
+        }
+        const auto wait_nanoseconds = elapsed(wait_started);
+        if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
+        const auto copy_started = Clock::now();
+        media::RgbaFrame frame{slot->width, slot->height, slot->width * 4, {}};
+        frame.rgba_pixels.resize(static_cast<std::size_t>(slot->bytes));
+        p.gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, slot->buffer);
+        const auto* mapped = static_cast<const std::uint8_t*>(p.gl->glMapBufferRange(
+            GL_PIXEL_PACK_BUFFER, 0, static_cast<GLsizeiptr>(slot->bytes), GL_MAP_READ_BIT));
+        if (!mapped) {
+            p.gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            return {OpenGlCompositionStatus::Failed, {}, {}, "map-pbo",
+                "The completed asynchronous readback buffer could not be mapped.",
+                p.gl->glGetError()};
+        }
+        std::memcpy(frame.rgba_pixels.data(), mapped, frame.rgba_pixels.size());
+        const bool unmapped = p.gl->glUnmapBuffer(GL_PIXEL_PACK_BUFFER) == GL_TRUE;
+        p.gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        if (!unmapped)
+            return {OpenGlCompositionStatus::Failed, {}, {}, "unmap-pbo",
+                "The asynchronous readback buffer contents became invalid."};
+        for (int y = 0; y < frame.height / 2; ++y) {
+            auto first = frame.rgba_pixels.begin() + static_cast<std::size_t>(y) * frame.stride;
+            auto last = frame.rgba_pixels.begin() + static_cast<std::size_t>(frame.height - 1 - y) * frame.stride;
+            std::swap_ranges(first, first + frame.stride, last);
+        }
+        const auto copy_nanoseconds = elapsed(copy_started);
+        p.gl->glDeleteSync(slot->fence);
+        slot->fence = nullptr;
+        slot->busy = false;
+        slot->ticket = 0;
+        OpenGlReadbackResult completed{OpenGlCompositionStatus::Complete, {}, std::move(frame)};
+        completed.fence_wait_nanoseconds = wait_nanoseconds;
+        completed.copy_nanoseconds = copy_nanoseconds;
+        completed.bytes = slot->bytes;
+        return completed;
+    } catch (const std::exception& error) {
+        return {OpenGlCompositionStatus::Failed, {}, {}, "collect-pbo-readback", error.what()};
+    }
+}
+
+void OpenGlFrameCompositor::discardAsyncReadbacks() noexcept {
+    auto& p = *impl_;
+    if (!p.context || p.readback_slots.empty()) return;
+    try {
+        auto active = p.activate();
+        if (active.status != OpenGlCompositionStatus::Complete) return;
+        if (std::any_of(p.readback_slots.begin(), p.readback_slots.end(),
+                [](const auto& slot) { return slot.busy; })) p.gl->glFinish();
+        for (auto& slot : p.readback_slots) {
+            if (slot.fence) p.gl->glDeleteSync(slot.fence);
+            slot.fence = nullptr;
+            slot.ticket = 0;
+            slot.busy = false;
+        }
+        p.context->doneCurrent();
+    } catch (...) {}
+}
+
+unsigned OpenGlFrameCompositor::asyncReadbackSlotCount() const noexcept {
+    return static_cast<unsigned>(impl_->readback_slots.size());
 }
 
 OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, int height,

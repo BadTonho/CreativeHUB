@@ -15,6 +15,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace motion::ui {
@@ -47,6 +48,12 @@ struct MotionExportPerformanceSummary {
     std::uint64_t write_count = 0;
     std::uint64_t write_total_nanoseconds = 0;
     std::uint64_t write_maximum_nanoseconds = 0;
+    std::string readback_mode = "cpu";
+    std::uint64_t readback_peak_pending_frames = 0;
+    std::uint64_t readback_peak_pending_bytes = 0;
+    std::uint64_t encoder_queue_wait_nanoseconds = 0;
+    std::uint64_t encoder_queue_peak_frames = 0;
+    std::uint64_t encoder_queue_peak_bytes = 0;
     CompositionGpuMetrics gpu;
 };
 
@@ -55,6 +62,12 @@ struct MotionExportRenderOptions {
     // Created/destroyed by the GUI thread owner and kept alive until the export
     // worker has released its context and compositor.
     QOffscreenSurface* gpu_surface = nullptr;
+    // Deterministic fault controls used by export regression tests. Production
+    // callers should keep the defaults; the staging limit is otherwise fixed.
+    std::uint64_t async_readback_staging_budget_bytes_for_testing =
+        128ULL * 1024 * 1024;
+    std::uint64_t fail_async_readback_collection_number_for_testing = 0;
+    std::uint64_t fail_encoder_write_number_for_testing = 0;
 };
 
 class MotionExportCancelled final : public std::exception {

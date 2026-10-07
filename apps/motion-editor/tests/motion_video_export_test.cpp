@@ -229,6 +229,22 @@ std::vector<std::uint8_t> fileBytes(const std::filesystem::path& path)
     return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
 }
 
+std::optional<std::uint64_t> summaryNumber(
+    const std::string& summary, const std::string& field)
+{
+    const auto prefix = field + "=\"";
+    const auto start = summary.find(prefix);
+    if (start == std::string::npos) return std::nullopt;
+    const auto value_start = start + prefix.size();
+    const auto end = summary.find('"', value_start);
+    if (end == std::string::npos) return std::nullopt;
+    try {
+        return std::stoull(summary.substr(value_start, end - value_start));
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 std::vector<creative_suite::media::VideoFramePtr> decodeVideo(
     const std::filesystem::path& path)
 {
@@ -517,6 +533,7 @@ int main(int argc, char* argv[])
         auto gpu_surface = creative_suite::composition::OpenGlFrameCompositor::createSurface();
         std::optional<motion::ui::MotionExportResult> gpu_surface_result;
         std::filesystem::path gpu_surface_target;
+        motion::ui::MotionExportPerformanceSummary gpu_surface_performance;
         if (gpu_surface) {
             gpu_surface_target = outputPath(
                 temporary_directory, container, "gpu-export-surface");
@@ -536,6 +553,91 @@ int main(int argc, char* argv[])
             const auto gpu_surface_decoded = decodeVideo(gpu_surface_target);
             require(videoFramesMatch(decoded, gpu_surface_decoded, 4),
                     "the GPU export path preserves CPU-reference output within encoder tolerance");
+
+            const auto gpu_metrics_target = outputPath(
+                temporary_directory, container, "gpu-export-async-metrics");
+            std::atomic_bool metrics_not_canceled{false};
+            motion::ui::MotionVideoExporter::exportVideo(
+                snapshot, settingsFor(gpu_metrics_target, container, encoder),
+                metrics_not_canceled, {}, &gpu_surface_performance,
+                motion::ui::MotionExportRenderOptions{true, gpu_surface.get()});
+            require(gpu_surface_performance.frames_rendered == 9 &&
+                        (gpu_surface_performance.readback_mode == "pbo_async" ||
+                         gpu_surface_performance.readback_mode == "gpu_sync" ||
+                         gpu_surface_performance.readback_mode == "cpu_fallback"),
+                    "GPU export metrics identify async, synchronous, or CPU fallback mode");
+            if (gpu_surface_performance.readback_mode == "pbo_async") {
+                require(gpu_surface_performance.gpu.readback_frames_submitted == 9 &&
+                            gpu_surface_performance.gpu.readback_frames_collected == 9 &&
+                            gpu_surface_performance.gpu.readback_slots >= 1 &&
+                            gpu_surface_performance.gpu.readback_slots <= 2,
+                        "the asynchronous export submits and collects every frame within its PBO pool");
+            }
+
+            const auto sync_target = outputPath(
+                temporary_directory, container, "gpu-export-small-budget-sync-fallback");
+            std::atomic_bool sync_not_canceled{false};
+            motion::ui::MotionExportPerformanceSummary sync_performance;
+            motion::ui::MotionExportRenderOptions sync_options{true, gpu_surface.get()};
+            sync_options.async_readback_staging_budget_bytes_for_testing = 1;
+            motion::ui::MotionVideoExporter::exportVideo(
+                snapshot, settingsFor(sync_target, container, encoder), sync_not_canceled,
+                {}, &sync_performance, sync_options);
+            require(sync_performance.gpu.readback_frames_submitted == 0 &&
+                        (sync_performance.gpu.composition_frames == 0 ||
+                         sync_performance.readback_mode == "gpu_sync"),
+                    "an insufficient PBO staging budget selects synchronous GPU readback");
+            require(videoFramesMatch(decoded, decodeVideo(sync_target), 4),
+                    "synchronous GPU readback fallback preserves frame output");
+
+            if (gpu_surface_performance.gpu.readback_frames_submitted > 0) {
+                const auto recovery_target = outputPath(
+                    temporary_directory, container, "gpu-export-async-collection-recovery");
+                std::atomic_bool recovery_not_canceled{false};
+                motion::ui::MotionExportPerformanceSummary recovery_performance;
+                motion::ui::MotionExportRenderOptions recovery_options{
+                    true, gpu_surface.get()};
+                recovery_options.fail_async_readback_collection_number_for_testing = 2;
+                motion::ui::MotionVideoExporter::exportVideo(
+                    snapshot, settingsFor(recovery_target, container, encoder),
+                    recovery_not_canceled, {}, &recovery_performance, recovery_options);
+                require(recovery_performance.readback_mode == "pbo_async_cpu_fallback" &&
+                            recovery_performance.gpu.failures == 1 &&
+                            recovery_performance.gpu.fallback_frames > 0 &&
+                            recovery_performance.frames_rendered == 9 &&
+                            recovery_performance.write_count == 9,
+                        "a collection failure rerenders outstanding and remaining frames on CPU");
+                require(videoFramesMatch(decoded, decodeVideo(recovery_target), 4),
+                        "mid-pipeline CPU recovery preserves output order and frame parity");
+
+                const auto queued_cancel_target = outputPath(
+                    temporary_directory, container, "gpu-export-queued-cancel-preserves-output");
+                {
+                    std::ofstream output(queued_cancel_target, std::ios::binary);
+                    output << "existing-queued-cancel-destination";
+                }
+                const auto queued_cancel_bytes = fileBytes(queued_cancel_target);
+                std::atomic_bool queued_cancel{false};
+                motion::ui::MotionExportPerformanceSummary queued_cancel_performance;
+                bool queued_cancel_reported = false;
+                try {
+                    motion::ui::MotionVideoExporter::exportVideo(
+                        snapshot,
+                        settingsFor(queued_cancel_target, container, encoder), queued_cancel,
+                        [&queued_cancel](int value) {
+                            if (value > 0) queued_cancel.store(true, std::memory_order_release);
+                        },
+                        &queued_cancel_performance,
+                        motion::ui::MotionExportRenderOptions{true, gpu_surface.get()});
+                } catch (const motion::ui::MotionExportCancelled&) {
+                    queued_cancel_reported = true;
+                }
+                require(queued_cancel_reported &&
+                            queued_cancel_performance.gpu.readback_frames_submitted >= 2,
+                        "canceling with submitted readbacks terminates the queued GPU pipeline");
+                require(fileBytes(queued_cancel_target) == queued_cancel_bytes,
+                        "queued GPU cancellation preserves the existing destination");
+            }
         }
 
         const auto preserved_target = outputPath(temporary_directory, container, "preserve-on-cancel");
@@ -594,6 +696,29 @@ int main(int argc, char* argv[])
                 "failed export preserves an existing destination");
         require(failure_performance.elapsed_nanoseconds > 0,
                 "failed export retains elapsed-time diagnostics");
+
+        const auto encoder_failure_target = outputPath(
+            temporary_directory, container, "preserve-on-encoder-failure");
+        {
+            std::ofstream output(encoder_failure_target, std::ios::binary);
+            output << "existing-encoder-destination";
+        }
+        const auto encoder_failure_bytes = fileBytes(encoder_failure_target);
+        std::atomic_bool encoder_not_canceled{false};
+        motion::ui::MotionExportRenderOptions encoder_failure_options;
+        encoder_failure_options.fail_encoder_write_number_for_testing = 1;
+        bool encoder_failure_reported = false;
+        try {
+            motion::ui::MotionVideoExporter::exportVideo(
+                snapshot, settingsFor(encoder_failure_target, container, encoder),
+                encoder_not_canceled, {}, nullptr, encoder_failure_options);
+        } catch (const std::exception&) {
+            encoder_failure_reported = true;
+        }
+        require(encoder_failure_reported,
+                "an encoder-thread failure is propagated to the export caller");
+        require(fileBytes(encoder_failure_target) == encoder_failure_bytes,
+                "an encoder failure preserves the existing destination");
         for (const auto& entry : std::filesystem::directory_iterator(temporary_directory.path().toStdString())) {
             require(entry.path().filename().string().find(".rendering-motion-") == std::string::npos,
                     "failed and canceled export temporary files are removed");
@@ -659,9 +784,10 @@ int main(int argc, char* argv[])
                 summary.find("gpu_composition_requested=\"true\"") != std::string::npos) {
                 ++completed_gpu_requested_summaries;
             }
-            require(summary.find("schema_version=\"2\"") != std::string::npos &&
+            require(summary.find("schema_version=\"3\"") != std::string::npos &&
                         summary.find("gpu_composition_requested=") != std::string::npos &&
                         summary.find("gpu_backend_used=") != std::string::npos &&
+                        summary.find("gpu_readback_mode=") != std::string::npos &&
                         summary.find("gpu_composition_attempts=") != std::string::npos &&
                         summary.find("gpu_composition_frames=") != std::string::npos &&
                         summary.find("gpu_composition_fallback_frames=") != std::string::npos &&
@@ -671,6 +797,18 @@ int main(int argc, char* argv[])
                         summary.find("gpu_upload_average_ms=") != std::string::npos &&
                         summary.find("gpu_draw_submission_average_ms=") != std::string::npos &&
                         summary.find("gpu_readback_average_ms=") != std::string::npos &&
+                        summary.find("gpu_async_readback_slots=") != std::string::npos &&
+                        summary.find("gpu_readback_frames_submitted=") != std::string::npos &&
+                        summary.find("gpu_readback_frames_collected=") != std::string::npos &&
+                        summary.find("gpu_readback_fence_waits=") != std::string::npos &&
+                        summary.find("gpu_readback_submit_average_ms=") != std::string::npos &&
+                        summary.find("gpu_readback_fence_wait_average_ms=") != std::string::npos &&
+                        summary.find("gpu_readback_copy_average_ms=") != std::string::npos &&
+                        summary.find("readback_peak_pending_frames=") != std::string::npos &&
+                        summary.find("readback_peak_pending_bytes=") != std::string::npos &&
+                        summary.find("encoder_queue_wait_ms=") != std::string::npos &&
+                        summary.find("encoder_queue_peak_frames=") != std::string::npos &&
+                        summary.find("encoder_queue_peak_bytes=") != std::string::npos &&
                         summary.find("render_average_ms=") != std::string::npos &&
                         summary.find("write_average_ms=") != std::string::npos &&
                         summary.find("achieved_frames_per_second=") != std::string::npos &&
@@ -694,6 +832,20 @@ int main(int argc, char* argv[])
                 saw_gpu_surface_export = saw_gpu_surface_export ||
                     (expected_backend &&
                      summary.find("frames_rendered=\"9\"") != std::string::npos);
+            }
+            if (summary.find("gpu_readback_mode=\"pbo_async\"") != std::string::npos) {
+                const auto submitted = summaryNumber(summary, "gpu_readback_frames_submitted");
+                const auto collected = summaryNumber(summary, "gpu_readback_frames_collected");
+                const auto slot_count = summaryNumber(summary, "gpu_async_readback_slots");
+                const auto pending_frames = summaryNumber(summary, "readback_peak_pending_frames");
+                const auto pending_bytes = summaryNumber(summary, "readback_peak_pending_bytes");
+                const auto encoder_frames = summaryNumber(summary, "encoder_queue_peak_frames");
+                require(submitted == 9 && collected == submitted && slot_count.has_value() &&
+                            *slot_count >= 1 && *slot_count <= 2 && pending_frames.has_value() &&
+                            *pending_frames <= 3 && pending_bytes.has_value() &&
+                            *pending_bytes <= 128ULL * 1024 * 1024 &&
+                            encoder_frames == 1,
+                        "PBO export metrics preserve frame order and stay within bounded staging");
             }
         }
         require(saw_completed && saw_cancelled && saw_failed,

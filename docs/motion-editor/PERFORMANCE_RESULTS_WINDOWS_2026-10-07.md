@@ -12,8 +12,8 @@ performance-metrics suites. These are correctness results; they do not measure
 interactive throughput.
 
 The 2026-10-07 Windows Release integration build passed all 11 Motion Studio
-CTest targets, including export and GPU composition. These correctness results
-do not measure full-project GPU export throughput.
+CTest targets, including export and GPU composition. These are pre-asynchronous
+correctness results and do not measure full-project GPU export throughput.
 
 The original Motion Studio log records a completed 1920 × 1080, 60 fps CPU
 export:
@@ -63,6 +63,26 @@ Average upload, draw-submission, and readback times were 0.95 ms, 0.18 ms, and
 GPU Color Adjustment operations and 860 GPU Gaussian Blur operations. The
 full-frame RGBA readback remains a substantial part of the GPU path before CPU
 FFmpeg encoding.
+
+## Asynchronous readback acceptance
+
+The 54.96 s schema-2 GPU export above is the pre-change synchronous-readback
+baseline. The current implementation adds up to two fenced PBOs, FIFO frame
+collection, a dedicated FFmpeg consumer, and a 128 MiB staging limit; its
+`export_summary` schema is 3. The post-change three-run GPU measurement has not
+been recorded yet. Use the same 3,405-frame project and export settings. The
+acceptance threshold is a median of 52.21 s or less (at least 5% below the old
+baseline), with matching output and no cancellation regression. Do not repeat
+the previous CPU baseline run. If the threshold is not met, retain synchronous
+GPU readback as the selected route and record that result; GPU remains opt-in.
+
+The asynchronous compositor, export, Motion Studio, and Video Editor OpenGL
+regressions passed 13/13 affected Windows CTest cases. The canonical Release
+executable at `build/apps/motion-editor/Release/creative-suite-motion-editor.exe`
+was linked and remained active after launch. Its Qt 6.7.2 `Qt6OpenGL.dll` is
+present and byte-identical to the Qt runtime DLL. The CMake post-build step
+still reports that `windeployqt` cannot query `qtpaths`; the executable was
+started successfully with the runtime files already in the canonical output.
 
 ## Interactive preview
 
@@ -121,29 +141,31 @@ memory pressure.
 
 ## GPU export follow-up
 
-Motion Studio now uses the same experimental OpenGL compositor in offline
-export when `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. CPU remains the default.
-Each export summary uses schema 2 and records the requested and used backend,
-GPU-composed and CPU-fallback frames, failures, uploaded/readback bytes, and
-average upload, draw-submission, and readback times. The output still crosses
-the existing RGBA readback boundary before CPU FFmpeg encoding.
+Motion Studio uses the same experimental OpenGL compositor in offline export
+when `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. CPU remains the default. Current
+schema-3 summaries record the requested and used backend, GPU-composed and
+CPU-fallback frames, async readback mode, PBO slots, submitted/collected frames,
+fence waits, submission/wait/copy CPU timings, staging peaks, encoder queue
+waits, failures, and transferred bytes. The output still crosses the existing
+RGBA readback boundary before CPU FFmpeg encoding.
 
 Automated export coverage exercises no-surface CPU fallback, frame parity,
-worker lifecycle, and GPU summary fields. The available runtime logs now
-include a completed GPU export and its schema-2 CPU comparison. Two earlier
-schema-1 CPU measurements provide additional historical context, but only one
-GPU summary is available in the log; the measured improvement is promising but
-not yet a repeated GPU benchmark result. The export summary does not identify
+worker lifecycle, asynchronous queue behavior, and GPU summary fields. The
+available runtime logs contain one completed schema-2 GPU export and its
+schema-2 CPU comparison; those remain historical results. No post-change
+schema-3 benchmark result is recorded yet. The export summary does not identify
 the layer/effect setup, so these throughput numbers should not be generalized
 to other compositions or hardware.
 
-For the paired manual measurement, use the same saved 3,405-frame composition,
-output dimensions, frame rate, encoder, and quality for three CPU exports with
-the environment variable unset and three GPU-requested exports with it set to
-`1`. Compare median end-to-end elapsed time and achieved FPS, along with render
-and write time, GPU/fallback frames, transfer bytes, and output parity. Record
-each schema-2 summary. Claim a speedup only when the end-to-end improvement
-repeats. Native macOS and Linux driver/performance checks remain pending.
+For the post-change measurement, use the same saved 3,405-frame composition,
+output dimensions, frame rate, encoder, and quality as the earlier 54.96 s GPU
+run. Run three exports with `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. Compare
+median end-to-end elapsed time and achieved FPS, async mode, submitted/collected
+frames, fence waits, staging and encoder queue peaks, GPU/fallback frames,
+failures, transfer bytes, and output parity. Record each schema-3 summary. A
+repeatable median of 52.21 s or lower is required to accept the async path as a
+performance improvement. Native macOS and Linux driver/performance checks
+remain pending.
 
 ## Recommended performance focus
 

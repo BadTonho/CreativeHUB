@@ -112,6 +112,81 @@ void parity(OpenGlFrameCompositor& gpu) {
     for (const auto dimensions : {std::pair{1920, 1080}, {960, 540}, {480, 270}})
         compare(gpu, dimensions.first, dimensions.second, {{&opaque}}, "preview quality");
 }
+void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
+    auto first_source = fixture(37, 23, true, 8);
+    auto second_source = fixture(31, 19, false, 4);
+    animation::Transform2D second_transform;
+    second_transform.position_x = .43;
+    second_transform.position_y = .58;
+    second_transform.opacity = .72;
+    const std::vector<CompositionLayer> first_layers{{&first_source}};
+    const std::vector<CompositionLayer> second_layers{{&first_source},
+        {&second_source, second_transform}};
+    const auto first_reference = gpu.compose(73, 51, first_layers);
+    const auto second_reference = gpu.compose(73, 51, second_layers);
+    require(first_reference.frame && second_reference.frame,
+        "synchronous readback references failed before asynchronous comparison");
+    unsigned slot_count = 0;
+    const auto frame_bytes = 73ULL * 51 * 4;
+    unsigned failed_slot_count = 0;
+    const auto allocation_failure = gpu.prepareAsyncReadback(
+        73, 51, frame_bytes * 2, 2, &failed_slot_count, true);
+    require(allocation_failure.status == OpenGlCompositionStatus::Failed &&
+        allocation_failure.operation == "allocate-pbo" && failed_slot_count == 0,
+        "injected PBO allocation failure did not report a clean fallback condition");
+    const auto prepared = gpu.prepareAsyncReadback(73, 51, frame_bytes * 2, 2, &slot_count);
+    require(prepared.status == OpenGlCompositionStatus::Complete && slot_count == 2 &&
+        gpu.asyncReadbackSlotCount() == 2,
+        "two PBO slots were not prepared within the explicit staging budget");
+    const auto first = gpu.submitAsyncReadback(73, 51, first_layers);
+    const auto second = gpu.submitAsyncReadback(73, 51, second_layers);
+    require(first.status == OpenGlCompositionStatus::Complete &&
+        second.status == OpenGlCompositionStatus::Complete &&
+        first.ticket.value != second.ticket.value,
+        "two asynchronous readbacks did not receive distinct tickets");
+    require(gpu.submitAsyncReadback(73, 51, first_layers).status ==
+        OpenGlCompositionStatus::Busy,
+        "PBO backpressure did not stop submission beyond the bounded pool");
+    require(gpu.collectAsyncReadback(second.ticket).status == OpenGlCompositionStatus::Busy,
+        "out-of-order PBO ticket collection was not rejected");
+    const auto cancelled = gpu.collectAsyncReadback(first.ticket, [] { return true; });
+    require(cancelled.status == OpenGlCompositionStatus::Cancelled,
+        "pre-cancelled asynchronous collection did not preserve its ticket");
+    const auto collected_first = gpu.collectAsyncReadback(first.ticket);
+    const auto collected_second = gpu.collectAsyncReadback(second.ticket);
+    require(collected_first.status == OpenGlCompositionStatus::Complete &&
+        collected_first.frame && collected_first.frame->rgba_pixels ==
+            first_reference.frame->rgba_pixels,
+        "first asynchronous frame differs from synchronous GPU output");
+    require(collected_second.status == OpenGlCompositionStatus::Complete &&
+        collected_second.frame && collected_second.frame->rgba_pixels ==
+            second_reference.frame->rgba_pixels,
+        "second asynchronous frame differs from synchronous GPU output or order");
+    const auto reused = gpu.submitAsyncReadback(73, 51, second_layers);
+    require(reused.status == OpenGlCompositionStatus::Complete,
+        "a collected PBO slot could not be reused");
+    const auto collection_failure = gpu.collectAsyncReadback(reused.ticket, {}, true);
+    require(collection_failure.status == OpenGlCompositionStatus::Failed &&
+        collection_failure.operation == "map-pbo",
+        "injected PBO collection failure did not preserve the failed ticket");
+    gpu.discardAsyncReadbacks();
+    const auto after_failure = gpu.submitAsyncReadback(73, 51, second_layers);
+    require(after_failure.status == OpenGlCompositionStatus::Complete &&
+        gpu.collectAsyncReadback(after_failure.ticket).status == OpenGlCompositionStatus::Complete,
+        "discarding tickets after collection failure did not release the PBO pool");
+    require(gpu.collectAsyncReadback(reused.ticket).status == OpenGlCompositionStatus::Unsupported,
+        "discarded PBO ticket remained usable after failure recovery");
+    require(gpu.asyncReadbackSlotCount() == 2,
+        "collection failure recovery unexpectedly destroyed the reusable PBO pool");
+    unsigned reduced_slots = 0;
+    const auto reduced = gpu.prepareAsyncReadback(73, 51, frame_bytes, 2, &reduced_slots);
+    require(reduced.status == OpenGlCompositionStatus::Complete && reduced_slots == 1,
+        "PBO pool sizing did not reduce the slot count to fit the staging budget");
+    const auto no_budget = gpu.prepareAsyncReadback(73, 51, frame_bytes - 1, 2);
+    require(no_budget.status == OpenGlCompositionStatus::Unsupported,
+        "a staging budget smaller than one readback frame was not rejected");
+    gpu.discardAsyncReadbacks();
+}
 void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
     auto source = fixture(23, 13, true, 7);
     auto adjusted = source;
@@ -213,6 +288,10 @@ void orderedEffectParity(OpenGlFrameCompositor& gpu) {
                 referenceBlur(expected, std::get<GpuGaussianBlurParameters>(effect).radius_pixels);
             }
         }
+        const auto cpu_composition = FrameCompositor::compose(
+            source.width, source.height, {{&expected}});
+        require(cpu_composition.has_value(),
+            "CPU reference ordered composition failed");
         CompositionLayer layer{&source};
         layer.gpu_effects = stacks[stack_index];
         OpenGlCompositionTimings timings;
@@ -222,17 +301,19 @@ void orderedEffectParity(OpenGlFrameCompositor& gpu) {
         for (int y = 0; y < expected.height; ++y) {
             for (int x = 0; x < expected.width; ++x) {
                 for (int channel = 0; channel < 4; ++channel) {
-                    const auto cpu_value = expected.rgba_pixels[
-                        static_cast<std::size_t>(y) * expected.stride + x * 4 + channel];
+                    const auto cpu_value = cpu_composition->rgba_pixels[
+                        static_cast<std::size_t>(y) * cpu_composition->stride + x * 4 + channel];
                     const auto gpu_value = output.frame->rgba_pixels[
                         static_cast<std::size_t>(y) * output.frame->stride + x * 4 + channel];
                     const int delta = std::abs(static_cast<int>(cpu_value) -
                                                static_cast<int>(gpu_value));
                     require(delta <= (channel == 3 ? 0 : 1),
-                        "Ordered GPU effects exceeded one RGB level or changed alpha");
+                        "Ordered GPU effects mismatch at pixel " + std::to_string(x) + "," +
+                        std::to_string(y) + " channel " + std::to_string(channel) +
+                        " CPU=" + std::to_string(cpu_value) + " GPU=" +
+                        std::to_string(gpu_value));
                 }
             }
-        }
         if (stack_index == 0)
             require(timings.gaussian_blur_count == 1 && timings.color_adjustment_count == 2 &&
                     timings.gaussian_blur_submission_nanoseconds > 0,
@@ -240,6 +321,7 @@ void orderedEffectParity(OpenGlFrameCompositor& gpu) {
         if (stack_index == 2)
             require(timings.gaussian_blur_count == 0,
                 "A zero-radius blur skips GPU work");
+        }
     }
 
     CompositionLayer layer{&source};
@@ -441,8 +523,12 @@ void highResolution(OpenGlFrameCompositor& gpu) {
     for (const auto size : {std::pair{1920, 1080}, {2560, 1440}, {3840, 2160}, {2160, 3840}})
         compare(gpu, size.first, size.second, {{&opaque}, {&alpha, transform}}, "high resolution split lookup");
     const auto usage = gpu.resourceUsage();
-    require(usage.geometry_buffer_bytes == 32768 && usage.texture_bytes > 0 &&
-        usage.peak_known_bytes >= usage.texture_bytes + usage.geometry_buffer_bytes, "GPU resource accounting omitted split lookup buffers.");
+    require(usage.geometry_buffer_bytes == 36864 && usage.texture_bytes > 0 &&
+        usage.peak_known_bytes >= usage.texture_bytes + usage.geometry_buffer_bytes,
+        "GPU resource accounting omitted split lookup buffers: geometry=" +
+            std::to_string(usage.geometry_buffer_bytes) + " texture=" +
+            std::to_string(usage.texture_bytes) + " peak=" +
+            std::to_string(usage.peak_known_bytes));
     require(gpu.compose(4097, 1, {{&opaque}}).status == OpenGlCompositionStatus::Unsupported &&
         gpu.compose(1, 4097, {{&opaque}}).status == OpenGlCompositionStatus::Unsupported,
         "Axis lookup limit was not enforced independently.");
@@ -492,14 +578,15 @@ int main(int argc, char** argv) {
                     }
                     require(initial.status == OpenGlCompositionStatus::Complete,
                         "native initialization failed: " + initial.operation + ": " + initial.cause);
-    parity(gpu);
-    colorAdjustmentParity(gpu);
-    orderedEffectParity(gpu);
+                    parity(gpu);
+                    colorAdjustmentParity(gpu);
+                    orderedEffectParity(gpu);
                     if (activation == 0) highResolution(gpu);
                     cancellationAndLimits(gpu);
                     directCancellation(gpu);
                     textureLeases(surface.get());
                     retirementCapacity(surface.get());
+                    asynchronousReadbackParity(gpu);
                     {
         OpenGlFrameCompositor baseline(surface.get(), OpenGlPrecisionPolicy::CoreOnly, QOpenGLContext::globalShareContext());
                         auto f = fixture(13, 7, true, 3);
