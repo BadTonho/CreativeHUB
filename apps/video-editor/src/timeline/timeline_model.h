@@ -3,6 +3,7 @@
 #include "../media/video_metadata.h"
 #include "timeline_frame_rate.h"
 #include "timeline_transform.h"
+#include "fusion/nodes/model/node_graph.h"
 #include <creative_suite/effects/effects.h>
 
 #include <algorithm>
@@ -116,6 +117,7 @@ struct TimelineClip {
     bool audio_muted = false;
     std::vector<AudioGainKeyframe> audio_gain_keyframes;
     std::vector<creative_suite::effects::EffectInstance> effects;
+    std::optional<fusion::nodes::NodeGraph> node_graph;
     ClipId clip_id = 0;
     TrackId track_id = 0;
     Transform2D transform;
@@ -270,6 +272,7 @@ enum class AudioParameterResult { Changed, InvalidIndex, InvalidValue, NoChange 
 enum class TransformParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TextParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class EffectMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
+enum class NodeGraphMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
 enum class TransitionMutationResult {
     Added,
     Updated,
@@ -413,6 +416,10 @@ public:
         std::size_t track_index,
         std::size_t clip_index,
         std::vector<creative_suite::effects::EffectInstance> effects);
+    NodeGraphMutationResult setClipNodeGraph(
+        std::size_t track_index,
+        std::size_t clip_index,
+        std::optional<fusion::nodes::NodeGraph> graph);
     TransitionMutationResult addTransition(
         std::size_t track_index,
         std::size_t from_clip_index,

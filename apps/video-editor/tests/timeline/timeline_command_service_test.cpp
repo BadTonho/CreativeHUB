@@ -664,6 +664,31 @@ void runVisualEffectCommands() {
                 session.timeline().tracks()[location->track_index]
                     .clips[location->clip_index].effects.size() == 2,
             "Undo did not restore removed filters.");
+
+    auto graph = fusion::nodes::makePassthroughGraph();
+    graph.nodes.push_back(fusion::nodes::Node{
+        graph.next_id++, fusion::nodes::NodeType::Color, 220.0, 120.0});
+    graph.connections = {{1, 3, 0}, {3, 2, 0}};
+    require(static_cast<bool>(fusion::nodes::validate(graph)),
+            "A simple Fusion graph should validate.");
+    const auto graph_edit = service.execute(application::SetClipNodeGraphCommand{
+        clip_id, graph});
+    require(graph_edit.changed() && graph_edit.invalidate_playback,
+            "Applying a Fusion graph did not invalidate playback or enter history.");
+    location = session.timeline().locateClip(clip_id);
+    require(location.has_value() && session.timeline().tracks()[location->track_index]
+                .clips[location->clip_index].node_graph == graph,
+            "The Fusion graph command did not update the selected visual clip.");
+    require(service.undo().changed(), "A Fusion graph edit could not be undone.");
+    location = session.timeline().locateClip(clip_id);
+    require(location.has_value() && !session.timeline().tracks()[location->track_index]
+                .clips[location->clip_index].node_graph.has_value(),
+            "Undo did not restore the clip's previous graph state.");
+    require(service.redo().changed(), "A Fusion graph edit could not be redone.");
+    location = session.timeline().locateClip(clip_id);
+    require(location.has_value() && session.timeline().tracks()[location->track_index]
+                .clips[location->clip_index].node_graph == graph,
+            "Redo did not restore the applied Fusion graph.");
 }
 
 void runReconnectTimingCommand() {

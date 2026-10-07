@@ -98,8 +98,9 @@ hardware and drivers. No percentage target is set from this measurement.
 | Cross Dissolve project migration | Version 11 legacy Cross Dissolves become moving overlaps; the incoming clip and later clips on the affected track shift left by D; Fade to Black remains unchanged; chained transitions remain valid; version 12 save/reopen preserves migrated positions and transitions |
 | Timeline edge-trim command | Rolling and individual trim outcomes for video, image, and text, edited-clip identity after reordering, local playback frame and preserved global playhead, no-change and invalid requests, and Undo/Redo snapshot compatibility |
 | Timeline edge-trim gesture | Pending transition selection versus valid shared-cut drag, rolling and individual previews, final release boundary, retained preview after an invalid pointer boundary, no-op and invalid requests, legacy trim range, signal order and single commit, and cancellation on track replacement or clearing |
-| Timeline workspace selectors | Edit, blank Fusion, and Render button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
+| Timeline workspace selectors | Edit, icon-free Fusion, and Render button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
 | Workspace page switching | Edit startup state; FusionWorkspace-provided Viewer title, Node Editor, and Inspector; Render settings, shared Preview, and queue columns; responsive horizontal/vertical layout switching at 1100 px; constrained Settings fields with accessible Browse action and no horizontal scrolling; fixed Add to Queue footer outside the Settings scroll area; wheel scrolling over closed selectors and numeric controls without changing their values; runtime FFmpeg output discovery; project-derived defaults; prepared-job snapshots; controller-coordinated Edit → Fusion → Render transitions; exclusive selectors and lower dock titles; replacement of the Timeline with the Node Editor in the same lower dock; shared Timeline identity; Preview transfer into the middle Render column and restoration to the Edit/Fusion central stack; hidden Timeline controls/footer and blocked Timeline input in Render; project dirty-state preservation when preparing jobs; preservation of mixed prior dock visibility across repeated Render selection and exit, including a previously hidden Timeline; prepare-for-close restoration; and MainWindow close/reopen layout persistence |
+| Fusion node workspace | `tests/ui/fusion_workspace_test.cpp`; `tests/timeline/timeline_command_service_test.cpp` | Adding, moving, and removing nodes; output-port drag connections; compatible connections; visible cycle rejection; Inspector parameter edits; preserving node selection after Timeline refresh; selected-clip graph mutation; dirty state and playback invalidation; and Undo/Redo |
 | Render queue model | Default-off per-job GPU settings and independent snapshots/tooltips; runtime container/encoder compatibility filtering; stable job IDs and status/progress/error roles; project-document snapshot isolation; append, remove, and reorder behavior; retry reset; structure locking during execution; invalid operation rejection; and a new session starting with an empty queue |
 | Offline Render export | CPU default and per-job experimental GPU composition at configured output dimensions, independent of Playback Preview Quality; persisted Timeline-to-source mapping followed by Timeline-to-output FPS conversion, including a 24 fps Timeline at 60 fps output with a trimmed 30 fps video source; moving outgoing and incoming Cross Dissolve frames with the incoming clip continuing from local frame D; embedded video audio hard-cut at a visual transition; independent audio crossfade matching the Preview mixer with gain, mute, and envelope; black gaps and black frames through an independent audio tail; text clips and transform keyframes; output file reopen and stream validation; embedded and independent audio mixing with clip/track gain and mute; linked video audio companion export at the same RMS as embedded-only playback to catch double mixing; mixed-source audio-disabled output; monotonic progress; cancellation and failure preserving an existing destination and cleaning temporary files; ordered queue continuation after failure; cancellation leaving later jobs unstarted; and no change to the project snapshot. The current Windows development Release encoder, muxer, and image-reader inventory is documented in [MEDIA_CAPABILITIES_WINDOWS_RELEASE.md](MEDIA_CAPABILITIES_WINDOWS_RELEASE.md); package export compatibility and licensing checks remain release gates. |
 | Edit workspace controller | Shared-session clip selection and playhead state; typed playback, media-drop, and seek requests; track creation, renaming, reordering, and removal; media and text insertion, automatic Audio N track creation/reuse and Undo/Redo; clip movement, nudge, split, trim, delete, and clear; Audio Crossfade add/update/remove commands with ripple and Undo/Redo; Inspector transition type and duration commands; command-result, committed-edit, and history signals; rejected and no-op edits; occupied positions; offline or unregistered media; and unchanged project state for rejected commands |
@@ -142,7 +143,7 @@ and its subdirectories; shared-library tests are registered in
 | Logging and system metrics | `tests/logging/logger_test.cpp`; `tests/system/system_memory_usage_test.cpp`, `system_memory_details_dialog_test.cpp`, `performance_usage_test.cpp` | The manual checklist documents checking the app log folder and platform resource values; runtime and platform results remain pending. |
 | Media import, probing, decode, and Media Pool | `tests/media/video_decoder_test.cpp` (`creative-suite-main-editor-video-decoder-errors`), `media_library_test.cpp`; `tests/application/application_media_services_test.cpp`; `tests/ui/media_browser_list_widget_test.cpp`, `media_browser_bin_tree_widget_test.cpp`; `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`) | Automated coverage checks image content despite absent/wrong extensions, dynamic Open Media patterns, static GIF acceptance, multi-frame rejection without an error entry, and WebP/TIFF fallback when the matching FFmpeg decoder is available without a Qt reader. External-drop tests dispatch through the actual Media Browser list and bin-tree viewports, preserve ordered local paths with spaces and Unicode, reject folders and remote URLs, route imports to the selected or dropped-on bin, and keep internal drags unchanged. Windows Explorer file-drop acceptance for video, audio, image, and bin drops was confirmed on 2026-10-07. The maintainer confirmed static-image import, Preview, and save/reopen against the rebuilt Windows Release executable on 2026-10-07; the one-frame and multi-frame edge cases have automated coverage. See the [manual checklist](#manual-ui-validation). |
 | Project data, validation, migration, autosave, and recovery | `tests/project/project_file_test.cpp`, `autosave_manager_test.cpp`; `tests/application/main_window_integration_test.cpp` | The owner reports repeatedly migrating the same long-lived `.csp` project as persisted-format versions advance. Save/reopen and invalid-project preservation worked; reopening through recovery after forgetting to save has restored the project every time it was needed. Representative project-size and detailed failure workflows remain pending. |
-| Project canvas and frame rate | `tests/project/project_file_test.cpp`; `tests/timeline/timeline_command_service_test.cpp`; `tests/application/main_window_integration_test.cpp`; `tests/playback/playback_worker_test.cpp`; `tests/rendering/text_compositor_test.cpp` | Create each supported canvas/rate combination; change settings on an existing project; confirm converted clip/keyframe/envelope/transition/playhead times, linked audio alignment, rejection without partial changes, and one-step Undo/Redo. Cancel both dialogs without disturbing the active document; save/reopen v19 and confirm portrait framing, text placement, and Project-resolution/initial-FPS defaults in Preview and Render. Open v1–v18 projects and confirm 16:9 migration with v11–v18 rates preserved. |
+| Project canvas and frame rate | `tests/project/project_file_test.cpp`; `tests/timeline/timeline_command_service_test.cpp`; `tests/application/main_window_integration_test.cpp`; `tests/playback/playback_worker_test.cpp`; `tests/rendering/text_compositor_test.cpp` | Create each supported canvas/rate combination; change settings on an existing project; confirm converted clip/keyframe/envelope/transition/playhead times, linked audio alignment, rejection without partial changes, and one-step Undo/Redo. Cancel both dialogs without disturbing the active document; save/reopen v20 and confirm portrait framing, text placement, and Project-resolution/initial-FPS defaults in Preview and Render. Open v1–v18 projects and confirm 16:9 migration with v11–v18 rates preserved. |
 | Timeline model, commands, geometry, gestures, and widgets | `tests/timeline/timeline_model_test.cpp`, `timeline_command_service_test.cpp`, `timeline_geometry_test.cpp`, `timeline_interaction_controller_test.cpp`, `timeline_trim_gesture_test.cpp`, `timeline_widget_test.cpp`, `timeline_end_buttons_test.cpp`; `tests/application/main_window_integration_test.cpp` | External file-drop tests dispatch through the production scroll viewport and Timeline event filter, capture local URLs, target track and frame, and verify end-to-end ordered import and placement. Batch command tests cover durations, automatic audio routing, linked companions, atomic rejection on collision/incompatibility, and one-step Undo/Redo. Automated Ripple Delete coverage checks video, audio, and text tracks, linked companions, collision stops, blocker preservation, transitions, Undo/Redo, shortcut customization, text-field cut routing, and the unchanged Delete gap behavior. Windows Explorer Timeline drops and Undo/Redo were confirmed by the maintainer on 2026-10-07; Ripple Delete, rendering, pointer feel, scaling, and accessibility checks remain pending. |
 | Playback, seeking, frame stepping, transitions, and audio | `tests/playback/video_playback_test.cpp`, `playback_worker_test.cpp`, `playback_controller_test.cpp`, `playback_deadline_scheduler_test.cpp`, `frame_step_navigation_test.cpp`, `timeline_audio_mix_test.cpp`, `audio_playback_test.cpp`, `audio_waveform_test.cpp` | Waveform extraction covers mono/stereo source metadata, distinct left/right peaks, combined Mono peaks, opposite-phase content, cancellation, invalid media, cache reuse, signature invalidation, and the 64 MiB limit. Mixer tests verify per-sample linear envelope gain alongside static clip/track gain and mute. Timeline widget coverage checks waveform and curve rendering, audio-only clips, and excludes visual clips. Driver/audio-device behavior and the approved reference workload remain in the broader manual matrix. |
 | Rendering, transforms, text, and preview metrics | `tests/rendering/transform_compositor_test.cpp`, `text_compositor_test.cpp`, `preview_performance_metrics_test.cpp`; `tests/ui/preview_widget_test.cpp`, `opengl_preview_test.cpp` (`creative-suite-main-editor-opengl-preview`) | The native OpenGL integration test checks framebuffer output and CPU fallback on a valid context; it skips only if the platform cannot create a valid context. Real-driver visual and platform checks remain manual. |
@@ -227,7 +228,7 @@ in the running Video Editor after UI or integration changes:
   the mouse Selection Tool icon is checked initially, the Blade Tool is an
   icon-only mutually exclusive mode, and both accessible names and tooltips
   remain available; confirm no Add Text button is shown; confirm the far right
-  of the top workspace toolbar shows the active `Edit` button, blank Fusion
+  of the top workspace toolbar shows the active `Edit` button, icon-free Fusion
   button with no text or icon, and labeled `Render` button;
 - Timeline construction (F1): confirm the control row, scrolling viewport,
   fixed track headers, and footer retain their layout. Check the saved monitor
@@ -291,10 +292,17 @@ in the running Video Editor after UI or integration changes:
   Timeline rate remains fixed, the clip and following transition junction are
   converted once, Undo/Redo restores and reapplies the conversion, and the
   project dirty marker reflects the restoration;
-- Workspace pages: confirm startup selects Edit; click the blank Fusion button
-  and confirm the existing Preview is labeled `Viewer`, the bottom dock title
-  changes to `Node Editor`, the Timeline is hidden, and the Inspector shows the
-  Fusion placeholder while Bins and Media remain available. Select Render and
+- Workspace pages: confirm startup selects Edit; click the icon-free Fusion
+  button and confirm the existing Preview is labeled `Viewer`, the bottom dock
+  title changes to `Node Editor`, the Timeline is hidden, and the Inspector
+  shows the selected node controls while Bins and Media remain available. Add
+  Transform and Color nodes, drag output ports to connect them in sequence,
+  change their parameters,
+  and confirm the selected clip's Preview updates. Add a Media Pool image Input
+  and Merge it over the selected clip; confirm transparent pixels reveal the
+  background. Move a node, remove a node, then Undo and Redo the graph edits;
+  confirm the node layout, connections, parameters, and project dirty marker
+  follow history. Select Render and
   confirm the central page has output settings on the left, the same live
   project Preview in the middle, and the render queue on the right. Confirm the
   Preview follows the current playhead and playback. At central widths of at
@@ -343,8 +351,8 @@ in the running Video Editor after UI or integration changes:
   reopen it to confirm it starts in Edit with the previous dock layout. Resize
   the bottom dock in Edit and Fusion. Click all selectors and confirm
   selection, playhead, playback, Timeline contents, Undo/Redo, and project
-  dirty state remain unchanged; the Node Editor and Fusion Inspector must not
-  provide composition operations;
+  dirty state remain unchanged by workspace switching. In Fusion, graph edits
+  must update dirty state and support Undo/Redo;
 - Functions window: press Shift + Space with focus in the Timeline, Media
   Browser, and Preview, in both Edit and Fusion, and confirm the non-modal
   `Functions` filter picker opens centered over the editor and receives focus.
@@ -961,3 +969,27 @@ Follow [GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md#manual-acceptance-checklist
 for session/snapshot/accessibility, output/audio, PNG producer/consumer, fallback,
 shutdown and platform checks. It records measured results separately from pending
 human acceptance. Export metrics use schema 1; preview schemas remain 9/3.
+
+## Fusion node graph
+
+Automated coverage includes `creative-suite-main-editor-node-graph` for graph
+validation, cycle rejection, Transform/Color evaluation, Merge alpha, and
+transparent missing input frames; `creative-suite-main-editor-project`
+for v20 graph round-trip and v19 compatibility; the Timeline command-service
+case for graph Undo/Redo; and `creative-suite-main-editor-fusion-workspace`
+for adding nodes, connecting them, editing Transform values, and displaying a
+cycle rejection. `creative-suite-main-editor-render-export` checks Preview and
+offline Render pixels for the same graph within the encoder's loss tolerance.
+Both paths call the same node evaluator before the existing clip effect stack
+and clip transform.
+
+Manual check: select a video clip and open Fusion. Confirm the pass-through
+graph matches the Edit Preview. Add Transform and Color nodes, connect them,
+change parameters in the Inspector, and confirm the Preview changes. Add a
+Merge, connect the selected clip as background and a Media Pool image as
+foreground, and confirm transparent pixels reveal the background. Add a
+Media Pool video input and confirm it starts at the selected clip's local
+frame zero and becomes transparent at its end. Export the same frame and
+compare it with Preview. Save/reopen the `.csp`, then Undo and Redo graph edits;
+confirm connections and parameters persist and the clip's Timeline position,
+duration, audio, effect stack, and transform/keyframes remain intact.

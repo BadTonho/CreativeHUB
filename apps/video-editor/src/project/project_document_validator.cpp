@@ -177,6 +177,13 @@ void validateDocument(const ProjectDocument& document,
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid effect stack for this clip.");
         }
+        if (clip.node_graph.has_value() &&
+            ((clip.kind != timeline::ClipKind::Video &&
+              clip.kind != timeline::ClipKind::Image) ||
+             !fusion::nodes::validate(*clip.node_graph))) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Fusion node graph for this clip.");
+        }
         if (clip.image_editor_variant.has_value() &&
             (clip.kind != timeline::ClipKind::Image ||
              !validLinkedImageReference(*clip.image_editor_variant, clip.source_path))) {
@@ -259,6 +266,20 @@ void validateDocument(const ProjectDocument& document,
                     !video_audio_companion) {
                     throwJson(ProjectErrorCode::InvalidTimeline, project_path,
                               "Project JSON contains a clip whose source media type does not match its clip type.");
+                }
+            }
+            if (clip.node_graph.has_value()) {
+                for (const auto& node : clip.node_graph->nodes) {
+                    if (node.type != fusion::nodes::NodeType::Input ||
+                        node.source_path.empty()) continue;
+                    const auto media = media_kind_for_path(node.source_path);
+                    if (!media.has_value() ||
+                        (*media != media::MediaKind::Video &&
+                         *media != media::MediaKind::Image) ||
+                        node.source_is_still != (*media == media::MediaKind::Image)) {
+                        throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                                  "A Fusion input must reference video or image media in the project Media Pool.");
+                    }
                 }
             }
             if ((clip.kind != timeline::ClipKind::Video &&

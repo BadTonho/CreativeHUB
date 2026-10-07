@@ -63,6 +63,8 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/audio_output.h
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/playback_worker.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/playback_worker.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/evaluation/node_graph_evaluator.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/evaluation/node_graph_evaluator.h
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/playback_transition_plan.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/playback_transition_plan.h
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/playback_audio_pacing.h
@@ -76,6 +78,7 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/text_renderer.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/text_renderer.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -92,6 +95,7 @@ target_link_directories(creative-suite-main-editor-playback-worker-tests PRIVATE
 
 target_link_libraries(creative-suite-main-editor-playback-worker-tests PRIVATE
     creative-suite::composition-opengl
+    creative_suite::media-assets
     Qt6::Core
     Qt6::Gui
     creative-suite::video-media
@@ -285,6 +289,7 @@ add_executable(creative-suite-main-editor-frame-step-navigation-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/frame_step_navigation.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/frame_step_navigation.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h

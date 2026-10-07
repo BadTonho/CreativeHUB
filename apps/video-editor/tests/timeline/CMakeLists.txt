@@ -6,6 +6,7 @@ add_executable(creative-suite-main-editor-timeline-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_history.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_history.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -42,6 +43,7 @@ add_executable(creative-suite-main-editor-timeline-command-service-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_history.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_history.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -69,9 +71,27 @@ add_creative_suite_test(
     COMMAND creative-suite-main-editor-timeline-command-service-tests
 )
 
+add_executable(creative-suite-main-editor-node-graph-tests
+    node_graph_test.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/evaluation/node_graph_evaluator.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/evaluation/node_graph_evaluator.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
+)
+target_include_directories(creative-suite-main-editor-node-graph-tests PRIVATE
+    ${VIDEO_EDITOR_SOURCE_DIR})
+target_link_libraries(creative-suite-main-editor-node-graph-tests PRIVATE
+    creative_suite::animation creative_suite::effects creative_suite::composition)
+target_compile_features(creative-suite-main-editor-node-graph-tests PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME creative-suite-main-editor-node-graph
+    COMMAND creative-suite-main-editor-node-graph-tests)
+
 add_executable(creative-suite-main-editor-timeline-trim-gesture-tests
     timeline_trim_gesture_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -102,6 +122,7 @@ add_executable(creative-suite-main-editor-timeline-widget-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_time.h
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_metadata.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_layout.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_geometry.cpp
@@ -189,6 +210,7 @@ add_executable(creative-suite-main-editor-timeline-geometry-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_interaction_painter.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_interaction_painter.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -214,6 +236,7 @@ add_executable(creative-suite-main-editor-timeline-interaction-controller-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_trim_gesture.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_trim_gesture.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h

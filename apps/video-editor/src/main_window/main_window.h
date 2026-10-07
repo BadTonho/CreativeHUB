@@ -143,6 +143,8 @@ private:
         std::optional<MediaImportIntent> intent = std::nullopt);
     void finishMediaImport(application::MediaImportBatchResult result);
     void updateMediaDetails(int row);
+    void refreshFusionMediaChoices();
+    void refreshFusionSelection();
     void populateMediaBrowser(
         const std::filesystem::path& selected_path = {},
         std::optional<std::string> selected_bin = std::nullopt);

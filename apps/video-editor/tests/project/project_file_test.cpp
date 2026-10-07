@@ -104,6 +104,16 @@ int main(int argc, char** argv) {
             directory / "media" / "still.png.image-editor" / "clips" /
                 "clip-still-uuid" / "output.png"};
         original.timeline_tracks.front().clips.push_back(image_clip);
+        auto node_graph = fusion::nodes::makePassthroughGraph();
+        node_graph.nodes.push_back(fusion::nodes::Node{
+            3, fusion::nodes::NodeType::Input, 80.0, 280.0});
+        node_graph.nodes.push_back(fusion::nodes::Node{
+            4, fusion::nodes::NodeType::Merge, 380.0, 180.0});
+        node_graph.nodes[2].source_path = image_source;
+        node_graph.nodes[2].source_is_still = true;
+        node_graph.connections = {{1, 4, 0}, {3, 4, 1}, {4, 2, 0}};
+        node_graph.next_id = 5;
+        original.timeline_tracks.front().clips.front().node_graph = node_graph;
         original.timeline_tracks.front().clips[1].timeline_start_frame = 45;
         original.timeline_tracks.front().clips.back().timeline_start_frame = 85;
         original.timeline_tracks.front().transitions.push_back(
@@ -147,7 +157,7 @@ int main(int argc, char** argv) {
         const auto portrait_project_path = directory / "portrait.csp";
         project::save(portrait_project_path, portrait_project);
         require(project::load(portrait_project_path) == portrait_project,
-                "A version 19 portrait project did not preserve its canvas and project data.");
+                "A version 20 portrait project did not preserve its canvas and project data.");
 
         auto invalid_canvas_project = portrait_project;
         invalid_canvas_project.canvas_width = 1440;
@@ -209,7 +219,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 19") != std::string::npos &&
+        require(saved_json.find("\"version\": 20") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -220,10 +230,22 @@ int main(int argc, char** argv) {
                     saved_json.find("cross_dissolve") != std::string::npos &&
                     saved_json.find("\"effects\"") != std::string::npos &&
                     saved_json.find("video.grayscale") != std::string::npos &&
+                    saved_json.find("\"node_graph\"") != std::string::npos &&
+                    saved_json.find("\"type\": \"merge\"") != std::string::npos &&
                     saved_json.find("\"enabled\": false") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline frame timing, effect states, and linked image references were not written to the version 19 project.");
+                "Timeline timing, effect states, Fusion nodes, and linked image references were not written to the version 20 project.");
+
+        auto legacy_v19_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        legacy_v19_json.insert("version", 19);
+        const auto legacy_v19_path = directory / "legacy-v19.csp";
+        writeText(legacy_v19_path,
+                  QJsonDocument(legacy_v19_json).toJson().toStdString());
+        const auto legacy_v19 = project::load(legacy_v19_path);
+        require(!legacy_v19.timeline_tracks.front().clips.front().node_graph.has_value(),
+                "A version 19 project must open without applying v20 node graphs.");
 
         auto legacy_v18_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
@@ -276,7 +298,7 @@ int main(int argc, char** argv) {
                 error.code() == project::ProjectErrorCode::InvalidValue;
         }
         require(unsupported_current_canvas_rejected,
-                "A version 19 project with unsupported dimensions was accepted.");
+                "A version 20 project with unsupported dimensions was accepted.");
 
         auto version_17_effects_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();

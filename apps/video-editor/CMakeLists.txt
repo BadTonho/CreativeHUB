@@ -31,6 +31,12 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/application/project_open_service.h
     src/application/timeline_command_service.cpp
     src/application/timeline_command_service.h
+    src/fusion/nodes/model/node_graph.cpp
+    src/fusion/nodes/model/node_graph.h
+    src/fusion/nodes/evaluation/node_graph_evaluator.cpp
+    src/fusion/nodes/evaluation/node_graph_evaluator.h
+    src/fusion/nodes/ui/node_canvas.cpp
+    src/fusion/nodes/ui/node_canvas.h
     src/main_window/main_window_support.cpp
     src/main_window/main_window_support.h
     src/main_window/main_window_workspace.cpp

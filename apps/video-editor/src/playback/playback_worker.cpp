@@ -7,6 +7,8 @@
 #include "../rendering/preview_performance_metrics.h"
 #include "../rendering/text_renderer.h"
 #include "../timeline/timeline_time.h"
+#include "../media/still_image_decoder.h"
+#include "fusion/nodes/evaluation/node_graph_evaluator.h"
 
 #include <QFileInfo>
 #include <QByteArray>
@@ -39,6 +41,12 @@ bool hasAnimatedTextGeometry(
 std::string pathToUtf8(const std::filesystem::path& path) {
     const auto value = path.u8string();
     return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+}
+
+QString pathToQString(const std::filesystem::path& path) {
+    const auto value = path.u8string();
+    return QString::fromUtf8(reinterpret_cast<const char*>(value.data()),
+                             static_cast<qsizetype>(value.size()));
 }
 
 std::string safePathForLog(const std::filesystem::path& path) noexcept {
@@ -754,6 +762,28 @@ void PlaybackWorker::setComposition(
             } else if (spec.kind == timeline::ClipKind::Audio &&
                        spec.source_path.isEmpty()) {
                 continue;
+            }
+            if (spec.node_graph.has_value()) {
+                for (const auto& node : spec.node_graph->nodes) {
+                    if (node.type != fusion::nodes::NodeType::Input ||
+                        node.source_path.empty()) continue;
+                    std::error_code graph_source_error;
+                    if (!std::filesystem::is_regular_file(
+                            node.source_path, graph_source_error) || graph_source_error) {
+                        continue;
+                    }
+                    CompositionSession::GraphInputSession graph_input;
+                    graph_input.node_id = node.id;
+                    graph_input.frame_rate = node.source_frame_rate;
+                    graph_input.still_source = node.source_is_still;
+                    if (node.source_is_still) {
+                        graph_input.still_frame = std::make_shared<const media::VideoFrame>(
+                            media::StillImageDecoder{}.decode_first_frame(node.source_path));
+                    } else {
+                        graph_input.video_session = openVideoPlaybackSession(node.source_path);
+                    }
+                    composition_session.graph_inputs.push_back(std::move(graph_input));
+                }
             }
             if (spec.track_index == track_index_ && spec.clip_index == clip_index_) {
                 primary_timeline_start_frame_ = spec.timeline_start_frame;
@@ -2633,6 +2663,42 @@ PlaybackWorker::decodeCompositionLayers(
             }
         }
         if (frame == nullptr) continue;
+        if (spec.node_graph.has_value()) {
+            fusion::nodes::InputFrames inputs;
+            for (const auto& node : spec.node_graph->nodes) {
+                if (node.type != fusion::nodes::NodeType::Input) continue;
+                if (node.source_path.empty()) {
+                    inputs.emplace(node.id, frame);
+                    continue;
+                }
+                const auto graph_input = std::find_if(composition.graph_inputs.begin(),
+                    composition.graph_inputs.end(), [&node](const auto& input) {
+                        return input.node_id == node.id;
+                    });
+                if (graph_input == composition.graph_inputs.end()) continue;
+                if (graph_input->still_source) {
+                    if (graph_input->still_frame != nullptr)
+                        inputs.emplace(node.id, graph_input->still_frame);
+                } else if (graph_input->video_session != nullptr) {
+                    const long double source_index = static_cast<long double>(request.local_frame) *
+                        graph_input->frame_rate / timeline_frame_rate_.asDouble();
+                    if (source_index >= 0.0L &&
+                        (node.source_frame_count <= 0 ||
+                         source_index < static_cast<long double>(node.source_frame_count)) &&
+                        source_index <= static_cast<long double>(
+                            std::numeric_limits<std::int64_t>::max())) {
+                        const auto decoded = graph_input->video_session->decode_frame_at(
+                            static_cast<std::int64_t>(source_index), should_cancel);
+                        if (decoded.has_value() && *decoded != nullptr)
+                            inputs.emplace(node.id, *decoded);
+                    }
+                }
+            }
+            const auto evaluated = fusion::nodes::evaluate(*spec.node_graph, inputs);
+            if (!evaluated.has_value())
+                throw media::MediaError("The Fusion node graph did not produce a frame.");
+            frame = std::make_shared<const media::VideoFrame>(*evaluated);
+        }
         if (!spec.effects.empty()) {
             auto processed = std::make_shared<media::VideoFrame>(*frame);
             if (!creative_suite::effects::applyStack(*processed, spec.effects)) {

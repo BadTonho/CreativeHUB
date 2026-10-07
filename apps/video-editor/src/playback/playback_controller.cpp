@@ -267,7 +267,8 @@ void PlaybackController::refreshComposition() {
                 clip.source_duration_time_us,
                 clip.audio_extracted,
                 clip.audio_gain_keyframes,
-                clip.effects});
+                clip.effects,
+                clip.node_graph});
         }
 
         for (const auto& transition : track.transitions) {

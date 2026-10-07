@@ -9,6 +9,7 @@ add_executable(creative-suite-main-editor-project-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/project/project_file_reader.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/project/project_file_writer.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/project/project_document_validator.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
@@ -49,6 +50,7 @@ add_executable(creative-suite-main-editor-autosave-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/project/project_file_reader.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/project/project_file_writer.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/project/project_document_validator.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/project/project_document.h
     ${VIDEO_EDITOR_SOURCE_DIR}/media/media_library.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_layout.h

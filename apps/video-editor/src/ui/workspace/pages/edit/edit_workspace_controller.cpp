@@ -451,6 +451,25 @@ bool EditWorkspaceController::selectedClipSupportsEffects() const noexcept {
     return kind == timeline::ClipKind::Video || kind == timeline::ClipKind::Image;
 }
 
+void EditWorkspaceController::applyFusionNodeGraph(
+    timeline::ClipId clip_id, const fusion::nodes::NodeGraph& graph) {
+    try {
+        const auto result = execute(application::SetClipNodeGraphCommand{clip_id, graph});
+        if (result.changed()) {
+            publishCommittedEdit(result, false, true,
+                                 QStringLiteral("Fusion node graph updated."));
+        } else if (result.status == application::EditStatus::Rejected) {
+            emit statusMessageRequested(QStringLiteral("The node graph could not be applied."));
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "fusion", "apply-node-graph", error.what(),
+            {{"clip_id", std::to_string(clip_id)}});
+        emit warningMessageRequested(QStringLiteral("Fusion graph"),
+            QString::fromUtf8(error.what()));
+    }
+}
+
 bool EditWorkspaceController::canCopySelectedClipAttributes() const noexcept {
     if (active_transition_.has_value()) return false;
     return selectedAttributeClipLocation().has_value();

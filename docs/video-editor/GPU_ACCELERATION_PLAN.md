@@ -139,8 +139,9 @@ regressions pass, and transfer/encode costs are included in performance results.
   parameters, order, alpha/color semantics, and persistence are defined.
   Motion-owned Blur/Color Adjustment do not automatically become Video features.
 - Preserve current transitions and viewing effects independently of future
-  color grading, masks, or Fusion processing. The Fusion placeholder does not
-  become a composition engine through this acceleration work.
+  color grading, masks, or additional Fusion processing. The initial CPU Fusion
+  graph remains evaluated before the existing clip effects and transforms;
+  GPU acceleration for Fusion is outside this plan.
 - Cover transparent PNG consumption from Image Editor, including masked and
   transformed imported-image output, shared links, clip variants, and refresh
   after publication. Invalidate dependent CPU/GPU caches on media replacement

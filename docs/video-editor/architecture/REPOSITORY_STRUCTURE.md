@@ -89,6 +89,11 @@ tests/
   rendering/
   settings/
   system/
+  fusion/
+    nodes/
+      model/
+      ui/
+      evaluation/
   timeline/
   ui/
 ```

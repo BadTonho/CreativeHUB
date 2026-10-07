@@ -2772,6 +2772,26 @@ EffectMutationResult TimelineModel::setClipEffects(
     return EffectMutationResult::Changed;
 }
 
+NodeGraphMutationResult TimelineModel::setClipNodeGraph(
+    std::size_t track_index,
+    std::size_t clip_index,
+    std::optional<fusion::nodes::NodeGraph> graph) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return NodeGraphMutationResult::InvalidIndex;
+    }
+    auto& clip = track->clips[clip_index];
+    if (clip.kind != ClipKind::Video && clip.kind != ClipKind::Image) {
+        return NodeGraphMutationResult::IncompatibleClip;
+    }
+    if (graph.has_value() && !fusion::nodes::validate(*graph)) {
+        return NodeGraphMutationResult::InvalidValue;
+    }
+    if (clip.node_graph == graph) return NodeGraphMutationResult::NoChange;
+    clip.node_graph = std::move(graph);
+    return NodeGraphMutationResult::Changed;
+}
+
 TransitionMutationResult TimelineModel::addTransition(
     std::size_t track_index,
     std::size_t from_clip_index,

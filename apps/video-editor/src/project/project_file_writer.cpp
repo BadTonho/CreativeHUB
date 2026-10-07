@@ -60,6 +60,60 @@ const char* trackKindName(timeline::TrackKind kind) {
     return kind == timeline::TrackKind::Audio ? "audio" : "video";
 }
 
+const char* nodeTypeName(fusion::nodes::NodeType type) {
+    switch (type) {
+    case fusion::nodes::NodeType::Input: return "input";
+    case fusion::nodes::NodeType::Transform: return "transform";
+    case fusion::nodes::NodeType::Color: return "color";
+    case fusion::nodes::NodeType::Merge: return "merge";
+    case fusion::nodes::NodeType::Output: return "output";
+    }
+    return "input";
+}
+
+QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
+                          const fusion::nodes::NodeGraph& graph) {
+    QJsonObject object;
+    object.insert("next_id", static_cast<qint64>(graph.next_id));
+    QJsonArray nodes;
+    for (const auto& node : graph.nodes) {
+        QJsonObject value;
+        value.insert("id", static_cast<qint64>(node.id));
+        value.insert("type", nodeTypeName(node.type));
+        value.insert("x", node.x);
+        value.insert("y", node.y);
+        if (!node.source_path.empty())
+            value.insert("source", storedPath(project_path, node.source_path));
+        value.insert("source_frame_rate", node.source_frame_rate);
+        value.insert("source_frame_count", static_cast<qint64>(node.source_frame_count));
+        value.insert("source_is_still", node.source_is_still);
+        QJsonObject transform;
+        transform.insert("x", node.transform.position_x);
+        transform.insert("y", node.transform.position_y);
+        transform.insert("scale", node.transform.scale);
+        transform.insert("rotation", node.transform.rotation_degrees);
+        transform.insert("opacity", node.transform.opacity);
+        value.insert("transform", transform);
+        QJsonObject color;
+        color.insert("brightness", node.color.brightness);
+        color.insert("contrast", node.color.contrast_percent);
+        color.insert("saturation", node.color.saturation_percent);
+        value.insert("color", color);
+        nodes.append(value);
+    }
+    object.insert("nodes", nodes);
+    QJsonArray connections;
+    for (const auto& edge : graph.connections) {
+        QJsonObject connection;
+        connection.insert("from", static_cast<qint64>(edge.from));
+        connection.insert("to", static_cast<qint64>(edge.to));
+        connection.insert("input", static_cast<int>(edge.input));
+        connections.append(connection);
+    }
+    object.insert("connections", connections);
+    return object;
+}
+
 QJsonObject linkedImageJson(
     const std::filesystem::path& project_path,
     const media::LinkedImageReference& link) {
@@ -199,6 +253,8 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 }
                 item.insert("effects", effect_stack);
             }
+            if (clip.node_graph.has_value())
+                item.insert("node_graph", nodeGraphJson(project_path, *clip.node_graph));
             QJsonObject transform;
             QJsonObject position;
             position.insert("x", clip.transform.position_x);

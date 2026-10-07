@@ -8,6 +8,7 @@
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_bin_tree_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
+#include "ui/workspace/pages/fusion/fusion_workspace.h"
 
 #include <QAction>
 #include <QCoreApplication>
@@ -68,6 +69,7 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 
 using namespace main_window_detail;
@@ -556,6 +558,24 @@ void MainWindow::populateMediaBrowser(
         updatePlaybackControls();
         updatePlaybackStatus();
     }
+    refreshFusionMediaChoices();
+}
+
+void MainWindow::refreshFusionMediaChoices() {
+    if (fusion_workspace_ == nullptr) return;
+    std::vector<ui::FusionWorkspace::MediaChoice> choices;
+    for (const auto& item : editor_session_.mediaLibrary().items()) {
+        if (item.offline || (item.metadata.kind != media::MediaKind::Video &&
+                             item.metadata.kind != media::MediaKind::Image)) continue;
+        choices.push_back({
+            QString::fromUtf8(item.display_name.data(),
+                              static_cast<qsizetype>(item.display_name.size())),
+            item.metadata.source_path,
+            item.metadata.frame_rate.value_or(30.0),
+            item.metadata.frame_count.value_or(0),
+            item.metadata.kind == media::MediaKind::Image});
+    }
+    fusion_workspace_->setMediaChoices(std::move(choices));
 }
 
 void MainWindow::selectMediaBrowserBin(const QString& path) {

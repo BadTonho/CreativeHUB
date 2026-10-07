@@ -55,6 +55,9 @@ std::filesystem::path normalizedPath(const std::filesystem::path& path) {
                              const std::filesystem::path& project_path,
                              const char* message);
 
+std::filesystem::path resolvedPath(const std::filesystem::path& project_path,
+                                   const QString& stored_path);
+
 
 
 media::MediaKind parseMediaKind(
@@ -98,6 +101,92 @@ timeline::TransitionKind parseTransitionKind(
     }
     throwJson(ProjectErrorCode::InvalidValue, project_path,
               "Project JSON contains an unsupported transition kind.");
+}
+
+fusion::nodes::NodeType parseNodeType(const QJsonValue& value,
+                                      const std::filesystem::path& project_path) {
+    if (!value.isString())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid Fusion node type.");
+    const auto name = value.toString();
+    if (name == QLatin1String("input")) return fusion::nodes::NodeType::Input;
+    if (name == QLatin1String("transform")) return fusion::nodes::NodeType::Transform;
+    if (name == QLatin1String("color")) return fusion::nodes::NodeType::Color;
+    if (name == QLatin1String("merge")) return fusion::nodes::NodeType::Merge;
+    if (name == QLatin1String("output")) return fusion::nodes::NodeType::Output;
+    throwJson(ProjectErrorCode::InvalidValue, project_path,
+              "Project JSON contains an unsupported Fusion node type.");
+}
+
+fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
+                                        const std::filesystem::path& project_path) {
+    if (!value.isObject())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid Fusion node graph.");
+    const auto object = value.toObject();
+    const auto nodes_value = object.value("nodes");
+    const auto edges_value = object.value("connections");
+    const auto next_id = object.value("next_id");
+    if (!nodes_value.isArray() || !edges_value.isArray() ||
+        !next_id.isDouble() || next_id.toInteger() <= 0)
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an incomplete Fusion node graph.");
+    fusion::nodes::NodeGraph graph;
+    graph.next_id = static_cast<fusion::nodes::NodeId>(next_id.toInteger());
+    for (const auto& node_value : nodes_value.toArray()) {
+        if (!node_value.isObject())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Fusion node.");
+        const auto node_object = node_value.toObject();
+        const auto id = node_object.value("id");
+        if (!id.isDouble() || id.toInteger() <= 0)
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Fusion node identifier.");
+        fusion::nodes::Node node;
+        node.id = static_cast<fusion::nodes::NodeId>(id.toInteger());
+        node.type = parseNodeType(node_object.value("type"), project_path);
+        node.x = node_object.value("x").toDouble(std::numeric_limits<double>::quiet_NaN());
+        node.y = node_object.value("y").toDouble(std::numeric_limits<double>::quiet_NaN());
+        if (node_object.contains("source")) {
+            if (!node_object.value("source").isString())
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Project JSON contains an invalid Fusion input path.");
+            node.source_path = resolvedPath(project_path, node_object.value("source").toString());
+        }
+        node.source_frame_rate = node_object.value("source_frame_rate").toDouble(30.0);
+        node.source_frame_count = node_object.value("source_frame_count").toInteger(0);
+        node.source_is_still = node_object.value("source_is_still").toBool(false);
+        const auto transform = node_object.value("transform").toObject();
+        node.transform.position_x = transform.value("x").toDouble(0.5);
+        node.transform.position_y = transform.value("y").toDouble(0.5);
+        node.transform.scale = transform.value("scale").toDouble(1.0);
+        node.transform.rotation_degrees = transform.value("rotation").toDouble(0.0);
+        node.transform.opacity = transform.value("opacity").toDouble(1.0);
+        const auto color = node_object.value("color").toObject();
+        node.color.brightness = color.value("brightness").toDouble(0.0);
+        node.color.contrast_percent = color.value("contrast").toDouble(100.0);
+        node.color.saturation_percent = color.value("saturation").toDouble(100.0);
+        graph.nodes.push_back(std::move(node));
+    }
+    for (const auto& edge_value : edges_value.toArray()) {
+        if (!edge_value.isObject())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Fusion connection.");
+        const auto edge = edge_value.toObject();
+        const auto from = edge.value("from"), to = edge.value("to"), input = edge.value("input");
+        if (!from.isDouble() || !to.isDouble() || !input.isDouble() ||
+            from.toInteger() <= 0 || to.toInteger() <= 0 ||
+            input.toInteger() < 0 || input.toInteger() > 1)
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Fusion connection endpoint.");
+        graph.connections.push_back({static_cast<fusion::nodes::NodeId>(from.toInteger()),
+            static_cast<fusion::nodes::NodeId>(to.toInteger()),
+            static_cast<std::uint8_t>(input.toInteger())});
+    }
+    if (!fusion::nodes::validate(graph))
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid or cyclic Fusion graph.");
+    return graph;
 }
 
 
@@ -719,6 +808,11 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         }
                         clip.effects.push_back(std::move(effect));
                     }
+                }
+                if (version >= node_graph_format_version &&
+                    clip_object.contains("node_graph")) {
+                    clip.node_graph = parseNodeGraph(
+                        clip_object.value("node_graph"), project_path);
                 }
                 if (version >= audio_companion_format_version) {
                     if (clip_object.contains("linked_clip_id")) {

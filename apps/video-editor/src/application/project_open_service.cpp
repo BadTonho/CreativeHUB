@@ -803,6 +803,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                 clip.audio_muted = project_clip.audio_muted;
                 clip.audio_gain_keyframes = project_clip.audio_gain_keyframes;
                 clip.effects = project_clip.effects;
+                clip.node_graph = project_clip.node_graph;
                 clip.clip_id = project_clip.clip_id;
                 clip.track_id = track_id;
                 clip.transform = project_clip.transform;

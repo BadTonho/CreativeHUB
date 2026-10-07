@@ -4,6 +4,7 @@
 #include "ui/workspace/pages/render/render_output_capabilities.h"
 #include "ui/workspace/pages/render/render_queue_controller.h"
 #include "logging/logger.h"
+#include "playback/playback_worker.h"
 
 #include <creative_suite/effects/effects.h>
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
@@ -19,6 +20,7 @@ extern "C" {
 }
 
 #include <QApplication>
+#include <QColor>
 #include <QEventLoop>
 #include <QImage>
 #include <QTemporaryDir>
@@ -27,17 +29,21 @@ extern "C" {
 #include <QSurfaceFormat>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdio>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 #include <thread>
+#include <utility>
 #include <exception>
 
 namespace {
@@ -554,6 +560,104 @@ void validateVisualEffectExport(
     require(baseline_frame.has_value() && *baseline_frame != nullptr &&
                 (*disabled_frame)->rgba_pixels == (*baseline_frame)->rgba_pixels,
             "Offline export changed the frame for a disabled visual effect.");
+}
+
+void validateFusionPreviewExportParity(
+    const OutputChoice& output,
+    const std::filesystem::path& image_path,
+    const std::filesystem::path& root) {
+    using namespace fusion::nodes;
+
+    const auto extension = output.container.extensions.empty()
+        ? std::string("mkv")
+        : output.container.extensions.substr(0, output.container.extensions.find(','));
+    const auto overlay_path = root / "fusion-overlay.png";
+    QImage overlay(1, 1, QImage::Format_RGBA8888);
+    overlay.fill(QColor(20, 40, 240, 128));
+    require(overlay.save(pathToQString(overlay_path)),
+            "Could not create the deterministic Fusion overlay fixture.");
+
+    auto graph = makePassthroughGraph();
+    Node overlay_input;
+    overlay_input.id = 3;
+    overlay_input.type = NodeType::Input;
+    overlay_input.source_path = overlay_path;
+    overlay_input.source_is_still = true;
+    Node merge;
+    merge.id = 4;
+    merge.type = NodeType::Merge;
+    graph.nodes.push_back(overlay_input);
+    graph.nodes.push_back(merge);
+    graph.connections = {{1, 4, 0}, {3, 4, 1}, {4, 2, 0}};
+    graph.next_id = 5;
+    require(static_cast<bool>(validate(graph)),
+            "The known Fusion Preview/Render parity graph is invalid.");
+
+    const QImage source_image(pathToQString(image_path));
+    require(!source_image.isNull(), "Could not read the base Fusion image fixture.");
+    const auto rgba_image = source_image.convertToFormat(QImage::Format_RGBA8888);
+    std::vector<std::uint8_t> source_pixels(
+        static_cast<std::size_t>(rgba_image.width()) *
+        static_cast<std::size_t>(rgba_image.height()) * 4U);
+    for (int y = 0; y < rgba_image.height(); ++y) {
+        const auto row_offset = static_cast<std::size_t>(y) *
+            static_cast<std::size_t>(rgba_image.width()) * 4U;
+        std::copy_n(rgba_image.constScanLine(y),
+                    static_cast<std::size_t>(rgba_image.width()) * 4U,
+                    source_pixels.begin() + static_cast<std::ptrdiff_t>(row_offset));
+    }
+
+    playback::PlaybackWorker worker;
+    std::vector<playback::VideoFramePtr> preview_frames;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&preview_frames](playback::VideoFramePtr frame, qint64, quint64, quint64) {
+            preview_frames.push_back(std::move(frame));
+        });
+    playback::CompositionLayerSpec preview_layer;
+    preview_layer.source_path = pathToQString(image_path);
+    preview_layer.frame_rate = 30.0;
+    preview_layer.timeline_start_frame = 0;
+    preview_layer.segment_frame_count = 1;
+    preview_layer.track_index = 0;
+    preview_layer.clip_index = 0;
+    preview_layer.kind = timeline::ClipKind::Image;
+    preview_layer.still_frame = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        rgba_image.width(), rgba_image.height(), rgba_image.width() * 4,
+        std::move(source_pixels)});
+    preview_layer.node_graph = graph;
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition({preview_layer}, {}, 900);
+    worker.renderCompositionFrame(0, 0, 900);
+    require(!preview_frames.empty() && preview_frames.back() != nullptr,
+            "Preview did not evaluate the known Fusion graph.");
+
+    const auto target = root / ("fusion-parity." + extension);
+    auto job = makeImageJob(output, image_path, target, 901, 1);
+    job.settings.export_audio = false;
+    job.project_snapshot.timeline_tracks.front().clips.front().node_graph = graph;
+    std::atomic_bool canceled{false};
+    renderJob(job, canceled);
+    auto decoder = media::VideoPlaybackSession::open(target);
+    const auto rendered = decoder->decode_next_frame();
+    require(rendered.has_value() && *rendered != nullptr,
+            "Render did not evaluate the known Fusion graph.");
+
+    const auto center_pixel = [](const media::VideoFrame& frame) {
+        const auto offset = static_cast<std::size_t>(frame.height / 2) *
+            static_cast<std::size_t>(frame.stride) +
+            static_cast<std::size_t>(frame.width / 2) * 4U;
+        return std::array<int, 3>{frame.rgba_pixels[offset],
+                                   frame.rgba_pixels[offset + 1],
+                                   frame.rgba_pixels[offset + 2]};
+    };
+    const auto preview_pixel = center_pixel(*preview_frames.back());
+    const auto rendered_pixel = center_pixel(**rendered);
+    for (std::size_t channel = 0; channel < preview_pixel.size(); ++channel) {
+        require(std::abs(preview_pixel[channel] - rendered_pixel[channel]) <= 32,
+                "Preview and Render produced different pixels for the known Fusion graph.");
+    }
 }
 
 void validateQueueContinuesAfterFailure(
@@ -1289,6 +1393,7 @@ int main(int argc, char* argv[]) {
         const auto output = chooseOutput();
         validateDirectExport(output, image_path, green_image_path, root);
         validateVisualEffectExport(output, image_path, root);
+        validateFusionPreviewExportParity(output, image_path, root);
         validateGapsTextAndKeyframes(output, image_path, green_image_path, root);
         validateQueueContinuesAfterFailure(output, image_path, green_image_path, root);
         validateQueueCancellationStopsLaterJobs(output, image_path, root);

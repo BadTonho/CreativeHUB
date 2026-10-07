@@ -359,7 +359,7 @@ limited to the current paint region so long timelines remain responsive.
 Zoom affects only horizontal timeline presentation and is persisted per project
 without creating a clip-edit history entry.
 At the far right of the top workspace toolbar, after `Media Pool` and `Effects`,
-the `Edit`, blank Fusion, and `Render` selectors are shown in that order. The
+the `Edit`, icon-free Fusion, and `Render` selectors are shown in that order. The
 Fusion selector has no visible text or icon; its tooltip and accessible name
 identify it as `Fusion`. The active page is highlighted, and the application
 always opens on Edit without saving the selected page as project or workspace
@@ -368,9 +368,14 @@ state.
 Edit preserves the current Preview, Inspector, and Timeline presentation. In
 Fusion, Bins and Media remain on the left, the existing Preview is labeled
 `Viewer`, and the bottom dock switches from Timeline to a visual-only Node
-Editor. The Inspector shows a Fusion placeholder. The Node Editor and Fusion
-Inspector have no composition operations. Switching pages changes only the
-visible workspace panels; it does not change the selected clip, playhead,
+Editor. The Node Editor provides Input, Transform, Color, Merge, and Output
+nodes for the selected visual clip. Drag an output port to an input port to
+connect nodes; drag a node body to move it. Its Inspector chooses Media Pool
+sources for additional Input nodes and edits the selected node's parameters;
+the Inspector also removes nodes and offers connection controls. Graph changes
+are Timeline commands, so they update project dirty state and support Undo/Redo.
+Switching pages changes only the visible workspace panels; it does not change
+the selected clip, playhead,
 playback, project data, history, or dirty state.
 
 `ui/workspace/pages/render/RenderWorkspace` supplies the Render settings,
@@ -550,7 +555,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 19 format. Linked video-audio clips can be
+the current `.csp` version 20 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a
@@ -653,10 +658,17 @@ handle set for shell-level tasks such as preferences and layout persistence; it
 keeps no additional widget pointers.
 
 `ui/workspace/pages/fusion/FusionWorkspace` builds the Fusion Viewer title,
-visual-only Node Editor panel, and Inspector placeholder, then exposes those
-widgets to `WorkspaceHost`. The shared Preview remains owned by the application
-shell and is reused as the Viewer surface; the Fusion workspace does not create
-or modify project, selection, playhead, playback, or history state.
+node canvas, node controls, and connection Inspector, then exposes those widgets
+to `WorkspaceHost`. The shared Preview remains owned by the application shell
+and is reused as the Viewer surface. The dedicated `fusion/nodes/` module owns
+the graph model, Qt canvas, and evaluator; graph edits go through the existing
+Timeline command service and therefore update project dirty state and
+Undo/Redo. Selecting a video or image clip loads its stored graph or a default
+Input-to-Output pass-through. The Inspector selects additional video or image
+inputs from the project Media Pool, edits Transform and Color parameters, and
+connects or removes graph links. Connection validation rejects incompatible
+ports and cycles with a visible explanation. The existing clip effect stack
+and Timeline transform/keyframes run after the graph output.
 
 `ui/workspace/pages/render/RenderWorkspace` builds the output form, a central
 slot for the shared Preview, and the session-only queue UI. `WorkspaceHost`

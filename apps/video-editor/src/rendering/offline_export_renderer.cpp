@@ -7,6 +7,7 @@
 #include "media/still_image_decoder.h"
 #include "media/video_playback.h"
 #include "media/video_probe.h"
+#include "fusion/nodes/evaluation/node_graph_evaluator.h"
 #include "rendering/frame_compositor.h"
 #include "rendering/text_renderer.h"
 #include "timeline/timeline_transform.h"
@@ -84,6 +85,14 @@ struct RenderClip {
     std::optional<media::VideoFrame> still;
     std::optional<media::VideoFrame> text;
     std::unique_ptr<media::AudioPlaybackSession> audio;
+    struct GraphSource {
+        fusion::nodes::NodeId node_id = 0;
+        double frame_rate = 30.0;
+        bool still_source = false;
+        std::optional<media::VideoFrame> still;
+        std::unique_ptr<media::VideoPlaybackSession> video;
+    };
+    std::vector<GraphSource> graph_sources;
 };
 
 struct RenderTransition {
@@ -240,6 +249,7 @@ std::optional<media::VideoFrame> composeFrame(
             auto transform = local_transform;
             setFrameOpacity(transform, request.opacity);
 
+            media::VideoFramePtr source_frame;
             if (clip.kind == timeline::ClipKind::Text) {
                 if (!render_clip.text.has_value()) {
                     auto text = rendering::renderText(
@@ -251,21 +261,12 @@ std::optional<media::VideoFrame> composeFrame(
                     }
                     render_clip.text = std::move(*text);
                 }
-                layers.push_back({&*render_clip.text, transform, {}});
+                source_frame = std::make_shared<const media::VideoFrame>(*render_clip.text);
             } else if (clip.kind == timeline::ClipKind::Image) {
                 if (!render_clip.still.has_value()) {
                     throw std::runtime_error("An image clip has no decoded source frame.");
                 }
-                if (clip.effects.empty()) {
-                    layers.push_back({&*render_clip.still, transform, {}});
-                } else {
-                    effected_frames.push_back(*render_clip.still);
-                    if (!creative_suite::effects::applyStack(
-                            effected_frames.back(), clip.effects)) {
-                        throw std::runtime_error("An image effect stack could not be processed.");
-                    }
-                    layers.push_back({&effected_frames.back(), transform, {}});
-                }
+                source_frame = std::make_shared<const media::VideoFrame>(*render_clip.still);
             } else {
                 const auto source_offset = timeline::sourceFrameOffsetForTimelineFrame(
                     local_frame, render_clip.source_fps, timeline_frame_rate,
@@ -284,17 +285,53 @@ std::optional<media::VideoFrame> composeFrame(
                     throw std::runtime_error(
                         "A video frame could not be decoded from " + pathUtf8(clipPath(clip)));
                 }
+                source_frame = *decoded;
                 decoded_frames.push_back(*decoded);
-                if (clip.effects.empty()) {
-                    layers.push_back({decoded_frames.back().get(), transform, {}});
-                } else {
-                    effected_frames.push_back(*decoded_frames.back());
-                    if (!creative_suite::effects::applyStack(
-                            effected_frames.back(), clip.effects)) {
-                        throw std::runtime_error("A video effect stack could not be processed.");
+            }
+            if (clip.node_graph.has_value()) {
+                fusion::nodes::InputFrames inputs;
+                for (const auto& node : clip.node_graph->nodes) {
+                    if (node.type != fusion::nodes::NodeType::Input) continue;
+                    if (node.source_path.empty()) {
+                        inputs.emplace(node.id, source_frame);
+                        continue;
                     }
-                    layers.push_back({&effected_frames.back(), transform, {}});
+                    const auto source = std::find_if(render_clip.graph_sources.begin(),
+                        render_clip.graph_sources.end(), [&node](const auto& item) {
+                            return item.node_id == node.id;
+                        });
+                    if (source == render_clip.graph_sources.end()) continue;
+                    if (source->still_source && source->still.has_value()) {
+                        inputs.emplace(node.id,
+                            std::make_shared<const media::VideoFrame>(*source->still));
+                    } else if (source->video != nullptr) {
+                        const long double frame_value = static_cast<long double>(local_frame) *
+                            source->frame_rate / timeline_frame_rate.asDouble();
+                        if (frame_value >= 0.0L &&
+                            (node.source_frame_count <= 0 ||
+                             frame_value < static_cast<long double>(node.source_frame_count)) &&
+                            frame_value <= static_cast<long double>(
+                                std::numeric_limits<std::int64_t>::max())) {
+                            const auto decoded = source->video->decode_frame_at(
+                                static_cast<std::int64_t>(frame_value),
+                                [&canceled] { return canceled.load(std::memory_order_acquire); });
+                            if (decoded.has_value() && *decoded != nullptr)
+                                inputs.emplace(node.id, *decoded);
+                        }
+                    }
                 }
+                const auto evaluated = fusion::nodes::evaluate(*clip.node_graph, inputs);
+                if (!evaluated.has_value())
+                    throw std::runtime_error("The Fusion node graph did not produce a frame.");
+                source_frame = std::make_shared<const media::VideoFrame>(*evaluated);
+            }
+            if (!clip.effects.empty()) {
+                effected_frames.push_back(*source_frame);
+                if (!creative_suite::effects::applyStack(effected_frames.back(), clip.effects))
+                    throw std::runtime_error("A clip effect stack could not be processed.");
+                layers.push_back({&effected_frames.back(), transform, {}});
+            } else {
+                layers.push_back({source_frame.get(), transform, {}});
             }
         }
         std::uint64_t resident = 0;
@@ -426,6 +463,26 @@ std::vector<RenderClip> prepareClips(
                 entry.video = media::VideoPlaybackSession::open(path);
                 if (job.settings.export_audio) {
                     entry.audio = media::AudioPlaybackSession::open(path, {48000, 2});
+                }
+            }
+            if (clip.node_graph.has_value()) {
+                for (const auto& node : clip.node_graph->nodes) {
+                    if (node.type != fusion::nodes::NodeType::Input || node.source_path.empty())
+                        continue;
+                    std::error_code source_error;
+                    if (!std::filesystem::is_regular_file(node.source_path, source_error) || source_error)
+                        throw std::runtime_error("A Fusion input source is offline: " +
+                                                 pathUtf8(node.source_path));
+                    RenderClip::GraphSource graph_source;
+                    graph_source.node_id = node.id;
+                    graph_source.frame_rate = node.source_frame_rate;
+                    graph_source.still_source = node.source_is_still;
+                    if (node.source_is_still) {
+                        graph_source.still = media::StillImageDecoder{}.decode_first_frame(node.source_path);
+                    } else {
+                        graph_source.video = media::VideoPlaybackSession::open(node.source_path);
+                    }
+                    entry.graph_sources.push_back(std::move(graph_source));
                 }
             }
             clips.push_back(std::move(entry));

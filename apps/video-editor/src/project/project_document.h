@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 19;
+inline constexpr int current_format_version = 20;
+inline constexpr int node_graph_format_version = 20;
 inline constexpr int portrait_canvas_format_version = 19;
 inline constexpr int effect_enabled_format_version = 18;
 inline constexpr int clip_effects_format_version = 17;
@@ -51,6 +52,7 @@ struct ProjectClip {
     bool audio_muted = false;
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
     std::vector<creative_suite::effects::EffectInstance> effects;
+    std::optional<fusion::nodes::NodeGraph> node_graph;
     timeline::Transform2D transform;
     timeline::TransformKeyframes keyframes;
     timeline::ClipKind kind = timeline::ClipKind::Video;

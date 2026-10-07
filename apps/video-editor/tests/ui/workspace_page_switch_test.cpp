@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
                     workspace_host->fusionInspectorPage() &&
                     workspace_host->fusionInspectorPage() ==
                         fusion_workspace->inspectorPanel(),
-                "Fusion must show the Fusion Inspector placeholder.");
+                "Fusion must show its Inspector page.");
         require(workspace_host->nodeEditorPanel() ==
                     fusion_workspace->nodeEditorPanel(),
                 "The Fusion Node Editor must come from FusionWorkspace.");

@@ -88,6 +88,7 @@ struct CompositionLayerSpec {
     bool audio_extracted = false;
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
     std::vector<creative_suite::effects::EffectInstance> effects;
+    std::optional<fusion::nodes::NodeGraph> node_graph;
 };
 
 struct CompositionTransitionSpec {
@@ -333,6 +334,13 @@ private:
     std::atomic<quint64> pending_seek_sequence_{0};
     std::atomic_bool seek_dispatch_scheduled_{false};
     struct CompositionSession {
+        struct GraphInputSession {
+            fusion::nodes::NodeId node_id = 0;
+            double frame_rate = 30.0;
+            bool still_source = false;
+            VideoFramePtr still_frame;
+            std::unique_ptr<media::VideoPlaybackSession> video_session;
+        };
         CompositionLayerSpec spec;
         std::unique_ptr<media::VideoPlaybackSession> session;
         std::unique_ptr<media::AudioPlaybackSession> audio_session;
@@ -340,6 +348,7 @@ private:
         bool audio_open_failed = false;
         VideoFramePtr static_frame;
         std::shared_ptr<const media::VideoFrame> cached_text_frame;
+        std::vector<GraphInputSession> graph_inputs;
         rendering::AlphaCoveragePtr cached_text_alpha_coverage;
         rendering::PreparedAlphaCoverageGeometryPtr cached_text_geometry;
     };

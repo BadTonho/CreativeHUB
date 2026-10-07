@@ -277,6 +277,19 @@ set_tests_properties(creative-suite-main-editor-workspace-page-switch PROPERTIES
 )
 
 preserve_video_editor_test_working_directory()
+
+add_executable(creative-suite-main-editor-fusion-workspace-tests
+    fusion_workspace_test.cpp
+)
+target_link_libraries(creative-suite-main-editor-fusion-workspace-tests PRIVATE
+    creative-suite-main-editor-core)
+target_compile_features(creative-suite-main-editor-fusion-workspace-tests PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME creative-suite-main-editor-fusion-workspace
+    COMMAND creative-suite-main-editor-fusion-workspace-tests)
+set_tests_properties(creative-suite-main-editor-fusion-workspace PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+preserve_video_editor_test_working_directory()
 add_executable(creative-suite-main-editor-render-queue-tests
     render_queue_model_test.cpp
 )

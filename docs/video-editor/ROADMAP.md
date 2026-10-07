@@ -166,6 +166,11 @@ tasks.
 - [x] Qt OpenGL preview presentation with CPU fallback and grayscale preview.
 - [x] Versioned `.csp` persistence, transactional New/Open/Save/Save As,
   autosave, and recovery snapshots.
+- [-] Initial functional Fusion node graphs for selected video and image clips:
+  Input, Transform, Color, Merge, and Output nodes; project Media Pool video
+  and image inputs; shared Preview/export evaluation; v20 graph persistence;
+  and Timeline Undo/Redo. See [Current Scope](architecture/SCOPE.md),
+  [Project Persistence](architecture/PROJECT.md), and [Regression Testing](REGRESSION_TESTING.md).
 - [x] New Project canvas and frame-rate choices: 16:9 (1920×1080) or 9:16
   (1080×1920), 24/25/30/48/50/60 fps, defaulting to 16:9 at 30 fps; version 19
   persists portrait canvas settings while versions 1–18 remain 16:9.
@@ -225,6 +230,10 @@ and required manual validation pass.
   used by the application. The maintainer confirmed real video, audio, image,
   bin, and ordered Timeline drops, including Undo/Redo, on 2026-10-07. Keep the
   import dialog and internal Media Browser drag workflow available.
+- [-] Initial Fusion graph code, tests, and documentation are in place. Run the
+  Video Editor Release build and targeted graph, project, UI, Preview, and Render
+  tests. Keep hands-on canvas, save/reopen, and edit-history checks pending until
+  they are performed in that build.
 - [x] Repeatedly migrate the same long-lived `.csp` project when advancing
   persisted-format versions. The owner reports doing this since the application
   was created and says the migrations have worked.

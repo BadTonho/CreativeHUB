@@ -25,6 +25,7 @@ add_executable(creative-suite-main-editor-transform-compositor-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/frame_compositor.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/frame_compositor.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -55,6 +56,7 @@ add_executable(creative-suite-main-editor-text-compositor-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/text_renderer.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/text_renderer.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h

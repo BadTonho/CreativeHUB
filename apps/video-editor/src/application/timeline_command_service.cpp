@@ -1366,6 +1366,27 @@ TimelineEditResult TimelineCommandService::execute(
 }
 
 TimelineEditResult TimelineCommandService::execute(
+    const SetClipNodeGraphCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setClipNodeGraph(
+        location->track_index, location->clip_index, command.graph);
+    if (mutation == timeline::NodeGraphMutationResult::NoChange)
+        return result(EditStatus::NoChange);
+    if (mutation != timeline::NodeGraphMutationResult::Changed)
+        return result(EditStatus::Rejected,
+            mutation == timeline::NodeGraphMutationResult::InvalidValue
+                ? EditReason::InvalidValue : EditReason::InvalidTarget);
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {session_.timeline_.tracks()[location->track_index].track_id};
+    output.affected_clip_ids = {command.clip_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
     const ApplyClipAttributesCommand& command) {
     const auto target_location = session_.timeline_.locateClip(command.clip_id);
     if (!target_location) return result(EditStatus::Rejected, EditReason::InvalidTarget);

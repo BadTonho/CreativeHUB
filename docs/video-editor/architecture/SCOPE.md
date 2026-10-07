@@ -19,7 +19,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 19, including migration from
+- versioned `.csp` persistence through version 20, including migration from
   versions 1 through 13, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio media kinds, typed tracks,
   per-project timeline zoom, track-row height, and optional shared/clip-specific
@@ -28,8 +28,11 @@ The Video Editor currently includes:
 - embedded video audio exposed as linked Audio-track companions, independent
   audio-only tracks, synchronized mixing, per-clip and per-track gain/mute,
   legacy-project migration, and the video fallback path;
-- basic layers, normalized 2D transformations, linear keyframes, worker-side
-  composition, and current version 19 project persistence;
+- basic Timeline layers, normalized 2D transformations, linear keyframes, and
+  worker-side composition;
+- the initial functional Fusion node graph for visual clips: Input, Transform,
+  Color, Merge, and Output nodes, per-clip persistence, shared Preview/export
+  evaluation, project Media Pool image/video inputs, and Undo/Redo;
 - CPU visual filters for video and image clips (Grayscale, Brightness, Contrast,
   and Saturation), with ordered per-clip stacks, Functions quick access,
   individual enable/bypass controls, and version 18 persistence;
@@ -55,9 +58,25 @@ The Video Editor currently includes:
 - independent per-job experimental GPU export composition (Render > Video,
   default off), supporting 1080p, 1440p and 4K UHD with RGBA readback and CPU fallback;
 - local structured diagnostic logging;
-- Edit and Fusion workspace pages in the same window; Fusion currently reuses
-  the Edit Preview as its Viewer and replaces the Timeline dock with a
-  visual-only Node Editor, alongside an Inspector placeholder.
+- Edit and Fusion workspace pages in the same window; Fusion reuses the Edit
+  Preview as its Viewer and replaces the Timeline dock with a draggable node
+  canvas and node Inspector.
+
+## Initial Fusion node-graph scope
+
+Each selected video or image Timeline clip may own one graph. The default graph
+passes the selected clip through. Input nodes can use that clip or a video/image
+already in the project Media Pool. Video inputs are evaluated from the graph
+clip's local start and become transparent after their source ends; still images
+remain available for the full clip. Transform and Color nodes use static
+parameters. Merge combines its background and foreground with straight-alpha
+source-over. The graph output replaces the clip image before its existing
+Inspector effect stack and Timeline transform/keyframes.
+
+Graph data is stored in `.csp` version 20. Versions 1 through 19 open without a
+node graph and preserve their prior image result. Graph editing participates in
+Timeline Undo/Redo. This phase does not add graph animation, text, audio, masks,
+extra effects, nested compositions, or Motion Studio integration.
 
 ## Approved foundation direction
 
@@ -101,7 +120,8 @@ The Video Editor currently includes:
   project subsystem;
 - thumbnails, proxies, complete relinking, and project-size-independent
   performance guarantees;
-- Fusion node graphs, composition editing, and Fusion-specific processing;
+- animated node parameters, masks, nested compositions, and advanced Fusion
+  processing beyond the initial visual graph nodes;
 - linked Motion Studio composition handoff and Rust integration.
 
 The Video Editor owns its project format, timeline policy, and UI. It also uses

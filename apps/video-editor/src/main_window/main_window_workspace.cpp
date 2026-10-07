@@ -363,6 +363,18 @@ void MainWindow::createWorkspace() {
     fusion_workspace_ = new ui::FusionWorkspace(this);
     fusion_workspace_->createPanels(this);
     auto* edit_controller = edit_workspace_->controller();
+    connect(fusion_workspace_, &ui::FusionWorkspace::graphEditRequested,
+        edit_controller, [this, edit_controller](timeline::ClipId clip_id,
+            const fusion::nodes::NodeGraph& graph) {
+            edit_controller->applyFusionNodeGraph(clip_id, graph);
+            refreshFusionSelection();
+        });
+    connect(edit_controller, &ui::EditWorkspaceController::timelineSelectionPresentationChanged,
+        this, &MainWindow::refreshFusionSelection);
+    connect(edit_controller, &ui::EditWorkspaceController::timelineEditCommitted,
+        this, [this](const application::TimelineEditResult&,
+            bool, bool, const QString&) { refreshFusionSelection(); });
+    refreshFusionSelection();
     render_workspace_ = new ui::RenderWorkspace(
         [edit_controller](bool active) {
             if (edit_controller != nullptr) {
@@ -431,6 +443,31 @@ void MainWindow::createWorkspace() {
 
     restoreWorkspaceLayout();
     setWorkspacePage(ui::WorkspacePageId::Edit);
+}
+
+void MainWindow::refreshFusionSelection() {
+    if (fusion_workspace_ == nullptr || edit_workspace_ == nullptr) return;
+    std::vector<ui::FusionWorkspace::MediaChoice> choices;
+    for (const auto& item : editor_session_.mediaLibrary().items()) {
+        if (item.offline || (item.metadata.kind != media::MediaKind::Video &&
+                             item.metadata.kind != media::MediaKind::Image)) continue;
+        choices.push_back({
+            QString::fromUtf8(item.display_name.data(),
+                              static_cast<qsizetype>(item.display_name.size())),
+            item.metadata.source_path,
+            item.metadata.frame_rate.value_or(30.0),
+            item.metadata.frame_count.value_or(0),
+            item.metadata.kind == media::MediaKind::Image});
+    }
+    const timeline::TimelineClip* selected = nullptr;
+    if (const auto location = edit_workspace_->controller()->selectedTimelineClipLocation();
+        location.has_value()) {
+        const auto& model = editor_session_.timeline();
+        if (location->track_index < model.tracks().size() &&
+            location->clip_index < model.tracks()[location->track_index].clips.size())
+            selected = &model.tracks()[location->track_index].clips[location->clip_index];
+    }
+    fusion_workspace_->setSelection(selected, std::move(choices));
 }
 
 void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
