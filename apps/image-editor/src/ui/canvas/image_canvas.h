@@ -37,7 +37,7 @@ class ImageCanvas final : public QWidget {
     Q_OBJECT
 
 public:
-    enum class AreaSelectionShape { Rectangle, Ellipse, Freehand };
+    enum class AreaSelectionShape { Rectangle, Ellipse };
     enum class AreaSelectionCombineMode { Replace, Add, Subtract };
 
     explicit ImageCanvas(QWidget* parent = nullptr);
@@ -50,6 +50,7 @@ public:
     void setTextCreationMode(bool enabled);
     void setObjectSelectionMode(bool enabled);
     void setAreaSelectionMode(bool enabled);
+    void setLassoMode(bool enabled);
     void setEyedropperMode(bool enabled);
     void setBucketFillMode(bool enabled);
     void setBucketFillTolerance(int tolerance);
@@ -64,6 +65,7 @@ public:
     [[nodiscard]] bool hasAreaSelection() const noexcept;
     [[nodiscard]] bool areaSelectionGestureActive() const noexcept;
     [[nodiscard]] bool areaSelectionMode() const noexcept { return area_selection_mode_; }
+    [[nodiscard]] bool lassoMode() const noexcept { return lasso_mode_; }
     [[nodiscard]] std::optional<QPainterPath> areaSelectionClipPath() const;
     void setShapeStyle(const ImageShapeData& style);
     void setTextStyle(const ImageTextData& style);
@@ -150,6 +152,7 @@ private:
     void updateBrushToolCursor(const QPointF& position);
     void resetBrushTools(bool clear_preview_notification);
     void resetBlurTool(bool clear_preview_notification);
+    void clearLassoMode() noexcept;
     [[nodiscard]] ObjectSelectionToolContext objectSelectionToolContext(
         const QPointF& position, Qt::KeyboardModifiers modifiers) const;
     void dispatchObjectSelectionToolEvents(
@@ -175,6 +178,7 @@ private:
     bool text_creation_mode_ = false;
     bool object_selection_mode_ = false;
     bool area_selection_mode_ = false;
+    bool lasso_mode_ = false;
     bool eyedropper_mode_ = false;
     bool bucket_fill_mode_ = false;
     bool linear_gradient_mode_ = false;

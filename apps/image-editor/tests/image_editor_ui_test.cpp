@@ -4,6 +4,7 @@
 #include "crop/crop_tool.h"
 #include "eyedropper/eyedropper_tool.h"
 #include "selection/area_selection_tool.h"
+#include "lasso/lasso_tool.h"
 #include "selection/object/object_selection_tool.h"
 #include "options/image_tool_options_bar.h"
 #include "shapes/shape_palette.h"
@@ -51,6 +52,7 @@
 #include <QTabBar>
 #include <QTableWidget>
 #include <QTreeWidget>
+#include <QToolButton>
 #include <QSlider>
 #include <QSpinBox>
 #include <QTextBlock>
@@ -1092,11 +1094,13 @@ bool testAreaSelectionToolUi(const QString& root) {
     auto* deselect = window.findChild<QAction*>(QStringLiteral("deselectAreaSelectionAction"));
     auto* shape_combo = window.findChild<QComboBox*>(QStringLiteral("areaSelectionShapeComboBox"));
     auto* mode_combo = window.findChild<QComboBox*>(QStringLiteral("areaSelectionModeComboBox"));
+    auto* lasso_button = window.findChild<QToolButton*>(QStringLiteral("lassoToolButton"));
     auto* options = window.findChild<QWidget*>(QStringLiteral("areaSelectionOptionsWidget"));
     if (!canvas || !area_tool || !paint_tool || !deselect || !shape_combo ||
-        !mode_combo || !options || area_tool->shortcut() != QKeySequence(Qt::Key_M) ||
+        !mode_combo || !lasso_button || !options || area_tool->shortcut() != QKeySequence(Qt::Key_M) ||
         deselect->shortcut() != QKeySequence(Qt::CTRL | Qt::Key_D) ||
-        shape_combo->currentData().toInt() != 0 || mode_combo->currentData().toInt() != 0) {
+        !lasso_button->isVisible() || shape_combo->currentData().toInt() != 0 ||
+        mode_combo->currentData().toInt() != 0) {
         std::cerr << "Area Selection controls or default shortcuts were not created.\n";
         return false;
     }
@@ -1161,11 +1165,17 @@ bool testAreaSelectionToolUi(const QString& root) {
         return false;
     }
 
-    if (shape_combo->findData(2) < 0) {
-        std::cerr << "The Area Selection shape menu did not offer Freehand.\n";
+    if (shape_combo->count() != 2 || shape_combo->findData(2) >= 0) {
+        std::cerr << "The Area Selection shape menu should contain only Rectangle and Ellipse.\n";
         return false;
     }
-    shape_combo->setCurrentIndex(shape_combo->findData(2));
+    lasso_button->click();
+    QCoreApplication::processEvents();
+    if (!lasso_button->isChecked() || !canvas->lassoMode() ||
+        !options->isVisible() || shape_combo->isVisible() || !mode_combo->isVisible()) {
+        std::cerr << "The standalone Lasso button did not activate its dedicated mode.\n";
+        return false;
+    }
     mode_combo->setCurrentIndex(0);
     const auto colorDelta = [](const QColor& left, const QColor& right) {
         return std::max({std::abs(left.red() - right.red()),
@@ -1180,13 +1190,13 @@ bool testAreaSelectionToolUi(const QString& root) {
     QTest::mouseMove(canvas, widgetPoint(4, 16));
     QCoreApplication::processEvents();
     if (!canvas->areaSelectionGestureActive()) {
-        std::cerr << "The Freehand shape did not track an in-progress gesture.\n";
+        std::cerr << "The Lasso tool did not track an in-progress gesture.\n";
         return false;
     }
     const QImage during_lasso_preview = canvas->grab().toImage();
     if (colorDelta(before_lasso_preview.pixelColor(widgetPoint(9, 10)),
                    during_lasso_preview.pixelColor(widgetPoint(9, 10))) < 4) {
-        std::cerr << "The Freehand contour did not update the live canvas preview.\n";
+        std::cerr << "The Lasso contour did not update the live canvas preview.\n";
         return false;
     }
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(4, 16));
@@ -1194,7 +1204,7 @@ bool testAreaSelectionToolUi(const QString& root) {
     auto lasso_selection = canvas->areaSelectionClipPath();
     if (!lasso_selection || !lasso_selection->contains(QPointF(9, 9)) ||
         lasso_selection->contains(QPointF(22, 9))) {
-        std::cerr << "The Freehand gesture did not close and commit its bounded contour.\n";
+        std::cerr << "The Lasso gesture did not close and commit its bounded contour.\n";
         return false;
     }
 
@@ -1215,7 +1225,7 @@ bool testAreaSelectionToolUi(const QString& root) {
     const QColor outside_after = after_lasso_paint.pixelColor(widgetPoint(22, 10));
     if (colorDelta(inside_before, inside_after) < 80 ||
         colorDelta(outside_before, outside_after) > 12) {
-        std::cerr << "Paint did not stay clipped to the Freehand selection.\n";
+        std::cerr << "Paint did not stay clipped to the Lasso selection.\n";
         return false;
     }
     auto* undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
@@ -1336,7 +1346,21 @@ bool testAreaSelectionToolState() {
         return false;
     }
 
-    tool.setOptions(AreaSelectionTool::Shape::Freehand,
+    image_editor::LassoTool lasso;
+    lasso.beginGesture(QPointF(2.0, 2.0));
+    lasso.updateGesture(QPointF(10.0, 2.0));
+    lasso.updateGesture(QPointF(10.0, 10.0));
+    const auto lasso_preview = lasso.previewPath(image_bounds);
+    const auto lasso_result = lasso.finishGesture(QPointF(2.0, 10.0), image_bounds);
+    if (!lasso_preview.contains(QPointF(5.0, 5.0)) ||
+        lasso_result.status != image_editor::LassoTool::FinishStatus::Completed ||
+        !lasso_result.path.contains(QPointF(5.0, 5.0))) {
+        std::cerr << "The dedicated Lasso tool did not preview and return a closed path.\n";
+        return false;
+    }
+
+    tool.setLassoMode(true);
+    tool.setOptions(AreaSelectionTool::Shape::Rectangle,
                     AreaSelectionTool::CombineMode::Add);
     tool.beginGesture(QPointF(1.0, 16.0));
     tool.updateGesture(QPointF(7.0, 16.0));
@@ -1347,16 +1371,16 @@ bool testAreaSelectionToolState() {
     if (!lasso_add_preview.contains(QPointF(3.0, 19.0)) ||
         tool.finishGesture(QPointF(1.0, 16.0), image_bounds).status !=
             AreaSelectionTool::FinishStatus::Applied) {
-        std::cerr << "Freehand Add did not preview and apply its closed contour.\n";
+        std::cerr << "Lasso Add did not preview and apply its closed contour.\n";
         return false;
     }
     const auto lasso_added = tool.clipPath(image_bounds);
     if (!lasso_added || !lasso_added->contains(QPointF(3.0, 19.0))) {
-        std::cerr << "Freehand Add did not include the lasso region.\n";
+        std::cerr << "Lasso Add did not include the lasso region.\n";
         return false;
     }
 
-    tool.setOptions(AreaSelectionTool::Shape::Freehand,
+    tool.setOptions(AreaSelectionTool::Shape::Rectangle,
                     AreaSelectionTool::CombineMode::Subtract);
     tool.beginGesture(QPointF(4.0, 4.0));
     tool.updateGesture(QPointF(12.0, 4.0));
@@ -1365,18 +1389,18 @@ bool testAreaSelectionToolState() {
         tool.previewPath(image_bounds).contains(QPointF(8.0, 7.0)) ||
         tool.finishGesture(QPointF(4.0, 4.0), image_bounds).status !=
             AreaSelectionTool::FinishStatus::Applied) {
-        std::cerr << "Freehand Subtract did not preview and apply its lasso region.\n";
+        std::cerr << "Lasso Subtract did not preview and apply its lasso region.\n";
         return false;
     }
     const auto lasso_subtracted = tool.clipPath(image_bounds);
     if (!lasso_subtracted || lasso_subtracted->contains(QPointF(8.0, 7.0)) ||
         !lasso_subtracted->contains(QPointF(13.0, 13.0)) ||
         !lasso_subtracted->contains(QPointF(3.0, 19.0))) {
-        std::cerr << "Freehand Subtract changed pixels outside its contour.\n";
+        std::cerr << "Lasso Subtract changed pixels outside its contour.\n";
         return false;
     }
 
-    tool.setOptions(AreaSelectionTool::Shape::Freehand,
+    tool.setOptions(AreaSelectionTool::Shape::Rectangle,
                     AreaSelectionTool::CombineMode::Replace);
     tool.beginGesture(QPointF(-10.0, -10.0));
     tool.updateGesture(QPointF(12.0, -10.0));
@@ -1384,7 +1408,7 @@ bool testAreaSelectionToolState() {
     tool.updateGesture(QPointF(-10.0, 10.0));
     if (tool.finishGesture(QPointF(-10.0, -10.0), image_bounds).status !=
         AreaSelectionTool::FinishStatus::Applied) {
-        std::cerr << "Freehand did not accept a contour crossing the image boundary.\n";
+        std::cerr << "Lasso did not accept a contour crossing the image boundary.\n";
         return false;
     }
     const auto clipped_lasso = tool.clipPath(image_bounds);
@@ -1394,7 +1418,7 @@ bool testAreaSelectionToolState() {
         clipped_lasso->boundingRect().top() < 0.0 ||
         clipped_lasso->boundingRect().right() > image_bounds.width() ||
         clipped_lasso->boundingRect().bottom() > image_bounds.height()) {
-        std::cerr << "Freehand selection was not clipped to the image bounds.\n";
+        std::cerr << "Lasso selection was not clipped to the image bounds.\n";
         return false;
     }
 
@@ -1403,7 +1427,7 @@ bool testAreaSelectionToolState() {
     if (tool.finishGesture(QPointF(3.0, 3.0), image_bounds).status !=
         AreaSelectionTool::FinishStatus::NoSelection ||
         tool.clipPath(image_bounds) != before_degenerate) {
-        std::cerr << "A Freehand click changed the prior selection.\n";
+        std::cerr << "A Lasso click changed the prior selection.\n";
         return false;
     }
     tool.beginGesture(QPointF(3.0, 3.0));
@@ -1411,7 +1435,7 @@ bool testAreaSelectionToolState() {
     if (tool.finishGesture(QPointF(9.0, 9.0), image_bounds).status !=
         AreaSelectionTool::FinishStatus::NoSelection ||
         tool.clipPath(image_bounds) != before_degenerate) {
-        std::cerr << "A Freehand line changed the prior selection.\n";
+        std::cerr << "A Lasso line changed the prior selection.\n";
         return false;
     }
     tool.beginGesture(QPointF(3.0, 3.0));
@@ -1421,11 +1445,11 @@ bool testAreaSelectionToolState() {
     if (tool.finishGesture(QPointF(3.0, 3.0), image_bounds).status !=
         AreaSelectionTool::FinishStatus::NoSelection ||
         tool.clipPath(image_bounds) != before_degenerate) {
-        std::cerr << "A retraced Freehand contour with no filled area changed the selection.\n";
+        std::cerr << "A retraced Lasso contour with no filled area changed the selection.\n";
         return false;
     }
 
-    tool.setOptions(AreaSelectionTool::Shape::Freehand,
+    tool.setOptions(AreaSelectionTool::Shape::Rectangle,
                     AreaSelectionTool::CombineMode::Replace);
     tool.beginGesture(QPointF(2.0, 2.0));
     constexpr int maximum_lasso_points =
@@ -1438,10 +1462,11 @@ bool testAreaSelectionToolState() {
     const auto limit_result = tool.finishGesture(QPointF(3.0, 2.0), image_bounds);
     if (limit_result.status != AreaSelectionTool::FinishStatus::Rejected ||
         tool.clipPath(image_bounds) != before_degenerate) {
-        std::cerr << "An oversized Freehand gesture did not preserve the prior selection.\n";
+        std::cerr << "An oversized Lasso gesture did not preserve the prior selection.\n";
         return false;
     }
 
+    tool.setLassoMode(false);
     const auto before_cancel = tool.clipPath(image_bounds);
     tool.beginGesture(QPointF(2.0, 2.0));
     tool.updateGesture(QPointF(12.0, 12.0));
@@ -3581,7 +3606,8 @@ int main(int argc, char* argv[]) {
             QStringLiteral("areaSelectionModeComboBox"));
         if (brush_size == nullptr || brush_slider == nullptr || eraser_preview == nullptr ||
             shape_stroke == nullptr || shape_width == nullptr || text_size == nullptr ||
-            delete_objects == nullptr || area_shape == nullptr || area_mode == nullptr) {
+            delete_objects == nullptr || area_shape == nullptr || area_mode == nullptr ||
+            area_shape->count() != 2) {
             std::cerr << "The tool options module did not create its expected controls.\n";
             return 1;
         }
@@ -3627,6 +3653,12 @@ int main(int argc, char* argv[]) {
         shape_stroke->setChecked(false);
         area_shape->setCurrentIndex(area_shape->findData(1));
         area_mode->setCurrentIndex(area_mode->findData(2));
+        options.setAreaSelectionOptionsState(true, 1, 2, false);
+        if (!area_shape->isHidden() || area_mode->isHidden()) {
+            std::cerr << "Lasso options did not hide only the shape selector.\n";
+            return 1;
+        }
+        options.setAreaSelectionOptionsState(false, 0, 0);
         options.setSelectionOptionsVisible(true);
         options.setDeleteSelectedObjectsEnabled(true);
         if (!delete_objects->isEnabled() ||

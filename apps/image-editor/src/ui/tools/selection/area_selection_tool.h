@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../lasso/lasso_tool.h"
+
 #include <QPainterPath>
 #include <QPoint>
 #include <QPointF>
@@ -21,7 +23,7 @@ struct AreaSelectionToolRenderContext {
 
 class AreaSelectionTool final {
 public:
-    enum class Shape { Rectangle, Ellipse, Freehand };
+    enum class Shape { Rectangle, Ellipse };
     enum class CombineMode { Replace, Add, Subtract };
 
     enum class FinishStatus { NoSelection, Applied, Rejected };
@@ -32,6 +34,7 @@ public:
     };
 
     void setOptions(Shape shape, CombineMode combine_mode) noexcept;
+    void setLassoMode(bool enabled) noexcept;
     void beginGesture(const QPointF& image_position) noexcept;
     void updateGesture(const QPointF& image_position) noexcept;
     [[nodiscard]] FinishResult finishGesture(const QPointF& image_position,
@@ -54,19 +57,15 @@ private:
     [[nodiscard]] QPainterPath gesturePath(const QRectF& image_bounds) const;
     [[nodiscard]] QPainterPath combinedPath(const QPainterPath& gesture,
                                             const QRectF& image_bounds) const;
-    void recordFreehandPoint(const QPointF& image_position) noexcept;
     void resetGesture() noexcept;
 
     Shape shape_ = Shape::Rectangle;
     CombineMode combine_mode_ = CombineMode::Replace;
     bool gesture_active_ = false;
-    bool gesture_rejected_ = false;
-    bool gesture_has_area_reference_ = false;
-    bool gesture_has_area_ = false;
+    bool lasso_mode_ = false;
     QPointF gesture_start_;
     QPointF gesture_current_;
-    QPointF gesture_area_reference_;
-    QVector<QPointF> gesture_points_;
+    LassoTool lasso_tool_;
     QPainterPath selection_path_;
     bool selection_active_ = false;
 };

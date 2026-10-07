@@ -736,11 +736,13 @@ and outcome. Visual and cross-application acceptance has not yet been recorded.
 
 1. Open an image and activate **Area Selection** with `M`. Confirm the options
    bar starts at Rectangle + Replace. Draw a rectangle, switch to Ellipse, and
-   verify the dashed outline and translucent area. Select Freehand and drag a
-   closed contour around an irregular region; confirm its live outline follows
-   the pointer and the release closes the shape. Add with a freehand contour and
-   subtract with another, then use `Ctrl+D` to clear the result.
-2. Create a freehand selection, switch to Paint and Eraser, and make strokes
+   verify the dashed outline and translucent area. Confirm its shape menu
+   contains only Rectangle and Ellipse. Activate the separate **Lasso** button;
+   confirm the shape control is hidden while Replace/Add/Subtract remains
+   available. Drag a closed contour around an irregular region and confirm its
+   live outline follows the pointer and release closes the shape. Add with a
+   second lasso contour and subtract with a third, then use `Ctrl+D` to clear.
+2. Create a lasso selection, switch to Paint and Eraser, and make strokes
    across its edge. Confirm pixels change only inside the selected geometry.
    Switch back to Area Selection and confirm the selection persists. Start
    another drag and press `Esc`; confirm it cancels the gesture without

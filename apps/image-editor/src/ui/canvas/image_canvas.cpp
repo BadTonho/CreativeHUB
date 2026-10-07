@@ -70,6 +70,7 @@ void ImageCanvas::setCropMode(bool enabled) {
     crop_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
+        clearLassoMode();
         paint_mode_ = false;
         eraser_mode_ = false;
         shape_creation_mode_ = false;
@@ -89,6 +90,7 @@ void ImageCanvas::setPaintMode(bool enabled) {
     paint_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
+        clearLassoMode();
         crop_mode_ = false;
         eraser_mode_ = false;
         shape_creation_mode_ = false;
@@ -109,6 +111,7 @@ void ImageCanvas::setEraserMode(bool enabled) {
     eraser_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
+        clearLassoMode();
         crop_mode_ = false;
         paint_mode_ = false;
         shape_creation_mode_ = false;
@@ -128,6 +131,7 @@ void ImageCanvas::setShapeCreationMode(bool enabled) {
     shape_creation_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
+        clearLassoMode();
         crop_mode_ = false;
         paint_mode_ = false;
         eraser_mode_ = false;
@@ -151,6 +155,7 @@ void ImageCanvas::setTextCreationMode(bool enabled) {
     text_creation_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
+        clearLassoMode();
         crop_mode_ = false;
         paint_mode_ = false;
         eraser_mode_ = false;
@@ -172,6 +177,7 @@ void ImageCanvas::setObjectSelectionMode(bool enabled) {
     object_selection_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
+        clearLassoMode();
         crop_mode_ = false;
         paint_mode_ = false;
         eraser_mode_ = false;
@@ -190,6 +196,9 @@ void ImageCanvas::setObjectSelectionMode(bool enabled) {
 void ImageCanvas::setAreaSelectionMode(bool enabled) {
     if (enabled && blur_mode_) setBlurMode(false);
     area_selection_mode_ = enabled;
+    if (!enabled) {
+        clearLassoMode();
+    }
     if (enabled) {
         crop_mode_ = false;
         paint_mode_ = false;
@@ -209,6 +218,18 @@ void ImageCanvas::setAreaSelectionMode(bool enabled) {
     update();
 }
 
+void ImageCanvas::clearLassoMode() noexcept {
+    lasso_mode_ = false;
+    area_selection_tool_.setLassoMode(false);
+}
+
+void ImageCanvas::setLassoMode(bool enabled) {
+    lasso_mode_ = enabled;
+    area_selection_tool_.setLassoMode(enabled);
+    if (enabled && !area_selection_mode_) setAreaSelectionMode(true);
+    update();
+}
+
 void ImageCanvas::setEyedropperMode(bool enabled) {
     if (enabled && blur_mode_) setBlurMode(false);
     if (eyedropper_mode_ == enabled) return;
@@ -223,6 +244,7 @@ void ImageCanvas::setEyedropperMode(bool enabled) {
         text_creation_mode_ = false;
         object_selection_mode_ = false;
         area_selection_mode_ = false;
+        clearLassoMode();
         static_cast<void>(crop_tool_.cancelGesture());
         static_cast<void>(area_selection_tool_.cancelGesture());
         static_cast<void>(shape_tool_.cancelGesture());
@@ -243,6 +265,7 @@ void ImageCanvas::setBucketFillMode(bool enabled) {
         resetBrushTools(true);
         crop_mode_ = paint_mode_ = eraser_mode_ = shape_creation_mode_ = false;
         text_creation_mode_ = object_selection_mode_ = area_selection_mode_ = false;
+        clearLassoMode();
         eyedropper_mode_ = false;
         resizing_brush_ = false;
         static_cast<void>(crop_tool_.cancelGesture());
@@ -270,6 +293,7 @@ void ImageCanvas::setLinearGradientMode(bool enabled) {
         resetBrushTools(true);
         crop_mode_ = paint_mode_ = eraser_mode_ = shape_creation_mode_ = false;
         text_creation_mode_ = object_selection_mode_ = area_selection_mode_ = false;
+        clearLassoMode();
         eyedropper_mode_ = bucket_fill_mode_ = false;
         resizing_brush_ = false;
         static_cast<void>(crop_tool_.cancelGesture());
@@ -295,6 +319,7 @@ void ImageCanvas::setBlurMode(bool enabled) {
         resetBrushTools(true);
         crop_mode_ = paint_mode_ = eraser_mode_ = shape_creation_mode_ = false;
         text_creation_mode_ = object_selection_mode_ = area_selection_mode_ = false;
+        clearLassoMode();
         eyedropper_mode_ = bucket_fill_mode_ = linear_gradient_mode_ = false;
         resizing_brush_ = false;
         static_cast<void>(crop_tool_.cancelGesture());
@@ -335,8 +360,6 @@ void ImageCanvas::setAreaSelectionOptions(AreaSelectionShape shape,
     AreaSelectionTool::Shape tool_shape = AreaSelectionTool::Shape::Rectangle;
     if (shape == AreaSelectionShape::Ellipse)
         tool_shape = AreaSelectionTool::Shape::Ellipse;
-    else if (shape == AreaSelectionShape::Freehand)
-        tool_shape = AreaSelectionTool::Shape::Freehand;
     AreaSelectionTool::CombineMode tool_combine_mode =
         AreaSelectionTool::CombineMode::Replace;
     switch (combine_mode) {

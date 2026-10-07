@@ -4,10 +4,6 @@
 
 #include <QPainter>
 #include <QPen>
-#include <QPolygonF>
-
-#include <cmath>
-
 #include <utility>
 
 namespace image_editor {
@@ -19,20 +15,6 @@ QPainterPath rectPath(const QRectF& rect) {
     return path;
 }
 
-bool hasFilledArea(const QPainterPath& path) {
-    for (const QPolygonF& polygon : path.toFillPolygons()) {
-        if (polygon.size() < 3) continue;
-        qreal twice_area = 0.0;
-        for (qsizetype i = 0; i < polygon.size(); ++i) {
-            const QPointF& current = polygon.at(i);
-            const QPointF& next = polygon.at((i + 1) % polygon.size());
-            twice_area += current.x() * next.y() - next.x() * current.y();
-        }
-        if (std::abs(twice_area) > 1e-6) return true;
-    }
-    return false;
-}
-
 } // namespace
 
 void AreaSelectionTool::setOptions(Shape shape, CombineMode combine_mode) noexcept {
@@ -40,46 +22,23 @@ void AreaSelectionTool::setOptions(Shape shape, CombineMode combine_mode) noexce
     combine_mode_ = combine_mode;
 }
 
+void AreaSelectionTool::setLassoMode(bool enabled) noexcept {
+    if (lasso_mode_ == enabled) return;
+    static_cast<void>(cancelGesture());
+    lasso_mode_ = enabled;
+}
+
 void AreaSelectionTool::beginGesture(const QPointF& image_position) noexcept {
     gesture_active_ = true;
-    gesture_rejected_ = false;
     gesture_start_ = image_position;
     gesture_current_ = image_position;
-    gesture_points_.clear();
-    gesture_has_area_reference_ = false;
-    gesture_has_area_ = false;
-    gesture_area_reference_ = {};
-    if (shape_ == Shape::Freehand) gesture_points_.append(image_position);
+    if (lasso_mode_) lasso_tool_.beginGesture(image_position);
 }
 
 void AreaSelectionTool::updateGesture(const QPointF& image_position) noexcept {
     if (!gesture_active_) return;
     gesture_current_ = image_position;
-    if (shape_ == Shape::Freehand) recordFreehandPoint(image_position);
-}
-
-void AreaSelectionTool::recordFreehandPoint(const QPointF& image_position) noexcept {
-    if (gesture_rejected_ ||
-        (!gesture_points_.isEmpty() && gesture_points_.constLast() == image_position)) return;
-    constexpr qsizetype maximum_lasso_points =
-        ImageDocumentStore::kMaximumStrokeClipPathElements - 2;
-    if (gesture_points_.size() >= maximum_lasso_points) {
-        gesture_rejected_ = true;
-        return;
-    }
-    gesture_points_.append(image_position);
-    if (image_position == gesture_start_) return;
-    if (!gesture_has_area_reference_) {
-        gesture_area_reference_ = image_position;
-        gesture_has_area_reference_ = true;
-        return;
-    }
-    if (!gesture_has_area_) {
-        const QPointF first = gesture_area_reference_ - gesture_start_;
-        const QPointF second = image_position - gesture_start_;
-        gesture_has_area_ = std::abs(
-            first.x() * second.y() - first.y() * second.x()) > 1e-6;
-    }
+    if (lasso_mode_) lasso_tool_.updateGesture(image_position);
 }
 
 AreaSelectionTool::FinishResult AreaSelectionTool::finishGesture(
@@ -87,15 +46,18 @@ AreaSelectionTool::FinishResult AreaSelectionTool::finishGesture(
     if (!gesture_active_) return {};
 
     gesture_current_ = image_position;
-    if (shape_ == Shape::Freehand) recordFreehandPoint(image_position);
-    if (gesture_rejected_) {
-        resetGesture();
-        return {FinishStatus::Rejected,
-                QStringLiteral("The selection would exceed the supported geometry limit.")};
+    QPainterPath gesture;
+    if (lasso_mode_) {
+        auto lasso_result = lasso_tool_.finishGesture(image_position, image_bounds);
+        if (lasso_result.status == LassoTool::FinishStatus::Rejected) {
+            resetGesture();
+            return {FinishStatus::Rejected, std::move(lasso_result.rejection_reason)};
+        }
+        gesture = std::move(lasso_result.path);
+    } else {
+        gesture = gesturePath(image_bounds);
     }
-    const QPainterPath gesture = gesturePath(image_bounds);
-    if (gesture.isEmpty() ||
-        (shape_ == Shape::Freehand && !hasFilledArea(gesture))) {
+    if (gesture.isEmpty()) {
         resetGesture();
         return {};
     }
@@ -182,17 +144,7 @@ QPainterPath AreaSelectionTool::visibleSelectionPath(
 
 QPainterPath AreaSelectionTool::gesturePath(const QRectF& image_bounds) const {
     if (!gesture_active_ || image_bounds.isEmpty()) return {};
-    if (shape_ == Shape::Freehand) {
-        if (gesture_rejected_ || gesture_points_.size() < 3 || !gesture_has_area_)
-            return {};
-
-        QPainterPath path;
-        path.moveTo(gesture_points_.constFirst());
-        for (qsizetype i = 1; i < gesture_points_.size(); ++i)
-            path.lineTo(gesture_points_.at(i));
-        path.closeSubpath();
-        return path.intersected(rectPath(image_bounds));
-    }
+    if (lasso_mode_) return lasso_tool_.previewPath(image_bounds);
 
     const QRectF bounds = QRectF(gesture_start_, gesture_current_).normalized();
     if (bounds.width() <= 0.0 || bounds.height() <= 0.0) return {};
@@ -204,13 +156,9 @@ QPainterPath AreaSelectionTool::gesturePath(const QRectF& image_bounds) const {
 
 void AreaSelectionTool::resetGesture() noexcept {
     gesture_active_ = false;
-    gesture_rejected_ = false;
-    gesture_has_area_reference_ = false;
-    gesture_has_area_ = false;
+    static_cast<void>(lasso_tool_.cancelGesture());
     gesture_start_ = {};
     gesture_current_ = {};
-    gesture_area_reference_ = {};
-    gesture_points_.clear();
 }
 
 QPainterPath AreaSelectionTool::combinedPath(const QPainterPath& gesture,

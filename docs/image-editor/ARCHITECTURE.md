@@ -50,14 +50,15 @@ persistence, and recovery.
   and the completed stroke; the session blurs only the active layer or selected
   mask in premultiplied RGBA and records one operation when pixels change.
 - `src/ui/tools/selection/area_selection_tool.*` owns each canvas's temporary
-  Area Selection path, rectangle/ellipse/freehand gesture geometry,
-  Replace/Add/Subtract operations, cancellation, bounds clipping, complexity
-  limit, and preview overlay. Freehand captures unsmoothed image-coordinate
-  points, ignores adjacent duplicates, and closes the contour on release;
-  degenerate or oversized gestures leave the previous selection intact.
-  `ImageCanvas` maps pointer positions to image coordinates, forwards the
-  existing selection signals, and supplies the active clip path to brush tools.
-  The selection remains UI state and is not stored in the document or history.
+  Area Selection path, rectangle/ellipse geometry, Replace/Add/Subtract
+  operations, cancellation, bounds clipping, and preview overlay.
+  `src/ui/tools/lasso/lasso_tool.*` owns freehand contour capture,
+  adjacent-point filtering, closure, area and complexity checks, and bounds
+  clipping. The sidebar exposes Lasso as its own tool button; both tools share
+  the same temporary per-tab selection and combine-mode control. `ImageCanvas`
+  maps pointer positions to image coordinates and supplies the active clip path
+  to brush tools. The selection remains UI state and is not stored in the
+  document or history.
 - `src/ui/tools/selection/object/object_selection_tool.*` owns temporary object
   selection, hit testing, marquee gestures, transform handles, move/resize/
   rotation geometry, cancellation, and selection overlays. It reports selected

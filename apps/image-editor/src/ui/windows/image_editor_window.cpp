@@ -956,8 +956,7 @@ void ImageEditorWindow::createToolOptionsBar() {
                 if (activeCanvas() != nullptr) {
                     activeCanvas()->setAreaSelectionOptions(
                         shape == 1 ? ImageCanvas::AreaSelectionShape::Ellipse
-                            : (shape == 2 ? ImageCanvas::AreaSelectionShape::Freehand
-                                          : ImageCanvas::AreaSelectionShape::Rectangle),
+                                   : ImageCanvas::AreaSelectionShape::Rectangle,
                         mode == 1 ? ImageCanvas::AreaSelectionCombineMode::Add
                             : (mode == 2
                                 ? ImageCanvas::AreaSelectionCombineMode::Subtract
@@ -998,8 +997,10 @@ void ImageEditorWindow::updateToolOptions() {
     tool_options_bar_->setSelectionOptionsVisible(
         tool_active && active_tool == ToolSidebar::Tool::Select);
     tool_options_bar_->setAreaSelectionOptionsState(
-        tool_active && active_tool == ToolSidebar::Tool::AreaSelect,
-        area_selection_shape_, area_selection_mode_);
+        tool_active && (active_tool == ToolSidebar::Tool::AreaSelect ||
+                        active_tool == ToolSidebar::Tool::Lasso),
+        area_selection_shape_, area_selection_mode_,
+        active_tool != ToolSidebar::Tool::Lasso);
     tool_options_bar_->setBucketFillOptionsState(
         tool_active && active_tool == ToolSidebar::Tool::BucketFill,
         bucket_fill_tolerance_);
@@ -1400,13 +1401,15 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         activeCanvas()->setAreaSelectionMode(false);
         activeCanvas()->setShapeCreationMode(false);
         activeCanvas()->setObjectSelectionMode(true);
-    } else if (tool == ToolSidebar::Tool::AreaSelect && has_source) {
+    } else if ((tool == ToolSidebar::Tool::AreaSelect ||
+                tool == ToolSidebar::Tool::Lasso) && has_source) {
         activeCanvas()->setTextCreationMode(false);
         activeCanvas()->setPaintMode(false);
         activeCanvas()->setEraserMode(false);
         activeCanvas()->setShapeCreationMode(false);
         activeCanvas()->setObjectSelectionMode(false);
         activeCanvas()->setAreaSelectionMode(true);
+        activeCanvas()->setLassoMode(tool == ToolSidebar::Tool::Lasso);
     } else if (tool == ToolSidebar::Tool::Text && has_source) {
         activeCanvas()->setPaintMode(false);
         activeCanvas()->setEraserMode(false);
@@ -1426,9 +1429,7 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
     activeCanvas()->setTextStyle(text_style_);
     activeCanvas()->setAreaSelectionOptions(
         area_selection_shape_ == 1 ? ImageCanvas::AreaSelectionShape::Ellipse
-            : (area_selection_shape_ == 2
-                ? ImageCanvas::AreaSelectionShape::Freehand
-                : ImageCanvas::AreaSelectionShape::Rectangle),
+                                   : ImageCanvas::AreaSelectionShape::Rectangle,
         area_selection_mode_ == 1 ? ImageCanvas::AreaSelectionCombineMode::Add
             : (area_selection_mode_ == 2
                 ? ImageCanvas::AreaSelectionCombineMode::Subtract
@@ -2122,7 +2123,8 @@ void ImageEditorWindow::updateSelectionContext() {
     flip_vertical_action_->setEnabled(selected_item_transformable);
     fit_action_->setEnabled(true);
     cancel_crop_action_->setEnabled((crop_action_->isChecked() && selected_item_transformable) ||
-        tool_sidebar_->activeTool() == ToolSidebar::Tool::AreaSelect);
+        tool_sidebar_->activeTool() == ToolSidebar::Tool::AreaSelect ||
+        tool_sidebar_->activeTool() == ToolSidebar::Tool::Lasso);
     paint_tool_action_->setEnabled(selected_layer_editable);
     eraser_tool_action_->setEnabled(selected_layer_editable);
     shapes_tool_action_->setEnabled(true);

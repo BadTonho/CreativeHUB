@@ -172,6 +172,29 @@ QIcon areaSelectionToolIcon() {
     return QIcon(icon);
 }
 
+QIcon lassoToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPainterPath loop;
+    loop.moveTo(8.0, 9.0);
+    loop.cubicTo(12.0, 4.0, 23.0, 5.0, 25.0, 11.0);
+    loop.cubicTo(29.0, 18.0, 22.0, 26.0, 14.0, 25.0);
+    loop.cubicTo(6.0, 25.0, 4.0, 17.0, 8.0, 9.0);
+    painter.setPen(QPen(QColor(236, 222, 145), 2.3, Qt::DashLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(loop);
+    painter.setPen(QPen(QColor(112, 196, 238), 2.0, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.drawLine(QPointF(14.0, 25.0), QPointF(9.0, 29.0));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(112, 196, 238));
+    painter.drawEllipse(QPointF(8.0, 29.0), 2.0, 2.0);
+    return QIcon(icon);
+}
+
 QIcon eyedropperToolIcon() {
     QPixmap icon(32, 32);
     icon.fill(Qt::transparent);
@@ -322,6 +345,17 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     area_selection_button_->setFixedSize(40, 40);
     layout->addWidget(area_selection_button_, 0, Qt::AlignHCenter);
 
+    lasso_button_ = new QToolButton(this);
+    lasso_button_->setObjectName(QStringLiteral("lassoToolButton"));
+    lasso_button_->setToolTip(QStringLiteral("Lasso"));
+    lasso_button_->setAccessibleName(QStringLiteral("Lasso tool"));
+    lasso_button_->setIcon(lassoToolIcon());
+    lasso_button_->setIconSize(QSize(24, 24));
+    lasso_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    lasso_button_->setCheckable(true);
+    lasso_button_->setFixedSize(40, 40);
+    layout->addWidget(lasso_button_, 0, Qt::AlignHCenter);
+
     eyedropper_button_ = new QToolButton(this);
     eyedropper_button_->setObjectName(QStringLiteral("eyedropperToolButton"));
     eyedropper_button_->setToolTip(QStringLiteral("Eyedropper"));
@@ -376,6 +410,10 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     connect(area_selection_button_, &QToolButton::toggled, this, [this](bool active) {
         if (active) setActiveTool(Tool::AreaSelect);
         else if (active_tool_ == Tool::AreaSelect) setActiveTool(Tool::None);
+    });
+    connect(lasso_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::Lasso);
+        else if (active_tool_ == Tool::Lasso) setActiveTool(Tool::None);
     });
     connect(eyedropper_button_, &QToolButton::toggled, this, [this](bool active) {
         if (active) setActiveTool(Tool::Eyedropper);
@@ -461,6 +499,11 @@ void ToolSidebar::setAreaSelectionToolActive(bool active) {
         (active_tool_ == Tool::AreaSelect ? Tool::None : active_tool_));
 }
 
+void ToolSidebar::setLassoToolActive(bool active) {
+    setActiveTool(active ? Tool::Lasso :
+        (active_tool_ == Tool::Lasso ? Tool::None : active_tool_));
+}
+
 void ToolSidebar::setEyedropperToolActive(bool active) {
     setActiveTool(active ? Tool::Eyedropper :
         (active_tool_ == Tool::Eyedropper ? Tool::None : active_tool_));
@@ -490,6 +533,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
         const QSignalBlocker text_blocker(text_button_);
         const QSignalBlocker select_shapes_blocker(select_shapes_button_);
         const QSignalBlocker area_selection_blocker(area_selection_button_);
+        const QSignalBlocker lasso_blocker(lasso_button_);
         const QSignalBlocker eyedropper_blocker(eyedropper_button_);
         paint_button_->setChecked(tool == Tool::Paint);
         bucket_fill_button_->setChecked(tool == Tool::BucketFill);
@@ -500,6 +544,7 @@ void ToolSidebar::setActiveTool(Tool tool) {
         text_button_->setChecked(tool == Tool::Text);
         select_shapes_button_->setChecked(tool == Tool::Select);
         area_selection_button_->setChecked(tool == Tool::AreaSelect);
+        lasso_button_->setChecked(tool == Tool::Lasso);
         eyedropper_button_->setChecked(tool == Tool::Eyedropper);
     }
     updateControls();
@@ -542,6 +587,10 @@ bool ToolSidebar::areaSelectionToolActive() const noexcept {
     return active_tool_ == Tool::AreaSelect;
 }
 
+bool ToolSidebar::lassoToolActive() const noexcept {
+    return active_tool_ == Tool::Lasso;
+}
+
 bool ToolSidebar::eyedropperToolActive() const noexcept {
     return active_tool_ == Tool::Eyedropper;
 }
@@ -568,6 +617,7 @@ void ToolSidebar::updateControls() {
     text_button_->setEnabled(document_available_);
     select_shapes_button_->setEnabled(document_available_);
     area_selection_button_->setEnabled(document_available_);
+    lasso_button_->setEnabled(document_available_);
     eyedropper_button_->setEnabled(document_available_);
     paint_button_->setToolTip(editable_layer_available
         ? QStringLiteral("Paint")
@@ -600,6 +650,9 @@ void ToolSidebar::updateControls() {
     area_selection_button_->setToolTip(document_available_
         ? QStringLiteral("Area Selection")
         : QStringLiteral("Open an image to use Area Selection"));
+    lasso_button_->setToolTip(document_available_
+        ? QStringLiteral("Lasso")
+        : QStringLiteral("Open an image to use Lasso"));
     shapes_button_->setToolTip(document_available_
         ? QStringLiteral("Shapes")
         : QStringLiteral("Open an image to use Shapes"));

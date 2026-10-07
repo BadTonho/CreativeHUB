@@ -22,10 +22,11 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 | Paint tool | `B` (toggle Paint on or off when an editable layer is available) |
 | Eraser tool | `E` (toggle Eraser on or off when an editable layer is available) |
 | Area Selection tool | `M` (toggle Area Selection on or off) |
+| Lasso tool | Unassigned by default |
 | Deselect | `Ctrl+D` |
 | Insert a line break while editing text | `Enter` |
 | Confirm text editing | `Ctrl+Enter` |
-| Cancel text editing, crop selection, an Area Selection gesture, shape creation, object selection, or a mask brush gesture | `Esc` |
+| Cancel text editing, crop selection, an Area Selection or Lasso gesture, shape creation, object selection, or a mask brush gesture | `Esc` |
 | Shapes tool | Unassigned by default |
 | Text tool | Unassigned by default |
 | Selection tool | Unassigned by default |
@@ -45,11 +46,12 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 Use the mouse wheel to zoom, the middle mouse button to pan, and the Crop
 Selection toolbar or Edit menu action to start a crop gesture.
 
-Area Selection is independent of object Selection. Choose Rectangle, Ellipse,
-or Freehand and Replace, Add, or Subtract in the options bar, then drag on the
-canvas. Freehand uses the captured pointer points and closes the contour on
-release. The temporary selection belongs to its document tab and does not mark
-the document modified. Switching tools preserves it. Paint and Eraser,
+Area Selection is independent of object Selection. Choose Rectangle or Ellipse
+and Replace, Add, or Subtract in the options bar, then drag on the canvas. The
+standalone Lasso toolbar button uses the same combine-mode control and closes
+its captured pointer contour on release. The temporary selection belongs to
+its document tab and does not mark the document modified. Switching tools
+preserves it. Paint and Eraser,
 including mask edits, are clipped to the selected area; without a selection
 they remain unrestricted. An empty selection blocks painting and erasing. `Esc`
 cancels only the in-flight selection gesture and retains the previous selection.

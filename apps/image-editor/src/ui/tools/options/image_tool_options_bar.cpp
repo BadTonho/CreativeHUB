@@ -163,13 +163,13 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     auto* area_layout = new QHBoxLayout(area_selection_options_widget_);
     area_layout->setContentsMargins(8, 3, 8, 3);
     area_layout->setSpacing(7);
-    area_layout->addWidget(new QLabel(QStringLiteral("Shape"), area_selection_options_widget_));
+    area_selection_shape_label_ = new QLabel(QStringLiteral("Shape"), area_selection_options_widget_);
+    area_layout->addWidget(area_selection_shape_label_);
     area_selection_shape_combo_ = new QComboBox(area_selection_options_widget_);
     area_selection_shape_combo_->setObjectName(QStringLiteral("areaSelectionShapeComboBox"));
     area_selection_shape_combo_->setAccessibleName(QStringLiteral("Area selection shape"));
     area_selection_shape_combo_->addItem(QStringLiteral("Rectangle"), 0);
     area_selection_shape_combo_->addItem(QStringLiteral("Ellipse"), 1);
-    area_selection_shape_combo_->addItem(QStringLiteral("Freehand"), 2);
     area_layout->addWidget(area_selection_shape_combo_);
     area_layout->addWidget(new QLabel(QStringLiteral("Mode"), area_selection_options_widget_));
     area_selection_mode_combo_ = new QComboBox(area_selection_options_widget_);
@@ -371,9 +371,12 @@ void ImageToolOptionsBar::setDeleteSelectedObjectsEnabled(bool enabled) {
     delete_selected_objects_button_->setEnabled(enabled);
 }
 
-void ImageToolOptionsBar::setAreaSelectionOptionsState(bool visible, int shape, int mode) {
+void ImageToolOptionsBar::setAreaSelectionOptionsState(
+    bool visible, int shape, int mode, bool show_shape) {
     area_selection_options_action_->setVisible(visible);
     area_selection_options_widget_->setVisible(visible);
+    area_selection_shape_label_->setVisible(show_shape);
+    area_selection_shape_combo_->setVisible(show_shape);
     {
         const QSignalBlocker shape_blocker(area_selection_shape_combo_);
         const QSignalBlocker mode_blocker(area_selection_mode_combo_);

@@ -33,7 +33,8 @@ public:
     void setTextOptionsState(const ImageTextData& style);
     void setSelectionOptionsVisible(bool visible);
     void setDeleteSelectedObjectsEnabled(bool enabled);
-    void setAreaSelectionOptionsState(bool visible, int shape, int mode);
+    void setAreaSelectionOptionsState(bool visible, int shape, int mode,
+                                      bool show_shape = true);
     void setBucketFillOptionsState(bool visible, int tolerance);
     void setBlurOptionsState(bool visible, int diameter, int radius);
     void setBlurDiameter(int diameter);
@@ -87,6 +88,7 @@ private:
     QPushButton* text_color_button_ = nullptr;
     QComboBox* text_alignment_combo_ = nullptr;
     QComboBox* area_selection_shape_combo_ = nullptr;
+    QLabel* area_selection_shape_label_ = nullptr;
     QComboBox* area_selection_mode_combo_ = nullptr;
     QSpinBox* bucket_fill_tolerance_spin_ = nullptr;
     QSpinBox* blur_diameter_spin_ = nullptr;

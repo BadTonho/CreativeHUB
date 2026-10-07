@@ -11,7 +11,7 @@ class ToolSidebar final : public QWidget {
     Q_OBJECT
 
 public:
-    enum class Tool { None, Paint, BucketFill, LinearGradient, Eraser, Blur, Shapes, Text, Select, AreaSelect, Eyedropper };
+    enum class Tool { None, Paint, BucketFill, LinearGradient, Eraser, Blur, Shapes, Text, Select, AreaSelect, Lasso, Eyedropper };
     Q_ENUM(Tool)
 
     explicit ToolSidebar(QWidget* parent = nullptr);
@@ -27,6 +27,7 @@ public:
     void setTextToolActive(bool active);
     void setSelectToolActive(bool active);
     void setAreaSelectionToolActive(bool active);
+    void setLassoToolActive(bool active);
     void setEyedropperToolActive(bool active);
     void setActiveTool(Tool tool);
 
@@ -39,6 +40,7 @@ public:
     [[nodiscard]] bool textToolActive() const noexcept;
     [[nodiscard]] bool selectToolActive() const noexcept;
     [[nodiscard]] bool areaSelectionToolActive() const noexcept;
+    [[nodiscard]] bool lassoToolActive() const noexcept;
     [[nodiscard]] bool eyedropperToolActive() const noexcept;
     [[nodiscard]] Tool activeTool() const noexcept { return active_tool_; }
     [[nodiscard]] QColor brushColor() const;
@@ -62,6 +64,7 @@ private:
     QToolButton* text_button_ = nullptr;
     QToolButton* select_shapes_button_ = nullptr;
     QToolButton* area_selection_button_ = nullptr;
+    QToolButton* lasso_button_ = nullptr;
     QToolButton* eyedropper_button_ = nullptr;
     QToolButton* color_button_ = nullptr;
     QColor brush_color_ = Qt::black;
