@@ -145,9 +145,11 @@ tasks.
 - [x] C++20 Qt Widgets application with FFmpeg media probing and decoding.
 - [x] Media Browser with bins, project-owned labels, duplicate-path handling,
   offline state, and restoration by reimport.
-- [x] Drag local files from the operating system into the Media Browser or
-  Timeline. Browser drops honor the selected or target bin; ordered Timeline
-  batches import asynchronously and place as one Undo/Redo edit.
+- [-] Direct operating-system file drops into the Media Browser and Timeline
+  are implemented and have automated viewport-level coverage. Browser drops
+  honor the selected or target bin; ordered Timeline batches import
+  asynchronously and place as one Undo/Redo edit. Windows Explorer acceptance
+  remains pending; see [Regression Testing](REGRESSION_TESTING.md).
 - [x] Multi-track timeline with absolute positions, gaps, cross-track overlap,
   clip selection and movement, split, trim, delete, and bounded Undo/Redo.
 - [x] Video and static raster-image clips, manual text clips, transforms,
@@ -212,10 +214,11 @@ and required manual validation pass.
   keeps later clips in place; Ripple Delete moves the selected track's
   sequence, follows linked companions, and stops at collisions without removing
   blockers. See the Timeline contract and manual regression checklist.
-- [ ] Implement direct operating-system file drops as decided in section 1.
-  Dropping on the Media Browser imports; dropping on the Timeline uses the
-  existing media-drop behavior. Keep the import dialog and Media Browser drag
-  workflow available.
+- [-] Complete Windows Explorer validation for direct operating-system file
+  drops. Automated coverage now exercises the Media Browser and Timeline
+  viewports used by the application; confirm real video, audio, image, bin, and
+  ordered Timeline drops in the manual checklist. Keep the import dialog and
+  internal Media Browser drag workflow available.
 - [x] Repeatedly migrate the same long-lived `.csp` project when advancing
   persisted-format versions. The owner reports doing this since the application
   was created and says the migrations have worked.

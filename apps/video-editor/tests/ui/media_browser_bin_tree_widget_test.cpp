@@ -36,6 +36,8 @@ int main(int argc, char* argv[]) {
     try {
         MediaBrowserBinTreeWidget tree;
         tree.resize(320, 180);
+        require(tree.viewport()->acceptDrops(),
+                "The bin-tree viewport must accept operating-system drops.");
         require(
             tree.editTriggers().testFlag(QAbstractItemView::DoubleClicked),
             "Bins must support double-click editing.");

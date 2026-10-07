@@ -123,16 +123,28 @@ int main(int argc, char* argv[]) {
         require(fixture.open(QIODevice::WriteOnly), "Could not create a Unicode drop fixture.");
         fixture.write("fixture");
         fixture.close();
+        const QString second_dropped_file = drop_directory.path() +
+            QStringLiteral("/audio mix.wav");
+        QFile second_fixture(second_dropped_file);
+        require(second_fixture.open(QIODevice::WriteOnly),
+                "Could not create the second drop fixture.");
+        second_fixture.write("fixture");
+        second_fixture.close();
         const QString dropped_folder = drop_directory.path() + QStringLiteral("/folder");
         require(QDir().mkpath(dropped_folder), "Could not create a folder drop fixture.");
         QMimeData external_drop;
         external_drop.setUrls({
             QUrl::fromLocalFile(dropped_file),
+            QUrl::fromLocalFile(second_dropped_file),
             QUrl::fromLocalFile(dropped_folder),
             QUrl(QStringLiteral("https://example.invalid/video.mp4"))});
         const auto local_files = media_browser_ui::localFilesFromUrls(&external_drop);
-        require(local_files == QStringList{QFileInfo(dropped_file).absoluteFilePath()},
+        require(local_files == QStringList{
+                    QFileInfo(dropped_file).absoluteFilePath(),
+                    QFileInfo(second_dropped_file).absoluteFilePath()},
                 "OS drops must retain ordered local files and reject folders and remote URLs.");
+        require(widget.viewport()->acceptDrops(),
+                "The Media Browser viewport must accept operating-system drops.");
 
         QStringList received_external_paths;
         QString received_destination_bin;
@@ -155,22 +167,39 @@ int main(int argc, char* argv[]) {
         widget.scrollToItem(destination_bin);
         application.processEvents();
         const auto bin_position = widget.visualItemRect(destination_bin).center();
-        const auto widget_bin_position = widget.viewport()->mapTo(&widget, bin_position);
         QDragEnterEvent list_enter(
-            widget_bin_position, Qt::CopyAction, &external_drop,
+            bin_position, Qt::CopyAction, &external_drop,
             Qt::NoButton, Qt::NoModifier);
-        QApplication::sendEvent(&widget, &list_enter);
+        QApplication::sendEvent(widget.viewport(), &list_enter);
         QDragMoveEvent list_move(
-            widget_bin_position, Qt::CopyAction, &external_drop,
+            bin_position, Qt::CopyAction, &external_drop,
             Qt::NoButton, Qt::NoModifier);
-        QApplication::sendEvent(&widget, &list_move);
+        QApplication::sendEvent(widget.viewport(), &list_move);
         QDropEvent list_drop(
-            QPointF(widget_bin_position), Qt::CopyAction, &external_drop,
+            QPointF(bin_position), Qt::CopyAction, &external_drop,
             Qt::NoButton, Qt::NoModifier);
-        QApplication::sendEvent(&widget, &list_drop);
+        QApplication::sendEvent(widget.viewport(), &list_drop);
         require(received_external_paths == local_files &&
-                    received_destination_bin == QStringLiteral("Footage"),
+                    received_destination_bin == QStringLiteral("Footage") &&
+                    list_enter.isAccepted() && list_move.isAccepted() &&
+                    list_drop.isAccepted(),
                 "The Media Browser did not route system files to the dropped-on bin.");
+
+        QMimeData rejected_drop;
+        rejected_drop.setUrls({
+            QUrl::fromLocalFile(dropped_folder),
+            QUrl(QStringLiteral("https://example.invalid/remote.mp4"))});
+        QDragEnterEvent rejected_enter(
+            bin_position, Qt::CopyAction, &rejected_drop,
+            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(widget.viewport(), &rejected_enter);
+        QDropEvent rejected_event(
+            QPointF(bin_position), Qt::CopyAction, &rejected_drop,
+            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(widget.viewport(), &rejected_event);
+        require(!rejected_enter.isAccepted() && !rejected_event.isAccepted() &&
+                    received_external_paths == local_files,
+                "Folders and remote URLs must not be accepted as external file drops.");
 
         widget.setDisplayMode(MediaBrowserListWidget::DisplayMode::Grid);
         require(

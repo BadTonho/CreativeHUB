@@ -10,7 +10,6 @@ class QPixmap;
 class QDragEnterEvent;
 class QDragMoveEvent;
 class QDropEvent;
-class QEvent;
 
 namespace media_browser_ui {
 
@@ -65,7 +64,6 @@ signals:
         const QString& destinationBin);
 
 protected:
-    bool event(QEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;
     void dropEvent(QDropEvent* event) override;

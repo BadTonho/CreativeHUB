@@ -822,13 +822,23 @@ int main(int argc, char* argv[]) {
                 media_drop_frame > 0,
             "Media drop did not preserve the source path and target position.");
 
-        timeline::TimelineWidget external_drop_widget;
-        external_drop_widget.resize(1000, 360);
-        external_drop_widget.setTrackRowHeight(timeline::kMaximumTrackRowHeight);
-        external_drop_widget.setTracks({top_track});
-        external_drop_widget.setTimelineViewportWidth(1000);
-        external_drop_widget.show();
+        QScrollArea external_drop_area;
+        external_drop_area.resize(1000, 360);
+        external_drop_area.setWidgetResizable(true);
+        external_drop_area.setAcceptDrops(true);
+        external_drop_area.viewport()->setAcceptDrops(true);
+        auto* external_drop_widget = new timeline::TimelineWidget;
+        external_drop_widget->setTrackRowHeight(timeline::kMaximumTrackRowHeight);
+        external_drop_widget->setTracks({top_track});
+        external_drop_area.setWidget(external_drop_widget);
+        external_drop_widget->setAcceptDrops(false);
+        external_drop_area.viewport()->installEventFilter(external_drop_widget);
+        external_drop_widget->setTimelineViewportWidth(
+            external_drop_area.viewport()->width());
+        external_drop_area.show();
         application.processEvents();
+        require(external_drop_area.viewport()->acceptDrops(),
+                "The Timeline scroll viewport must accept operating-system drops.");
         QTemporaryDir external_drop_directory;
         require(external_drop_directory.isValid(),
                 "Could not create a Timeline external-drop fixture directory.");
@@ -845,7 +855,7 @@ int main(int argc, char* argv[]) {
         timeline::TrackId external_drop_track = 0;
         qint64 external_drop_frame = -1;
         QObject::connect(
-            &external_drop_widget,
+            external_drop_widget,
             &timeline::TimelineWidget::externalFilesDropRequested,
             [&external_drop_paths, &external_drop_track, &external_drop_frame](
                 const QStringList& paths, timeline::TrackId track, qint64 frame) {
@@ -853,24 +863,65 @@ int main(int argc, char* argv[]) {
                 external_drop_track = track;
                 external_drop_frame = frame;
             });
-        const QPointF external_position(360.0, 120.0);
+        const std::vector<timeline::TimelineTrack> external_drop_tracks{top_track};
+        const timeline::TimelineGeometry external_drop_geometry(
+            external_drop_tracks,
+            QSizeF(external_drop_widget->size()),
+            external_drop_widget->trackRowHeight(),
+            external_drop_widget->zoomFactor());
+        const QPointF external_position(
+            360.0, external_drop_geometry.trackRect(0).center().y());
         QDragEnterEvent external_enter(
             external_position.toPoint(), Qt::CopyAction, &external_file_mime,
             Qt::LeftButton, Qt::NoModifier);
-        QApplication::sendEvent(&external_drop_widget, &external_enter);
+        QApplication::sendEvent(
+            external_drop_area.viewport(), &external_enter);
         QDragMoveEvent external_move(
             external_position.toPoint(), Qt::CopyAction, &external_file_mime,
             Qt::LeftButton, Qt::NoModifier);
-        QApplication::sendEvent(&external_drop_widget, &external_move);
+        QApplication::sendEvent(
+            external_drop_area.viewport(), &external_move);
         QDropEvent external_drop(
             external_position, Qt::CopyAction, &external_file_mime,
             Qt::LeftButton, Qt::NoModifier);
-        QApplication::sendEvent(&external_drop_widget, &external_drop);
+        QApplication::sendEvent(
+            external_drop_area.viewport(), &external_drop);
         require(external_drop.isAccepted() && !external_drop_paths.isEmpty() &&
                     external_drop_paths.front() == external_file_path &&
                     external_drop_track == top_track.track_id &&
                     external_drop_frame >= 0,
-                "Timeline did not capture ordered local file URLs, track, and frame.");
+                "Timeline viewport did not capture local file URLs, track, and frame.");
+
+        external_drop_paths.clear();
+        const QPointF outside_track_position(360.0, 20.0);
+        QDragEnterEvent outside_track_enter(
+            outside_track_position.toPoint(), Qt::CopyAction,
+            &external_file_mime, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(
+            external_drop_area.viewport(), &outside_track_enter);
+        QDragMoveEvent outside_track_move(
+            outside_track_position.toPoint(), Qt::CopyAction,
+            &external_file_mime, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(
+            external_drop_area.viewport(), &outside_track_move);
+        QDropEvent outside_track_drop(
+            outside_track_position, Qt::CopyAction, &external_file_mime,
+            Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(
+            external_drop_area.viewport(), &outside_track_drop);
+        require(!outside_track_drop.isAccepted() && external_drop_paths.isEmpty(),
+                "Timeline viewport accepted an external file above its tracks.");
+
+        QMimeData remote_external_mime;
+        remote_external_mime.setUrls({
+            QUrl(QStringLiteral("https://example.invalid/source.mp4"))});
+        QDragEnterEvent remote_external_enter(
+            external_position.toPoint(), Qt::CopyAction,
+            &remote_external_mime, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(
+            external_drop_area.viewport(), &remote_external_enter);
+        require(!remote_external_enter.isAccepted(),
+                "Timeline viewport accepted a remote URL as an external file.");
 
         QDropEvent header_media_drop(
             QPointF(50.0, effect_drop_position.y()),

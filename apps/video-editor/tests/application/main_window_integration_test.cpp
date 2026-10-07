@@ -9,6 +9,7 @@
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "settings/settings_dialog.h"
+#include "timeline/timeline_geometry.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 #include <creative_suite/effects/effects.h>
@@ -20,6 +21,8 @@
 #include <QAction>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
 #include <QEventLoop>
 #include <QDockWidget>
 #include <QClipboard>
@@ -38,11 +41,15 @@
 #include <QStandardPaths>
 #include <QTimer>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QDropEvent>
+#include <QScrollArea>
 #include <QSlider>
 #include <QTabWidget>
+#include <QUrl>
 #include <QRunnable>
 
 #include <algorithm>
@@ -1139,6 +1146,7 @@ public:
             const auto drop_bin = window.media_controller_.createBin("DropTarget");
             require(drop_bin.changed(),
                     "The external-drop integration test could not create its destination bin.");
+            window.populateMediaBrowser();
             window.edit_workspace_->controller()->clearTimeline();
             window.timeline_command_service_.clearHistory();
             const auto video_track = std::find_if(
@@ -1165,10 +1173,49 @@ public:
                 loop.exec();
                 require(!window.active_media_import_cancel_, failure_message);
             };
+            const auto sendFileDrop = [](QWidget* viewport,
+                                         const QPoint& position,
+                                         QMimeData* mime_data) {
+                QDragEnterEvent enter(
+                    position, Qt::CopyAction, mime_data,
+                    Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(viewport, &enter);
+                QDragMoveEvent move(
+                    position, Qt::CopyAction, mime_data,
+                    Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(viewport, &move);
+                QDropEvent drop(
+                    QPointF(position), Qt::CopyAction, mime_data,
+                    Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(viewport, &drop);
+                return enter.isAccepted() && move.isAccepted() && drop.isAccepted();
+            };
             const auto first_source_qt = QString::fromStdWString(first_source.wstring());
             const auto second_source_qt = QString::fromStdWString(second_source.wstring());
-            window.media_list_->externalFilesDropRequested(
-                QStringList{first_source_qt}, QStringLiteral("DropTarget"));
+            QListWidgetItem* drop_target_item = nullptr;
+            for (int row = 0; row < window.media_list_->count(); ++row) {
+                auto* item = window.media_list_->item(row);
+                if (item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
+                        media_browser_ui::kMediaItemTypeBin &&
+                    item->data(media_browser_ui::kMediaBinPathRole).toString() ==
+                        QStringLiteral("DropTarget")) {
+                    drop_target_item = item;
+                    break;
+                }
+            }
+            require(drop_target_item != nullptr,
+                    "The external-drop integration test could not find its target bin in the list.");
+            window.media_list_->scrollToItem(drop_target_item);
+            QApplication::processEvents();
+            const auto list_drop_position =
+                window.media_list_->visualItemRect(drop_target_item).center();
+            QMimeData browser_drop_mime;
+            browser_drop_mime.setUrls({QUrl::fromLocalFile(first_source_qt)});
+            require(sendFileDrop(
+                        window.media_list_->viewport(),
+                        list_drop_position,
+                        &browser_drop_mime),
+                    "The Media Browser viewport did not accept the operating-system drop.");
             waitForDropImport(
                 "The Media Browser did not complete an operating-system file drop.");
             const auto first_media_index =
@@ -1178,9 +1225,37 @@ public:
                             "DropTarget",
                     "A file dropped on the Media Browser did not use its target bin.");
 
-            window.edit_workspace_->ui().timeline->externalFilesDropRequested(
-                QStringList{first_source_qt, second_source_qt},
-                video_track_id, 0);
+            auto& edit_ui = window.edit_workspace_->ui();
+            const auto track_location =
+                window.timeline_model_.locateTrack(video_track_id);
+            require(track_location.has_value() && edit_ui.timeline != nullptr &&
+                        edit_ui.timeline_scroll != nullptr,
+                    "The external-drop integration test could not find the production Timeline viewport.");
+            const timeline::TimelineGeometry timeline_geometry(
+                window.timeline_model_.tracks(),
+                QSizeF(edit_ui.timeline->size()),
+                edit_ui.timeline->trackRowHeight(),
+                edit_ui.timeline->zoomFactor());
+            const auto timeline_local_position = QPoint(
+                360,
+                static_cast<int>(timeline_geometry.trackRect(
+                    *track_location).center().y()));
+            const auto expected_timeline_frame =
+                edit_ui.timeline->frameAtContentX(timeline_local_position.x());
+            require(expected_timeline_frame.has_value(),
+                    "The Timeline integration drop point did not map to a frame.");
+            const auto timeline_drop_position = edit_ui.timeline->mapTo(
+                edit_ui.timeline_scroll->viewport(),
+                timeline_local_position);
+            QMimeData timeline_drop_mime;
+            timeline_drop_mime.setUrls({
+                QUrl::fromLocalFile(first_source_qt),
+                QUrl::fromLocalFile(second_source_qt)});
+            require(sendFileDrop(
+                        edit_ui.timeline_scroll->viewport(),
+                        timeline_drop_position,
+                        &timeline_drop_mime),
+                    "The Timeline scroll viewport did not route the operating-system drop.");
             waitForDropImport(
                 "The Timeline did not complete an operating-system file drop.");
             const auto placed_track_index = window.timeline_model_.locateTrack(
@@ -1189,16 +1264,24 @@ public:
                     "The Timeline drop target disappeared during import.");
             const auto& placed_clips = window.timeline_model_.tracks()[
                 *placed_track_index].clips;
-            require(placed_clips.size() == 2 &&
-                        placed_clips[0].source_path ==
+            require(placed_clips.size() == 2,
+                    "External Timeline drop did not insert two video clips.");
+            require(placed_clips[0].source_path ==
                             media::MediaLibrary::canonicalPath(first_source) &&
                         placed_clips[1].source_path ==
-                            media::MediaLibrary::canonicalPath(second_source) &&
-                        placed_clips[0].timeline_start_frame == 0 &&
-                        placed_clips[1].timeline_start_frame ==
-                            placed_clips[0].timeline_duration_frames &&
-                        window.timeline_command_service_.undoCount() == 1,
-                    "External Timeline drops did not preserve order, sequence, and one-step history.");
+                            media::MediaLibrary::canonicalPath(second_source),
+                    "External Timeline drop did not preserve file order.");
+            require(placed_clips[0].timeline_start_frame ==
+                            *expected_timeline_frame,
+                    "External Timeline drop did not preserve its insertion frame: expected " +
+                        std::to_string(*expected_timeline_frame) + ", got " +
+                        std::to_string(placed_clips[0].timeline_start_frame) + ".");
+            require(placed_clips[1].timeline_start_frame ==
+                        placed_clips[0].timeline_start_frame +
+                            placed_clips[0].timeline_duration_frames,
+                    "External Timeline batch clips were not placed sequentially.");
+            require(window.timeline_command_service_.undoCount() == 1,
+                    "External Timeline batch did not create one undo step.");
             static_cast<void>(window.edit_workspace_->controller()->undo());
             const auto emptied_track_index = window.timeline_model_.locateTrack(
                 video_track_id);

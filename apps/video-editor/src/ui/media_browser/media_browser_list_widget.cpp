@@ -195,7 +195,7 @@ MediaBrowserListWidget::MediaBrowserListWidget(QWidget* parent)
     setDragDropMode(QAbstractItemView::DragOnly);
     setDropIndicatorShown(false);
     setAcceptDrops(true);
-    viewport()->setAcceptDrops(false);
+    viewport()->setAcceptDrops(true);
     setDefaultDropAction(Qt::CopyAction);
     setEditTriggers(
         QAbstractItemView::DoubleClicked |
@@ -227,40 +227,6 @@ void MediaBrowserListWidget::dragEnterEvent(QDragEnterEvent* event) {
     if (event != nullptr) event->ignore();
 }
 
-bool MediaBrowserListWidget::event(QEvent* event) {
-    if (event != nullptr) {
-        switch (event->type()) {
-        case QEvent::DragEnter: {
-            auto* drag = static_cast<QDragEnterEvent*>(event);
-            if (!media_browser_ui::localFilesFromUrls(drag->mimeData()).isEmpty()) {
-                dragEnterEvent(drag);
-                return true;
-            }
-            break;
-        }
-        case QEvent::DragMove: {
-            auto* drag = static_cast<QDragMoveEvent*>(event);
-            if (!media_browser_ui::localFilesFromUrls(drag->mimeData()).isEmpty()) {
-                dragMoveEvent(drag);
-                return true;
-            }
-            break;
-        }
-        case QEvent::Drop: {
-            auto* drop = static_cast<QDropEvent*>(event);
-            if (!media_browser_ui::localFilesFromUrls(drop->mimeData()).isEmpty()) {
-                dropEvent(drop);
-                return true;
-            }
-            break;
-        }
-        default:
-            break;
-        }
-    }
-    return QListWidget::event(event);
-}
-
 void MediaBrowserListWidget::dragMoveEvent(QDragMoveEvent* event) {
     if (event != nullptr &&
         !media_browser_ui::localFilesFromUrls(event->mimeData()).isEmpty()) {
@@ -279,8 +245,7 @@ void MediaBrowserListWidget::dropEvent(QDropEvent* event) {
         return;
     }
     QString destination_bin;
-    const auto viewport_position = viewport()->mapFrom(
-        this, event->position().toPoint());
+    const auto viewport_position = event->position().toPoint();
     if (const auto* item = itemAt(viewport_position); item != nullptr &&
         item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
             media_browser_ui::kMediaItemTypeBin) {
@@ -350,6 +315,8 @@ void MediaBrowserListWidget::applyDisplayMode() {
         setMovement(QListView::Static);
         setWordWrap(true);
         setUniformItemSizes(true);
+        setAcceptDrops(true);
+        viewport()->setAcceptDrops(true);
         return;
     }
 
@@ -361,6 +328,8 @@ void MediaBrowserListWidget::applyDisplayMode() {
     setMovement(QListView::Static);
     setWordWrap(true);
     setUniformItemSizes(false);
+    setAcceptDrops(true);
+    viewport()->setAcceptDrops(true);
 }
 
 void MediaBrowserListWidget::mousePressEvent(QMouseEvent* event) {
