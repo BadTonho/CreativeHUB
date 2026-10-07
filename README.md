@@ -1,8 +1,6 @@
-# Creative Suite (Working Title)
+# CreativeHub
 
-> **Note:** The project name is temporary; a permanent identity will be established later.
-
-An open-source, lightweight, cross-platform creative ecosystem for **video editing**, **raster image design**, **motion graphics compositing**, and **centralized project management**. Built with native C++20, Qt 6, and hardware-accelerated rendering pipelines, the suite targets **Windows**, **macOS**, and **Linux**.
+An open-source, lightweight, cross-platform creative ecosystem for **video editing**, **raster image design**, **motion graphics compositing**, and **centralized project management**. Built with native C++20, Qt 6, and hardware-accelerated rendering pipelines, CreativeHub targets **Windows**, **macOS**, and **Linux**.
 
 **Jump to:** [The Vision & Proposal](#the-vision--core-proposal) | [Applications](#applications-overview) | [Interoperability & Workflows](#interoperability--connected-workflows) | [Core Principles](#core-engineering-principles) | [Build from Source](#build-from-source) | [Regression Tests](#regression-tests) | [Documentation](#documentation-directory) | [License](#license)
 
@@ -34,7 +32,7 @@ The suite is composed of four coordinated desktop applications:
 
 | Icon | Application | ID | Status | Primary Purpose |
 | :---: | :--- | :---: | :---: | :--- |
-| <img src="docs/assets/app-icons/hub.png" alt="Creative Suite Hub icon" width="48"> | **Creative Suite Hub** | `hub` | Beta 0.1.0 | Suite command center: project launching, recent files, project backup vault, storage cache cleanup, and isolated per-app updates. |
+| <img src="docs/assets/app-icons/hub.png" alt="CreativeHub icon" width="48"> | **CreativeHub** | `hub` | Beta 0.1.0 | Suite command center: project launching, recent files, project backup vault, storage cache cleanup, and isolated per-app updates. |
 | <img src="docs/assets/app-icons/video-editor.png" alt="Video Editor icon" width="48"> | [**Video Editor**](docs/video-editor/ROADMAP.md) | `video-editor` | Beta 0.1.0 | Multitrack audiovisual editing (NLE), trimming, GPU-accelerated compositing, audio mixing, text overlays, and FFmpeg export. |
 | <img src="docs/assets/app-icons/image-editor.png" alt="Image Editor icon" width="48"> | [**Image Editor**](docs/image-editor/ROADMAP.md) | `image-editor` | Beta 0.1.0 | Layered raster editing, vector shapes, layer masks, and atomic linked-image handoff with the Video Editor. |
 | <img src="docs/assets/app-icons/motion-studio.png" alt="Motion Studio icon" width="48"> | [**Motion Studio**](docs/motion-editor/ROADMAP.md) | `motion-editor` | Beta 0.1.0 | Motion graphics, Bezier Graph Editor curve animation, layer compositing, Gaussian blur/color effects, and video export. |
@@ -45,7 +43,7 @@ The suite is composed of four coordinated desktop applications:
 
 ### Deep Dive into the Suite Components
 
-#### 1. Creative Suite Hub (`hub`)
+#### 1. CreativeHub (`hub`)
 The central desktop management console and launcher for the entire creative ecosystem:
 - **App Launcher & Discovery:** Scans the workstation for installed suite applications, verifies operational health, and launches editors with appropriate launch profiles.
 - **Unified Recent Projects:** Aggregates recent documents across all editors (`.csp`, `.cimg`, `.motion`), with thumbnail previews, app badges, and direct project opening.
@@ -90,7 +88,7 @@ Unlike fragmented toolsets where moving assets between applications requires man
 
 ```mermaid
 graph LR
-    Hub[Creative Suite Hub] -->|Launches & Backs Up| VE[Video Editor]
+    Hub[CreativeHub] -->|Launches & Backs Up| VE[Video Editor]
     Hub -->|Launches & Backs Up| IE[Image Editor]
     Hub -->|Launches & Backs Up| MS[Motion Studio]
     
@@ -151,7 +149,7 @@ cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/v
 You can build the entire suite or individual applications:
 
 ```bash
-# Build the Creative Suite Hub
+# Build CreativeHub
 cmake --build build --config Release --target creative-suite-hub
 
 # Build the Video Editor
@@ -176,7 +174,7 @@ Executable outputs are generated under `build/apps/<application-id>/`:
 
 | Application | Windows | Linux | macOS |
 | :--- | :--- | :--- | :--- |
-| **Hub** | `.\build\apps\hub\Release\creative-suite-hub.exe` | `./build/apps/hub/creative-suite-hub` | `open build/apps/hub/creative-suite-hub.app` |
+| **CreativeHub** | `.\build\apps\hub\Release\creative-suite-hub.exe` | `./build/apps/hub/creative-suite-hub` | `open build/apps/hub/creative-suite-hub.app` |
 | **Video Editor** | `.\build\apps\video-editor\Release\creative-suite-video-editor.exe` | `./build/apps/video-editor/creative-suite-video-editor` | `open build/apps/video-editor/creative-suite-video-editor.app` |
 | **Image Editor** | `.\build\apps\image-editor\Release\creative-suite-image-editor.exe` | `./build/apps/image-editor/creative-suite-image-editor` | `open build/apps/image-editor/creative-suite-image-editor.app` |
 | **Motion Studio** | `.\build\apps\motion-editor\Release\creative-suite-motion-editor.exe` | `./build/apps/motion-editor/creative-suite-motion-editor` | `open build/apps/motion-editor/creative-suite-motion-editor.app` |
@@ -206,7 +204,7 @@ Before contributing, please read the repository guidelines in [`AGENTS.md`](AGEN
 | :--- | :--- | :--- |
 | **Architecture** | [Video Editor Architecture](docs/video-editor/ARCHITECTURE.md) | Video Editor modules and subsystem architecture. |
 | | [Cross-Application Compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared contracts, linked-document handoffs, and extraction criteria. |
-| | [Product & Distribution Architecture](docs/PRODUCT_DISTRIBUTION.md) | Hub architecture, app recovery, and release strategies *(Portuguese planning doc)*. |
+| | [Product & Distribution Architecture](docs/PRODUCT_DISTRIBUTION.md) | CreativeHub architecture, app recovery, and release strategies *(Portuguese planning doc)*. |
 | | [Windows Update Contract](docs/WINDOWS_UPDATES.md) | Update catalog format, verification, staging, and rollback mechanics. |
 | **Video Editor** | [Video Editor Roadmap](docs/video-editor/ROADMAP.md) | Milestones, stabilization, and release criteria. |
 | | [Keyboard Shortcuts](docs/video-editor/SHORTCUTS.md) | User-facing keyboard shortcut directory. |
@@ -221,7 +219,7 @@ Before contributing, please read the repository guidelines in [`AGENTS.md`](AGEN
 | | [Motion Studio Roadmap](docs/motion-editor/ROADMAP.md) | Technical milestones and export evolution. |
 | **Quality & Tests** | [Regression Prevention Policy](docs/REGRESSION_POLICY.md) | Universal test coverage mandates for all suite components. |
 | | [Video Editor Regression Tests](docs/video-editor/REGRESSION_TESTING.md) | Verification index and manual testing checklists. |
-| | [Hub Regression Tests](docs/hub/REGRESSION_TESTING.md) | Hub verification index, catalog tests, and update flows. |
+| | [CreativeHub Regression Tests](docs/hub/REGRESSION_TESTING.md) | CreativeHub verification index, catalog tests, and update flows. |
 
 ---
 
