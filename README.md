@@ -196,8 +196,6 @@ The project enforces automated test coverage for all application logic, shared l
 ```bash
 ctest --test-dir build -C Release --output-on-failure
 ```
-
-For test policies and validation checklists, see [`docs/REGRESSION_POLICY.md`](docs/REGRESSION_POLICY.md) and [`docs/video-editor/REGRESSION_TESTING.md`](docs/video-editor/REGRESSION_TESTING.md).
 ---
 
 ## Documentation Directory
