@@ -71,6 +71,11 @@ public:
         QString* error = nullptr,
         std::optional<QPainterPath> clipping_path = {},
         bool mask_target = false);
+    [[nodiscard]] bool applyBlurStroke(
+        const QVector<QPointF>& points, int diameter, int radius,
+        QString* error = nullptr,
+        std::optional<QPainterPath> clipping_path = {},
+        bool mask_target = false);
     [[nodiscard]] QString addShape(ImageShapeData shape, QString* error = nullptr);
     [[nodiscard]] bool updateShape(const ImageShapeData& shape,
                                    QString* error = nullptr);
@@ -162,6 +167,10 @@ public:
         const QPointF& start, const QPointF& end, const QColor& color,
         std::optional<QPainterPath> clipping_path = {},
         bool mask_target = false) const;
+    [[nodiscard]] QImage renderedImageWithBlurStroke(
+        const QVector<QPointF>& points, int diameter, int radius,
+        std::optional<QPainterPath> clipping_path = {},
+        bool mask_target = false) const;
     [[nodiscard]] QHash<QString, QImage> renderedLayerThumbnails(
         const QSize& maximum_size) const;
     [[nodiscard]] bool hasSource() const noexcept { return !source_image_.isNull(); }
@@ -217,6 +226,10 @@ private:
         bool erase);
     [[nodiscard]] std::optional<ImageOperation> prepareLinearGradientOperation(
         const QPointF& start, const QPointF& end, const QColor& color,
+        std::optional<QPainterPath> clipping_path, bool mask_target,
+        QString* error) const;
+    [[nodiscard]] std::optional<ImageOperation> prepareBlurStrokeOperation(
+        const QVector<QPointF>& points, int diameter, int radius,
         std::optional<QPainterPath> clipping_path, bool mask_target,
         QString* error) const;
     [[nodiscard]] bool loadSource(const QString& path, QImage* image, QString* error) const;

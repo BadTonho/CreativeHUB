@@ -504,6 +504,20 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
                 handleLinearGradient(
                     start, end, color, canvas->areaSelectionClipPath());
             });
+    connect(canvas, &ImageCanvas::blurPreviewRequested, this,
+            [this, canvas](const QVector<QPointF>& points, int diameter, int radius) {
+                if (activeCanvas() != canvas) return;
+                canvas->setTransientImage(activeSession().renderedImageWithBlurStroke(
+                    points, diameter, radius, canvas->areaSelectionClipPath(), editingMask()));
+            });
+    connect(canvas, &ImageCanvas::blurPreviewCleared, canvas, [canvas]() {
+        canvas->setTransientImage({});
+    });
+    connect(canvas, &ImageCanvas::blurStrokeSelected, this,
+            [this, canvas](const QVector<QPointF>& points, int diameter, int radius) {
+                handleBlurStroke(
+                    points, diameter, radius, canvas->areaSelectionClipPath());
+            });
     connect(canvas, &ImageCanvas::erasePreviewRequested, this,
             [this, canvas](const QVector<QPointF>& points, int diameter) {
                 if (activeCanvas() == nullptr) return;
@@ -836,6 +850,19 @@ void ImageEditorWindow::createToolOptionsBar() {
                 }
                 updateCanvasBrush();
             });
+    connect(tool_options_bar_, &ImageToolOptionsBar::blurDiameterChanged,
+            this, [this](int diameter) {
+                blur_diameter_ = std::clamp(
+                    diameter, 1, ImageDocumentStore::kMaximumPaintBrushDiameter);
+                updateCanvasBrush();
+            });
+    connect(tool_options_bar_, &ImageToolOptionsBar::blurRadiusChanged,
+            this, [this](int radius) {
+                blur_radius_ = std::clamp(
+                    radius, 0, ImageDocumentStore::kMaximumBlurRadius);
+                if (activeCanvas() != nullptr)
+                    activeCanvas()->setBlurOptions(blur_diameter_, blur_radius_);
+            });
     connect(tool_options_bar_, &ImageToolOptionsBar::eraserPreviewToggled,
             this, [this](bool enabled) {
                 eraser_preview_enabled_ = enabled;
@@ -958,6 +985,8 @@ void ImageEditorWindow::updateToolOptions() {
         activeCanvas()->paintMode();
     const bool eraser_active = has_canvas && active_tool == ToolSidebar::Tool::Eraser &&
         activeCanvas()->eraserMode();
+    const bool blur_active = has_canvas && active_tool == ToolSidebar::Tool::Blur &&
+        activeCanvas()->blurMode();
     const int diameter = active_tool == ToolSidebar::Tool::Eraser
         ? eraser_diameter_ : paint_diameter_;
     tool_options_bar_->setBrushOptionsState(
@@ -971,6 +1000,8 @@ void ImageEditorWindow::updateToolOptions() {
     tool_options_bar_->setBucketFillOptionsState(
         tool_active && active_tool == ToolSidebar::Tool::BucketFill,
         bucket_fill_tolerance_);
+    tool_options_bar_->setBlurOptionsState(
+        tool_active && blur_active, blur_diameter_, blur_radius_);
     const auto placements = tool_active
         ? activeSession().visibleObjects() : QVector<ImageObjectPlacement>{};
     const bool has_selected_shape = std::any_of(
@@ -1248,8 +1279,11 @@ void ImageEditorWindow::updateDeleteActions() {
 void ImageEditorWindow::updateCanvasBrush() {
     if (activeCanvas() == nullptr || tool_sidebar_ == nullptr) return;
     const int diameter = tool_sidebar_->activeTool() == ToolSidebar::Tool::Eraser
-        ? eraser_diameter_ : paint_diameter_;
+        ? eraser_diameter_
+        : (tool_sidebar_->activeTool() == ToolSidebar::Tool::Blur
+            ? blur_diameter_ : paint_diameter_);
     activeCanvas()->setBrush(tool_sidebar_->brushColor(), diameter);
+    activeCanvas()->setBlurOptions(blur_diameter_, blur_radius_);
 }
 
 void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool preserveSelection) {
@@ -1266,6 +1300,7 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
     activeCanvas()->setEyedropperMode(false);
     activeCanvas()->setBucketFillMode(false);
     activeCanvas()->setLinearGradientMode(false);
+    activeCanvas()->setBlurMode(false);
     if (paint_tool_action_ != nullptr) {
         const QSignalBlocker blocker(paint_tool_action_);
         paint_tool_action_->setChecked(tool == ToolSidebar::Tool::Paint);
@@ -1326,6 +1361,15 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         activeCanvas()->setObjectSelectionMode(false);
         activeCanvas()->setPaintMode(false);
         activeCanvas()->setLinearGradientMode(true);
+    } else if (tool == ToolSidebar::Tool::Blur && has_source) {
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setBlurOptions(blur_diameter_, blur_radius_);
+        activeCanvas()->setBlurMode(true);
     } else if (tool == ToolSidebar::Tool::Paint && has_source) {
         activeCanvas()->setTextCreationMode(false);
         activeCanvas()->setEraserMode(false);
@@ -1387,9 +1431,12 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
                 : ImageCanvas::AreaSelectionCombineMode::Replace));
     activeCanvas()->setEraserPreviewEnabled(eraser_preview_enabled_);
     const int diameter = tool == ToolSidebar::Tool::Eraser
-        ? eraser_diameter_ : paint_diameter_;
+        ? eraser_diameter_
+        : (tool == ToolSidebar::Tool::Blur ? blur_diameter_ : paint_diameter_);
     tool_options_bar_->setBrushOptionsState(false, diameter,
         tool == ToolSidebar::Tool::Eraser, editingMask(), eraser_preview_enabled_);
+    tool_options_bar_->setBlurOptionsState(
+        false, blur_diameter_, blur_radius_);
     updateCanvasBrush();
     updateToolOptions();
 }
@@ -2563,6 +2610,20 @@ void ImageEditorWindow::handleLinearGradient(
     }
 }
 
+void ImageEditorWindow::handleBlurStroke(
+    const QVector<QPointF>& points, int diameter, int radius,
+    std::optional<QPainterPath> clipping_path) {
+    if (activeCanvas() == nullptr || !activeSession().hasSource()) return;
+    QString error;
+    const bool changed = activeSession().applyBlurStroke(
+        points, diameter, radius, &error, std::move(clipping_path), editingMask());
+    if (changed) {
+        updateView(true);
+    } else if (!error.isEmpty()) {
+        reportError(QStringLiteral("blur_stroke"), error);
+    }
+}
+
 void ImageEditorWindow::deactivateCanvasTools() {
     if (activeCanvas() == nullptr || tool_sidebar_ == nullptr) return;
     tool_sidebar_->setActiveTool(ToolSidebar::Tool::None);
@@ -2576,6 +2637,7 @@ void ImageEditorWindow::deactivateCanvasTools() {
     activeCanvas()->setCropMode(false);
     activeCanvas()->setShapeCreationMode(false);
     activeCanvas()->setObjectSelectionMode(false);
+    activeCanvas()->setBlurMode(false);
 }
 
 void ImageEditorWindow::maybeOfferRecovery() {

@@ -12,6 +12,8 @@ add_library(creative-suite-image-editor-core STATIC
     src/core/document/rendering/image_document_geometry.h
     src/core/document/rendering/image_bucket_fill.cpp
     src/core/document/rendering/image_bucket_fill.h
+    src/core/document/rendering/image_blur_stroke.cpp
+    src/core/document/rendering/image_blur_stroke.h
     src/core/document/rendering/image_linear_gradient.cpp
     src/core/document/rendering/image_linear_gradient.h
     src/core/document/editing/image_document_history.cpp
@@ -91,6 +93,8 @@ add_executable(creative-suite-image-editor
     src/ui/tools/bucket_fill/bucket_fill_tool.h
     src/ui/tools/gradient/linear_gradient_tool.cpp
     src/ui/tools/gradient/linear_gradient_tool.h
+    src/ui/tools/blur/blur_tool.cpp
+    src/ui/tools/blur/blur_tool.h
     src/ui/tools/crop/crop_tool.cpp
     src/ui/tools/crop/crop_tool.h
     src/ui/tools/eyedropper/eyedropper_tool.cpp

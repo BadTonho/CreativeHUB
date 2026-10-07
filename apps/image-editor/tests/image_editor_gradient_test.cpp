@@ -107,7 +107,7 @@ void testSessionPreviewHistoryMaskAndPersistence(const QString& root) {
             session.redo() && session.renderedImage() == applied,
             "Undo and redo must remove and restore the gradient.");
 
-    const QString saved_path = root + QStringLiteral("/gradient-v15.cimg");
+    const QString saved_path = root + QStringLiteral("/gradient-v16.cimg");
     require(session.saveDocument(saved_path, &error), "Could not save the gradient document.");
     QFile saved(saved_path);
     require(saved.open(QIODevice::ReadOnly), "Could not inspect the saved gradient document.");
@@ -115,15 +115,15 @@ void testSessionPreviewHistoryMaskAndPersistence(const QString& root) {
     saved.close();
     const auto stored_operations = saved_json.value("layers").toArray().at(1)
         .toObject().value("operations").toArray();
-    require(saved_json.value("version").toInt() == 15,
-            "A saved gradient document must use .cimg version 15.");
+    require(saved_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            "A saved gradient document must use the current .cimg version.");
     require(stored_operations.size() == 1 &&
             stored_operations.at(0).toObject().contains("clip_path"),
-            "The v15 gradient operation must persist its optional selection clip.");
+            "The v16 gradient operation must persist its optional selection clip.");
     ImageDocumentSession reopened;
     require(reopened.openDocument(saved_path, &error) &&
             reopened.data() == session.data() && reopened.renderedImage() == applied,
-            "Version 15 must preserve the gradient pixels when reopened.");
+            "The current format must preserve the gradient pixels when reopened.");
 
     const QString v14_path = root + QStringLiteral("/legacy-v14.cimg");
     ImageDocumentSession legacy;
@@ -155,14 +155,14 @@ void testSessionPreviewHistoryMaskAndPersistence(const QString& root) {
     require(mask_operations.back().kind == OperationKind::LinearGradient &&
             mask_color.red() == mask_color.green() && mask_color.green() == mask_color.blue(),
             "Mask gradients must be stored in grayscale.");
-    const QString mask_path = root + QStringLiteral("/gradient-mask-v15.cimg");
+    const QString mask_path = root + QStringLiteral("/gradient-mask-v16.cimg");
     require(session.saveDocument(mask_path, &error),
             "Could not save the mask gradient document.");
     ImageDocumentSession reopened_mask;
     require(reopened_mask.openDocument(mask_path, &error) &&
             reopened_mask.data() == session.data() &&
             reopened_mask.renderedImage() == session.renderedImage(),
-            "A grayscale mask gradient must survive v15 save and reopen.");
+            "A grayscale mask gradient must survive v16 save and reopen.");
 }
 
 } // namespace

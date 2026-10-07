@@ -45,6 +45,10 @@ persistence, and recovery.
   preview while dragging and forwards the completed gesture; the session maps
   its geometry through the parent group, applies the active selection and
   layer-mask target, and records one operation only when pixels change.
+- `src/ui/tools/blur/blur_tool.*` owns the temporary blur-brush stroke and its
+  size, radius, and selection snapshot. `ImageCanvas` forwards live previews
+  and the completed stroke; the session blurs only the active layer or selected
+  mask in premultiplied RGBA and records one operation when pixels change.
 - `src/ui/tools/selection/area_selection_tool.*` owns each canvas's temporary
   Area Selection path, gesture geometry, Replace/Add/Subtract operations,
   cancellation, bounds clipping, complexity limit, and preview overlay.
@@ -187,10 +191,11 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   Version 9 adds text, version 10 adds raster layer masks, version 11 adds
   linked raster images, version 12 adds independent current canvas bounds with
   a base-image offset, version 13 adds persisted selection clips on paint and
-  eraser strokes, version 14 adds editable bucket fills, and version 15 adds
-  editable linear gradients on raster layers and masks. Area Selection itself remains temporary per tab. The
+  eraser strokes, version 14 adds editable bucket fills, version 15 adds
+  editable linear gradients, and version 16 adds editable blur strokes on
+  raster layers and masks. Area Selection itself remains temporary per tab. The
   original base dimensions remain available for relink validation. The codec
-  continues to accept versions 1–14 and generates in-memory IDs for older
+  continues to accept versions 1–15 and generates in-memory IDs for older
   strokes. The data format is specified in [`FORMAT.md`](FORMAT.md).
 - `ImageExportSnapshot` captures the current source image, document data, and
   selected layer and group IDs; its implicitly shared image and document
@@ -277,6 +282,14 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   create no Undo entry. A composed transient image previews the result without
   mutating document state. Each committed gradient is one persistent operation
   and cannot be moved individually with Object Selection.
+- Blur uses an in-canvas brush stroke with a 1–1024 px diameter (default 12)
+  and a 0–100 px radius (default 10). Three horizontal/vertical box-blur passes
+  process only the gesture's affected region in premultiplied RGBA; brush
+  coverage and Area Selection clip writes. The blur reads only the active
+  layer or selected mask, preserving mask grayscale. A transient composed
+  preview does not mutate document state. Escape cancels a gesture, radius zero
+  and pixel-identical strokes add no history, and each changed stroke is one
+  persistent `.cimg` v16 operation that Object Selection cannot move alone.
 - `AreaSelectionTool` keeps the temporary selection and draws its live
   Replace/Add/Subtract preview. `ImageCanvas` continues to own mode exclusivity,
   coordinate conversion, and canvas-resize translation, while its public
@@ -296,7 +309,8 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   creation or an active selection gesture. Each object transform, shape style
   edit, or object deletion is one Undo/Redo edit.
 - `ToolSidebar` contains mutually exclusive, checkable, icon-only Paint,
-  Bucket Fill, Linear Gradient, Eraser, Shapes, and Selection tools in a compact rail; all can be inactive.
+  Bucket Fill, Linear Gradient, Eraser, Blur, Shapes, and Selection tools in a
+  compact rail; all can be inactive.
   Selection uses a mouse-pointer icon.
   The always-visible color swatch remains specific to Paint. `ImageEditorWindow`
   owns a persistent top tool options bar; it is empty when no tool is active and
@@ -403,7 +417,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 15; host links live in the Video Editor's
+  The `.cimg` schema is version 16; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message

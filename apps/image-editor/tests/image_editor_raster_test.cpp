@@ -204,7 +204,8 @@ void deletionTests(const QString& root) {
     require(session.undo() && session.data() == before && session.selectedLayerId() == second &&
         session.renderedImage() == rendered && session.redo() && session.data() == deleted,
         "Batch deletion was not one complete history edit.");
-    require(session.saveDocument() && json(doc)["version"].toInt() == 13,
+    require(session.saveDocument() &&
+            json(doc)["version"].toInt() == ImageDocumentStore::kCurrentDocumentVersion,
         "Deletion changed the document format.");
     ImageDocumentSession reopened;
     require(reopened.openDocument(doc) && reopened.data() == deleted,

@@ -116,15 +116,15 @@ void testSessionUndoMaskAndV14RoundTrip(const QString& root) {
     require(session.redo() && session.renderedImage().pixelColor(1, 1).alpha() == mask_gray,
             "Redo should restore the mask fill.");
 
-    const QString path = root + QStringLiteral("/bucket-fill-v15.cimg");
+    const QString path = root + QStringLiteral("/bucket-fill-v16.cimg");
     require(session.saveDocument(path, &error), "Could not save the bucket-fill document.");
     QFile file(path);
     require(file.open(QIODevice::ReadOnly), "Could not inspect the saved document.");
     const auto json = QJsonDocument::fromJson(file.readAll()).object();
-    require(json.value("version").toInt() == 15,
-            "Saving a bucket fill must write the current .cimg version 15.");
+    require(json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            "Saving a bucket fill must write the current .cimg version.");
     ImageDocumentSession reopened;
-    require(reopened.openDocument(path, &error), "Could not reopen the v15 fill document.");
+    require(reopened.openDocument(path, &error), "Could not reopen the v16 fill document.");
     require(reopened.renderedImage() == session.renderedImage() &&
             reopened.data().layers.at(1).mask->operations.front().kind == OperationKind::BucketFill,
             "The layer and mask fill operations must survive saving and reopening.");

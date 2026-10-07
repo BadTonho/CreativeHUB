@@ -90,7 +90,7 @@ Automated coverage is in `image_editor_bucket_fill_test.cpp`
 (`creative-suite-image-editor-bucket-fill`) and
 `image_editor_ui_test.cpp` (`testBucketFillTool`,
 `creative-suite-image-editor-ui`). It checks connectivity, RGBA tolerance,
-selection clipping, mask conversion, no-op history, Undo/Redo, v15 round-trip,
+selection clipping, mask conversion, no-op history, Undo/Redo, v16 round-trip,
 tool activation, tolerance updates, and ignored outside-image clicks. Native
 visual checks remain pending.
 
@@ -117,9 +117,33 @@ Automated coverage is in `image_editor_gradient_test.cpp`
 (`creative-suite-image-editor-gradient`) and `image_editor_ui_test.cpp`
 (`testLinearGradientTool`; `creative-suite-image-editor-gradient-ui`). It checks
 premultiplied interpolation, endpoint clamping, selection clipping, zero-length
-gestures, composed preview equivalence, mask grayscale, Undo/Redo, v15
+gestures, composed preview equivalence, mask grayscale, Undo/Redo, v16
 round-trip, v14 compatibility, tool activation, drag preview, and outside
 clicks. Native visual checks remain pending.
+
+## Blur
+
+Use a disposable layered `.cimg` image with a hard color edge and a separate
+lower layer with a distinct color.
+
+1. Select **Blur**. Confirm Brush Size starts at 12 px and accepts 1–1024 px;
+   Radius starts at 10 px and accepts 0–100 px. Drag across the edge and confirm
+   the preview softens only pixels on the active layer. The lower layer must not
+   be used as the blur source.
+2. Create an Area Selection and drag across its boundary. Confirm blur writes
+   stay inside the selection. Select a layer mask thumbnail, blur a grayscale
+   transition, and confirm the mask stays grayscale and affects only its layer.
+3. Press Escape during a stroke and confirm it is cancelled. Set Radius to 0
+   and confirm a gesture does not alter the document. Make a changed stroke and
+   use Undo and Redo; save and reopen the document and confirm the blur persists.
+
+Automated coverage is in `image_editor_blur_test.cpp`
+(`creative-suite-image-editor-blur`) and `image_editor_ui_test.cpp`
+(`testBlurTool`; `creative-suite-image-editor-blur-ui`). It checks premultiplied
+RGBA behavior, affected-region and selection clipping, layer/mask operation
+replay, preview/commit equality, grayscale masks, radius-zero no-op, history,
+v16 round-trip, v15 reading, controls, preview, cancellation, and outside clicks.
+Native visual checks remain pending.
 
 ## Performance collection and benchmark
 

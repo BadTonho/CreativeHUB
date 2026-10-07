@@ -12,7 +12,7 @@ The current application supports one raster document at a time, either linked
 to an original image or created as a self-contained canvas. It provides a
 locked Background, editable raster layers, one-level groups, visibility,
 opacity, ordering, crop, quarter-turn rotation, flips, painting, bucket fill,
-linear gradients, erasing,
+linear gradients, blur, erasing,
 editable line/rectangle/ellipse shapes, editable text, raster layer masks,
 imported image layers, object selection and transforms, an RGBA Eyedropper that
 samples visible composite pixels with nonzero alpha into the paint color,
@@ -22,9 +22,9 @@ alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 15 format. The application reads
-versions 1 through 14 and writes version 15, migrating older documents on save;
-version 1 recovery envelopes accept a version 15 document payload. Source images
+Documents use the provisional `.cimg` version 16 format. The application reads
+versions 1 through 15 and writes version 16, migrating older documents on save;
+version 1 recovery envelopes accept a version 16 document payload. Source images
 remain unchanged, and original source dimensions are retained for relinking.
 Area Selection is a separate tool from object Selection. Rectangle and ellipse
 gestures can replace, add to, or subtract from the temporary per-tab selection.
@@ -32,6 +32,11 @@ New Paint and Eraser strokes, including mask edits, persist their clipping
 geometry in `.cimg` v13; bucket fills persist as v14 operations. The Linear
 Gradient tool previews and stores a color-to-transparent operation in `.cimg`
 v15 on the active layer or selected mask, clipped by the active selection.
+The Blur tool previews a stroke with independent brush size and radius controls,
+and stores one ordered `.cimg` v16 operation on the active layer or mask. It
+uses only that target's preceding pixels, respects the active selection, and
+supports Undo/Redo and cancellation during a gesture. Radius zero and unchanged
+results do not create edits.
 Fill detection uses the active layer or selected mask, four-way connectivity,
 per-channel RGBA tolerance, brush color and alpha, and the active selection
 clip. No-op fills do not add history. The selection itself does not dirty or
@@ -90,9 +95,9 @@ performance guarantee is approved yet.
 ## Compatibility and Release Order
 
 The current implementation preserves the ability to open existing `.cimg`
-versions 1 through 14 and writes the current version 15 format on save. Automated
+versions 1 through 15 and writes the current version 16 format on save. Automated
 regression tests cover migration, canvas-size persistence, clipped paint/erase,
-bucket-fill and linear-gradient operations, and version 15 recovery payload. This implementation does not mark manual text checks or
+bucket-fill, linear-gradient, and blur operations, and version 16 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
 
 Per project policy, complete and accept the standalone minimum before accepting
@@ -145,7 +150,16 @@ editable stack items in one Undo/Redo edit; groups include their children.
 Background is protected, including mixed selections. Text, rename, and numeric
 fields keep normal character deletion. Deleting a missing image reference is
 allowed and can unblock exports. Original files are preserved. The document
-format remains v15 and the contextual shortcut is customizable.
+format remains v16 and the contextual shortcut is customizable.
+
+## Approved Blur Tool
+
+On 2026-10-06 the maintainer approved an editable Blur tool. It applies a
+premultiplied-RGBA blur to the active raster layer or selected mask with a
+1–1024 px brush size (default 12) and 0–100 px radius (default 10). The active
+Area Selection clips writes. A live preview is temporary; Escape cancels, and
+each changed gesture becomes one ordered, undoable `.cimg` v16 operation.
+General retouching and broad effect systems remain outside this feature.
 
 ## Outside This Release
 
