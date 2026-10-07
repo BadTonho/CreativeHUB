@@ -3159,6 +3159,8 @@ bool testBlurTool() {
         &canvas, [&canvas, radius](int size) {
             canvas.setBlurOptions(size, radius->value());
         });
+    QObject::connect(&canvas, &image_editor::ImageCanvas::blurDiameterChanged,
+        &options, &image_editor::ImageToolOptionsBar::setBlurDiameter);
     QObject::connect(&options, &image_editor::ImageToolOptionsBar::blurRadiusChanged,
         &canvas, [&canvas, diameter](int value) {
             canvas.setBlurOptions(diameter->value(), value);
@@ -3178,6 +3180,8 @@ bool testBlurTool() {
     QSignalSpy previews(&canvas, &image_editor::ImageCanvas::blurPreviewRequested);
     QSignalSpy strokes(&canvas, &image_editor::ImageCanvas::blurStrokeSelected);
     QSignalSpy cleared(&canvas, &image_editor::ImageCanvas::blurPreviewCleared);
+    QSignalSpy resized_diameters(&canvas,
+        &image_editor::ImageCanvas::blurDiameterChanged);
     button->click();
     const QPoint start = canvas.rect().center();
     const QPoint end(start.x() + 40, start.y() + 15);
@@ -3194,6 +3198,23 @@ bool testBlurTool() {
         strokes.front().at(1).toInt() == 18 && strokes.front().at(2).toInt() == 6;
     const bool preview_cleared = cleared.size() == 1;
 
+    QTest::mousePress(&canvas, Qt::LeftButton,
+                      Qt::ControlModifier | Qt::AltModifier, start);
+    QTest::mouseMove(&canvas, start + QPoint(20, 0));
+    QCoreApplication::processEvents();
+    const bool resize_updated_own_control = diameter->value() == 38 &&
+        radius->value() == 6 && resized_diameters.size() == 1 && strokes.size() == 1;
+    QTest::mouseRelease(&canvas, Qt::LeftButton,
+                        Qt::ControlModifier | Qt::AltModifier,
+                        start + QPoint(20, 0));
+
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseMove(&canvas, end, 1);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
+    QCoreApplication::processEvents();
+    const bool resized_diameter_used_for_blur = strokes.size() == 2 &&
+        strokes.back().at(1).toInt() == 38 && previews.back().at(1).toInt() == 38;
+
     const qreal target_left =
         (canvas.width() - pixels.width() * canvas.zoomFactor()) / 2.0;
     const qreal target_top =
@@ -3203,23 +3224,27 @@ bool testBlurTool() {
     QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, outside);
     QTest::mouseMove(&canvas, start, 1);
     QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, start);
-    const bool outside_ignored = strokes.size() == 1;
+    const bool outside_ignored = strokes.size() == 2;
 
     QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
     QTest::mouseMove(&canvas, end, 1);
     QTest::keyClick(&canvas, Qt::Key_Escape);
     QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
     QCoreApplication::processEvents();
-    const bool escape_cancelled = strokes.size() == 1 && cleared.size() == 2;
+    const bool escape_cancelled = strokes.size() == 2 && cleared.size() == 3;
     if (!activated || !previewed || !committed || !preview_cleared ||
+        !resize_updated_own_control || !resized_diameter_used_for_blur ||
         !outside_ignored || !escape_cancelled) {
         std::cerr << "Blur UI failed: active=" << activated
                   << ", preview=" << previewed << ", commit=" << committed
                   << ", cleared=" << preview_cleared
+                  << ", resize=" << resize_updated_own_control
+                  << ", resized stroke=" << resized_diameter_used_for_blur
                   << ", outside=" << outside_ignored
                   << ", escape=" << escape_cancelled << '\n';
     }
     return activated && previewed && committed && preview_cleared &&
+        resize_updated_own_control && resized_diameter_used_for_blur &&
         outside_ignored && escape_cancelled;
 }
 

@@ -618,6 +618,8 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
             });
     connect(canvas, &ImageCanvas::brushDiameterChanged,
             tool_options_bar_, &ImageToolOptionsBar::setBrushDiameter);
+    connect(canvas, &ImageCanvas::blurDiameterChanged,
+            tool_options_bar_, &ImageToolOptionsBar::setBlurDiameter);
 }
 
 int ImageEditorWindow::addDocumentTab(bool activate) {

@@ -36,6 +36,7 @@ public:
     void setAreaSelectionOptionsState(bool visible, int shape, int mode);
     void setBucketFillOptionsState(bool visible, int tolerance);
     void setBlurOptionsState(bool visible, int diameter, int radius);
+    void setBlurDiameter(int diameter);
     void hideAllOptions();
 
 signals:

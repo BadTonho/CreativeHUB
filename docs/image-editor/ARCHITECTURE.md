@@ -259,7 +259,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   gesture; regular paint keeps its existing cancellation behavior. The eraser
   clears alpha only in the selected editable layer, revealing visible lower
   layers; when targeting a mask it writes black instead, and Background cannot
-  be painted or erased. For either active tool, `Ctrl+Alt` plus a left-button
+  be painted or erased. For Paint, Eraser, or Blur, `Ctrl+Alt` plus a left-button
   drag over the image adjusts that tool's size from signed horizontal
   displacement at the press point: right increases and left decreases at 1 px
   per screen pixel. Vertical movement is ignored. The tool outline stays

@@ -386,14 +386,17 @@ still pending.
    image, and drag right. Confirm the eraser outline stays centered at the press
    point while its diameter, slider, and numeric field increase by 1 px per
    screen pixel. Drag left and confirm the size decreases at the same rate.
+   Repeat with Blur active. Confirm the Blur brush-size field and the next blur
+   stroke use the adjusted diameter, while the blur radius and Paint/Eraser sizes
+   remain unchanged.
    Move vertically without changing the horizontal position and confirm the
    size stays the same. Move the pointer outside the image and confirm the
    anchored outline remains visible until release. Verify the size clamps at 1
    and 1024 px. Release outside the image and confirm the system pointer returns
    to the press point and the outline remains there. Move the pointer and confirm
    the outline follows it again. Verify the image pixels and Undo availability
-   did not change during resizing. Repeat with both tools inactive and confirm
-   the gesture does not change either size. Open
+   did not change during resizing. Repeat with Paint, Eraser, and Blur inactive and confirm
+   the gesture does not change any size. Open
    **Settings > Keyboard Shortcuts**
    and confirm the dialog is larger, can be resized, and keeps the shortcut list
    scrollable when made shorter. Change Paint from `B` to another

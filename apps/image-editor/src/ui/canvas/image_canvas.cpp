@@ -323,7 +323,10 @@ void ImageCanvas::setBlurOptions(int diameter, int radius) {
     blur_diameter_ = std::clamp(
         diameter, 1, ImageDocumentStore::kMaximumPaintBrushDiameter);
     blur_radius_ = std::clamp(radius, 0, ImageDocumentStore::kMaximumBlurRadius);
-    if (blur_mode_) updateBrushToolCursor(mapFromGlobal(QCursor::pos()));
+    if (blur_mode_) {
+        updateBrushToolCursor(resizing_brush_
+            ? brush_resize_start_ : mapFromGlobal(QCursor::pos()));
+    }
     update();
 }
 
@@ -794,6 +797,19 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if ((paint_mode_ || eraser_mode_ || blur_mode_) && !crop_mode_ &&
+        event->button() == Qt::LeftButton &&
+        modifiers.testFlag(Qt::ControlModifier) && modifiers.testFlag(Qt::AltModifier) &&
+        imageTargetRect().contains(event->position())) {
+        resizing_brush_ = true;
+        brush_resize_start_ = event->position();
+        brush_resize_global_start_ = event->globalPosition().toPoint();
+        brush_resize_initial_diameter_ = blur_mode_ ? blur_diameter_ : brush_diameter_;
+        updateBrushToolCursor(event->position());
+        update();
+        event->accept();
+        return;
+    }
     if (linear_gradient_mode_ && event->button() == Qt::LeftButton) {
         if (!image_.isNull() && imageTargetRect().contains(event->position()) &&
             linear_gradient_tool_.beginGesture(
@@ -813,18 +829,6 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
             emit blurPreviewRequested(stroke.points, stroke.diameter, stroke.radius);
             update();
         }
-        event->accept();
-        return;
-    }
-    if ((paint_mode_ || eraser_mode_) && !crop_mode_ && event->button() == Qt::LeftButton &&
-        modifiers.testFlag(Qt::ControlModifier) && modifiers.testFlag(Qt::AltModifier) &&
-        imageTargetRect().contains(event->position())) {
-        resizing_brush_ = true;
-        brush_resize_start_ = event->position();
-        brush_resize_global_start_ = event->globalPosition().toPoint();
-        brush_resize_initial_diameter_ = brush_diameter_;
-        updateBrushToolCursor(event->position());
-        update();
         event->accept();
         return;
     }
@@ -932,9 +936,11 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         const int diameter = std::clamp(
             brush_resize_initial_diameter_ + adjustment,
             1, ImageDocumentStore::kMaximumPaintBrushDiameter);
-        if (diameter != brush_diameter_) {
-            brush_diameter_ = diameter;
-            emit brushDiameterChanged(brush_diameter_);
+        int& active_diameter = blur_mode_ ? blur_diameter_ : brush_diameter_;
+        if (diameter != active_diameter) {
+            active_diameter = diameter;
+            if (blur_mode_) emit blurDiameterChanged(active_diameter);
+            else emit brushDiameterChanged(active_diameter);
         }
         // Keep the brush preview anchored at the gesture's press point. The
         // cursor may leave the image while its horizontal displacement still

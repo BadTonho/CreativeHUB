@@ -401,6 +401,11 @@ void ImageToolOptionsBar::setBlurOptionsState(bool visible, int diameter, int ra
         radius, 0, ImageDocumentStore::kMaximumBlurRadius));
 }
 
+void ImageToolOptionsBar::setBlurDiameter(int diameter) {
+    blur_diameter_spin_->setValue(std::clamp(
+        diameter, 1, ImageDocumentStore::kMaximumPaintBrushDiameter));
+}
+
 void ImageToolOptionsBar::hideAllOptions() {
     setBrushOptionsState(false, brush_size_spin_->value(), false, false,
                          eraser_preview_check_->isChecked());

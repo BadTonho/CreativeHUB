@@ -99,6 +99,7 @@ signals:
     void erasePreviewCleared();
     void eraseStrokeSelected(const QVector<QPointF>& image_points, int diameter);
     void brushDiameterChanged(int diameter);
+    void blurDiameterChanged(int diameter);
     void colorSampled(const QColor& color);
     void bucketFillRequested(const QPoint& seed, int tolerance, const QColor& color);
     void linearGradientPreviewRequested(const QPointF& start,
