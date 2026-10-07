@@ -197,11 +197,12 @@ and required manual validation pass.
   [Windows Release Media Capability Inventory](MEDIA_CAPABILITIES_WINDOWS_RELEASE.md).
   The inventory is not an application-level allow-list; revalidate each final
   distribution package and platform before making release capability claims.
-- [-] Detect static images from deployed decoder capabilities and file content,
+- [x] Detect static images from deployed decoder capabilities and file content,
   including the WebP/TIFF FFmpeg fallback; accept single-frame GIF and reject
   multi-frame images until per-frame Timeline timing is designed. Automated
-  regression coverage is implemented; manual validation against the rebuilt
-  Windows Release executable remains pending.
+  regression coverage is implemented, and the maintainer confirmed static-image
+  import, Preview, and save/reopen against the rebuilt Windows Release
+  executable on 2026-10-07.
 - [x] Add the initial offline export workflow: a session-only ordered queue,
   project/settings snapshots, CPU composition, dynamically discovered FFmpeg
   muxer and encoder choices, progress, cancellation, failure reporting, and

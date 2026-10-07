@@ -100,6 +100,7 @@ The final package manifest and platform-specific licensing review remain open.
 
 Re-run this inventory against each intended distribution package and platform;
 do not carry these Windows development-build counts forward as release claims.
-The remaining Video Editor manual gate is to open this rebuilt executable,
-inspect the dynamic Open Media image filter, and verify import, preview,
-save/reopen, and the clear multi-frame rejection with representative files.
+The maintainer confirmed static-image import, Preview, and save/reopen with the
+rebuilt executable on 2026-10-07. Automated tests cover the dynamic Open Media
+filter, single-frame GIF acceptance, and multi-frame rejection. Distribution-
+package and cross-platform validation remain separate release gates.
