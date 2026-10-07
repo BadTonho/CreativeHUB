@@ -291,9 +291,12 @@ outcome; technical export failures continue through the existing error log.
 Performance records do not include project/media paths, layer names, or text
 content. GPU utilization and device memory are not sampled. These diagnostics
 help inspect a running session; they are not performance benchmarks.
-Representative small, medium,
-and heavy compositions, Windows resource behavior, startup, seek/paint latency,
-memory limits, and export throughput still require measured validation.
+An initial Windows preview/export measurement is documented in
+[PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md](PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md).
+It identifies Gaussian Blur as the main preview bottleneck in a 1080p, two-layer
+workload. Representative small, medium, and heavy compositions, startup,
+seek/paint latency, memory limits, and the approved five-layer benchmark still
+require measured validation.
 On Windows, toggle the option, seek and play compositions, export a job, then
 use **Help > Open Log Folder** to inspect samples and job summaries.
 For a controlled Windows comparison, use the same 1920 × 1080, 60 fps

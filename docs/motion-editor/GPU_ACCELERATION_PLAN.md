@@ -50,6 +50,16 @@ effects are an important follow-up target; composition alone must not be
 presented as a solution for all playback delays. No private media or local log
 files are included in this plan.
 
+The maintainer's Windows run on 2026-10-07 confirms the same bottleneck in
+current local diagnostics: at 1920 × 1080 and 60 fps, Gaussian Blur averaged
+54.7 ms while composition averaged 4.66 ms. With blur active, the preview
+delivered about 11 fps; with no effects applied, it delivered about 59 fps.
+The completed 60 fps export ran at 33.79 fps (0.563× realtime). The full
+measurements and limits are in
+[PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md](PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md).
+The preview log uses schema 4 while the current source emits schema 7, so it
+does not contain GPU counters and cannot establish GPU-path performance.
+
 ## Stage 1 — Layer composition
 
 ### 1A — Experimental backend and preview integration (implemented)
