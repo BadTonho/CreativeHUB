@@ -1397,7 +1397,7 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
     if (import_intent.has_value() &&
         import_intent->destination == MediaImportIntent::Destination::Browser) {
         const auto requested = import_intent->bin_path;
-        if (requested == "Unsorted" ||
+        if (requested.empty() || requested == "Unsorted" ||
             std::find(bin_paths_.begin(), bin_paths_.end(), requested) != bin_paths_.end()) {
             destination_bin = requested.empty() ? "Unsorted" : requested;
         } else {

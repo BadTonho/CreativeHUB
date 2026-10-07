@@ -11,6 +11,7 @@
 #include "settings/settings_dialog.h"
 #include "timeline/timeline_geometry.h"
 #include "timeline/timeline_widget.h"
+#include "ui/media_browser/media_browser_bin_tree_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 #include <creative_suite/effects/effects.h>
 #if defined(CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS)
@@ -1224,6 +1225,65 @@ public:
                         window.media_controller_.library().items()[first_media_index].bin_path ==
                             "DropTarget",
                     "A file dropped on the Media Browser did not use its target bin.");
+
+            const auto fallback_source = directory /
+                ("unassigned-" + first_source.filename().string());
+            std::filesystem::copy_file(first_source, fallback_source);
+            require(window.bin_tree_ != nullptr &&
+                        window.bin_tree_->topLevelItemCount() > 0,
+                    "The external-drop integration test could not find All Media.");
+            window.bin_tree_->setCurrentItem(window.bin_tree_->topLevelItem(0));
+            QApplication::processEvents();
+            QListWidgetItem* media_drop_target = nullptr;
+            for (int row = 0; row < window.media_list_->count(); ++row) {
+                auto* item = window.media_list_->item(row);
+                if (item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
+                    media_browser_ui::kMediaItemTypeMedia) {
+                    media_drop_target = item;
+                    break;
+                }
+            }
+            require(media_drop_target != nullptr,
+                    "All Media did not show an item for the fallback drop test.");
+            window.media_list_->scrollToItem(media_drop_target);
+            QApplication::processEvents();
+            const auto fallback_drop_position =
+                window.media_list_->visualItemRect(media_drop_target).center();
+            const auto fallback_source_qt =
+                QString::fromStdWString(fallback_source.wstring());
+            QMimeData fallback_drop_mime;
+            fallback_drop_mime.setUrls({QUrl::fromLocalFile(fallback_source_qt)});
+            int stale_bin_warning_count = 0;
+            QTimer dismiss_stale_bin_warning;
+            QObject::connect(&dismiss_stale_bin_warning, &QTimer::timeout, [&]() {
+                auto* message = qobject_cast<QMessageBox*>(
+                    QApplication::activeModalWidget());
+                if (message != nullptr &&
+                    message->windowTitle() ==
+                        QStringLiteral("Some media could not be imported")) {
+                    if (message->text().contains(
+                            QStringLiteral("The destination bin no longer exists"))) {
+                        ++stale_bin_warning_count;
+                    }
+                    message->accept();
+                }
+            });
+            dismiss_stale_bin_warning.start(10);
+            require(sendFileDrop(
+                        window.media_list_->viewport(),
+                        fallback_drop_position,
+                        &fallback_drop_mime),
+                    "The Media Browser did not accept a drop without a bin target.");
+            waitForDropImport(
+                "The Media Browser did not complete a drop without a bin target.");
+            dismiss_stale_bin_warning.stop();
+            const auto fallback_media_index =
+                window.media_controller_.library().indexForPath(fallback_source);
+            require(fallback_media_index != window.media_controller_.library().size() &&
+                        window.media_controller_.library().items()[fallback_media_index]
+                                .bin_path == "Unsorted" &&
+                        stale_bin_warning_count == 0,
+                    "A drop without a concrete bin must fall back to Unsorted without a stale-bin warning.");
 
             auto& edit_ui = window.edit_workspace_->ui();
             const auto track_location =

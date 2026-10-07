@@ -147,7 +147,8 @@ tasks.
   offline state, and restoration by reimport.
 - [-] Direct operating-system file drops into the Media Browser and Timeline
   are implemented and have automated viewport-level coverage. Browser drops
-  honor the selected or target bin; ordered Timeline batches import
+  honor the selected or target bin and fall back to Unsorted when no concrete
+  bin is selected; ordered Timeline batches import
   asynchronously and place as one Undo/Redo edit. Windows Explorer acceptance
   remains pending; see [Regression Testing](REGRESSION_TESTING.md).
 - [x] Multi-track timeline with absolute positions, gaps, cross-track overlap,
