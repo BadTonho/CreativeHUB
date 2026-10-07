@@ -5,8 +5,8 @@ Current application version: **Beta 0.1.0**.
 Status: **2D MVP product scope approved; implementation is substantially
 complete, with Windows acceptance in progress**. The
 standalone Motion Studio shell, in-memory composition/layer model, navigation
-timeline, Media Pool, image/video/text/shape layers, CPU preview with an
-experimental opt-in GPU composition backend, versioned
+timeline, Media Pool, image/video/text/shape layers, CPU preview and offline
+export with an experimental opt-in GPU composition backend, versioned
 native save/open, and first-pass rendered video export are implemented under
 `apps/motion-editor/`.
 Configurable preview performance metrics and per-job export summaries are also
@@ -52,15 +52,17 @@ technically clear.
 The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records four deliveries:
 layer composition, GPU effects, preview/export integration, and adoption by the
 other applications. Video Editor is the first consumer of the shared OpenGL
-compositor; Motion now has an opt-in experimental preview integration with CPU
-fallback.
+compositor; Motion now has opt-in experimental preview and export integration
+with CPU fallback.
 
-**Status: experimental preview composition, Color Adjustment, and Gaussian Blur
-implemented; export integration deferred.** Color Adjustment-only stacks run in
-the composition shader, while stacks containing Gaussian Blur use the shared
-ordered GPU effect path when supported. Preview requires
-`CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1` and reads the composed result back to
-RGBA for the existing viewer. No GPU speedup or driver acceptance is claimed.
+**Status: experimental preview composition, Color Adjustment, Gaussian Blur,
+and offline export integration implemented; native driver and performance
+acceptance pending.** Color Adjustment-only stacks run in the composition
+shader, while stacks containing Gaussian Blur use the shared ordered GPU effect
+path when supported. `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1` opts both preview
+and export into the backend; both remain CPU-only by default. Export reads the
+composed result back to RGBA for the existing CPU encoder. No GPU speedup or
+cross-platform driver acceptance is claimed.
 
 ## Milestones
 
@@ -310,9 +312,9 @@ readiness checks remain in this roadmap and
 | `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Windows invalid-file and path results remain part of Windows acceptance. |
 | Autosave and restart recovery | `motion_recovery_store_test.cpp` (`creative-suite-motion-editor-recovery`), `motion_editor_ui_test.cpp` | Automated snapshots and UI recovery paths exist. Basic recovery was reported working on the Windows 11 reference PC on 2026-10-01; detailed restart/recovery scenarios remain pending (**P0 validation**). |
 | Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; exported Color Adjustment pixels in `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`); shared evaluator coverage in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp`; shared color processing in `libs/tests/effects_test.cpp` (`creative-suite-effects`) | Offscreen tests cover preview, shared Color Adjustment delegation, export output, cancellation, timing, and interaction behavior. Real-hardware visual output and graphics-driver validation remain pending (**P2 validation**). |
-| Experimental GPU composition and ordered effects preview | `gpu_composition_test.cpp` (`creative-suite-motion-editor-gpu-composition`), `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), and shared `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`) | Automated coverage checks fallback output, ordered Color Adjustment and Gaussian Blur parity within one RGB level with exact alpha, cancellation, context fallback, and metrics. Manual GPU enabled/disabled checks and native graphics-driver validation remain pending (**P2 validation**). |
-| Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`) | CTest recorded 63/63 passes on 2026-10-06. A Windows run on 2026-10-07 recorded a 1920 × 1080, 60 fps, two-layer preview and a completed export; the export summary does not identify its layer/effect setup. Results are analyzed in [`PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md`](PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md): Gaussian Blur reduced preview delivery to about 11 fps; export achieved 33.79 fps. The approved 1080p/30 fps, 10-second, five-layer reference workload remains outstanding (**P2 validation**). |
-| Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated output, cancellation, failure, and cancellation-exception message coverage exists. The maintainer reports running tests and a video export on Windows. The basic test/export run is recorded as done; the next export work is performance profiling and investigating any issues found (**P1/P2 validation**). |
+| Experimental GPU preview and offline export | `gpu_composition_test.cpp` (`creative-suite-motion-editor-gpu-composition`), `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), and shared `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`) | Automated coverage checks CPU fallback parity, GPU/CPU frame parity when an offscreen surface is available, worker-owned context lifecycle, cancellation, and per-job schema-2 GPU metrics. Windows manual 3,405-frame CPU/GPU comparison and native macOS/Linux driver checks remain pending (**P2 validation**). |
+| Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`) | The 2026-10-07 Windows Release build passed all 11 Motion CTest targets. Existing 33.79 fps CPU export and preview measurements remain historical; the export did not record its layer/effect setup. The new schema-2 export summary records the requested/used backend, GPU/fallback frames, failures, transfer bytes, and upload/draw/readback averages. Paired GPU export measurements remain pending in [`PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md`](PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md). |
+| Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated output parity, cancellation, failure, no-surface CPU fallback, backend metrics, and cancellation-exception coverage exists. The maintainer has completed a Windows test/export run. GPU export remains opt-in pending the repeatable three-pair performance comparison (**P1/P2 validation**). |
 | Optional audio-to-transform keyframe generation | `audio_keyframe_generation_test.cpp` (`creative-suite-motion-editor-audio-keyframes`) | Automated coverage includes per-frame RMS, whole-file peak normalization past the layer boundary, empty and silent sources, invalid audio, atomic track replacement, Undo/Redo, `.motion` round-trip, worker success and progress callbacks on the receiver thread, pre-start cancellation without an error log, and failure logging with operation, path, and layer ID. Manual generation and cancellation during an active UI analysis remain pending. |
 | Startup and application UI | `motion_editor_startup_test.cpp` (`creative-suite-motion-editor-startup`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Startup and Media Pool bin filtering have offscreen coverage; the current UI has no separate media-search control. After tightening the seek test to wait for the final still frame, the full UI suite passed 10 repeated Debug runs on 2026-10-01. Broader Windows visual and graphics-driver checks remain pending (**P2 validation**). |
 | Motion Studio to Video Editor editable handoff | No current integration test; handoff remains a later roadmap milestone | Planned, not implemented. Define producer/consumer tests when the contract is implemented; not a current regression gap. |
@@ -419,8 +421,9 @@ skipped. Transform keyframes use the shared curve evaluator in the preview
 worker. A completed frame from the current uninterrupted playback may still be
 presented; manual seeking or replacing the composition invalidates it. Playback
 extends the navigation range by one hour as needed and scrolls to keep the
-playhead visible. This does not set a composition duration. Preview remains
-CPU-only and Motion Studio-owned. Text, rectangle, and ellipse layers are
+playhead visible. This does not set a composition duration. Preview scheduling
+remains Motion Studio-owned; composition uses CPU by default or the experimental
+shared OpenGL backend when opted in. Text, rectangle, and ellipse layers are
 rasterized to transparent RGBA8 with Qt painting on the preview worker; the
 shared compositor handles their layer order, transforms, opacity, and alpha.
 Text glyphs and shape fills/strokes are static; only their existing transform
@@ -516,9 +519,13 @@ to disable and re-enable preview metrics; seek and play, then inspect **Help >
 Open Log Folder** for active-only samples with CPU/memory, stage timings,
 percentiles, and request counters. Confirm idle intervals stay silent and
 records contain no paths, layer names, or text content. Export a composition and
-inspect its completion summary for elapsed time, frame count, render/write
-timings, output size/rate, and achieved speed; also confirm canceled and failed
-jobs have summaries. Open **File > Export
+inspect its completion summary for schema 2, elapsed time, frame count,
+render/write timings, GPU requested/used backend, GPU/fallback frames,
+failures, transfer bytes, upload/draw/readback times, output size/rate, and
+achieved speed; also confirm canceled and failed jobs have summaries. Repeat
+the same 3,405-frame project and settings three times with the GPU environment
+variable unset and three times with it set to `1`; record results without
+claiming a speedup unless the end-to-end gain repeats. Open **File > Export
 Video...**, confirm composition resolution and frame-rate defaults, try a custom
 resolution and quality profile, export overlapping image, video, text, and
 shape layers with a blank lead-in, and play the result in a media player. Cancel

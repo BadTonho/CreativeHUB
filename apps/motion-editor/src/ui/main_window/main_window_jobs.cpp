@@ -8,13 +8,16 @@
 #include "ui/media_pool/media_pool_widget.h"
 #include "ui/dialogs/motion_video_export_dialog.h"
 #include "ui/timeline/timeline_navigator.h"
+#include "settings/gpu_composition_preferences.h"
 
 #include <creative_suite/animation/animation.h>
+#include <creative_suite/composition/opengl_frame_compositor.h>
 #include <creative_suite/diagnostics/logger.h>
 
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QMetaObject>
+#include <QOffscreenSurface>
 #include <QPointer>
 #include <QProgressDialog>
 #include <QStatusBar>
@@ -41,8 +44,15 @@ void MainWindow::startVideoExport()
 
     MotionVideoExportDialog dialog(document_->canvasSize(), document_->frameRate(), this);
     if (dialog.exec() != QDialog::Accepted) return;
-    const auto settings = dialog.exportSettings();
-    if (!settings.has_value()) return;
+    const auto export_settings = dialog.exportSettings();
+    if (!export_settings.has_value()) return;
+
+    const bool gpu_composition_enabled = motion::settings::gpuCompositionEnabled();
+    gpu_export_surface_.reset();
+    if (gpu_composition_enabled) {
+        gpu_export_surface_ =
+            creative_suite::composition::OpenGlFrameCompositor::createSurface();
+    }
 
     MotionExportSnapshot snapshot;
     snapshot.canvas_size = document_->canvasSize();
@@ -72,7 +82,7 @@ void MainWindow::startVideoExport()
 
     QPointer<MainWindow> owner(this);
     export_worker_ = std::make_unique<MotionVideoExportWorker>(
-        this, std::move(snapshot), *settings,
+        this, std::move(snapshot), *export_settings,
         [owner](int progress) {
             if (!owner.isNull() && owner->export_progress_ != nullptr) {
                 owner->export_progress_->setLabelText(
@@ -82,7 +92,10 @@ void MainWindow::startVideoExport()
         },
         [owner](MotionExportResult result) mutable {
             if (!owner.isNull()) owner->finishVideoExport(std::move(result));
-        });
+        },
+        MotionExportRenderOptions{
+            gpu_composition_enabled,
+            gpu_export_surface_.get()});
     updateDocumentState();
     export_progress_->show();
     export_worker_->start();
@@ -93,6 +106,7 @@ void MainWindow::finishVideoExport(MotionExportResult result)
         export_worker_->wait();
         export_worker_.reset();
     }
+    gpu_export_surface_.reset();
     if (export_progress_ != nullptr) {
         export_progress_->close();
         export_progress_->deleteLater();

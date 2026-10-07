@@ -1,7 +1,9 @@
 #include "ui/main_window/main_window.h"
 #include "export/motion_video_export.h"
 #include "ui/dialogs/motion_video_export_dialog.h"
+#include "settings/gpu_composition_preferences.h"
 
+#include <creative_suite/composition/opengl_frame_compositor.h>
 #include <creative_suite/media/video_encoder.h>
 #include <creative_suite/media/video_playback.h>
 #include <creative_suite/diagnostics/logger.h>
@@ -14,6 +16,7 @@
 #include <QElapsedTimer>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QOffscreenSurface>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSize>
@@ -226,6 +229,40 @@ std::vector<std::uint8_t> fileBytes(const std::filesystem::path& path)
     return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
 }
 
+std::vector<creative_suite::media::VideoFramePtr> decodeVideo(
+    const std::filesystem::path& path)
+{
+    auto decoder = creative_suite::media::VideoPlaybackSession::open(path);
+    std::vector<creative_suite::media::VideoFramePtr> frames;
+    while (const auto frame = decoder->decode_next_frame()) frames.push_back(*frame);
+    return frames;
+}
+
+bool videoFramesMatch(
+    const std::vector<creative_suite::media::VideoFramePtr>& left,
+    const std::vector<creative_suite::media::VideoFramePtr>& right,
+    int maximum_channel_delta)
+{
+    if (left.size() != right.size()) return false;
+    for (std::size_t frame_index = 0; frame_index < left.size(); ++frame_index) {
+        if (left[frame_index] == nullptr || right[frame_index] == nullptr ||
+            left[frame_index]->width != right[frame_index]->width ||
+            left[frame_index]->height != right[frame_index]->height ||
+            left[frame_index]->rgba_pixels.size() != right[frame_index]->rgba_pixels.size()) {
+            return false;
+        }
+        for (std::size_t byte_index = 0;
+             byte_index < left[frame_index]->rgba_pixels.size(); ++byte_index) {
+            if (std::abs(static_cast<int>(left[frame_index]->rgba_pixels[byte_index]) -
+                         static_cast<int>(right[frame_index]->rgba_pixels[byte_index])) >
+                maximum_channel_delta) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 template<typename Widget>
 Widget* findWidget(QObject* parent, const char* object_name)
 {
@@ -356,6 +393,9 @@ int main(int argc, char* argv[])
 {
     QApplication application(argc, argv);
     try {
+        qputenv("CREATIVE_SUITE_MOTION_GPU_COMPOSITION", "1");
+        require(motion::settings::gpuCompositionEnabled(),
+                "the shared GPU composition opt-in can be enabled for preview and export");
         const motion::ui::MotionExportCancelled cancellation_exception;
         require(std::string(cancellation_exception.what()) ==
                     "Motion Studio video export was canceled.",
@@ -395,9 +435,7 @@ int main(int argc, char* argv[])
         require(progress.size() <= 101,
                 "large jobs report bounded percentage updates instead of per-frame events");
 
-        auto decoder = creative_suite::media::VideoPlaybackSession::open(target);
-        std::vector<creative_suite::media::VideoFramePtr> decoded;
-        while (const auto frame = decoder->decode_next_frame()) decoded.push_back(*frame);
+        const auto decoded = decodeVideo(target);
         require(decoded.size() == 9,
                 "fractional composition rate converts to the expected nine 24-fps output frames");
         require(decoded.front() != nullptr && decoded.back() != nullptr,
@@ -424,6 +462,81 @@ int main(int argc, char* argv[])
                 "Color Adjustment is included in exported still-layer pixels");
         require(!has_non_black(*decoded.back()),
                 "hidden layers extend the export duration without rendering pixels");
+
+        QObject gpu_worker_receiver;
+        std::optional<motion::ui::MotionExportResult> gpu_fallback_result;
+        const auto gpu_fallback_target = outputPath(
+            temporary_directory, container, "gpu-export-no-surface-fallback");
+        motion::ui::MotionVideoExportWorker gpu_fallback_worker(
+            &gpu_worker_receiver, snapshot,
+            settingsFor(gpu_fallback_target, container, encoder), {},
+            [&gpu_fallback_result](motion::ui::MotionExportResult result) {
+                gpu_fallback_result = std::move(result);
+            },
+            motion::ui::MotionExportRenderOptions{true, nullptr});
+        gpu_fallback_worker.start();
+        require(waitFor([&] { return gpu_fallback_result.has_value(); }),
+                "an export with no OpenGL surface reports completion through its worker");
+        gpu_fallback_worker.wait();
+        require(gpu_fallback_result->succeeded,
+                "an unavailable export surface falls back to a successful CPU export");
+        const auto gpu_fallback_decoded = decodeVideo(gpu_fallback_target);
+        require(videoFramesMatch(decoded, gpu_fallback_decoded, 2),
+                "a GPU-requested CPU fallback preserves the exported frames");
+
+        const auto gpu_cancel_target = outputPath(
+            temporary_directory, container, "gpu-export-cancel-preserves-output");
+        {
+            std::ofstream output(gpu_cancel_target, std::ios::binary);
+            output << "existing-gpu-export-destination";
+        }
+        const auto gpu_cancel_previous_bytes = fileBytes(gpu_cancel_target);
+        std::atomic_bool gpu_cancel_requested{false};
+        motion::ui::MotionExportPerformanceSummary gpu_cancel_performance;
+        bool gpu_cancel_reported = false;
+        try {
+            motion::ui::MotionVideoExporter::exportVideo(
+                snapshot,
+                settingsFor(gpu_cancel_target, container, encoder),
+                gpu_cancel_requested,
+                [&gpu_cancel_requested](int progress) {
+                    if (progress > 0) gpu_cancel_requested.store(true, std::memory_order_release);
+                },
+                &gpu_cancel_performance,
+                motion::ui::MotionExportRenderOptions{true, nullptr});
+        } catch (const motion::ui::MotionExportCancelled&) {
+            gpu_cancel_reported = true;
+        }
+        require(gpu_cancel_reported && gpu_cancel_performance.gpu_composition_requested &&
+                    gpu_cancel_performance.gpu.failures == 1 &&
+                    gpu_cancel_performance.gpu.fallback_frames > 0,
+                "canceling a GPU-requested fallback export reports its backend and cancellation");
+        require(fileBytes(gpu_cancel_target) == gpu_cancel_previous_bytes,
+                "canceling a GPU-requested export preserves an existing destination");
+
+        auto gpu_surface = creative_suite::composition::OpenGlFrameCompositor::createSurface();
+        std::optional<motion::ui::MotionExportResult> gpu_surface_result;
+        std::filesystem::path gpu_surface_target;
+        if (gpu_surface) {
+            gpu_surface_target = outputPath(
+                temporary_directory, container, "gpu-export-surface");
+            motion::ui::MotionVideoExportWorker gpu_surface_worker(
+                &gpu_worker_receiver, snapshot,
+                settingsFor(gpu_surface_target, container, encoder), {},
+                [&gpu_surface_result](motion::ui::MotionExportResult result) {
+                    gpu_surface_result = std::move(result);
+                },
+                motion::ui::MotionExportRenderOptions{true, gpu_surface.get()});
+            gpu_surface_worker.start();
+            require(waitFor([&] { return gpu_surface_result.has_value(); }),
+                    "an export with a GUI-created surface reports completion through its worker");
+            gpu_surface_worker.wait();
+            require(gpu_surface_result->succeeded,
+                    "GPU export or its CPU fallback completes without losing the output");
+            const auto gpu_surface_decoded = decodeVideo(gpu_surface_target);
+            require(videoFramesMatch(decoded, gpu_surface_decoded, 4),
+                    "the GPU export path preserves CPU-reference output within encoder tolerance");
+        }
 
         const auto preserved_target = outputPath(temporary_directory, container, "preserve-on-cancel");
         {
@@ -535,19 +648,64 @@ int main(int argc, char* argv[])
         bool saw_completed = false;
         bool saw_cancelled = false;
         bool saw_failed = false;
+        bool saw_gpu_fallback = false;
+        bool saw_gpu_surface_export = false;
+        std::size_t completed_gpu_requested_summaries = 0;
         for (const auto& summary : export_summaries) {
             saw_completed = saw_completed || summary.find("outcome=\"completed\"") != std::string::npos;
             saw_cancelled = saw_cancelled || summary.find("outcome=\"cancelled\"") != std::string::npos;
             saw_failed = saw_failed || summary.find("outcome=\"failed\"") != std::string::npos;
-            require(summary.find("render_average_ms=") != std::string::npos &&
+            if (summary.find("outcome=\"completed\"") != std::string::npos &&
+                summary.find("gpu_composition_requested=\"true\"") != std::string::npos) {
+                ++completed_gpu_requested_summaries;
+            }
+            require(summary.find("schema_version=\"2\"") != std::string::npos &&
+                        summary.find("gpu_composition_requested=") != std::string::npos &&
+                        summary.find("gpu_backend_used=") != std::string::npos &&
+                        summary.find("gpu_composition_attempts=") != std::string::npos &&
+                        summary.find("gpu_composition_frames=") != std::string::npos &&
+                        summary.find("gpu_composition_fallback_frames=") != std::string::npos &&
+                        summary.find("gpu_composition_failures=") != std::string::npos &&
+                        summary.find("gpu_composition_uploaded_bytes=") != std::string::npos &&
+                        summary.find("gpu_composition_readback_bytes=") != std::string::npos &&
+                        summary.find("gpu_upload_average_ms=") != std::string::npos &&
+                        summary.find("gpu_draw_submission_average_ms=") != std::string::npos &&
+                        summary.find("gpu_readback_average_ms=") != std::string::npos &&
+                        summary.find("render_average_ms=") != std::string::npos &&
                         summary.find("write_average_ms=") != std::string::npos &&
                         summary.find("achieved_frames_per_second=") != std::string::npos &&
                         summary.find("output_path=") == std::string::npos &&
                         summary.find("window-export.") == std::string::npos,
                     "export performance summaries include render/output metrics without paths");
+            if (summary.find("gpu_composition_requested=\"true\"") != std::string::npos &&
+                summary.find("gpu_surface_available=\"false\"") != std::string::npos) {
+                saw_gpu_fallback = summary.find("gpu_backend_used=\"cpu_fallback\"") !=
+                        std::string::npos &&
+                    summary.find("gpu_composition_attempts=\"1\"") != std::string::npos &&
+                    summary.find("gpu_composition_fallback_frames=\"9\"") != std::string::npos &&
+                    summary.find("gpu_composition_failures=\"1\"") != std::string::npos;
+            }
+            if (summary.find("gpu_composition_requested=\"true\"") != std::string::npos &&
+                summary.find("gpu_surface_available=\"true\"") != std::string::npos) {
+                const bool expected_backend =
+                    summary.find("gpu_backend_used=\"gpu\"") != std::string::npos ||
+                    summary.find("gpu_backend_used=\"mixed\"") != std::string::npos ||
+                    summary.find("gpu_backend_used=\"cpu_fallback\"") != std::string::npos;
+                saw_gpu_surface_export = saw_gpu_surface_export ||
+                    (expected_backend &&
+                     summary.find("frames_rendered=\"9\"") != std::string::npos);
+            }
         }
         require(saw_completed && saw_cancelled && saw_failed,
                 "export summaries identify each terminal job outcome");
+        require(saw_gpu_fallback,
+                "export summaries record the no-surface fallback, failure, and per-frame backend");
+        require(completed_gpu_requested_summaries >= 2U + (gpu_surface ? 1U : 0U),
+                "the shared environment opt-in reaches the MainWindow export worker");
+        if (gpu_surface) {
+            require(saw_gpu_surface_export,
+                    "export summaries identify GPU use or a full CPU fallback with a surface");
+        }
 
         std::cout << "Motion Studio video export tests passed.\n";
         return EXIT_SUCCESS;

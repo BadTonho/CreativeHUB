@@ -86,6 +86,19 @@ MotionDecodeObserver& motionDecodeObserver() noexcept
 
 } // namespace
 
+void CompositionGpuMetrics::record(
+    const creative_suite::composition::OpenGlCompositionTimings& timings) noexcept
+{
+    uploaded_bytes += timings.uploaded_bytes;
+    readback_bytes += timings.readback_bytes;
+    uploaded_layers += timings.uploaded_layers;
+    upload_nanoseconds += timings.upload_nanoseconds;
+    draw_submission_nanoseconds += timings.draw_submission_nanoseconds;
+    readback_nanoseconds += timings.readback_nanoseconds;
+    color_adjustment_count += timings.color_adjustment_count;
+    gaussian_blur_count += timings.gaussian_blur_count;
+}
+
 void CompositionFrameRenderer::reset()
 {
     video_sessions_.clear();
@@ -454,32 +467,41 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         using creative_suite::composition::OpenGlCompositionStatus;
         creative_suite::composition::OpenGlCompositionTimings gpu_timings;
         creative_suite::composition::OpenGlCompositionResult gpu_result;
-        try {
-            if (!gpu_compositor_) {
-                gpu_compositor_ = std::make_unique<
-                    creative_suite::composition::OpenGlFrameCompositor>(gpu_surface_);
+        if (gpu_metrics_ != nullptr) ++gpu_metrics_->composition_attempts;
+        if (gpu_surface_ == nullptr) {
+            gpu_result.status = OpenGlCompositionStatus::Failed;
+            gpu_result.operation = "create_surface";
+            gpu_result.cause = "The OpenGL offscreen surface is unavailable.";
+        } else {
+            try {
+                if (!gpu_compositor_) {
+                    gpu_compositor_ = std::make_unique<
+                        creative_suite::composition::OpenGlFrameCompositor>(gpu_surface_);
+                }
+                gpu_result = gpu_compositor_->compose(
+                    request.canvas_size.width,
+                    request.canvas_size.height,
+                    composition_layers,
+                    should_cancel,
+                    &gpu_timings);
+            } catch (const std::exception& error) {
+                gpu_result.status = OpenGlCompositionStatus::Failed;
+                gpu_result.operation = "compose";
+                gpu_result.cause = error.what();
+            } catch (...) {
+                gpu_result.status = OpenGlCompositionStatus::Failed;
+                gpu_result.operation = "compose";
+                gpu_result.cause = "Unknown OpenGL composition failure";
             }
-            gpu_result = gpu_compositor_->compose(
-                request.canvas_size.width,
-                request.canvas_size.height,
-                composition_layers,
-                should_cancel,
-                &gpu_timings);
-        } catch (const std::exception& error) {
-            gpu_result.status = OpenGlCompositionStatus::Failed;
-            gpu_result.operation = "compose";
-            gpu_result.cause = error.what();
-        } catch (...) {
-            gpu_result.status = OpenGlCompositionStatus::Failed;
-            gpu_result.operation = "compose";
-            gpu_result.cause = "Unknown OpenGL composition failure";
         }
+        if (gpu_metrics_ != nullptr) gpu_metrics_->record(gpu_timings);
         if (gpu_result.status == OpenGlCompositionStatus::Cancelled ||
             (should_cancel && should_cancel())) {
             return {};
         }
         if (gpu_result.status == OpenGlCompositionStatus::Complete &&
             gpu_result.frame.has_value()) {
+            if (gpu_metrics_ != nullptr) ++gpu_metrics_->composition_frames;
             if (record_preview_metrics_ &&
                 (gpu_timings.color_adjustment_count != 0 ||
                  cpu_color_adjustment_fallbacks != 0)) {
@@ -509,6 +531,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
 
         const bool gpu_failed = gpu_result.status == OpenGlCompositionStatus::Failed ||
             gpu_result.status == OpenGlCompositionStatus::Complete;
+        if (gpu_metrics_ != nullptr && gpu_failed) ++gpu_metrics_->failures;
         gpu_color_adjustment_failed = gpu_failed;
         gpu_failure_operation = gpu_result.operation;
         gpu_failure_code = gpu_result.error_code;
@@ -517,10 +540,12 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             ? std::to_string(composition_layer_ids[static_cast<std::size_t>(gpu_result.layer_index)])
             : std::string("unknown");
         gpu_composition_disabled_after_failure_ = true;
+        const char* const gpu_subsystem = record_preview_metrics_
+            ? "motion_preview" : "motion_export";
         creative_suite::diagnostics::Logger::instance().log(
             gpu_failed ? creative_suite::diagnostics::Level::Error
                        : creative_suite::diagnostics::Level::Warning,
-            "motion_preview", "gpu_composition_fallback",
+            gpu_subsystem, "gpu_composition_fallback",
             gpu_result.cause.empty() ? "OpenGL composition is unavailable; using CPU composition"
                                      : gpu_result.cause,
             {{"gpu_operation", gpu_result.operation},
@@ -585,7 +610,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             }
             creative_suite::diagnostics::Logger::instance().log(
                 creative_suite::diagnostics::Level::Error,
-                "motion_preview", "gpu_effect_cpu_fallback", error.what(),
+                record_preview_metrics_ ? "motion_preview" : "motion_export",
+                "gpu_effect_cpu_fallback", error.what(),
                 {{"layer_id", std::to_string(pending.layer_id)},
                  {"gpu_operation", gpu_failure_operation},
                  {"error_code", std::to_string(gpu_failure_code)}});
@@ -608,6 +634,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
              {"height", std::to_string(request.canvas_size.height)}});
         return {};
     }
+    if (gpu_composition_enabled_ && gpu_metrics_ != nullptr)
+        ++gpu_metrics_->fallback_frames;
     return std::make_shared<const creative_suite::media::RgbaFrame>(std::move(*composed));
 }
 

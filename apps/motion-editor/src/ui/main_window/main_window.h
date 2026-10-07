@@ -193,6 +193,7 @@ private:
     QLabel* curve_custom_label_ = nullptr;
     TimelineNavigator* timeline_ = nullptr;
     std::unique_ptr<QOffscreenSurface> gpu_composition_surface_;
+    std::unique_ptr<QOffscreenSurface> gpu_export_surface_;
     std::unique_ptr<PreviewRenderer> preview_renderer_;
     std::optional<std::filesystem::path> document_path_;
     std::optional<model::MotionProjectData> saved_data_;

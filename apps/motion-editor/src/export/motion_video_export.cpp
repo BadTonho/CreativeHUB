@@ -33,6 +33,21 @@ std::string pathForLog(const std::filesystem::path& path)
     return {reinterpret_cast<const char*>(value.data()), value.size()};
 }
 
+std::string gpuBackendUsed(const MotionExportPerformanceSummary& performance)
+{
+    if (performance.frames_rendered == 0) return "none";
+    if (performance.gpu.composition_frames == 0) {
+        return performance.gpu_composition_requested ? "cpu_fallback" : "cpu";
+    }
+    return performance.gpu.fallback_frames == 0 ? "gpu" : "mixed";
+}
+
+std::string averageMilliseconds(std::uint64_t total_nanoseconds, std::uint64_t count)
+{
+    return count == 0 ? "N/A" : std::to_string(
+        static_cast<double>(total_nanoseconds) / static_cast<double>(count) / 1'000'000.0);
+}
+
 void checkCancelled(const std::atomic_bool& cancel_requested)
 {
     if (cancel_requested.load(std::memory_order_acquire)) throw MotionExportCancelled{};
@@ -129,7 +144,8 @@ void MotionVideoExporter::exportVideo(
     const MotionExportSettings& settings,
     const std::atomic_bool& cancel_requested,
     ProgressCallback report_progress,
-    MotionExportPerformanceSummary* performance_summary)
+    MotionExportPerformanceSummary* performance_summary,
+    MotionExportRenderOptions render_options)
 {
     const auto export_started = std::chrono::steady_clock::now();
     struct ElapsedRecorder {
@@ -141,6 +157,11 @@ void MotionVideoExporter::exportVideo(
                 summary->elapsed_nanoseconds, std::chrono::steady_clock::now() - started);
         }
     } elapsed_recorder{performance_summary, export_started};
+    if (performance_summary != nullptr) {
+        performance_summary->gpu_composition_requested =
+            render_options.gpu_composition_enabled;
+        performance_summary->gpu_surface_available = render_options.gpu_surface != nullptr;
+    }
 
     if (snapshot.canvas_size.width <= 0 || snapshot.canvas_size.height <= 0 ||
         snapshot.frame_rate.numerator <= 0 || snapshot.frame_rate.denominator <= 0 ||
@@ -195,7 +216,11 @@ void MotionVideoExporter::exportVideo(
         encoding.frame_rate_denominator = output_rate.den;
         encoding.video_bitrate_mbps = settings.video_bitrate_mbps;
         creative_suite::media::VideoEncoder encoder(std::move(encoding));
-        CompositionFrameRenderer frame_renderer(false);
+        CompositionFrameRenderer frame_renderer(
+            false,
+            render_options.gpu_composition_enabled,
+            render_options.gpu_surface,
+            performance_summary != nullptr ? &performance_summary->gpu : nullptr);
         int last_reported_progress = -1;
 
         for (std::int64_t output_frame = 0;
@@ -306,10 +331,12 @@ MotionVideoExportWorker::MotionVideoExportWorker(
     MotionExportSnapshot snapshot,
     MotionExportSettings settings,
     ProgressHandler progress_handler,
-    FinishedHandler finished_handler)
+    FinishedHandler finished_handler,
+    MotionExportRenderOptions render_options)
     : receiver_(receiver),
       snapshot_(std::move(snapshot)),
       settings_(std::move(settings)),
+      render_options_(render_options),
       cancel_requested_(std::make_shared<std::atomic_bool>(false)),
       progress_handler_(std::move(progress_handler)),
       finished_handler_(std::move(finished_handler))
@@ -348,7 +375,7 @@ void MotionVideoExportWorker::run()
                 QMetaObject::invokeMethod(receiver.data(), [receiver, handler, progress] {
                     if (!receiver.isNull() && handler) handler(progress);
                 }, Qt::QueuedConnection);
-            }, &performance);
+            }, &performance, render_options_);
         result.succeeded = true;
     } catch (const MotionExportCancelled&) {
         result.cancelled = true;
@@ -378,9 +405,40 @@ void MotionVideoExportWorker::run()
         creative_suite::diagnostics::Level::Info,
         "motion_performance", "export_summary",
         "Motion Studio video export performance summary.",
-        {{"schema_version", "1"},
+        {{"schema_version", "2"},
          {"outcome", result.succeeded ? "completed" :
              (result.cancelled ? "cancelled" : "failed")},
+         {"gpu_composition_requested", performance.gpu_composition_requested
+             ? "true" : "false"},
+         {"gpu_surface_available", performance.gpu_surface_available
+             ? "true" : "false"},
+         {"gpu_backend_used", gpuBackendUsed(performance)},
+         {"gpu_composition_attempts",
+             std::to_string(performance.gpu.composition_attempts)},
+         {"gpu_composition_frames",
+             std::to_string(performance.gpu.composition_frames)},
+         {"gpu_composition_fallback_frames",
+             std::to_string(performance.gpu.fallback_frames)},
+         {"gpu_composition_failures", std::to_string(performance.gpu.failures)},
+         {"gpu_composition_uploaded_bytes",
+             std::to_string(performance.gpu.uploaded_bytes)},
+         {"gpu_composition_readback_bytes",
+             std::to_string(performance.gpu.readback_bytes)},
+         {"gpu_composition_uploaded_layers",
+             std::to_string(performance.gpu.uploaded_layers)},
+         {"gpu_color_adjustment_count",
+             std::to_string(performance.gpu.color_adjustment_count)},
+         {"gpu_gaussian_blur_count",
+             std::to_string(performance.gpu.gaussian_blur_count)},
+         {"gpu_upload_average_ms", averageMilliseconds(
+             performance.gpu.upload_nanoseconds,
+             performance.gpu.composition_attempts)},
+         {"gpu_draw_submission_average_ms", averageMilliseconds(
+             performance.gpu.draw_submission_nanoseconds,
+             performance.gpu.composition_attempts)},
+         {"gpu_readback_average_ms", averageMilliseconds(
+             performance.gpu.readback_nanoseconds,
+             performance.gpu.composition_attempts)},
          {"elapsed_ms", std::to_string(elapsed_seconds * 1000.0)},
          {"frames_rendered", std::to_string(performance.frames_rendered)},
          {"render_count", std::to_string(performance.render_count)},

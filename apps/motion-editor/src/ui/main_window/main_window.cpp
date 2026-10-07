@@ -335,7 +335,11 @@ MainWindow::~MainWindow()
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
     if (performance_metrics_timer_ != nullptr) performance_metrics_timer_->stop();
     if (audio_keyframe_worker_) audio_keyframe_worker_->cancelAndWait();
-    if (export_worker_) export_worker_->cancelAndWait();
+    if (export_worker_) {
+        export_worker_->cancelAndWait();
+        export_worker_.reset();
+    }
+    gpu_export_surface_.reset();
     if (preview_renderer_) preview_renderer_->stopAndWait();
     preview_renderer_.reset();
     gpu_composition_surface_.reset();

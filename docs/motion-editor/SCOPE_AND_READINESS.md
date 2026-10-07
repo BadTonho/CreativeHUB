@@ -11,13 +11,14 @@ keyframes are editable, with a Graph Editor for bounded cubic Bezier easing.
 Native text, rectangle, and ellipse layers have content
 inspectors and static content; their transforms and transform keyframes work
 through the same timeline and preview path. Motion Studio rasterizes that
-content with Qt painting on its preview worker before composition with the
-shared CPU compositor by default or the experimental OpenGL adapter when
-`CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`; failures fall back to CPU. The GPU
+content with Qt painting on its preview or export worker before composition
+with the shared CPU compositor by default or the experimental OpenGL adapter
+when `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`; failures fall back to CPU. The GPU
 composition shader applies Color Adjustment-only stacks before blending;
 stacks containing enabled Gaussian Blur use the shared ordered GPU effect path
-when supported, with bounded scratch storage and CPU fallback. Video export remains CPU
-composed. Manual Save, Save As, and Open use a
+when supported, with bounded scratch storage and CPU fallback. Offline export
+uses the same opt-in path and reads back RGBA for the existing CPU encoder.
+Manual Save, Save As, and Open use a
 versioned `.motion`
 document that includes the Media Pool. The writer emits v4, reads v1-v3 with
 empty effect stacks, reads v1 and v2 with old keyframes migrated as Linear,
@@ -283,10 +284,13 @@ The cross-platform CPU and memory sampler is owned by the shared
 Video Editor continues to use its existing preference and log schema through
 compatibility headers. Motion Studio keeps its stage aggregation, one-second
 activity policy, and export summaries application-owned. Export jobs log one
-summary on completion, failure, or cancellation with elapsed time, rendered
-frames, render and encode/write timings, output dimensions/rate, achieved
-frames per second, and realtime factor. Cancellation is an informational
-outcome; technical export failures continue through the existing error log.
+schema-2 summary on completion, failure, or cancellation with elapsed time,
+rendered frames, render and encode/write timings, output dimensions/rate,
+achieved frames per second, and realtime factor. The summary also records the
+GPU request and used backend, GPU/fallback frame counts, failures,
+upload/readback bytes, and upload/draw/readback averages. Cancellation is an
+informational outcome; technical export failures continue through the existing
+error log.
 
 Performance records do not include project/media paths, layer names, or text
 content. GPU utilization and device memory are not sampled. These diagnostics
@@ -297,8 +301,14 @@ It identifies Gaussian Blur as the main preview bottleneck in a 1080p, two-layer
 workload. Representative small, medium, and heavy compositions, startup,
 seek/paint latency, memory limits, and the approved five-layer benchmark still
 require measured validation.
-On Windows, toggle the option, seek and play compositions, export a job, then
-use **Help > Open Log Folder** to inspect samples and job summaries.
+On Windows, toggle the environment variable, seek and play compositions, export
+a job, then use **Help > Open Log Folder** to inspect preview samples and
+schema-2 export summaries. For GPU export, use the same saved 3,405-frame
+composition and settings for three runs with the variable unset and three runs
+with `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. Compare median end-to-end FPS,
+render/write timing, backend/fallback counts, transfer bytes, and output parity.
+Claim a performance improvement only if it repeats; GPU mode remains opt-in.
+Native macOS and Linux driver validation is pending.
 For a controlled Windows comparison, use the same 1920 × 1080, 60 fps
 composition with radius-10 Gaussian Blur and neutral Color Adjustment in
 automatic mode and with `CREATIVE_SUITE_MOTION_EFFECT_WORKERS` set to `1`, `2`,

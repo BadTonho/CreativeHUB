@@ -1,7 +1,8 @@
 # Motion Studio Windows Performance Results — 2026-10-07
 
-This report analyzes existing Motion Studio and CTest logs from the Windows
-reference PC. No tests or exports were rerun for this analysis.
+This report preserves the original Motion Studio measurements and records the
+GPU export integration verification. The original 3,405-frame performance run
+was not repeated during implementation.
 
 ## Test and export run
 
@@ -10,7 +11,11 @@ failures**, including the Motion Studio export, preview, UI, persistence, and
 performance-metrics suites. These are correctness results; they do not measure
 interactive throughput.
 
-The Motion Studio log records one completed 1920 × 1080, 60 fps export:
+The 2026-10-07 Windows Release integration build passed all 11 Motion Studio
+CTest targets, including export and GPU composition. These correctness results
+do not measure full-project GPU export throughput.
+
+The Motion Studio log records one completed 1920 × 1080, 60 fps CPU export:
 
 | Metric | Result |
 | --- | ---: |
@@ -28,7 +33,8 @@ about 1.78 seconds per second of finished video. Frame rendering accounts for
 about 76% of the combined average render and write time; encoding/write time is
 about 24%. The export record does not include its layer/effect configuration,
 so its throughput cannot be attributed to the preview composition below.
-Motion Studio offline export uses the CPU path.
+This recorded export predates the opt-in GPU export integration and remains a
+historical CPU baseline, not a paired GPU comparison.
 
 ## Interactive preview
 
@@ -81,10 +87,33 @@ memory pressure.
   still useful for identifying the blur bottleneck; they should not be
   generalized to other composition sizes or hardware.
 
+## GPU export follow-up
+
+Motion Studio now uses the same experimental OpenGL compositor in offline
+export when `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. CPU remains the default.
+Each export summary uses schema 2 and records the requested and used backend,
+GPU-composed and CPU-fallback frames, failures, uploaded/readback bytes, and
+average upload, draw-submission, and readback times. The output still crosses
+the existing RGBA readback boundary before CPU FFmpeg encoding.
+
+Automated export coverage exercises no-surface CPU fallback, frame parity,
+worker lifecycle, and GPU summary fields. No new run of the maintainer's
+3,405-frame project was recorded, so no GPU speedup is claimed. The prior
+33.79 fps CPU export does not identify its layer/effect setup and should be
+treated only as the existing local baseline.
+
+For the paired manual measurement, use the same saved 3,405-frame composition,
+output dimensions, frame rate, encoder, and quality for three CPU exports with
+the environment variable unset and three GPU-requested exports with it set to
+`1`. Compare median end-to-end elapsed time and achieved FPS, along with render
+and write time, GPU/fallback frames, transfer bytes, and output parity. Record
+each schema-2 summary. Claim a speedup only when the end-to-end improvement
+repeats. Native macOS and Linux driver/performance checks remain pending.
+
 ## Recommended performance focus
 
 Profile and improve Gaussian Blur first. Compare the existing worker settings
 with the same composition, then compare CPU and opt-in GPU preview using the
-current diagnostics schema. Keep export as a separate measurement because it
-uses the CPU frame-rendering path. Do not prioritize Color Adjustment or
-composition changes based on these results.
+current diagnostics schema. Measure GPU export separately from preview; it
+still includes source upload and full-frame readback before encoding. Do not
+prioritize Color Adjustment or composition changes based on these results.
