@@ -58,6 +58,12 @@ Before distributing binaries, the project must record the exact modules,
 codecs, licenses, deployment files, and source/relinking obligations required
 by the chosen configuration.
 
+The current Windows development Release media capabilities and runtime
+licensing notes are recorded in the
+[Windows Release Media Capability Inventory](../MEDIA_CAPABILITIES_WINDOWS_RELEASE.md).
+That snapshot is not a distribution manifest; repeat it against the actual
+package for each target platform before release.
+
 When `BUILD_IMAGE_EDITOR` is enabled, the Video Editor main-window test links
 the Image Editor core to generate a real masked PNG producer fixture. The
 Video Editor application itself gains no Image Editor dependency. The fixture

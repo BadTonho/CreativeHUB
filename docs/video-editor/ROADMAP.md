@@ -145,12 +145,12 @@ tasks.
 - [x] C++20 Qt Widgets application with FFmpeg media probing and decoding.
 - [x] Media Browser with bins, project-owned labels, duplicate-path handling,
   offline state, and restoration by reimport.
-- [-] Direct operating-system file drops into the Media Browser and Timeline
+- [x] Direct operating-system file drops into the Media Browser and Timeline
   are implemented and have automated viewport-level coverage. Browser drops
   honor the selected or target bin and fall back to Unsorted when no concrete
   bin is selected; ordered Timeline batches import
-  asynchronously and place as one Undo/Redo edit. Windows Explorer acceptance
-  remains pending; see [Regression Testing](REGRESSION_TESTING.md).
+  asynchronously and place as one Undo/Redo edit. Windows Explorer validation
+  passed on 2026-10-07; see [Regression Testing](REGRESSION_TESTING.md).
 - [x] Multi-track timeline with absolute positions, gaps, cross-track overlap,
   clip selection and movement, split, trim, delete, and bounded Undo/Redo.
 - [x] Video and static raster-image clips, manual text clips, transforms,
@@ -191,10 +191,12 @@ Complete these gates after the foundation decisions in section 1 are
 recorded. A feature counts as complete when its automated regression coverage
 and required manual validation pass.
 
-- [ ] Inventory the actual media capabilities of the intended shipped build:
-  FFmpeg demuxers, video and audio decoders, muxers and encoders, plus available
-  Qt image-format plugins. Record capability and license constraints without
-  turning the inventory into a fixed application-level allow-list.
+- [x] Inventory the current Windows development Release runtime: FFmpeg
+  demuxers, video/audio decoders, muxers/encoders, Qt image-reader formats, and
+  license constraints are recorded in
+  [Windows Release Media Capability Inventory](MEDIA_CAPABILITIES_WINDOWS_RELEASE.md).
+  The inventory is not an application-level allow-list; revalidate each final
+  distribution package and platform before making release capability claims.
 - [ ] Replace hardcoded still-image extension checks with capability-based
   detection from the deployed Qt image plugins. Define how multi-frame images
   retain timing before importing them as animated Timeline clips.
@@ -215,11 +217,11 @@ and required manual validation pass.
   keeps later clips in place; Ripple Delete moves the selected track's
   sequence, follows linked companions, and stops at collisions without removing
   blockers. See the Timeline contract and manual regression checklist.
-- [-] Complete Windows Explorer validation for direct operating-system file
-  drops. Automated coverage now exercises the Media Browser and Timeline
-  viewports used by the application; confirm real video, audio, image, bin, and
-  ordered Timeline drops in the manual checklist. Keep the import dialog and
-  internal Media Browser drag workflow available.
+- [x] Complete Windows Explorer validation for direct operating-system file
+  drops. Automated coverage exercises the Media Browser and Timeline viewports
+  used by the application. The maintainer confirmed real video, audio, image,
+  bin, and ordered Timeline drops, including Undo/Redo, on 2026-10-07. Keep the
+  import dialog and internal Media Browser drag workflow available.
 - [x] Repeatedly migrate the same long-lived `.csp` project when advancing
   persisted-format versions. The owner reports doing this since the application
   was created and says the migrations have worked.
