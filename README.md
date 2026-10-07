@@ -4,7 +4,7 @@
 
 An open-source, lightweight, cross-platform creative ecosystem for **video editing**, **raster image design**, **motion graphics compositing**, and **centralized project management**. Built with native C++20, Qt 6, and hardware-accelerated rendering pipelines, the suite targets **Windows**, **macOS**, and **Linux**.
 
-**Jump to:** [The Vision & Proposal](#the-vision--core-proposal) | [Applications](#applications-overview) | [Interoperability & Workflows](#interoperability--connected-workflows) | [Core Principles](#core-engineering-principles) | [Build from Source](#build-from-source) | [Regression Tests](#regression-tests) | [Keyboard Shortcuts](#keyboard-shortcuts) | [Documentation](#documentation-directory) | [License](#license)
+**Jump to:** [The Vision & Proposal](#the-vision--core-proposal) | [Applications](#applications-overview) | [Interoperability & Workflows](#interoperability--connected-workflows) | [Core Principles](#core-engineering-principles) | [Build from Source](#build-from-source) | [Regression Tests](#regression-tests) | [Documentation](#documentation-directory) | [License](#license)
 
 ---
 
@@ -198,29 +198,6 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 For test policies and validation checklists, see [`docs/REGRESSION_POLICY.md`](docs/REGRESSION_POLICY.md) and [`docs/video-editor/REGRESSION_TESTING.md`](docs/video-editor/REGRESSION_TESTING.md).
-
----
-
-## Keyboard Shortcuts
-
-A complete directory of user-facing shortcuts is maintained in [`docs/video-editor/SHORTCUTS.md`](docs/video-editor/SHORTCUTS.md).
-
-### Video Editor Common Shortcuts
-
-| Action | Shortcut |
-| :--- | :--- |
-| **Play / Pause** | `Space` |
-| **Previous Frame / Next Frame** | `Left` / `Right` |
-| **Jump to Start / End** | `Home` / `End` |
-| **Split Clip at Playhead** | `Ctrl + K` |
-| **Blade Tool (Toggle)** | `B` |
-| **Selection Tool** | `V` |
-| **Delete Selected Clip** | `Delete` |
-| **Nudge Clip 1 Frame** | `Ctrl + Left` / `Ctrl + Right` |
-| **Move Clip (Between Tracks / Timeline)** | `Alt + Drag` |
-| **Undo / Redo** | `Ctrl + Z` / `Ctrl + Y` |
-| **Save Project** | `Ctrl + S` |
-
 ---
 
 ## Documentation Directory
@@ -234,6 +211,7 @@ Before contributing, please read the repository guidelines in [`AGENTS.md`](AGEN
 | | [Product & Distribution Architecture](docs/PRODUCT_DISTRIBUTION.md) | Hub architecture, app recovery, and release strategies *(Portuguese planning doc)*. |
 | | [Windows Update Contract](docs/WINDOWS_UPDATES.md) | Update catalog format, verification, staging, and rollback mechanics. |
 | **Video Editor** | [Video Editor Roadmap](docs/video-editor/ROADMAP.md) | Milestones, stabilization, and release criteria. |
+| | [Keyboard Shortcuts](docs/video-editor/SHORTCUTS.md) | User-facing keyboard shortcut directory. |
 | | [GPU Acceleration Plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | OpenGL composition pipeline, textures, and export integration. |
 | | [GPU Export Pipeline](docs/video-editor/GPU_EXPORT.md) | Resource management and independent export metrics. |
 | | [Direct GPU Preview Delivery](docs/video-editor/GPU_TEXTURE_DELIVERY.md) | Shared contexts, texture leases, fences, and diagnostics. |
