@@ -1,181 +1,212 @@
 # Creative Suite (Working Title)
 
-> The project name is temporary; a permanent name will be chosen later.
+> **Note:** The project name is temporary; a permanent identity will be established later.
 
-An open-source desktop suite for video editing, raster image editing, and motion
-design. The project prioritizes responsive local workflows and targets Windows,
-macOS, and Linux.
+An open-source, lightweight, cross-platform creative ecosystem for **video editing**, **raster image design**, **motion graphics compositing**, and **centralized project management**. Built with native C++20, Qt 6, and hardware-accelerated rendering pipelines, the suite targets **Windows**, **macOS**, and **Linux**.
 
-**Jump to:** [Applications](#applications) | [Build](#build-from-source) |
-[Tests](#regression-tests) | [Documentation](#documentation-and-contribution) |
-[License](#license)
+**Jump to:** [The Vision & Proposal](#the-vision--core-proposal) | [Applications](#applications-overview) | [Interoperability & Workflows](#interoperability--connected-workflows) | [Core Principles](#core-engineering-principles) | [Build from Source](#build-from-source) | [Regression Tests](#regression-tests) | [Keyboard Shortcuts](#keyboard-shortcuts) | [Documentation](#documentation-directory) | [License](#license)
 
-## Applications
+---
 
-| Icon | Application | Status | Purpose |
-| --- | --- | --- | --- |
-| <img src="docs/assets/app-icons/video-editor.png" alt="Temporary Video Editor icon" width="56"> | [Video Editor](docs/video-editor/ROADMAP.md) | Beta 0.1.0 | Multitrack video and audio editing, compositing, and export. |
-| <img src="docs/assets/app-icons/image-editor.png" alt="Temporary Image Editor icon" width="56"> | [Image Editor](docs/image-editor/ROADMAP.md) | Beta 0.1.0 | Layered raster editing, masks, and linked image layers with `.cimg` documents and PNG/JPEG export. |
-| <img src="docs/assets/app-icons/motion-studio.png" alt="Temporary Motion Studio icon" width="56"> | [Motion Studio](docs/motion-editor/ROADMAP.md) | Beta 0.1.0; validation in progress | Motion design, animation, and advanced compositing. |
+## The Vision & Core Proposal
 
-The icons above are temporary product assets. Each application loads its PNG
-icon from bundled resources for the runtime window. Windows executable icons
-are generated separately as multi-resolution `.ico` files, including for
-Motion Studio.
+Creative tools are essential to modern storytelling, communication, and digital art. However, today's dominant proprietary creative suites (such as Adobe Creative Cloud) increasingly burden creators with:
 
-The three tracks may be developed in parallel. Video Editor stability remains a
-priority. Cross-application work depends on validated interfaces and regression
-coverage in both the producer and consumer applications.
+- **Aggressive Subscription Walls:** Expensive recurring licenses that lock access to your own work if a payment lapses.
+- **Resource Bloat & Sluggish Runtimes:** Heavy background telemetry daemons, constant DRM checks, and memory-hungry web-wrapper shells (Electron) that consume gigabytes of RAM before any project even loads.
+- **Cloud Lock-in & Privacy Loss:** Forced cloud synchronization, mandatory user accounts, and telemetry tracking creative files and usage patterns.
+- **Brittle Ecosystem Coupling:** Monolithic installations where updating one component risks corrupting project environments or breaking dependencies.
 
-### Current work
+### What This Project Offers
 
-- **Video Editor:** the desktop shell, multitrack timeline, FFmpeg playback,
-  audio mixing, transforms, keyframes, transitions, text overlays, and `.csp`
-  project persistence are implemented. Experimental GPU timeline composition is
-  available in Settings > General, disabled by default with automatic direct
-  texture delivery when supported and RGBA/CPU fallbacks;
-  export defaults to CPU with independent experimental GPU composition per queue
-  item, including 4K UHD. See the [Video Editor roadmap](docs/video-editor/ROADMAP.md).
-- **Image Editor:** Windows users have confirmed the current Release workflow,
-  including layers and groups, editable shapes, object selection, save/reopen,
-  and export. Imported images support movement, scaling, free rotation, and fixed
-  masks with `.cimg` v11, preserving v1–v10 reads. Windows packaging and linked-image acceptance remain in progress;
-  macOS and Linux validation is deferred. See the [Image Editor roadmap](docs/image-editor/ROADMAP.md).
-- **Motion Studio:** its standalone Qt workspace has a Media Pool, image/video
-  timeline layers, native text/rectangle/ellipse layers, CPU preview, playback,
-  transform keyframe editing with a Bezier Graph Editor, ordered per-layer
-  Gaussian Blur and Color Adjustment effects, and bounded Undo/Redo.
-  Manual Save/Open and configurable autosave/recovery use its own versioned
-  `.motion` v4 format and a separate recovery wrapper. Its first video export
-  offers FFmpeg container,
-  encoder, resolution, frame-rate, and quality settings, with progress and
-  cancellation. Export is opaque and contains no audio; advanced effects,
-  alpha export, and platform validation remain open. C++ and Qt 6 remain
-  provisional choices.
-  It links shared libraries and builds without the Video or Image Editor
-  targets. See the
-  [scope and readiness guide](docs/motion-editor/SCOPE_AND_READINESS.md),
-  [reuse plan](docs/motion-editor/REUSE_PLAN.md),
-  [native format specification](docs/motion-editor/FORMAT.md), and
-  [Motion Studio roadmap](docs/motion-editor/ROADMAP.md).
+This project delivers a **professional, modern, 100% free and open-source alternative** designed around four foundational pillars:
 
-## Project principles
+1. **Freedom & Transparency (GPL-3.0-or-later):** A completely open-source suite with no subscriptions, no paywalled features, and no vendor lock-in.
+2. **Local-First & Absolute Privacy:** Operates entirely offline on your workstation. Zero required accounts, zero mandatory cloud synchronization, and zero telemetry on your creative media or project assets. Your files stay strictly yours.
+3. **Pure Native Performance:** Engineered in modern **C++20** and **Qt 6** with direct GPU hardware acceleration (OpenGL). Fast startup times, lean memory footprints, and fluid timeline responsiveness—even on modest laptop hardware.
+4. **Modular Yet Interoperable Ecosystem:** Independent, focused applications that excel at their specific tasks, connected by non-destructive asset linking, versioned open project formats, and a shared high-performance core library.
 
-- Native desktop applications with local-first workflows.
-- Shared libraries only where multiple applications have a stable, validated
-  use for the same capability.
-- Cross-platform support, efficient media handling, structured logs, and
-  automated regression coverage.
+---
+
+## Applications Overview
+
+The suite is composed of four coordinated desktop applications:
+
+| Icon | Application | ID | Status | Primary Purpose |
+| :---: | :--- | :---: | :---: | :--- |
+| <img src="docs/assets/app-icons/hub.png" alt="Creative Suite Hub icon" width="48"> | **Creative Suite Hub** | `hub` | Beta 0.1.0 | Suite command center: project launching, recent files, project backup vault, storage cache cleanup, and isolated per-app updates. |
+| <img src="docs/assets/app-icons/video-editor.png" alt="Video Editor icon" width="48"> | [**Video Editor**](docs/video-editor/ROADMAP.md) | `video-editor` | Beta 0.1.0 | Multitrack audiovisual editing (NLE), trimming, GPU-accelerated compositing, audio mixing, text overlays, and FFmpeg export. |
+| <img src="docs/assets/app-icons/image-editor.png" alt="Image Editor icon" width="48"> | [**Image Editor**](docs/image-editor/ROADMAP.md) | `image-editor` | Beta 0.1.0 | Layered raster editing, vector shapes, layer masks, and atomic linked-image handoff with the Video Editor. |
+| <img src="docs/assets/app-icons/motion-studio.png" alt="Motion Studio icon" width="48"> | [**Motion Studio**](docs/motion-editor/ROADMAP.md) | `motion-editor` | Beta 0.1.0 | Motion graphics, Bezier Graph Editor curve animation, layer compositing, Gaussian blur/color effects, and video export. |
+
+> *Note:* App icons are temporary product assets. Executable icons on Windows are generated as multi-resolution `.ico` binaries.
+
+---
+
+### Deep Dive into the Suite Components
+
+#### 1. Creative Suite Hub (`hub`)
+The central desktop management console and launcher for the entire creative ecosystem:
+- **App Launcher & Discovery:** Scans the workstation for installed suite applications, verifies operational health, and launches editors with appropriate launch profiles.
+- **Unified Recent Projects:** Aggregates recent documents across all editors (`.csp`, `.cimg`, `.motion`), with thumbnail previews, app badges, and direct project opening.
+- **Resilient Per-App Updates:** Inspects release catalogs, validates cryptographic signatures and SHA-256 integrity, schedules background updates per application, and provides automated rollback protection if an installation or launch fails.
+- **Project Backup Vault:** Automatically or manually captures timestamped project snapshots to prevent accidental data loss.
+- **Safe Storage Manager:** Analyzes disk space used by temporary render files and media caches across the suite, providing one-click safe cleanup without touching user project files.
+- See the [Hub regression documentation](docs/hub/REGRESSION_TESTING.md) and [product distribution architecture](docs/PRODUCT_DISTRIBUTION.md).
+
+#### 2. Video Editor (`video-editor`)
+A full-featured multitrack non-linear audiovisual editor (NLE) tailored for storytelling and rapid assembly:
+- **Multitrack Timeline:** Non-linear audio and video tracks, razor/blade tools, ripple edits, clip nudging, and snapping.
+- **FFmpeg Decoding & Playback:** High-performance video decoding supporting standard broadcast and web codecs.
+- **Hardware-Accelerated Compositing:** Experimental GPU timeline rendering (Settings > General) with direct texture delivery and fallback to robust CPU composition.
+- **Transformations & Keyframing:** Spatial keyframing for position, scale, rotation, and opacity transitions.
+- **Audio Mixing:** Multi-channel playback, volume envelopes, and track level controls.
+- **4K UHD Export Engine:** Configurable FFmpeg container and encoder pipelines with independent per-job CPU or GPU compositing.
+- See the [Video Editor roadmap](docs/video-editor/ROADMAP.md) and [architecture guide](docs/video-editor/ARCHITECTURE.md).
+
+#### 3. Image Editor (`image-editor`)
+A responsive raster canvas optimized for asset creation, photo manipulation, and graphics design:
+- **Layer & Group Management:** Multi-layer hierarchy with group nesting, visibility toggling, and opacity blending.
+- **Raster Masks & Straight Alpha:** Non-destructive layer masks (`.cimg` format) preserving transparent cutouts.
+- **Vector Shapes & Drawing:** Vector rectangles, ellipses, text layers, and freehand drawing tools.
+- **Transformations & Selections:** Bounding-box selection, scaling, translation, and free rotation.
+- **Linked Asset Companion Workflow:** Directly open and edit image clips referenced by the Video Editor; saving atomically updates the video timeline without destructive raster flattening.
+- See the [Image Editor roadmap](docs/image-editor/ROADMAP.md) and [scope specification](docs/image-editor/SCOPE.md).
+
+#### 4. Motion Studio (`motion-editor`)
+A dedicated motion design and 2D animation workstation for complex visual compositions:
+- **Media Pool & Composition Timeline:** Dedicated media library, nested composition timelines, and multi-layer staging.
+- **Bezier Graph Editor:** Precise curve manipulation for smooth velocity, easing, and spatial animation trajectories.
+- **Native Shape & Text Engine:** Animatable vector paths, geometric primitives, and typography layers.
+- **Layered Effects Pipeline:** Chained per-layer visual filters, including real-time Gaussian Blur and Color Adjustments.
+- **Video Export:** High-quality offline video rendering via FFmpeg with custom resolution, framerate, and codec presets.
+- See the [Motion Studio roadmap](docs/motion-editor/ROADMAP.md) and [scope & readiness guide](docs/motion-editor/SCOPE_AND_READINESS.md).
+
+---
+
+## Interoperability & Connected Workflows
+
+Unlike fragmented toolsets where moving assets between applications requires manual export, rasterization, and re-import, the suite features **non-destructive interoperability**:
+
+```mermaid
+graph LR
+    Hub[Creative Suite Hub] -->|Launches & Backs Up| VE[Video Editor]
+    Hub -->|Launches & Backs Up| IE[Image Editor]
+    Hub -->|Launches & Backs Up| MS[Motion Studio]
+    
+    VE -.->|Linked Image Handoff| IE
+    IE -.->|Atomically Saves & Live Refreshes| VE
+    
+    MS -.->|Rendered Compositions| VE
+```
+
+1. **Linked Image Editing:** Right-clicking an image clip in the Video Editor opens it directly in the Image Editor. The source asset remains intact, while a companion `.cimg` document tracks the layered edits. When saved, the Video Editor immediately invalidates its frame cache and live-refreshes the clip in the timeline.
+2. **Open, Versioned Project Formats:**
+   - `.csp` (Video Editor Project)
+   - `.cimg` (Image Editor Document)
+   - `.motion` (Motion Studio Composition)
+   All formats are strictly versioned, human-readable, and backward-compatible to guarantee your creative archives can be opened years from now.
+3. **Resilient Data Protection:** Automatic autosave snapshots and separate recovery wrappers ensure that system crashes or power interruptions never corrupt master project files.
+
+---
+
+## Core Engineering Principles
+
+- **Shared Core Libraries (`libs/`):** Code reuse is achieved via modular CMake static libraries (`media-frame`, `video-media`, `video-encoding`, `media-assets`, `animation`, `composition`, `diagnostics`, `updater`, `system-monitor`, `shortcuts`). No monolithic entanglement or bloated shared runtimes.
+- **Cross-Platform by Design:** Built from day one for Windows, macOS, and Linux without platform lock-in. Platform-specific APIs are isolated behind clean adapter layers.
+- **Predictable, Isolated Updates:** Each application can update independently. Updates preserve user preferences, project documents, and recovery snapshots. If an update fails, automated rollback restores the prior working installation.
+- **Strict Automated Regression Policy:** Every user-facing capability, bug fix, and module boundary requires automated regression test coverage before being accepted into the codebase.
 
 ---
 
 ## Build from Source
 
-### Requirements
+### Prerequisites
 
 - **CMake** (version 3.24 or newer)
 - **C++20 compliant compiler** (MSVC 2022 on Windows, GCC 11+ on Linux, or Clang 14+ on macOS)
-- **Qt 6** (Widgets required; Multimedia optional for audio sink)
+- **Qt 6** (Qt6 Core, Widgets, OpenGL, OpenGLWidgets; Multimedia optional for audio sink)
 - **FFmpeg** (libraries: `avformat`, `avcodec`, `avutil`, `swscale`, `swresample`)
-- **vcpkg** (recommended for automatic dependency management)
+- **vcpkg** (recommended for cross-platform dependency management)
 
-### Configure and build
+### 1. Clone the Repository
 
-1. **Clone the repository:**
-   ```bash
-   # Replace the placeholders with the clone URL and folder shown by the repository host.
-   git clone <repository-url>
-   cd <repository-folder>
-   ```
+```bash
+git clone https://github.com/BadTonho/AdobeShoppee.git
+cd AdobeShoppee
+```
 
-2. **Configure with CMake and vcpkg:**
-   ```bash
-   cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
-   ```
-   Replace `/path/to/vcpkg` with the location of your vcpkg checkout. On
-   Windows, use forward slashes in the path, for example `C:/dev/vcpkg`.
+### 2. Configure with CMake
 
-3. **Build the application you want:**
-   ```bash
-   # Video Editor
-   cmake --build build --config Release --target creative-suite-main-editor
+Using vcpkg toolchain integration:
 
-   # Image Editor
-   cmake --build build --config Release --target creative-suite-image-editor
+```bash
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+```
 
-   # Motion Studio
-   cmake --build build --config Release --target creative-suite-motion-editor
-   ```
+*(On Windows, use forward slashes for the toolchain path, e.g., `C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake`)*
 
-   To configure Motion Studio as the only application target:
-   ```bash
-   cmake -S . -B build-motion -DBUILD_VIDEO_EDITOR=OFF -DBUILD_IMAGE_EDITOR=OFF -DBUILD_MOTION_EDITOR=ON
-   cmake --build build-motion --config Release --target creative-suite-motion-editor
-   ```
+### 3. Build Applications
 
-4. **Run the Video Editor:**
-   ```bash
-   # On Windows:
-   .\build\apps\video-editor\Release\creative-suite-video-editor.exe
+You can build the entire suite or individual applications:
 
-   # On Linux:
-   ./build/apps/video-editor/creative-suite-video-editor
+```bash
+# Build the Creative Suite Hub
+cmake --build build --config Release --target creative-suite-hub
 
-   # On macOS:
-   open build/apps/video-editor/creative-suite-video-editor.app
-   ```
+# Build the Video Editor
+cmake --build build --config Release --target creative-suite-main-editor
 
-5. **Run the Image Editor:**
-   ```powershell
-   # On Windows:
-   .\build\apps\image-editor\Release\creative-suite-image-editor.exe
-   ```
-   ```bash
-   # On Linux:
-   ./build/apps/image-editor/creative-suite-image-editor
+# Build the Image Editor
+cmake --build build --config Release --target creative-suite-image-editor
 
-   # On macOS:
-   open build/apps/image-editor/creative-suite-image-editor.app
-   ```
+# Build Motion Studio
+cmake --build build --config Release --target creative-suite-motion-editor
+```
 
-6. **Run Motion Studio:**
-   ```powershell
-   # On Windows:
-   .\build\apps\motion-editor\Release\creative-suite-motion-editor.exe
-   ```
-   ```bash
-   # On Linux:
-   ./build/apps/motion-editor/creative-suite-motion-editor
+To configure and build only a single application (e.g., Motion Studio):
+```bash
+cmake -S . -B build-motion -DBUILD_VIDEO_EDITOR=OFF -DBUILD_IMAGE_EDITOR=OFF -DBUILD_CREATIVE_HUB=OFF -DBUILD_MOTION_EDITOR=ON
+cmake --build build-motion --config Release --target creative-suite-motion-editor
+```
 
-   # On macOS:
-   open build/apps/motion-editor/creative-suite-motion-editor.app
-   ```
+### 4. Run the Applications
+
+Executable outputs are generated under `build/apps/<application-id>/`:
+
+| Application | Windows | Linux | macOS |
+| :--- | :--- | :--- | :--- |
+| **Hub** | `.\build\apps\hub\Release\creative-suite-hub.exe` | `./build/apps/hub/creative-suite-hub` | `open build/apps/hub/creative-suite-hub.app` |
+| **Video Editor** | `.\build\apps\video-editor\Release\creative-suite-video-editor.exe` | `./build/apps/video-editor/creative-suite-video-editor` | `open build/apps/video-editor/creative-suite-video-editor.app` |
+| **Image Editor** | `.\build\apps\image-editor\Release\creative-suite-image-editor.exe` | `./build/apps/image-editor/creative-suite-image-editor` | `open build/apps/image-editor/creative-suite-image-editor.app` |
+| **Motion Studio** | `.\build\apps\motion-editor\Release\creative-suite-motion-editor.exe` | `./build/apps/motion-editor/creative-suite-motion-editor` | `open build/apps/motion-editor/creative-suite-motion-editor.app` |
 
 ---
 
 ## Regression Tests
 
-The project enforces automated regression test coverage for all application logic and module boundaries.
+The project enforces automated test coverage for all application logic, shared libraries, and module boundaries.
 
-On Windows (PowerShell):
+**On Windows (PowerShell):**
 ```powershell
 .\scripts\run-regression-tests.ps1 -Configuration Release
 ```
 
-Or directly via CTest:
+**Via CTest (Cross-Platform):**
 ```bash
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-For testing practices, refer to [`docs/video-editor/REGRESSION_TESTING.md`](docs/video-editor/REGRESSION_TESTING.md).
+For test policies and validation checklists, see [`docs/REGRESSION_POLICY.md`](docs/REGRESSION_POLICY.md) and [`docs/video-editor/REGRESSION_TESTING.md`](docs/video-editor/REGRESSION_TESTING.md).
 
 ---
 
 ## Keyboard Shortcuts
 
-A complete and continuously updated directory of all user-facing shortcuts is maintained in [`docs/video-editor/SHORTCUTS.md`](docs/video-editor/SHORTCUTS.md).
+A complete directory of user-facing shortcuts is maintained in [`docs/video-editor/SHORTCUTS.md`](docs/video-editor/SHORTCUTS.md).
 
-Common shortcuts in the Video Editor:
+### Video Editor Common Shortcuts
+
 | Action | Shortcut |
 | :--- | :--- |
 | **Play / Pause** | `Space` |
@@ -192,32 +223,31 @@ Common shortcuts in the Video Editor:
 
 ---
 
-## Documentation and Contribution
+## Documentation Directory
 
-Before contributing, please read the project guidelines outlined in [`AGENTS.md`](AGENTS.md). Project and contributor documentation normally uses English. The suite distribution proposal linked below is a Portuguese planning note requested by the maintainer.
+Before contributing, please read the repository guidelines in [`AGENTS.md`](AGENTS.md).
 
-| Guide | What it covers |
-| --- | --- |
-| [Video Editor architecture](docs/video-editor/ARCHITECTURE.md) | Video Editor structure and modules. |
-| [Video Editor subsystem docs](docs/video-editor/architecture/) | Technical boundaries and subsystem behavior. |
-| [Video Editor roadmap](docs/video-editor/ROADMAP.md) | Current work and release gates. |
-| [Video Editor GPU plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | First consumer of the shared compositor: optional timeline composition, direct texture delivery and per-job GPU export through 4K implemented; broader platform acceptance pending. |
-| [Video Editor GPU export](docs/video-editor/GPU_EXPORT.md) | Per-job selection, resource ownership, CPU fallback and independent export metrics. |
-| [GPU export results](docs/video-editor/GPU_EXPORT_RESULTS.md) | Native parity, builds/tests, repeated CPU/GPU measurements and remaining platform checks. |
-| [Direct GPU preview delivery](docs/video-editor/GPU_TEXTURE_DELIVERY.md) | Shared contexts, texture leases, bounded buffers, fences, asynchronous recovery and diagnostics. |
-| [Regression prevention policy](docs/REGRESSION_POLICY.md) | Required test coverage and gates for all current and future applications. |
-| [Video Editor regression tests](docs/video-editor/REGRESSION_TESTING.md) | Detailed automated coverage and local validation checklist. |
-| [Image Editor scope](docs/image-editor/SCOPE.md) | Approved first editing-release workflow, current boundary, and validation profile. |
-| [Image Editor roadmap](docs/image-editor/ROADMAP.md) | Image Editor milestones and validation. |
-| [Image Editor GPU plan](docs/image-editor/GPU_ACCELERATION_PLAN.md) | Planned transparent layer/mask composition, interactive editing, export/publication, and acceptance stages; implementation deferred. |
-| [Motion Studio scope and readiness](docs/motion-editor/SCOPE_AND_READINESS.md) | Initial users, MVP boundary, capability ownership, and compatibility policy. |
-| [Motion Studio reuse plan](docs/motion-editor/REUSE_PLAN.md) | Shared library boundaries and application ownership. |
-| [Motion Studio native format](docs/motion-editor/FORMAT.md) | Provisional `.motion` version 4 JSON layout, v1-v3 migration, curve and effect data, and save/open behavior. |
-| [Motion Studio roadmap](docs/motion-editor/ROADMAP.md) | Provisional scope and technical milestones. |
-| [Motion Studio GPU plan](docs/motion-editor/GPU_ACCELERATION_PLAN.md) | Planned stages for shared GPU composition, effects, and preview/export integration; implementation deferred. |
-| [Cross-application compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared interfaces and handoff contracts. |
-| [Product and distribution architecture (Portuguese planning document)](docs/PRODUCT_DISTRIBUTION.md) | Provisional boundaries for the future Hub, its integrated recovery feature and standalone recovery tool, and GitHub releases. |
-| [Technical prototype comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md) | Language and technology evaluation. |
+| Category | Guide | Description |
+| :--- | :--- | :--- |
+| **Architecture** | [Video Editor Architecture](docs/video-editor/ARCHITECTURE.md) | Video Editor modules and subsystem architecture. |
+| | [Cross-Application Compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared contracts, linked-document handoffs, and extraction criteria. |
+| | [Product & Distribution Architecture](docs/PRODUCT_DISTRIBUTION.md) | Hub architecture, app recovery, and release strategies *(Portuguese planning doc)*. |
+| | [Windows Update Contract](docs/WINDOWS_UPDATES.md) | Update catalog format, verification, staging, and rollback mechanics. |
+| **Video Editor** | [Video Editor Roadmap](docs/video-editor/ROADMAP.md) | Milestones, stabilization, and release criteria. |
+| | [GPU Acceleration Plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | OpenGL composition pipeline, textures, and export integration. |
+| | [GPU Export Pipeline](docs/video-editor/GPU_EXPORT.md) | Resource management and independent export metrics. |
+| | [Direct GPU Preview Delivery](docs/video-editor/GPU_TEXTURE_DELIVERY.md) | Shared contexts, texture leases, fences, and diagnostics. |
+| **Image Editor** | [Image Editor Scope](docs/image-editor/SCOPE.md) | Layer workflow, selection tools, and acceptance criteria. |
+| | [Image Editor Roadmap](docs/image-editor/ROADMAP.md) | Development roadmap and platform validation milestones. |
+| **Motion Studio** | [Motion Studio Scope & Readiness](docs/motion-editor/SCOPE_AND_READINESS.md) | Standalone MVP boundary, capability ownership, and format migration. |
+| | [Motion Studio Native Format](docs/motion-editor/FORMAT.md) | `.motion` JSON schema, curve evaluation, and effect data. |
+| | [Motion Studio Reuse Plan](docs/motion-editor/REUSE_PLAN.md) | Reusable library boundaries vs application-owned components. |
+| | [Motion Studio Roadmap](docs/motion-editor/ROADMAP.md) | Technical milestones and export evolution. |
+| **Quality & Tests** | [Regression Prevention Policy](docs/REGRESSION_POLICY.md) | Universal test coverage mandates for all suite components. |
+| | [Video Editor Regression Tests](docs/video-editor/REGRESSION_TESTING.md) | Verification index and manual testing checklists. |
+| | [Hub Regression Tests](docs/hub/REGRESSION_TESTING.md) | Hub verification index, catalog tests, and update flows. |
+
+---
 
 ## License
 
@@ -225,5 +255,6 @@ This project is licensed under the **GNU General Public License v3.0 or later (G
 
 Third-party dependencies and libraries:
 - **Qt 6**: Licensed under LGPLv3 / GPLv3.
-- **Qt Image Formats**: Provides the TIFF and WebP plugins; review the Qt and bundled codec notices before distribution.
-- **FFmpeg**: Licensed under LGPLv2.1+ / GPLv2+ depending on the enabled codecs and configuration.
+- **Qt Image Formats**: TIFF and WebP plugins (review Qt and bundled codec notices before distribution).
+- **FFmpeg**: Licensed under LGPLv2.1+ / GPLv2+ depending on enabled codecs and build configurations.
+

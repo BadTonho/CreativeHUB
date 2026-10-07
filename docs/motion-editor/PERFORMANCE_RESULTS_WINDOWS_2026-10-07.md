@@ -71,6 +71,11 @@ memory pressure.
   schema 7, which includes GPU counters. This run therefore provides no GPU
   composition counts or timings and cannot establish whether the experimental
   GPU preview path was active or faster.
+- Every Motion Studio executable found in the repository's Windows build
+  outputs predates the current performance-metrics source file. The process
+  that generated this log has exited, and the log does not record its
+  executable path, so the exact launch route cannot be identified. The schema
+  mismatch is consistent with the run using one of those stale builds.
 - This is a real user run, but it is not the approved 1080p/30 fps,
   10-second, five-layer reference workload. The 60 fps, two-layer results are
   still useful for identifying the blur bottleneck; they should not be
