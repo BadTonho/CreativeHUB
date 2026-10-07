@@ -18,8 +18,10 @@ remain application-specific.
 - `VideoProbe` owns FFmpeg format and codec contexts through RAII and translates
   FFmpeg failures into `MediaError`.
 - `VideoDecoder` decodes the first frame and converts it to RGBA8.
-- `StillImageDecoder` probes and decodes PNG, JPEG, BMP, WebP, and TIFF files
-  through `QImageReader`, preserving source dimensions and RGBA transparency.
+- `StillImageDecoder` selects and validates image content through
+  `QImageReader`, preserving source dimensions and RGBA transparency. It also
+  uses the existing FFmpeg boundary for WebP and TIFF only when Qt lacks the
+  corresponding reader and FFmpeg has the matching decoder.
 - `VideoFrame` owns its pixel buffer through standard C++ containers.
 - The UI converts metadata into display strings and copies decoded pixels into
   an owning `QImage`.
@@ -60,12 +62,17 @@ are cleared when a composition is replaced. Importing media alone does not
 create a layer; dragging an item to the timeline creates a timed composition
 layer at the drop position.
 
-Still images are represented by `MediaKind::Image`. They use a synthetic
-default timing of 30 FPS for five seconds (150 frames), have no audio stream,
-and reuse the decoded first frame for every timeline frame. Animated GIF files
-are intentionally not supported in this milestone. The image decoder is used
-only for import, project reopen, and static composition; it never opens an
-FFmpeg or audio playback session.
+Still images are represented by `MediaKind::Image`. Runtime `QImageReader`
+formats are detected from file content rather than a fixed extension list;
+Qt-readable vector formats are rasterized by the reader. Single-frame images,
+including single-frame GIFs, use a synthetic default timing of 30 FPS for five
+seconds (150 frames), have no audio stream, and reuse the decoded first frame
+for every Timeline frame. Images with more than one frame are rejected with a
+clear import result until per-frame Timeline timing is designed. The FFmpeg
+WebP/TIFF fallback also checks for a second decoded frame. Expected animation
+rejections are not written as technical error entries. The image decoder is
+used only for import, project reopen, and static composition; it does not add
+animated-image playback or change Preview/export behavior.
 
 ## Image Editor links
 
@@ -101,9 +108,13 @@ implemented.
 
 The shared import processor accepts multiple local paths, reports progress and
 per-file errors, supports cancellation between files, and retains successes
-when another selected file fails. Supported video files and PNG, JPEG, BMP,
-WebP, and TIFF still images can be selected by the application import dialogs;
-duplicates are ignored and animated GIFs are rejected. Each application owns
+when another selected file fails. Supported video files and image formats
+readable by the deployed Qt runtime can be selected by the application import
+dialogs. The Video Editor's image filter is generated from
+`QImageReader::supportedImageFormats()` and adds WebP/TIFF extensions when
+their FFmpeg fallback decoders are available. Single-frame GIFs are accepted;
+multi-frame images are rejected by decoded frame count, independent of their
+extension. Duplicates are ignored. Each application owns
 the dialog, thread/task lifecycle, result logging, and user-facing summary.
 The Media Browser can drag an already imported item to the Timeline through the
 UI-only MIME type `application/x-creative-suite-media-path`. The Main Window

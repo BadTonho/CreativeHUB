@@ -112,9 +112,11 @@ future work.
 
 Still images imported through Open Media use the cached RGBA frame as a visual
 thumbnail and can be dropped into the Timeline as five-second static clips.
-They have no audio and the same frame is reused during playback. The supported
-formats are PNG, JPEG, BMP, WebP, and TIFF; animated GIF is intentionally
-excluded.
+They have no audio and the same frame is reused during playback. The Open Media
+image filter follows the deployed `QImageReader` formats and adds WebP/TIFF
+when their FFmpeg fallback decoders are available. This includes a single-frame
+GIF when the runtime can read GIF; files with multiple frames are rejected by
+content regardless of their extension.
 
 After a left-button press moves past the platform drag threshold, the Browser
 starts the native drag explicitly and supplies a native Qt drag preview

@@ -6,7 +6,7 @@ Status: **current development-build snapshot; final distribution packages remain
 
 This inventory describes the directly runnable Windows Release build at
 `build/apps/video-editor/Release/creative-suite-video-editor.exe`, last modified
-on 2026-10-07 at 15:28:09 (America/Sao_Paulo). It is a snapshot of the current x64
+on 2026-10-07 at 16:56:21 (America/Sao_Paulo). It is a snapshot of the current x64
 development output, not a promise that every listed format works with every
 file, profile, device, or export combination.
 
@@ -56,12 +56,15 @@ available export choices and filter them for stream compatibility.
 
 The deployed Qt image-format plugin directory contains Qt 6.7.2 versions of
 `qgif.dll`, `qico.dll`, `qjpeg.dll`, and `qsvg.dll`. Other reported keys are
-provided by Qt Gui in this build. WebP and TIFF are not reported by the Video
-Editor runtime, even though a separate Image Editor test deployment has used
-those plugins. Reader registration alone does not define whether a format is
-accepted by the current still-image import path. GIF is registered, while the
-Video Editor currently rejects animated GIFs; frame timing for animated image
-clips remains undecided.
+provided by Qt Gui in this build. The Open Media image filter is generated from
+the runtime reader keys. WebP and TIFF are not reported by the Video Editor
+runtime, so their extensions are added only when the corresponding FFmpeg
+decoder is available. Import detection reads file content instead of relying
+on an extension list; Qt-readable static images, including single-frame GIFs
+and vector formats rasterized by Qt, retain the five-second/150-frame defaults.
+Files with multiple frames are rejected independent of extension, pending
+Timeline per-frame timing. This inventory does not claim animated-image
+playback support.
 
 ## Runtime and licensing constraints
 
@@ -97,7 +100,6 @@ The final package manifest and platform-specific licensing review remain open.
 
 Re-run this inventory against each intended distribution package and platform;
 do not carry these Windows development-build counts forward as release claims.
-The next implementation gate is to replace hardcoded still-image extension
-checks with capability-based detection from the deployed Qt image readers and
-to define timing behavior before accepting multi-frame images as animated
-Timeline clips.
+The remaining Video Editor manual gate is to open this rebuilt executable,
+inspect the dynamic Open Media image filter, and verify import, preview,
+save/reopen, and the clear multi-frame rejection with representative files.

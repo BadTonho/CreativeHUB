@@ -39,9 +39,12 @@ The Video Editor currently includes:
 - essential Cross Dissolve overlaps with both clips moving, and Fade to Black
   between consecutive clips, with worker-side composition, Inspector editing,
   bounded history, and legacy transition records migrated in version 12;
-- static raster-image clips imported from PNG, JPEG, BMP, WebP, and TIFF files,
-  with RGBA transparency, five-second/150-frame defaults, static composition
-  playback, no audio, and version 8 persistence;
+- static image clips imported from formats readable by the deployed
+  `QImageReader`, plus WebP/TIFF through the FFmpeg fallback when available;
+  content-based detection, including single-frame GIF and Qt-rasterized vector
+  formats, with RGBA transparency, five-second/150-frame defaults, static
+  composition playback, no audio, and version 8 persistence. Multi-frame
+  images are rejected until per-frame Timeline timing is designed;
 - initial Image Editor handoff for shared Media Pool images and isolated
   timeline image variants, with saved PNG refresh and no unsaved live preview;
 - atomic project autosave and recovery snapshots with configurable global

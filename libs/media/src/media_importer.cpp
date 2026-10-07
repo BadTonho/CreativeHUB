@@ -4,28 +4,39 @@
 #include <creative_suite/media/video_decoder.h>
 #include <creative_suite/media/video_probe.h>
 
-#include <algorithm>
-#include <cctype>
+#include <QMimeDatabase>
+#include <QString>
+
 #include <exception>
 #include <utility>
 
 namespace creative_suite::media {
 namespace {
 
+QString pathToQString(const std::filesystem::path& path) {
+    const auto value = path.u8string();
+    return QString::fromUtf8(
+        reinterpret_cast<const char*>(value.data()),
+        static_cast<qsizetype>(value.size()));
+}
+
+bool hasImageContent(const std::filesystem::path& path) noexcept {
+    try {
+        const auto mime = QMimeDatabase{}.mimeTypeForFile(
+            pathToQString(path), QMimeDatabase::MatchContent);
+        return mime.isValid() && mime.name().startsWith(QStringLiteral("image/"));
+    } catch (...) {
+        return false;
+    }
+}
+
 MediaItem importMedia(const std::filesystem::path& input_path)
 {
     const auto path = MediaLibrary::canonicalPath(input_path);
-    auto extension = path.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char value) {
-        return static_cast<char>(std::tolower(value));
-    });
-    if (extension == ".gif") {
-        throw MediaError("Animated GIF files are not supported.");
-    }
 
     VideoMetadata metadata;
     VideoFrame first_frame;
-    if (StillImageDecoder::supportsPath(path)) {
+    if (StillImageDecoder::supportsPath(path) || hasImageContent(path)) {
         const StillImageDecoder decoder;
         metadata = decoder.probe(path);
         first_frame = decoder.decode_first_frame(path);

@@ -2,9 +2,14 @@
 
 #include <QDockWidget>
 #include <QHBoxLayout>
+#include <QImageReader>
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QWidget>
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
 
 #include <system_error>
 
@@ -19,6 +24,32 @@ QString compactMediaBrowserName(std::string_view display_name) {
     const auto name = fromUtf8(std::string(display_name));
     if (name.size() <= kMaximumVisibleCharacters) return name;
     return name.left(kMaximumVisibleCharacters) + QStringLiteral("...");
+}
+
+QStringList stillImageFilePatterns() {
+    QStringList patterns;
+    const auto add_pattern = [&patterns](const QString& extension) {
+        const auto pattern = QStringLiteral("*.") + extension.toLower();
+        if (!extension.isEmpty() && !patterns.contains(pattern)) {
+            patterns.push_back(pattern);
+        }
+    };
+
+    for (const auto& format : QImageReader::supportedImageFormats()) {
+        add_pattern(QString::fromLatin1(format));
+    }
+
+    // The media importer retains an FFmpeg fallback for these formats when
+    // the matching decoder is present but Qt has no image-format plugin.
+    if (avcodec_find_decoder(AV_CODEC_ID_WEBP) != nullptr) {
+        add_pattern(QStringLiteral("webp"));
+    }
+    if (avcodec_find_decoder(AV_CODEC_ID_TIFF) != nullptr) {
+        add_pattern(QStringLiteral("tif"));
+        add_pattern(QStringLiteral("tiff"));
+    }
+    patterns.sort(Qt::CaseInsensitive);
+    return patterns;
 }
 
 std::string pathToUtf8(const std::filesystem::path& path) {

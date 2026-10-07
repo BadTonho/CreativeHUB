@@ -1280,13 +1280,18 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
 }
 
 void MainWindow::openMedia() {
+    QStringList filters{
+        QStringLiteral("Video Files (*.avi *.mkv *.mov *.mp4 *.mxf *.webm)")};
+    const auto image_patterns = stillImageFilePatterns();
+    if (!image_patterns.isEmpty()) {
+        filters.push_back(QStringLiteral("Image Files (%1)").arg(image_patterns.join(' ')));
+    }
+    filters.push_back(QStringLiteral("All Files (*)"));
     const QStringList selected_files = QFileDialog::getOpenFileNames(
         this,
         "Open Media",
         QString(),
-        "Video Files (*.avi *.mkv *.mov *.mp4 *.mxf *.webm);;"
-        "Image Files (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff);;"
-        "All Files (*)");
+        filters.join(QStringLiteral(";;")));
     if (selected_files.isEmpty()) return;
     std::vector<std::filesystem::path> paths;
     paths.reserve(static_cast<std::size_t>(selected_files.size()));

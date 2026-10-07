@@ -135,12 +135,18 @@ preview image area is capped at 128x72 and is created only when the drag starts.
 Folder items display the same style using the standard folder icon, but carry no
 media MIME and are therefore rejected by the Timeline.
 
-Open Media accepts multiple video and raster-image files in one dialog. PNG,
-JPEG, BMP, WebP, and TIFF files become static image media with a five-second,
-150-frame default at 30 FPS; they preserve RGBA transparency, have no audio,
-and reuse their imported frame during composition playback. Animated GIF is
-not part of the current import scope. Import failures are logged per path and
-do not discard valid files selected in the same operation.
+Open Media accepts multiple video and image files in one dialog. Its Image Files
+filter is generated from the image formats readable by the deployed
+`QImageReader`, with WebP/TIFF added when the matching FFmpeg fallback decoder
+is available. Images are classified and decoded by content, not by extension;
+Qt-readable vector formats are rasterized by the reader. Single-frame files,
+including GIF, become static image media with a five-second, 150-frame default
+at 30 FPS; they preserve RGBA transparency, have no audio, and reuse their
+imported frame during composition playback. Content with multiple frames is
+rejected with an explanatory import result until animated Timeline timing is
+designed. This expected rejection is not logged as a technical error. Other
+import failures are logged per path and do not discard valid files selected in
+the same operation.
 
 The Media list and bin tree accept files dragged from the operating system.
 Dropping on the list imports into the selected bin; dropping on a bin imports

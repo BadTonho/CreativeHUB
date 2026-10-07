@@ -275,8 +275,9 @@ navigation ruler, timeline zoom and scrolling, layer rows, drag/drop, transforms
 the nested Transform/property tracks and key editing, time/frame display, and
 preview have offscreen coverage. The shared media catalog
 and importer, plus the Motion Studio Media Pool, have regression coverage for
-video and still-image imports, first-frame thumbnails, bins, renaming, offline
-restoration, view modes, selection details,
+video and still-image imports, runtime-based image decoding, single-frame GIF
+acceptance, multi-frame rejection, first-frame thumbnails, bins, renaming,
+offline restoration, view modes, selection details,
 and clearing on composition replacement. The Video Editor retains its
 project-media and linked-image regressions. Motion Studio document tests cover
 empty and populated round trips, exact fractional rates, stable layer IDs,

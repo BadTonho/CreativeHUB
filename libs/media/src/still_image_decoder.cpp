@@ -1,15 +1,23 @@
 #include <creative_suite/media/still_image_decoder.h>
 
 #include <creative_suite/diagnostics/logger.h>
+#include <creative_suite/media/video_playback.h>
 #include <creative_suite/media/video_probe.h>
 
 #include <QImage>
 #include <QImageReader>
 #include <QString>
 
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
+
 #include <algorithm>
-#include <cctype>
+#include <array>
 #include <cstddef>
+#include <fstream>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 
@@ -35,6 +43,56 @@ std::string safePathForLog(const std::filesystem::path& path) noexcept {
         return "<unavailable>";
     }
 }
+
+class UnsupportedAnimatedImage final : public std::runtime_error {
+public:
+    UnsupportedAnimatedImage()
+        : std::runtime_error(
+              "Animated images are not supported yet. Import a single-frame image instead.") {}
+};
+
+std::optional<AVCodecID> ffmpegFallbackCodec(
+    const std::filesystem::path& path) noexcept {
+    try {
+        std::ifstream input(path, std::ios::binary);
+        std::array<unsigned char, 12> signature{};
+        input.read(
+            reinterpret_cast<char*>(signature.data()),
+            static_cast<std::streamsize>(signature.size()));
+        const auto bytes_read = input.gcount();
+        if (bytes_read >= 12 &&
+            signature[0] == 'R' && signature[1] == 'I' &&
+            signature[2] == 'F' && signature[3] == 'F' &&
+            signature[8] == 'W' && signature[9] == 'E' &&
+            signature[10] == 'B' && signature[11] == 'P') {
+            return AV_CODEC_ID_WEBP;
+        }
+        if (bytes_read >= 4 &&
+            ((signature[0] == 'I' && signature[1] == 'I' &&
+              (signature[2] == 42 || signature[2] == 43) && signature[3] == 0) ||
+             (signature[0] == 'M' && signature[1] == 'M' &&
+              signature[2] == 0 && (signature[3] == 42 || signature[3] == 43)))) {
+            return AV_CODEC_ID_TIFF;
+        }
+    } catch (...) {
+    }
+    return std::nullopt;
+}
+
+bool hasFfmpegFallback(const std::filesystem::path& path) noexcept {
+    const auto codec_id = ffmpegFallbackCodec(path);
+    return codec_id.has_value() && avcodec_find_decoder(*codec_id) != nullptr;
+}
+
+void rejectAdditionalQtImageFrame(QImageReader& reader) {
+    if (reader.imageCount() > 1 || reader.jumpToNextImage()) {
+        throw UnsupportedAnimatedImage{};
+    }
+}
+
+[[noreturn]] void throwImageError(
+    const std::filesystem::path& path,
+    const QString& cause);
 
 [[noreturn]] void throwImageError(
     const std::filesystem::path& path,
@@ -76,13 +134,13 @@ VideoFrame frameFromImage(QImage image, const std::filesystem::path& path) {
 bool StillImageDecoder::supportsPath(
     const std::filesystem::path& source_path) noexcept {
     try {
-        const auto extension = source_path.extension().u8string();
-        std::string lower(reinterpret_cast<const char*>(extension.data()), extension.size());
-        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char value) {
-            return static_cast<char>(std::tolower(value));
-        });
-        return lower == ".png" || lower == ".jpg" || lower == ".jpeg" ||
-            lower == ".bmp" || lower == ".webp" || lower == ".tif" || lower == ".tiff";
+        std::error_code file_error;
+        if (!std::filesystem::is_regular_file(source_path, file_error) || file_error) {
+            return false;
+        }
+        QImageReader reader(pathToQString(source_path));
+        reader.setDecideFormatFromContent(true);
+        return reader.canRead() || hasFfmpegFallback(source_path);
     } catch (...) {
         return false;
     }
@@ -99,9 +157,11 @@ VideoMetadata StillImageDecoder::probe(
         }
 
         QImageReader reader(pathToQString(source_path));
+        reader.setDecideFormatFromContent(true);
         reader.setAutoTransform(true);
         const QSize size = reader.size();
         if (reader.canRead() && size.isValid() && size.width() > 0 && size.height() > 0) {
+            rejectAdditionalQtImageFrame(reader);
             VideoMetadata metadata;
             metadata.kind = MediaKind::Image;
             metadata.source_path = source_path;
@@ -119,10 +179,18 @@ VideoMetadata StillImageDecoder::probe(
         }
 
         // Some Qt distributions do not ship optional WebP/TIFF image plugins.
-        // Keep QImageReader as the primary path, but use the already-linked
-        // FFmpeg boundary as a compatibility fallback for those still-image
-        // codecs instead of exposing a format that cannot be imported.
+        // Use the already-linked FFmpeg boundary only for those image formats
+        // when the runtime has the matching decoder.
+        if (!hasFfmpegFallback(source_path)) {
+            throw MediaError("No installed image reader can decode this image format.");
+        }
         auto metadata = VideoProbe{}.probe(source_path);
+        if (metadata.kind != MediaKind::Video || metadata.width <= 0 || metadata.height <= 0) {
+            throw MediaError("The image could not be read by the available decoder.");
+        }
+        if (metadata.frame_count.has_value() && *metadata.frame_count > 1) {
+            throw UnsupportedAnimatedImage{};
+        }
         metadata.kind = MediaKind::Image;
         metadata.source_path = source_path;
         metadata.display_name = pathToUtf8(source_path.filename());
@@ -146,13 +214,28 @@ VideoFrame StillImageDecoder::decode_first_frame(
     const std::filesystem::path& source_path) const {
     try {
         QImageReader reader(pathToQString(source_path));
+        reader.setDecideFormatFromContent(true);
         reader.setAutoTransform(true);
+        if (reader.canRead()) rejectAdditionalQtImageFrame(reader);
         const auto image = reader.read();
         if (!image.isNull()) return frameFromImage(image, source_path);
 
-        // See the probe fallback above. This is primarily needed when the
-        // runtime Qt image plugin set lacks WebP or TIFF support.
-        return VideoDecoder{}.decode_first_frame(source_path);
+        // See the probe fallback above. Decoding through a session also lets
+        // this boundary reject a second frame instead of silently flattening
+        // an animated WebP or multi-page TIFF.
+        if (!hasFfmpegFallback(source_path)) {
+            throwImageError(source_path, QStringLiteral(
+                "No installed image reader can decode this image format."));
+        }
+        auto session = VideoPlaybackSession::open(source_path);
+        const auto first_frame = session->decode_next_frame();
+        if (!first_frame.has_value()) {
+            throwImageError(source_path, QStringLiteral("The image contains no decodable frame."));
+        }
+        if (session->decode_next_frame().has_value()) {
+            throw UnsupportedAnimatedImage{};
+        }
+        return **first_frame;
     } catch (const MediaError& error) {
         diagnostics::Logger::instance().log(
             diagnostics::Level::Error,

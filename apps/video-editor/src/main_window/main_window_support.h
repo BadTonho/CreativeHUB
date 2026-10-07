@@ -3,6 +3,7 @@
 #include "media/video_metadata.h"
 
 #include <QString>
+#include <QStringList>
 
 #include <filesystem>
 #include <optional>
@@ -20,6 +21,7 @@ namespace main_window_detail {
     const std::optional<double>& value,
     const QString& suffix);
 [[nodiscard]] QString compactMediaBrowserName(std::string_view display_name);
+[[nodiscard]] QStringList stillImageFilePatterns();
 [[nodiscard]] std::filesystem::path normalizedPath(
     const std::filesystem::path& path);
 [[nodiscard]] QString mediaListText(const media::VideoMetadata& metadata);

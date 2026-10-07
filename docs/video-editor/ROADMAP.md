@@ -197,9 +197,11 @@ and required manual validation pass.
   [Windows Release Media Capability Inventory](MEDIA_CAPABILITIES_WINDOWS_RELEASE.md).
   The inventory is not an application-level allow-list; revalidate each final
   distribution package and platform before making release capability claims.
-- [ ] Replace hardcoded still-image extension checks with capability-based
-  detection from the deployed Qt image plugins. Define how multi-frame images
-  retain timing before importing them as animated Timeline clips.
+- [-] Detect static images from deployed decoder capabilities and file content,
+  including the WebP/TIFF FFmpeg fallback; accept single-frame GIF and reject
+  multi-frame images until per-frame Timeline timing is designed. Automated
+  regression coverage is implemented; manual validation against the rebuilt
+  Windows Release executable remains pending.
 - [x] Add the initial offline export workflow: a session-only ordered queue,
   project/settings snapshots, CPU composition, dynamically discovered FFmpeg
   muxer and encoder choices, progress, cancellation, failure reporting, and

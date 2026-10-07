@@ -1,4 +1,5 @@
 #include "main_window/main_window.h"
+#include "main_window/main_window_support.h"
 
 #include "ui/preview/preview_widget.h"
 #include "ui/workspace/workspace_host.h"
@@ -30,6 +31,7 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QImage>
+#include <QImageReader>
 #include <QImageWriter>
 #include <QKeySequence>
 #include <QMenu>
@@ -63,6 +65,10 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
 
 namespace {
 
@@ -176,6 +182,23 @@ public:
         bool project_settings_only = false) {
         const auto directory = uniqueTestDirectory();
         std::filesystem::create_directories(directory);
+
+        const auto image_patterns = main_window_detail::stillImageFilePatterns();
+        for (const auto& format : QImageReader::supportedImageFormats()) {
+            const auto pattern = QStringLiteral("*.") +
+                QString::fromLatin1(format).toLower();
+            require(image_patterns.contains(pattern),
+                    "The Open Media image filter omitted a runtime QImageReader format.");
+        }
+        if (avcodec_find_decoder(AV_CODEC_ID_WEBP) != nullptr) {
+            require(image_patterns.contains(QStringLiteral("*.webp")),
+                    "The Open Media image filter omitted the available FFmpeg WebP fallback.");
+        }
+        if (avcodec_find_decoder(AV_CODEC_ID_TIFF) != nullptr) {
+            require(image_patterns.contains(QStringLiteral("*.tif")) &&
+                        image_patterns.contains(QStringLiteral("*.tiff")),
+                    "The Open Media image filter omitted the available FFmpeg TIFF fallback.");
+        }
 
         QStandardPaths::setTestModeEnabled(true);
         QSettings::setDefaultFormat(QSettings::IniFormat);
