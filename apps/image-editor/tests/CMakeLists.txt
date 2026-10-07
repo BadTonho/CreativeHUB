@@ -225,6 +225,12 @@ set_tests_properties(creative-suite-image-editor-blur-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 add_creative_suite_test(
+    NAME creative-suite-image-editor-area-selection-ui
+    COMMAND creative-suite-image-editor-ui-tests --area-selection-only)
+set_tests_properties(creative-suite-image-editor-area-selection-ui PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+add_creative_suite_test(
     NAME creative-suite-image-editor-brush-size-ui
     COMMAND creative-suite-image-editor-ui-tests --brush-size-only)
 set_tests_properties(creative-suite-image-editor-brush-size-ui PROPERTIES

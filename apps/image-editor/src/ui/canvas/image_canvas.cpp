@@ -332,8 +332,11 @@ void ImageCanvas::setBlurOptions(int diameter, int radius) {
 
 void ImageCanvas::setAreaSelectionOptions(AreaSelectionShape shape,
                                           AreaSelectionCombineMode combine_mode) {
-    const auto tool_shape = shape == AreaSelectionShape::Ellipse
-        ? AreaSelectionTool::Shape::Ellipse : AreaSelectionTool::Shape::Rectangle;
+    AreaSelectionTool::Shape tool_shape = AreaSelectionTool::Shape::Rectangle;
+    if (shape == AreaSelectionShape::Ellipse)
+        tool_shape = AreaSelectionTool::Shape::Ellipse;
+    else if (shape == AreaSelectionShape::Freehand)
+        tool_shape = AreaSelectionTool::Shape::Freehand;
     AreaSelectionTool::CombineMode tool_combine_mode =
         AreaSelectionTool::CombineMode::Replace;
     switch (combine_mode) {

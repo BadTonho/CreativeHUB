@@ -50,8 +50,11 @@ persistence, and recovery.
   and the completed stroke; the session blurs only the active layer or selected
   mask in premultiplied RGBA and records one operation when pixels change.
 - `src/ui/tools/selection/area_selection_tool.*` owns each canvas's temporary
-  Area Selection path, gesture geometry, Replace/Add/Subtract operations,
-  cancellation, bounds clipping, complexity limit, and preview overlay.
+  Area Selection path, rectangle/ellipse/freehand gesture geometry,
+  Replace/Add/Subtract operations, cancellation, bounds clipping, complexity
+  limit, and preview overlay. Freehand captures unsmoothed image-coordinate
+  points, ignores adjacent duplicates, and closes the contour on release;
+  degenerate or oversized gestures leave the previous selection intact.
   `ImageCanvas` maps pointer positions to image coordinates, forwards the
   existing selection signals, and supplies the active clip path to brush tools.
   The selection remains UI state and is not stored in the document or history.

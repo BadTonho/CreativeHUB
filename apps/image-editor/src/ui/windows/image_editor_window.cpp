@@ -956,7 +956,8 @@ void ImageEditorWindow::createToolOptionsBar() {
                 if (activeCanvas() != nullptr) {
                     activeCanvas()->setAreaSelectionOptions(
                         shape == 1 ? ImageCanvas::AreaSelectionShape::Ellipse
-                                   : ImageCanvas::AreaSelectionShape::Rectangle,
+                            : (shape == 2 ? ImageCanvas::AreaSelectionShape::Freehand
+                                          : ImageCanvas::AreaSelectionShape::Rectangle),
                         mode == 1 ? ImageCanvas::AreaSelectionCombineMode::Add
                             : (mode == 2
                                 ? ImageCanvas::AreaSelectionCombineMode::Subtract
@@ -1425,7 +1426,9 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
     activeCanvas()->setTextStyle(text_style_);
     activeCanvas()->setAreaSelectionOptions(
         area_selection_shape_ == 1 ? ImageCanvas::AreaSelectionShape::Ellipse
-            : ImageCanvas::AreaSelectionShape::Rectangle,
+            : (area_selection_shape_ == 2
+                ? ImageCanvas::AreaSelectionShape::Freehand
+                : ImageCanvas::AreaSelectionShape::Rectangle),
         area_selection_mode_ == 1 ? ImageCanvas::AreaSelectionCombineMode::Add
             : (area_selection_mode_ == 2
                 ? ImageCanvas::AreaSelectionCombineMode::Subtract

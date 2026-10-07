@@ -45,15 +45,17 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 Use the mouse wheel to zoom, the middle mouse button to pan, and the Crop
 Selection toolbar or Edit menu action to start a crop gesture.
 
-Area Selection is independent of object Selection. Choose Rectangle or Ellipse
-and Replace, Add, or Subtract in the options bar, then drag on the canvas. The
-temporary selection belongs to its document tab and does not mark the document
-modified. Switching tools preserves it. Paint and Eraser, including mask edits,
-are clipped to the selected area; without a selection they remain unrestricted.
-An empty selection blocks painting and erasing. `Esc` cancels only the in-flight
-selection gesture and retains the previous selection. **Edit > Deselect** clears
-the selection without adding an Undo entry. The saved clip on each new stroke
-preserves its selected area after saving and reopening the document.
+Area Selection is independent of object Selection. Choose Rectangle, Ellipse,
+or Freehand and Replace, Add, or Subtract in the options bar, then drag on the
+canvas. Freehand uses the captured pointer points and closes the contour on
+release. The temporary selection belongs to its document tab and does not mark
+the document modified. Switching tools preserves it. Paint and Eraser,
+including mask edits, are clipped to the selected area; without a selection
+they remain unrestricted. An empty selection blocks painting and erasing. `Esc`
+cancels only the in-flight selection gesture and retains the previous selection.
+**Edit > Deselect** clears the selection without adding an Undo entry. The
+saved clip on each new stroke preserves its selected area after saving and
+reopening the document.
 
 **Delete Selection** follows keyboard focus. In the canvas with Selection active,
 it removes the selected objects while preserving their layers, masks, and other

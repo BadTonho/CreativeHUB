@@ -26,8 +26,11 @@ Documents use the provisional `.cimg` version 16 format. The application reads
 versions 1 through 15 and writes version 16, migrating older documents on save;
 version 1 recovery envelopes accept a version 16 document payload. Source images
 remain unchanged, and original source dimensions are retained for relinking.
-Area Selection is a separate tool from object Selection. Rectangle and ellipse
-gestures can replace, add to, or subtract from the temporary per-tab selection.
+Area Selection is a separate tool from object Selection. Rectangle, ellipse,
+and freehand gestures can replace, add to, or subtract from the temporary
+per-tab selection. Freehand follows the pointer without smoothing, closes on
+release, and rejects degenerate or oversized contours without replacing the
+previous selection.
 New Paint and Eraser strokes, including mask edits, persist their clipping
 geometry in `.cimg` v13; bucket fills persist as v14 operations. The Linear
 Gradient tool previews and stores a color-to-transparent operation in `.cimg`

@@ -736,12 +736,15 @@ and outcome. Visual and cross-application acceptance has not yet been recorded.
 
 1. Open an image and activate **Area Selection** with `M`. Confirm the options
    bar starts at Rectangle + Replace. Draw a rectangle, switch to Ellipse, and
-   verify the dashed outline and translucent area. Add an ellipse, subtract a
-   rectangle, then use `Ctrl+D` to clear the result.
-2. Create a selection, switch to Paint and Eraser, and make strokes across its
-   edge. Confirm pixels change only inside the selected geometry. Switch back to
-   Area Selection and confirm the selection persists. Start another drag and
-   press `Esc`; confirm it cancels the gesture without changing the prior area.
+   verify the dashed outline and translucent area. Select Freehand and drag a
+   closed contour around an irregular region; confirm its live outline follows
+   the pointer and the release closes the shape. Add with a freehand contour and
+   subtract with another, then use `Ctrl+D` to clear the result.
+2. Create a freehand selection, switch to Paint and Eraser, and make strokes
+   across its edge. Confirm pixels change only inside the selected geometry.
+   Switch back to Area Selection and confirm the selection persists. Start
+   another drag and press `Esc`; confirm it cancels the gesture without
+   changing the prior area.
 3. Create an empty result with Subtract and confirm Paint and Eraser make no
    change. Clear it with **Edit > Deselect**. Verify selection gestures and
    clearing do not add an Undo step or mark the document modified.

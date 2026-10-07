@@ -6,6 +6,7 @@
 #include <QRectF>
 #include <QString>
 #include <QTransform>
+#include <QVector>
 #include <optional>
 
 class QPainter;
@@ -20,7 +21,7 @@ struct AreaSelectionToolRenderContext {
 
 class AreaSelectionTool final {
 public:
-    enum class Shape { Rectangle, Ellipse };
+    enum class Shape { Rectangle, Ellipse, Freehand };
     enum class CombineMode { Replace, Add, Subtract };
 
     enum class FinishStatus { NoSelection, Applied, Rejected };
@@ -53,12 +54,19 @@ private:
     [[nodiscard]] QPainterPath gesturePath(const QRectF& image_bounds) const;
     [[nodiscard]] QPainterPath combinedPath(const QPainterPath& gesture,
                                             const QRectF& image_bounds) const;
+    void recordFreehandPoint(const QPointF& image_position) noexcept;
+    void resetGesture() noexcept;
 
     Shape shape_ = Shape::Rectangle;
     CombineMode combine_mode_ = CombineMode::Replace;
     bool gesture_active_ = false;
+    bool gesture_rejected_ = false;
+    bool gesture_has_area_reference_ = false;
+    bool gesture_has_area_ = false;
     QPointF gesture_start_;
     QPointF gesture_current_;
+    QPointF gesture_area_reference_;
+    QVector<QPointF> gesture_points_;
     QPainterPath selection_path_;
     bool selection_active_ = false;
 };

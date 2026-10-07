@@ -169,6 +169,7 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     area_selection_shape_combo_->setAccessibleName(QStringLiteral("Area selection shape"));
     area_selection_shape_combo_->addItem(QStringLiteral("Rectangle"), 0);
     area_selection_shape_combo_->addItem(QStringLiteral("Ellipse"), 1);
+    area_selection_shape_combo_->addItem(QStringLiteral("Freehand"), 2);
     area_layout->addWidget(area_selection_shape_combo_);
     area_layout->addWidget(new QLabel(QStringLiteral("Mode"), area_selection_options_widget_));
     area_selection_mode_combo_ = new QComboBox(area_selection_options_widget_);

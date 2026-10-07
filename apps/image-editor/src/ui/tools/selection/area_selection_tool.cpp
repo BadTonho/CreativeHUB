@@ -4,6 +4,9 @@
 
 #include <QPainter>
 #include <QPen>
+#include <QPolygonF>
+
+#include <cmath>
 
 #include <utility>
 
@@ -16,6 +19,20 @@ QPainterPath rectPath(const QRectF& rect) {
     return path;
 }
 
+bool hasFilledArea(const QPainterPath& path) {
+    for (const QPolygonF& polygon : path.toFillPolygons()) {
+        if (polygon.size() < 3) continue;
+        qreal twice_area = 0.0;
+        for (qsizetype i = 0; i < polygon.size(); ++i) {
+            const QPointF& current = polygon.at(i);
+            const QPointF& next = polygon.at((i + 1) % polygon.size());
+            twice_area += current.x() * next.y() - next.x() * current.y();
+        }
+        if (std::abs(twice_area) > 1e-6) return true;
+    }
+    return false;
+}
+
 } // namespace
 
 void AreaSelectionTool::setOptions(Shape shape, CombineMode combine_mode) noexcept {
@@ -25,12 +42,44 @@ void AreaSelectionTool::setOptions(Shape shape, CombineMode combine_mode) noexce
 
 void AreaSelectionTool::beginGesture(const QPointF& image_position) noexcept {
     gesture_active_ = true;
+    gesture_rejected_ = false;
     gesture_start_ = image_position;
     gesture_current_ = image_position;
+    gesture_points_.clear();
+    gesture_has_area_reference_ = false;
+    gesture_has_area_ = false;
+    gesture_area_reference_ = {};
+    if (shape_ == Shape::Freehand) gesture_points_.append(image_position);
 }
 
 void AreaSelectionTool::updateGesture(const QPointF& image_position) noexcept {
-    if (gesture_active_) gesture_current_ = image_position;
+    if (!gesture_active_) return;
+    gesture_current_ = image_position;
+    if (shape_ == Shape::Freehand) recordFreehandPoint(image_position);
+}
+
+void AreaSelectionTool::recordFreehandPoint(const QPointF& image_position) noexcept {
+    if (gesture_rejected_ ||
+        (!gesture_points_.isEmpty() && gesture_points_.constLast() == image_position)) return;
+    constexpr qsizetype maximum_lasso_points =
+        ImageDocumentStore::kMaximumStrokeClipPathElements - 2;
+    if (gesture_points_.size() >= maximum_lasso_points) {
+        gesture_rejected_ = true;
+        return;
+    }
+    gesture_points_.append(image_position);
+    if (image_position == gesture_start_) return;
+    if (!gesture_has_area_reference_) {
+        gesture_area_reference_ = image_position;
+        gesture_has_area_reference_ = true;
+        return;
+    }
+    if (!gesture_has_area_) {
+        const QPointF first = gesture_area_reference_ - gesture_start_;
+        const QPointF second = image_position - gesture_start_;
+        gesture_has_area_ = std::abs(
+            first.x() * second.y() - first.y() * second.x()) > 1e-6;
+    }
 }
 
 AreaSelectionTool::FinishResult AreaSelectionTool::finishGesture(
@@ -38,11 +87,19 @@ AreaSelectionTool::FinishResult AreaSelectionTool::finishGesture(
     if (!gesture_active_) return {};
 
     gesture_current_ = image_position;
+    if (shape_ == Shape::Freehand) recordFreehandPoint(image_position);
+    if (gesture_rejected_) {
+        resetGesture();
+        return {FinishStatus::Rejected,
+                QStringLiteral("The selection would exceed the supported geometry limit.")};
+    }
     const QPainterPath gesture = gesturePath(image_bounds);
-    gesture_active_ = false;
-    gesture_start_ = {};
-    gesture_current_ = {};
-    if (gesture.isEmpty()) return {};
+    if (gesture.isEmpty() ||
+        (shape_ == Shape::Freehand && !hasFilledArea(gesture))) {
+        resetGesture();
+        return {};
+    }
+    resetGesture();
 
     QPainterPath combined = combinedPath(gesture, image_bounds);
     if (combined.elementCount() > ImageDocumentStore::kMaximumStrokeClipPathElements) {
@@ -57,9 +114,7 @@ AreaSelectionTool::FinishResult AreaSelectionTool::finishGesture(
 
 bool AreaSelectionTool::cancelGesture() noexcept {
     if (!gesture_active_) return false;
-    gesture_active_ = false;
-    gesture_start_ = {};
-    gesture_current_ = {};
+    resetGesture();
     return true;
 }
 
@@ -127,12 +182,35 @@ QPainterPath AreaSelectionTool::visibleSelectionPath(
 
 QPainterPath AreaSelectionTool::gesturePath(const QRectF& image_bounds) const {
     if (!gesture_active_ || image_bounds.isEmpty()) return {};
+    if (shape_ == Shape::Freehand) {
+        if (gesture_rejected_ || gesture_points_.size() < 3 || !gesture_has_area_)
+            return {};
+
+        QPainterPath path;
+        path.moveTo(gesture_points_.constFirst());
+        for (qsizetype i = 1; i < gesture_points_.size(); ++i)
+            path.lineTo(gesture_points_.at(i));
+        path.closeSubpath();
+        return path.intersected(rectPath(image_bounds));
+    }
+
     const QRectF bounds = QRectF(gesture_start_, gesture_current_).normalized();
     if (bounds.width() <= 0.0 || bounds.height() <= 0.0) return {};
     QPainterPath path;
     if (shape_ == Shape::Ellipse) path.addEllipse(bounds);
     else path.addRect(bounds);
     return path.intersected(rectPath(image_bounds));
+}
+
+void AreaSelectionTool::resetGesture() noexcept {
+    gesture_active_ = false;
+    gesture_rejected_ = false;
+    gesture_has_area_reference_ = false;
+    gesture_has_area_ = false;
+    gesture_start_ = {};
+    gesture_current_ = {};
+    gesture_area_reference_ = {};
+    gesture_points_.clear();
 }
 
 QPainterPath AreaSelectionTool::combinedPath(const QPainterPath& gesture,

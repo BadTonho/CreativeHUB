@@ -37,7 +37,7 @@ class ImageCanvas final : public QWidget {
     Q_OBJECT
 
 public:
-    enum class AreaSelectionShape { Rectangle, Ellipse };
+    enum class AreaSelectionShape { Rectangle, Ellipse, Freehand };
     enum class AreaSelectionCombineMode { Replace, Add, Subtract };
 
     explicit ImageCanvas(QWidget* parent = nullptr);
