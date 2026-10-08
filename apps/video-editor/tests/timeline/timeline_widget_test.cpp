@@ -1024,9 +1024,19 @@ int main(int argc, char* argv[]) {
         const auto compact_video_row = compact_groups_widget.trackBounds(0);
         const auto compact_splitter = compact_groups_widget.trackSplitterRect();
         const auto compact_audio_row = compact_groups_widget.trackBounds(1);
-        require(std::abs(compact_splitter.top() - compact_video_row.bottom()) < 0.001 &&
-                    std::abs(compact_audio_row.top() - compact_splitter.bottom()) < 0.001,
-                "The default layout left a large empty band between short Video and Audio groups.");
+        const auto compact_video_viewport = compact_groups_widget
+            .trackGroupViewportRect(timeline::TrackKind::Video);
+        const auto compact_audio_viewport = compact_groups_widget
+            .trackGroupViewportRect(timeline::TrackKind::Audio);
+        require(std::abs(compact_video_viewport.height() -
+                         compact_audio_viewport.height()) < 0.001 &&
+                    std::abs(compact_video_row.height() -
+                             timeline::kDefaultTrackRowHeight) < 0.001 &&
+                    std::abs(compact_audio_row.height() -
+                             timeline::kDefaultTrackRowHeight) < 0.001 &&
+                    compact_video_row.bottom() < compact_splitter.top() - 100.0 &&
+                    compact_audio_row.top() >= compact_splitter.bottom(),
+                "The default 50/50 panes did not preserve row height and viewport space.");
         compact_groups_widget.close();
 
         timeline::TrackKind requested_group = timeline::TrackKind::Audio;
@@ -1337,26 +1347,23 @@ int main(int argc, char* argv[]) {
         require(std::abs(splitter.height() - 18.0) < 0.001,
                 "The Video/Audio divider does not expose the expanded drag area.");
 
+        const auto video_row_height_before_split =
+            viewport_timeline->trackBounds(0).height();
+        const auto audio_row_height_before_split =
+            viewport_timeline->trackBounds(3).height();
+        const auto check_divider_cursor = [&application, viewport_timeline](
+            QPointF position) {
+            sendMouse(*viewport_timeline, QEvent::MouseMove,
+                position, Qt::NoButton);
+            application.processEvents();
+            require(viewport_timeline->cursor().shape() == Qt::SplitVCursor,
+                    "The Video/Audio divider did not use the resize cursor across its width.");
+        };
+        check_divider_cursor(QPointF(splitter.left() + 3.0, splitter.center().y()));
+        check_divider_cursor(splitter.center());
+        check_divider_cursor(QPointF(splitter.right() - 3.0, splitter.center().y()));
         sendMouse(*viewport_timeline, QEvent::MouseMove,
-            QPointF(splitter.left() + 60.0, splitter.center().y()),
-            Qt::NoButton);
-        require(viewport_timeline->cursor().shape() == Qt::OpenHandCursor,
-                "The left side of the central divider did not use the open-hand cursor.");
-        sendMouse(*viewport_timeline, QEvent::MouseMove,
-            QPointF(splitter.right() - 60.0, splitter.center().y()),
-            Qt::NoButton);
-        require(viewport_timeline->cursor().shape() == Qt::OpenHandCursor,
-                "The right side of the central divider did not use the open-hand cursor.");
-        sendMouse(*viewport_timeline, QEvent::MouseMove,
-            QPointF(splitter.left() + 24.0, splitter.center().y()),
-            Qt::NoButton);
-        require(viewport_timeline->cursor().shape() == Qt::SplitVCursor,
-                "The left divider endpoint did not use the resize cursor.");
-        sendMouse(*viewport_timeline, QEvent::MouseMove,
-            QPointF(splitter.right() - 24.0, splitter.center().y()),
-            Qt::NoButton);
-        require(viewport_timeline->cursor().shape() == Qt::SplitVCursor,
-                "The right divider endpoint did not use the resize cursor.");
+            QPointF(0.0, splitter.center().y()), Qt::NoButton);
 
         QImage divider_idle(
             viewport_timeline->size(), QImage::Format_ARGB32_Premultiplied);
@@ -1380,81 +1387,74 @@ int main(int argc, char* argv[]) {
         video_scroll->setValue(0);
         audio_scroll->setValue(0);
         application.processEvents();
-        const auto linked_scroll_delta = std::min({
-            15, video_scroll->maximum(), audio_scroll->maximum()});
-        require(linked_scroll_delta > 0,
-                "The linked-scroll test does not have overflow in both groups.");
-        const auto left_linked_scroll_target = QPointF(
-            splitter.left() + 60.0, splitter.top() + 15.0);
-        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
-            left_linked_scroll_target, Qt::LeftButton);
-        require(viewport_timeline->cursor().shape() == Qt::ClosedHandCursor,
-                "Dragging the central divider did not use the closed-hand cursor.");
+        const auto drag_divider_at = [
+            &application, viewport_timeline,
+            video_row_height_before_split, audio_row_height_before_split](
+                double x, double vertical_delta) {
+            const auto current_splitter = viewport_timeline->trackSplitterRect();
+            const auto press_position = QPointF(x, current_splitter.center().y());
+            const auto drag_position =
+                press_position + QPointF(0.0, vertical_delta);
+            const auto ratio_before = viewport_timeline->trackGroupSplitRatio();
+            const auto video_view_height_before = viewport_timeline
+                ->trackGroupViewportRect(timeline::TrackKind::Video).height();
+            sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
+                press_position, Qt::LeftButton);
+            require(viewport_timeline->cursor().shape() == Qt::SplitVCursor,
+                    "Dragging the divider did not retain the resize cursor.");
+            QImage divider_active(
+                viewport_timeline->size(), QImage::Format_ARGB32_Premultiplied);
+            divider_active.fill(Qt::transparent);
+            viewport_timeline->render(&divider_active);
+            sendMouse(*viewport_timeline, QEvent::MouseMove,
+                drag_position, Qt::LeftButton);
+            sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
+                drag_position, Qt::NoButton);
+            application.processEvents();
+            require(std::abs(viewport_timeline->trackGroupSplitRatio() -
+                             ratio_before) > 0.01 &&
+                        std::abs(viewport_timeline->trackGroupViewportRect(
+                            timeline::TrackKind::Video).height() -
+                            video_view_height_before) > 1.0,
+                    "Dragging the divider did not resize the pane viewports.");
+            require(std::abs(viewport_timeline->trackBounds(0).height() -
+                             video_row_height_before_split) < 0.001 &&
+                        std::abs(viewport_timeline->trackBounds(3).height() -
+                                 audio_row_height_before_split) < 0.001,
+                    "Resizing the divider changed the height of a track row.");
+        };
+        drag_divider_at(splitter.left() + 3.0, 20.0);
+        viewport_timeline->setTrackGroupSplitRatio(initial_split);
+        drag_divider_at(viewport_timeline->trackSplitterRect().center().x(), 20.0);
+        viewport_timeline->setTrackGroupSplitRatio(initial_split);
+        drag_divider_at(viewport_timeline->trackSplitterRect().right() - 3.0, 20.0);
+        viewport_timeline->setTrackGroupSplitRatio(initial_split);
+
+        sendMouse(*viewport_timeline, QEvent::MouseMove,
+            viewport_timeline->trackSplitterRect().center(), Qt::NoButton);
+        application.processEvents();
         QImage divider_active(
             viewport_timeline->size(), QImage::Format_ARGB32_Premultiplied);
         divider_active.fill(Qt::transparent);
+        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
+            viewport_timeline->trackSplitterRect().center(), Qt::LeftButton);
         viewport_timeline->render(&divider_active);
         require(divider_active.pixelColor(grip_sample) !=
                     divider_hover.pixelColor(grip_sample),
-                "Dragging the central scroll area did not highlight its grip.");
-        sendMouse(*viewport_timeline, QEvent::MouseMove,
-            left_linked_scroll_target + QPointF(0.0, linked_scroll_delta),
-            Qt::LeftButton);
+                "Dragging the divider did not highlight its grip.");
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
-            left_linked_scroll_target + QPointF(0.0, linked_scroll_delta),
-            Qt::NoButton);
-        require(video_scroll->value() == linked_scroll_delta &&
-                    audio_scroll->value() == linked_scroll_delta &&
-                    std::abs(viewport_timeline->trackGroupSplitRatio() -
-                             initial_split) < 0.001,
-                "Dragging the left side of the central bar did not scroll both groups equally without resizing.");
-
-        const auto video_scroll_headroom = std::min({
-            5, video_scroll->maximum() - 1, audio_scroll->maximum() - 1});
-        const auto requested_linked_delta = std::min(
-            12, audio_scroll->maximum());
-        require(video_scroll_headroom >= 0 &&
-                    requested_linked_delta > video_scroll_headroom,
-                "The linked-scroll bound test needs overflow in both groups.");
-        video_scroll->setValue(video_scroll->maximum() - video_scroll_headroom);
-        audio_scroll->setValue(0);
-        application.processEvents();
-        const auto right_linked_scroll_target = QPointF(
-            splitter.right() - 60.0, splitter.center().y());
-        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
-            right_linked_scroll_target, Qt::LeftButton);
-        sendMouse(*viewport_timeline, QEvent::MouseMove,
-            right_linked_scroll_target + QPointF(0.0, requested_linked_delta),
-            Qt::LeftButton);
-        sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
-            right_linked_scroll_target + QPointF(0.0, requested_linked_delta),
-            Qt::NoButton);
-        require(video_scroll->value() == video_scroll->maximum() &&
-                    audio_scroll->value() == video_scroll_headroom,
-                "Linked scrolling did not stop both groups at the first group's limit.");
+            viewport_timeline->trackSplitterRect().center(), Qt::NoButton);
 
         video_scroll->setValue(0);
-        audio_scroll->setValue(video_scroll_headroom);
+        audio_scroll->setValue(0);
         application.processEvents();
-        const auto left_limit_scroll_target = QPointF(
-            splitter.left() + 60.0, splitter.center().y());
-        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
-            left_limit_scroll_target, Qt::LeftButton);
-        sendMouse(*viewport_timeline, QEvent::MouseMove,
-            left_limit_scroll_target + QPointF(0.0, -10.0), Qt::LeftButton);
-        sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
-            left_limit_scroll_target + QPointF(0.0, -10.0), Qt::NoButton);
-        require(video_scroll->value() == 0 &&
-                    audio_scroll->value() == video_scroll_headroom,
-                "Linked scrolling did not stop both groups at the first group's top limit.");
-
         const auto upper_splitter = viewport_timeline->trackSplitterRect();
         const auto left_splitter_edge = QPointF(
             upper_splitter.left() + 2.0, upper_splitter.center().y());
         sendMouse(*viewport_timeline, QEvent::MouseMove,
             left_splitter_edge, Qt::NoButton);
         require(viewport_timeline->cursor().shape() == Qt::SplitVCursor,
-                "The divider edge did not retain the resize cursor.");
+                "The left divider did not retain the resize cursor.");
         sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
             left_splitter_edge, Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseMove,
@@ -1491,25 +1491,27 @@ int main(int argc, char* argv[]) {
         viewport_timeline->setTracks(std::move(video_overflow_tracks));
         application.processEvents();
         require(video_scroll->maximum() > 0 && audio_scroll->maximum() == 0,
-                "The single-group linked-scroll test did not isolate Video overflow.");
+                "The pane resize test did not isolate Video overflow.");
         video_scroll->setValue(0);
         audio_scroll->setValue(0);
         application.processEvents();
-        const auto single_group_delta = std::min(10, video_scroll->maximum());
+        const auto split_before_empty_group_drag =
+            viewport_timeline->trackGroupSplitRatio();
         const auto expanded_hit_target = QPointF(
             viewport_timeline->trackSplitterRect().center().x(),
             viewport_timeline->trackSplitterRect().center().y());
         sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
             expanded_hit_target, Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseMove,
-            expanded_hit_target + QPointF(0.0, single_group_delta),
+            expanded_hit_target + QPointF(0.0, 20.0),
             Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
-            expanded_hit_target + QPointF(0.0, single_group_delta),
+            expanded_hit_target + QPointF(0.0, 20.0),
             Qt::NoButton);
-        require(video_scroll->value() == 0 &&
-                    audio_scroll->value() == 0,
-                "Linked scrolling moved one group when the other had no vertical overflow.");
+        require(viewport_timeline->trackGroupSplitRatio() >
+                    split_before_empty_group_drag &&
+                    video_scroll->value() == 0 && audio_scroll->value() == 0,
+                "Dragging the divider with a non-overflowing group did not resize panes independently of scrolling.");
 
         scroll_area.close();
 

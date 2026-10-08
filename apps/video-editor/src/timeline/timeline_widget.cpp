@@ -36,7 +36,6 @@ constexpr double edge_width = 8.0;
 constexpr double shared_roll_half_width = 4.0;
 constexpr double shared_single_clip_handle_width = 8.0;
 constexpr double track_group_splitter_height = 18.0;
-constexpr double track_group_splitter_resize_edge_width = 48.0;
 constexpr double ruler_minor_target_spacing_pixels = 8.0;
 
 TrimPointerPosition trimPointer(const QPointF& position) noexcept {
@@ -134,14 +133,11 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     // would leave the grab active and route every subsequent click back to
     // the timeline instead of the rest of the editor.
     if (QWidget::mouseGrabber() == this) releaseMouse();
-    if (split_drag_active_ || group_scroll_drag_active_ ||
-        splitter_hover_active_ || splitter_scroll_hover_active_) {
+    if (split_drag_active_ || splitter_hover_active_) {
         unsetCursor();
     }
     split_drag_active_ = false;
-    group_scroll_drag_active_ = false;
     splitter_hover_active_ = false;
-    splitter_scroll_hover_active_ = false;
     if (interaction_controller_.trimGesture().active()) unsetCursor();
 
     tracks_ = tracks;
@@ -464,36 +460,15 @@ QRectF TimelineWidget::trackSplitterRect() const noexcept {
     return trackViewLayout().splitter_rect;
 }
 
-QRectF TimelineWidget::trackSplitterScrollRect() const noexcept {
-    const auto splitter = trackSplitterRect();
-    const auto width = std::max(
-        0.0, splitter.width() - 2.0 * track_group_splitter_resize_edge_width);
-    return QRectF(
-        splitter.left() + track_group_splitter_resize_edge_width,
-        splitter.top(),
-        width,
-        splitter.height());
-}
-
 void TimelineWidget::updateTrackSplitterHoverState(const QPointF& position) {
     const auto splitter_hovered = trackSplitterRect().contains(position);
-    const auto scroll_area_hovered = splitter_hovered &&
-        trackSplitterScrollRect().contains(position);
-    const auto hover_changed = splitter_hover_active_ != splitter_hovered ||
-        splitter_scroll_hover_active_ != scroll_area_hovered;
+    const auto hover_changed = splitter_hover_active_ != splitter_hovered;
     splitter_hover_active_ = splitter_hovered;
-    splitter_scroll_hover_active_ = scroll_area_hovered;
     if (hover_changed) update();
 
-    if (group_scroll_drag_active_) {
-        setCursor(Qt::ClosedHandCursor);
-    } else if (scroll_area_hovered) {
-        setCursor(Qt::OpenHandCursor);
-    } else if (splitter_hovered) {
+    if (split_drag_active_ || splitter_hovered) {
         setCursor(Qt::SplitVCursor);
-    } else if (cursor().shape() == Qt::OpenHandCursor ||
-               cursor().shape() == Qt::ClosedHandCursor ||
-               cursor().shape() == Qt::SplitVCursor) {
+    } else if (cursor().shape() == Qt::SplitVCursor) {
         unsetCursor();
     }
 }
@@ -855,38 +830,6 @@ TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
     auto video_height = available_height * ratio;
     auto audio_height = available_height - video_height;
 
-    // At the untouched 50/50 default, fit each pane to its rows when possible
-    // instead of leaving a large empty band between the Video and Audio rows.
-    // If the combined rows overflow the available height, the unused space in
-    // the smaller group is given to the group that needs to scroll. Once the
-    // user resizes the divider, honor the saved ratio as an explicit layout.
-    if (std::abs(track_group_split_ratio_ - 0.5) < 0.0001) {
-        const auto group_content_height = [this, available_height](TrackKind kind) {
-            const auto count = static_cast<double>(std::count_if(
-                tracks_.begin(), tracks_.end(), [kind](const TimelineTrack& track) {
-                    return track.kind == kind;
-                }));
-            if (count == 0.0) {
-                return std::min(
-                    std::max(kMinimumTrackRowHeight, track_row_height_),
-                    available_height / 2.0);
-            }
-            return count * track_row_height_ +
-                std::max(0.0, count - 1.0) * TimelineGeometry::row_gap;
-        };
-        const auto video_content_height = group_content_height(TrackKind::Video);
-        const auto audio_content_height = group_content_height(TrackKind::Audio);
-        if (video_content_height + audio_content_height <= available_height) {
-            video_height = video_content_height;
-            audio_height = audio_content_height;
-        } else if (video_content_height < video_height) {
-            video_height = video_content_height;
-            audio_height = available_height - video_height;
-        } else if (audio_content_height < audio_height) {
-            audio_height = audio_content_height;
-            video_height = available_height - audio_height;
-        }
-    }
     const auto audio_top = TimelineGeometry::top_margin + video_height +
         track_group_splitter_height;
     const auto width = std::max(
@@ -1320,19 +1263,16 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     const auto current_geometry = geometry();
     painter.fillRect(track_view.video_viewport, QColor("#1b2028"));
     painter.fillRect(track_view.audio_viewport, QColor("#1b2028"));
-    const auto splitter_highlighted =
-        splitter_hover_active_ || split_drag_active_ || group_scroll_drag_active_;
-    const auto splitter_grip_highlighted =
-        splitter_scroll_hover_active_ || group_scroll_drag_active_;
-    const auto splitter_background = split_drag_active_ || group_scroll_drag_active_
+    const auto splitter_highlighted = splitter_hover_active_ || split_drag_active_;
+    const auto splitter_background = split_drag_active_
         ? QColor("#214463")
         : splitter_highlighted ? QColor("#26394b") : QColor("#202630");
-    const auto splitter_border = split_drag_active_ || group_scroll_drag_active_
+    const auto splitter_border = split_drag_active_
         ? QColor("#80c7ff")
         : splitter_highlighted ? QColor("#66b7ff") : QColor("#566476");
-    const auto splitter_grip = group_scroll_drag_active_
+    const auto splitter_grip = split_drag_active_
         ? QColor("#b8e2ff")
-        : splitter_grip_highlighted ? QColor("#9bd5ff") : QColor("#aab6c5");
+        : splitter_hover_active_ ? QColor("#9bd5ff") : QColor("#aab6c5");
     painter.fillRect(track_view.splitter_rect, splitter_background);
     painter.setPen(QPen(splitter_border, 1.0));
     painter.drawLine(track_view.splitter_rect.topLeft(),
@@ -1345,13 +1285,13 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         grip_center.y() - 6.0,
         36.0,
         12.0);
-    const auto grip_border = group_scroll_drag_active_
+    const auto grip_border = split_drag_active_
         ? QColor("#80c7ff")
-        : splitter_scroll_hover_active_ ? QColor("#66b7ff") : QColor("#566476");
+        : splitter_hover_active_ ? QColor("#66b7ff") : QColor("#566476");
     painter.setPen(QPen(grip_border, 1.0));
-    painter.setBrush(group_scroll_drag_active_
+    painter.setBrush(split_drag_active_
         ? QColor("#214463")
-        : splitter_grip_highlighted ? QColor("#26394b") : QColor("#2a303a"));
+        : splitter_hover_active_ ? QColor("#26394b") : QColor("#2a303a"));
     painter.drawRoundedRect(grip_bounds, 5.0, 5.0);
     painter.setPen(QPen(splitter_grip, 1.4, Qt::SolidLine, Qt::RoundCap));
     for (const auto offset : {-3.0, 0.0, 3.0}) {
@@ -2373,13 +2313,11 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
 }
 
 void TimelineWidget::leaveEvent(QEvent* event) {
-    if (splitter_hover_active_ || splitter_scroll_hover_active_) {
+    if (splitter_hover_active_) {
         splitter_hover_active_ = false;
-        splitter_scroll_hover_active_ = false;
         update();
     }
-    if (!split_drag_active_ && !group_scroll_drag_active_ &&
-        !interaction_controller_.trimGesture().active()) {
+    if (!split_drag_active_ && !interaction_controller_.trimGesture().active()) {
         unsetCursor();
     }
     QWidget::leaveEvent(event);
@@ -2389,18 +2327,8 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton &&
         trackSplitterRect().contains(event->position())) {
         splitter_hover_active_ = true;
-        splitter_scroll_hover_active_ =
-            trackSplitterScrollRect().contains(event->position());
-        if (splitter_scroll_hover_active_) {
-            group_scroll_drag_active_ = true;
-            group_scroll_drag_start_y_ = event->position().y();
-            group_scroll_drag_video_start_offset_ = video_scroll_offset_;
-            group_scroll_drag_audio_start_offset_ = audio_scroll_offset_;
-            setCursor(Qt::ClosedHandCursor);
-        } else {
-            split_drag_active_ = true;
-            setCursor(Qt::SplitVCursor);
-        }
+        split_drag_active_ = true;
+        setCursor(Qt::SplitVCursor);
         grabMouse();
         update();
         event->accept();
@@ -2693,28 +2621,6 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
-    if (group_scroll_drag_active_) {
-        const auto requested_delta = static_cast<int>(std::lround(
-            event->position().y() - group_scroll_drag_start_y_));
-        const auto video_start = static_cast<int>(std::lround(
-            group_scroll_drag_video_start_offset_));
-        const auto audio_start = static_cast<int>(std::lround(
-            group_scroll_drag_audio_start_offset_));
-        const auto minimum_delta = -std::min(video_start, audio_start);
-        const auto maximum_delta = std::min(
-            trackScrollMaximum(TrackKind::Video) - video_start,
-            trackScrollMaximum(TrackKind::Audio) - audio_start);
-        const auto scroll_delta = std::clamp(
-            requested_delta, minimum_delta, maximum_delta);
-        setTrackScrollOffset(
-            TrackKind::Video,
-            video_start + scroll_delta);
-        setTrackScrollOffset(
-            TrackKind::Audio,
-            audio_start + scroll_delta);
-        event->accept();
-        return;
-    }
     if (split_drag_active_) {
         constexpr double bottom_margin = 12.0;
         const auto available_height = std::max(
@@ -2893,14 +2799,6 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
-    if (group_scroll_drag_active_ && event->button() == Qt::LeftButton) {
-        group_scroll_drag_active_ = false;
-        releaseMouse();
-        updateTrackSplitterHoverState(event->position());
-        update();
-        event->accept();
-        return;
-    }
     if (split_drag_active_ && event->button() == Qt::LeftButton) {
         split_drag_active_ = false;
         releaseMouse();
