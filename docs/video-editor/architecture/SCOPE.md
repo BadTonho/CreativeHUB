@@ -73,10 +73,13 @@ remain available for the full clip. Transform nodes animate position X/Y,
 scale, rotation, and opacity with clip-local linear keyframes; Brightness nodes
 animate their `amount` parameter. Color and other effect parameters remain
 static. Grayscale, Brightness, Contrast, and Saturation from the existing
-video Effects catalog can be dragged onto the canvas as effect nodes; each
-reuses the existing parameter values and enabled state. Dropping onto a cable
-inserts the effect into the connection, while dropping onto empty canvas adds a
-disconnected node. Merge combines its background and foreground with
+video Effects catalog can be dragged from either Effects or Functions onto the
+canvas as effect nodes; each reuses the existing parameter values and enabled
+state. Dropping onto a cable inserts the effect into the connection, while
+dropping onto empty canvas adds a disconnected node. The Functions picker stays
+open during a drag, closes after an accepted node drop, and remains open after
+a canceled or rejected drop; its Add and Enter actions continue to apply the
+effect to the Timeline stack. Merge combines its background and foreground with
 straight-alpha source-over. The graph output replaces the clip image before
 its existing Inspector effect stack and Timeline transform/keyframes.
 

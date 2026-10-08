@@ -20,6 +20,7 @@
 #include <QWidget>
 
 #include <cstdio>
+#include <memory>
 #include <stdexcept>
 
 namespace {
@@ -306,15 +307,15 @@ int runFusionWorkspaceTest() {
 
     const auto drop_effect = [canvas](const QPoint& position,
                                       const QByteArray& effect_id) {
-        QMimeData mime;
-        mime.setData(ui::kEffectIdMimeType, effect_id);
-        QDragEnterEvent enter(position, Qt::CopyAction, &mime,
+        std::unique_ptr<QMimeData> mime(
+            ui::createEffectIdMimeData(QString::fromUtf8(effect_id)));
+        QDragEnterEvent enter(position, Qt::CopyAction, mime.get(),
                               Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(canvas->viewport(), &enter);
-        QDragMoveEvent move(position, Qt::CopyAction, &mime,
+        QDragMoveEvent move(position, Qt::CopyAction, mime.get(),
                             Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(canvas->viewport(), &move);
-        QDropEvent drop(QPointF(position), Qt::CopyAction, &mime,
+        QDropEvent drop(QPointF(position), Qt::CopyAction, mime.get(),
                         Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(canvas->viewport(), &drop);
         return enter.isAccepted() && move.isAccepted() && drop.isAccepted();

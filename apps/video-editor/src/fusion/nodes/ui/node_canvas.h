@@ -32,7 +32,7 @@ public:
     void setDisconnectionRequestedHandler(
         std::function<void(NodeId, std::uint8_t)> handler);
     void setEffectDropRequestedHandler(
-        std::function<void(const QString&, const QPointF&,
+        std::function<bool(const QString&, const QPointF&,
                            std::optional<Connection>)> handler);
 
 protected:
@@ -50,7 +50,7 @@ private:
     std::function<void(NodeId, double, double)> position_changed_;
     std::function<void(NodeId, NodeId, std::uint8_t)> connection_requested_;
     std::function<void(NodeId, std::uint8_t)> disconnection_requested_;
-    std::function<void(const QString&, const QPointF&,
+    std::function<bool(const QString&, const QPointF&,
                        std::optional<Connection>)> effect_drop_requested_;
     NodeGraph graph_;
     std::vector<Connection> connections_;

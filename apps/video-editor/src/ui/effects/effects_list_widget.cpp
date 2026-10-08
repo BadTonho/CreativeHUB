@@ -84,11 +84,7 @@ QMimeData* EffectsListWidget::mimeData(
     const auto effect_id = items.front()->data(Qt::UserRole).toString();
     if (!isDraggableEffect(effect_id)) return nullptr;
 
-    auto* mime_data = new QMimeData;
-    mime_data->setData(
-        ui::kEffectIdMimeType,
-        effect_id.toUtf8());
-    return mime_data;
+    return ui::createEffectIdMimeData(effect_id);
 }
 
 void EffectsListWidget::updateVisibility() {

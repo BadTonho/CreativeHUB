@@ -311,7 +311,8 @@ performance measurements, and Video Editor stability as the decision criteria.
   - [x] Add shared CPU Grayscale, Brightness, Contrast, and Saturation filters
     for video and image clips, available through Effects and Functions with
     editable stacks, individual enable/bypass controls, and version 18 project
-    persistence.
+    persistence. Both panels can also drag the four visual filters into the
+    Fusion graph; Functions remains open when a drop is canceled or rejected.
   - [ ] Expand clip color correction into broader grading workflows.
 - [x] Display derived, cached waveforms on independent and linked Audio clips,
   with a global Mono/Stereo view preference and separate channel peaks.

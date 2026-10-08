@@ -4,6 +4,8 @@
 #include <QPointer>
 #include <QString>
 
+#include <cstdint>
+
 #include "settings/shortcut_manager.h"
 
 class QAction;
@@ -42,7 +44,13 @@ private:
     void updateAddEnabled();
     void addCurrentEffect();
     void filterEffects(const QString& query);
+    void setEffectDragInProgress(bool in_progress);
+    void finishEffectDrag(bool drop_accepted);
 
+private slots:
+    void onEffectDragStateChanged(bool in_progress, bool drop_accepted);
+
+private:
     QWidget* owner_ = nullptr;
     QPointer<QDialog> dialog_;
     QAction* toggle_action_ = nullptr;
@@ -50,6 +58,8 @@ private:
     QListWidget* effect_list_ = nullptr;
     QPushButton* add_button_ = nullptr;
     bool effect_target_available_ = false;
+    bool effect_drag_in_progress_ = false;
+    std::uint64_t drag_session_generation_ = 0;
     bool suppress_owner_focus_restore_ = false;
 };
 

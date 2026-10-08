@@ -249,9 +249,12 @@ across the four visual filters and an `Add`/`Cancel` action row. With no
 selected video or image clip, search remains enabled and `Add` is disabled.
 `Add` or Enter applies the selected filter and closes the picker; Cancel closes
 it without editing the Timeline. Functions is an additional quick-access path
-and does not replace the Effects dock or its drag-and-drop workflow. A click
-outside it, loss of window activation, Escape, the title-bar close button, or
-Shift + Space closes and destroys it; the next shortcut press creates a fresh
+and does not replace the Effects dock. Both Effects and Functions can drag
+Grayscale, Brightness, Contrast, or Saturation into the Fusion node canvas.
+Functions stays open during a drag, closes after a node is successfully added,
+and remains open after a canceled or rejected drop. A click outside it, loss of
+window activation, Escape, the title-bar close button, or Shift + Space closes
+and destroys it when no drag is active; the next shortcut press creates a fresh
 window. Outside clicks continue to the clicked control. The shortcut uses
 `WindowShortcut` context and remains available while the floating window is
 focused. It is registered in `ShortcutManager` and can be customized in
@@ -672,15 +675,17 @@ service and therefore update project dirty state and Undo/Redo. Selecting a
 video or image clip loads its stored graph or a default Input-to-Output
 pass-through. The Inspector edits the selected node's parameters and chooses
 additional video or image inputs from the project Media Pool. Drag Grayscale,
-Brightness, Contrast, or Saturation from the Effects panel onto the canvas to
-add its node. Dropping onto a connection splits the cable and inserts the
-effect; dropping elsewhere creates a disconnected node. Its Inspector shows
-the effect's existing enabled state and parameter controls. Audio effects,
-text, and transitions are not graph nodes. To connect nodes,
-drag an output port onto an input port; drag a connected input port or cable to
-empty canvas space to remove it. Releasing an output on another input rewires
-that input. Disconnected inputs evaluate as transparent. Connection validation
-rejects incompatible ports and cycles with a visible explanation. The Transform
+Brightness, Contrast, or Saturation from either the Effects panel or the
+Functions window onto the canvas to add its node. Dropping onto a connection
+splits the cable and inserts the effect; dropping elsewhere creates a
+disconnected node. Its Inspector shows the effect's existing enabled state and
+parameter controls. The Functions window closes only after the canvas accepts
+the new node. Audio effects, text, and transitions are not graph nodes. To
+connect nodes, drag an output port onto an input port; drag a connected input
+port or cable to empty canvas space to remove it. Releasing an output on
+another input rewires that input. Disconnected inputs evaluate as transparent.
+Connection validation rejects incompatible ports and cycles with a visible
+explanation. The Transform
 Inspector exposes diamond controls for position X/Y, scale, rotation, and
 opacity; Brightness exposes one for `amount`. Clicking a diamond adds a linear
 keyframe at the selected clip-local playhead frame, seeded with the evaluated

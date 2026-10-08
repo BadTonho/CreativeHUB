@@ -1,7 +1,9 @@
 #include "settings/shortcut_manager.h"
 #include "ui/functions/function_palette.h"
+#include "ui/media_browser/media_drag_mime.h"
 
 #include <QAction>
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDialog>
@@ -9,10 +11,13 @@
 #include <QKeySequence>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMetaObject>
+#include <QMimeData>
 #include <QMainWindow>
 #include <QPointer>
 #include <QPushButton>
 #include <QSettings>
+#include <QStringList>
 #include <QTest>
 #include <QWidget>
 
@@ -101,6 +106,26 @@ void verifyFunctionPalette(QSettings& settings) {
                 functions_list != nullptr && functions_list->count() == 4 &&
                 functions_add != nullptr,
             "Functions must provide effect search, list, and Add controls.");
+    require(functions_list->dragEnabled() &&
+                functions_list->dragDropMode() == QAbstractItemView::DragOnly,
+            "Functions effects must support copy-only dragging.");
+    const QStringList fusion_effect_ids{
+        QStringLiteral("video.grayscale"),
+        QStringLiteral("video.brightness"),
+        QStringLiteral("video.contrast"),
+        QStringLiteral("video.saturation")};
+    for (int index = 0; index < fusion_effect_ids.size(); ++index) {
+        auto* item = functions_list->item(index);
+        require(item->data(Qt::UserRole).toString() == fusion_effect_ids[index] &&
+                    item->flags().testFlag(Qt::ItemIsDragEnabled),
+                "Functions must expose the four draggable Fusion visual effects.");
+        auto* mime = ui::createEffectIdMimeData(fusion_effect_ids[index]);
+        require(mime->hasFormat(ui::kEffectIdMimeType) &&
+                    mime->data(ui::kEffectIdMimeType) ==
+                        fusion_effect_ids[index].toUtf8(),
+                "Functions effect drag must use the shared Effects MIME payload.");
+        delete mime;
+    }
     require(!functions_add->isEnabled(),
             "Add must be disabled without a compatible selected clip.");
     functions_search->setText(QStringLiteral("contrast"));
@@ -235,6 +260,39 @@ void verifyFunctionPalette(QSettings& settings) {
     processDeferredDeletes();
     require(deactivated_dialog.isNull() && palette.dialog() == nullptr,
             "Losing window activation must close and destroy Functions.");
+
+    main_window.activateWindow();
+    editor->setFocus();
+    QApplication::processEvents();
+    sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
+    QPointer<QDialog> drag_dialog = palette.dialog();
+    require(drag_dialog != nullptr && drag_dialog->isVisible(),
+            "Functions did not reopen for drag-dismissal checks.");
+    require(QMetaObject::invokeMethod(
+                &palette, "onEffectDragStateChanged", Qt::DirectConnection,
+                Q_ARG(bool, true), Q_ARG(bool, false)),
+            "The Functions effect drag did not enter its protected state.");
+    QEvent drag_deactivation(QEvent::WindowDeactivate);
+    QCoreApplication::sendEvent(drag_dialog, &drag_deactivation);
+    QTest::qWait(1);
+    require(drag_dialog->isVisible(),
+            "Window deactivation during a drag must not close Functions.");
+    require(QMetaObject::invokeMethod(
+                &palette, "onEffectDragStateChanged", Qt::DirectConnection,
+                Q_ARG(bool, false), Q_ARG(bool, false)),
+            "The canceled Functions drag did not finish.");
+    require(drag_dialog->isVisible(),
+            "A canceled or rejected drag must leave Functions open.");
+    require(QMetaObject::invokeMethod(
+                &palette, "onEffectDragStateChanged", Qt::DirectConnection,
+                Q_ARG(bool, true), Q_ARG(bool, false)) &&
+                QMetaObject::invokeMethod(
+                    &palette, "onEffectDragStateChanged", Qt::DirectConnection,
+                    Q_ARG(bool, false), Q_ARG(bool, true)),
+            "The accepted Functions drag did not finish.");
+    processDeferredDeletes();
+    require(drag_dialog.isNull() && palette.dialog() == nullptr,
+            "A successful drop must close and destroy Functions.");
 
     palette.setEffectTargetAvailable(true);
     main_window.activateWindow();

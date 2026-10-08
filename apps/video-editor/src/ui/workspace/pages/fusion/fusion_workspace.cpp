@@ -173,11 +173,11 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     node_canvas->setEffectDropRequestedHandler(
         [this](const QString& effect_id, const QPointF& position,
                std::optional<fusion::nodes::Connection> cable) {
-            if (clip_id_ == 0) return;
+            if (clip_id_ == 0) return false;
             const auto effect_bytes = effect_id.toUtf8();
             const std::string effect_key(effect_bytes.constData(),
                                          static_cast<std::size_t>(effect_bytes.size()));
-            if (creative_suite::effects::findDefinition(effect_key) == nullptr) return;
+            if (creative_suite::effects::findDefinition(effect_key) == nullptr) return false;
             auto candidate = graph_;
             fusion::nodes::Node effect_node;
             effect_node.id = candidate.next_id++;
@@ -195,13 +195,14 @@ void FusionWorkspace::createPanels(QWidget* parent) {
                 if (!fusion::nodes::validate(candidate)) {
                     if (auto* label = inspector_panel_->findChild<QLabel*>("fusionNodeStatus"))
                         label->setText("Effect insertion rejected: the cable cannot be split without creating an invalid or cyclic graph.");
-                    return;
+                    return false;
                 }
             }
             selected_node_id_ = effect_node_id;
             commitGraph(std::move(candidate), cable.has_value()
                 ? QStringLiteral("Effect inserted into the connection.")
                 : QStringLiteral("Effect node added; connect it to the graph."));
+            return true;
         });
     connect(add_button, &QPushButton::clicked, this, [this, add_type] {
         if (clip_id_ == 0) return;

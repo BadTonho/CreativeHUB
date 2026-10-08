@@ -244,7 +244,7 @@ void NodeCanvas::setDisconnectionRequestedHandler(
 }
 
 void NodeCanvas::setEffectDropRequestedHandler(
-    std::function<void(const QString&, const QPointF&,
+    std::function<bool(const QString&, const QPointF&,
                        std::optional<Connection>)> handler) {
     effect_drop_requested_ = std::move(handler);
 }
@@ -287,7 +287,10 @@ void NodeCanvas::dropEvent(QDropEvent* event) {
             break;
         }
     }
-    effect_drop_requested_(effect_id, scene_position, cable);
+    if (!effect_drop_requested_(effect_id, scene_position, cable)) {
+        event->ignore();
+        return;
+    }
     event->acceptProposedAction();
 }
 

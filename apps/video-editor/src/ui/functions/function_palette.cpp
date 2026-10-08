@@ -1,13 +1,16 @@
 #include "ui/functions/function_palette.h"
 
 #include "settings/shortcut_manager.h"
+#include "ui/media_browser/media_drag_mime.h"
 
 #include <creative_suite/effects/effects.h>
 
 #include <QAction>
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QDialog>
+#include <QDrag>
 #include <QEvent>
 #include <QKeySequence>
 #include <QLabel>
@@ -20,7 +23,59 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <functional>
+#include <string_view>
+#include <utility>
+
 namespace ui {
+namespace {
+
+class FunctionEffectListWidget final : public QListWidget {
+public:
+    using DragStateHandler = std::function<void(bool, bool)>;
+
+    FunctionEffectListWidget(QWidget* parent, DragStateHandler drag_state_handler)
+        : QListWidget(parent), drag_state_handler_(std::move(drag_state_handler)) {
+        setSelectionMode(QAbstractItemView::SingleSelection);
+        setSelectionBehavior(QAbstractItemView::SelectRows);
+        setUniformItemSizes(true);
+        setDragEnabled(true);
+        setDragDropMode(QAbstractItemView::DragOnly);
+        setDefaultDropAction(Qt::CopyAction);
+    }
+
+    QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override {
+        if (items.size() != 1 || items.front() == nullptr) return nullptr;
+        const auto effect_id = items.front()->data(Qt::UserRole).toString();
+        const auto effect_bytes = effect_id.toUtf8();
+        const std::string_view effect_key(
+            effect_bytes.constData(), static_cast<std::size_t>(effect_bytes.size()));
+        if (creative_suite::effects::findDefinition(effect_key) == nullptr) {
+            return nullptr;
+        }
+        return createEffectIdMimeData(effect_id);
+    }
+
+protected:
+    void startDrag(Qt::DropActions supported_actions) override {
+        auto* drag_mime = mimeData(selectedItems());
+        if (drag_mime == nullptr) return;
+
+        QDrag drag(this);
+        drag.setMimeData(drag_mime);
+        if (drag_state_handler_) drag_state_handler_(true, false);
+        const auto action = drag.exec(
+            supported_actions & Qt::CopyAction, Qt::CopyAction);
+        if (drag_state_handler_) {
+            drag_state_handler_(false, action == Qt::CopyAction);
+        }
+    }
+
+private:
+    DragStateHandler drag_state_handler_;
+};
+
+}  // namespace
 
 FunctionPalette::FunctionPalette(
     QWidget* owner,
@@ -121,13 +176,22 @@ bool FunctionPalette::eventFilter(QObject* watched, QEvent* event) {
     if (dialog_ == nullptr || !dialog_->isVisible()) {
         return QObject::eventFilter(watched, event);
     }
+    if (effect_drag_in_progress_) {
+        return QObject::eventFilter(watched, event);
+    }
 
     if (watched == dialog_ && event->type() == QEvent::WindowDeactivate) {
         const QPointer<QDialog> deactivated_dialog = dialog_;
-        QTimer::singleShot(0, this, [this, deactivated_dialog]() {
+        const auto drag_generation = drag_session_generation_;
+        QTimer::singleShot(0, this, [this, deactivated_dialog,
+                                     drag_generation]() {
             if (deactivated_dialog == nullptr ||
                 dialog_ != deactivated_dialog ||
                 !deactivated_dialog->isVisible()) {
+                return;
+            }
+            if (effect_drag_in_progress_ ||
+                drag_session_generation_ != drag_generation) {
                 return;
             }
             closeDialog(QApplication::activeWindow() == owner_);
@@ -143,6 +207,22 @@ bool FunctionPalette::eventFilter(QObject* watched, QEvent* event) {
         }
     }
     return QObject::eventFilter(watched, event);
+}
+
+void FunctionPalette::setEffectDragInProgress(bool in_progress) {
+    effect_drag_in_progress_ = in_progress;
+    ++drag_session_generation_;
+}
+
+void FunctionPalette::finishEffectDrag(bool drop_accepted) {
+    setEffectDragInProgress(false);
+    if (dialog_ == nullptr || !dialog_->isVisible()) return;
+    if (drop_accepted) {
+        closeDialog(true);
+        return;
+    }
+    dialog_->raise();
+    dialog_->activateWindow();
 }
 
 void FunctionPalette::removeDismissFilters() {
@@ -174,7 +254,10 @@ void FunctionPalette::createDialog() {
     search_->setObjectName(QStringLiteral("functionsEffectSearch"));
     search_->setPlaceholderText(QStringLiteral("Search effects"));
     layout->addWidget(search_);
-    effect_list_ = new QListWidget(dialog_);
+    effect_list_ = new FunctionEffectListWidget(dialog_,
+        [this](bool in_progress, bool drop_accepted) {
+            onEffectDragStateChanged(in_progress, drop_accepted);
+        });
     effect_list_->setObjectName(QStringLiteral("functionsEffectList"));
     for (const auto& effect : creative_suite::effects::builtInEffects()) {
         auto* item = new QListWidgetItem(
@@ -222,6 +305,12 @@ void FunctionPalette::createDialog() {
             if (!suppress_owner_focus_restore_) restoreOwnerFocus();
             suppress_owner_focus_restore_ = false;
         });
+}
+
+void FunctionPalette::onEffectDragStateChanged(
+    bool in_progress, bool drop_accepted) {
+    if (in_progress) setEffectDragInProgress(true);
+    else finishEffectDrag(drop_accepted);
 }
 
 void FunctionPalette::restoreOwnerFocus() {
