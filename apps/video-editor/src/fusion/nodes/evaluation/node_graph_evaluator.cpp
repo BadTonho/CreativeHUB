@@ -130,6 +130,13 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph, const InputFra
                     creative_suite::effects::ProcessingResult::Completed)
                 return std::nullopt;
             values.emplace(id, std::move(frame));
+        } else if (node->type == NodeType::Effect) {
+            auto frame = background;
+            if (!creative_suite::effects::applyStack(frame,
+                    std::span<const creative_suite::effects::EffectInstance>(
+                        &node->effect, 1)))
+                return std::nullopt;
+            values.emplace(id, std::move(frame));
         } else if (node->type == NodeType::Merge) {
             const auto* second = incoming(graph, id, 1);
             const auto foreground = second != nullptr

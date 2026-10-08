@@ -13,8 +13,9 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 20;
+inline constexpr int current_format_version = 21;
 inline constexpr int node_graph_format_version = 20;
+inline constexpr int effect_node_format_version = 21;
 inline constexpr int portrait_canvas_format_version = 19;
 inline constexpr int effect_enabled_format_version = 18;
 inline constexpr int clip_effects_format_version = 17;

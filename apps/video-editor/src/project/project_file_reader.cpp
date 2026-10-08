@@ -114,12 +114,14 @@ fusion::nodes::NodeType parseNodeType(const QJsonValue& value,
     if (name == QLatin1String("color")) return fusion::nodes::NodeType::Color;
     if (name == QLatin1String("merge")) return fusion::nodes::NodeType::Merge;
     if (name == QLatin1String("output")) return fusion::nodes::NodeType::Output;
+    if (name == QLatin1String("effect")) return fusion::nodes::NodeType::Effect;
     throwJson(ProjectErrorCode::InvalidValue, project_path,
               "Project JSON contains an unsupported Fusion node type.");
 }
 
 fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
-                                        const std::filesystem::path& project_path) {
+                                        const std::filesystem::path& project_path,
+                                        int version) {
     if (!value.isObject())
         throwJson(ProjectErrorCode::InvalidValue, project_path,
                   "Project JSON contains an invalid Fusion node graph.");
@@ -145,6 +147,43 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
         fusion::nodes::Node node;
         node.id = static_cast<fusion::nodes::NodeId>(id.toInteger());
         node.type = parseNodeType(node_object.value("type"), project_path);
+        if (node.type == fusion::nodes::NodeType::Effect) {
+            if (version < effect_node_format_version)
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Effect nodes require project format version 21 or newer.");
+            const auto effect_value = node_object.value("effect");
+            if (!effect_value.isObject())
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A Fusion effect node is missing its effect settings.");
+            const auto effect_object = effect_value.toObject();
+            const auto effect_id = effect_object.value("id");
+            const auto parameters = effect_object.value("parameters");
+            if (!effect_id.isString() ||
+                !effect_object.value("enabled").isBool() ||
+                !parameters.isArray())
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A Fusion effect node contains incomplete effect settings.");
+            const auto effect_id_bytes = effect_id.toString().toUtf8();
+            node.effect.id.assign(effect_id_bytes.constData(),
+                                  static_cast<std::size_t>(effect_id_bytes.size()));
+            node.effect.enabled = effect_object.value("enabled").toBool();
+            for (const auto& parameter_value : parameters.toArray()) {
+                if (!parameter_value.isObject() ||
+                    !parameter_value.toObject().value("id").isString() ||
+                    !parameter_value.toObject().value("value").isDouble())
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Fusion effect node contains an invalid parameter.");
+                const auto parameter = parameter_value.toObject();
+                const auto parameter_id = parameter.value("id").toString().toUtf8();
+                node.effect.parameters.push_back({
+                    std::string(parameter_id.constData(),
+                                static_cast<std::size_t>(parameter_id.size())),
+                    parameter.value("value").toDouble()});
+            }
+            if (!creative_suite::effects::isValid(node.effect))
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A Fusion effect node contains an unsupported effect or invalid parameter.");
+        }
         node.x = node_object.value("x").toDouble(std::numeric_limits<double>::quiet_NaN());
         node.y = node_object.value("y").toDouble(std::numeric_limits<double>::quiet_NaN());
         if (node_object.contains("source")) {
@@ -812,7 +851,7 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                 if (version >= node_graph_format_version &&
                     clip_object.contains("node_graph")) {
                     clip.node_graph = parseNodeGraph(
-                        clip_object.value("node_graph"), project_path);
+                        clip_object.value("node_graph"), project_path, version);
                 }
                 if (version >= audio_companion_format_version) {
                     if (clip_object.contains("linked_clip_id")) {

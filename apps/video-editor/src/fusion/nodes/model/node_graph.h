@@ -13,7 +13,7 @@ namespace fusion::nodes {
 
 using NodeId = std::uint64_t;
 
-enum class NodeType { Input, Transform, Color, Merge, Output };
+enum class NodeType { Input, Transform, Color, Merge, Output, Effect };
 
 struct ColorParameters {
     double brightness = 0.0;
@@ -35,6 +35,7 @@ struct Node {
     bool source_is_still = false;
     timeline::Transform2D transform;
     ColorParameters color;
+    creative_suite::effects::EffectInstance effect;
     friend bool operator==(const Node&, const Node&) = default;
 };
 

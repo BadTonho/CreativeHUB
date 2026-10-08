@@ -166,10 +166,14 @@ tasks.
 - [x] Qt OpenGL preview presentation with CPU fallback and grayscale preview.
 - [x] Versioned `.csp` persistence, transactional New/Open/Save/Save As,
   autosave, and recovery snapshots.
-- [-] Initial functional Fusion node graphs for selected video and image clips:
-  Input, Transform, Color, Merge, and Output nodes; project Media Pool video
-  and image inputs; shared Preview/export evaluation; v20 graph persistence;
-  and Timeline Undo/Redo. See [Current Scope](architecture/SCOPE.md),
+- [-] Functional Fusion node graphs for selected video and image clips:
+  Input, Transform, Color, Merge, Output, and the existing Grayscale,
+  Brightness, Contrast, and Saturation effects as draggable graph nodes;
+  Media Pool video/image inputs; cable insertion; shared Preview/export
+  evaluation; v21 graph persistence; and Timeline Undo/Redo. Automated coverage
+  is in place; keep Effects-panel drags, Preview, save/reopen, and edit-history
+  checks pending until performed in the Release build. See
+  [Current Scope](architecture/SCOPE.md),
   [Project Persistence](architecture/PROJECT.md), and [Regression Testing](REGRESSION_TESTING.md).
 - [x] New Project canvas and frame-rate choices: 16:9 (1920×1080) or 9:16
   (1080×1920), 24/25/30/48/50/60 fps, defaulting to 16:9 at 30 fps; version 19

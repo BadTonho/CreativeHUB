@@ -594,10 +594,19 @@ void validateFusionPreviewExportParity(
     Node merge;
     merge.id = 4;
     merge.type = NodeType::Merge;
+    Node effect;
+    effect.id = 5;
+    effect.type = NodeType::Effect;
+    effect.effect = creative_suite::effects::makeDefaultInstance(
+        "video.brightness");
+    require(creative_suite::effects::setParameterValue(
+                effect.effect, "amount", 4.0),
+            "Could not configure the known Fusion effect-node fixture.");
     graph.nodes.push_back(overlay_input);
     graph.nodes.push_back(merge);
-    graph.connections = {{1, 4, 0}, {3, 4, 1}, {4, 2, 0}};
-    graph.next_id = 5;
+    graph.nodes.push_back(effect);
+    graph.connections = {{1, 4, 0}, {3, 4, 1}, {4, 5, 0}, {5, 2, 0}};
+    graph.next_id = 6;
     require(static_cast<bool>(validate(graph)),
             "The known Fusion Preview/Render parity graph is invalid.");
 

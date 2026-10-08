@@ -19,7 +19,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 20, including migration from
+- versioned `.csp` persistence through version 21, including migration from
   versions 1 through 13, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio media kinds, typed tracks,
   per-project timeline zoom, track-row height, and optional shared/clip-specific
@@ -69,14 +69,19 @@ passes the selected clip through. Input nodes can use that clip or a video/image
 already in the project Media Pool. Video inputs are evaluated from the graph
 clip's local start and become transparent after their source ends; still images
 remain available for the full clip. Transform and Color nodes use static
-parameters. Merge combines its background and foreground with straight-alpha
-source-over. The graph output replaces the clip image before its existing
-Inspector effect stack and Timeline transform/keyframes.
+parameters. Grayscale, Brightness, Contrast, and Saturation from the existing
+video Effects catalog can be dragged onto the canvas as effect nodes; each
+reuses the existing parameter values and enabled state. Dropping onto a cable
+inserts the effect into the connection, while dropping onto empty canvas adds a
+disconnected node. Merge combines its background and foreground with
+straight-alpha source-over. The graph output replaces the clip image before
+its existing Inspector effect stack and Timeline transform/keyframes.
 
-Graph data is stored in `.csp` version 20. Versions 1 through 19 open without a
-node graph and preserve their prior image result. Graph editing participates in
-Timeline Undo/Redo. This phase does not add graph animation, text, audio, masks,
-extra effects, nested compositions, or Motion Studio integration.
+Graph data is stored in `.csp` version 21. Versions 1 through 20 retain their
+existing graph behavior and preserve their prior image result. Graph editing
+participates in Timeline Undo/Redo. This phase does not add graph animation,
+text, audio, masks, effects beyond the four existing video effects, nested
+compositions, or Motion Studio integration.
 
 ## Approved foundation direction
 

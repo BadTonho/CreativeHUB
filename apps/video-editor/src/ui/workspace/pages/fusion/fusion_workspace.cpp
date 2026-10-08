@@ -1,6 +1,9 @@
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
 #include "fusion/nodes/ui/node_canvas.h"
 
+#include <creative_suite/effects/effects.h>
+
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -92,6 +95,39 @@ void FusionWorkspace::createPanels(QWidget* parent) {
                 return;
             }
             commitGraph(std::move(*candidate), QStringLiteral("Connection removed."));
+        });
+    node_canvas->setEffectDropRequestedHandler(
+        [this](const QString& effect_id, const QPointF& position,
+               std::optional<fusion::nodes::Connection> cable) {
+            if (clip_id_ == 0) return;
+            const auto effect_bytes = effect_id.toUtf8();
+            const std::string effect_key(effect_bytes.constData(),
+                                         static_cast<std::size_t>(effect_bytes.size()));
+            if (creative_suite::effects::findDefinition(effect_key) == nullptr) return;
+            auto candidate = graph_;
+            fusion::nodes::Node effect_node;
+            effect_node.id = candidate.next_id++;
+            effect_node.type = fusion::nodes::NodeType::Effect;
+            effect_node.x = position.x();
+            effect_node.y = position.y();
+            effect_node.effect = creative_suite::effects::makeDefaultInstance(effect_key);
+            const auto effect_node_id = effect_node.id;
+            candidate.nodes.push_back(std::move(effect_node));
+            if (cable.has_value()) {
+                candidate.connections.erase(std::remove(candidate.connections.begin(),
+                    candidate.connections.end(), *cable), candidate.connections.end());
+                candidate.connections.push_back({cable->from, effect_node_id, 0});
+                candidate.connections.push_back({effect_node_id, cable->to, cable->input});
+                if (!fusion::nodes::validate(candidate)) {
+                    if (auto* label = inspector_panel_->findChild<QLabel*>("fusionNodeStatus"))
+                        label->setText("Effect insertion rejected: the cable cannot be split without creating an invalid or cyclic graph.");
+                    return;
+                }
+            }
+            selected_node_id_ = effect_node_id;
+            commitGraph(std::move(candidate), cable.has_value()
+                ? QStringLiteral("Effect inserted into the connection.")
+                : QStringLiteral("Effect node added; connect it to the graph."));
         });
     connect(add_button, &QPushButton::clicked, this, [this, add_type] {
         if (clip_id_ == 0) return;
@@ -254,6 +290,24 @@ void FusionWorkspace::refreshInspector() {
         spin("fusionColorBrightness", "Brightness", node->color.brightness, -100.0, 100.0, 1.0);
         spin("fusionColorContrast", "Contrast %", node->color.contrast_percent, 0.0, 200.0, 1.0);
         spin("fusionColorSaturation", "Saturation %", node->color.saturation_percent, 0.0, 200.0, 1.0);
+    } else if (node->type == fusion::nodes::NodeType::Effect) {
+        auto* enabled = new QCheckBox(node_properties_);
+        enabled->setObjectName("fusionEffectEnabled");
+        enabled->setChecked(node->effect.enabled);
+        layout->addRow("Enabled", enabled);
+        if (const auto* definition = creative_suite::effects::findDefinition(node->effect.id)) {
+            for (const auto& parameter : definition->parameters) {
+                const auto parameter_id = QString::fromUtf8(
+                    parameter.id.data(), static_cast<qsizetype>(parameter.id.size()));
+                const auto parameter_name = QString::fromUtf8(
+                    parameter.name.data(), static_cast<qsizetype>(parameter.name.size()));
+                const auto control_name = QStringLiteral("fusionEffectParameter_%1")
+                    .arg(parameter_id);
+                spin(control_name, parameter_name,
+                    creative_suite::effects::parameterValue(node->effect, parameter.id),
+                    parameter.minimum, parameter.maximum, parameter.step);
+            }
+        }
     }
     layout->addRow(apply);
     layout->addRow(remove);
@@ -272,6 +326,19 @@ void FusionWorkspace::refreshInspector() {
             found->color.brightness = node_properties_->findChild<QDoubleSpinBox*>("fusionColorBrightness")->value();
             found->color.contrast_percent = node_properties_->findChild<QDoubleSpinBox*>("fusionColorContrast")->value();
             found->color.saturation_percent = node_properties_->findChild<QDoubleSpinBox*>("fusionColorSaturation")->value();
+        } else if (found->type == fusion::nodes::NodeType::Effect) {
+            const auto* definition = creative_suite::effects::findDefinition(found->effect.id);
+            auto* enabled = node_properties_->findChild<QCheckBox*>("fusionEffectEnabled");
+            if (definition == nullptr || enabled == nullptr) return;
+            found->effect.enabled = enabled->isChecked();
+            for (const auto& parameter : definition->parameters) {
+                const auto parameter_id = QString::fromUtf8(
+                    parameter.id.data(), static_cast<qsizetype>(parameter.id.size()));
+                auto* control = node_properties_->findChild<QDoubleSpinBox*>(
+                    QStringLiteral("fusionEffectParameter_%1").arg(parameter_id));
+                if (control == nullptr || !creative_suite::effects::setParameterValue(
+                        found->effect, parameter.id, control->value())) return;
+            }
         }
         commitGraph(std::move(candidate), QStringLiteral("Node settings updated."));
     });

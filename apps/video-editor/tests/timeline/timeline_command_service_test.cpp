@@ -668,7 +668,12 @@ void runVisualEffectCommands() {
     auto graph = fusion::nodes::makePassthroughGraph();
     graph.nodes.push_back(fusion::nodes::Node{
         graph.next_id++, fusion::nodes::NodeType::Color, 220.0, 120.0});
-    graph.connections = {{1, 3, 0}, {3, 2, 0}};
+    fusion::nodes::Node effect_node{
+        graph.next_id++, fusion::nodes::NodeType::Effect, 420.0, 120.0};
+    effect_node.effect = creative_suite::effects::makeDefaultInstance(
+        "video.brightness");
+    graph.nodes.push_back(effect_node);
+    graph.connections = {{1, 3, 0}, {3, 4, 0}, {4, 2, 0}};
     require(static_cast<bool>(fusion::nodes::validate(graph)),
             "A simple Fusion graph should validate.");
     const auto graph_edit = service.execute(application::SetClipNodeGraphCommand{

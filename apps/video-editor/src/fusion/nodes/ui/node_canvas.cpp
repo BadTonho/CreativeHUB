@@ -1,6 +1,14 @@
 #include "node_canvas.h"
 
+#include "ui/media_browser/media_drag_mime.h"
+
+#include <creative_suite/effects/effects.h>
+
 #include <QApplication>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsItem>
 #include <QGraphicsLineItem>
@@ -25,8 +33,26 @@ QString title(NodeType type) {
     case NodeType::Color: return QStringLiteral("Color");
     case NodeType::Merge: return QStringLiteral("Merge");
     case NodeType::Output: return QStringLiteral("Output");
+    case NodeType::Effect: return QStringLiteral("Effect");
     }
     return QStringLiteral("Node");
+}
+
+QString title(const Node& node) {
+    if (node.type == NodeType::Effect) {
+        if (const auto* definition = creative_suite::effects::findDefinition(node.effect.id))
+            return QString::fromUtf8(definition->name.data(),
+                                     static_cast<qsizetype>(definition->name.size()));
+    }
+    return title(node.type);
+}
+
+QString effectIdFromMime(const QMimeData* mime) {
+    if (mime == nullptr || !mime->hasFormat(ui::kEffectIdMimeType)) return {};
+    const auto value = mime->data(ui::kEffectIdMimeType);
+    const auto id = value.toStdString();
+    return creative_suite::effects::findDefinition(id) != nullptr
+        ? QString::fromUtf8(value.constData(), value.size()) : QString{};
 }
 
 double inputPortY(NodeType type, std::uint8_t input) {
@@ -47,6 +73,8 @@ NodeCanvas::NodeCanvas(QWidget* parent) : QGraphicsView(parent) {
     setDragMode(QGraphicsView::NoDrag);
     setBackgroundBrush(QColor("#171a20"));
     setObjectName("fusionNodeCanvasView");
+    setAcceptDrops(true);
+    viewport()->setAcceptDrops(true);
     connect(scene_, &QGraphicsScene::selectionChanged, this, [this] {
         if (!selection_changed_) return;
         for (auto* item : scene_->selectedItems()) {
@@ -61,6 +89,7 @@ NodeCanvas::NodeCanvas(QWidget* parent) : QGraphicsView(parent) {
 }
 
 void NodeCanvas::setGraph(const NodeGraph& graph) {
+    graph_ = graph;
     dragging_from_output_ = 0;
     dragging_from_input_ = 0;
     dragging_input_index_ = 0;
@@ -78,7 +107,7 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         item->setFlag(QGraphicsItem::ItemIsSelectable, true);
         item->setFlag(QGraphicsItem::ItemSendsGeometryChanges, true);
         item->setPos(node.x, node.y);
-        auto* label = scene_->addText(title(node.type));
+        auto* label = scene_->addText(title(node));
         label->setDefaultTextColor(QColor("#e4e9f0"));
         label->setFont(QFont(QStringLiteral("Segoe UI"), 10, QFont::DemiBold));
         label->setParentItem(item);
@@ -176,6 +205,54 @@ void NodeCanvas::setConnectionRequestedHandler(
 void NodeCanvas::setDisconnectionRequestedHandler(
     std::function<void(NodeId, std::uint8_t)> handler) {
     disconnection_requested_ = std::move(handler);
+}
+
+void NodeCanvas::setEffectDropRequestedHandler(
+    std::function<void(const QString&, const QPointF&,
+                       std::optional<Connection>)> handler) {
+    effect_drop_requested_ = std::move(handler);
+}
+
+void NodeCanvas::dragEnterEvent(QDragEnterEvent* event) {
+    if (!effectIdFromMime(event->mimeData()).isEmpty()) {
+        event->acceptProposedAction();
+        return;
+    }
+    event->ignore();
+}
+
+void NodeCanvas::dragMoveEvent(QDragMoveEvent* event) {
+    if (!effectIdFromMime(event->mimeData()).isEmpty()) {
+        event->acceptProposedAction();
+        return;
+    }
+    event->ignore();
+}
+
+void NodeCanvas::dropEvent(QDropEvent* event) {
+    const auto effect_id = effectIdFromMime(event->mimeData());
+    if (effect_id.isEmpty() || !effect_drop_requested_) {
+        event->ignore();
+        return;
+    }
+    const auto viewport_position = event->position().toPoint();
+    const auto scene_position = mapToScene(viewport_position);
+    std::optional<Connection> cable;
+    for (auto* item : items(viewport_position)) {
+        if (item->data(1).toInt() != 3) continue;
+        const auto to = static_cast<NodeId>(item->data(0).toULongLong());
+        const auto input = static_cast<std::uint8_t>(item->data(2).toInt());
+        const auto found = std::find_if(graph_.connections.begin(), graph_.connections.end(),
+            [to, input](const Connection& edge) {
+                return edge.to == to && edge.input == input;
+            });
+        if (found != graph_.connections.end()) {
+            cable = *found;
+            break;
+        }
+    }
+    effect_drop_requested_(effect_id, scene_position, cable);
+    event->acceptProposedAction();
 }
 
 void NodeCanvas::mousePressEvent(QMouseEvent* event) {

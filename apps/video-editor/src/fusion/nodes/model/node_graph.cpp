@@ -18,6 +18,7 @@ std::uint8_t inputCount(NodeType type) noexcept {
     switch (type) {
     case NodeType::Transform:
     case NodeType::Color:
+    case NodeType::Effect:
     case NodeType::Output: return 1;
     case NodeType::Merge: return 2;
     case NodeType::Input: return 0;
@@ -38,7 +39,8 @@ NodeGraph makePassthroughGraph() {
 const Node* findNode(const NodeGraph& graph, NodeId id) noexcept { return find(graph, id); }
 bool isVisualNode(NodeType type) noexcept {
     return type == NodeType::Input || type == NodeType::Transform ||
-        type == NodeType::Color || type == NodeType::Merge || type == NodeType::Output;
+        type == NodeType::Color || type == NodeType::Merge ||
+        type == NodeType::Output || type == NodeType::Effect;
 }
 
 GraphValidation validate(const NodeGraph& graph) {
@@ -68,6 +70,9 @@ GraphValidation validate(const NodeGraph& graph) {
             return {GraphError::InvalidParameter, node.id};
         if (node.type == NodeType::Input) inputs.insert(node.id);
         if (node.type == NodeType::Output) ++output_count;
+        if (node.type == NodeType::Effect &&
+            !creative_suite::effects::isValid(node.effect))
+            return {GraphError::InvalidParameter, node.id};
     }
     if (graph.next_id == 0 || graph.next_id <= maximum_id ||
         graph.next_id > static_cast<NodeId>(

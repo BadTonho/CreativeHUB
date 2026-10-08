@@ -1,14 +1,21 @@
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
 #include "fusion/nodes/ui/node_canvas.h"
+#include "ui/media_browser/media_drag_mime.h"
 
 #include <QApplication>
+#include <QByteArray>
 #include <QComboBox>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
 #include <QDoubleSpinBox>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QMimeData>
+#include <QCheckBox>
+#include <QDropEvent>
 #include <QPushButton>
 #include <QWidget>
 
@@ -247,6 +254,76 @@ int runFusionWorkspaceTest() {
                 fusion::nodes::findNode(edited, transform_id) == nullptr &&
                 static_cast<bool>(fusion::nodes::validate(edited)),
             "Removing a node did not preserve a valid pass-through graph.");
+
+    const auto drop_effect = [canvas](const QPoint& position,
+                                      const QByteArray& effect_id) {
+        QMimeData mime;
+        mime.setData(ui::kEffectIdMimeType, effect_id);
+        QDragEnterEvent enter(position, Qt::CopyAction, &mime,
+                              Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &enter);
+        QDragMoveEvent move(position, Qt::CopyAction, &mime,
+                            Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &move);
+        QDropEvent drop(QPointF(position), Qt::CopyAction, &mime,
+                        Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &drop);
+        return enter.isAccepted() && move.isAccepted() && drop.isAccepted();
+    };
+    const auto connected_edge = edited.connections.back();
+    const auto cable_start = port_position(connected_edge.from, 2, 0);
+    const auto cable_end = port_position(connected_edge.to, 1, connected_edge.input);
+    const auto cable_position = (cable_start + cable_end) / 2;
+    require(drop_effect(cable_position, QByteArray("video.grayscale")) &&
+                edit_count == 13 && edited.nodes.back().type ==
+                    fusion::nodes::NodeType::Effect &&
+                edited.connections.size() == 2 &&
+                edited.connections[edited.connections.size() - 2].to ==
+                    edited.nodes.back().id &&
+                edited.connections.back().from == edited.nodes.back().id,
+            "Dropping a video effect on a cable did not split and preserve the connection.");
+    const auto connected_effect_id = edited.nodes.back().id;
+
+    found_blank_canvas_position = false;
+    for (int y = 8; y < canvas->viewport()->height() && !found_blank_canvas_position; y += 16) {
+        for (int x = 8; x < canvas->viewport()->width(); x += 16) {
+            if (canvas->itemAt(QPoint(x, y)) == nullptr) {
+                blank_canvas_position = QPoint(x, y);
+                found_blank_canvas_position = true;
+                break;
+            }
+        }
+    }
+    require(found_blank_canvas_position &&
+                drop_effect(blank_canvas_position, QByteArray("video.saturation")) &&
+                edit_count == 14 && edited.nodes.back().type ==
+                    fusion::nodes::NodeType::Effect && edited.connections.size() == 2,
+            "Dropping a video effect on empty canvas did not create a disconnected node.");
+    const auto detached_effect_id = edited.nodes.back().id;
+    for (const auto* rejected_id : {"audio.gain", "text.text",
+                                    "transitions.cross_dissolve",
+                                    "transitions.fade_to_black"}) {
+        require(!drop_effect(blank_canvas_position, QByteArray(rejected_id)) &&
+                    edit_count == 14 &&
+                    fusion::nodes::findNode(edited, detached_effect_id) != nullptr,
+                "A non-video Effects item was accepted by the Fusion canvas.");
+    }
+
+    node_canvas->setSelectedNode(connected_effect_id);
+    auto* effect_enabled = root.findChild<QCheckBox*>("fusionEffectEnabled");
+    auto* effect_amount = root.findChild<QDoubleSpinBox*>(
+        "fusionEffectParameter_amount");
+    apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
+    require(effect_enabled && effect_amount && apply,
+            "The effect Inspector did not show the effect's enabled state and parameters.");
+    effect_enabled->setChecked(false);
+    effect_amount->setValue(45.0);
+    apply->click();
+    const auto* effect_node = fusion::nodes::findNode(edited, connected_effect_id);
+    require(edit_count == 15 && effect_node != nullptr &&
+                !effect_node->effect.enabled &&
+                creative_suite::effects::parameterValue(effect_node->effect, "amount") == 45.0,
+            "Effect Inspector changes were not committed to the selected graph node.");
     return 0;
 }
 

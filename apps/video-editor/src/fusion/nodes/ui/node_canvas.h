@@ -4,10 +4,16 @@
 
 #include <QGraphicsView>
 #include <QPoint>
+#include <QString>
 #include <functional>
+#include <optional>
 #include <vector>
 
 class QGraphicsLineItem;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDropEvent;
+class QMimeData;
 
 namespace fusion::nodes {
 
@@ -23,11 +29,17 @@ public:
         std::function<void(NodeId, NodeId, std::uint8_t)> handler);
     void setDisconnectionRequestedHandler(
         std::function<void(NodeId, std::uint8_t)> handler);
+    void setEffectDropRequestedHandler(
+        std::function<void(const QString&, const QPointF&,
+                           std::optional<Connection>)> handler);
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     QGraphicsScene* scene_ = nullptr;
@@ -35,6 +47,9 @@ private:
     std::function<void(NodeId, double, double)> position_changed_;
     std::function<void(NodeId, NodeId, std::uint8_t)> connection_requested_;
     std::function<void(NodeId, std::uint8_t)> disconnection_requested_;
+    std::function<void(const QString&, const QPointF&,
+                       std::optional<Connection>)> effect_drop_requested_;
+    NodeGraph graph_;
     std::vector<Connection> connections_;
     NodeId dragging_from_output_ = 0;
     NodeId dragging_from_input_ = 0;

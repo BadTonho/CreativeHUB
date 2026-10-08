@@ -67,6 +67,7 @@ const char* nodeTypeName(fusion::nodes::NodeType type) {
     case fusion::nodes::NodeType::Color: return "color";
     case fusion::nodes::NodeType::Merge: return "merge";
     case fusion::nodes::NodeType::Output: return "output";
+    case fusion::nodes::NodeType::Effect: return "effect";
     }
     return "input";
 }
@@ -99,6 +100,22 @@ QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
         color.insert("contrast", node.color.contrast_percent);
         color.insert("saturation", node.color.saturation_percent);
         value.insert("color", color);
+        if (node.type == fusion::nodes::NodeType::Effect) {
+            QJsonObject effect;
+            effect.insert("id", QString::fromUtf8(node.effect.id.data(),
+                static_cast<qsizetype>(node.effect.id.size())));
+            effect.insert("enabled", node.effect.enabled);
+            QJsonArray parameters;
+            for (const auto& parameter : node.effect.parameters) {
+                QJsonObject parameter_value;
+                parameter_value.insert("id", QString::fromUtf8(parameter.id.data(),
+                    static_cast<qsizetype>(parameter.id.size())));
+                parameter_value.insert("value", parameter.value);
+                parameters.append(parameter_value);
+            }
+            effect.insert("parameters", parameters);
+            value.insert("effect", effect);
+        }
         nodes.append(value);
     }
     object.insert("nodes", nodes);

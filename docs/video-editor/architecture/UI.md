@@ -557,7 +557,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 20 format. Linked video-audio clips can be
+the current `.csp` version 21 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Right-clicking a video or image clip offers
 **Open in Fusion** and opens the selected clip's node graph. A video with linked
@@ -671,7 +671,12 @@ canvas, and evaluator; graph edits go through the existing Timeline command
 service and therefore update project dirty state and Undo/Redo. Selecting a
 video or image clip loads its stored graph or a default Input-to-Output
 pass-through. The Inspector edits the selected node's parameters and chooses
-additional video or image inputs from the project Media Pool. To connect nodes,
+additional video or image inputs from the project Media Pool. Drag Grayscale,
+Brightness, Contrast, or Saturation from the Effects panel onto the canvas to
+add its node. Dropping onto a connection splits the cable and inserts the
+effect; dropping elsewhere creates a disconnected node. Its Inspector shows
+the effect's existing enabled state and parameter controls. Audio effects,
+text, and transitions are not graph nodes. To connect nodes,
 drag an output port onto an input port; drag a connected input port or cable to
 empty canvas space to remove it. Releasing an output on another input rewires
 that input. Disconnected inputs evaluate as transparent. Connection validation

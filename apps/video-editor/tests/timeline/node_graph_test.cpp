@@ -2,6 +2,9 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 void require(bool value, const char* message) {
@@ -61,6 +64,53 @@ int main() {
     const auto adjusted = evaluate(color_graph, {{1, black}});
     require(adjusted.has_value() && adjusted->rgba_pixels[0] > 0,
             "Color node should apply brightness to the RGBA input.");
+
+    const std::vector<std::pair<std::string, double>> built_in_effects{
+        {"video.grayscale", 100.0}, {"video.brightness", 20.0},
+        {"video.contrast", 180.0}, {"video.saturation", 0.0}};
+    auto color_source = std::make_shared<media::VideoFrame>(
+        media::VideoFrame{1, 1, 4, {220, 40, 15, 73}});
+    for (const auto& [effect_id, amount] : built_in_effects) {
+        NodeGraph effect_graph;
+        effect_graph.nodes = {{1, NodeType::Input}, {2, NodeType::Effect},
+                              {3, NodeType::Output}};
+        effect_graph.nodes[1].effect = creative_suite::effects::makeDefaultInstance(effect_id);
+        require(creative_suite::effects::setParameterValue(
+                    effect_graph.nodes[1].effect, "amount", amount),
+                "A built-in effect parameter could not be set for graph coverage.");
+        effect_graph.connections = {{1, 2, 0}, {2, 3, 0}};
+        effect_graph.next_id = 4;
+        require(static_cast<bool>(validate(effect_graph)),
+                "A built-in effect node graph did not validate.");
+        const auto effected = evaluate(effect_graph, {{1, color_source}});
+        require(effected.has_value() && effected->rgba_pixels[3] == 73 &&
+                    std::vector<std::uint8_t>(effected->rgba_pixels.begin(),
+                        effected->rgba_pixels.begin() + 3) !=
+                    std::vector<std::uint8_t>(color_source->rgba_pixels.begin(),
+                        color_source->rgba_pixels.begin() + 3),
+                "A built-in effect node failed to process RGB while preserving alpha.");
+        effect_graph.nodes[1].effect.enabled = false;
+        const auto bypassed = evaluate(effect_graph, {{1, color_source}});
+        require(bypassed.has_value() && bypassed->rgba_pixels == color_source->rgba_pixels,
+                "A disabled effect node did not bypass its input frame.");
+    }
+
+    NodeGraph effect_chain;
+    effect_chain.nodes = {{1, NodeType::Input}, {2, NodeType::Effect},
+                          {3, NodeType::Effect}, {4, NodeType::Output}};
+    effect_chain.nodes[1].effect =
+        creative_suite::effects::makeDefaultInstance("video.grayscale");
+    effect_chain.nodes[2].effect =
+        creative_suite::effects::makeDefaultInstance("video.brightness");
+    require(creative_suite::effects::setParameterValue(
+                effect_chain.nodes[2].effect, "amount", 10.0),
+            "A chained effect parameter could not be set.");
+    effect_chain.connections = {{1, 2, 0}, {2, 3, 0}, {3, 4, 0}};
+    effect_chain.next_id = 5;
+    const auto chained = evaluate(effect_chain, {{1, color_source}});
+    require(static_cast<bool>(validate(effect_chain)) && chained.has_value() &&
+                chained->rgba_pixels[3] == 73,
+            "Repeated effect nodes did not evaluate in connection order.");
 
     auto background = std::make_shared<media::VideoFrame>(
         media::VideoFrame{2, 1, 8, {0, 0, 255, 255, 0, 0, 255, 255}});
