@@ -68,6 +68,15 @@ Other conflicting combinations are rejected. Each command can be reset
 individually, or all commands can be restored with `Reset All`.
 Mouse gestures remain outside the customizable shortcut list.
 
+Global menu and toolbar visibility follows the same workspace scopes. File,
+View, Settings, and Help remain available in every workspace. The Edit menu
+keeps shared Undo/Redo in Edit and Fusion, while its editing commands appear
+only in Edit; it is hidden in Render when it has no applicable commands. The
+Media Pool and Effects toolbar buttons and their View submenus appear in Edit
+and Fusion. Empty menus and separators are hidden. This changes presentation
+only; each command keeps its existing enablement rule, handler, and shortcut.
+Context menus continue to be controlled by their owning widgets.
+
 ## Image Editor
 
 | Shortcut | Action | Context |

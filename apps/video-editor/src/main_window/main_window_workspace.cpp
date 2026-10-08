@@ -65,6 +65,34 @@
 
 using namespace main_window_detail;
 
+namespace {
+
+void refreshMenuVisibility(QMenu* menu) {
+    if (menu == nullptr) return;
+
+    bool has_visible_content = false;
+    QAction* pending_separator = nullptr;
+    const auto actions = menu->actions();
+    for (auto* action : actions) {
+        if (action == nullptr) continue;
+        if (action->menu() != nullptr) refreshMenuVisibility(action->menu());
+        if (action->isSeparator()) {
+            action->setVisible(false);
+            if (has_visible_content) pending_separator = action;
+            continue;
+        }
+        if (!action->isVisible()) continue;
+        if (pending_separator != nullptr) {
+            pending_separator->setVisible(true);
+            pending_separator = nullptr;
+        }
+        has_visible_content = true;
+    }
+    menu->menuAction()->setVisible(has_visible_content);
+}
+
+} // namespace
+
 void MainWindow::createWorkspace() {
     preview_widget_ = new PreviewWidget(this);
     edit_workspace_ = new ui::EditWorkspace(
@@ -509,6 +537,7 @@ void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
     if (shortcut_manager_ != nullptr) {
         shortcut_manager_->setWorkspace(page);
     }
+    refreshWorkspaceMenuVisibility();
     if (playback_controller_ == nullptr) return;
     if (page != ui::WorkspacePageId::Fusion) {
         playback_controller_->setFusionNodePreviewTarget(std::nullopt);
@@ -525,6 +554,42 @@ void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
     playback_controller_->setFusionNodePreviewTarget(
         playback::FusionNodePreviewTarget{clip_id, fusion_workspace_->previewNodeId()});
     static_cast<void>(playback_controller_->activateClip(clip_id, 0, false));
+}
+
+void MainWindow::registerWorkspaceMenuAction(
+    QAction* action,
+    settings::ShortcutScope scope) {
+    if (action == nullptr) return;
+    const auto scope_index = static_cast<std::size_t>(scope);
+    if (scope_index >= workspace_menu_actions_.size()) return;
+    for (const auto& actions : workspace_menu_actions_) {
+        if (std::find(actions.cbegin(), actions.cend(), action) != actions.cend()) {
+            return;
+        }
+    }
+    workspace_menu_actions_[scope_index].push_back(action);
+    if (shortcut_manager_ != nullptr) {
+        action->setVisible(shortcut_manager_->isScopeActive(scope));
+    }
+}
+
+void MainWindow::refreshWorkspaceMenuVisibility() {
+    if (shortcut_manager_ != nullptr) {
+        for (std::size_t scope_index = 0;
+             scope_index < workspace_menu_actions_.size(); ++scope_index) {
+            const auto scope = static_cast<settings::ShortcutScope>(scope_index);
+            const bool active = shortcut_manager_->isScopeActive(scope);
+            for (auto* action : workspace_menu_actions_[scope_index]) {
+                if (action != nullptr) action->setVisible(active);
+            }
+        }
+    }
+    if (menuBar() == nullptr) return;
+    for (auto* action : menuBar()->actions()) {
+        if (action != nullptr && action->menu() != nullptr) {
+            refreshMenuVisibility(action->menu());
+        }
+    }
 }
 
 void MainWindow::refreshFusionNodePreviewTarget() {
@@ -612,9 +677,15 @@ void MainWindow::createMenus() {
             shortcut_manager_->registerAction(
                 id, label, action, scope, availability);
         };
+    const auto register_menu_action =
+        [this](QAction* action, settings::ShortcutScope scope) {
+            registerWorkspaceMenuAction(action, scope);
+        };
 
     auto* file_menu = menuBar()->addMenu("&File");
+    file_menu->setObjectName(QStringLiteral("fileMenu"));
     new_project_action_ = file_menu->addAction("&New Project");
+    register_menu_action(new_project_action_, settings::ShortcutScope::Application);
     disableDuringProjectLoad(new_project_action_);
     new_project_action_->setShortcut(QKeySequence("Ctrl+N"));
     new_project_action_->setShortcutContext(Qt::WindowShortcut);
@@ -624,14 +695,17 @@ void MainWindow::createMenus() {
         QStringLiteral("All workspaces"));
     connect(new_project_action_, &QAction::triggered, this, &MainWindow::newProject);
     project_settings_action_ = file_menu->addAction("Project Settings...");
+    register_menu_action(project_settings_action_, settings::ShortcutScope::Application);
     project_settings_action_->setObjectName(QStringLiteral("projectSettingsAction"));
     disableDuringProjectLoad(project_settings_action_);
     connect(project_settings_action_, &QAction::triggered,
             this, &MainWindow::showProjectSettingsDialog);
     auto* open_media_action = file_menu->addAction("Open &Media...");
+    register_menu_action(open_media_action, settings::ShortcutScope::Application);
     disableDuringProjectLoad(open_media_action);
     connect(open_media_action, &QAction::triggered, this, &MainWindow::openMedia);
     open_project_action_ = file_menu->addAction("&Open Project...");
+    register_menu_action(open_project_action_, settings::ShortcutScope::Application);
     disableDuringProjectLoad(open_project_action_);
     open_project_action_->setShortcut(QKeySequence("Ctrl+O"));
     open_project_action_->setShortcutContext(Qt::WindowShortcut);
@@ -641,6 +715,7 @@ void MainWindow::createMenus() {
         QStringLiteral("All workspaces"));
     connect(open_project_action_, &QAction::triggered, this, &MainWindow::openProject);
     save_project_action_ = file_menu->addAction("&Save Project");
+    register_menu_action(save_project_action_, settings::ShortcutScope::Application);
     disableDuringProjectLoad(save_project_action_);
     save_project_action_->setShortcut(QKeySequence("Ctrl+S"));
     save_project_action_->setShortcutContext(Qt::WindowShortcut);
@@ -650,6 +725,7 @@ void MainWindow::createMenus() {
         QStringLiteral("All workspaces"));
     connect(save_project_action_, &QAction::triggered, this, &MainWindow::saveProject);
     save_project_as_action_ = file_menu->addAction("Save Project &As...");
+    register_menu_action(save_project_as_action_, settings::ShortcutScope::Application);
     disableDuringProjectLoad(save_project_as_action_);
     save_project_as_action_->setShortcut(QKeySequence("Ctrl+Shift+S"));
     save_project_as_action_->setShortcutContext(Qt::WindowShortcut);
@@ -661,10 +737,13 @@ void MainWindow::createMenus() {
     connect(save_project_as_action_, &QAction::triggered, this, &MainWindow::saveProjectAs);
     file_menu->addSeparator();
     auto* exit_action = file_menu->addAction("E&xit");
+    register_menu_action(exit_action, settings::ShortcutScope::Application);
     connect(exit_action, &QAction::triggered, this, &QWidget::close);
 
     auto* edit_menu = menuBar()->addMenu("&Edit");
+    edit_menu->setObjectName(QStringLiteral("editMenu"));
     auto* undo_action = edit_menu->addAction("&Undo");
+    register_menu_action(undo_action, settings::ShortcutScope::Shared);
     disableDuringProjectLoad(undo_action);
     undo_action->setShortcut(QKeySequence::Undo);
     undo_action->setShortcutContext(Qt::WindowShortcut);
@@ -677,6 +756,7 @@ void MainWindow::createMenus() {
         static_cast<void>(edit_workspace_->controller()->undo());
     });
     auto* redo_action = edit_menu->addAction("&Redo");
+    register_menu_action(redo_action, settings::ShortcutScope::Shared);
     disableDuringProjectLoad(redo_action);
     redo_action->setShortcut(QKeySequence::Redo);
     redo_action->setShortcutContext(Qt::WindowShortcut);
@@ -690,6 +770,7 @@ void MainWindow::createMenus() {
     });
     edit_menu->addSeparator();
     auto* delete_clip_action = edit_menu->addAction("Delete Selected Clip");
+    register_menu_action(delete_clip_action, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(delete_clip_action);
     delete_clip_action->setShortcut(QKeySequence(Qt::Key_Delete));
     delete_clip_action->setShortcutContext(Qt::WindowShortcut);
@@ -725,6 +806,7 @@ void MainWindow::createMenus() {
         }
     });
     ripple_delete_clip_action_ = edit_menu->addAction("Ripple Delete Selected Clip");
+    register_menu_action(ripple_delete_clip_action_, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(ripple_delete_clip_action_);
     ripple_delete_clip_action_->setObjectName(
         QStringLiteral("edit.ripple_delete_clip"));
@@ -756,6 +838,7 @@ void MainWindow::createMenus() {
         }
     });
     auto* split_clip_action = edit_menu->addAction("Split Clip at Playhead");
+    register_menu_action(split_clip_action, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(split_clip_action);
     split_clip_action->setShortcut(QKeySequence("Ctrl+K"));
     split_clip_action->setShortcutContext(Qt::WindowShortcut);
@@ -770,6 +853,7 @@ void MainWindow::createMenus() {
         edit_workspace_->controller(),
         &ui::EditWorkspaceController::splitActiveClipAtPlayhead);
     copy_attributes_action_ = edit_menu->addAction("Copy Attributes");
+    register_menu_action(copy_attributes_action_, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(copy_attributes_action_);
     copy_attributes_action_->setObjectName(QStringLiteral("edit.copy_attributes"));
     copy_attributes_action_->setShortcut(QKeySequence("Ctrl+C"));
@@ -797,6 +881,7 @@ void MainWindow::createMenus() {
         updateAttributeClipboardActions();
     });
     paste_attributes_action_ = edit_menu->addAction("Paste Attributes");
+    register_menu_action(paste_attributes_action_, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(paste_attributes_action_);
     paste_attributes_action_->setObjectName(QStringLiteral("edit.paste_attributes"));
     paste_attributes_action_->setShortcut(QKeySequence("Ctrl+Shift+V"));
@@ -812,31 +897,37 @@ void MainWindow::createMenus() {
     });
     edit_menu->addSeparator();
     add_video_track_action_ = edit_menu->addAction("Add Video Track");
+    register_menu_action(add_video_track_action_, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(add_video_track_action_);
     connect(add_video_track_action_, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->promptAddVideoTrack(this);
     });
     rename_track_action_ = edit_menu->addAction("Rename Track");
+    register_menu_action(rename_track_action_, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(rename_track_action_);
     connect(rename_track_action_, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->promptRenameActiveTrack(this);
     });
     move_track_up_action_ = edit_menu->addAction("Move Track Up");
+    register_menu_action(move_track_up_action_, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(move_track_up_action_);
     connect(move_track_up_action_, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->moveActiveTrack(-1);
     });
     move_track_down_action_ = edit_menu->addAction("Move Track Down");
+    register_menu_action(move_track_down_action_, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(move_track_down_action_);
     connect(move_track_down_action_, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->moveActiveTrack(1);
     });
     remove_track_action_ = edit_menu->addAction("Remove Track");
+    register_menu_action(remove_track_action_, settings::ShortcutScope::Edit);
     disableDuringProjectLoad(remove_track_action_);
     connect(remove_track_action_, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->removeActiveTrack();
     });
     auto* razor_tool_action = edit_menu->addAction("Blade Tool");
+    register_menu_action(razor_tool_action, settings::ShortcutScope::Edit);
     razor_tool_action->setCheckable(true);
     razor_tool_action_ = razor_tool_action;
     connect(razor_tool_action_, &QAction::toggled, this, [this](bool enabled) {
@@ -846,6 +937,7 @@ void MainWindow::createMenus() {
     });
     edit_menu->addSeparator();
     require_alt_to_move_action_ = edit_menu->addAction("Require Alt to Move Clips");
+    register_menu_action(require_alt_to_move_action_, settings::ShortcutScope::Edit);
     require_alt_to_move_action_->setCheckable(true);
     QSettings settings;
     const bool require_alt_to_move = settings.value(
@@ -865,6 +957,8 @@ void MainWindow::createMenus() {
 
     move_playhead_on_clip_selection_action_ = edit_menu->addAction(
         "Move Playhead to Selected Clip Start");
+    register_menu_action(
+        move_playhead_on_clip_selection_action_, settings::ShortcutScope::Edit);
     move_playhead_on_clip_selection_action_->setCheckable(true);
     QSettings timeline_selection_settings;
     const bool move_playhead_on_selection = timeline_selection_settings.value(
@@ -887,17 +981,35 @@ void MainWindow::createMenus() {
         move_playhead_on_clip_selection_action_->isChecked());
 
     auto* view_menu = menuBar()->addMenu("&View");
+    view_menu->setObjectName(QStringLiteral("viewMenu"));
     auto* media_pool_menu = view_menu->addMenu("Media Pool");
-    media_pool_menu->addAction(bins_dock_->toggleViewAction());
-    media_pool_menu->addAction(media_dock_->toggleViewAction());
+    media_pool_menu->setObjectName(QStringLiteral("mediaPoolViewMenu"));
+    auto* bins_view_action = bins_dock_->toggleViewAction();
+    auto* media_view_action = media_dock_->toggleViewAction();
+    media_pool_menu->addAction(bins_view_action);
+    media_pool_menu->addAction(media_view_action);
+    register_menu_action(bins_view_action, settings::ShortcutScope::Shared);
+    register_menu_action(media_view_action, settings::ShortcutScope::Shared);
     auto* effects_menu = view_menu->addMenu("Effects");
-    effects_menu->addAction(toolbox_dock_->toggleViewAction());
-    effects_menu->addAction(favorites_dock_->toggleViewAction());
-    effects_menu->addAction(effects_dock_->toggleViewAction());
-    view_menu->addAction(inspector_dock_->toggleViewAction());
-    view_menu->addAction(timeline_dock_->toggleViewAction());
+    effects_menu->setObjectName(QStringLiteral("effectsViewMenu"));
+    auto* toolbox_view_action = toolbox_dock_->toggleViewAction();
+    auto* favorites_view_action = favorites_dock_->toggleViewAction();
+    auto* effects_view_action = effects_dock_->toggleViewAction();
+    effects_menu->addAction(toolbox_view_action);
+    effects_menu->addAction(favorites_view_action);
+    effects_menu->addAction(effects_view_action);
+    register_menu_action(toolbox_view_action, settings::ShortcutScope::Shared);
+    register_menu_action(favorites_view_action, settings::ShortcutScope::Shared);
+    register_menu_action(effects_view_action, settings::ShortcutScope::Shared);
+    auto* inspector_view_action = inspector_dock_->toggleViewAction();
+    auto* timeline_view_action = timeline_dock_->toggleViewAction();
+    view_menu->addAction(inspector_view_action);
+    view_menu->addAction(timeline_view_action);
+    register_menu_action(inspector_view_action, settings::ShortcutScope::Application);
+    register_menu_action(timeline_view_action, settings::ShortcutScope::Application);
     view_menu->addSeparator();
     auto* grayscale_action = view_menu->addAction("Grayscale Preview");
+    register_menu_action(grayscale_action, settings::ShortcutScope::Application);
     grayscale_action->setCheckable(true);
     grayscale_action->setChecked(false);
     connect(grayscale_action, &QAction::toggled, this, [this](bool enabled) {
@@ -908,11 +1020,13 @@ void MainWindow::createMenus() {
     auto* playback_quality_group = new QActionGroup(playback_quality_menu);
     playback_quality_group->setExclusive(true);
     const auto add_playback_quality_action =
-        [this, playback_quality_menu, playback_quality_group](
+        [this, playback_quality_menu, playback_quality_group,
+         &register_menu_action](
             const QString& label,
             const QString& object_name,
             playback::PreviewQuality quality) {
             auto* action = playback_quality_menu->addAction(label);
+            register_menu_action(action, settings::ShortcutScope::Shared);
             action->setObjectName(object_name);
             action->setCheckable(true);
             action->setChecked(playback_preview_quality_ == quality);
@@ -942,6 +1056,7 @@ void MainWindow::createMenus() {
         playback::PreviewQuality::Quarter);
     view_menu->addSeparator();
     auto* restore_layout_action = view_menu->addAction("Restore &Default Layout");
+    register_menu_action(restore_layout_action, settings::ShortcutScope::Application);
     connect(restore_layout_action, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);
 
     auto* media_pool_toolbar = new QToolBar("Media Pool", this);
@@ -972,9 +1087,11 @@ void MainWindow::createMenus() {
         "}");
     addToolBar(Qt::TopToolBarArea, media_pool_toolbar);
     media_pool_action_ = media_pool_toolbar->addAction("Media Pool");
+    register_menu_action(media_pool_action_, settings::ShortcutScope::Shared);
     media_pool_action_->setCheckable(true);
     media_pool_action_->setToolTip("Show the Media Pool docks");
     effects_action_ = media_pool_toolbar->addAction("Effects");
+    register_menu_action(effects_action_, settings::ShortcutScope::Shared);
     effects_action_->setCheckable(true);
     effects_action_->setToolTip("Show the Effects docks");
     auto* workspace_toolbar_spacer = new QWidget(media_pool_toolbar);
@@ -1018,12 +1135,16 @@ void MainWindow::createMenus() {
     updateEffectsActionState();
 
     auto* settings_action = menuBar()->addAction("&Settings");
+    settings_action->setObjectName(QStringLiteral("settingsMenuAction"));
+    register_menu_action(settings_action, settings::ShortcutScope::Application);
     settings_action->setToolTip("Open editor settings");
     connect(settings_action, &QAction::triggered,
             this, &MainWindow::showSettingsDialog);
 
     auto* help_menu = menuBar()->addMenu("&Help");
+    help_menu->setObjectName(QStringLiteral("helpMenu"));
     auto* system_action = help_menu->addAction("&System");
+    register_menu_action(system_action, settings::ShortcutScope::Application);
     connect(system_action, &QAction::triggered, this, [this]() {
         const auto version = QCoreApplication::applicationVersion();
         const auto executable_path = QCoreApplication::applicationFilePath();
@@ -1037,6 +1158,7 @@ void MainWindow::createMenus() {
                          : executable_path));
     });
     auto* open_log_folder_action = help_menu->addAction("Open &Log Folder");
+    register_menu_action(open_log_folder_action, settings::ShortcutScope::Application);
     connect(open_log_folder_action, &QAction::triggered, this, [this]() {
         auto& logger = logging::Logger::instance();
         const auto directory = logger.log_directory();
@@ -1064,6 +1186,7 @@ void MainWindow::createMenus() {
     });
     help_menu->addSeparator();
     auto* about_action = help_menu->addAction("&About Video Editor");
+    register_menu_action(about_action, settings::ShortcutScope::Application);
     connect(about_action, &QAction::triggered, this, [this]() {
         QMessageBox::about(
             this,
@@ -1145,6 +1268,7 @@ void MainWindow::createMenus() {
     if (workspace_host_ != nullptr) {
         shortcut_manager_->setWorkspace(workspace_host_->currentPage());
     }
+    refreshWorkspaceMenuVisibility();
     updateHistoryActions();
     updateAttributeClipboardActions();
 }

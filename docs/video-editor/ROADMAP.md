@@ -194,6 +194,13 @@ tasks.
 - [x] Document the application module boundaries and the CPU
   composition/Qt OpenGL presentation split. Current shared-library boundaries
   are maintained in [Repository Structure](architecture/REPOSITORY_STRUCTURE.md).
+- [x] Global menu and toolbar actions follow the active workspace scopes:
+  application actions remain available, shared commands appear in Edit/Fusion,
+  and Edit-only commands are hidden elsewhere. Empty menus and separators are
+  pruned without changing action enablement. Automated workspace-switch
+  coverage is in place; manual appearance and shortcut checks remain pending.
+  The gradual transfer of action ownership from `MainWindow` remains planned
+  in [Workspace Modularization](architecture/WORKSPACE_MODULARIZATION_PLAN.md).
 
 The detailed implemented scope and deferred behaviors are recorded in
 [Current Scope and Non-goals](architecture/SCOPE.md). The active `.csp` schema

@@ -836,6 +836,93 @@ public:
                         window.workspace_host_->renderPage() ==
                             window.render_workspace_->centralPage(),
                     "The MainWindow must start with Edit selected and expose all workspace selectors.");
+            auto* file_menu = window.menuBar()->findChild<QMenu*>("fileMenu");
+            auto* edit_menu = window.menuBar()->findChild<QMenu*>("editMenu");
+            auto* view_menu = window.menuBar()->findChild<QMenu*>("viewMenu");
+            auto* help_menu = window.menuBar()->findChild<QMenu*>("helpMenu");
+            auto* settings_menu_action = window.menuBar()->findChild<QAction*>(
+                "settingsMenuAction");
+            auto* media_pool_view_menu =
+                window.menuBar()->findChild<QMenu*>("mediaPoolViewMenu");
+            auto* effects_view_menu =
+                window.menuBar()->findChild<QMenu*>("effectsViewMenu");
+            require(file_menu != nullptr && edit_menu != nullptr &&
+                        view_menu != nullptr && help_menu != nullptr &&
+                        settings_menu_action != nullptr &&
+                        media_pool_view_menu != nullptr &&
+                        effects_view_menu != nullptr,
+                    "The MainWindow must expose its scoped menus for integration coverage.");
+
+            auto* fusion_fixture_menu =
+                new QMenu(QStringLiteral("Fusion Fixture"), window.menuBar());
+            fusion_fixture_menu->setObjectName(QStringLiteral("fusionFixtureMenu"));
+            auto* fusion_fixture_action = fusion_fixture_menu->addAction(
+                QStringLiteral("Fusion Fixture Command"));
+            window.menuBar()->addMenu(fusion_fixture_menu);
+            window.registerWorkspaceMenuAction(
+                fusion_fixture_action, settings::ShortcutScope::Fusion);
+            auto* render_fixture_menu =
+                new QMenu(QStringLiteral("Render Fixture"), window.menuBar());
+            render_fixture_menu->setObjectName(QStringLiteral("renderFixtureMenu"));
+            auto* render_fixture_action = render_fixture_menu->addAction(
+                QStringLiteral("Render Fixture Command"));
+            window.menuBar()->addMenu(render_fixture_menu);
+            window.registerWorkspaceMenuAction(
+                render_fixture_action, settings::ShortcutScope::Render);
+            const auto require_menu_scopes = [&window, file_menu, edit_menu,
+                view_menu, help_menu, settings_menu_action,
+                media_pool_view_menu, effects_view_menu,
+                fusion_fixture_menu, fusion_fixture_action,
+                render_fixture_menu, render_fixture_action](
+                    ui::WorkspacePageId page) {
+                const bool undo_enabled = window.undo_action_->isEnabled();
+                const bool redo_enabled = window.redo_action_->isEnabled();
+                const bool delete_enabled = window.delete_clip_action_->isEnabled();
+                const bool edit_or_fusion = page != ui::WorkspacePageId::Render;
+                const bool edit_active = page == ui::WorkspacePageId::Edit;
+                const bool fusion_active = page == ui::WorkspacePageId::Fusion;
+                const bool render_active = page == ui::WorkspacePageId::Render;
+                require(file_menu->menuAction()->isVisible() &&
+                            view_menu->menuAction()->isVisible() &&
+                            help_menu->menuAction()->isVisible() &&
+                            settings_menu_action->isVisible() &&
+                            window.new_project_action_->isVisible() &&
+                            window.undo_action_->isVisible() == edit_or_fusion &&
+                            window.redo_action_->isVisible() == edit_or_fusion &&
+                            window.delete_clip_action_->isVisible() == edit_active &&
+                            edit_menu->menuAction()->isVisible() == edit_or_fusion &&
+                            media_pool_view_menu->menuAction()->isVisible() ==
+                                edit_or_fusion &&
+                            effects_view_menu->menuAction()->isVisible() ==
+                                edit_or_fusion &&
+                            window.media_pool_action_->isVisible() == edit_or_fusion &&
+                            window.effects_action_->isVisible() == edit_or_fusion &&
+                            fusion_fixture_action->isVisible() == fusion_active &&
+                            fusion_fixture_menu->menuAction()->isVisible() ==
+                                fusion_active &&
+                            render_fixture_action->isVisible() == render_active &&
+                            render_fixture_menu->menuAction()->isVisible() ==
+                                render_active,
+                        "Menu and toolbar actions must follow their workspace scopes.");
+                bool found_separator = false;
+                const bool separators_active = page == ui::WorkspacePageId::Edit;
+                for (auto* action : edit_menu->actions()) {
+                    if (!action->isSeparator()) continue;
+                    found_separator = true;
+                    require(action->isVisible() == separators_active,
+                            "Edit menu separators must disappear when no following scoped command is visible.");
+                }
+                require(found_separator,
+                        "The Edit menu integration fixture expected separators.");
+                window.refreshWorkspaceMenuVisibility();
+                require(window.undo_action_->isEnabled() == undo_enabled &&
+                            window.redo_action_->isEnabled() == redo_enabled &&
+                            window.delete_clip_action_->isEnabled() == delete_enabled,
+                        "Refreshing command visibility must not change QAction enablement.");
+            };
+            window.refreshWorkspaceMenuVisibility();
+            QApplication::processEvents();
+            require_menu_scopes(ui::WorkspacePageId::Edit);
             const auto edit_dock_visibility = dock_visibility();
             window.editor_session_.setPlayheadFrame(11);
             const auto history_probe =
@@ -884,12 +971,16 @@ public:
             };
             window.setWorkspacePage(ui::WorkspacePageId::Fusion);
             require_workspace_state_unchanged();
+            QApplication::processEvents();
+            require_menu_scopes(ui::WorkspacePageId::Fusion);
             require(window.editor_session_.playheadFrame() == 0 &&
                         !window.playback_controller_->isPlaying(),
                     "Entering Fusion must pause playback and seek to the selected clip's start.");
             const auto fusion_playhead = window.editor_session_.playheadFrame();
             window.setWorkspacePage(ui::WorkspacePageId::Render);
             require_workspace_state_unchanged();
+            QApplication::processEvents();
+            require_menu_scopes(ui::WorkspacePageId::Render);
             require(window.editor_session_.playheadFrame() == fusion_playhead &&
                         !window.playback_controller_->isPlaying(),
                     "Leaving Fusion for Render must preserve the paused playhead position.");
@@ -961,6 +1052,7 @@ public:
             window.setWorkspacePage(ui::WorkspacePageId::Fusion);
             QApplication::processEvents();
             require_workspace_state_unchanged();
+            require_menu_scopes(ui::WorkspacePageId::Fusion);
             require_dock_visibility(
                 edit_dock_visibility,
                 "Returning to Fusion must restore the dock visibility from before Render.");
@@ -984,6 +1076,7 @@ public:
             window.setWorkspacePage(ui::WorkspacePageId::Edit);
             QApplication::processEvents();
             require_workspace_state_unchanged();
+            require_menu_scopes(ui::WorkspacePageId::Edit);
             require_dock_visibility(
                 mixed_dock_visibility,
                 "Returning to Edit must restore mixed dock visibility from before Render.");
@@ -993,10 +1086,12 @@ public:
             const auto hidden_timeline_visibility = dock_visibility();
             window.setWorkspacePage(ui::WorkspacePageId::Render);
             QApplication::processEvents();
+            require_menu_scopes(ui::WorkspacePageId::Render);
             require(window.timeline_dock_->isVisible(),
                     "Render must show the Timeline even when its prior workspace visibility was hidden.");
             window.setWorkspacePage(ui::WorkspacePageId::Edit);
             QApplication::processEvents();
+            require_menu_scopes(ui::WorkspacePageId::Edit);
             require_dock_visibility(
                 hidden_timeline_visibility,
                 "Leaving Render must restore the prior hidden state of the Timeline dock.");

@@ -108,6 +108,10 @@ void ShortcutManager::setWorkspace(ui::WorkspacePageId page) {
     applyActiveBindings();
 }
 
+bool ShortcutManager::isScopeActive(ShortcutScope scope) const noexcept {
+    return isActive(scope);
+}
+
 bool ShortcutManager::setShortcut(
     const QString& id,
     const QKeySequence& sequence,

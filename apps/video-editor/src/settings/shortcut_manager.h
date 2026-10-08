@@ -48,6 +48,7 @@ public:
         const QString& availability);
     bool load(QString* error_message = nullptr);
     void setWorkspace(ui::WorkspacePageId page);
+    [[nodiscard]] bool isScopeActive(ShortcutScope scope) const noexcept;
     [[nodiscard]] bool setShortcut(
         const QString& id,
         const QKeySequence& sequence,

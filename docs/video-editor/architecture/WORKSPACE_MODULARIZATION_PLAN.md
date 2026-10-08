@@ -33,10 +33,10 @@ dependências e não exige novas funções visíveis ao usuário.
 - `MainWindow` é a estrutura principal do aplicativo, mas ainda cria muitas
   ações de menu e conecta operações específicas dos workspaces. Isso faz dela
   um ponto central que tende a crescer.
-- Os atalhos do Video Editor são registrados como uma lista plana. A
-  personalização é global, combinações duplicadas são rejeitadas globalmente e
-  o modelo compartilhado de atalhos ainda não representa explicitamente o
-  escopo do workspace ativo.
+- Os atalhos do Video Editor usam escopos de Aplicativo, Compartilhado, Edit,
+  Fusion e Render, com preferências globais e combinações reutilizáveis entre
+  telas exclusivas. As ações ainda são criadas principalmente em `MainWindow`;
+  a extração gradual para cada workspace continua sendo trabalho futuro.
 - O comportamento atual dos atalhos está documentado em
   [`SHORTCUTS.md`](../SHORTCUTS.md). Esse documento deve servir de referência
   durante a separação.
@@ -222,22 +222,32 @@ alternância entre telas está documentado em
 
 ### Etapa 4 — Estabelecer os limites entre workspaces e estrutura principal
 
-1. Manter `WorkspaceHost` e `WorkspaceTransitionController` focados na seleção
-   de páginas, posicionamento de interfaces compartilhadas e estado das
-   transições.
-2. Criar para cada workspace um ponto pequeno de registro e montagem de suas
-   ações, menus, atalhos e atualizações de habilitação.
-3. Reduzir `MainWindow` a ciclo de vida e coordenação do aplicativo. Ela pode
-   encaminhar pedidos dos workspaces para serviços do aplicativo, mas não deve
-   implementar o comportamento de edição de cada tela.
-4. Preservar um único responsável pelos serviços de projeto e mídia,
-   reprodução e histórico de comandos.
-5. Desativar comandos específicos de um workspace quando ele não estiver
-   ativo, exceto os comandos explicitamente compartilhados ou globais.
+**Estado: registro de escopos e visibilidade de menus implementados, com
+cobertura automatizada em 2026-10-08; conferência manual entre as três telas
+permanece pendente.** Esta etapa organiza a apresentação dos comandos atuais;
+ela ainda não transfere a criação e a execução das ações para os workspaces.
 
-**Critério para concluir:** a troca de tela ativa o conjunto de comandos
-correto, sem alterar o projeto ou interromper inesperadamente o estado
-compartilhado.
+1. Manter `WorkspaceHost` e `WorkspaceTransitionController` responsáveis pela
+   seleção de páginas, posicionamento das interfaces compartilhadas e estado
+   das transições.
+2. Registrar as ações de menu e barra existentes pelos escopos do Video Editor,
+   usando o workspace ativo mantido por `ShortcutManager`.
+3. Manter ações de Aplicativo visíveis em todas as telas; ações Compartilhadas
+   em Edit e Fusion; ações específicas somente no workspace correspondente.
+   Fusion e Render foram cobertos por ações de fixture, pois ainda não têm
+   comandos globais próprios.
+4. Ocultar separadores sem comandos visíveis e menus que ficam sem conteúdo.
+   Alterar somente visibilidade: habilitação, handlers, IDs, atalhos e
+   personalizações permanecem sob as regras atuais. Menus contextuais seguem
+   controlados pelos widgets que os criam.
+5. Preservar em `MainWindow` a coordenação do ciclo de vida e dos serviços
+   únicos de projeto, mídia, reprodução e Undo/Redo. A transferência gradual
+   de ownership fica para as Etapas 5–7.
+
+**Critério para concluir:** a troca de tela mostra apenas os comandos aplicáveis,
+sem alterar estado habilitado, documento, seleção, playhead, reprodução ou
+histórico. Os testes de integração cobrem as três telas e menus vazios; a
+validação manual de aparência e atalhos ainda precisa ser feita no aplicativo.
 
 ### Etapa 5 — Separar as responsabilidades de Edit
 
@@ -358,11 +368,11 @@ o comportamento atuais que sustentam a proposta.
 | `File > Project Settings` | A ação nasce em `main_window_workspace.cpp`; `MainWindow` abre o diálogo e encaminha a atualização para os serviços/sessão do projeto | Disponível no menu global; altera propriedades do projeto e usa o caminho de edição existente com Undo/Redo | Aplicativo para abrir o diálogo; alteração do documento pelo serviço de projeto compartilhado |
 | `File > Open Media` | A ação é criada na `MainWindow`; `MainWindow::openMedia` e o fluxo `MediaImportService`/`MediaController` importam os arquivos | Disponível pelo menu global; cria/atualiza itens do Media Pool, podendo marcar o projeto como alterado; não insere automaticamente na Timeline | Serviço compartilhado de mídia; acionamento global |
 | `Edit > Undo` e `Redo` | Criadas em `main_window_workspace.cpp`; delegam a `EditWorkspaceController`, que usa o único `TimelineCommandService` | Menu e atalhos ficam no nível da janela. O histórico atual contém edições da Timeline e também as alterações do grafo Fusion encaminhadas pelo controlador de Edit | Compartilhado; estado habilitado derivado do histórico único |
-| Menus `View`, `Settings` e `Help` | Ações criadas e conectadas em `main_window_workspace.cpp`; preferências são aplicadas por `MainWindow`, `SettingsDialog` ou serviço correspondente | Controles de janela e preferências não alteram o projeto nem criam Undo: alternar docks; Grayscale Preview; qualidade Full/Half/Quarter; restaurar layout; abrir Settings; System; abrir pasta de logs; About | Aplicativo para janela, preferências e ajuda; qualidade/preview usa os serviços compartilhados correspondentes |
+| Menus `View`, `Settings` e `Help` | Ações criadas e conectadas em `main_window_workspace.cpp`; preferências são aplicadas por `MainWindow`, `SettingsDialog` ou serviço correspondente | `Settings` e `Help` ficam sempre visíveis. Em `View`, Inspector/Timeline, Grayscale Preview e Restore Layout são de Aplicativo; os submenus Media Pool/Effects e a qualidade de playback são Compartilhados e ficam disponíveis em Edit/Fusion. Não alteram projeto nem criam Undo | Aplicativo para janela, preferências e ajuda; comandos de Preview/playback continuam compartilhados |
 | Settings: `General`, `Autosave`, `Timeline` e `Shortcuts` | `SettingsDialog` cria controles de métricas de preview, GPU de preview, autosave/intervalo/limite de snapshots; a página Autosave lista snapshots e oferece Refresh, Restore Selected, Delete Selected e Open Folder; Timeline escolhe exibição Mono/Stereo de waveform; Shortcuts edita sequência, Reset individual e Reset All | Preferências globais em `QSettings`, fora do estado do projeto e do histórico. Restaurar snapshot substitui a sessão/projeto através do fluxo de recuperação; personalizar atalhos atualiza ações registradas | Aplicativo; registro de atalhos é infraestrutura compartilhada |
 | Botões `Media Pool` e `Effects` | Criados em `main_window_workspace.cpp`; `MainWindow` alterna grupos de docks | Alterna a visibilidade dos docks e salva layout global; não altera o projeto. Disponível em Edit/Fusion; os docks são ocultados ao entrar em Render e restaurados ao sair | Aplicativo/estrutura da janela; docks usados pelos workspaces |
 | Seletores Edit, Fusion e Render | Botões criados pela janela; `WorkspaceTransitionController` atualiza `WorkspaceHost`, seletores e visibilidade dos docks | Muda página e apresentação, não o documento nem o histórico. Ao entrar em Render, mantém o dock Timeline visível em modo somente leitura e oculta outros docks; ao sair, restaura sua visibilidade anterior | Aplicativo para navegação; cada workspace é responsável pela página apresentada |
-| Atalhos atuais do Video Editor | Ações com atalhos são criadas principalmente em `main_window_workspace.cpp`; Shift+Space nasce em `FunctionPalette`. `SettingsDialog` mostra a lista plana de entradas | `ShortcutManager` compartilhado guarda combinações em `QSettings` e rejeita duplicatas globalmente. As ações de janela usam `Qt::WindowShortcut`: não há filtragem por `WorkspacePageId`; habilitação de algumas depende de seleção/histórico. A lista exata e os gestos já documentados permanecem em [`SHORTCUTS.md`](../SHORTCUTS.md) | Aplicativo/Compartilhado para a infraestrutura; propriedade específica deve acompanhar a ação (Edit, Fusion ou Render); ações de texto pertencem ao foco |
+| Atalhos atuais do Video Editor | Ações com atalhos são criadas principalmente em `main_window_workspace.cpp`; Shift+Space nasce em `FunctionPalette`. `SettingsDialog` agrupa as entradas pelos escopos existentes | O `ShortcutManager` local usa `QSettings`, preserva as preferências atuais e ativa bindings conforme `WorkspaceHost::currentPage()`. A visibilidade dos itens de menu e dos botões Media Pool/Effects segue os mesmos escopos; a habilitação continua dependendo da regra de cada ação. A lista exata e os gestos permanecem em [`SHORTCUTS.md`](../SHORTCUTS.md) | Aplicativo/Compartilhado para a infraestrutura; ownership dos handlers ainda será transferido nas etapas seguintes; ações de texto pertencem ao foco |
 
 ### Media Pool, Effects e Functions
 
@@ -431,6 +441,8 @@ o comportamento atuais que sustentam a proposta.
 ## Requisitos de regressão
 
 - Registro e desativação de comandos ao entrar e sair de cada workspace.
+- Visibilidade de menus e barras conforme os escopos; separadores e menus vazios
+  ocultos, sem alterar habilitação nem estado do projeto.
 - Resolução de atalhos nos contextos Aplicativo, Compartilhado, Edit, Fusion,
   Render e editor em foco, incluindo combinações duplicadas permitidas ou
   rejeitadas.

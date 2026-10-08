@@ -24,6 +24,7 @@
 #include <QThreadPool>
 #include <QtGlobal>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -106,6 +107,9 @@ private:
     void createWorkspace();
     void setWorkspacePage(ui::WorkspacePageId page);
     void handleWorkspacePageChanged(ui::WorkspacePageId page);
+    void registerWorkspaceMenuAction(
+        QAction* action, settings::ShortcutScope scope);
+    void refreshWorkspaceMenuVisibility();
     void refreshFusionNodePreviewTarget();
     void showSettingsDialog();
     void restoreDefaultLayout();
@@ -339,6 +343,7 @@ private:
     QAction* move_track_up_action_ = nullptr;
     QAction* move_track_down_action_ = nullptr;
     QAction* remove_track_action_ = nullptr;
+    std::array<std::vector<QAction*>, 5> workspace_menu_actions_;
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
     application::EditorSession editor_session_;
     std::unique_ptr<playback::PlaybackController> playback_controller_;
