@@ -28,10 +28,6 @@ public:
                       std::vector<MediaChoice> media_choices);
     void setMediaChoices(std::vector<MediaChoice> media_choices);
 
-signals:
-    void graphEditRequested(timeline::ClipId clip_id,
-                            const fusion::nodes::NodeGraph& graph);
-
     [[nodiscard]] QWidget* viewerTitle() const noexcept { return viewer_title_; }
     [[nodiscard]] QWidget* nodeEditorPanel() const noexcept {
         return node_editor_panel_;
@@ -39,6 +35,10 @@ signals:
     [[nodiscard]] QWidget* inspectorPanel() const noexcept {
         return inspector_panel_;
     }
+
+signals:
+    void graphEditRequested(timeline::ClipId clip_id,
+                            const fusion::nodes::NodeGraph& graph);
 
 private:
     QWidget* viewer_title_ = nullptr;

@@ -423,6 +423,14 @@ void verifyExport(
         const auto offset = static_cast<std::size_t>(12 * frame.stride + 16 * 4 + channel);
         return frame.rgba_pixels[offset];
     };
+    if (!(centerPixel(*decoded_frames[4], 0) > 65 &&
+          centerPixel(*decoded_frames[4], 1) > 65 &&
+          centerPixel(*decoded_frames[6], 1) > centerPixel(*decoded_frames[6], 0))) {
+        std::fprintf(stderr, "transition frame4=%u,%u,%u frame6=%u,%u,%u\n",
+            centerPixel(*decoded_frames[4], 0), centerPixel(*decoded_frames[4], 1),
+            centerPixel(*decoded_frames[4], 2), centerPixel(*decoded_frames[6], 0),
+            centerPixel(*decoded_frames[6], 1), centerPixel(*decoded_frames[6], 2));
+    }
     require(centerPixel(*decoded_frames[4], 0) > 65 &&
                 centerPixel(*decoded_frames[4], 1) > 65 &&
                 centerPixel(*decoded_frames[6], 1) > centerPixel(*decoded_frames[6], 0),

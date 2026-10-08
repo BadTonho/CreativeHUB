@@ -172,6 +172,22 @@ void NodeCanvas::mousePressEvent(QMouseEvent* event) {
             event->accept();
             return;
         }
+        while (item != nullptr &&
+               (!item->data(0).isValid() || item->data(1).toInt() != 0)) {
+            item = item->parentItem();
+        }
+        if (item != nullptr && item->flags().testFlag(QGraphicsItem::ItemIsMovable)) {
+            dragging_node_ = static_cast<NodeId>(item->data(0).toULongLong());
+            const auto scene_position = mapToScene(event->pos());
+            drag_offset_x_ = scene_position.x() - item->pos().x();
+            drag_offset_y_ = scene_position.y() - item->pos().y();
+            drag_start_x_ = item->pos().x();
+            drag_start_y_ = item->pos().y();
+            scene_->clearSelection();
+            item->setSelected(true);
+            event->accept();
+            return;
+        }
     }
     QGraphicsView::mousePressEvent(event);
 }
@@ -182,6 +198,19 @@ void NodeCanvas::mouseMoveEvent(QMouseEvent* event) {
         pending_connection_line_->setLine(line.x1(), line.y1(),
                                            mapToScene(event->pos()).x(),
                                            mapToScene(event->pos()).y());
+        event->accept();
+        return;
+    }
+    if (dragging_node_ != 0) {
+        for (auto* item : scene_->items()) {
+            if (item->data(0).isValid() && item->data(1).toInt() == 0 &&
+                static_cast<NodeId>(item->data(0).toULongLong()) == dragging_node_) {
+                const auto scene_position = mapToScene(event->pos());
+                item->setPos(scene_position.x() - drag_offset_x_,
+                             scene_position.y() - drag_offset_y_);
+                break;
+            }
+        }
         event->accept();
         return;
     }
@@ -209,15 +238,21 @@ void NodeCanvas::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    QGraphicsView::mouseReleaseEvent(event);
-    if (event->button() != Qt::LeftButton || !position_changed_) return;
-    for (auto* item : scene_->selectedItems()) {
-        while (item != nullptr && !item->data(0).isValid()) item = item->parentItem();
-        if (item != nullptr) {
-            position_changed_(static_cast<NodeId>(item->data(0).toULongLong()),
-                              item->pos().x(), item->pos().y());
-            return;
+    if (event->button() == Qt::LeftButton && dragging_node_ != 0) {
+        const auto node_id = dragging_node_;
+        dragging_node_ = 0;
+        if (position_changed_) for (auto* item : scene_->items()) {
+            if (item->data(0).isValid() && item->data(1).toInt() == 0 &&
+                static_cast<NodeId>(item->data(0).toULongLong()) == node_id) {
+                const auto position = item->pos();
+                if (position.x() != drag_start_x_ || position.y() != drag_start_y_)
+                    position_changed_(node_id, position.x(), position.y());
+                break;
+            }
         }
+        event->accept();
+        return;
     }
+    QGraphicsView::mouseReleaseEvent(event);
 }
 } // namespace fusion::nodes

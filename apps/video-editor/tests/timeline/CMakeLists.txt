@@ -82,7 +82,7 @@ add_executable(creative-suite-main-editor-node-graph-tests
 target_include_directories(creative-suite-main-editor-node-graph-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR})
 target_link_libraries(creative-suite-main-editor-node-graph-tests PRIVATE
-    creative_suite::animation creative_suite::effects creative_suite::composition)
+    creative-suite::animation creative-suite::effects creative-suite::composition)
 target_compile_features(creative-suite-main-editor-node-graph-tests PRIVATE cxx_std_20)
 add_creative_suite_test(
     NAME creative-suite-main-editor-node-graph

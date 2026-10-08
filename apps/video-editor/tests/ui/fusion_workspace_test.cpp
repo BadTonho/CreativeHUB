@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QWidget>
 
+#include <cstdio>
 #include <stdexcept>
 
 namespace {
@@ -20,8 +21,7 @@ void require(bool value, const char* message) {
 }
 }
 
-int main(int argc, char** argv) {
-    QApplication app(argc, argv);
+int runFusionWorkspaceTest() {
     ui::FusionWorkspace workspace;
     QWidget root;
     workspace.createPanels(&root);
@@ -64,7 +64,7 @@ int main(int argc, char** argv) {
     canvas->parentWidget()->resize(950, 600);
     canvas->resize(950, 600);
     canvas->show();
-    app.processEvents();
+    QApplication::processEvents();
     const auto port_position = [canvas](fusion::nodes::NodeId node_id,
                                          int port_kind, int port_index) {
         for (auto* item : canvas->scene()->items()) {
@@ -134,6 +134,14 @@ int main(int argc, char** argv) {
     require(transform_item != nullptr, "The Transform node body was not drawn.");
     const auto node_body = canvas->mapFromScene(
         transform_item->scenePos() + QPointF(100, 70));
+    QMouseEvent click_press(QEvent::MouseButtonPress, QPointF(node_body),
+                            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &click_press);
+    QMouseEvent click_release(QEvent::MouseButtonRelease, QPointF(node_body),
+                              Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &click_release);
+    require(edit_count == 4,
+            "Selecting a node without moving it created a graph edit.");
     const auto moved_body = node_body + QPoint(40, 20);
     QMouseEvent move_press(QEvent::MouseButtonPress, QPointF(node_body),
                            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
@@ -145,6 +153,10 @@ int main(int argc, char** argv) {
                              Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     QApplication::sendEvent(canvas->viewport(), &move_release);
     transformed = fusion::nodes::findNode(edited, transform_id);
+    if (transformed == nullptr || edit_count != 5 || transformed->x <= original_x) {
+        std::fprintf(stderr, "node drag: edits=%d x-before=%.3f x-after=%.3f\n",
+            edit_count, original_x, transformed ? transformed->x : -1.0);
+    }
     require(edit_count == 5 && transformed && transformed->x > original_x,
             "Dragging a node body did not save its canvas position.");
 
@@ -156,4 +168,14 @@ int main(int argc, char** argv) {
                 static_cast<bool>(fusion::nodes::validate(edited)),
             "Removing a node did not preserve a valid pass-through graph.");
     return 0;
+}
+
+int main(int argc, char** argv) {
+    QApplication app(argc, argv);
+    try {
+        return runFusionWorkspaceTest();
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "%s\n", error.what());
+        return 1;
+    }
 }

@@ -276,9 +276,9 @@ std::optional<media::VideoFrame> composeFrame(
                         *source_offset) {
                     throw std::runtime_error("A source frame index exceeded the supported range.");
                 }
-                const auto source_frame = clip.source_start_frame + *source_offset;
+                const auto source_frame_index = clip.source_start_frame + *source_offset;
                 auto decoded = render_clip.video->decode_frame_at(
-                    source_frame,
+                    source_frame_index,
                     [&canceled] { return canceled.load(std::memory_order_acquire); });
                 if (!decoded.has_value() || *decoded == nullptr) {
                     checkCanceled(canceled);
@@ -286,7 +286,6 @@ std::optional<media::VideoFrame> composeFrame(
                         "A video frame could not be decoded from " + pathUtf8(clipPath(clip)));
                 }
                 source_frame = *decoded;
-                decoded_frames.push_back(*decoded);
             }
             if (clip.node_graph.has_value()) {
                 fusion::nodes::InputFrames inputs;
@@ -325,6 +324,9 @@ std::optional<media::VideoFrame> composeFrame(
                     throw std::runtime_error("The Fusion node graph did not produce a frame.");
                 source_frame = std::make_shared<const media::VideoFrame>(*evaluated);
             }
+            // CompositionLayer stores a raw frame pointer. Keep the shared frame alive
+            // until after the compositor consumes all layers for this output frame.
+            decoded_frames.push_back(source_frame);
             if (!clip.effects.empty()) {
                 effected_frames.push_back(*source_frame);
                 if (!creative_suite::effects::applyStack(effected_frames.back(), clip.effects))

@@ -972,6 +972,10 @@ human acceptance. Export metrics use schema 1; preview schemas remain 9/3.
 
 ## Fusion node graph
 
+Windows Release evidence (2026-10-07): the canonical Video Editor executable
+was built at `build/apps/video-editor/Release/creative-suite-video-editor.exe`.
+The five focused CTest targets below passed.
+
 Automated coverage includes `creative-suite-main-editor-node-graph` for graph
 validation, cycle rejection, Transform/Color evaluation, Merge alpha, and
 transparent missing input frames; `creative-suite-main-editor-project`

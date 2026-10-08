@@ -230,10 +230,11 @@ and required manual validation pass.
   used by the application. The maintainer confirmed real video, audio, image,
   bin, and ordered Timeline drops, including Undo/Redo, on 2026-10-07. Keep the
   import dialog and internal Media Browser drag workflow available.
-- [-] Initial Fusion graph code, tests, and documentation are in place. Run the
-  Video Editor Release build and targeted graph, project, UI, Preview, and Render
-  tests. Keep hands-on canvas, save/reopen, and edit-history checks pending until
-  they are performed in that build.
+- [-] Initial Fusion graph code, tests, and documentation are in place. The
+  Video Editor Windows Release executable and focused graph, project, UI,
+  Preview, and Render tests passed on 2026-10-07. Keep hands-on canvas,
+  save/reopen, and edit-history checks pending until they are performed in that
+  build.
 - [x] Repeatedly migrate the same long-lived `.csp` project when advancing
   persisted-format versions. The owner reports doing this since the application
   was created and says the migrations have worked.
