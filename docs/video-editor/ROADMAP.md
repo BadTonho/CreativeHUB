@@ -226,6 +226,12 @@ tasks.
   Focused workspace, queue, export, and window integration tests pass. This
   structural change adds no new manual interaction check; the existing Render
   queue checks above remain pending.
+- [x] Close the workspace modularization documentation against the current
+  source tree and CMake: Edit, Fusion (including `workspaces/fusion/nodes/`),
+  Render, shared rendering contracts, shortcut scopes, and regression indexes
+  are aligned. The focused Release test/build evidence is recorded in
+  [Regression Testing](REGRESSION_TESTING.md). Manual menu/shortcut and Edit
+  command checks, Fusion preview checks, and Render queue checks remain pending.
 
 The detailed implemented scope and deferred behaviors are recorded in
 [Current Scope and Non-goals](architecture/SCOPE.md). The active `.csp` schema

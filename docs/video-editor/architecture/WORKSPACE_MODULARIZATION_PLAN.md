@@ -361,26 +361,35 @@ testes focados concluídas.
    protegem os módulos movidos.
 
 **Critério automatizado:** atendido pelos testes focados e pela compilação limpa
-do Video Editor Release. Não restam referências de código ou CMake aos caminhos
-anteriores `ui/workspace/pages/` e `src/fusion/nodes/`.
+do Video Editor Release. A estrutura consolidada está registrada em `src/workspaces/`
+e `src/rendering/`; o CMake e os includes usam esses caminhos.
 
-### Etapa 9 — Documentação e aceitação
+### Etapa 9 — Fechar a documentação dos workspaces
 
-1. Atualizar a visão geral de arquitetura e a estrutura do repositório para
-   descrever os limites realmente implementados, não apenas os planejados.
-2. Atualizar `SHORTCUTS.md` sempre que os atalhos, escopos ou comportamentos de
-   contexto forem alterados.
-3. Atualizar o roadmap e o guia de regressão com as etapas concluídas, a
-   cobertura automatizada e as conferências manuais ainda pendentes.
-4. Manter atualizado o índice de funcionalidades e verificações para cada
-   workspace afetado.
-5. Compilar somente a configuração do Video Editor correspondente ao método de
-   execução do usuário e informar o caminho e a data de modificação do
-   executável verificado.
+**Estado:** concluída em 2026-10-08 após conferência da documentação contra a
+estrutura, os limites de responsabilidade e os registros do CMake atuais; os
+nove testes focados passaram e a build Release canônica foi concluída.
 
-**Critério para concluir:** código, atalhos, arquitetura e registros de
-regressão estão alinhados; os testes automatizados passam; e as conferências
-manuais restantes estão explicitadas.
+1. Conferir `REPOSITORY_STRUCTURE.md` e `UI.md` com as pastas reais de Edit,
+   Fusion, `workspaces/fusion/nodes/`, Render, `rendering/` e `ui/workspace/`.
+2. Conferir `../SHORTCUTS.md`, `../ROADMAP.md` e `../REGRESSION_TESTING.md`
+   com os escopos, responsabilidades, testes automatizados e pendências
+   manuais.
+3. Confirmar que código e CMake não usam mais caminhos anteriores e que os
+   documentos de arquitetura descrevem os caminhos atuais.
+4. Executar `git diff --check`, os testes focados de workspace e a build Release
+   canônica do Video Editor; registrar as evidências no guia de regressão.
+
+**Conferências manuais ainda pendentes:** aparência de menus e comportamento de
+atalhos ao trocar de workspace; comandos de Edit e foco em campos de texto;
+prévia de nós e restauração do Viewer no Fusion; continuidade, cancelamento e
+fechamento durante uma fila de Render. A cobertura automatizada não substitui
+essas verificações na build Release.
+
+**Critério para concluir:** atendido quando os documentos, o código e o CMake
+descrevem a mesma estrutura; as verificações automatizadas e a build Release
+passam; caminhos antigos não aparecem como referências ativas; e as
+conferências manuais pendentes permanecem explicitamente listadas.
 
 ## Resumo da matriz de responsabilidades
 

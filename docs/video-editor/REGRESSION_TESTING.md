@@ -1153,3 +1153,18 @@ succeeds. The canonical Release build and Qt runtime deployment completed;
 modified 2026-10-08 09:38:16. Manual dragging from both panels onto empty canvas
 and cables, plus confirming the existing Add/Enter Timeline behavior, remains
 pending.
+
+Workspace modularization documentation closeout (2026-10-08): `UI.md`,
+`REPOSITORY_STRUCTURE.md`, `SHORTCUTS.md`, the roadmap, and this regression
+index were checked against the current Edit, Fusion (including
+`workspaces/fusion/nodes/`), Render, shared rendering, and workspace-host
+structure. The source and CMake no longer reference the superseded workspace
+paths. `git diff --check` completed without whitespace errors. The nine focused
+Release CTest entries for MainWindow, workspace switching, Fusion, node graph,
+Timeline, project persistence, playback-worker errors/reference mapping, and
+Render export passed. The canonical Video Editor Release build completed at
+`build/apps/video-editor/Release/creative-suite-video-editor.exe`, last
+modified 2026-10-08 13:48:33 (2,441,216 bytes). Manual menu and shortcut checks,
+Edit command/focus checks, Fusion preview/restoration, and Render queue
+switching/cancel/shutdown checks remain pending; automated coverage does not
+mark those manual checks as complete.
