@@ -385,6 +385,10 @@ void MainWindow::createWorkspace() {
             edit_controller->applyFusionNodeGraph(clip_id, graph);
             refreshFusionSelection();
         });
+    connect(fusion_workspace_, &ui::FusionWorkspace::playbackPauseRequested,
+        this, [this] {
+            if (playback_controller_ != nullptr) playback_controller_->pause();
+        });
     connect(fusion_workspace_, &ui::FusionWorkspace::nodePreviewRequested,
         this, [this](timeline::ClipId, fusion::nodes::NodeId) {
             refreshFusionNodePreviewTarget();

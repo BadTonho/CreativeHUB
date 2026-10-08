@@ -13,9 +13,75 @@
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <array>
+#include <cstdint>
+#include <functional>
 #include <utility>
 
 namespace ui {
+namespace {
+
+const creative_suite::animation::ScalarKeyframes* effectParameterKeyframes(
+    const fusion::nodes::Node& node,
+    const std::string& parameter_id) {
+    const auto found = std::find_if(node.effect_parameter_keyframes.begin(),
+        node.effect_parameter_keyframes.end(), [&parameter_id](const auto& item) {
+            return item.parameter_id == parameter_id;
+        });
+    return found == node.effect_parameter_keyframes.end() ? nullptr : &found->keyframes;
+}
+
+creative_suite::animation::ScalarKeyframes* effectParameterKeyframes(
+    fusion::nodes::Node& node,
+    const std::string& parameter_id) {
+    const auto found = std::find_if(node.effect_parameter_keyframes.begin(),
+        node.effect_parameter_keyframes.end(), [&parameter_id](const auto& item) {
+            return item.parameter_id == parameter_id;
+        });
+    return found == node.effect_parameter_keyframes.end() ? nullptr : &found->keyframes;
+}
+
+fusion::nodes::Node* findMutableNode(
+    fusion::nodes::NodeGraph& graph,
+    fusion::nodes::NodeId id) {
+    const auto found = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+        [id](const fusion::nodes::Node& node) { return node.id == id; });
+    return found == graph.nodes.end() ? nullptr : &*found;
+}
+
+creative_suite::animation::ScalarKeyframes& ensureEffectParameterKeyframes(
+    fusion::nodes::Node& node,
+    const std::string& parameter_id) {
+    auto found = std::find_if(node.effect_parameter_keyframes.begin(),
+        node.effect_parameter_keyframes.end(), [&parameter_id](const auto& item) {
+            return item.parameter_id == parameter_id;
+        });
+    if (found == node.effect_parameter_keyframes.end()) {
+        node.effect_parameter_keyframes.push_back({parameter_id, {}});
+        return node.effect_parameter_keyframes.back().keyframes;
+    }
+    return found->keyframes;
+}
+
+double evaluatedEffectParameter(
+    const fusion::nodes::Node& node,
+    const std::string& parameter_id,
+    std::int64_t frame) {
+    const auto base = creative_suite::effects::parameterValue(
+        node.effect, parameter_id);
+    const auto* keyframes = effectParameterKeyframes(node, parameter_id);
+    return keyframes == nullptr ? base
+        : creative_suite::animation::evaluateScalar(base, *keyframes, frame);
+}
+
+bool hasKeyAtFrame(
+    const std::vector<creative_suite::animation::Keyframe>& keyframes,
+    std::int64_t frame) {
+    return std::any_of(keyframes.begin(), keyframes.end(),
+        [frame](const auto& keyframe) { return keyframe.frame == frame; });
+}
+
+} // namespace
 
 FusionWorkspace::FusionWorkspace(QObject* parent) : QObject(parent) {}
 
@@ -180,6 +246,12 @@ void FusionWorkspace::setSelection(const timeline::TimelineClip* clip,
     const auto previous_preview_node_id = preview_node_id_;
     clip_id_ = clip != nullptr && (clip->kind == timeline::ClipKind::Video ||
         clip->kind == timeline::ClipKind::Image) ? clip->clip_id : 0;
+    clip_timeline_start_frame_ = clip_id_ != 0 ? clip->timeline_start_frame : 0;
+    clip_duration_frames_ = clip_id_ != 0 ? clip->timeline_duration_frames : 0;
+    local_frame_ = clip_id_ == previous_clip_id
+        ? std::clamp<std::int64_t>(local_frame_, 0,
+            std::max<std::int64_t>(0, clip_duration_frames_ - 1))
+        : 0;
     graph_ = clip_id_ == 0 ? fusion::nodes::NodeGraph{}
         : clip->node_graph.value_or(fusion::nodes::makePassthroughGraph());
     media_choices_ = std::move(media_choices);
@@ -198,6 +270,17 @@ void FusionWorkspace::setSelection(const timeline::TimelineClip* clip,
             ? previous_preview_node_id : output_id;
     refreshCanvas();
     refreshInspector();
+}
+
+void FusionWorkspace::setTimelinePlayheadFrame(std::int64_t timeline_frame) {
+    if (clip_id_ == 0 || clip_duration_frames_ <= 0) return;
+    const auto frame = timeline_frame <= clip_timeline_start_frame_
+        ? std::int64_t{0}
+        : std::min<std::int64_t>(
+            timeline_frame - clip_timeline_start_frame_, clip_duration_frames_ - 1);
+    if (frame == local_frame_) return;
+    local_frame_ = frame;
+    refreshAnimatedControls();
 }
 
 void FusionWorkspace::setMediaChoices(std::vector<MediaChoice> media_choices) {
@@ -267,6 +350,41 @@ void FusionWorkspace::refreshInspector() {
         layout->addRow(label, control);
         return control;
     };
+    const auto animatedSpin = [this, layout](
+        const QString& name, const QString& label, double value,
+        double minimum, double maximum, double step, bool keyed,
+        std::function<void()> toggle_keyframe) {
+        auto* row = new QWidget(node_properties_);
+        auto* row_layout = new QHBoxLayout(row);
+        row_layout->setContentsMargins(0, 0, 0, 0);
+        row_layout->setSpacing(4);
+        auto* control = new QDoubleSpinBox(row);
+        control->setObjectName(name);
+        control->setRange(minimum, maximum);
+        control->setSingleStep(step);
+        control->setDecimals(3);
+        control->setValue(value);
+        auto* key = new QPushButton(keyed ? QStringLiteral("◆") : QStringLiteral("◇"), row);
+        key->setObjectName(name + QStringLiteral("Keyframe"));
+        key->setCheckable(true);
+        key->setChecked(keyed);
+        key->setFixedWidth(30);
+        key->setStyleSheet(
+            "QPushButton { font-size: 16px; font-weight: 600; padding: 0px; }"
+            "QPushButton:checked { color: #171a20; background: #e8b94f; }");
+        key->setToolTip(keyed
+            ? QStringLiteral("Remove keyframe at the current frame")
+            : QStringLiteral("Add keyframe at the current frame"));
+        row_layout->addWidget(control, 1);
+        row_layout->addWidget(key);
+        layout->addRow(label, row);
+        connect(key, &QPushButton::clicked, this,
+            [this, toggle_keyframe = std::move(toggle_keyframe)] {
+                if (refreshing_) return;
+                toggle_keyframe();
+            });
+        return control;
+    };
     if (node->type == fusion::nodes::NodeType::Input) {
         auto* source = new QComboBox(node_properties_);
         source->setObjectName("fusionInputMediaSource");
@@ -300,11 +418,29 @@ void FusionWorkspace::refreshInspector() {
                 commitGraph(std::move(candidate), QStringLiteral("Input source updated."));
             });
     } else if (node->type == fusion::nodes::NodeType::Transform) {
-        spin("fusionTransformX", "Center X", node->transform.position_x, -2.0, 3.0, 0.05);
-        spin("fusionTransformY", "Center Y", node->transform.position_y, -2.0, 3.0, 0.05);
-        spin("fusionTransformScale", "Scale", node->transform.scale, 0.01, 10.0, 0.05);
-        spin("fusionTransformRotation", "Rotation", node->transform.rotation_degrees, -360.0, 360.0, 1.0);
-        spin("fusionTransformOpacity", "Opacity", node->transform.opacity, 0.0, 1.0, 0.05);
+        const auto add_transform = [&](const QString& name, const QString& label,
+                                       timeline::TransformProperty property,
+                                       double minimum, double maximum, double step) {
+            const auto& keys = timeline::keyframesFor(
+                node->transform_keyframes, property);
+            const auto value = timeline::evaluateProperty(
+                node->transform, node->transform_keyframes, property, local_frame_);
+            animatedSpin(name, label, value, minimum, maximum, step,
+                hasKeyAtFrame(keys, local_frame_),
+                [this, node_id = node->id, property] {
+                    toggleTransformKeyframe(node_id, property);
+                });
+        };
+        add_transform("fusionTransformX", "Center X",
+            timeline::TransformProperty::PositionX, -2.0, 3.0, 0.05);
+        add_transform("fusionTransformY", "Center Y",
+            timeline::TransformProperty::PositionY, -2.0, 3.0, 0.05);
+        add_transform("fusionTransformScale", "Scale",
+            timeline::TransformProperty::Scale, 0.01, 10.0, 0.05);
+        add_transform("fusionTransformRotation", "Rotation",
+            timeline::TransformProperty::Rotation, -360.0, 360.0, 1.0);
+        add_transform("fusionTransformOpacity", "Opacity",
+            timeline::TransformProperty::Opacity, 0.0, 1.0, 0.05);
     } else if (node->type == fusion::nodes::NodeType::Color) {
         spin("fusionColorBrightness", "Brightness", node->color.brightness, -100.0, 100.0, 1.0);
         spin("fusionColorContrast", "Contrast %", node->color.contrast_percent, 0.0, 200.0, 1.0);
@@ -322,9 +458,25 @@ void FusionWorkspace::refreshInspector() {
                     parameter.name.data(), static_cast<qsizetype>(parameter.name.size()));
                 const auto control_name = QStringLiteral("fusionEffectParameter_%1")
                     .arg(parameter_id);
-                spin(control_name, parameter_name,
-                    creative_suite::effects::parameterValue(node->effect, parameter.id),
-                    parameter.minimum, parameter.maximum, parameter.step);
+                if (node->effect.id == "video.brightness" &&
+                    parameter.id == "amount") {
+                    const std::string effect_parameter_id(parameter.id);
+                    const auto* keys = effectParameterKeyframes(
+                        *node, effect_parameter_id);
+                    const auto evaluated = evaluatedEffectParameter(
+                        *node, effect_parameter_id, local_frame_);
+                    animatedSpin(control_name, parameter_name, evaluated,
+                        parameter.minimum, parameter.maximum, parameter.step,
+                        keys != nullptr && hasKeyAtFrame(*keys, local_frame_),
+                        [this, node_id = node->id, effect_parameter_id] {
+                            toggleEffectParameterKeyframe(
+                                node_id, effect_parameter_id);
+                        });
+                } else {
+                    spin(control_name, parameter_name,
+                        creative_suite::effects::parameterValue(node->effect, parameter.id),
+                        parameter.minimum, parameter.maximum, parameter.step);
+                }
             }
         }
     }
@@ -336,11 +488,43 @@ void FusionWorkspace::refreshInspector() {
             [node_id](const auto& value) { return value.id == node_id; });
         if (found == candidate.nodes.end()) return;
         if (found->type == fusion::nodes::NodeType::Transform) {
-            found->transform.position_x = node_properties_->findChild<QDoubleSpinBox*>("fusionTransformX")->value();
-            found->transform.position_y = node_properties_->findChild<QDoubleSpinBox*>("fusionTransformY")->value();
-            found->transform.scale = node_properties_->findChild<QDoubleSpinBox*>("fusionTransformScale")->value();
-            found->transform.rotation_degrees = node_properties_->findChild<QDoubleSpinBox*>("fusionTransformRotation")->value();
-            found->transform.opacity = node_properties_->findChild<QDoubleSpinBox*>("fusionTransformOpacity")->value();
+            const auto frame = std::clamp<std::int64_t>(local_frame_, 0,
+                std::max<std::int64_t>(0, clip_duration_frames_ - 1));
+            const auto apply_property = [found, frame](
+                timeline::TransformProperty property,
+                QDoubleSpinBox* control) {
+                if (control == nullptr) return;
+                const auto value = control->value();
+                const auto& existing = timeline::keyframesFor(
+                    found->transform_keyframes, property);
+                if (!existing.empty()) {
+                    static_cast<void>(timeline::setKeyframe(
+                        found->transform_keyframes, property, frame, value));
+                    return;
+                }
+                switch (property) {
+                case timeline::TransformProperty::PositionX:
+                    found->transform.position_x = value; break;
+                case timeline::TransformProperty::PositionY:
+                    found->transform.position_y = value; break;
+                case timeline::TransformProperty::Scale:
+                    found->transform.scale = value; break;
+                case timeline::TransformProperty::Rotation:
+                    found->transform.rotation_degrees = value; break;
+                case timeline::TransformProperty::Opacity:
+                    found->transform.opacity = value; break;
+                }
+            };
+            apply_property(timeline::TransformProperty::PositionX,
+                node_properties_->findChild<QDoubleSpinBox*>("fusionTransformX"));
+            apply_property(timeline::TransformProperty::PositionY,
+                node_properties_->findChild<QDoubleSpinBox*>("fusionTransformY"));
+            apply_property(timeline::TransformProperty::Scale,
+                node_properties_->findChild<QDoubleSpinBox*>("fusionTransformScale"));
+            apply_property(timeline::TransformProperty::Rotation,
+                node_properties_->findChild<QDoubleSpinBox*>("fusionTransformRotation"));
+            apply_property(timeline::TransformProperty::Opacity,
+                node_properties_->findChild<QDoubleSpinBox*>("fusionTransformOpacity"));
         } else if (found->type == fusion::nodes::NodeType::Color) {
             found->color.brightness = node_properties_->findChild<QDoubleSpinBox*>("fusionColorBrightness")->value();
             found->color.contrast_percent = node_properties_->findChild<QDoubleSpinBox*>("fusionColorContrast")->value();
@@ -355,8 +539,29 @@ void FusionWorkspace::refreshInspector() {
                     parameter.id.data(), static_cast<qsizetype>(parameter.id.size()));
                 auto* control = node_properties_->findChild<QDoubleSpinBox*>(
                     QStringLiteral("fusionEffectParameter_%1").arg(parameter_id));
-                if (control == nullptr || !creative_suite::effects::setParameterValue(
-                        found->effect, parameter.id, control->value())) return;
+                if (control == nullptr) return;
+                if (found->effect.id == "video.brightness" &&
+                    parameter.id == "amount") {
+                    auto curve = std::find_if(
+                        found->effect_parameter_keyframes.begin(),
+                        found->effect_parameter_keyframes.end(),
+                        [&parameter](const auto& value) {
+                            return value.parameter_id == parameter.id;
+                        });
+                    if (curve != found->effect_parameter_keyframes.end() &&
+                        !curve->keyframes.empty()) {
+                        const auto frame = std::clamp<std::int64_t>(local_frame_, 0,
+                            std::max<std::int64_t>(0, clip_duration_frames_ - 1));
+                        static_cast<void>(creative_suite::animation::setKeyframe(
+                            curve->keyframes, frame, control->value()));
+                    } else if (!creative_suite::effects::setParameterValue(
+                            found->effect, parameter.id, control->value())) {
+                        return;
+                    }
+                } else if (!creative_suite::effects::setParameterValue(
+                        found->effect, parameter.id, control->value())) {
+                    return;
+                }
             }
         }
         commitGraph(std::move(candidate), QStringLiteral("Node settings updated."));
@@ -396,8 +601,106 @@ void FusionWorkspace::refreshInspector() {
     });
 }
 
+void FusionWorkspace::refreshAnimatedControls() {
+    if (inspector_panel_ == nullptr) return;
+    const auto* node = fusion::nodes::findNode(graph_, selected_node_id_);
+    if (node == nullptr) return;
+    const auto set_value = [this](const QString& name, double value) {
+        auto* control = node_properties_->findChild<QDoubleSpinBox*>(name);
+        if (control == nullptr) return;
+        const QSignalBlocker blocker(control);
+        control->setValue(value);
+    };
+    const auto set_key_button = [this](const QString& name, bool keyed) {
+        auto* button = node_properties_->findChild<QPushButton*>(
+            name + QStringLiteral("Keyframe"));
+        if (button == nullptr) return;
+        const QSignalBlocker blocker(button);
+        button->setChecked(keyed);
+        button->setText(keyed ? QStringLiteral("◆") : QStringLiteral("◇"));
+        button->setToolTip(keyed
+            ? QStringLiteral("Remove keyframe at the current frame")
+            : QStringLiteral("Add keyframe at the current frame"));
+    };
+    if (node->type == fusion::nodes::NodeType::Transform) {
+        const std::array<std::pair<QString, timeline::TransformProperty>, 5> properties{{
+            {QStringLiteral("fusionTransformX"), timeline::TransformProperty::PositionX},
+            {QStringLiteral("fusionTransformY"), timeline::TransformProperty::PositionY},
+            {QStringLiteral("fusionTransformScale"), timeline::TransformProperty::Scale},
+            {QStringLiteral("fusionTransformRotation"), timeline::TransformProperty::Rotation},
+            {QStringLiteral("fusionTransformOpacity"), timeline::TransformProperty::Opacity},
+        }};
+        for (const auto& [name, property] : properties) {
+            const auto& keys = timeline::keyframesFor(
+                node->transform_keyframes, property);
+            set_value(name, timeline::evaluateProperty(
+                node->transform, node->transform_keyframes, property, local_frame_));
+            set_key_button(name, hasKeyAtFrame(keys, local_frame_));
+        }
+    } else if (node->type == fusion::nodes::NodeType::Effect &&
+               node->effect.id == "video.brightness") {
+        const std::string parameter_id = "amount";
+        const auto* keys = effectParameterKeyframes(*node, parameter_id);
+        const auto name = QStringLiteral("fusionEffectParameter_amount");
+        set_value(name, evaluatedEffectParameter(*node, parameter_id, local_frame_));
+        set_key_button(name, keys != nullptr && hasKeyAtFrame(*keys, local_frame_));
+    }
+}
+
+void FusionWorkspace::toggleTransformKeyframe(
+    fusion::nodes::NodeId node_id,
+    timeline::TransformProperty property) {
+    auto candidate = graph_;
+    auto* node = findMutableNode(candidate, node_id);
+    if (node == nullptr || node->type != fusion::nodes::NodeType::Transform ||
+        clip_duration_frames_ <= 0) return;
+    const auto frame = std::clamp<std::int64_t>(
+        local_frame_, 0, clip_duration_frames_ - 1);
+    const auto& keys = timeline::keyframesFor(node->transform_keyframes, property);
+    if (hasKeyAtFrame(keys, frame)) {
+        static_cast<void>(timeline::removeKeyframe(
+            node->transform_keyframes, property, frame));
+    } else {
+        const auto value = timeline::evaluateProperty(
+            node->transform, node->transform_keyframes, property, frame);
+        if (!timeline::setKeyframe(
+                node->transform_keyframes, property, frame, value)) return;
+    }
+    commitGraph(std::move(candidate), QStringLiteral("Node keyframe updated."));
+}
+
+void FusionWorkspace::toggleEffectParameterKeyframe(
+    fusion::nodes::NodeId node_id,
+    const std::string& parameter_id) {
+    auto candidate = graph_;
+    auto* node = findMutableNode(candidate, node_id);
+    if (node == nullptr || node->type != fusion::nodes::NodeType::Effect ||
+        node->effect.id != "video.brightness" || parameter_id != "amount" ||
+        clip_duration_frames_ <= 0) return;
+    const auto frame = std::clamp<std::int64_t>(
+        local_frame_, 0, clip_duration_frames_ - 1);
+    auto* existing = effectParameterKeyframes(*node, parameter_id);
+    const bool has_key = existing != nullptr && hasKeyAtFrame(*existing, frame);
+    if (has_key) {
+        static_cast<void>(creative_suite::animation::removeKeyframe(*existing, frame));
+        if (existing->empty()) {
+            std::erase_if(node->effect_parameter_keyframes,
+                [&parameter_id](const auto& item) {
+                    return item.parameter_id == parameter_id;
+                });
+        }
+    } else {
+        auto& keyframes = ensureEffectParameterKeyframes(*node, parameter_id);
+        const auto value = evaluatedEffectParameter(*node, parameter_id, frame);
+        if (!creative_suite::animation::setKeyframe(keyframes, frame, value)) return;
+    }
+    commitGraph(std::move(candidate), QStringLiteral("Node keyframe updated."));
+}
+
 void FusionWorkspace::commitGraph(fusion::nodes::NodeGraph graph, const QString& status) {
-    if (clip_id_ == 0 || !fusion::nodes::validate(graph)) return;
+    if (clip_id_ == 0 || !fusion::nodes::validate(graph) ||
+        !fusion::nodes::validKeyframeRange(graph, clip_duration_frames_)) return;
+    emit playbackPauseRequested();
     graph_ = std::move(graph);
     refreshCanvas();
     refreshInspector();

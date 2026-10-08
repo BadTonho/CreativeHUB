@@ -557,7 +557,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 21 format. Linked video-audio clips can be
+the current `.csp` version 22 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Right-clicking a video or image clip offers
 **Open in Fusion** and opens the selected clip's node graph. A video with linked
@@ -680,8 +680,16 @@ text, and transitions are not graph nodes. To connect nodes,
 drag an output port onto an input port; drag a connected input port or cable to
 empty canvas space to remove it. Releasing an output on another input rewires
 that input. Disconnected inputs evaluate as transparent. Connection validation
-rejects incompatible ports and cycles with a visible explanation. The existing
-clip effect stack and Timeline transform/keyframes run after the graph output.
+rejects incompatible ports and cycles with a visible explanation. The Transform
+Inspector exposes diamond controls for position X/Y, scale, rotation, and
+opacity; Brightness exposes one for `amount`. Clicking a diamond adds a linear
+keyframe at the selected clip-local playhead frame, seeded with the evaluated
+value, or removes a key at that frame. Editing an animated property updates or
+creates a key at the current frame, pauses playback, and clamps the key to the
+clip duration. Inspector values and diamond states follow the playhead. These
+curves are saved in `.csp` v22 and evaluated by the shared Preview and Render
+graph path. The existing clip effect stack and Timeline transform/keyframes run
+after the graph output.
 Each node also has a `VIEW` control. Output is the initial Viewer target;
 clicking another node previews its intermediate image without changing the
 Inspector selection, project dirty state, or Undo/Redo history. While Fusion is

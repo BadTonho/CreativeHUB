@@ -35,6 +35,8 @@ int runFusionWorkspaceTest() {
     timeline::TimelineClip selected;
     selected.clip_id = 42;
     selected.kind = timeline::ClipKind::Video;
+    selected.timeline_start_frame = 100;
+    selected.timeline_duration_frames = 100;
     workspace.setSelection(&selected, {});
 
     fusion::nodes::NodeGraph edited;
@@ -43,6 +45,7 @@ int runFusionWorkspaceTest() {
     timeline::ClipId preview_clip_id = 0;
     fusion::nodes::NodeId preview_node_id = 0;
     int preview_request_count = 0;
+    int pause_request_count = 0;
     QObject::connect(&workspace, &ui::FusionWorkspace::graphEditRequested,
         [&edited, &edit_count, &selected_clip_id_was_preserved, &selected](timeline::ClipId clip_id,
             const fusion::nodes::NodeGraph& graph) {
@@ -59,6 +62,8 @@ int runFusionWorkspaceTest() {
             preview_node_id = node_id;
             ++preview_request_count;
         });
+    QObject::connect(&workspace, &ui::FusionWorkspace::playbackPauseRequested,
+        [&pause_request_count] { ++pause_request_count; });
     auto* add_type = root.findChild<QComboBox*>("fusionAddNodeType");
     auto* add = root.findChild<QPushButton*>("fusionAddNodeButton");
     require(add_type && add, "Node controls were not created.");
@@ -368,6 +373,97 @@ int runFusionWorkspaceTest() {
                 !effect_node->effect.enabled &&
                 creative_suite::effects::parameterValue(effect_node->effect, "amount") == 45.0,
             "Effect Inspector changes were not committed to the selected graph node.");
+
+    add_type->setCurrentIndex(add_type->findData(
+        static_cast<int>(fusion::nodes::NodeType::Transform)));
+    add->click();
+    const auto animated_transform_id = edited.nodes.back().id;
+    node_canvas->setSelectedNode(animated_transform_id);
+    auto* animated_scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
+    auto* scale_key = root.findChild<QPushButton*>("fusionTransformScaleKeyframe");
+    apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
+    require(animated_scale && scale_key && apply,
+            "Transform animation controls were not shown in the Inspector.");
+    scale_key->click();
+    auto* animated_transform = fusion::nodes::findNode(edited, animated_transform_id);
+    require(animated_transform && edit_count == 17 &&
+                animated_transform->transform_keyframes.scale.size() == 1 &&
+                animated_transform->transform_keyframes.scale.front() ==
+                    creative_suite::animation::Keyframe{0, 1.0} && pause_request_count > 0,
+            "Adding a Transform keyframe did not use the evaluated local-frame value or pause playback.");
+    animated_scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
+    apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
+    workspace.setTimelinePlayheadFrame(110);
+    QApplication::processEvents();
+    animated_scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
+    scale_key = root.findChild<QPushButton*>("fusionTransformScaleKeyframe");
+    require(animated_scale->value() == 1.0 && !scale_key->isChecked(),
+            "The Transform Inspector did not follow the clip-local playhead frame.");
+    animated_scale->setValue(2.0);
+    apply->click();
+    animated_transform = fusion::nodes::findNode(edited, animated_transform_id);
+    animated_scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
+    require(animated_transform && edit_count == 18 &&
+                animated_transform->transform_keyframes.scale.size() == 2 &&
+                animated_transform->transform_keyframes.scale.back() ==
+                    creative_suite::animation::Keyframe{10, 2.0},
+            "Editing an animated Transform parameter did not update the key at the current frame.");
+    workspace.setTimelinePlayheadFrame(100);
+    QApplication::processEvents();
+    animated_scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
+    scale_key = root.findChild<QPushButton*>("fusionTransformScaleKeyframe");
+    require(animated_scale->value() == 1.0 && scale_key->isChecked() &&
+                workspace.selectedNodeId() == animated_transform_id,
+            "Transform animation changed Inspector selection or failed to restore the keyed value.");
+
+    found_blank_canvas_position = false;
+    for (int y = 8; y < canvas->viewport()->height() && !found_blank_canvas_position; y += 16) {
+        for (int x = 8; x < canvas->viewport()->width(); x += 16) {
+            if (canvas->itemAt(QPoint(x, y)) == nullptr) {
+                blank_canvas_position = QPoint(x, y);
+                found_blank_canvas_position = true;
+                break;
+            }
+        }
+    }
+    require(found_blank_canvas_position &&
+                drop_effect(blank_canvas_position, QByteArray("video.brightness")),
+            "A Brightness node could not be created for Inspector animation coverage.");
+    const auto animated_brightness_id = edited.nodes.back().id;
+    node_canvas->setSelectedNode(animated_brightness_id);
+    auto* brightness_amount = root.findChild<QDoubleSpinBox*>(
+        "fusionEffectParameter_amount");
+    auto* brightness_key = root.findChild<QPushButton*>(
+        "fusionEffectParameter_amountKeyframe");
+    apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
+    require(brightness_amount && brightness_key && apply,
+            "Brightness animation controls were not shown in the Inspector.");
+    workspace.setTimelinePlayheadFrame(110);
+    brightness_key->click();
+    auto* animated_brightness = fusion::nodes::findNode(edited, animated_brightness_id);
+    require(animated_brightness && edit_count == 20 &&
+                animated_brightness->effect_parameter_keyframes.size() == 1 &&
+                animated_brightness->effect_parameter_keyframes.front().keyframes.front() ==
+                    creative_suite::animation::Keyframe{10, 0.0},
+            "Adding a Brightness keyframe did not use its evaluated value at the local frame.");
+    brightness_amount = root.findChild<QDoubleSpinBox*>("fusionEffectParameter_amount");
+    brightness_key = root.findChild<QPushButton*>(
+        "fusionEffectParameter_amountKeyframe");
+    apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
+    brightness_amount->setValue(25.0);
+    apply->click();
+    animated_brightness = fusion::nodes::findNode(edited, animated_brightness_id);
+    brightness_key = root.findChild<QPushButton*>(
+        "fusionEffectParameter_amountKeyframe");
+    require(animated_brightness && edit_count == 21 &&
+                animated_brightness->effect_parameter_keyframes.front().keyframes.front() ==
+                    creative_suite::animation::Keyframe{10, 25.0},
+            "Editing animated Brightness did not update its key at the current frame.");
+    brightness_key->click();
+    animated_brightness = fusion::nodes::findNode(edited, animated_brightness_id);
+    require(animated_brightness && edit_count == 22 &&
+                animated_brightness->effect_parameter_keyframes.front().keyframes.empty(),
+            "The Brightness diamond did not remove the keyframe at the current frame.");
     return 0;
 }
 

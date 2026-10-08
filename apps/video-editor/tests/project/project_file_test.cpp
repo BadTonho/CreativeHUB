@@ -118,10 +118,28 @@ int main(int argc, char** argv) {
                 "Could not set a Fusion effect-node parameter for project coverage.");
         effect_node.effect.enabled = false;
         node_graph.nodes.push_back(effect_node);
+        fusion::nodes::Node transform_node{
+            6, fusion::nodes::NodeType::Transform, 820.0, 180.0};
+        transform_node.transform.position_x = 0.2;
+        transform_node.transform.scale = 1.25;
+        transform_node.transform_keyframes.position_x = {{0, 0.2}, {40, 0.8}};
+        transform_node.transform_keyframes.scale = {{0, 1.25}, {40, 2.0}};
+        node_graph.nodes.push_back(transform_node);
+        fusion::nodes::Node brightness_node{
+            7, fusion::nodes::NodeType::Effect, 1040.0, 180.0};
+        brightness_node.effect = creative_suite::effects::makeDefaultInstance(
+            "video.brightness");
+        require(creative_suite::effects::setParameterValue(
+                    brightness_node.effect, "amount", 10.0),
+                "Could not set a Fusion Brightness node parameter for project coverage.");
+        brightness_node.effect_parameter_keyframes.push_back(
+            {"amount", {{0, 10.0}, {40, 60.0}}});
+        node_graph.nodes.push_back(brightness_node);
         node_graph.nodes[2].source_path = image_source;
         node_graph.nodes[2].source_is_still = true;
-        node_graph.connections = {{1, 4, 0}, {3, 4, 1}, {4, 5, 0}, {5, 2, 0}};
-        node_graph.next_id = 6;
+        node_graph.connections = {
+            {1, 4, 0}, {3, 4, 1}, {4, 6, 0}, {6, 5, 0}, {5, 7, 0}, {7, 2, 0}};
+        node_graph.next_id = 8;
         original.timeline_tracks.front().clips.front().node_graph = node_graph;
         auto disconnected_graph = fusion::nodes::makePassthroughGraph();
         disconnected_graph.connections.clear();
@@ -169,7 +187,7 @@ int main(int argc, char** argv) {
         const auto portrait_project_path = directory / "portrait.csp";
         project::save(portrait_project_path, portrait_project);
         require(project::load(portrait_project_path) == portrait_project,
-                "A version 21 portrait project did not preserve its canvas and project data.");
+                "A version 22 portrait project did not preserve its canvas and project data.");
 
         auto invalid_canvas_project = portrait_project;
         invalid_canvas_project.canvas_width = 1440;
@@ -231,7 +249,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 21") != std::string::npos &&
+        require(saved_json.find("\"version\": 22") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -246,10 +264,49 @@ int main(int argc, char** argv) {
                     saved_json.find("\"type\": \"merge\"") != std::string::npos &&
                     saved_json.find("\"type\": \"effect\"") != std::string::npos &&
                     saved_json.find("video.saturation") != std::string::npos &&
+                    saved_json.find("transform_keyframes") != std::string::npos &&
+                    saved_json.find("effect_parameter_keyframes") != std::string::npos &&
+                    saved_json.find("video.brightness") != std::string::npos &&
                     saved_json.find("\"enabled\": false") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline timing, effect states, Fusion nodes, and linked image references were not written to the version 21 project.");
+                "Timeline timing, effect states, Fusion node animation, and linked image references were not written to the version 22 project.");
+
+        auto legacy_v21_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        legacy_v21_json.insert("version", 21);
+        auto legacy_v21_timeline = legacy_v21_json.value("timeline").toObject();
+        auto legacy_v21_tracks = legacy_v21_timeline.value("tracks").toArray();
+        auto legacy_v21_track = legacy_v21_tracks[0].toObject();
+        auto legacy_v21_clips = legacy_v21_track.value("clips").toArray();
+        auto legacy_v21_clip = legacy_v21_clips[0].toObject();
+        auto legacy_v21_graph = legacy_v21_clip.value("node_graph").toObject();
+        QJsonArray legacy_v21_nodes;
+        for (const auto& node_value : legacy_v21_graph.value("nodes").toArray()) {
+            auto node = node_value.toObject();
+            node.remove("transform_keyframes");
+            node.remove("effect_parameter_keyframes");
+            legacy_v21_nodes.append(node);
+        }
+        legacy_v21_graph.insert("nodes", legacy_v21_nodes);
+        legacy_v21_clip.insert("node_graph", legacy_v21_graph);
+        legacy_v21_clips[0] = legacy_v21_clip;
+        legacy_v21_track.insert("clips", legacy_v21_clips);
+        legacy_v21_tracks[0] = legacy_v21_track;
+        legacy_v21_timeline.insert("tracks", legacy_v21_tracks);
+        legacy_v21_json.insert("timeline", legacy_v21_timeline);
+        const auto legacy_v21_path = directory / "legacy-v21.csp";
+        writeText(legacy_v21_path,
+                  QJsonDocument(legacy_v21_json).toJson().toStdString());
+        const auto legacy_v21 = project::load(legacy_v21_path);
+        auto expected_v21_graph = node_graph;
+        for (auto& node : expected_v21_graph.nodes) {
+            node.transform_keyframes = {};
+            node.effect_parameter_keyframes.clear();
+        }
+        require(legacy_v21.timeline_tracks.front().clips.front().node_graph ==
+                    expected_v21_graph,
+                "A version 21 graph did not open with its previous static parameters.");
 
         auto legacy_v20_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
@@ -262,21 +319,20 @@ int main(int argc, char** argv) {
         auto legacy_v20_graph_object = legacy_v20_clip.value("node_graph").toObject();
         QJsonArray legacy_v20_nodes;
         for (const auto& node_value : legacy_v20_graph_object.value("nodes").toArray()) {
-            if (node_value.toObject().value("type").toString() != "effect")
-                legacy_v20_nodes.append(node_value);
+            auto node = node_value.toObject();
+            if (node.value("type").toString() == "effect") continue;
+            node.remove("transform_keyframes");
+            node.remove("effect_parameter_keyframes");
+            legacy_v20_nodes.append(node);
         }
-        QJsonArray legacy_v20_connections;
-        for (const auto& edge_value : legacy_v20_graph_object.value("connections").toArray()) {
-            auto edge = edge_value.toObject();
-            if (edge.value("from").toInteger() == 4 &&
-                edge.value("to").toInteger() == 5) continue;
-            if (edge.value("from").toInteger() == 5)
-                edge.insert("from", 4);
-            legacy_v20_connections.append(edge);
-        }
+        QJsonArray legacy_v20_connections{
+            QJsonObject{{"from", 1}, {"to", 4}, {"input", 0}},
+            QJsonObject{{"from", 3}, {"to", 4}, {"input", 1}},
+            QJsonObject{{"from", 4}, {"to", 6}, {"input", 0}},
+            QJsonObject{{"from", 6}, {"to", 2}, {"input", 0}}};
         legacy_v20_graph_object.insert("nodes", legacy_v20_nodes);
         legacy_v20_graph_object.insert("connections", legacy_v20_connections);
-        legacy_v20_graph_object.insert("next_id", 5);
+        legacy_v20_graph_object.insert("next_id", 8);
         legacy_v20_clip.insert("node_graph", legacy_v20_graph_object);
         legacy_v20_clips[0] = legacy_v20_clip;
         legacy_v20_track.insert("clips", legacy_v20_clips);
@@ -288,12 +344,22 @@ int main(int argc, char** argv) {
                   QJsonDocument(legacy_v20_json).toJson().toStdString());
         const auto legacy_v20 = project::load(legacy_v20_path);
         auto expected_v20_graph = node_graph;
-        expected_v20_graph.nodes.pop_back();
-        expected_v20_graph.connections = {{1, 4, 0}, {3, 4, 1}, {4, 2, 0}};
-        expected_v20_graph.next_id = 5;
+        expected_v20_graph.nodes.erase(
+            std::remove_if(expected_v20_graph.nodes.begin(), expected_v20_graph.nodes.end(),
+                           [](const auto& node) {
+                               return node.type == fusion::nodes::NodeType::Effect;
+                           }),
+            expected_v20_graph.nodes.end());
+        for (auto& node : expected_v20_graph.nodes) {
+            node.transform_keyframes = {};
+            node.effect_parameter_keyframes.clear();
+        }
+        expected_v20_graph.connections = {
+            {1, 4, 0}, {3, 4, 1}, {4, 6, 0}, {6, 2, 0}};
+        expected_v20_graph.next_id = 8;
         require(legacy_v20.timeline_tracks.front().clips.front().node_graph ==
                     expected_v20_graph,
-                "A version 20 graph did not open unchanged without v21 effect nodes.");
+                "A version 20 graph did not open without v21 effect or v22 animation data.");
 
         auto legacy_v19_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();

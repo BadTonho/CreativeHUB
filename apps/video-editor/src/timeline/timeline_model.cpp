@@ -369,6 +369,207 @@ bool rescaleTransformKeyframes(
         creative_suite::animation::validTransformKeyframes(keyframes);
 }
 
+std::vector<creative_suite::animation::Keyframe> trimScalarKeyframes(
+    double base_value,
+    const creative_suite::animation::ScalarKeyframes& keyframes,
+    std::int64_t old_start_frame,
+    std::int64_t new_start_frame,
+    std::int64_t new_duration_frames,
+    double& new_base_value) {
+    const auto new_end = new_start_frame + new_duration_frames;
+    new_base_value = new_start_frame == old_start_frame
+        ? base_value
+        : creative_suite::animation::evaluateScalar(
+            base_value, keyframes, new_start_frame - old_start_frame);
+    creative_suite::animation::ScalarKeyframes result;
+    for (const auto& keyframe : keyframes) {
+        if (keyframe.frame >= new_start_frame && keyframe.frame < new_end) {
+            auto shifted = keyframe;
+            shifted.frame -= new_start_frame;
+            result.push_back(std::move(shifted));
+        }
+    }
+    if (result.empty()) {
+        new_base_value = creative_suite::animation::evaluateScalar(
+            base_value, keyframes, new_start_frame - old_start_frame);
+    } else if (result.front().frame > 0) {
+        result.insert(result.begin(), {0, new_base_value});
+    }
+    return result;
+}
+
+std::vector<creative_suite::animation::Keyframe>& mutableTransformKeyframes(
+    TransformKeyframes& keyframes,
+    TransformProperty property) {
+    switch (property) {
+    case TransformProperty::PositionX: return keyframes.position_x;
+    case TransformProperty::PositionY: return keyframes.position_y;
+    case TransformProperty::Scale: return keyframes.scale;
+    case TransformProperty::Rotation: return keyframes.rotation;
+    case TransformProperty::Opacity: return keyframes.opacity;
+    }
+    return keyframes.position_x;
+}
+
+void setTransformPropertyValue(
+    Transform2D& transform,
+    TransformProperty property,
+    double value) {
+    switch (property) {
+    case TransformProperty::PositionX: transform.position_x = value; break;
+    case TransformProperty::PositionY: transform.position_y = value; break;
+    case TransformProperty::Scale: transform.scale = value; break;
+    case TransformProperty::Rotation: transform.rotation_degrees = value; break;
+    case TransformProperty::Opacity: transform.opacity = value; break;
+    }
+}
+
+void preserveTransformCurveAnchor(
+    Transform2D& base,
+    TransformKeyframes& keyframes,
+    const Transform2D& source_base,
+    const TransformKeyframes& source_keyframes,
+    std::int64_t source_frame) {
+    for (const auto property : {TransformProperty::PositionX,
+                                TransformProperty::PositionY,
+                                TransformProperty::Scale,
+                                TransformProperty::Rotation,
+                                TransformProperty::Opacity}) {
+        auto& output = mutableTransformKeyframes(keyframes, property);
+        const auto value = evaluateProperty(
+            source_base, source_keyframes, property, source_frame);
+        if (output.empty()) {
+            setTransformPropertyValue(base, property, value);
+        } else if (output.front().frame > 0) {
+            output.insert(output.begin(), {0, value});
+        }
+    }
+}
+
+void splitNodeGraphKeyframes(
+    fusion::nodes::NodeGraph& left,
+    fusion::nodes::NodeGraph& right,
+    std::int64_t split_frame) {
+    for (auto& left_node : left.nodes) {
+        auto right_node = std::find_if(right.nodes.begin(), right.nodes.end(),
+            [&left_node](const fusion::nodes::Node& node) {
+                return node.id == left_node.id;
+            });
+        if (right_node == right.nodes.end()) continue;
+
+        if (left_node.type == fusion::nodes::NodeType::Transform) {
+            const auto old_base = left_node.transform;
+            const auto old_keys = left_node.transform_keyframes;
+            Transform2D left_base;
+            left_node.transform_keyframes = trimKeyframes(
+                old_base, old_keys, 0, 0, split_frame, left_base);
+            preserveTransformCurveAnchor(
+                left_base, left_node.transform_keyframes, old_base, old_keys, 0);
+            left_node.transform = left_base;
+            right_node->transform_keyframes = splitKeyframes(
+                old_base, old_keys, split_frame, right_node->transform);
+            preserveTransformCurveAnchor(
+                right_node->transform, right_node->transform_keyframes,
+                old_base, old_keys, split_frame);
+        }
+
+        if (left_node.type != fusion::nodes::NodeType::Effect) continue;
+        for (auto& left_parameter : left_node.effect_parameter_keyframes) {
+            auto right_parameter = std::find_if(
+                right_node->effect_parameter_keyframes.begin(),
+                right_node->effect_parameter_keyframes.end(),
+                [&left_parameter](const auto& value) {
+                    return value.parameter_id == left_parameter.parameter_id;
+                });
+            if (right_parameter == right_node->effect_parameter_keyframes.end()) continue;
+
+            const auto base_value = creative_suite::effects::parameterValue(
+                left_node.effect, left_parameter.parameter_id);
+            const auto old_keys = left_parameter.keyframes;
+            double left_base = base_value;
+            left_parameter.keyframes = trimScalarKeyframes(
+                base_value, old_keys, 0, 0, split_frame, left_base);
+            static_cast<void>(creative_suite::effects::setParameterValue(
+                left_node.effect, left_parameter.parameter_id, left_base));
+            const auto right_base = creative_suite::animation::evaluateScalar(
+                base_value, old_keys, split_frame);
+            static_cast<void>(creative_suite::effects::setParameterValue(
+                right_node->effect, right_parameter->parameter_id, right_base));
+            right_parameter->keyframes.clear();
+            for (const auto& keyframe : old_keys) {
+                if (keyframe.frame >= split_frame) {
+                    auto shifted = keyframe;
+                    shifted.frame -= split_frame;
+                    right_parameter->keyframes.push_back(std::move(shifted));
+                }
+            }
+            if (right_parameter->keyframes.empty()) {
+                static_cast<void>(creative_suite::effects::setParameterValue(
+                    right_node->effect, right_parameter->parameter_id, right_base));
+            } else if (right_parameter->keyframes.front().frame > 0) {
+                right_parameter->keyframes.insert(
+                    right_parameter->keyframes.begin(), {0, right_base});
+            }
+        }
+    }
+}
+
+void trimNodeGraphKeyframes(
+    std::optional<fusion::nodes::NodeGraph>& graph,
+    std::int64_t old_start_frame,
+    std::int64_t new_start_frame,
+    std::int64_t new_duration_frames) {
+    if (!graph.has_value()) return;
+    for (auto& node : graph->nodes) {
+        if (node.type == fusion::nodes::NodeType::Transform) {
+            const auto old_base = node.transform;
+            const auto old_keyframes = node.transform_keyframes;
+            Transform2D new_base;
+            node.transform_keyframes = trimKeyframes(
+                node.transform, node.transform_keyframes,
+                old_start_frame, new_start_frame,
+                new_duration_frames, new_base);
+            preserveTransformCurveAnchor(new_base, node.transform_keyframes,
+                old_base, old_keyframes, new_start_frame - old_start_frame);
+            node.transform = new_base;
+        }
+        if (node.type != fusion::nodes::NodeType::Effect) continue;
+        for (auto& parameter : node.effect_parameter_keyframes) {
+            double new_base = 0.0;
+            const auto base = creative_suite::effects::parameterValue(
+                node.effect, parameter.parameter_id);
+            parameter.keyframes = trimScalarKeyframes(
+                base, parameter.keyframes, old_start_frame,
+                new_start_frame, new_duration_frames, new_base);
+            static_cast<void>(creative_suite::effects::setParameterValue(
+                node.effect, parameter.parameter_id, new_base));
+        }
+    }
+}
+
+bool rescaleNodeGraphKeyframes(
+    std::optional<fusion::nodes::NodeGraph>& graph,
+    FrameRate source_rate,
+    FrameRate target_rate,
+    std::int64_t duration_frames) {
+    if (!graph.has_value()) return true;
+    if (duration_frames <= 0) return false;
+    const auto maximum_frame = duration_frames - 1;
+    for (auto& node : graph->nodes) {
+        if (node.type == fusion::nodes::NodeType::Transform &&
+            !rescaleTransformKeyframes(node.transform_keyframes,
+                source_rate, target_rate, duration_frames)) return false;
+        if (node.type != fusion::nodes::NodeType::Effect) continue;
+        for (auto& parameter : node.effect_parameter_keyframes) {
+            if (!rescaleKeyframes(parameter.keyframes, source_rate,
+                    target_rate, maximum_frame) ||
+                !creative_suite::animation::validScalarKeyframes(
+                    parameter.keyframes)) return false;
+        }
+    }
+    return fusion::nodes::validKeyframeRange(*graph, duration_frames);
+}
+
 bool hasPermittedOverlapTransition(
     const TimelineTrack& track,
     std::size_t left_index,
@@ -1555,6 +1756,10 @@ SplitClipResult TimelineModel::splitClip(
     }
     right.timeline_start_frame += local_frame;
     right.timeline_duration_frames -= local_frame;
+    if (clip.node_graph.has_value()) {
+        splitNodeGraphKeyframes(
+            *clip.node_graph, *right.node_graph, local_frame);
+    }
     if (clip.kind == ClipKind::Video) {
         right.source_duration_frames = source_duration - source_offset;
         clip.source_duration_frames = source_offset;
@@ -1953,6 +2158,8 @@ TrimClipResult TimelineModel::trimClip(
         local_start,
         new_duration_frames,
         trimmed_transform);
+    trimNodeGraphKeyframes(
+        clip.node_graph, 0, local_start, new_duration_frames);
     clip.source_start_frame = new_source_start_frame;
     clip.source_duration_frames = *converted_duration;
     clip.timeline_duration_frames = new_duration_frames;
@@ -2259,6 +2466,11 @@ std::optional<TimelineModel::Snapshot> TimelineModel::rescaleSnapshotFrameRate(
 
             if (!rescaleTransformKeyframes(
                     clip.keyframes, source_rate, target_frame_rate,
+                    clip.timeline_duration_frames)) {
+                return std::nullopt;
+            }
+            if (!rescaleNodeGraphKeyframes(
+                    clip.node_graph, source_rate, target_frame_rate,
                     clip.timeline_duration_frames)) {
                 return std::nullopt;
             }
@@ -2784,7 +2996,10 @@ NodeGraphMutationResult TimelineModel::setClipNodeGraph(
     if (clip.kind != ClipKind::Video && clip.kind != ClipKind::Image) {
         return NodeGraphMutationResult::IncompatibleClip;
     }
-    if (graph.has_value() && !fusion::nodes::validate(*graph)) {
+    if (graph.has_value() &&
+        (!fusion::nodes::validate(*graph) ||
+         !fusion::nodes::validKeyframeRange(
+             *graph, clip.timeline_duration_frames))) {
         return NodeGraphMutationResult::InvalidValue;
     }
     if (clip.node_graph == graph) return NodeGraphMutationResult::NoChange;

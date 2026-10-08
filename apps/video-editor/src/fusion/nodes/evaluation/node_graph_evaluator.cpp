@@ -85,12 +85,28 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph, const InputFra
     const auto output = std::find_if(graph.nodes.begin(), graph.nodes.end(),
         [](const Node& node) { return node.type == NodeType::Output; });
     if (output == graph.nodes.end()) return std::nullopt;
-    return evaluate(graph, inputs, output->id);
+    return evaluate(graph, inputs, output->id, EvaluationContext{});
 }
 
 std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
                                           const InputFrames& inputs,
                                           NodeId target_node) {
+    return evaluate(graph, inputs, target_node, EvaluationContext{});
+}
+
+std::optional<media::VideoFrame> evaluate(
+    const NodeGraph& graph, const InputFrames& inputs,
+    EvaluationContext context) {
+    const auto output = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+        [](const Node& node) { return node.type == NodeType::Output; });
+    if (output == graph.nodes.end()) return std::nullopt;
+    return evaluate(graph, inputs, output->id, context);
+}
+
+std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
+                                          const InputFrames& inputs,
+                                          NodeId target_node,
+                                          EvaluationContext context) {
     if (!validate(graph)) return std::nullopt;
     if (findNode(graph, target_node) == nullptr) return std::nullopt;
     const auto order = evaluationOrder(graph);
@@ -145,7 +161,9 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
             ? transparent() : media::VideoFrame{};
         const auto& background = input != values.end() ? input->second : empty_input;
         if (node->type == NodeType::Transform) {
-            values.emplace(id, transformFrame(background, node->transform));
+            values.emplace(id, transformFrame(background,
+                timeline::evaluateTransform(node->transform,
+                    node->transform_keyframes, context.local_frame)));
         } else if (node->type == NodeType::Color) {
             auto frame = background;
             if (creative_suite::effects::applyColorAdjustment(frame,
@@ -156,9 +174,19 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
             values.emplace(id, std::move(frame));
         } else if (node->type == NodeType::Effect) {
             auto frame = background;
+            auto effect = node->effect;
+            for (const auto& parameter : node->effect_parameter_keyframes) {
+                const auto base_value = creative_suite::effects::parameterValue(
+                    effect, parameter.parameter_id);
+                const auto animated_value = creative_suite::animation::evaluateScalar(
+                    base_value, parameter.keyframes, context.local_frame);
+                if (!creative_suite::effects::setParameterValue(
+                        effect, parameter.parameter_id, animated_value))
+                    return std::nullopt;
+            }
             if (!creative_suite::effects::applyStack(frame,
                     std::span<const creative_suite::effects::EffectInstance>(
-                        &node->effect, 1)))
+                        &effect, 1)))
                 return std::nullopt;
             values.emplace(id, std::move(frame));
         } else if (node->type == NodeType::Merge) {

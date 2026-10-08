@@ -55,6 +55,11 @@ std::filesystem::path normalizedPath(const std::filesystem::path& path) {
                              const std::filesystem::path& project_path,
                              const char* message);
 
+std::int64_t requiredInteger(
+    const QJsonObject& object,
+    const char* key,
+    const std::filesystem::path& project_path);
+
 std::filesystem::path resolvedPath(const std::filesystem::path& project_path,
                                    const QString& stored_path);
 
@@ -205,6 +210,77 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
         node.color.brightness = color.value("brightness").toDouble(0.0);
         node.color.contrast_percent = color.value("contrast").toDouble(100.0);
         node.color.saturation_percent = color.value("saturation").toDouble(100.0);
+        if (version >= node_animation_format_version) {
+            const auto parse_scalar_keyframes = [&](const QJsonValue& keys_value,
+                                                    auto& output) {
+                if (keys_value.isUndefined()) return;
+                if (!keys_value.isArray())
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Fusion node contains an invalid animation curve.");
+                for (const auto& key_value : keys_value.toArray()) {
+                    if (!key_value.isObject())
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "A Fusion node contains an invalid animation keyframe.");
+                    const auto key = key_value.toObject();
+                    const auto frame = requiredInteger(key, "frame", project_path);
+                    const auto numeric = key.value("value");
+                    if (frame < 0 || !numeric.isDouble() ||
+                        !std::isfinite(numeric.toDouble()))
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "A Fusion node contains an invalid animation keyframe value.");
+                    output.push_back({frame, numeric.toDouble()});
+                }
+            };
+            const auto transform_keys_value =
+                node_object.value("transform_keyframes");
+            if (!transform_keys_value.isUndefined()) {
+                if (!transform_keys_value.isObject() ||
+                    node.type != fusion::nodes::NodeType::Transform)
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Fusion node contains invalid Transform animation data.");
+                const auto transform_keys = transform_keys_value.toObject();
+                parse_scalar_keyframes(transform_keys.value("position_x"),
+                    node.transform_keyframes.position_x);
+                parse_scalar_keyframes(transform_keys.value("position_y"),
+                    node.transform_keyframes.position_y);
+                parse_scalar_keyframes(transform_keys.value("scale"),
+                    node.transform_keyframes.scale);
+                parse_scalar_keyframes(transform_keys.value("rotation"),
+                    node.transform_keyframes.rotation);
+                parse_scalar_keyframes(transform_keys.value("opacity"),
+                    node.transform_keyframes.opacity);
+                if (!creative_suite::animation::validTransformKeyframes(
+                        node.transform_keyframes))
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Fusion Transform node contains invalid animation curves.");
+            }
+            const auto effect_keys_value =
+                node_object.value("effect_parameter_keyframes");
+            if (!effect_keys_value.isUndefined()) {
+                if (!effect_keys_value.isArray() ||
+                    node.type != fusion::nodes::NodeType::Effect)
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Fusion node contains invalid effect animation data.");
+                for (const auto& parameter_value : effect_keys_value.toArray()) {
+                    if (!parameter_value.isObject() ||
+                        !parameter_value.toObject().value("id").isString())
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "A Fusion effect contains an invalid animated parameter.");
+                    const auto parameter_object = parameter_value.toObject();
+                    const auto parameter_id_bytes =
+                        parameter_object.value("id").toString().toUtf8();
+                    fusion::nodes::EffectParameterKeyframes animated;
+                    animated.parameter_id.assign(parameter_id_bytes.constData(),
+                        static_cast<std::size_t>(parameter_id_bytes.size()));
+                    parse_scalar_keyframes(parameter_object.value("keyframes"),
+                        animated.keyframes);
+                    if (animated.keyframes.empty())
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "A Fusion effect animation curve cannot be empty.");
+                    node.effect_parameter_keyframes.push_back(std::move(animated));
+                }
+            }
+        }
         graph.nodes.push_back(std::move(node));
     }
     for (const auto& edge_value : edges_value.toArray()) {

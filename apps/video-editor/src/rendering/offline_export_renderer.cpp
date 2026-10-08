@@ -319,7 +319,9 @@ std::optional<media::VideoFrame> composeFrame(
                         }
                     }
                 }
-                const auto evaluated = fusion::nodes::evaluate(*clip.node_graph, inputs);
+                const auto evaluated = fusion::nodes::evaluate(
+                    *clip.node_graph, inputs,
+                    fusion::nodes::EvaluationContext{local_frame});
                 if (!evaluated.has_value())
                     throw std::runtime_error("The Fusion node graph did not produce a frame.");
                 source_frame = std::make_shared<const media::VideoFrame>(*evaluated);

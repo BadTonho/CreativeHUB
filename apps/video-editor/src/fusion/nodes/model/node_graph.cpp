@@ -25,6 +25,40 @@ std::uint8_t inputCount(NodeType type) noexcept {
     }
     return 0;
 }
+
+bool hasTransformKeyframes(const timeline::TransformKeyframes& keyframes) noexcept {
+    return !keyframes.position_x.empty() || !keyframes.position_y.empty() ||
+        !keyframes.scale.empty() || !keyframes.rotation.empty() ||
+        !keyframes.opacity.empty();
+}
+
+const creative_suite::effects::ParameterDefinition* findEffectParameter(
+    const creative_suite::effects::EffectInstance& effect,
+    std::string_view parameter_id) noexcept {
+    const auto* definition = creative_suite::effects::findDefinition(effect.id);
+    if (definition == nullptr) return nullptr;
+    const auto found = std::find_if(definition->parameters.begin(),
+        definition->parameters.end(), [parameter_id](const auto& parameter) {
+            return parameter.id == parameter_id;
+        });
+    return found == definition->parameters.end() ? nullptr : &*found;
+}
+
+bool validEffectParameterKeyframes(const Node& node) noexcept {
+    std::set<std::string> animated_parameters;
+    for (const auto& animated : node.effect_parameter_keyframes) {
+        const auto* parameter = findEffectParameter(node.effect, animated.parameter_id);
+        if (parameter == nullptr || !animated_parameters.insert(animated.parameter_id).second ||
+            !creative_suite::animation::validScalarKeyframes(animated.keyframes)) {
+            return false;
+        }
+        for (const auto& keyframe : animated.keyframes) {
+            if (keyframe.value < parameter->minimum ||
+                keyframe.value > parameter->maximum) return false;
+        }
+    }
+    return true;
+}
 }
 
 NodeGraph makePassthroughGraph() {
@@ -68,10 +102,18 @@ GraphValidation validate(const NodeGraph& graph) {
             !std::isfinite(node.color.saturation_percent) ||
             node.color.saturation_percent < 0.0 || node.color.saturation_percent > 200.0)
             return {GraphError::InvalidParameter, node.id};
+        if (!creative_suite::animation::validTransformKeyframes(
+                node.transform_keyframes) ||
+            (node.type != NodeType::Transform &&
+             hasTransformKeyframes(node.transform_keyframes)) ||
+            (node.type != NodeType::Effect &&
+             !node.effect_parameter_keyframes.empty()))
+            return {GraphError::InvalidParameter, node.id};
         if (node.type == NodeType::Input) inputs.insert(node.id);
         if (node.type == NodeType::Output) ++output_count;
         if (node.type == NodeType::Effect &&
-            !creative_suite::effects::isValid(node.effect))
+            (!creative_suite::effects::isValid(node.effect) ||
+             !validEffectParameterKeyframes(node)))
             return {GraphError::InvalidParameter, node.id};
     }
     if (graph.next_id == 0 || graph.next_id <= maximum_id ||
@@ -96,6 +138,33 @@ GraphValidation validate(const NodeGraph& graph) {
     }
     if (!evaluationOrder(graph)) return {GraphError::Cycle, 0};
     return {};
+}
+
+bool validKeyframeRange(const NodeGraph& graph,
+                        std::int64_t duration_frames) noexcept {
+    if (duration_frames <= 0) return false;
+    const auto valid_range = [duration_frames](const auto& keyframes) {
+        return std::all_of(keyframes.begin(), keyframes.end(),
+            [duration_frames](const auto& keyframe) {
+                return keyframe.frame >= 0 && keyframe.frame < duration_frames;
+            });
+    };
+    for (const auto& node : graph.nodes) {
+        if (node.type == NodeType::Transform) {
+            for (const auto property : {timeline::TransformProperty::PositionX,
+                                        timeline::TransformProperty::PositionY,
+                                        timeline::TransformProperty::Scale,
+                                        timeline::TransformProperty::Rotation,
+                                        timeline::TransformProperty::Opacity}) {
+                if (!valid_range(timeline::keyframesFor(
+                        node.transform_keyframes, property))) return false;
+            }
+        }
+        for (const auto& parameter : node.effect_parameter_keyframes) {
+            if (!valid_range(parameter.keyframes)) return false;
+        }
+    }
+    return true;
 }
 
 std::optional<NodeGraph> connect(const NodeGraph& graph, NodeId from, NodeId to,

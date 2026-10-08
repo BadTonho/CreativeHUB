@@ -22,6 +22,13 @@ struct ColorParameters {
     friend bool operator==(const ColorParameters&, const ColorParameters&) = default;
 };
 
+struct EffectParameterKeyframes {
+    std::string parameter_id;
+    creative_suite::animation::ScalarKeyframes keyframes;
+    friend bool operator==(const EffectParameterKeyframes&,
+                           const EffectParameterKeyframes&) = default;
+};
+
 struct Node {
     NodeId id = 0;
     NodeType type = NodeType::Input;
@@ -34,8 +41,10 @@ struct Node {
     std::int64_t source_frame_count = 0;
     bool source_is_still = false;
     timeline::Transform2D transform;
+    timeline::TransformKeyframes transform_keyframes;
     ColorParameters color;
     creative_suite::effects::EffectInstance effect;
+    std::vector<EffectParameterKeyframes> effect_parameter_keyframes;
     friend bool operator==(const Node&, const Node&) = default;
 };
 
@@ -70,6 +79,8 @@ struct GraphValidation {
 
 [[nodiscard]] NodeGraph makePassthroughGraph();
 [[nodiscard]] GraphValidation validate(const NodeGraph& graph);
+[[nodiscard]] bool validKeyframeRange(
+    const NodeGraph& graph, std::int64_t duration_frames) noexcept;
 [[nodiscard]] std::optional<NodeGraph> connect(
     const NodeGraph& graph, NodeId from, NodeId to, std::uint8_t input);
 [[nodiscard]] std::optional<NodeGraph> disconnect(

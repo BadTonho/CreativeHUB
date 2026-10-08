@@ -170,11 +170,14 @@ tasks.
   Input, Transform, Color, Merge, Output, and the existing Grayscale,
   Brightness, Contrast, and Saturation effects as draggable graph nodes;
   Media Pool video/image inputs; cable insertion; shared Preview/export
-  evaluation; v21 graph persistence; and Timeline Undo/Redo. Automated coverage
+  evaluation; animated Transform and Brightness parameters; v22 graph
+  persistence; and Timeline Undo/Redo. Automated coverage
   now includes per-node evaluation, disconnected-node output, isolated worker
   preview, temporary Viewer targeting, and workspace entry/exit behavior. Keep
-  visual checks of node indicators, playback tracking, and Timeline restoration
-  pending until performed in the Release build. See
+  animation of Transform position/scale/rotation/opacity and Brightness amount,
+  and v22 persistence. Focused automated tests passed on 2026-10-08; visual
+  checks of node indicators, animated playback, save/reopen, Undo/Redo, and
+  Timeline restoration remain pending until performed in the Release build. See
   [Current Scope](architecture/SCOPE.md),
   [Project Persistence](architecture/PROJECT.md), and [Regression Testing](REGRESSION_TESTING.md).
 - [x] New Project canvas and frame-rate choices: 16:9 (1920×1080) or 9:16
@@ -236,11 +239,13 @@ and required manual validation pass.
   used by the application. The maintainer confirmed real video, audio, image,
   bin, and ordered Timeline drops, including Undo/Redo, on 2026-10-07. Keep the
   import dialog and internal Media Browser drag workflow available.
-- [-] Initial Fusion graph code, tests, and documentation are in place. The
-  Video Editor Windows Release executable and focused graph, project, UI,
-  Preview, and Render tests passed on 2026-10-07. Keep hands-on canvas,
-  save/reopen, and edit-history checks pending until they are performed in that
-  build.
+- [-] Fusion graph and node-animation code, tests, and documentation are in
+  place. The focused animation, graph, Timeline, project, Fusion workspace, and
+  Preview/Render tests passed on 2026-10-08. The canonical Windows Release app
+  was relinked at `build/apps/video-editor/Release/creative-suite-video-editor.exe`
+  (2026-10-08 00:24:26); MSBuild's `windeployqt` post-build step still reports
+  that it cannot query `qtpaths` (3221225794). Manual checks of animated
+  playback, save/reopen, Undo/Redo, and Timeline restoration remain pending.
 - [x] Repeatedly migrate the same long-lived `.csp` project when advancing
   persisted-format versions. The owner reports doing this since the application
   was created and says the migrations have worked.

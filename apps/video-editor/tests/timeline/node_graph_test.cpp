@@ -43,6 +43,37 @@ int main() {
                 empty_transform->rgba_pixels[7] == 0,
             "A node with a disconnected input should render transparent output.");
 
+    NodeGraph animated_transform_graph;
+    animated_transform_graph.nodes = {
+        {1, NodeType::Input}, {2, NodeType::Transform}, {3, NodeType::Output}};
+    animated_transform_graph.nodes[1].transform_keyframes.position_x = {
+        {0, 0.5}, {10, 0.1}};
+    animated_transform_graph.nodes[1].transform_keyframes.position_y = {
+        {0, 0.5}, {10, 0.2}};
+    animated_transform_graph.nodes[1].transform_keyframes.scale = {
+        {0, 1.0}, {10, 0.5}};
+    animated_transform_graph.nodes[1].transform_keyframes.rotation = {
+        {0, 0.0}, {10, 45.0}};
+    animated_transform_graph.nodes[1].transform_keyframes.opacity = {
+        {0, 1.0}, {10, 0.25}};
+    animated_transform_graph.connections = {{1, 2, 0}, {2, 3, 0}};
+    animated_transform_graph.next_id = 4;
+    auto white_square = std::make_shared<media::VideoFrame>(
+        media::VideoFrame{2, 2, 8,
+            {255, 255, 255, 255, 255, 255, 255, 255,
+             255, 255, 255, 255, 255, 255, 255, 255}});
+    const auto transform_start = evaluate(animated_transform_graph,
+        {{1, white_square}}, EvaluationContext{0});
+    const auto transform_end = evaluate(animated_transform_graph,
+        {{1, white_square}}, EvaluationContext{10});
+    require(static_cast<bool>(validate(animated_transform_graph)) &&
+                transform_start.has_value() && transform_end.has_value() &&
+                transform_start->rgba_pixels != transform_end->rgba_pixels,
+            "Transform nodes did not evaluate their animated parameters at local clip frames.");
+    require(!validKeyframeRange(animated_transform_graph, 10) &&
+                validKeyframeRange(animated_transform_graph, 11),
+            "Node keyframes outside the clip duration were not rejected.");
+
     const auto passthrough = makePassthroughGraph();
     const auto detached_output = disconnect(passthrough, 2, 0);
     require(detached_output && static_cast<bool>(validate(*detached_output)) &&
@@ -111,6 +142,44 @@ int main() {
     require(static_cast<bool>(validate(effect_chain)) && chained.has_value() &&
                 chained->rgba_pixels[3] == 73,
             "Repeated effect nodes did not evaluate in connection order.");
+
+    NodeGraph animated_brightness;
+    animated_brightness.nodes = {{1, NodeType::Input}, {2, NodeType::Effect},
+                                 {3, NodeType::Effect}, {4, NodeType::Output}};
+    animated_brightness.nodes[1].effect =
+        creative_suite::effects::makeDefaultInstance("video.brightness");
+    animated_brightness.nodes[2].effect =
+        creative_suite::effects::makeDefaultInstance("video.brightness");
+    animated_brightness.nodes[1].effect_parameter_keyframes.push_back(
+        {"amount", {{0, 0.0}, {10, 20.0}}});
+    animated_brightness.nodes[2].effect_parameter_keyframes.push_back(
+        {"amount", {{0, 0.0}, {10, 10.0}}});
+    animated_brightness.connections = {{1, 2, 0}, {2, 3, 0}, {3, 4, 0}};
+    animated_brightness.next_id = 5;
+    auto black_source = std::make_shared<media::VideoFrame>(
+        media::VideoFrame{1, 1, 4, {0, 0, 0, 71}});
+    const auto brightness_start = evaluate(animated_brightness,
+        {{1, black_source}}, EvaluationContext{0});
+    const auto first_brightness = evaluate(animated_brightness,
+        {{1, black_source}}, 2, EvaluationContext{10});
+    const auto brightness_end = evaluate(animated_brightness,
+        {{1, black_source}}, EvaluationContext{10});
+    require(static_cast<bool>(validate(animated_brightness)) &&
+                brightness_start.has_value() && brightness_end.has_value() &&
+                brightness_start->rgba_pixels[0] == 0 &&
+                brightness_end->rgba_pixels[0] > 70 &&
+                brightness_end->rgba_pixels[3] == 71 &&
+                first_brightness.has_value() &&
+                first_brightness->rgba_pixels[0] == 51 &&
+                first_brightness->rgba_pixels[3] == 71,
+            "Brightness nodes did not animate independently, preserve alpha, or preview their intermediate output.");
+    animated_brightness.nodes[1].effect.enabled = false;
+    const auto disabled_brightness = evaluate(animated_brightness,
+        {{1, black_source}}, EvaluationContext{10});
+    require(disabled_brightness.has_value() &&
+                disabled_brightness->rgba_pixels[0] == 26 &&
+                disabled_brightness->rgba_pixels[3] == 71,
+            "A disabled animated Brightness node did not bypass its animated parameter.");
     const auto input_preview = evaluate(effect_chain, {{1, color_source}}, 1);
     const auto grayscale_preview = evaluate(effect_chain, {{1, color_source}}, 2);
     const auto output_preview = evaluate(effect_chain, {{1, color_source}}, 4);

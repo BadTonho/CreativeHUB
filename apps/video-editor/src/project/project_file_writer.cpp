@@ -74,6 +74,16 @@ const char* nodeTypeName(fusion::nodes::NodeType type) {
 
 QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
                           const fusion::nodes::NodeGraph& graph) {
+    const auto write_keyframes = [](const auto& keyframes) {
+        QJsonArray output;
+        for (const auto& keyframe : keyframes) {
+            QJsonObject item;
+            item.insert("frame", static_cast<qint64>(keyframe.frame));
+            item.insert("value", keyframe.value);
+            output.append(item);
+        }
+        return output;
+    };
     QJsonObject object;
     object.insert("next_id", static_cast<qint64>(graph.next_id));
     QJsonArray nodes;
@@ -95,6 +105,18 @@ QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
         transform.insert("rotation", node.transform.rotation_degrees);
         transform.insert("opacity", node.transform.opacity);
         value.insert("transform", transform);
+        const auto& transform_keys = node.transform_keyframes;
+        if (!transform_keys.position_x.empty() || !transform_keys.position_y.empty() ||
+            !transform_keys.scale.empty() || !transform_keys.rotation.empty() ||
+            !transform_keys.opacity.empty()) {
+            QJsonObject animated_transform;
+            animated_transform.insert("position_x", write_keyframes(transform_keys.position_x));
+            animated_transform.insert("position_y", write_keyframes(transform_keys.position_y));
+            animated_transform.insert("scale", write_keyframes(transform_keys.scale));
+            animated_transform.insert("rotation", write_keyframes(transform_keys.rotation));
+            animated_transform.insert("opacity", write_keyframes(transform_keys.opacity));
+            value.insert("transform_keyframes", animated_transform);
+        }
         QJsonObject color;
         color.insert("brightness", node.color.brightness);
         color.insert("contrast", node.color.contrast_percent);
@@ -115,6 +137,18 @@ QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
             }
             effect.insert("parameters", parameters);
             value.insert("effect", effect);
+            if (!node.effect_parameter_keyframes.empty()) {
+                QJsonArray animated_parameters;
+                for (const auto& animated : node.effect_parameter_keyframes) {
+                    QJsonObject parameter;
+                    parameter.insert("id", QString::fromUtf8(
+                        animated.parameter_id.data(),
+                        static_cast<qsizetype>(animated.parameter_id.size())));
+                    parameter.insert("keyframes", write_keyframes(animated.keyframes));
+                    animated_parameters.append(parameter);
+                }
+                value.insert("effect_parameter_keyframes", animated_parameters);
+            }
         }
         nodes.append(value);
     }

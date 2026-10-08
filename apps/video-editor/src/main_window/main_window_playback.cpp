@@ -9,6 +9,7 @@
 #include "timeline/timeline_time.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
+#include "ui/workspace/pages/fusion/fusion_workspace.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -1095,6 +1096,11 @@ void MainWindow::commitTimelineClipActivation(
     const auto& clip = track.clips[location->clip_index];
     setActiveTimelineSelection(location.value());
     playback_frame_index_ = frame_index;
+    if (fusion_workspace_ != nullptr && frame_index >= 0 &&
+        clip.timeline_start_frame <= std::numeric_limits<std::int64_t>::max() - frame_index) {
+        fusion_workspace_->setTimelinePlayheadFrame(
+            clip.timeline_start_frame + frame_index);
+    }
     if (!preserve_timeline_playhead) {
         preserved_timeline_playhead_frame_.reset();
     }
@@ -1319,6 +1325,10 @@ void MainWindow::handlePlaybackPosition(
         edit_workspace_->controller()->presentPlaybackPosition(
             static_cast<qint64>(event.timeline_frame),
             static_cast<qint64>(event.clip_frame));
+    }
+    if (fusion_workspace_ != nullptr) {
+        fusion_workspace_->setTimelinePlayheadFrame(
+            static_cast<std::int64_t>(event.timeline_frame));
     }
     updatePlaybackStatus();
 }

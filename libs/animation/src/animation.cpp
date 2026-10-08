@@ -134,6 +134,19 @@ bool validTransformKeyframes(const TransformKeyframes& keyframes) noexcept {
         valid_property(keyframes.opacity, TransformProperty::Opacity);
 }
 
+bool validScalarKeyframes(const ScalarKeyframes& keyframes) noexcept {
+    std::int64_t previous = -1;
+    for (const auto& keyframe : keyframes) {
+        if (keyframe.frame < 0 || keyframe.frame <= previous ||
+            !std::isfinite(keyframe.value) ||
+            !validKeyframeInterpolation(keyframe.interpolation, keyframe.easing)) {
+            return false;
+        }
+        previous = keyframe.frame;
+    }
+    return true;
+}
+
 double evaluateEasing(
     double progress,
     InterpolationMode interpolation,
@@ -163,6 +176,27 @@ double evaluateProperty(
     if (local_frame <= values.front().frame) return values.front().value;
     if (local_frame >= values.back().frame) return values.back().value;
     const auto upper = std::upper_bound(values.begin(), values.end(), local_frame,
+        [](std::int64_t frame, const Keyframe& keyframe) {
+            return frame < keyframe.frame;
+        });
+    const auto& right = *upper;
+    const auto& left = *(upper - 1);
+    const auto distance = right.frame - left.frame;
+    if (distance <= 0) return right.value;
+    double fraction = static_cast<double>(local_frame - left.frame) /
+        static_cast<double>(distance);
+    fraction = evaluateEasing(fraction, left.interpolation, left.easing);
+    return left.value + (right.value - left.value) * fraction;
+}
+
+double evaluateScalar(
+    double base_value,
+    const ScalarKeyframes& keyframes,
+    std::int64_t local_frame) noexcept {
+    if (keyframes.empty()) return base_value;
+    if (local_frame <= keyframes.front().frame) return keyframes.front().value;
+    if (local_frame >= keyframes.back().frame) return keyframes.back().value;
+    const auto upper = std::upper_bound(keyframes.begin(), keyframes.end(), local_frame,
         [](std::int64_t frame, const Keyframe& keyframe) {
             return frame < keyframe.frame;
         });
@@ -217,6 +251,34 @@ bool removeKeyframe(
         [local_frame](const auto& keyframe) { return keyframe.frame == local_frame; });
     if (found == values.end()) return false;
     values.erase(found);
+    return true;
+}
+
+bool setKeyframe(
+    ScalarKeyframes& keyframes,
+    std::int64_t local_frame,
+    double value) noexcept {
+    if (local_frame < 0 || !std::isfinite(value)) return false;
+    const auto found = std::find_if(keyframes.begin(), keyframes.end(),
+        [local_frame](const auto& keyframe) { return keyframe.frame == local_frame; });
+    if (found != keyframes.end()) {
+        found->value = value;
+        return true;
+    }
+    keyframes.push_back({local_frame, value});
+    std::sort(keyframes.begin(), keyframes.end(), [](const auto& left, const auto& right) {
+        return left.frame < right.frame;
+    });
+    return true;
+}
+
+bool removeKeyframe(
+    ScalarKeyframes& keyframes,
+    std::int64_t local_frame) noexcept {
+    const auto found = std::find_if(keyframes.begin(), keyframes.end(),
+        [local_frame](const auto& keyframe) { return keyframe.frame == local_frame; });
+    if (found == keyframes.end()) return false;
+    keyframes.erase(found);
     return true;
 }
 

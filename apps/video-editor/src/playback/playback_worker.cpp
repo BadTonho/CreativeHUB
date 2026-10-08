@@ -2635,7 +2635,9 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeFusionNodePreview(
             inputs.emplace(node.id, *decoded);
     }
     if (should_cancel()) return std::nullopt;
-    return fusion::nodes::evaluate(graph, inputs, target_node);
+    return fusion::nodes::evaluate(
+        graph, inputs, target_node,
+        fusion::nodes::EvaluationContext{local_frame});
 }
 
 std::optional<std::vector<PlaybackWorker::DecodedCompositionLayer>>
@@ -2826,7 +2828,9 @@ PlaybackWorker::decodeCompositionLayers(
                     }
                 }
             }
-            const auto evaluated = fusion::nodes::evaluate(*spec.node_graph, inputs);
+            const auto evaluated = fusion::nodes::evaluate(
+                *spec.node_graph, inputs,
+                fusion::nodes::EvaluationContext{request.local_frame});
             if (!evaluated.has_value())
                 throw media::MediaError("The Fusion node graph did not produce a frame.");
             frame = std::make_shared<const media::VideoFrame>(*evaluated);

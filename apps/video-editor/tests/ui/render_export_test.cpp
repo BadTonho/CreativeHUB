@@ -602,6 +602,8 @@ void validateFusionPreviewExportParity(
     require(creative_suite::effects::setParameterValue(
                 effect.effect, "amount", 4.0),
             "Could not configure the known Fusion effect-node fixture.");
+    effect.effect_parameter_keyframes.push_back(
+        {"amount", {{0, 4.0}, {3, 40.0}}});
     graph.nodes.push_back(overlay_input);
     graph.nodes.push_back(merge);
     graph.nodes.push_back(effect);
@@ -636,7 +638,7 @@ void validateFusionPreviewExportParity(
     preview_layer.source_path = pathToQString(image_path);
     preview_layer.frame_rate = 30.0;
     preview_layer.timeline_start_frame = 0;
-    preview_layer.segment_frame_count = 1;
+    preview_layer.segment_frame_count = 4;
     preview_layer.track_index = 0;
     preview_layer.clip_index = 0;
     preview_layer.kind = timeline::ClipKind::Image;
@@ -647,19 +649,25 @@ void validateFusionPreviewExportParity(
     worker.setActiveCompositionClip(0, 0);
     worker.setComposition({preview_layer}, {}, 900);
     worker.renderCompositionFrame(0, 0, 900);
-    require(!preview_frames.empty() && preview_frames.back() != nullptr,
-            "Preview did not evaluate the known Fusion graph.");
+    worker.renderCompositionFrame(3, 3, 900);
+    require(preview_frames.size() == 2 && preview_frames[0] != nullptr &&
+                preview_frames[1] != nullptr,
+            "Preview did not evaluate both frames of the animated Fusion graph.");
 
     const auto target = root / ("fusion-parity." + extension);
-    auto job = makeImageJob(output, image_path, target, 901, 1);
+    auto job = makeImageJob(output, image_path, target, 901, 4);
     job.settings.export_audio = false;
     job.project_snapshot.timeline_tracks.front().clips.front().node_graph = graph;
     std::atomic_bool canceled{false};
     renderJob(job, canceled);
     auto decoder = media::VideoPlaybackSession::open(target);
-    const auto rendered = decoder->decode_next_frame();
-    require(rendered.has_value() && *rendered != nullptr,
-            "Render did not evaluate the known Fusion graph.");
+    std::vector<media::VideoFramePtr> rendered_frames;
+    for (int frame = 0; frame < 8; ++frame) {
+        auto rendered = decoder->decode_next_frame();
+        require(rendered.has_value() && *rendered != nullptr,
+                "Render did not evaluate every frame of the animated Fusion graph.");
+        rendered_frames.push_back(std::move(*rendered));
+    }
 
     const auto center_pixel = [](const media::VideoFrame& frame) {
         const auto offset = static_cast<std::size_t>(frame.height / 2) *
@@ -669,11 +677,15 @@ void validateFusionPreviewExportParity(
                                    frame.rgba_pixels[offset + 1],
                                    frame.rgba_pixels[offset + 2]};
     };
-    const auto preview_pixel = center_pixel(*preview_frames.back());
-    const auto rendered_pixel = center_pixel(**rendered);
-    for (std::size_t channel = 0; channel < preview_pixel.size(); ++channel) {
-        require(std::abs(preview_pixel[channel] - rendered_pixel[channel]) <= 32,
-                "Preview and Render produced different pixels for the known Fusion graph.");
+    for (const auto [preview_index, rendered_index] : {
+             std::pair{std::size_t{0}, std::size_t{0}},
+             std::pair{std::size_t{1}, std::size_t{6}}}) {
+        const auto preview_pixel = center_pixel(*preview_frames[preview_index]);
+        const auto rendered_pixel = center_pixel(*rendered_frames[rendered_index]);
+        for (std::size_t channel = 0; channel < preview_pixel.size(); ++channel) {
+            require(std::abs(preview_pixel[channel] - rendered_pixel[channel]) <= 32,
+                    "Preview and Render produced different pixels for an animated Fusion graph.");
+        }
     }
 }
 

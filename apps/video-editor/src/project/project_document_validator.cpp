@@ -180,7 +180,9 @@ void validateDocument(const ProjectDocument& document,
         if (clip.node_graph.has_value() &&
             ((clip.kind != timeline::ClipKind::Video &&
               clip.kind != timeline::ClipKind::Image) ||
-             !fusion::nodes::validate(*clip.node_graph))) {
+             !fusion::nodes::validate(*clip.node_graph) ||
+             !fusion::nodes::validKeyframeRange(
+                 *clip.node_graph, clip.duration_frames))) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid Fusion node graph for this clip.");
         }

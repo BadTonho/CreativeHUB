@@ -126,6 +126,27 @@ int main() {
         require(removeKeyframe(keyframes, TransformProperty::PositionX, 0) &&
                     !removeKeyframe(keyframes, TransformProperty::PositionX, 0),
                 "Keyframe removal did not report whether it removed a key.");
+
+        ScalarKeyframes scalar_keys;
+        require(evaluateScalar(4.0, scalar_keys, 5) == 4.0 &&
+                    setKeyframe(scalar_keys, 12, 100.0) &&
+                    setKeyframe(scalar_keys, 2, -20.0) &&
+                    validScalarKeyframes(scalar_keys) &&
+                    scalar_keys.front().frame == 2 &&
+                    std::abs(evaluateScalar(4.0, scalar_keys, 7) - 40.0) < 1e-12 &&
+                    evaluateScalar(4.0, scalar_keys, 0) == -20.0 &&
+                    evaluateScalar(4.0, scalar_keys, 20) == 100.0,
+                "Scalar animation did not sort keys, interpolate, and clamp endpoints.");
+        require(setKeyframe(scalar_keys, 12, 80.0) &&
+                    scalar_keys.size() == 2 &&
+                    evaluateScalar(4.0, scalar_keys, 12) == 80.0 &&
+                    removeKeyframe(scalar_keys, 2) &&
+                    !removeKeyframe(scalar_keys, 2) &&
+                    !setKeyframe(scalar_keys, -1, 0.0) &&
+                    !setKeyframe(scalar_keys, 13,
+                        std::numeric_limits<double>::quiet_NaN()) &&
+                    !validScalarKeyframes({Keyframe{1, 0.0}, Keyframe{1, 1.0}}),
+                "Scalar keyframe replacement, removal, or invalid-input handling failed.");
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

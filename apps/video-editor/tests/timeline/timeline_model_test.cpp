@@ -23,6 +23,15 @@ std::filesystem::path uniqueTestDirectory() {
         ("creative-suite-timeline-test-" + std::to_string(stamp));
 }
 
+std::filesystem::path expectedCanonicalPath(const std::filesystem::path& path) {
+    std::error_code error;
+    const auto canonical = std::filesystem::weakly_canonical(path, error);
+    if (!error) return canonical;
+    error.clear();
+    const auto absolute = std::filesystem::absolute(path, error);
+    return error ? path.lexically_normal() : absolute.lexically_normal();
+}
+
 media::VideoMetadata makeMetadata(
     const std::filesystem::path& source_path,
     const std::string& display_name,
@@ -519,6 +528,72 @@ void validateMixedFrameRateMapping(const std::filesystem::path& source_path) {
             "Source-position and safe-trim boundary conversions were inconsistent.");
 }
 
+void validateFusionNodeKeyframeTimeline(const std::filesystem::path& source_path) {
+    timeline::TimelineModel model;
+    auto metadata = makeMetadata(source_path, "animated-node-graph.mkv", 120);
+    metadata.duration_seconds = 4.0;
+    metadata.frame_rate = 30.0;
+    require(model.addClip(metadata) == timeline::AddClipResult::Added,
+            "The animated Fusion graph fixture could not be added to the Timeline.");
+
+    fusion::nodes::NodeGraph graph;
+    graph.nodes = {{1, fusion::nodes::NodeType::Input},
+                   {2, fusion::nodes::NodeType::Transform},
+                   {3, fusion::nodes::NodeType::Effect},
+                   {4, fusion::nodes::NodeType::Output}};
+    graph.nodes[1].transform_keyframes.scale = {{0, 1.0}, {30, 2.0}, {90, 4.0}};
+    graph.nodes[2].effect = creative_suite::effects::makeDefaultInstance(
+        "video.brightness");
+    graph.nodes[2].effect_parameter_keyframes.push_back(
+        {"amount", {{0, 0.0}, {30, 30.0}, {90, 90.0}}});
+    graph.connections = {{1, 2, 0}, {2, 3, 0}, {3, 4, 0}};
+    graph.next_id = 5;
+    require(model.setClipNodeGraph(0, 0, graph) ==
+                timeline::NodeGraphMutationResult::Changed,
+            "A valid animated Fusion graph was rejected by its Timeline clip.");
+
+    require(model.splitClip(0, 0, 60) == timeline::SplitClipResult::Split,
+            "A clip with animated Fusion nodes could not be split.");
+    const auto& left_graph = *model.tracks()[0].clips[0].node_graph;
+    const auto& right_graph = *model.tracks()[0].clips[1].node_graph;
+    require(fusion::nodes::validKeyframeRange(left_graph, 60) &&
+                fusion::nodes::validKeyframeRange(right_graph, 60) &&
+                timeline::evaluateProperty(
+                    right_graph.nodes[1].transform,
+                    right_graph.nodes[1].transform_keyframes,
+                    timeline::TransformProperty::Scale, 0) == 3.0 &&
+                creative_suite::animation::evaluateScalar(
+                    creative_suite::effects::parameterValue(
+                        right_graph.nodes[2].effect, "amount"),
+                    right_graph.nodes[2].effect_parameter_keyframes[0].keyframes,
+                    0) == 60.0,
+            "Splitting did not rebase node animation to the right clip's start frame.");
+
+    require(model.trimClip(0, 1, 70, 40) == timeline::TrimClipResult::Trimmed,
+            "A clip with animated Fusion nodes could not be trimmed.");
+    const auto& trimmed_clip = model.tracks()[0].clips[1];
+    require(trimmed_clip.node_graph.has_value() &&
+                fusion::nodes::validKeyframeRange(*trimmed_clip.node_graph, 40) &&
+                timeline::evaluateProperty(
+                    trimmed_clip.node_graph->nodes[1].transform,
+                    trimmed_clip.node_graph->nodes[1].transform_keyframes,
+                    timeline::TransformProperty::Scale, 0) == 3.3333333333333335 &&
+                creative_suite::animation::evaluateScalar(
+                    creative_suite::effects::parameterValue(
+                        trimmed_clip.node_graph->nodes[2].effect, "amount"),
+                    trimmed_clip.node_graph->nodes[2].effect_parameter_keyframes[0].keyframes,
+                    0) == 70.0,
+            "Trimming did not preserve node animation at the new clip in-point.");
+
+    const auto converted = timeline::TimelineModel::rescaleSnapshotFrameRate(
+        model.snapshot(), {60, 1});
+    require(converted.has_value() && converted->tracks[0].clips[1].node_graph.has_value() &&
+                converted->tracks[0].clips[1].timeline_duration_frames == 80 &&
+                fusion::nodes::validKeyframeRange(
+                    *converted->tracks[0].clips[1].node_graph, 80),
+            "Changing Timeline frame rate did not rescale node animation keyframes.");
+}
+
 } // namespace
 
 int main() {
@@ -536,6 +611,7 @@ int main() {
         validatePendingMediaTimingReconnect(directory);
         validateClipEdgeTrimCommand(first_source, second_source);
         validateMixedFrameRateMapping(first_source);
+        validateFusionNodeKeyframeTimeline(first_source);
 
         const auto non_canonical_first =
             directory / "media" / ".." / "media" / "first.mkv";
@@ -559,7 +635,7 @@ int main() {
                 "The first clip did not start at source frame zero.");
         require(first_clip.timeline_duration_frames == 120,
                 "The first clip duration was incorrect.");
-        require(first_clip.source_path == std::filesystem::weakly_canonical(first_source),
+        require(first_clip.source_path == expectedCanonicalPath(first_source),
                 "The first source path was not canonicalized.");
         require(first_clip.display_name == "first.mkv",
                 "The first clip name was not preserved.");
@@ -703,7 +779,7 @@ int main() {
         require(split_model.totalDurationFrames() == split_total_before,
                 "Splitting changed the total timeline duration.");
         require(split_model.tracks().front().clips[1].source_path ==
-                    std::filesystem::weakly_canonical(first_source) &&
+                    expectedCanonicalPath(first_source) &&
                     split_model.tracks().front().clips[1].display_name == first_metadata.display_name &&
                     split_model.tracks().front().clips[1].frame_rate == first_metadata.frame_rate &&
                     split_model.tracks().front().clips[1].frame_count == first_metadata.frame_count,
@@ -1186,7 +1262,7 @@ int main() {
                     remove_model.tracks().front().clips[0].timeline_start_frame == 0 &&
                     remove_model.tracks().front().clips[1].timeline_start_frame == 180 &&
                     remove_model.tracks().front().clips[1].source_path ==
-                        std::filesystem::weakly_canonical(first_source),
+                        expectedCanonicalPath(first_source),
                 "Removing an intermediate clip did not preserve absolute placement.");
         require(remove_model.totalDurationFrames() == 300,
                 "Removing an intermediate clip did not update total duration.");
@@ -1206,7 +1282,7 @@ int main() {
         require(model.moveClip(0, 3) == timeline::MoveClipResult::Moved,
                 "Moving the first clip to the end failed.");
         require(model.tracks().front().clips[0].source_path ==
-                    std::filesystem::weakly_canonical(second_source),
+                    expectedCanonicalPath(second_source),
                 "The first-to-last move produced the wrong first source.");
         require(model.tracks().front().clips[0].timeline_start_frame == 0 &&
                     model.tracks().front().clips[1].timeline_start_frame == 60 &&
@@ -1222,7 +1298,7 @@ int main() {
         require(model.moveClip(3, 0) == timeline::MoveClipResult::Moved,
                 "Moving the last clip to the beginning failed.");
         require(model.tracks().front().clips[0].source_path ==
-                    std::filesystem::weakly_canonical(first_source),
+                    expectedCanonicalPath(first_source),
                 "The last-to-first move produced the wrong first source.");
         require(model.tracks().front().clips[0].timeline_start_frame == 0 &&
                     model.tracks().front().clips[1].timeline_start_frame == 120 &&
@@ -1532,9 +1608,9 @@ int main() {
                 "Undo did not return the previous timeline state.");
         history_model.restore(undone_move->timeline);
         require(history_model.tracks().front().clips[0].source_path ==
-                    std::filesystem::weakly_canonical(first_source) &&
+                    expectedCanonicalPath(first_source) &&
                     history_model.tracks().front().clips[1].source_path ==
-                        std::filesystem::weakly_canonical(second_source) &&
+                        expectedCanonicalPath(second_source) &&
                     undone_move->active_clip_id == history_model.tracks().front()
                         .clips[0].clip_id &&
                     undone_move->selected_source_path == first_source &&
@@ -1546,9 +1622,9 @@ int main() {
                 "Redo did not return the newer timeline state.");
         history_model.restore(redone_move->timeline);
         require(history_model.tracks().front().clips[0].source_path ==
-                    std::filesystem::weakly_canonical(second_source) &&
+                    expectedCanonicalPath(second_source) &&
                     history_model.tracks().front().clips[1].source_path ==
-                        std::filesystem::weakly_canonical(first_source) &&
+                        expectedCanonicalPath(first_source) &&
                     redone_move->active_clip_id == history_model.tracks().front()
                         .clips[1].clip_id &&
                     redone_move->playhead_frame == 5,
@@ -1603,7 +1679,7 @@ int main() {
         history_model.restore(undone_clear->timeline);
         require(history_model.clipCount() == 2 &&
                     history_model.tracks().front().clips[0].source_path ==
-                        std::filesystem::weakly_canonical(second_source),
+                        expectedCanonicalPath(second_source),
                 "Undo after clear did not restore the Timeline.");
 
         const auto before_audio = make_history_state(0, first_source, 4);

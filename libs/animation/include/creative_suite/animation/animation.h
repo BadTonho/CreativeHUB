@@ -69,6 +69,11 @@ struct TransformKeyframes {
     friend bool operator==(const TransformKeyframes&, const TransformKeyframes&) = default;
 };
 
+// A scalar curve is used by animated parameters that are not part of a 2D
+// transform, such as an effect parameter. Keys must have unique ascending
+// frame numbers and finite values.
+using ScalarKeyframes = std::vector<Keyframe>;
+
 [[nodiscard]] bool validTransform(const Transform2D& transform) noexcept;
 [[nodiscard]] bool validKeyframeValue(
     TransformProperty property,
@@ -79,6 +84,8 @@ struct TransformKeyframes {
     const CubicBezierEasing& easing) noexcept;
 [[nodiscard]] bool validTransformKeyframes(
     const TransformKeyframes& keyframes) noexcept;
+[[nodiscard]] bool validScalarKeyframes(
+    const ScalarKeyframes& keyframes) noexcept;
 [[nodiscard]] double evaluateEasing(
     double progress,
     InterpolationMode interpolation,
@@ -88,6 +95,11 @@ struct TransformKeyframes {
     const Transform2D& base,
     const TransformKeyframes& keyframes,
     TransformProperty property,
+    std::int64_t local_frame) noexcept;
+
+[[nodiscard]] double evaluateScalar(
+    double base_value,
+    const ScalarKeyframes& keyframes,
     std::int64_t local_frame) noexcept;
 
 // With no keyframes, evaluation returns the base value. Otherwise it clamps
@@ -107,6 +119,15 @@ struct TransformKeyframes {
 [[nodiscard]] bool removeKeyframe(
     TransformKeyframes& keyframes,
     TransformProperty property,
+    std::int64_t local_frame) noexcept;
+
+[[nodiscard]] bool setKeyframe(
+    ScalarKeyframes& keyframes,
+    std::int64_t local_frame,
+    double value) noexcept;
+
+[[nodiscard]] bool removeKeyframe(
+    ScalarKeyframes& keyframes,
     std::int64_t local_frame) noexcept;
 
 [[nodiscard]] bool setKeyframeInterpolation(

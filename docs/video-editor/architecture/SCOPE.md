@@ -19,7 +19,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 21, including migration from
+- versioned `.csp` persistence through version 22, including migration from
   versions 1 through 13, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio media kinds, typed tracks,
   per-project timeline zoom, track-row height, and optional shared/clip-specific
@@ -30,9 +30,10 @@ The Video Editor currently includes:
   legacy-project migration, and the video fallback path;
 - basic Timeline layers, normalized 2D transformations, linear keyframes, and
   worker-side composition;
-- the initial functional Fusion node graph for visual clips: Input, Transform,
-  Color, Merge, and Output nodes, per-clip persistence, shared Preview/export
-  evaluation, project Media Pool image/video inputs, and Undo/Redo;
+- the functional Fusion node graph for visual clips: Input, Transform, Color,
+  Merge, Output, and existing video-effect nodes, per-clip persistence, shared
+  Preview/export evaluation, project Media Pool image/video inputs, animated
+  Transform/Brightness parameters, and Undo/Redo;
 - CPU visual filters for video and image clips (Grayscale, Brightness, Contrast,
   and Saturation), with ordered per-clip stacks, Functions quick access,
   individual enable/bypass controls, and version 18 persistence;
@@ -68,8 +69,10 @@ Each selected video or image Timeline clip may own one graph. The default graph
 passes the selected clip through. Input nodes can use that clip or a video/image
 already in the project Media Pool. Video inputs are evaluated from the graph
 clip's local start and become transparent after their source ends; still images
-remain available for the full clip. Transform and Color nodes use static
-parameters. Grayscale, Brightness, Contrast, and Saturation from the existing
+remain available for the full clip. Transform nodes animate position X/Y,
+scale, rotation, and opacity with clip-local linear keyframes; Brightness nodes
+animate their `amount` parameter. Color and other effect parameters remain
+static. Grayscale, Brightness, Contrast, and Saturation from the existing
 video Effects catalog can be dragged onto the canvas as effect nodes; each
 reuses the existing parameter values and enabled state. Dropping onto a cable
 inserts the effect into the connection, while dropping onto empty canvas adds a
@@ -77,11 +80,15 @@ disconnected node. Merge combines its background and foreground with
 straight-alpha source-over. The graph output replaces the clip image before
 its existing Inspector effect stack and Timeline transform/keyframes.
 
-Graph data is stored in `.csp` version 21. Versions 1 through 20 retain their
-existing graph behavior and preserve their prior image result. Graph editing
-participates in Timeline Undo/Redo. This phase does not add graph animation,
-text, audio, masks, effects beyond the four existing video effects, nested
-compositions, or Motion Studio integration.
+Graph data is stored in `.csp` version 22. Versions 1 through 21 retain their
+existing graph behavior and preserve their prior image result. New keyframes
+are linear, relative to the selected clip's start, and constrained to its
+duration. Preview and export evaluate the same graph at the clip-local frame;
+keyframes are adjusted when the clip is split, trimmed, or converted to another
+frame rate. Graph editing participates in Timeline Undo/Redo. This phase does
+not add graph animation to Color or other effect parameters, text, audio, masks,
+effects beyond the four existing video effects, nested compositions, or Motion
+Studio integration.
 
 Each node has a `VIEW` control that routes that node's output to the shared
 Fusion Viewer. Output is active when Fusion opens. Choosing a different node is

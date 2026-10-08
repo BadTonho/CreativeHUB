@@ -27,6 +27,7 @@ public:
     void setSelection(const timeline::TimelineClip* clip,
                       std::vector<MediaChoice> media_choices);
     void setMediaChoices(std::vector<MediaChoice> media_choices);
+    void setTimelinePlayheadFrame(std::int64_t timeline_frame);
     [[nodiscard]] timeline::ClipId selectedClipId() const noexcept {
         return clip_id_;
     }
@@ -46,6 +47,7 @@ public:
     }
 
 signals:
+    void playbackPauseRequested();
     void graphEditRequested(timeline::ClipId clip_id,
                             const fusion::nodes::NodeGraph& graph);
     void nodePreviewRequested(timeline::ClipId clip_id,
@@ -62,9 +64,19 @@ private:
     timeline::ClipId clip_id_ = 0;
     fusion::nodes::NodeId selected_node_id_ = 0;
     fusion::nodes::NodeId preview_node_id_ = 0;
+    std::int64_t clip_timeline_start_frame_ = 0;
+    std::int64_t clip_duration_frames_ = 0;
+    std::int64_t local_frame_ = 0;
     bool refreshing_ = false;
     void refreshCanvas();
     void refreshInspector();
+    void refreshAnimatedControls();
+    void toggleTransformKeyframe(
+        fusion::nodes::NodeId node_id,
+        timeline::TransformProperty property);
+    void toggleEffectParameterKeyframe(
+        fusion::nodes::NodeId node_id,
+        const std::string& parameter_id);
     void commitGraph(fusion::nodes::NodeGraph graph, const QString& status);
 };
 
