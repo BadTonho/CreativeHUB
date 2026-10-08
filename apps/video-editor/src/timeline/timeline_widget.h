@@ -187,9 +187,20 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    struct TrackScrollAnchor final {
+        TrackId track_id = 0;
+        double row_edge_offset = 0.0;
+        bool bottom_edge = false;
+    };
+
     [[nodiscard]] QRectF trackRect(std::size_t index) const noexcept;
     [[nodiscard]] TimelineGeometry geometry() const noexcept;
     [[nodiscard]] TimelineTrackViewLayout trackViewLayout() const noexcept;
+    [[nodiscard]] std::optional<TrackScrollAnchor> captureTrackScrollAnchor(
+        TrackKind kind) const noexcept;
+    void restoreTrackScrollAnchor(
+        TrackKind kind,
+        const std::optional<TrackScrollAnchor>& anchor) noexcept;
     void updateTrackSplitterHoverState(const QPointF& position);
     [[nodiscard]] QRectF rulerRect() const noexcept;
     [[nodiscard]] double rowHeight() const noexcept;

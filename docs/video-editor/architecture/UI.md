@@ -331,7 +331,13 @@ available through vertical scrolling. Each track row has a maximum height of
 for new projects. Holding Shift while scrolling
 over the Timeline changes every row uniformly using smooth wheel deltas. When
 the rows require more space than the viewport, the existing vertical scroll
-bar exposes the remaining tracks. The selected row height is persisted per
+bar exposes the remaining tracks. When Video rows fit, the last Video track
+meets the divider and Audio starts immediately below it; unused pane space is
+kept above Video and below Audio. Changing row height anchors Video at the
+bottom edge of its last visible row and Audio at the top edge of its first
+visible row, subject to the available scroll range. Below 44 pixels, each
+header shows the track name and clip count on one clipped, elided line; taller
+rows keep the two-line header. The selected row height is persisted per
 project; Ctrl + scroll continues to control horizontal timeline zoom.
 The same toolbar includes `Volume` and a `Monitor Volume` slider from 0% to
 200%, initialized at 100%. This is a global monitoring control for audio heard

@@ -99,8 +99,16 @@ highlights on hover or while dragging and uses the vertical-resize cursor. Its
 position is stored in local
 `QSettings` under `timeline/track_group_split_ratio` for use across projects.
 Both panes keep a minimum usable height. Track row height remains shared by
-Video and Audio. Vertical scroll positions are temporary view state and are
-not written to the `.csp` project.
+Video and Audio. When Video rows fit in their pane, the last Video track is
+aligned to the divider; Audio begins at the divider's lower edge. Unused pane
+space stays above Video and below Audio. Changing row height anchors Video by
+the bottom edge of its last visible row and Audio by the top edge of its first
+visible row, clamping each scroll offset when the new range requires it. The
+divider keeps both stacks moving by the same amount. Below 44 pixels, each
+fixed track header shows its name and clip count on one elided line; taller
+rows keep the two-line header. Header text stays clipped to its row. Vertical
+scroll positions are temporary view state and are not written to the `.csp`
+project.
 Clip rectangles fill the vertical extent of their track row; the track header
 remains reserved on the left, while no top or bottom inset is applied to clips.
 The visual timeline uses a minimum one-hour range, independent of the

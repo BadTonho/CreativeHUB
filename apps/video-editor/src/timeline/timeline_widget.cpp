@@ -481,15 +481,50 @@ void TimelineWidget::setTrackGroupSplitRatio(double ratio) {
     if (!std::isfinite(ratio)) return;
     const auto normalized = std::clamp(ratio, 0.2, 0.8);
     if (std::abs(normalized - track_group_split_ratio_) < 0.0001) return;
-    const auto video_offset_before = video_scroll_offset_;
-    const auto audio_offset_before = audio_scroll_offset_;
+    const auto video_anchor = captureTrackScrollAnchor(TrackKind::Video);
+    const auto audio_anchor = captureTrackScrollAnchor(TrackKind::Audio);
+    const auto anchor_edge_y = [this](
+        TrackKind kind,
+        const std::optional<TrackScrollAnchor>& anchor) -> std::optional<double> {
+        if (!anchor.has_value()) return std::nullopt;
+        const auto index = indexForTrack(tracks_, anchor->track_id);
+        if (!index.has_value() || tracks_[*index].kind != kind) {
+            return std::nullopt;
+        }
+        const auto row = trackRect(*index);
+        return anchor->bottom_edge ? row.bottom() : row.top();
+    };
+    const auto video_edge_before = anchor_edge_y(TrackKind::Video, video_anchor);
+    const auto audio_edge_before = anchor_edge_y(TrackKind::Audio, audio_anchor);
+    const auto splitter_y_before = trackSplitterRect().center().y();
+
     track_group_split_ratio_ = normalized;
     updateVerticalExtent();
-    // Changing the splitter also moves the Audio viewport's origin. Translate
-    // Video by the same amount, and compensate either group's translation if
-    // its independent scroll offset had to be clamped for the new viewport.
-    video_splitter_translation_ += video_scroll_offset_ - video_offset_before;
-    audio_splitter_translation_ += audio_scroll_offset_ - audio_offset_before;
+    // Keep both stacks attached to the divider as their pane boundary moves.
+    // This also compensates for scroll clamping and for Video's bottom alignment
+    // when its content fits inside the upper pane.
+    const auto splitter_delta =
+        trackSplitterRect().center().y() - splitter_y_before;
+    if (video_edge_before.has_value()) {
+        const auto index = indexForTrack(tracks_, video_anchor->track_id);
+        if (index.has_value()) {
+            const auto row = trackRect(*index);
+            const auto edge_after = video_anchor->bottom_edge
+                ? row.bottom() : row.top();
+            video_splitter_translation_ +=
+                *video_edge_before + splitter_delta - edge_after;
+        }
+    }
+    if (audio_edge_before.has_value()) {
+        const auto index = indexForTrack(tracks_, audio_anchor->track_id);
+        if (index.has_value()) {
+            const auto row = trackRect(*index);
+            const auto edge_after = audio_anchor->bottom_edge
+                ? row.bottom() : row.top();
+            audio_splitter_translation_ +=
+                *audio_edge_before + splitter_delta - edge_after;
+        }
+    }
     update();
     emit trackHeaderVisualsChanged();
     emit trackGroupSplitRatioChanged(track_group_split_ratio_);
@@ -519,8 +554,20 @@ void TimelineWidget::setTrackRowHeight(double height) {
     const auto normalized = std::clamp(
         height, kMinimumTrackRowHeight, kMaximumTrackRowHeight);
     if (std::abs(normalized - track_row_height_) < 0.000001) return;
+
+    const auto video_anchor = captureTrackScrollAnchor(TrackKind::Video);
+    const auto audio_anchor = captureTrackScrollAnchor(TrackKind::Audio);
     track_row_height_ = normalized;
+
+    // Divider adjustments can leave pixel compensation after one group's
+    // independent scroll offset reaches its limit. Re-anchor each group to
+    // its visible track and derive fresh offsets for the new row pitch.
+    video_splitter_translation_ = 0.0;
+    audio_splitter_translation_ = 0.0;
     updateVerticalExtent();
+    restoreTrackScrollAnchor(TrackKind::Video, video_anchor);
+    restoreTrackScrollAnchor(TrackKind::Audio, audio_anchor);
+    emit trackScrollMetricsChanged();
     emit trackHeaderVisualsChanged();
     update();
     emit trackRowHeightChanged(track_row_height_);
@@ -628,23 +675,60 @@ void TimelineWidget::paintTrackHeaderCell(
             ++track_kind_number;
         }
     }
-    painter.setPen(active_track ? QColor("#ffcf5c") : QColor("#b8c2d1"));
-    painter.drawText(
-        header.adjusted(10, 7, -8, -header.height() + 40),
-        Qt::AlignLeft | Qt::AlignVCenter,
-        QString("%1%2  %3")
-            .arg(tracks_[track_index].kind == TrackKind::Audio ? "A" : "V")
-            .arg(track_kind_number)
-            .arg(text(tracks_[track_index].name)));
+    const auto track_label = QString("%1%2  %3")
+        .arg(tracks_[track_index].kind == TrackKind::Audio ? "A" : "V")
+        .arg(track_kind_number)
+        .arg(text(tracks_[track_index].name));
+    const auto clip_count = QString("%1 clip%2")
+        .arg(tracks_[track_index].clips.size())
+        .arg(tracks_[track_index].clips.size() == 1 ? "" : "s");
+    const auto text_bounds = header.adjusted(10.0, 2.0, -8.0, -2.0);
+    painter.save();
+    painter.setClipRect(header, Qt::IntersectClip);
 
-    painter.setPen(QColor("#7e8999"));
-    painter.setFont(QFont(painter.font().family(), 8));
-    painter.drawText(
-        header.adjusted(10, 38, -8, -7),
-        Qt::AlignLeft | Qt::AlignVCenter,
-        QString("%1 clip%2")
-            .arg(tracks_[track_index].clips.size())
-            .arg(tracks_[track_index].clips.size() == 1 ? "" : "s"));
+    if (header.height() < 44.0) {
+        auto compact_font = painter.font();
+        compact_font.setPointSize(8);
+        painter.setFont(compact_font);
+        painter.setPen(active_track ? QColor("#ffcf5c") : QColor("#b8c2d1"));
+        const auto compact_label = QStringLiteral("%1  ·  %2")
+            .arg(track_label, clip_count);
+        painter.drawText(
+            text_bounds,
+            Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
+            QFontMetrics(compact_font).elidedText(
+                compact_label, Qt::ElideRight,
+                std::max(0, static_cast<int>(std::floor(text_bounds.width())))));
+    } else {
+        const auto title_height = std::min(
+            33.0, std::max(18.0, header.height() * 0.45));
+        const auto title_bounds = QRectF(
+            text_bounds.left(), header.top() + 7.0,
+            text_bounds.width(), title_height);
+        const auto count_bounds = QRectF(
+            text_bounds.left(), title_bounds.bottom() + 1.0,
+            text_bounds.width(), std::max(0.0,
+                header.bottom() - 3.0 - title_bounds.bottom()));
+        painter.setPen(active_track ? QColor("#ffcf5c") : QColor("#b8c2d1"));
+        painter.drawText(
+            title_bounds,
+            Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
+            QFontMetrics(painter.font()).elidedText(
+                track_label, Qt::ElideRight,
+                std::max(0, static_cast<int>(std::floor(title_bounds.width())))));
+
+        auto count_font = painter.font();
+        count_font.setPointSize(8);
+        painter.setFont(count_font);
+        painter.setPen(QColor("#7e8999"));
+        painter.drawText(
+            count_bounds,
+            Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
+            QFontMetrics(count_font).elidedText(
+                clip_count, Qt::ElideRight,
+                std::max(0, static_cast<int>(std::floor(count_bounds.width())))));
+    }
+    painter.restore();
 
     painter.setPen(QColor("#384250"));
     painter.drawLine(
@@ -861,10 +945,115 @@ TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
         audio_height);
     layout.video_scroll_offset = video_scroll_offset_;
     layout.audio_scroll_offset = audio_scroll_offset_;
+    const auto video_count = static_cast<double>(std::count_if(
+        tracks_.begin(), tracks_.end(), [](const TimelineTrack& track) {
+            return track.kind == TrackKind::Video;
+        }));
+    const auto video_content_height = video_count <= 0.0
+        ? 0.0
+        : video_count * track_row_height_ +
+            (video_count - 1.0) * TimelineGeometry::row_gap;
+    const auto video_alignment_offset = std::max(
+        0.0, video_height - video_content_height);
     layout.video_track_translation = video_splitter_translation_ +
-        video_height - available_height * 0.5;
+        video_alignment_offset;
     layout.audio_track_translation = audio_splitter_translation_;
     return layout;
+}
+
+std::optional<TimelineWidget::TrackScrollAnchor>
+TimelineWidget::captureTrackScrollAnchor(TrackKind kind) const noexcept {
+    const auto viewport = trackGroupViewportRect(kind);
+    if (viewport.height() <= 0.0) return std::nullopt;
+    std::optional<TrackScrollAnchor> visible_anchor;
+    for (std::size_t index = 0; index < tracks_.size(); ++index) {
+        if (tracks_[index].kind != kind) continue;
+        const auto row = trackRect(index);
+        if (row.bottom() > viewport.top() && row.top() < viewport.bottom()) {
+            const auto anchor = kind == TrackKind::Video
+                ? TrackScrollAnchor{
+                    tracks_[index].track_id,
+                    row.bottom() - viewport.bottom(), true}
+                : TrackScrollAnchor{
+                    tracks_[index].track_id,
+                    row.top() - viewport.top(), false};
+            if (kind == TrackKind::Audio) return anchor;
+            visible_anchor = anchor;
+        }
+    }
+    if (visible_anchor.has_value()) return visible_anchor;
+
+    for (std::size_t index = 0; index < tracks_.size(); ++index) {
+        if (tracks_[index].kind != kind) continue;
+        const auto row = trackRect(index);
+        if (kind == TrackKind::Video) {
+            visible_anchor = TrackScrollAnchor{
+                tracks_[index].track_id,
+                row.bottom() - viewport.bottom(), true};
+        } else {
+            return TrackScrollAnchor{
+                tracks_[index].track_id,
+                row.top() - viewport.top(), false};
+        }
+    }
+    return visible_anchor;
+}
+
+void TimelineWidget::restoreTrackScrollAnchor(
+    TrackKind kind,
+    const std::optional<TrackScrollAnchor>& anchor) noexcept {
+    auto& scroll_offset = kind == TrackKind::Audio
+        ? audio_scroll_offset_ : video_scroll_offset_;
+    const auto group_count = geometry().trackGroupCount(kind);
+    if (group_count == 0) {
+        scroll_offset = 0.0;
+        return;
+    }
+
+    std::size_t anchor_index = tracks_.size();
+    if (anchor.has_value()) {
+        const auto index = indexForTrack(tracks_, anchor->track_id);
+        if (index.has_value() && tracks_[*index].kind == kind) {
+            anchor_index = *index;
+        }
+    }
+    if (anchor_index == tracks_.size()) {
+        const auto first = std::find_if(
+            tracks_.begin(), tracks_.end(), [kind](const TimelineTrack& track) {
+                return track.kind == kind;
+            });
+        if (first == tracks_.end()) {
+            scroll_offset = 0.0;
+            return;
+        }
+        anchor_index = static_cast<std::size_t>(
+            std::distance(tracks_.begin(), first));
+    }
+
+    std::size_t group_index = 0;
+    for (std::size_t index = 0; index < anchor_index; ++index) {
+        if (tracks_[index].kind == kind) ++group_index;
+    }
+    const auto layout = trackViewLayout();
+    const auto track_translation = kind == TrackKind::Audio
+        ? layout.audio_track_translation : layout.video_track_translation;
+    const auto viewport = kind == TrackKind::Audio
+        ? layout.audio_viewport : layout.video_viewport;
+    const auto row_edge_offset = anchor.has_value()
+        ? std::clamp(
+            anchor->row_edge_offset,
+            1.0 - track_row_height_,
+            anchor->bottom_edge
+                ? 0.0 : std::max(0.0, viewport.height() - 1.0))
+        : 0.0;
+    const auto row_pitch_offset = static_cast<double>(group_index) *
+        (track_row_height_ + TimelineGeometry::row_gap);
+    const auto desired_offset = anchor.has_value() && anchor->bottom_edge
+        ? row_pitch_offset + track_row_height_ + track_translation -
+            viewport.height() - row_edge_offset
+        : row_pitch_offset + track_translation - row_edge_offset;
+    scroll_offset = std::clamp(
+        desired_offset, 0.0, geometry().trackGroupScrollMaximum(kind));
 }
 
 QRectF TimelineWidget::rulerRect() const noexcept {

@@ -1034,10 +1034,214 @@ int main(int argc, char* argv[]) {
                              timeline::kDefaultTrackRowHeight) < 0.001 &&
                     std::abs(compact_audio_row.height() -
                              timeline::kDefaultTrackRowHeight) < 0.001 &&
-                    compact_video_row.bottom() < compact_splitter.top() - 100.0 &&
-                    compact_audio_row.top() >= compact_splitter.bottom(),
-                "The default 50/50 panes did not preserve row height and viewport space.");
+                    std::abs(compact_video_row.bottom() -
+                             compact_splitter.top()) < 0.001 &&
+                    std::abs(compact_audio_row.top() -
+                             compact_splitter.bottom()) < 0.001,
+                "The Video and Audio rows did not meet at the central divider.");
+        const auto video_bottom_before_height_change = compact_video_row.bottom();
+        const auto video_top_before_height_change = compact_video_row.top();
+        const auto audio_top_before_height_change = compact_audio_row.top();
+        const auto audio_bottom_before_height_change = compact_audio_row.bottom();
+        compact_groups_widget.setTrackRowHeight(
+            timeline::kMinimumTrackRowHeight);
+        require(compact_groups_widget.trackScrollMaximum(
+                    timeline::TrackKind::Video) == 0 &&
+                    compact_groups_widget.trackScrollMaximum(
+                        timeline::TrackKind::Audio) == 0 &&
+                    compact_groups_widget.trackScrollOffset(
+                        timeline::TrackKind::Video) == 0 &&
+                    compact_groups_widget.trackScrollOffset(
+                        timeline::TrackKind::Audio) == 0,
+                "Row-height reflow changed scroll offsets for non-overflowing groups.");
+        const auto compact_video_row_small = compact_groups_widget.trackBounds(0);
+        const auto compact_audio_row_small = compact_groups_widget.trackBounds(1);
+        require(std::abs(compact_video_row_small.bottom() -
+                             video_bottom_before_height_change) < 0.001 &&
+                    compact_video_row_small.top() > video_top_before_height_change &&
+                    std::abs(compact_audio_row_small.top() -
+                             audio_top_before_height_change) < 0.001 &&
+                    compact_audio_row_small.bottom() <
+                        audio_bottom_before_height_change,
+                "Reducing track height did not keep the groups anchored on opposite sides of the divider.");
+        compact_groups_widget.setTrackRowHeight(
+            timeline::kDefaultTrackRowHeight);
+        const auto compact_video_row_default = compact_groups_widget.trackBounds(0);
+        const auto compact_audio_row_default = compact_groups_widget.trackBounds(1);
+        require(std::abs(compact_video_row_default.bottom() -
+                             video_bottom_before_height_change) < 0.001 &&
+                    compact_video_row_default.top() < compact_video_row_small.top() &&
+                    std::abs(compact_audio_row_default.top() -
+                             audio_top_before_height_change) < 0.001 &&
+                    compact_audio_row_default.bottom() >
+                        compact_audio_row_small.bottom(),
+                "Increasing track height did not grow Video upward and Audio downward.");
+        compact_groups_widget.setTrackRowHeight(
+            timeline::kMaximumTrackRowHeight);
+        require(compact_groups_widget.trackBounds(0).height() ==
+                    timeline::kMaximumTrackRowHeight &&
+                    compact_groups_widget.trackBounds(1).height() ==
+                        timeline::kMaximumTrackRowHeight &&
+                    compact_groups_widget.trackScrollMaximum(
+                        timeline::TrackKind::Audio) == 0,
+                "A height change with non-overflowing rows changed their scroll limits.");
+        compact_groups_widget.setTracks({top_track});
+        compact_groups_widget.setTrackRowHeight(
+            timeline::kMinimumTrackRowHeight);
+        require(compact_groups_widget.trackScrollMaximum(
+                    timeline::TrackKind::Audio) == 0 &&
+                    std::abs(compact_groups_widget.trackBounds(0).bottom() -
+                             compact_groups_widget.trackSplitterRect().top()) < 0.001,
+                "An empty Audio group or row-height change detached Video from the divider.");
         compact_groups_widget.close();
+
+        std::vector<timeline::TimelineTrack> reflow_tracks;
+        for (int index = 0; index < 9; ++index) {
+            auto track = top_track;
+            track.track_id = static_cast<timeline::TrackId>(500 + index);
+            track.name = "Video reflow " + std::to_string(index + 1);
+            track.clips.clear();
+            reflow_tracks.push_back(std::move(track));
+        }
+        for (int index = 0; index < 9; ++index) {
+            auto track = empty_group_audio;
+            track.track_id = static_cast<timeline::TrackId>(600 + index);
+            track.name = "Audio reflow " + std::to_string(index + 1);
+            reflow_tracks.push_back(std::move(track));
+        }
+        timeline::TimelineWidget reflow_widget;
+        reflow_widget.resize(900, 520);
+        reflow_widget.setTracks(reflow_tracks);
+        reflow_widget.show();
+        application.processEvents();
+        const auto visible_anchor = [&reflow_tracks](
+            const timeline::TimelineWidget& target,
+            timeline::TrackKind kind)
+            -> std::optional<std::pair<timeline::TrackId, double>> {
+            const auto viewport = target.trackGroupViewportRect(kind);
+            std::optional<std::pair<timeline::TrackId, double>> last_video_anchor;
+            for (std::size_t index = 0; index < reflow_tracks.size(); ++index) {
+                if (reflow_tracks[index].kind != kind) continue;
+                const auto row = target.trackBounds(index);
+                if (row.bottom() > viewport.top() && row.top() < viewport.bottom()) {
+                    if (kind == timeline::TrackKind::Video) {
+                        last_video_anchor = std::pair{
+                            reflow_tracks[index].track_id,
+                            row.bottom() - viewport.bottom()};
+                    } else {
+                        return std::pair{
+                            reflow_tracks[index].track_id,
+                            row.top() - viewport.top()};
+                    }
+                }
+            }
+            return last_video_anchor;
+        };
+        reflow_widget.setTrackScrollOffset(
+            timeline::TrackKind::Video,
+            reflow_widget.trackScrollMaximum(timeline::TrackKind::Video));
+        reflow_widget.setTrackScrollOffset(timeline::TrackKind::Audio, 180);
+        const auto video_anchor_before_reflow = visible_anchor(
+            reflow_widget, timeline::TrackKind::Video);
+        const auto audio_anchor_before_reflow = visible_anchor(
+            reflow_widget, timeline::TrackKind::Audio);
+        require(video_anchor_before_reflow.has_value() &&
+                    audio_anchor_before_reflow.has_value() &&
+                    video_anchor_before_reflow->first !=
+                        audio_anchor_before_reflow->first,
+                "The reflow fixture did not start with independently scrolled groups.");
+
+        reflow_widget.setTrackRowHeight(timeline::kMinimumTrackRowHeight);
+        auto video_anchor_after_reflow = visible_anchor(
+            reflow_widget, timeline::TrackKind::Video);
+        auto audio_anchor_after_reflow = visible_anchor(
+            reflow_widget, timeline::TrackKind::Audio);
+        require(video_anchor_after_reflow.has_value() &&
+                    audio_anchor_after_reflow.has_value() &&
+                    video_anchor_after_reflow->first ==
+                        video_anchor_before_reflow->first &&
+                    audio_anchor_after_reflow->first ==
+                        audio_anchor_before_reflow->first &&
+                    std::abs(video_anchor_after_reflow->second -
+                             video_anchor_before_reflow->second) < 0.001 &&
+                    std::abs(audio_anchor_after_reflow->second -
+                             audio_anchor_before_reflow->second) < 0.001,
+                "Reducing row height did not preserve the Video bottom and Audio top anchors.");
+        for (std::size_t index = 1; index < 9; ++index) {
+            require(std::abs(
+                        reflow_widget.trackBounds(index).top() -
+                        reflow_widget.trackBounds(index - 1).top() - 40.0) < 0.001 &&
+                    std::abs(
+                        reflow_widget.trackBounds(index + 9).top() -
+                        reflow_widget.trackBounds(index + 8).top() - 40.0) < 0.001,
+                    "Compact Video or Audio rows no longer follow their model order.");
+        }
+        QImage compact_header_image(
+            reflow_widget.size(), QImage::Format_ARGB32_Premultiplied);
+        compact_header_image.fill(Qt::transparent);
+        reflow_widget.render(&compact_header_image);
+        const auto video_gap_y = static_cast<int>(std::lround(
+            (reflow_widget.trackBounds(3).bottom() +
+             reflow_widget.trackBounds(4).top()) / 2.0));
+        const auto audio_gap_y = static_cast<int>(std::lround(
+            (reflow_widget.trackBounds(11).bottom() +
+             reflow_widget.trackBounds(12).top()) / 2.0));
+        require(compact_header_image.pixelColor(80, video_gap_y) ==
+                    QColor("#1b2028") &&
+                    compact_header_image.pixelColor(80, audio_gap_y) ==
+                    QColor("#1b2028"),
+                "Compact track header text or decorations escaped their row bounds.");
+
+        reflow_widget.setTrackRowHeight(timeline::kDefaultTrackRowHeight);
+        video_anchor_after_reflow = visible_anchor(
+            reflow_widget, timeline::TrackKind::Video);
+        audio_anchor_after_reflow = visible_anchor(
+            reflow_widget, timeline::TrackKind::Audio);
+        require(video_anchor_after_reflow.has_value() &&
+                    audio_anchor_after_reflow.has_value() &&
+                    video_anchor_after_reflow->first ==
+                        video_anchor_before_reflow->first &&
+                    audio_anchor_after_reflow->first ==
+                        audio_anchor_before_reflow->first &&
+                    std::abs(video_anchor_after_reflow->second -
+                             video_anchor_before_reflow->second) < 0.001 &&
+                    std::abs(audio_anchor_after_reflow->second -
+                             audio_anchor_before_reflow->second) < 0.001,
+                "Increasing row height did not restore the Video bottom and Audio top anchors.");
+        sendWheel(
+            reflow_widget, QPointF(500.0, 200.0), 0,
+            Qt::ShiftModifier, QPoint(0, 5));
+        video_anchor_after_reflow = visible_anchor(
+            reflow_widget, timeline::TrackKind::Video);
+        audio_anchor_after_reflow = visible_anchor(
+            reflow_widget, timeline::TrackKind::Audio);
+        require(reflow_widget.trackRowHeight() == 75.0 &&
+                    video_anchor_after_reflow.has_value() &&
+                    audio_anchor_after_reflow.has_value() &&
+                    video_anchor_after_reflow->first ==
+                        video_anchor_before_reflow->first &&
+                    audio_anchor_after_reflow->first ==
+                        audio_anchor_before_reflow->first &&
+                    std::abs(video_anchor_after_reflow->second -
+                             video_anchor_before_reflow->second) < 0.001 &&
+                    std::abs(audio_anchor_after_reflow->second -
+                             audio_anchor_before_reflow->second) < 0.001,
+                "Shift + wheel did not preserve the Video and Audio boundary anchors.");
+        reflow_widget.setTrackRowHeight(timeline::kMinimumTrackRowHeight);
+        const auto video_before_divider_reflow =
+            reflow_widget.trackBounds(0).center().y();
+        const auto audio_before_divider_reflow =
+            reflow_widget.trackBounds(9).center().y();
+        reflow_widget.setTrackGroupSplitRatio(0.6);
+        const auto video_divider_delta =
+            reflow_widget.trackBounds(0).center().y() -
+            video_before_divider_reflow;
+        const auto audio_divider_delta =
+            reflow_widget.trackBounds(9).center().y() -
+            audio_before_divider_reflow;
+        require(std::abs(video_divider_delta - audio_divider_delta) < 0.001,
+                "The divider stopped moving both track groups together after a row-height change.");
+        reflow_widget.close();
 
         timeline::TrackKind requested_group = timeline::TrackKind::Audio;
         int group_drop_count = 0;
@@ -1190,6 +1394,20 @@ int main(int argc, char* argv[]) {
                 "The Timeline timecode moved or changed during horizontal scrolling.");
         QImage header_after_scroll(360, 220, QImage::Format_ARGB32);
         header_after_scroll.fill(Qt::transparent);
+        const auto select_video_track_at_header_y = [&](double y) {
+            for (std::size_t index = 0; index < 3; ++index) {
+                const auto row = viewport_timeline->trackBounds(index);
+                if (row.top() <= y && row.bottom() >= y) {
+                    viewport_timeline->setActiveClip(
+                        timeline::ClipLocation{index, 0});
+                    return true;
+                }
+            }
+            return false;
+        };
+        require(select_video_track_at_header_y(60.0),
+                "The horizontal-scroll header fixture has no visible Video row at its sample point.");
+        application.processEvents();
         scroll_area.viewport()->render(&header_after_scroll);
         require(header_overlay->geometry().x() == 0 &&
                     header_overlay->geometry().width() == 154,
@@ -1198,7 +1416,7 @@ int main(int argc, char* argv[]) {
         require(playhead_timecode->text() == QStringLiteral("00:00:02.002"),
                 "The fixed Timeline timecode did not refresh when the playhead advanced.");
         require(
-            header_after_scroll.pixelColor(120, 60) == QColor("#252d3a"),
+            header_after_scroll.pixelColor(150, 60) == QColor("#252d3a"),
             "The fixed header did not cover horizontally scrolled clip content.");
         const auto horizontal_frame_before = viewport_timeline->frameAtContentX(220.0);
         scroll_area.horizontalScrollBar()->setValue(160);
@@ -1212,13 +1430,16 @@ int main(int argc, char* argv[]) {
         application.processEvents();
         QImage header_after_vertical_scroll(360, 220, QImage::Format_ARGB32);
         header_after_vertical_scroll.fill(Qt::transparent);
+        require(select_video_track_at_header_y(60.0),
+                "The vertical-scroll header fixture has no visible Video row at its sample point.");
+        application.processEvents();
         scroll_area.viewport()->render(&header_after_vertical_scroll);
         require(
             header_overlay->geometry().x() == 0 &&
                 header_overlay->geometry().width() == 154,
             "Vertical scrolling changed the fixed header column geometry.");
         require(
-            header_after_vertical_scroll.pixelColor(120, 60) == QColor("#202631"),
+            header_after_vertical_scroll.pixelColor(150, 60) == QColor("#252d3a"),
             "The fixed Video header did not follow its group's vertical scroll.");
         video_scroll->setValue(0);
         application.processEvents();
@@ -1296,6 +1517,7 @@ int main(int argc, char* argv[]) {
         viewport_timeline->setTracks({
             top_track, video_second, video_third,
             audio_first, audio_second, audio_third});
+        viewport_timeline->setActiveClip(std::nullopt);
         viewport_timeline->setTrackRowHeight(70.0);
         application.processEvents();
         require(video_scroll->maximum() > 0 && audio_scroll->maximum() > 0,
@@ -1327,10 +1549,13 @@ int main(int argc, char* argv[]) {
                 if (clip_id != 0) ++scrolled_video_selection;
             });
         const auto video_target = viewport_timeline->trackBounds(2);
+        const auto video_clip_target = viewport_timeline->clipBounds({2, 0});
         sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
-            QPointF(220.0, video_target.center().y()), Qt::LeftButton);
+            QPointF(video_clip_target.center().x(), video_target.center().y()),
+            Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
-            QPointF(220.0, video_target.center().y()), Qt::NoButton);
+            QPointF(video_clip_target.center().x(), video_target.center().y()),
+            Qt::NoButton);
         require(scrolled_video_selection == 1,
                 "Hit testing and selection failed after independently scrolling Video.");
 
@@ -2095,9 +2320,10 @@ int main(int argc, char* argv[]) {
         widget.setTracks({junction_track});
         widget.setActiveClip(std::nullopt);
         application.processEvents();
-        sendMouse(widget, QEvent::MouseButtonPress, QPointF(568, 120),
+        const auto junction_y = widget.trackBounds(0).center().y();
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(568, junction_y),
                   Qt::LeftButton);
-        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(568, 120),
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(568, junction_y),
                   Qt::NoButton);
         require(transition_track == static_cast<qint64>(junction_track.track_id) &&
                     transition_from == static_cast<qint64>(junction_track.clips[0].clip_id) &&
@@ -2848,7 +3074,7 @@ int main(int argc, char* argv[]) {
                 snap_target_track = track;
                 snap_target_frame = frame;
             });
-        const auto snap_source_y = 48.0 + 35.0;
+        const auto snap_source_y = snap_widget.trackBounds(0).center().y();
         const auto snap_press = QPointF(
             snap_widget.contentXForFrame(6000), snap_source_y);
         const auto snap_near_target = QPointF(
@@ -2874,8 +3100,10 @@ int main(int argc, char* argv[]) {
         const auto snap_guide_x = static_cast<int>(std::lround(
             snap_widget.contentXForFrame(30000)));
         require(
-            snap_active.pixelColor(snap_guide_x, 52) !=
-                snap_before.pixelColor(snap_guide_x, 52),
+            snap_active.pixelColor(snap_guide_x,
+                                   static_cast<int>(std::lround(snap_source_y))) !=
+                snap_before.pixelColor(snap_guide_x,
+                                       static_cast<int>(std::lround(snap_source_y))),
             "Magnetic snapping did not paint its aligned guide line.");
         sendMouse(
             snap_widget,
@@ -2941,13 +3169,15 @@ int main(int argc, char* argv[]) {
         snap_widget.setTracks({
             timeline::TimelineTrack{1, "Video 1", 1.0, false, {snap_source_clip}},
             snap_destination_track});
-        const auto snap_second_track_y = 48.0 + 70.0 + 10.0 + 35.0;
+        application.processEvents();
+        const auto snap_cross_source_y = snap_widget.trackBounds(0).center().y();
+        const auto snap_second_track_y = snap_widget.trackBounds(1).center().y();
         const auto snap_cross_track = QPointF(
             snap_widget.contentXForFrame(19000), snap_second_track_y);
         sendMouse(
             snap_widget,
             QEvent::MouseButtonPress,
-            snap_press,
+            QPointF(snap_widget.contentXForFrame(6000), snap_cross_source_y),
             Qt::LeftButton);
         sendMouse(
             snap_widget,
@@ -3032,8 +3262,9 @@ int main(int argc, char* argv[]) {
         snap_media_mime.setData(
             ui::kMediaFrameCountMimeType,
             QByteArrayLiteral("12000"));
+        const auto media_snap_y = media_snap_widget.trackBounds(0).center().y();
         const auto media_snap_position = QPointF(
-            media_snap_widget.contentXForFrame(19000), snap_source_y);
+            media_snap_widget.contentXForFrame(19000), media_snap_y);
         QDragEnterEvent snap_media_enter(
             media_snap_position.toPoint(),
             Qt::CopyAction,
@@ -3085,8 +3316,9 @@ int main(int argc, char* argv[]) {
         fallback_snap_mime.setData(
             ui::kMediaPathMimeType,
             QByteArrayLiteral("snap-fallback.mp4"));
+        const auto fallback_snap_y = fallback_snap_widget.trackBounds(0).center().y();
         const auto fallback_snap_position = QPointF(
-            fallback_snap_widget.contentXForFrame(100), snap_source_y);
+            fallback_snap_widget.contentXForFrame(100), fallback_snap_y);
         QDragEnterEvent fallback_snap_enter(
             fallback_snap_position.toPoint(),
             Qt::CopyAction,
