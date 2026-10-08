@@ -6,6 +6,8 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 
+#include <utility>
+
 namespace ui {
 
 WorkspaceTransitionController::WorkspaceTransitionController(
@@ -36,6 +38,10 @@ WorkspaceTransitionController::WorkspaceTransitionController(
 
 void WorkspaceTransitionController::setPage(WorkspacePageId page) {
     if (workspace_host_ == nullptr) return;
+    if (workspace_host_->currentPage() == page) {
+        updateSelectors(page);
+        return;
+    }
 
     const bool entering_render =
         page == WorkspacePageId::Render &&
@@ -76,6 +82,12 @@ void WorkspaceTransitionController::setPage(WorkspacePageId page) {
     }
 
     updateSelectors(page);
+    if (page_changed_handler_) page_changed_handler_(page);
+}
+
+void WorkspaceTransitionController::setPageChangedHandler(
+    std::function<void(WorkspacePageId)> handler) {
+    page_changed_handler_ = std::move(handler);
 }
 
 void WorkspaceTransitionController::prepareForClose() {

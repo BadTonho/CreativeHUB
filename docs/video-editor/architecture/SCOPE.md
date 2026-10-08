@@ -83,6 +83,15 @@ participates in Timeline Undo/Redo. This phase does not add graph animation,
 text, audio, masks, effects beyond the four existing video effects, nested
 compositions, or Motion Studio integration.
 
+Each node has a `VIEW` control that routes that node's output to the shared
+Fusion Viewer. Output is active when Fusion opens. Choosing a different node is
+temporary interface state: it does not change Inspector selection, project
+dirty state, or Undo/Redo history. The Viewer shows only the chosen node's
+output, evaluated at the selected clip's Timeline time; time outside the clip
+uses the nearest frame within the clip. Entering Fusion pauses playback and
+seeks to the selected clip's start. Leaving Fusion restores the normal Timeline
+composition, including its other tracks, clip effects, and transforms.
+
 ## Approved foundation direction
 
 - Serve content creators broadly, with YouTube long-form videos and Shorts as

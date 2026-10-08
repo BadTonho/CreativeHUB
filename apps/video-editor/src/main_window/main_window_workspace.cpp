@@ -385,6 +385,10 @@ void MainWindow::createWorkspace() {
             edit_controller->applyFusionNodeGraph(clip_id, graph);
             refreshFusionSelection();
         });
+    connect(fusion_workspace_, &ui::FusionWorkspace::nodePreviewRequested,
+        this, [this](timeline::ClipId, fusion::nodes::NodeId) {
+            refreshFusionNodePreviewTarget();
+        });
     connect(edit_controller, &ui::EditWorkspaceController::timelineSelectionPresentationChanged,
         this, &MainWindow::refreshFusionSelection);
     connect(edit_controller, &ui::EditWorkspaceController::timelineEditCommitted,
@@ -443,6 +447,8 @@ void MainWindow::createWorkspace() {
                 fusion_workspace_button_,
                 render_workspace_button_},
             this);
+    workspace_transition_controller_->setPageChangedHandler(
+        [this](ui::WorkspacePageId page) { handleWorkspacePageChanged(page); });
 
     function_palette_ = new ui::FunctionPalette(this, *shortcut_manager_);
     connect(function_palette_, &ui::FunctionPalette::effectAddRequested,
@@ -484,6 +490,9 @@ void MainWindow::refreshFusionSelection() {
             selected = &model.tracks()[location->track_index].clips[location->clip_index];
     }
     fusion_workspace_->setSelection(selected, std::move(choices));
+    if (workspace_host_ != nullptr &&
+        workspace_host_->currentPage() == ui::WorkspacePageId::Fusion)
+        refreshFusionNodePreviewTarget();
 }
 
 void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
@@ -491,6 +500,39 @@ void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
         workspace_transition_controller_->setPage(page);
     }
 }
+
+void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
+    if (playback_controller_ == nullptr) return;
+    if (page != ui::WorkspacePageId::Fusion) {
+        playback_controller_->setFusionNodePreviewTarget(std::nullopt);
+        return;
+    }
+
+    if (fusion_workspace_ == nullptr || fusion_workspace_->selectedClipId() == 0) {
+        playback_controller_->setFusionNodePreviewTarget(std::nullopt);
+        return;
+    }
+
+    const auto clip_id = fusion_workspace_->selectedClipId();
+    playback_controller_->pause();
+    playback_controller_->setFusionNodePreviewTarget(
+        playback::FusionNodePreviewTarget{clip_id, fusion_workspace_->previewNodeId()});
+    static_cast<void>(playback_controller_->activateClip(clip_id, 0, false));
+}
+
+void MainWindow::refreshFusionNodePreviewTarget() {
+    if (playback_controller_ == nullptr) return;
+    if (workspace_host_ == nullptr ||
+        workspace_host_->currentPage() != ui::WorkspacePageId::Fusion ||
+        fusion_workspace_ == nullptr || fusion_workspace_->selectedClipId() == 0) {
+        playback_controller_->setFusionNodePreviewTarget(std::nullopt);
+        return;
+    }
+    playback_controller_->setFusionNodePreviewTarget(
+        playback::FusionNodePreviewTarget{
+            fusion_workspace_->selectedClipId(), fusion_workspace_->previewNodeId()});
+}
+
 void MainWindow::showSettingsDialog() {
     settings::SettingsDialog dialog(this, *shortcut_manager_);
     connect(&dialog, &settings::SettingsDialog::gpuCompositionEnabledChanged,

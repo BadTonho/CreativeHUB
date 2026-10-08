@@ -14,5 +14,7 @@ using InputFrames = std::unordered_map<NodeId, media::VideoFramePtr>;
 
 [[nodiscard]] std::optional<media::VideoFrame> evaluate(
     const NodeGraph& graph, const InputFrames& inputs);
+[[nodiscard]] std::optional<media::VideoFrame> evaluate(
+    const NodeGraph& graph, const InputFrames& inputs, NodeId target_node);
 
 } // namespace fusion::nodes

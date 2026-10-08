@@ -1,6 +1,7 @@
 #include "playback/playback_worker.h"
 #include "playback/playback_frame_mailbox.h"
 #include "playback/playback_transition_plan.h"
+#include "fusion/nodes/evaluation/node_graph_evaluator.h"
 #include "logging/logger.h"
 #include "media/video_playback.h"
 #include "rendering/frame_compositor.h"
@@ -1530,6 +1531,145 @@ void validateStaticImageComposition() {
             "Static image composition did not reuse the same image pixels.");
 }
 
+void validateFusionNodePreview() {
+    playback::PlaybackWorker worker;
+    std::vector<playback::VideoFramePtr> frames;
+    std::vector<qint64> timeline_frames;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::previewFrameReady,
+        [&frames, &timeline_frames](rendering::PreviewFramePayload frame,
+                                    qint64, quint64, quint64) {
+            frames.push_back(frame.rgba);
+            timeline_frames.push_back(frame.timeline_frame);
+        });
+
+    auto source = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        1, 1, 4, std::vector<std::uint8_t>{200, 40, 20, 128}});
+    auto overlay = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        1, 1, 4, std::vector<std::uint8_t>{5, 15, 245, 255}});
+    fusion::nodes::NodeGraph graph;
+    graph.nodes = {{1, fusion::nodes::NodeType::Input},
+                   {2, fusion::nodes::NodeType::Color},
+                   {3, fusion::nodes::NodeType::Effect},
+                   {4, fusion::nodes::NodeType::Output}};
+    graph.nodes[1].color.brightness = 12.0;
+    graph.nodes[2].effect = creative_suite::effects::makeDefaultInstance(
+        "video.grayscale");
+    graph.nodes.push_back({5, fusion::nodes::NodeType::Transform});
+    graph.connections = {{1, 2, 0}, {2, 3, 0}, {3, 4, 0}};
+    graph.next_id = 6;
+
+    playback::CompositionLayerSpec selected;
+    selected.timeline_start_frame = 10;
+    selected.segment_frame_count = 3;
+    selected.track_index = 0;
+    selected.clip_index = 0;
+    selected.clip_id = 50;
+    selected.kind = timeline::ClipKind::Image;
+    selected.still_frame = source;
+    selected.transform.opacity = 0.25;
+    selected.effects.push_back(
+        creative_suite::effects::makeDefaultInstance("video.grayscale"));
+    selected.node_graph = graph;
+    selected.fusion_preview_node_id = 2;
+
+    playback::CompositionLayerSpec other_track = selected;
+    other_track.timeline_start_frame = 0;
+    other_track.track_index = 1;
+    other_track.clip_index = 0;
+    other_track.clip_id = 51;
+    other_track.still_frame = overlay;
+    other_track.node_graph.reset();
+    other_track.fusion_preview_node_id.reset();
+    other_track.effects.clear();
+    other_track.transform = {};
+
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{selected, other_track}, {}, 620);
+    worker.setActiveCompositionClip(0, 0, 99);
+    worker.renderCompositionFrame(99, 0, 620);
+
+    const auto expected = fusion::nodes::evaluate(
+        graph, {{1, source}}, 2);
+    require(expected.has_value() && frames.size() == 1 && frames.front() != nullptr &&
+                frames.front()->rgba_pixels == expected->rgba_pixels &&
+                frames.front()->width == 1 && frames.front()->height == 1 &&
+                timeline_frames.front() == 99,
+            "Fusion preview did not isolate the requested node output at the clamped clip time.");
+
+    selected.fusion_preview_node_id = 5;
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{selected, other_track}, {}, 621);
+    worker.setActiveCompositionClip(0, 0, 10);
+    worker.renderCompositionFrame(10, 0, 621);
+    const auto expected_disconnected = fusion::nodes::evaluate(graph, {{1, source}}, 5);
+    require(expected_disconnected.has_value() && frames.size() == 2 &&
+                frames.back()->width == source->width &&
+                frames.back()->height == source->height &&
+                frames.back()->rgba_pixels == expected_disconnected->rgba_pixels &&
+                frames.back()->rgba_pixels == std::vector<std::uint8_t>(4, 0),
+            "A disconnected Fusion node did not preview as transparent at source dimensions.");
+
+    selected.fusion_preview_node_id = 4;
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{selected, other_track}, {}, 622);
+    worker.setActiveCompositionClip(0, 0, 10);
+    worker.renderCompositionFrame(10, 0, 622);
+    const auto expected_output = fusion::nodes::evaluate(graph, {{1, source}});
+    require(expected_output.has_value() && frames.size() == 3 &&
+                frames.back()->rgba_pixels == expected_output->rgba_pixels,
+            "Fusion Output preview did not show the final graph output.");
+}
+
+void validateFusionVideoNodePreview(const std::filesystem::path& path) {
+    auto source = media::VideoPlaybackSession::open(path);
+    const auto first_source_frame = source->decode_frame_at(2);
+    const auto middle_source_frame = source->decode_frame_at(4);
+    const auto last_source_frame = source->decode_frame_at(6);
+    require(first_source_frame.has_value() && middle_source_frame.has_value() &&
+                last_source_frame.has_value(),
+            "The Fusion video-preview fixture did not contain the required source frames.");
+
+    playback::CompositionLayerSpec clip;
+    clip.source_path = toQString(path);
+    clip.frame_rate = 30.0;
+    clip.timeline_start_frame = 10;
+    clip.source_start_frame = 2;
+    clip.segment_frame_count = 5;
+    clip.source_duration_frames = 64;
+    clip.timeline_frame_rate = {30, 1};
+    clip.kind = timeline::ClipKind::Video;
+    clip.track_index = 0;
+    clip.clip_index = 0;
+    clip.node_graph = fusion::nodes::makePassthroughGraph();
+    clip.fusion_preview_node_id = 1;
+
+    playback::PlaybackWorker worker;
+    std::vector<playback::VideoFramePtr> frames;
+    bool playback_error = false;
+    QObject::connect(&worker, &playback::PlaybackWorker::frameReady,
+        [&frames](playback::VideoFramePtr frame, qint64, quint64, quint64) {
+            frames.push_back(std::move(frame));
+        });
+    QObject::connect(&worker, &playback::PlaybackWorker::playbackError,
+        [&playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+        });
+
+    worker.setComposition({clip}, {}, 623);
+    worker.setActiveCompositionClip(0, 0, 10);
+    worker.renderCompositionFrame(10, 0, 623);
+    worker.renderCompositionFrame(12, 2, 623);
+    worker.renderCompositionFrame(30, 20, 623);
+
+    require(!playback_error && frames.size() == 3 &&
+                frames[0]->rgba_pixels == (*first_source_frame)->rgba_pixels &&
+                frames[1]->rgba_pixels == (*middle_source_frame)->rgba_pixels &&
+                frames[2]->rgba_pixels == (*last_source_frame)->rgba_pixels,
+            "Fusion video preview did not follow clip time or clamp beyond the clip's last frame.");
+}
+
 void validateVisualEffectPreview() {
     playback::PlaybackWorker worker;
     std::vector<playback::VideoFramePtr> frames;
@@ -2039,9 +2179,11 @@ int main(int argc, char* argv[]) {
         validateCompositionCaching();
         validateAnimatedTextGeometry();
         validateStaticImageComposition();
+        validateFusionNodePreview();
         validateVisualEffectPreview();
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));
+            validateFusionVideoNodePreview(std::filesystem::path(argv[1]));
             validateSeekCoalescing(application, std::filesystem::path(argv[1]));
             validateSegmentRange(application, std::filesystem::path(argv[1]));
             validateCompositionTransitions(std::filesystem::path(argv[1]));

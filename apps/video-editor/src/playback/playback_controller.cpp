@@ -236,6 +236,20 @@ void PlaybackController::refreshComposition() {
                         : VideoFramePtr{};
             }
 
+            auto node_graph = clip.node_graph;
+            std::optional<fusion::nodes::NodeId> fusion_preview_node_id;
+            if (fusion_node_preview_target_.has_value() &&
+                fusion_node_preview_target_->clip_id == clip.clip_id &&
+                (clip.kind == timeline::ClipKind::Video ||
+                 clip.kind == timeline::ClipKind::Image)) {
+                if (!node_graph.has_value())
+                    node_graph = fusion::nodes::makePassthroughGraph();
+                if (fusion::nodes::findNode(*node_graph,
+                        fusion_node_preview_target_->node_id) != nullptr) {
+                    fusion_preview_node_id = fusion_node_preview_target_->node_id;
+                }
+            }
+
             layers.push_back(CompositionLayerSpec{
                 timeline::isMediaClipKind(clip.kind)
                     ? pathToQString(clip.source_path)
@@ -268,7 +282,8 @@ void PlaybackController::refreshComposition() {
                 clip.audio_extracted,
                 clip.audio_gain_keyframes,
                 clip.effects,
-                clip.node_graph});
+                std::move(node_graph),
+                fusion_preview_node_id});
         }
 
         for (const auto& transition : track.transitions) {
@@ -322,6 +337,44 @@ void PlaybackController::refreshComposition() {
         worker.setActiveCompositionClip(
             active_track, active_clip, static_cast<qint64>(global_timeline_frame));
     });
+}
+
+void PlaybackController::setFusionNodePreviewTarget(
+    std::optional<FusionNodePreviewTarget> target) {
+    if (target.has_value()) {
+        const auto location = session_.timeline().locateClip(target->clip_id);
+        if (!location.has_value()) {
+            target.reset();
+        } else {
+            const auto& clip = session_.timeline().tracks()[location->track_index]
+                .clips[location->clip_index];
+            if (clip.kind != timeline::ClipKind::Video &&
+                clip.kind != timeline::ClipKind::Image) {
+                target.reset();
+            } else {
+                const auto graph = clip.node_graph.value_or(
+                    fusion::nodes::makePassthroughGraph());
+                if (fusion::nodes::findNode(graph, target->node_id) == nullptr) {
+                    const auto output = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+                        [](const fusion::nodes::Node& node) {
+                            return node.type == fusion::nodes::NodeType::Output;
+                        });
+                    if (output == graph.nodes.end()) target.reset();
+                    else target->node_id = output->id;
+                }
+            }
+        }
+    }
+    if (fusion_node_preview_target_ == target) return;
+    fusion_node_preview_target_ = target;
+    refreshComposition();
+    const auto global_frame = timelineFrame();
+    const auto active = session_.timeline().topClipAt(global_frame);
+    const auto local_frame = active.has_value()
+        ? global_frame - session_.timeline().tracks()[active->track_index]
+              .clips[active->clip_index].timeline_start_frame
+        : std::int64_t{0};
+    renderCompositionFrame(global_frame, local_frame);
 }
 
 void PlaybackController::setGpuCompositionEnabled(bool enabled) {

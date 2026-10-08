@@ -682,6 +682,14 @@ empty canvas space to remove it. Releasing an output on another input rewires
 that input. Disconnected inputs evaluate as transparent. Connection validation
 rejects incompatible ports and cycles with a visible explanation. The existing
 clip effect stack and Timeline transform/keyframes run after the graph output.
+Each node also has a `VIEW` control. Output is the initial Viewer target;
+clicking another node previews its intermediate image without changing the
+Inspector selection, project dirty state, or Undo/Redo history. While Fusion is
+active, the shared Preview renders only that node's graph output at the selected
+clip's Timeline time, clamped to the clip's first or last frame when the
+playhead is outside its range. Opening Fusion pauses playback and seeks to the
+selected clip's start. Leaving Fusion clears the temporary target and restores
+the normal multi-track Timeline composition.
 
 `ui/workspace/pages/render/RenderWorkspace` builds the output form, a central
 slot for the shared Preview, and the session-only queue UI. `WorkspaceHost`

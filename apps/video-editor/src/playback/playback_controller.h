@@ -90,6 +90,13 @@ struct PlaybackCompositionWarningEvent {
 
 struct PlaybackDeliveryEpochEvent { quint64 epoch = 0; bool retry_texture_delivery = false; };
 
+struct FusionNodePreviewTarget {
+    timeline::ClipId clip_id = 0;
+    fusion::nodes::NodeId node_id = 0;
+    friend bool operator==(const FusionNodePreviewTarget&,
+                           const FusionNodePreviewTarget&) = default;
+};
+
 using PlaybackControllerEvent = std::variant<
     PlaybackActivationEvent,
     PlaybackFrameEvent,
@@ -122,6 +129,8 @@ public:
     [[nodiscard]] bool isPlaying() const noexcept;
 
     void refreshComposition();
+    void setFusionNodePreviewTarget(
+        std::optional<FusionNodePreviewTarget> target);
     void setPreviewQuality(PreviewQuality quality);
     void setGpuCompositionEnabled(bool enabled);
     void setGpuTextureDeliveryAvailable(bool available);
@@ -206,6 +215,7 @@ private:
     PlaybackFrameMailbox frame_mailbox_;
     EventHandler event_handler_;
     std::optional<PendingActivation> pending_activation_;
+    std::optional<FusionNodePreviewTarget> fusion_node_preview_target_;
     QTimer timeline_clock_timer_;
     using Clock = std::chrono::steady_clock;
     Clock::time_point timeline_clock_started_at_{};

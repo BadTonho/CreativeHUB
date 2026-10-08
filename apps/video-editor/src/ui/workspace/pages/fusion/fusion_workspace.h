@@ -27,6 +27,15 @@ public:
     void setSelection(const timeline::TimelineClip* clip,
                       std::vector<MediaChoice> media_choices);
     void setMediaChoices(std::vector<MediaChoice> media_choices);
+    [[nodiscard]] timeline::ClipId selectedClipId() const noexcept {
+        return clip_id_;
+    }
+    [[nodiscard]] fusion::nodes::NodeId previewNodeId() const noexcept {
+        return preview_node_id_;
+    }
+    [[nodiscard]] fusion::nodes::NodeId selectedNodeId() const noexcept {
+        return selected_node_id_;
+    }
 
     [[nodiscard]] QWidget* viewerTitle() const noexcept { return viewer_title_; }
     [[nodiscard]] QWidget* nodeEditorPanel() const noexcept {
@@ -39,6 +48,8 @@ public:
 signals:
     void graphEditRequested(timeline::ClipId clip_id,
                             const fusion::nodes::NodeGraph& graph);
+    void nodePreviewRequested(timeline::ClipId clip_id,
+                              fusion::nodes::NodeId node_id);
 
 private:
     QWidget* viewer_title_ = nullptr;
@@ -50,6 +61,7 @@ private:
     fusion::nodes::NodeGraph graph_;
     timeline::ClipId clip_id_ = 0;
     fusion::nodes::NodeId selected_node_id_ = 0;
+    fusion::nodes::NodeId preview_node_id_ = 0;
     bool refreshing_ = false;
     void refreshCanvas();
     void refreshInspector();

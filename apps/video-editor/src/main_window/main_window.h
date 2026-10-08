@@ -105,6 +105,8 @@ private:
     void createMenus();
     void createWorkspace();
     void setWorkspacePage(ui::WorkspacePageId page);
+    void handleWorkspacePageChanged(ui::WorkspacePageId page);
+    void refreshFusionNodePreviewTarget();
     void showSettingsDialog();
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();

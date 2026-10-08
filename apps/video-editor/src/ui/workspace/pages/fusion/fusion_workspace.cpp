@@ -64,6 +64,14 @@ void FusionWorkspace::createPanels(QWidget* parent) {
         selected_node_id_ = id;
         refreshInspector();
     });
+    node_canvas->setViewerNodeRequestedHandler([this](fusion::nodes::NodeId id) {
+        if (refreshing_ || clip_id_ == 0 ||
+            fusion::nodes::findNode(graph_, id) == nullptr ||
+            preview_node_id_ == id) return;
+        preview_node_id_ = id;
+        refreshCanvas();
+        emit nodePreviewRequested(clip_id_, preview_node_id_);
+    });
     node_canvas->setPositionChangedHandler([this](fusion::nodes::NodeId id, double x, double y) {
         if (refreshing_) return;
         auto candidate = graph_;
@@ -169,6 +177,7 @@ void FusionWorkspace::setSelection(const timeline::TimelineClip* clip,
                                    std::vector<MediaChoice> media_choices) {
     const auto previous_clip_id = clip_id_;
     const auto previous_node_id = selected_node_id_;
+    const auto previous_preview_node_id = preview_node_id_;
     clip_id_ = clip != nullptr && (clip->kind == timeline::ClipKind::Video ||
         clip->kind == timeline::ClipKind::Image) ? clip->clip_id : 0;
     graph_ = clip_id_ == 0 ? fusion::nodes::NodeGraph{}
@@ -178,6 +187,15 @@ void FusionWorkspace::setSelection(const timeline::TimelineClip* clip,
         fusion::nodes::findNode(graph_, previous_node_id) != nullptr
             ? previous_node_id
             : graph_.nodes.empty() ? 0 : graph_.nodes.front().id;
+    const auto output = std::find_if(graph_.nodes.begin(), graph_.nodes.end(),
+        [](const fusion::nodes::Node& node) {
+            return node.type == fusion::nodes::NodeType::Output;
+        });
+    const auto output_id = output == graph_.nodes.end() ? fusion::nodes::NodeId{0}
+                                                        : output->id;
+    preview_node_id_ = clip_id_ != 0 && clip_id_ == previous_clip_id &&
+        fusion::nodes::findNode(graph_, previous_preview_node_id) != nullptr
+            ? previous_preview_node_id : output_id;
     refreshCanvas();
     refreshInspector();
 }
@@ -213,6 +231,7 @@ void FusionWorkspace::refreshCanvas() {
     refreshing_ = true;
     canvas->setEnabled(clip_id_ != 0);
     canvas->setGraph(graph_);
+    canvas->setViewerNode(preview_node_id_);
     canvas->setSelectedNode(selected_node_id_);
     refreshing_ = false;
 }

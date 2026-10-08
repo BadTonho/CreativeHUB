@@ -5,6 +5,7 @@
 #include <QObject>
 
 #include <array>
+#include <functional>
 
 class QDockWidget;
 class QPushButton;
@@ -40,6 +41,7 @@ public:
 
     void setPage(WorkspacePageId page);
     void prepareForClose();
+    void setPageChangedHandler(std::function<void(WorkspacePageId)> handler);
 
 private:
     [[nodiscard]] std::array<QDockWidget*, 7> dockWidgets() const noexcept;
@@ -50,6 +52,7 @@ private:
     Selectors selectors_;
     std::array<bool, 7> dock_visibility_before_render_{};
     bool has_render_dock_visibility_snapshot_ = false;
+    std::function<void(WorkspacePageId)> page_changed_handler_;
 };
 
 }  // namespace ui

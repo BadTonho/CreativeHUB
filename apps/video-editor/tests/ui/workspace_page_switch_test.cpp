@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -118,6 +119,9 @@ int main(int argc, char* argv[]) {
                 lower_dock},
             {buttons.edit, buttons.fusion, buttons.render},
             &window);
+        std::vector<ui::WorkspacePageId> page_changes;
+        transition_controller.setPageChangedHandler(
+            [&page_changes](ui::WorkspacePageId page) { page_changes.push_back(page); });
         transition_controller.setPage(ui::WorkspacePageId::Edit);
 
         window.resize(1400, 720);
@@ -141,6 +145,9 @@ int main(int argc, char* argv[]) {
 
         buttons.fusion->click();
         application.processEvents();
+        require(page_changes == std::vector<ui::WorkspacePageId>{
+                    ui::WorkspacePageId::Fusion},
+                "Workspace transitions did not report the Fusion page change once.");
         require(!buttons.edit->isChecked() && buttons.fusion->isChecked(),
                 "Selecting Fusion must select only the Fusion button.");
         require(workspace_host->currentPage() == ui::WorkspacePageId::Fusion &&
@@ -435,6 +442,9 @@ int main(int argc, char* argv[]) {
 
         buttons.edit->click();
         application.processEvents();
+        require(!page_changes.empty() &&
+                    page_changes.back() == ui::WorkspacePageId::Edit,
+                "Leaving Fusion did not report the Edit page change.");
         require(buttons.edit->isChecked() && !buttons.fusion->isChecked() &&
                     !buttons.render->isChecked(),
                 "Returning to Edit must restore the exclusive button state.");

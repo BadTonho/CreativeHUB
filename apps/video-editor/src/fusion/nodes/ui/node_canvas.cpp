@@ -63,6 +63,10 @@ double inputPortY(NodeType type, std::uint8_t input) {
 double outputPortY(NodeType type) {
     return type == NodeType::Merge ? 56.0 : 47.0;
 }
+
+double nodeHeight(NodeType type) {
+    return type == NodeType::Merge ? 132.0 : 112.0;
+}
 }
 
 NodeCanvas::NodeCanvas(QWidget* parent) : QGraphicsView(parent) {
@@ -99,7 +103,8 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
     scene_->clear();
     std::unordered_map<NodeId, QGraphicsRectItem*> items;
     for (const auto& node : graph.nodes) {
-        auto* item = scene_->addRect(QRectF(0, 0, 210, node.type == NodeType::Merge ? 112 : 94),
+        const auto height = nodeHeight(node.type);
+        auto* item = scene_->addRect(QRectF(0, 0, 210, height),
             QPen(QColor("#5b6574"), 1.5), QBrush(QColor("#252b35")));
         item->setData(0, QVariant::fromValue<qulonglong>(node.id));
         item->setData(1, 0);
@@ -117,6 +122,27 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         id_label->setFont(QFont(QStringLiteral("Segoe UI"), 8));
         id_label->setParentItem(item);
         id_label->setPos(12, node.type == NodeType::Merge ? 94 : 35);
+        auto* viewer_button = scene_->addRect(
+            QRectF(12, height - 24.0, 48, 16),
+            QPen(node.id == viewer_node_id_ ? QColor("#66b5ff") : QColor("#5b6574"), 1.0),
+            QBrush(node.id == viewer_node_id_ ? QColor("#285578") : QColor("#303742")));
+        viewer_button->setParentItem(item);
+        viewer_button->setData(0, QVariant::fromValue<qulonglong>(node.id));
+        viewer_button->setData(1, 4);
+        viewer_button->setData(3, node.id == viewer_node_id_);
+        viewer_button->setToolTip(QStringLiteral("Show this node in the Fusion Viewer."));
+        viewer_button->setFlag(QGraphicsItem::ItemIsSelectable, false);
+        viewer_button->setZValue(2);
+        auto* viewer_label = scene_->addText(QStringLiteral("VIEW"));
+        viewer_label->setDefaultTextColor(QColor("#e4e9f0"));
+        viewer_label->setFont(QFont(QStringLiteral("Segoe UI"), 7, QFont::DemiBold));
+        viewer_label->setParentItem(item);
+        viewer_label->setPos(21, height - 25.0);
+        viewer_label->setData(0, QVariant::fromValue<qulonglong>(node.id));
+        viewer_label->setData(1, 4);
+        viewer_label->setData(3, node.id == viewer_node_id_);
+        viewer_label->setToolTip(QStringLiteral("Show this node in the Fusion Viewer."));
+        viewer_label->setZValue(3);
         const auto add_port = [this, item, &node](double x, double y,
                                                   int kind, std::uint8_t input) {
             auto* port = scene_->addEllipse(QRectF(-5, -5, 10, 10),
@@ -189,8 +215,18 @@ void NodeCanvas::setSelectedNode(NodeId id) {
     }
 }
 
+void NodeCanvas::setViewerNode(NodeId id) {
+    if (viewer_node_id_ == id) return;
+    viewer_node_id_ = id;
+    setGraph(graph_);
+}
+
 void NodeCanvas::setSelectionChangedHandler(std::function<void(NodeId)> handler) {
     selection_changed_ = std::move(handler);
+}
+void NodeCanvas::setViewerNodeRequestedHandler(
+    std::function<void(NodeId)> handler) {
+    viewer_node_requested_ = std::move(handler);
 }
 void NodeCanvas::setPositionChangedHandler(
     std::function<void(NodeId, double, double)> handler) {
@@ -258,6 +294,12 @@ void NodeCanvas::dropEvent(QDropEvent* event) {
 void NodeCanvas::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         auto* item = itemAt(event->pos());
+        if (item != nullptr && item->data(1).toInt() == 4) {
+            const auto node_id = static_cast<NodeId>(item->data(0).toULongLong());
+            if (viewer_node_requested_) viewer_node_requested_(node_id);
+            event->accept();
+            return;
+        }
         if (item != nullptr && item->data(1).toInt() == 1) {
             auto* node = item->parentItem();
             if (node != nullptr) {

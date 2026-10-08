@@ -40,6 +40,9 @@ int runFusionWorkspaceTest() {
     fusion::nodes::NodeGraph edited;
     int edit_count = 0;
     bool selected_clip_id_was_preserved = true;
+    timeline::ClipId preview_clip_id = 0;
+    fusion::nodes::NodeId preview_node_id = 0;
+    int preview_request_count = 0;
     QObject::connect(&workspace, &ui::FusionWorkspace::graphEditRequested,
         [&edited, &edit_count, &selected_clip_id_was_preserved, &selected](timeline::ClipId clip_id,
             const fusion::nodes::NodeGraph& graph) {
@@ -49,12 +52,29 @@ int runFusionWorkspaceTest() {
             selected.node_graph = graph;
             ++edit_count;
         });
+    QObject::connect(&workspace, &ui::FusionWorkspace::nodePreviewRequested,
+        [&preview_clip_id, &preview_node_id, &preview_request_count](
+            timeline::ClipId clip_id, fusion::nodes::NodeId node_id) {
+            preview_clip_id = clip_id;
+            preview_node_id = node_id;
+            ++preview_request_count;
+        });
     auto* add_type = root.findChild<QComboBox*>("fusionAddNodeType");
     auto* add = root.findChild<QPushButton*>("fusionAddNodeButton");
     require(add_type && add, "Node controls were not created.");
 
     auto* canvas = root.findChild<QGraphicsView*>("fusionNodeCanvas");
     require(canvas != nullptr, "The Fusion node canvas was not created.");
+    require(workspace.previewNodeId() == 2,
+            "The Output node should be the default Fusion Viewer target.");
+    bool output_view_button_active = false;
+    for (auto* item : canvas->scene()->items()) {
+        output_view_button_active = output_view_button_active ||
+            (item->data(0).toULongLong() == 2 && item->data(1).toInt() == 4 &&
+             item->data(3).toBool());
+    }
+    require(output_view_button_active,
+            "The Output node's Fusion Viewer indicator was not shown as active.");
     root.resize(1250, 700);
     root.show();
     auto* canvas_panel = canvas->parentWidget()->parentWidget();
@@ -133,6 +153,30 @@ int runFusionWorkspaceTest() {
                 edited.nodes.size() == 3,
             "Adding a node did not update the selected clip graph.");
     const auto transform_id = edited.nodes.back().id;
+
+    QGraphicsItem* input_view_button = nullptr;
+    for (auto* item : canvas->scene()->items()) {
+        if (item->data(0).toULongLong() == 1 && item->data(1).toInt() == 4) {
+            input_view_button = item;
+            break;
+        }
+    }
+    require(input_view_button != nullptr,
+            "The Input node does not expose its Fusion Viewer indicator.");
+    const auto input_view_position = canvas->mapFromScene(
+        input_view_button->sceneBoundingRect().center());
+    QMouseEvent viewer_press(QEvent::MouseButtonPress,
+        QPointF(input_view_position), Qt::LeftButton, Qt::LeftButton,
+        Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &viewer_press);
+    QMouseEvent viewer_release(QEvent::MouseButtonRelease,
+        QPointF(input_view_position), Qt::LeftButton, Qt::NoButton,
+        Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &viewer_release);
+    require(preview_request_count == 1 && preview_clip_id == 42 &&
+                preview_node_id == 1 && workspace.previewNodeId() == 1 &&
+                workspace.selectedNodeId() == transform_id && edit_count == 3,
+            "The node Viewer indicator changed the graph or failed to select its preview target.");
 
     drag_between_ports(port_position(1, 2, 0), port_position(transform_id, 1, 0));
     require(edit_count == 4 && edited.connections.size() == 2,

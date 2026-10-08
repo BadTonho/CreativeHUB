@@ -171,8 +171,10 @@ tasks.
   Brightness, Contrast, and Saturation effects as draggable graph nodes;
   Media Pool video/image inputs; cable insertion; shared Preview/export
   evaluation; v21 graph persistence; and Timeline Undo/Redo. Automated coverage
-  is in place; keep Effects-panel drags, Preview, save/reopen, and edit-history
-  checks pending until performed in the Release build. See
+  now includes per-node evaluation, disconnected-node output, isolated worker
+  preview, temporary Viewer targeting, and workspace entry/exit behavior. Keep
+  visual checks of node indicators, playback tracking, and Timeline restoration
+  pending until performed in the Release build. See
   [Current Scope](architecture/SCOPE.md),
   [Project Persistence](architecture/PROJECT.md), and [Regression Testing](REGRESSION_TESTING.md).
 - [x] New Project canvas and frame-rate choices: 16:9 (1920×1080) or 9:16

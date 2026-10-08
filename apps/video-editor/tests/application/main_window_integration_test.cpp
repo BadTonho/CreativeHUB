@@ -680,6 +680,12 @@ public:
                 timeline_widget->zoomFactor(), std::nullopt, 30.0);
             const auto fusion_context_position = fusion_context_geometry.clipRect(
                 fusion_target_clip, fusion_target_location->track_index).center().toPoint();
+            const auto playback_start_result = window.playback_controller_->activateClip(
+                selected_clip_id, 0, true);
+            require((playback_start_result == playback::PlaybackCommandResult::Applied ||
+                     playback_start_result == playback::PlaybackCommandResult::Pending) &&
+                        window.playback_controller_->isPlaying(),
+                    "The Fusion routing test could not start playback before opening the workspace.");
             bool fusion_context_action_found = false;
             QTimer::singleShot(0, [timeline_widget, &fusion_context_action_found]() {
                 auto* menu = timeline_widget->findChild<QMenu*>();
@@ -710,6 +716,9 @@ public:
                             ui::WorkspacePageId::Fusion &&
                         window.editor_session_.selection().active_clip_id ==
                             selected_clip_id && fusion_canvas != nullptr &&
+                        window.editor_session_.playheadFrame() == 0 &&
+                        window.playback_controller_ != nullptr &&
+                        !window.playback_controller_->isPlaying() &&
                         fusion_canvas->isEnabled() && fusion_canvas->scene() != nullptr &&
                         fusion_canvas->scene()->items().size() >= 2,
                     "Timeline Open in Fusion did not open the selected clip's node graph.");
@@ -808,29 +817,19 @@ public:
                     "The workspace preservation check could not prepare a clean redo history state.");
             const auto selection_before_workspace_switch =
                 window.editor_session_.selection();
-            const auto playhead_before_workspace_switch =
-                window.editor_session_.playheadFrame();
             const auto can_undo_before_workspace_switch =
                 window.edit_workspace_->controller()->canUndo();
             const auto can_redo_before_workspace_switch =
                 window.edit_workspace_->controller()->canRedo();
             const auto playback_controller_before_workspace_switch =
                 window.playback_controller_.get();
-            const auto playback_active_before_workspace_switch =
-                window.playback_is_playing_;
-            const auto playback_worker_active_before_workspace_switch =
-                window.playback_controller_ != nullptr &&
-                window.playback_controller_->isPlaying();
             const auto project_dirty_before_workspace_switch =
                 window.project_dirty_;
             const auto require_workspace_state_unchanged = [&window,
                 &selection_before_workspace_switch,
-                playhead_before_workspace_switch,
                 can_undo_before_workspace_switch,
                 can_redo_before_workspace_switch,
                 playback_controller_before_workspace_switch,
-                playback_active_before_workspace_switch,
-                playback_worker_active_before_workspace_switch,
                 project_dirty_before_workspace_switch]() {
                 const auto& selection_after = window.editor_session_.selection();
                 require(
@@ -842,26 +841,27 @@ public:
                             selection_before_workspace_switch.selected_source_path &&
                         selection_after.active_transition.has_value() ==
                             selection_before_workspace_switch.active_transition.has_value() &&
-                        window.editor_session_.playheadFrame() ==
-                            playhead_before_workspace_switch &&
                         window.edit_workspace_->controller()->canUndo() ==
                             can_undo_before_workspace_switch &&
                         window.edit_workspace_->controller()->canRedo() ==
                             can_redo_before_workspace_switch &&
                         window.playback_controller_.get() ==
                             playback_controller_before_workspace_switch &&
-                        window.playback_is_playing_ ==
-                            playback_active_before_workspace_switch &&
                         window.playback_controller_ != nullptr &&
-                        window.playback_controller_->isPlaying() ==
-                            playback_worker_active_before_workspace_switch &&
                         window.project_dirty_ == project_dirty_before_workspace_switch,
-                    "Switching workspaces must preserve selection, playhead, playback, history, and dirty state.");
+                    "Switching workspaces must preserve selection, history, and dirty state.");
             };
             window.setWorkspacePage(ui::WorkspacePageId::Fusion);
             require_workspace_state_unchanged();
+            require(window.editor_session_.playheadFrame() == 0 &&
+                        !window.playback_controller_->isPlaying(),
+                    "Entering Fusion must pause playback and seek to the selected clip's start.");
+            const auto fusion_playhead = window.editor_session_.playheadFrame();
             window.setWorkspacePage(ui::WorkspacePageId::Render);
             require_workspace_state_unchanged();
+            require(window.editor_session_.playheadFrame() == fusion_playhead &&
+                        !window.playback_controller_->isPlaying(),
+                    "Leaving Fusion for Render must preserve the paused playhead position.");
             QApplication::processEvents();
             require(window.render_workspace_button_->isChecked() &&
                         !window.edit_workspace_button_->isChecked() &&

@@ -1041,3 +1041,29 @@ node addition, insertion, and parameter edits; confirm a v20 project retains
 its existing graph without effect nodes. Also Undo and Redo other graph edits;
 confirm connections and parameters persist and the clip's Timeline position,
 duration, audio, effect stack, and transform/keyframes remain intact.
+
+Per-node Viewer preview: automated coverage exercises target-node evaluation
+for Input, Transform, Color, Merge, effect, and Output nodes; disconnected nodes
+render transparent output at the selected clip's dimensions, and downstream
+nodes do not affect an intermediate preview. The Playback Worker test confirms
+the target output is isolated from other Timeline tracks, clip effects, and
+Timeline transforms. Its reference-video case confirms the Viewer follows
+selected-clip source time and clamps beyond the clip's last frame. The Playback
+Controller test confirms changing or clearing the temporary
+target does not mark the project dirty and restores normal composition. The
+MainWindow integration test covers pausing and seeking to the selected clip's
+start when Fusion opens. Manual check in the Release build: confirm Output is
+active on entry; click `VIEW` on Input, an effect, Merge, and Output; confirm
+the Inspector selection stays unchanged and the image follows playback. Leave
+Fusion and confirm the normal multi-track Timeline preview returns. Reopen
+Fusion, remove the selected preview node or clip, and confirm the Viewer falls
+back to Output when a visual clip remains selected.
+
+Per-node preview verification (2026-10-07): all seven focused CTest entries for
+MainWindow, Playback Worker (including reference-video time mapping), Playback
+Controller, node graph evaluation, workspace switching, and Fusion workspace
+passed. The Release app target linked at
+`build/apps/video-editor/Release/creative-suite-video-editor.exe` (last
+modified 2026-10-07 23:40:59). MSBuild returned an error afterward because
+`windeployqt` could not query `qtpaths` (exit code `3221225794`); manual
+confirmation in the running Release application remains pending.

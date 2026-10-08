@@ -408,6 +408,88 @@ void runContinuousClockTests() {
     controller.shutdown();
 }
 
+void runFusionNodePreviewTargetTests() {
+    application::EditorSession session;
+    application::MediaController media_controller(session);
+    const auto source = std::filesystem::temp_directory_path() /
+        "playback-fusion-node-preview.mkv";
+    require(media_controller.commitImported(makeMedia(source)).changed(),
+            "Could not seed the Fusion preview clip.");
+    auto& model = session.legacyTimelineForUi();
+    require(model.addTrack("Video 1") == timeline::AddTrackResult::Added &&
+                model.addClip(0, makeMedia(source).metadata, 37) ==
+                    timeline::AddClipResult::Added,
+            "Could not place the Fusion preview clip in the Timeline.");
+    fusion::nodes::NodeGraph graph;
+    graph.nodes = {{1, fusion::nodes::NodeType::Input},
+                   {2, fusion::nodes::NodeType::Color},
+                   {3, fusion::nodes::NodeType::Output}};
+    graph.connections = {{1, 2, 0}, {2, 3, 0}};
+    graph.next_id = 4;
+    require(model.setClipNodeGraph(0, 0, graph) ==
+                timeline::NodeGraphMutationResult::Changed,
+            "Could not attach the node graph to the Fusion preview clip.");
+    const auto& clip = model.tracks()[0].clips[0];
+
+    auto fake_state = std::make_shared<FakeWorkerState>();
+    playback::PlaybackController controller(
+        session, nullptr,
+        [fake_state]() { return new FakePlaybackWorker(fake_state); });
+    std::vector<playback::PlaybackControllerEvent> events;
+    controller.setEventHandler([&](const auto& event) { events.push_back(event); });
+    const auto dirty_before = session.projectDirty();
+    require(controller.activateClip(clip.clip_id, 2, false) ==
+                playback::PlaybackCommandResult::Pending,
+            "Could not activate the Fusion preview clip.");
+    require(waitUntil([&]() {
+        return std::any_of(events.begin(), events.end(), [&clip](const auto& event) {
+            const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+            return activation != nullptr && activation->clip_id == clip.clip_id &&
+                activation->phase == playback::PlaybackActivationPhase::Committed;
+        });
+    }), "The Fusion preview clip did not finish activation.");
+
+    controller.setFusionNodePreviewTarget(
+        playback::FusionNodePreviewTarget{clip.clip_id, 2});
+    require(waitUntil([&]() {
+        std::lock_guard lock(fake_state->composition_mutex);
+        const auto target = std::find_if(fake_state->composition_layers.begin(),
+            fake_state->composition_layers.end(), [&clip](const auto& layer) {
+                return layer.clip_id == clip.clip_id;
+            });
+        return target != fake_state->composition_layers.end() &&
+            target->fusion_preview_node_id == fusion::nodes::NodeId{2};
+    }), "The selected Fusion node was not routed through the playback composition.");
+    require(session.projectDirty() == dirty_before && session.playheadFrame() == 2,
+            "Selecting a node preview changed project state or the current clip frame.");
+
+    controller.setFusionNodePreviewTarget(
+        playback::FusionNodePreviewTarget{clip.clip_id, 999});
+    require(waitUntil([&]() {
+        std::lock_guard lock(fake_state->composition_mutex);
+        const auto target = std::find_if(fake_state->composition_layers.begin(),
+            fake_state->composition_layers.end(), [&clip](const auto& layer) {
+                return layer.clip_id == clip.clip_id;
+            });
+        return target != fake_state->composition_layers.end() &&
+            target->fusion_preview_node_id == fusion::nodes::NodeId{3};
+    }), "A removed preview node did not fall back to the graph Output node.");
+    require(session.projectDirty() == dirty_before && session.playheadFrame() == 2,
+            "Falling back to Output changed project state or the clip frame.");
+
+    controller.setFusionNodePreviewTarget(std::nullopt);
+    require(waitUntil([&]() {
+        std::lock_guard lock(fake_state->composition_mutex);
+        const auto target = std::find_if(fake_state->composition_layers.begin(),
+            fake_state->composition_layers.end(), [&clip](const auto& layer) {
+                return layer.clip_id == clip.clip_id;
+            });
+        return target != fake_state->composition_layers.end() &&
+            !target->fusion_preview_node_id.has_value();
+    }), "Leaving Fusion did not restore the regular Timeline composition.");
+    controller.shutdown();
+}
+
 void runPendingActivationCancellationTests() {
     application::EditorSession session;
     application::MediaController media_controller(session);
@@ -1024,6 +1106,7 @@ int main(int argc, char** argv) {
         runAudioCompositionSnapshotTests();
         runControllerTests();
         runContinuousClockTests();
+        runFusionNodePreviewTargetTests();
         runPendingActivationCancellationTests();
         runGapAndEndClockTests();
         return 0;

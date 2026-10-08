@@ -23,7 +23,9 @@ public:
     explicit NodeCanvas(QWidget* parent = nullptr);
     void setGraph(const NodeGraph& graph);
     void setSelectedNode(NodeId id);
+    void setViewerNode(NodeId id);
     void setSelectionChangedHandler(std::function<void(NodeId)> handler);
+    void setViewerNodeRequestedHandler(std::function<void(NodeId)> handler);
     void setPositionChangedHandler(std::function<void(NodeId, double, double)> handler);
     void setConnectionRequestedHandler(
         std::function<void(NodeId, NodeId, std::uint8_t)> handler);
@@ -44,6 +46,7 @@ protected:
 private:
     QGraphicsScene* scene_ = nullptr;
     std::function<void(NodeId)> selection_changed_;
+    std::function<void(NodeId)> viewer_node_requested_;
     std::function<void(NodeId, double, double)> position_changed_;
     std::function<void(NodeId, NodeId, std::uint8_t)> connection_requested_;
     std::function<void(NodeId, std::uint8_t)> disconnection_requested_;
@@ -51,6 +54,7 @@ private:
                        std::optional<Connection>)> effect_drop_requested_;
     NodeGraph graph_;
     std::vector<Connection> connections_;
+    NodeId viewer_node_id_ = 0;
     NodeId dragging_from_output_ = 0;
     NodeId dragging_from_input_ = 0;
     std::uint8_t dragging_input_index_ = 0;

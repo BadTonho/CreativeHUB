@@ -1022,6 +1022,56 @@ void PlaybackWorker::renderCompositionFrame(
             return;
         }
 
+        const auto fusion_preview = std::find_if(
+            composition_sessions_.begin(), composition_sessions_.end(),
+            [](const CompositionSession& composition) {
+                return composition.spec.fusion_preview_node_id.has_value();
+            });
+        if (fusion_preview != composition_sessions_.end()) {
+            const auto started = Clock::now();
+            const auto seek_sequence = pending_seek_sequence_.load(
+                std::memory_order_acquire);
+            const auto should_cancel = [this, seek_sequence]() {
+                return !isSeekCurrent(seek_sequence);
+            };
+            auto preview = decodeFusionNodePreview(
+                *fusion_preview, global_frame, should_cancel);
+            if (should_cancel()) return;
+            if (!preview.has_value())
+                throw media::MediaError("The selected Fusion node did not produce a frame.");
+            rendering::PreviewFramePayload payload;
+            payload.rgba = std::make_shared<const media::VideoFrame>(std::move(*preview));
+            payload.delivery_epoch = delivery_epoch_;
+            payload.composition_revision = composition_revision_;
+            payload.timeline_frame = global_frame;
+            cached_composition_generation_ = generation_;
+            cached_composition_global_frame_ = global_frame;
+            cached_composition_frame_ = payload;
+            metrics.recordDecodedFrame();
+            metrics.recordComposedFrame();
+            metrics.recordEmittedFrame();
+            const auto trace_id = playing_
+                ? metrics.createFrameDeliveryTrace(generation_, global_frame)
+                : 0U;
+            if (metrics.isEnabled()) {
+                rendering::SlowFrameSample sample;
+                sample.playback_generation = generation_;
+                sample.timeline_frame = global_frame;
+                const auto rate = playbackFrameRate();
+                sample.frame_rate_milli = std::isfinite(rate) && rate > 0.0
+                    ? static_cast<std::uint64_t>(std::llround(rate * 1000.0)) : 0U;
+                sample.processing_nanoseconds = static_cast<std::uint64_t>(
+                    std::max<std::int64_t>(0,
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            Clock::now() - started).count()));
+                sample.decode_nanoseconds = sample.processing_nanoseconds;
+                sample.active_layer_count = 1;
+                metrics.recordSlowFrame(sample);
+            }
+            publishPreviewFrame(std::move(payload), frame_index, generation_, trace_id);
+            return;
+        }
+
         const bool collect_slow_frame = playing_ && metrics.isEnabled();
         const auto frame_started = collect_slow_frame ? Clock::now() : Clock::time_point{};
 
@@ -2504,6 +2554,88 @@ void PlaybackWorker::emitComposedFrame() {
         current_timeline_frame_,
         current_frame_index_,
         generation_);
+}
+
+std::optional<media::VideoFrame> PlaybackWorker::decodeFusionNodePreview(
+    CompositionSession& composition,
+    qint64 global_frame,
+    const media::VideoPlaybackSession::CancellationPredicate& should_cancel) {
+    const auto& spec = composition.spec;
+    if (!spec.node_graph.has_value() ||
+        !spec.fusion_preview_node_id.has_value() ||
+        spec.segment_frame_count <= 0 ||
+        spec.timeline_frame_rate.numerator <= 0 ||
+        spec.timeline_frame_rate.denominator <= 0) return std::nullopt;
+
+    const auto local_frame = std::clamp<qint64>(
+        global_frame - spec.timeline_start_frame,
+        0,
+        spec.segment_frame_count - 1);
+    VideoFramePtr selected_clip_frame;
+    if (spec.kind == timeline::ClipKind::Image) {
+        selected_clip_frame = composition.static_frame;
+    } else if (spec.kind == timeline::ClipKind::Video &&
+               composition.session != nullptr) {
+        const auto source_offset = timeline::sourceFrameOffsetForTimelineFrame(
+            local_frame, spec.frame_rate, spec.timeline_frame_rate,
+            spec.source_duration_frames);
+        if (!source_offset.has_value() || spec.source_start_frame < 0 ||
+            *source_offset > std::numeric_limits<std::int64_t>::max() -
+                spec.source_start_frame) return std::nullopt;
+        const auto decoded = composition.session->decode_frame_at(
+            spec.source_start_frame + *source_offset, should_cancel);
+        if (decoded.has_value()) selected_clip_frame = *decoded;
+    }
+    if (should_cancel()) return std::nullopt;
+    if (selected_clip_frame == nullptr)
+        throw media::MediaError("The selected clip frame for Fusion preview is unavailable.");
+
+    const auto& graph = *spec.node_graph;
+    const auto target_node = *spec.fusion_preview_node_id;
+    std::unordered_set<fusion::nodes::NodeId> required{target_node};
+    std::vector<fusion::nodes::NodeId> pending{target_node};
+    while (!pending.empty()) {
+        const auto downstream = pending.back();
+        pending.pop_back();
+        for (const auto& edge : graph.connections) {
+            if (edge.to == downstream && required.insert(edge.from).second)
+                pending.push_back(edge.from);
+        }
+    }
+
+    fusion::nodes::InputFrames inputs;
+    for (const auto& node : graph.nodes) {
+        if (node.type != fusion::nodes::NodeType::Input) continue;
+        if (node.source_path.empty()) {
+            inputs.emplace(node.id, selected_clip_frame);
+            continue;
+        }
+        if (!required.contains(node.id)) continue;
+        const auto graph_input = std::find_if(composition.graph_inputs.begin(),
+            composition.graph_inputs.end(), [&node](const auto& input) {
+                return input.node_id == node.id;
+            });
+        if (graph_input == composition.graph_inputs.end()) continue;
+        if (graph_input->still_source) {
+            if (graph_input->still_frame != nullptr)
+                inputs.emplace(node.id, graph_input->still_frame);
+            continue;
+        }
+        if (graph_input->video_session == nullptr) continue;
+        const long double source_index = static_cast<long double>(local_frame) *
+            graph_input->frame_rate / spec.timeline_frame_rate.asDouble();
+        if (source_index < 0.0L ||
+            (node.source_frame_count > 0 &&
+             source_index >= static_cast<long double>(node.source_frame_count)) ||
+            source_index > static_cast<long double>(
+                std::numeric_limits<std::int64_t>::max())) continue;
+        const auto decoded = graph_input->video_session->decode_frame_at(
+            static_cast<std::int64_t>(source_index), should_cancel);
+        if (decoded.has_value() && *decoded != nullptr)
+            inputs.emplace(node.id, *decoded);
+    }
+    if (should_cancel()) return std::nullopt;
+    return fusion::nodes::evaluate(graph, inputs, target_node);
 }
 
 std::optional<std::vector<PlaybackWorker::DecodedCompositionLayer>>

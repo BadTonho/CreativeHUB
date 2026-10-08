@@ -111,6 +111,21 @@ int main() {
     require(static_cast<bool>(validate(effect_chain)) && chained.has_value() &&
                 chained->rgba_pixels[3] == 73,
             "Repeated effect nodes did not evaluate in connection order.");
+    const auto input_preview = evaluate(effect_chain, {{1, color_source}}, 1);
+    const auto grayscale_preview = evaluate(effect_chain, {{1, color_source}}, 2);
+    const auto output_preview = evaluate(effect_chain, {{1, color_source}}, 4);
+    require(input_preview.has_value() &&
+                input_preview->rgba_pixels == color_source->rgba_pixels,
+            "Previewing an Input node did not return its original frame.");
+    require(grayscale_preview.has_value() &&
+                grayscale_preview->rgba_pixels[0] == grayscale_preview->rgba_pixels[1] &&
+                grayscale_preview->rgba_pixels[1] == grayscale_preview->rgba_pixels[2] &&
+                grayscale_preview->rgba_pixels[3] == 73 && output_preview.has_value() &&
+                output_preview->rgba_pixels == chained->rgba_pixels &&
+                output_preview->rgba_pixels != grayscale_preview->rgba_pixels,
+            "A node preview included downstream processing or Output differed from the final graph.");
+    require(!evaluate(effect_chain, {{1, color_source}}, 99).has_value(),
+            "An unknown node was accepted as a preview target.");
 
     auto background = std::make_shared<media::VideoFrame>(
         media::VideoFrame{2, 1, 8, {0, 0, 255, 255, 0, 0, 255, 255}});
@@ -126,6 +141,10 @@ int main() {
     require(composed.has_value() && composed->width == background->width &&
                 composed->height == background->height,
             "Merge should use the selected clip as its output canvas.");
+    const auto merge_preview = evaluate(merge, {{1, background}, {2, foreground}}, 3);
+    require(merge_preview.has_value() &&
+                merge_preview->rgba_pixels == composed->rgba_pixels,
+            "Previewing a Merge node did not include both connected image inputs.");
     require(composed->rgba_pixels[0] > 100 && composed->rgba_pixels[2] > 100,
             "merge should blend foreground over background");
     const auto ended = evaluate(merge, {{1, background}});

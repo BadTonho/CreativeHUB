@@ -89,6 +89,8 @@ struct CompositionLayerSpec {
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
     std::vector<creative_suite::effects::EffectInstance> effects;
     std::optional<fusion::nodes::NodeGraph> node_graph;
+    // Ephemeral viewer routing; never serialized to the project document.
+    std::optional<fusion::nodes::NodeId> fusion_preview_node_id;
 };
 
 struct CompositionTransitionSpec {
@@ -352,6 +354,10 @@ private:
         rendering::AlphaCoveragePtr cached_text_alpha_coverage;
         rendering::PreparedAlphaCoverageGeometryPtr cached_text_geometry;
     };
+    [[nodiscard]] std::optional<media::VideoFrame> decodeFusionNodePreview(
+        CompositionSession& composition,
+        qint64 global_frame,
+        const media::VideoPlaybackSession::CancellationPredicate& should_cancel);
     struct TransitionPrerollResult {
         quint64 composition_revision = 0;
         std::size_t session_index = 0;

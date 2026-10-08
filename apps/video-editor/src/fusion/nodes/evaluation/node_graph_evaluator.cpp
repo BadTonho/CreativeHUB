@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace fusion::nodes {
 namespace {
@@ -81,13 +82,34 @@ media::VideoFrame mergeFrames(const media::VideoFrame& background,
 }
 
 std::optional<media::VideoFrame> evaluate(const NodeGraph& graph, const InputFrames& inputs) {
+    const auto output = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+        [](const Node& node) { return node.type == NodeType::Output; });
+    if (output == graph.nodes.end()) return std::nullopt;
+    return evaluate(graph, inputs, output->id);
+}
+
+std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
+                                          const InputFrames& inputs,
+                                          NodeId target_node) {
     if (!validate(graph)) return std::nullopt;
+    if (findNode(graph, target_node) == nullptr) return std::nullopt;
     const auto order = evaluationOrder(graph);
     if (!order) return std::nullopt;
+    std::unordered_set<NodeId> required{target_node};
+    std::vector<NodeId> pending{target_node};
+    while (!pending.empty()) {
+        const auto downstream = pending.back();
+        pending.pop_back();
+        for (const auto& edge : graph.connections) {
+            if (edge.to == downstream && required.insert(edge.from).second)
+                pending.push_back(edge.from);
+        }
+    }
     int canvas_width = 0, canvas_height = 0;
-    const auto selectCanvas = [&](bool selected_clip_only) {
+    const auto selectCanvas = [&](bool selected_clip_only, bool required_only) {
         for (const auto& node : graph.nodes) {
             if (node.type != NodeType::Input ||
+                (required_only && !required.contains(node.id)) ||
                 (selected_clip_only && !node.source_path.empty())) continue;
             const auto found = inputs.find(node.id);
             if (found == inputs.end() || !usable(found->second)) continue;
@@ -97,8 +119,9 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph, const InputFra
         }
         return false;
     };
-    if (!selectCanvas(true)) {
-        static_cast<void>(selectCanvas(false));
+    if (!selectCanvas(true, true) && !selectCanvas(true, false) &&
+        !selectCanvas(false, true)) {
+        static_cast<void>(selectCanvas(false, false));
     }
     if (canvas_width <= 0 || canvas_height <= 0) return std::nullopt;
     const auto transparent = [&] {
@@ -107,6 +130,7 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph, const InputFra
     };
     std::unordered_map<NodeId, media::VideoFrame> values;
     for (const auto id : *order) {
+        if (!required.contains(id)) continue;
         const auto* node = findNode(graph, id);
         if (!node) return std::nullopt;
         if (node->type == NodeType::Input) {
@@ -150,10 +174,7 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph, const InputFra
             values.emplace(id, background);
         }
     }
-    const auto output = std::find_if(graph.nodes.begin(), graph.nodes.end(),
-        [](const Node& node) { return node.type == NodeType::Output; });
-    if (output == graph.nodes.end()) return std::nullopt;
-    const auto found = values.find(output->id);
+    const auto found = values.find(target_node);
     return found == values.end() ? std::nullopt : std::optional<media::VideoFrame>{found->second};
 }
 } // namespace fusion::nodes
