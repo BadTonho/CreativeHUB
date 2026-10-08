@@ -4,12 +4,14 @@
 
 #include <QGraphicsView>
 #include <QPoint>
+#include <QSettings>
 #include <QString>
 #include <functional>
 #include <optional>
 #include <vector>
 
 class QGraphicsLineItem;
+class QPainter;
 class QDragEnterEvent;
 class QDragMoveEvent;
 class QDropEvent;
@@ -17,10 +19,29 @@ class QMimeData;
 
 namespace fusion::nodes {
 
+enum class BackgroundGridStyle : int {
+    Lines = 0,
+    Dots = 1,
+};
+
+struct BackgroundGridSettings {
+    bool visible = true;
+    BackgroundGridStyle style = BackgroundGridStyle::Lines;
+    int spacing = 24;
+    int intensity_percent = 30;
+
+    friend bool operator==(const BackgroundGridSettings&,
+                           const BackgroundGridSettings&) = default;
+};
+
 class NodeCanvas final : public QGraphicsView {
     Q_OBJECT
 public:
     explicit NodeCanvas(QWidget* parent = nullptr);
+    [[nodiscard]] BackgroundGridSettings backgroundGridSettings() const noexcept {
+        return grid_settings_;
+    }
+    void setBackgroundGridSettings(BackgroundGridSettings settings);
     void setGraph(const NodeGraph& graph);
     void setSelectedNode(NodeId id);
     void setViewerNode(NodeId id);
@@ -36,6 +57,7 @@ public:
                            std::optional<Connection>)> handler);
 
 protected:
+    void drawBackground(QPainter* painter, const QRectF& rect) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
@@ -45,6 +67,8 @@ protected:
 
 private:
     QGraphicsScene* scene_ = nullptr;
+    QSettings settings_;
+    BackgroundGridSettings grid_settings_;
     std::function<void(NodeId)> selection_changed_;
     std::function<void(NodeId)> viewer_node_requested_;
     std::function<void(NodeId, double, double)> position_changed_;

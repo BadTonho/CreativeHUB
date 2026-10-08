@@ -5,12 +5,15 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSlider>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <array>
@@ -113,8 +116,13 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     add_type->addItem("Merge", static_cast<int>(fusion::nodes::NodeType::Merge));
     auto* add_button = new QPushButton("Add Node", toolbar);
     add_button->setObjectName("fusionAddNodeButton");
+    auto* grid_button = new QPushButton("Grid", toolbar);
+    grid_button->setObjectName("fusionGridSettingsButton");
+    grid_button->setToolTip("Adjust the Node Editor background grid.");
+    grid_button->setAccessibleName("Grid Settings");
     toolbar_layout->addWidget(add_type);
     toolbar_layout->addWidget(add_button);
+    toolbar_layout->addWidget(grid_button);
     toolbar_layout->addStretch(1);
     node_layout->addWidget(toolbar);
 
@@ -125,6 +133,87 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     node_canvas->setObjectName("fusionNodeCanvas");
     canvas_layout->addWidget(node_canvas);
     node_layout->addWidget(canvas_host_, 1);
+
+    auto* grid_dialog = new QDialog(node_editor_panel_, Qt::Tool);
+    grid_dialog->setObjectName("fusionGridSettingsDialog");
+    grid_dialog->setWindowTitle("Grid Settings");
+    grid_dialog->setWindowModality(Qt::NonModal);
+    auto* grid_layout = new QVBoxLayout(grid_dialog);
+    auto* grid_form = new QFormLayout;
+    auto* grid_visible = new QCheckBox("Show grid", grid_dialog);
+    grid_visible->setObjectName("fusionGridVisible");
+    auto* grid_style = new QComboBox(grid_dialog);
+    grid_style->setObjectName("fusionGridStyle");
+    grid_style->addItem("Lines", static_cast<int>(
+        fusion::nodes::BackgroundGridStyle::Lines));
+    grid_style->addItem("Dots", static_cast<int>(
+        fusion::nodes::BackgroundGridStyle::Dots));
+    auto* spacing_slider = new QSlider(Qt::Horizontal, grid_dialog);
+    spacing_slider->setObjectName("fusionGridSpacing");
+    spacing_slider->setRange(12, 64);
+    auto* spacing_value = new QLabel(grid_dialog);
+    spacing_value->setObjectName("fusionGridSpacingValue");
+    auto* spacing_row = new QWidget(grid_dialog);
+    auto* spacing_row_layout = new QHBoxLayout(spacing_row);
+    spacing_row_layout->setContentsMargins(0, 0, 0, 0);
+    spacing_row_layout->addWidget(spacing_slider, 1);
+    spacing_row_layout->addWidget(spacing_value);
+    auto* intensity_slider = new QSlider(Qt::Horizontal, grid_dialog);
+    intensity_slider->setObjectName("fusionGridIntensity");
+    intensity_slider->setRange(10, 60);
+    auto* intensity_value = new QLabel(grid_dialog);
+    intensity_value->setObjectName("fusionGridIntensityValue");
+    auto* intensity_row = new QWidget(grid_dialog);
+    auto* intensity_row_layout = new QHBoxLayout(intensity_row);
+    intensity_row_layout->setContentsMargins(0, 0, 0, 0);
+    intensity_row_layout->addWidget(intensity_slider, 1);
+    intensity_row_layout->addWidget(intensity_value);
+    const auto initial_grid = node_canvas->backgroundGridSettings();
+    grid_visible->setChecked(initial_grid.visible);
+    grid_style->setCurrentIndex(grid_style->findData(
+        static_cast<int>(initial_grid.style)));
+    spacing_slider->setValue(initial_grid.spacing);
+    intensity_slider->setValue(initial_grid.intensity_percent);
+    spacing_value->setText(QString::number(initial_grid.spacing));
+    intensity_value->setText(QStringLiteral("%1%").arg(
+        initial_grid.intensity_percent));
+    grid_form->addRow(QString(), grid_visible);
+    grid_form->addRow("Style", grid_style);
+    grid_form->addRow("Spacing", spacing_row);
+    grid_form->addRow("Intensity", intensity_row);
+    grid_layout->addLayout(grid_form);
+    auto* grid_buttons = new QDialogButtonBox(QDialogButtonBox::Close, grid_dialog);
+    grid_layout->addWidget(grid_buttons);
+    QObject::connect(grid_buttons, &QDialogButtonBox::rejected,
+                     grid_dialog, &QDialog::hide);
+    const auto apply_grid_settings = [node_canvas, grid_visible, grid_style,
+                                      spacing_slider, intensity_slider,
+                                      spacing_value, intensity_value] {
+        auto settings = node_canvas->backgroundGridSettings();
+        settings.visible = grid_visible->isChecked();
+        settings.style = static_cast<fusion::nodes::BackgroundGridStyle>(
+            grid_style->currentData().toInt());
+        settings.spacing = spacing_slider->value();
+        settings.intensity_percent = intensity_slider->value();
+        spacing_value->setText(QString::number(settings.spacing));
+        intensity_value->setText(QStringLiteral("%1%").arg(
+            settings.intensity_percent));
+        node_canvas->setBackgroundGridSettings(settings);
+    };
+    QObject::connect(grid_visible, &QCheckBox::toggled,
+                     grid_dialog, apply_grid_settings);
+    QObject::connect(grid_style, qOverload<int>(&QComboBox::currentIndexChanged),
+                     grid_dialog, apply_grid_settings);
+    QObject::connect(spacing_slider, &QSlider::valueChanged,
+                     grid_dialog, apply_grid_settings);
+    QObject::connect(intensity_slider, &QSlider::valueChanged,
+                     grid_dialog, apply_grid_settings);
+    QObject::connect(grid_button, &QPushButton::clicked, grid_dialog, [grid_dialog] {
+        grid_dialog->show();
+        grid_dialog->raise();
+        grid_dialog->activateWindow();
+    });
+
     node_canvas->setSelectionChangedHandler([this](fusion::nodes::NodeId id) {
         if (refreshing_) return;
         selected_node_id_ = id;

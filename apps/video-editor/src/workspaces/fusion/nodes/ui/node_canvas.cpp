@@ -14,13 +14,17 @@
 #include <QGraphicsLineItem>
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
+#include <QLineF>
+#include <QMetaType>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPen>
 #include <QBrush>
 #include <QColor>
 #include <QFont>
+#include <QVector>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <unordered_map>
 
@@ -67,9 +71,53 @@ double outputPortY(NodeType type) {
 double nodeHeight(NodeType type) {
     return type == NodeType::Merge ? 132.0 : 112.0;
 }
+
+constexpr auto kGridSettingsGroup = "fusion/node_editor/grid";
+constexpr int kGridMinimumSpacing = 12;
+constexpr int kGridMaximumSpacing = 64;
+constexpr int kGridMinimumIntensity = 10;
+constexpr int kGridMaximumIntensity = 60;
+
+BackgroundGridSettings readGridSettings(QSettings& settings) {
+    BackgroundGridSettings result;
+    settings.beginGroup(QString::fromLatin1(kGridSettingsGroup));
+
+    if (settings.contains(QStringLiteral("visible"))) {
+        const auto value = settings.value(QStringLiteral("visible"));
+        const auto normalized = value.toString().trimmed().toLower();
+        if (value.metaType().id() == QMetaType::Bool || normalized == "true" ||
+            normalized == "false" || normalized == "1" || normalized == "0") {
+            result.visible = value.toBool();
+        }
+    }
+
+    bool valid = false;
+    const auto style = settings.value(QStringLiteral("style"),
+        static_cast<int>(BackgroundGridStyle::Lines)).toInt(&valid);
+    if (valid && style == static_cast<int>(BackgroundGridStyle::Dots))
+        result.style = BackgroundGridStyle::Dots;
+    else
+        result.style = BackgroundGridStyle::Lines;
+
+    valid = false;
+    const auto spacing = settings.value(QStringLiteral("spacing"), result.spacing)
+                             .toInt(&valid);
+    if (valid) result.spacing = std::clamp(
+        spacing, kGridMinimumSpacing, kGridMaximumSpacing);
+
+    valid = false;
+    const auto intensity = settings.value(QStringLiteral("intensity"),
+        result.intensity_percent).toInt(&valid);
+    if (valid) result.intensity_percent = std::clamp(
+        intensity, kGridMinimumIntensity, kGridMaximumIntensity);
+
+    settings.endGroup();
+    return result;
+}
 }
 
 NodeCanvas::NodeCanvas(QWidget* parent) : QGraphicsView(parent) {
+    grid_settings_ = readGridSettings(settings_);
     scene_ = new QGraphicsScene(this);
     scene_->setSceneRect(0, 0, 1600, 900);
     setScene(scene_);
@@ -90,6 +138,90 @@ NodeCanvas::NodeCanvas(QWidget* parent) : QGraphicsView(parent) {
         }
         selection_changed_(0);
     });
+}
+
+void NodeCanvas::setBackgroundGridSettings(BackgroundGridSettings settings) {
+    settings.spacing = std::clamp(
+        settings.spacing, kGridMinimumSpacing, kGridMaximumSpacing);
+    settings.intensity_percent = std::clamp(
+        settings.intensity_percent, kGridMinimumIntensity, kGridMaximumIntensity);
+    if (settings.style != BackgroundGridStyle::Dots)
+        settings.style = BackgroundGridStyle::Lines;
+    if (settings == grid_settings_) return;
+
+    grid_settings_ = settings;
+    settings_.beginGroup(QString::fromLatin1(kGridSettingsGroup));
+    settings_.setValue(QStringLiteral("visible"), grid_settings_.visible);
+    settings_.setValue(QStringLiteral("style"),
+                       static_cast<int>(grid_settings_.style));
+    settings_.setValue(QStringLiteral("spacing"), grid_settings_.spacing);
+    settings_.setValue(QStringLiteral("intensity"),
+                       grid_settings_.intensity_percent);
+    settings_.endGroup();
+    viewport()->update();
+}
+
+void NodeCanvas::drawBackground(QPainter* painter, const QRectF& rect) {
+    painter->save();
+    painter->fillRect(rect, backgroundBrush());
+    if (!grid_settings_.visible || rect.isEmpty()) {
+        painter->restore();
+        return;
+    }
+
+    const auto spacing = static_cast<double>(grid_settings_.spacing);
+    const auto first_x = static_cast<qint64>(std::floor(rect.left() / spacing));
+    const auto last_x = static_cast<qint64>(std::ceil(rect.right() / spacing));
+    const auto first_y = static_cast<qint64>(std::floor(rect.top() / spacing));
+    const auto last_y = static_cast<qint64>(std::ceil(rect.bottom() / spacing));
+    const auto intensity = static_cast<double>(grid_settings_.intensity_percent) / 100.0;
+    QColor minor_color(QStringLiteral("#8999ae"));
+    minor_color.setAlphaF(intensity * 0.4);
+    QColor major_color(QStringLiteral("#a4b7d0"));
+    major_color.setAlphaF(intensity * 0.9);
+
+    painter->setRenderHint(QPainter::Antialiasing, false);
+    if (grid_settings_.style == BackgroundGridStyle::Lines) {
+        QVector<QLineF> minor_lines;
+        QVector<QLineF> major_lines;
+        for (auto index = first_x; index <= last_x; ++index) {
+            const auto x = static_cast<double>(index) * spacing;
+            auto& lines = index % 5 == 0 ? major_lines : minor_lines;
+            lines.push_back(QLineF(x, rect.top(), x, rect.bottom()));
+        }
+        for (auto index = first_y; index <= last_y; ++index) {
+            const auto y = static_cast<double>(index) * spacing;
+            auto& lines = index % 5 == 0 ? major_lines : minor_lines;
+            lines.push_back(QLineF(rect.left(), y, rect.right(), y));
+        }
+        painter->setPen(QPen(minor_color, 1.0));
+        painter->drawLines(minor_lines.constData(),
+                           static_cast<int>(minor_lines.size()));
+        painter->setPen(QPen(major_color, 1.0));
+        painter->drawLines(major_lines.constData(),
+                           static_cast<int>(major_lines.size()));
+    } else {
+        QVector<QPointF> minor_dots;
+        QVector<QPointF> major_dots;
+        for (auto x_index = first_x; x_index <= last_x; ++x_index) {
+            for (auto y_index = first_y; y_index <= last_y; ++y_index) {
+                const QPointF point(
+                    static_cast<double>(x_index) * spacing,
+                    static_cast<double>(y_index) * spacing);
+                if (x_index % 5 == 0 && y_index % 5 == 0)
+                    major_dots.push_back(point);
+                else
+                    minor_dots.push_back(point);
+            }
+        }
+        painter->setPen(QPen(minor_color, 1.0));
+        painter->drawPoints(minor_dots.constData(),
+                            static_cast<int>(minor_dots.size()));
+        painter->setPen(QPen(major_color, 2.0));
+        painter->drawPoints(major_dots.constData(),
+                            static_cast<int>(major_dots.size()));
+    }
+    painter->restore();
 }
 
 void NodeCanvas::setGraph(const NodeGraph& graph) {

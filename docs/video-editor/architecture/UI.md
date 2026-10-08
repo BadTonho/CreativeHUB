@@ -405,6 +405,11 @@ the Inspector also removes nodes. Drag a connected input port or the cable
 itself to empty canvas space to disconnect it, or to another output to rewire
 it. Disconnected inputs render transparently until reconnected. Graph changes
 are Timeline commands, so they update project dirty state and support Undo/Redo.
+The canvas background has a subtle grid with more visible guides every five
+intervals. The `Grid` toolbar button opens `Grid Settings`, where visibility,
+line or dot style, spacing, and intensity can be adjusted immediately. These
+preferences are stored locally for the application and are not part of the
+project or node graph.
 Switching pages changes only the visible workspace panels; it does not change
 the selected clip, playhead,
 playback, project data, history, or dirty state.

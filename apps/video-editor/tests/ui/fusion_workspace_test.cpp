@@ -16,7 +16,12 @@
 #include <QMimeData>
 #include <QCheckBox>
 #include <QDropEvent>
+#include <QImage>
 #include <QPushButton>
+#include <QDialog>
+#include <QSettings>
+#include <QSlider>
+#include <QTemporaryDir>
 #include <QWidget>
 
 #include <cstdio>
@@ -26,6 +31,90 @@
 namespace {
 void require(bool value, const char* message) {
     if (!value) throw std::runtime_error(message);
+}
+
+bool imagesDiffer(const QImage& first, const QImage& second) {
+    if (first.size() != second.size()) return true;
+    for (int y = 0; y < first.height(); ++y) {
+        for (int x = 0; x < first.width(); ++x) {
+            if (first.pixel(x, y) != second.pixel(x, y)) return true;
+        }
+    }
+    return false;
+}
+
+QImage renderGrid(fusion::nodes::BackgroundGridSettings settings) {
+    fusion::nodes::NodeCanvas canvas;
+    canvas.setGraph({});
+    canvas.resize(420, 260);
+    canvas.show();
+    QApplication::processEvents();
+    canvas.setBackgroundGridSettings(settings);
+    QApplication::processEvents();
+    return canvas.viewport()->grab().toImage().convertToFormat(QImage::Format_ARGB32);
+}
+
+void testGridPreferencesAndRendering() {
+    using fusion::nodes::BackgroundGridSettings;
+    using fusion::nodes::BackgroundGridStyle;
+
+    QSettings settings;
+    settings.clear();
+    settings.sync();
+    {
+        fusion::nodes::NodeCanvas canvas;
+        require(canvas.backgroundGridSettings() == BackgroundGridSettings{},
+                "The Node Editor grid did not use its default settings.");
+    }
+
+    const BackgroundGridSettings lines{};
+    auto hidden = lines;
+    hidden.visible = false;
+    auto dots = lines;
+    dots.style = BackgroundGridStyle::Dots;
+    auto wider = lines;
+    wider.spacing = 48;
+    auto brighter = lines;
+    brighter.intensity_percent = 60;
+    const auto lines_image = renderGrid(lines);
+    require(imagesDiffer(lines_image, renderGrid(hidden)),
+            "Hiding the grid did not change the canvas background.");
+    require(imagesDiffer(lines_image, renderGrid(dots)),
+            "Changing the grid style did not change its rendered pattern.");
+    require(imagesDiffer(lines_image, renderGrid(wider)),
+            "Changing grid spacing did not change its rendered pattern.");
+    require(imagesDiffer(lines_image, renderGrid(brighter)),
+            "Changing grid intensity did not change its rendered appearance.");
+
+    auto custom = lines;
+    custom.visible = false;
+    custom.style = BackgroundGridStyle::Dots;
+    custom.spacing = 37;
+    custom.intensity_percent = 47;
+    {
+        fusion::nodes::NodeCanvas canvas;
+        canvas.setBackgroundGridSettings(custom);
+    }
+    {
+        fusion::nodes::NodeCanvas restored;
+        require(restored.backgroundGridSettings() == custom,
+                "The Node Editor grid preferences were not restored.");
+    }
+
+    settings.beginGroup(QStringLiteral("fusion/node_editor/grid"));
+    settings.setValue(QStringLiteral("visible"), QStringLiteral("invalid"));
+    settings.setValue(QStringLiteral("style"), 99);
+    settings.setValue(QStringLiteral("spacing"), 3);
+    settings.setValue(QStringLiteral("intensity"), 100);
+    settings.endGroup();
+    settings.sync();
+    fusion::nodes::NodeCanvas invalid_values;
+    auto normalized = invalid_values.backgroundGridSettings();
+    require(normalized.visible && normalized.style == BackgroundGridStyle::Lines &&
+                normalized.spacing == 12 && normalized.intensity_percent == 60,
+            "Invalid grid preferences were not safely normalized.");
+    fusion::nodes::NodeCanvas reset_defaults;
+    reset_defaults.setBackgroundGridSettings(BackgroundGridSettings{});
 }
 }
 
@@ -112,6 +201,44 @@ int runFusionWorkspaceTest() {
     canvas->resize(1200, 600);
     canvas->show();
     QApplication::processEvents();
+    auto* grid_button = root.findChild<QPushButton*>("fusionGridSettingsButton");
+    auto* grid_dialog = root.findChild<QDialog*>("fusionGridSettingsDialog");
+    auto* grid_visible = root.findChild<QCheckBox*>("fusionGridVisible");
+    auto* grid_style = root.findChild<QComboBox*>("fusionGridStyle");
+    auto* grid_spacing = root.findChild<QSlider*>("fusionGridSpacing");
+    auto* grid_intensity = root.findChild<QSlider*>("fusionGridIntensity");
+    require(grid_button && grid_dialog && grid_visible && grid_style &&
+                grid_spacing && grid_intensity,
+            "The Node Editor did not expose its grid settings controls.");
+    require(grid_spacing->minimum() == 12 && grid_spacing->maximum() == 64 &&
+                grid_intensity->minimum() == 10 &&
+                grid_intensity->maximum() == 60,
+            "Grid adjustment controls did not enforce their supported ranges.");
+    require(!grid_dialog->isVisible() && grid_button->accessibleName() ==
+                QStringLiteral("Grid Settings"),
+            "Grid settings should open on demand and be accessible by name.");
+    grid_button->click();
+    QApplication::processEvents();
+    require(grid_dialog->isVisible(), "The Grid button did not open Grid Settings.");
+    auto* node_canvas = root.findChild<fusion::nodes::NodeCanvas*>("fusionNodeCanvas");
+    auto grid_settings = node_canvas->backgroundGridSettings();
+    require(grid_settings == fusion::nodes::BackgroundGridSettings{},
+            "Grid Settings did not reflect the canvas defaults.");
+    grid_style->setCurrentIndex(grid_style->findData(static_cast<int>(
+        fusion::nodes::BackgroundGridStyle::Dots)));
+    grid_spacing->setValue(40);
+    grid_intensity->setValue(50);
+    grid_visible->setChecked(false);
+    grid_settings = node_canvas->backgroundGridSettings();
+    require(grid_settings == fusion::nodes::BackgroundGridSettings{
+                false, fusion::nodes::BackgroundGridStyle::Dots, 40, 50} &&
+                edit_count == 0,
+            "Grid controls did not update immediately without editing the node graph.");
+    fusion::nodes::NodeCanvas restored_grid_canvas;
+    require(restored_grid_canvas.backgroundGridSettings() == grid_settings,
+            "Grid control changes were not restored from local preferences.");
+    grid_visible->setChecked(true);
+    grid_dialog->hide();
     const auto port_position = [canvas](fusion::nodes::NodeId node_id,
                                          int port_kind, int port_index) {
         for (auto* item : canvas->scene()->items()) {
@@ -265,7 +392,6 @@ int runFusionWorkspaceTest() {
     require(edit_count == 9 && status && status->text().contains("rejected"),
             "Dragging a wire that would create a cycle did not show an explanation.");
 
-    auto* node_canvas = static_cast<fusion::nodes::NodeCanvas*>(canvas);
     node_canvas->setSelectedNode(transform_id);
     auto* scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
     auto* apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
@@ -551,6 +677,15 @@ int runFusionWorkspaceTest() {
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     try {
+        QTemporaryDir settings_directory;
+        require(settings_directory.isValid(),
+                "Could not create isolated settings storage for the Fusion test.");
+        app.setOrganizationName("CreativeSuiteTests");
+        app.setApplicationName("FusionWorkspaceTest");
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                           settings_directory.path());
+        testGridPreferencesAndRendering();
         return runFusionWorkspaceTest();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());
