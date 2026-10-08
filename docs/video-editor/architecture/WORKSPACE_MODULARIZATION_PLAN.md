@@ -100,8 +100,8 @@ categorias iniciais de escopo são:
 
 - **Aplicativo:** ciclo de vida do projeto, configurações, ajuda e navegação
   entre workspaces.
-- **Compartilhado:** operações disponíveis em mais de um workspace, como
-  salvar o projeto e desfazer/refazer quando o histórico atual permitir.
+- **Compartilhado:** operações apresentadas em mais de um workspace, como
+  Undo/Redo e reprodução em Edit e Fusion, quando o estado atual permitir.
 - **Edit:** edição da Timeline, operações de faixa, mídia, efeitos e ferramentas
   específicas de Edit.
 - **Fusion:** criação, seleção, conexão e prévia de nós, além da edição de seus
@@ -110,18 +110,60 @@ categorias iniciais de escopo são:
 - **Contexto do editor em foco:** comandos cujo significado depende do editor
   ou campo de texto ativo, como Delete e Copy.
 
-O sistema de atalhos deve resolver comandos seguindo uma prioridade
-documentada: primeiro o contexto do editor em foco, depois o workspace ativo e
-por último os comandos do aplicativo. Uma combinação só deve ser rejeitada
-quando os comandos envolvidos puderem estar ativos ao mesmo tempo. Workspaces
-mutuamente exclusivos podem compartilhar uma combinação, desde que a tela de
-configuração identifique claramente o escopo de cada comando.
+### Contrato provisório de comandos
+
+Cada workspace é dono das ações que executa. Ele cria e mantém a ação e sua
+ligação ao controlador ou serviço responsável; a estrutura principal registra
+essa ação, coloca-a no menu ou barra correspondente e administra sua
+personalização. Assim, `MainWindow` monta a interface comum sem implementar a
+operação específica de Edit, Fusion ou Render.
+
+O descritor conceitual de um comando contém: identificador estável, rótulo,
+ação executável, regra de habilitação, escopo, atalho padrão opcional e local
+de apresentação (menu ou barra, incluindo seção e ordem). Os novos
+identificadores usam prefixos de escopo como `app.*`, `shared.*`, `edit.*`,
+`fusion.*` e `render.*`. Os identificadores já persistidos permanecem
+inalterados durante a migração para preservar as preferências dos usuários.
+
+`WorkspaceHost::currentPage()` é a fonte de verdade para Edit, Fusion ou
+Render. A troca de página atualiza quais comandos de workspace estão ativos;
+não se registram e removem ações repetidamente. O contexto do editor em foco é
+resolvido antes do workspace, para que comandos de texto ou do editor focado
+tenham precedência. Depois vêm os comandos aplicáveis ao workspace ativo e,
+por último, os comandos do aplicativo.
+
+A barra de menus mantém sua estrutura reconhecível. A janela principal monta
+as áreas comuns e recebe as ações oferecidas pelos workspaces; o conjunto de
+ações específicas muda com a página ativa. A tela Configurações > Atalhos
+agrupará os comandos por escopo e mostrará onde cada um funciona.
+
+Combinações iguais são permitidas entre comandos de workspaces mutuamente
+exclusivos, como Edit e Fusion. Conflitos são rejeitados quando os comandos
+podem estar ativos simultaneamente, incluindo colisões com comandos do
+aplicativo ou compartilhados. A resolução pelo foco tem prioridade sobre a
+ação do workspace para preservar o comportamento normal de campos de texto e
+dos editores.
+
+### Disponibilidade definida entre workspaces
+
+| Escopo | Disponibilidade definida |
+| --- | --- |
+| Aplicativo | Novo/Abrir/Salvar/Salvar Como, Project Settings, Open Media, Exit, configurações, ajuda e navegação entre workspaces ficam disponíveis em Edit, Fusion e Render. |
+| Compartilhado | Undo/Redo, reprodução/navegação por quadro e abertura de Functions (`Shift+Space`) ficam disponíveis em Edit e Fusion, com habilitação derivada do histórico, reprodução ou disponibilidade do alvo. Não ficam disponíveis em Render. |
+| Edit | Comandos de Timeline, faixas, inserção de mídia, aplicação de efeitos na Timeline e Inspector de Edit ficam ativos somente em Edit. |
+| Fusion | Comandos do grafo e de sua prévia ficam ativos somente em Fusion. |
+| Render | Configuração de saída e comandos da fila ficam ativos somente em Render. |
+| Contexto do editor em foco | Comandos como Copy e Delete seguem o editor ou campo de texto que tem foco e prevalecem sobre atalhos de workspace conflitantes. |
+
+O contrato permanece no Video Editor. Não se expande a biblioteca compartilhada
+de atalhos até que outro aplicativo precise do mesmo comportamento estável.
+Esta é uma decisão arquitetural provisória: a forma do descritor pode ser
+refinada durante a implementação, sem mudar ownership, escopos ou regras de
+disponibilidade definidos aqui.
 
 Durante a migração inicial, preservar os atalhos padrão e as personalizações
 existentes. Não atribuir novos atalhos só para preencher as listas dos
-workspaces. A tela Configurações > Atalhos deverá, futuramente, agrupar os
-comandos por Aplicativo, Compartilhado, Edit, Fusion e Render, e indicar em que
-contexto cada um funciona.
+workspaces.
 
 ## Etapas de implementação
 
@@ -137,21 +179,18 @@ seu comportamento entre workspaces está entendido.
 
 ### Etapa 2 — Definir o contrato de comandos e contexto
 
-1. Documentar como cada workspace disponibiliza seus comandos à estrutura
-   principal: identificadores estáveis, rótulos, habilitação, execução e
-   atalhos padrão opcionais.
-2. Definir como o workspace ativo e o contexto do editor em foco são
-   identificados quando um comando é acionado.
-3. Definir as regras de prioridade e conflito de atalhos entre escopos,
-   incluindo o comportamento de campos de texto.
-4. Manter esse contrato dentro do Video Editor enquanto outro aplicativo não
-   precisar do mesmo comportamento estável. Não expandir o core compartilhado
-   sem uma necessidade real.
-5. Registrar a decisão como provisória na documentação de arquitetura antes
-   de implementar mudanças no registro de comandos.
+**Estado: contrato documental concluído em 2026-10-08.** Cada workspace fornece
+suas ações à janela principal, que as registra uma vez e monta os menus
+adaptáveis. `WorkspaceHost::currentPage()` define o workspace ativo; o foco do
+editor tem precedência para comandos contextuais. Atalhos específicos ficam
+restritos à tela definida na matriz acima, enquanto comandos de Aplicativo
+permanecem disponíveis em todas as telas.
 
 **Critério para concluir:** há um único caminho documentado entre a entrada do
 usuário e o comando responsável, sem duplicar estado ou histórico do workspace.
+O registro de atalhos permanece no Video Editor, os identificadores atuais e
+as combinações existentes são preservados, e conflitos são avaliados conforme
+a sobreposição real dos contextos.
 
 ### Etapa 3 — Adicionar escopos aos atalhos sem mudar os padrões
 
@@ -289,8 +328,8 @@ o comportamento atuais que sustentam a proposta.
 | --- | --- | --- |
 | Ciclo de vida do projeto | Novo/Abrir/Salvar/Salvar Como, configurações do projeto e recuperação | Aplicativo |
 | Navegação entre telas | Seleção de Edit/Fusion/Render e transições de página | Aplicativo / estrutura dos workspaces |
-| Histórico compartilhado | Undo/Redo para o histórico de edição compartilhado | Comando compartilhado, com habilitação baseada no contexto |
-| Reprodução | Play/Pause e navegação por quadro para o Viewer e Timeline compartilhados | Serviço compartilhado; Edit/Fusion expõem comandos adequados ao contexto |
+| Histórico compartilhado | Undo/Redo para o histórico de edição compartilhado | Comando compartilhado, disponível em Edit e Fusion e habilitado pelo histórico |
+| Reprodução | Play/Pause e navegação por quadro para o Viewer e Timeline compartilhados | Serviço compartilhado; comandos apresentados em Edit e Fusion, não em Render |
 | Media Pool | Importação, bins, relink/restore, seleção e organização do navegador | Serviços compartilhados de mídia; Edit é responsável por inserir na Timeline |
 | Timeline | Seleção, divisão, aparo, exclusão, ripple delete, deslocamento, faixas e transições | Edit |
 | Inspector de Edit | Efeitos do clipe, transformação, animação, áudio, texto e transições | Edit |
@@ -323,19 +362,19 @@ o comportamento atuais que sustentam a proposta.
 | Selecionar bin e navegar na lista/árvore de mídia; alternar lista/blocos e ajustar tamanho de ícones | Widgets do Media Browser recebem eventos; `MainWindow` popula e sincroniza as visualizações em `main_window_media.cpp` | Docks compartilhados entre Edit/Fusion; seleção é temporária; modo e escala de ícones são preferência global, sem dirty state ou Undo | Serviço compartilhado de mídia e UI compartilhada |
 | `New Bin`, renomear bin/mídia (`F2` ou edição inline), `Move to Bin`, arrastar mídia/bin entre bins, `Remove from Browser` e `Restore Media` | Menus/handlers em `main_window_media.cpp`; operações de dados passam por `MediaController` | Alteram o catálogo do projeto e marcam o projeto como alterado. Os caminhos inspecionados não registram essas operações em `TimelineCommandService`; o Undo da Timeline não as desfaz | Serviço compartilhado de mídia; menus e gestos do Media Pool |
 | Arrastar arquivos do sistema para o Media Pool | Viewports do navegador recebem arquivos; `MainWindow` coordena a importação assíncrona e determina o bin de destino | Edit/Fusion com Media Pool disponível; importa no bin alvo/selecionado ou em Unsorted; atualiza o projeto, sem criar edição da Timeline | Serviço compartilhado de mídia |
-| Pré-visualizar/selecionar mídia; abrir mídia no Image Editor | `MainWindow` controla seleção/preview e menus em `main_window_media.cpp`; a integração com Image Editor é iniciada pelo aplicativo | Seleção/preview é temporária; abrir o Image Editor pode criar ou atualizar referência vinculada no projeto. Não é edição da Timeline | Compartilhado para navegação de mídia; integração externa sob responsabilidade do aplicativo — fronteira de propriedade a confirmar na Etapa 2 |
+| Pré-visualizar/selecionar mídia; abrir mídia no Image Editor | `MainWindow` controla seleção/preview e menus em `main_window_media.cpp`; a integração com Image Editor é iniciada pelo aplicativo | Seleção/preview é temporária; abrir o Image Editor pode criar ou atualizar referência vinculada no projeto. Não é edição da Timeline | Compartilhado para navegação de mídia; integração externa sob responsabilidade do aplicativo |
 | Toolbox e lista `Effects`; categorias All/Video/Audio/Transitions/Text; catálogo Grayscale, Brightness, Contrast, Saturation, Gain, Cross Dissolve, Fade to Black e Text; Favorites | Docks montados pela `MainWindow`; controles filtram o catálogo existente. Favorites está vazio e ainda não tem ação de favoritar | Docks disponíveis em Edit/Fusion e ocultos em Render; filtrar/navegar não altera projeto. Os quatro filtros visuais podem ser arrastados à Timeline ou ao canvas Fusion; Cross Dissolve/Fade to Black são aplicados em cortes; Text é arrastado à Timeline; Gain permanece um protótipo de UI de áudio | UI de catálogo compartilhada; a ação depende do destino: Edit para Timeline, Fusion para grafo |
-| `Functions` (`Shift+Space`, busca, Add, Enter, duplo clique e Cancel) | Janela implementada por `FunctionPalette`; Add/Enter/duplo clique aplicam a seleção ao clipe visual selecionado via controlador de Edit; Cancel fecha sem aplicar | Janela de filtro é temporária. Aplicar efeito altera a pilha do clipe e participa do Undo/Redo da Timeline. Arrastar os quatro filtros suportados ao Fusion solicita criação de nó e fecha a janela só após aceitação | Edit para aplicação na Timeline; Fusion para drop aceito no canvas; catálogo e janela são UI compartilhada |
+| `Functions` (`Shift+Space`, busca, Add, Enter, duplo clique e Cancel) | Janela implementada por `FunctionPalette`; Add/Enter/duplo clique aplicam a seleção ao clipe visual selecionado via controlador de Edit; Cancel fecha sem aplicar | Janela de filtro é temporária; sua abertura por `Shift+Space` fica disponível em Edit/Fusion. Aplicar efeito altera a pilha do clipe e participa do Undo/Redo da Timeline. Arrastar os quatro filtros suportados ao Fusion solicita criação de nó e fecha a janela só após aceitação | Edit para aplicação na Timeline; Fusion para drop aceito no canvas; catálogo e janela são UI compartilhada |
 
 ### Edit e Timeline
 
 | Ação ou controle | Declaração e execução atuais | Disponibilidade, estado e Undo/Redo | Responsabilidade proposta |
 | --- | --- | --- | --- |
-| `Delete`, `Ripple Delete`, `Split Clip`, `Copy Attributes`, `Paste Attributes` | Ações e atalhos estão no menu Edit criado por `MainWindow`; execução delega a `EditWorkspaceController` e `TimelineCommandService` | Operações dependem de seleção/contexto e viram edições de Timeline. Copy armazena atributos na memória; Paste abre diálogo e aplica uma edição. Copy e `Shift+Delete` respeitam edição normal quando campo de texto está em foco; Delete também preserva comportamento de campos. As ações ficam registradas globalmente; em Render a Timeline fica read-only, mas o comportamento de cada ação de menu/atalho nesse estado não é uniformemente filtrado por workspace | Edit; resolução de Copy/Delete condicionada ao editor em foco |
+| `Delete`, `Ripple Delete`, `Split Clip`, `Copy Attributes`, `Paste Attributes` | Ações e atalhos estão no menu Edit criado por `MainWindow`; execução delega a `EditWorkspaceController` e `TimelineCommandService` | Operações dependem de seleção/contexto e viram edições de Timeline. Copy armazena atributos na memória; Paste abre diálogo e aplica uma edição. Copy e `Shift+Delete` respeitam edição normal quando campo de texto está em foco; Delete também preserva comportamento de campos. Hoje as ações ficam registradas globalmente; no contrato, ficam ativas somente em Edit, e Copy/Delete respeitam o foco | Edit; resolução de Copy/Delete condicionada ao editor em foco |
 | `Add/Rename/Move Up/Move Down/Remove Track` | Ações aparecem no menu Edit e controles de Timeline; `MainWindow` encaminha para `EditWorkspaceController` | Alteram estrutura e ordem das faixas; entram no histórico de edição. Controles dependem da faixa ativa e de regras de remoção/colisão | Edit |
 | `Blade Tool`, ferramentas Selection/Razor/Volume, Magnetic Snap e `Clear Timeline` | Menu Edit e botões criados por `MainWindow`/`EditWorkspace`; implementação fica no controlador e `TimelineWidget` | Ferramentas alteram modo de interação; Snap altera preferência/estado da Timeline. Clear Timeline altera o documento e usa o histórico. Não há atalhos de teclado padrão para essas ferramentas | Edit |
 | Exibir cabeçalhos/timecode das faixas; escolher aba Inspector/Audio/Effects; monitor volume e controles de áudio da faixa/clipe | Cabeçalho/timecode são desenhados pela Timeline; abas e sliders/checks são criados em `EditWorkspace` e tratados pelo controlador | Aba é salva em preferência global. Monitor volume é preferência de reprodução; volume/mute de clipe ou faixa alteram dados de áudio e usam edição Undo/Redo | Edit; serviço de áudio/reprodução permanece compartilhado |
-| Play/Pause, Previous/Next Frame, volume de monitor | Botões do Edit e ações globais registradas na janela; ações de teclado encaminham para `EditWorkspaceController` e `PlaybackController` | Estado do playhead/reprodução/saída de monitor, sem alterar o projeto. As ações de teclado são WindowShortcut e não têm escopo por workspace hoje; seu uso desejado em Render ainda precisa de decisão | Serviço compartilhado de playback; comandos apresentados por Edit e, se definido, Fusion. Render é ambíguo |
+| Play/Pause, Previous/Next Frame, volume de monitor | Botões do Edit e ações globais registradas na janela; ações de teclado encaminham para `EditWorkspaceController` e `PlaybackController` | Estado do playhead/reprodução/saída de monitor, sem alterar o projeto. Hoje as ações de teclado são WindowShortcut; a disponibilidade definida para a migração é Edit e Fusion, sem comandos de reprodução em Render | Serviço compartilhado de playback; comandos apresentados por Edit e Fusion |
 | Zoom da Timeline, altura de faixas, ruler scrub | Zoom por botões/slider e gestos em `EditWorkspace`; seek/zoom/altura são processados por `TimelineWidget` e controlador | Altera apresentação ou playhead, não o documento nem Undo. Gestos de mouse descritos em `SHORTCUTS.md` | Edit |
 | Selecionar clipe, Ctrl+clique para seleção múltipla, mover/arrastar entre faixas, trim pelas bordas, Blade ao clicar e snap | `TimelineWidget` interpreta eventos do mouse; `EditWorkspaceController` valida e executa edições via serviço de comandos | Seleção/playhead são estado de interface; mover, aparar e dividir alteram Timeline e entram no histórico. Preferência `Require Alt to Move Clips` troca o significado do arraste normal e de Alt+arraste | Edit; comportamento de campo de texto continua pertencendo ao foco |
 | Clique em espaço vazio/faixa, clique em clipe já selecionado e seek por clique/arraste | `TimelineWidget` limpa seleção ou inicia seek conforme posição, seleção atual e modo de arraste | Altera apenas seleção e playhead; não marca projeto como alterado nem cria Undo. Seek usa o PlaybackController compartilhado | Edit expõe a interação; estado de playhead permanece compartilhado |
@@ -355,7 +394,7 @@ o comportamento atuais que sustentam a proposta.
 | Selecionar e mover nós; conectar/rewire por arraste de saída para entrada; desconectar arrastando entrada/cabo para área vazia | Gestos de `NodeCanvas`; `FusionWorkspace` chama modelo `connect`/`disconnect` e envia o grafo ao controlador de Edit | Canvas e Inspector dependem de clipe visual selecionado; incompatibilidade/ciclo é rejeitado com status. Posições e conexões são dados persistidos e entram no Undo/Redo | Fusion |
 | `VIEW` por nó | Botão desenhado no `NodeCanvas`; `FusionWorkspace` solicita prévia temporária pelo Viewer compartilhado | Não muda seleção do Inspector, projeto, dirty state nem histórico; ao sair do Fusion ou perder nó/clipe válido, alvo retorna ao Output/Viewer normal | Fusion para estado temporário da prévia; Viewer permanece compartilhado |
 | Inspector Fusion: fonte de Input; controles de Transform/Color/Merge; parâmetros e enable de efeito; losangos de keyframe; `Apply Settings` e `Remove Node` | Montagem e callbacks em `FusionWorkspace`; avaliação em `fusion/nodes`; alterações de grafo são encaminhadas a `EditWorkspaceController` | Edições de parâmetros/estado/keyframes alteram grafo e histórico; keyframes usam quadro local do clipe. Seleção de nó e valores apresentados não são, por si, alterações do projeto | Fusion |
-| Playhead e preview do grafo | `FusionWorkspace` recebe seleção/playhead; `MainWindow` e `PlaybackController` direcionam a saída do nó para o Preview compartilhado | Prévia acompanha o tempo do clipe; selecionar o nó a visualizar é temporário. Reproduzir/navegar por quadro ainda usa ações registradas na janela/Edit; escopo final precisa de decisão na Etapa 2 | Fusion controla composição/target; playback permanece compartilhado |
+| Playhead e preview do grafo | `FusionWorkspace` recebe seleção/playhead; `MainWindow` e `PlaybackController` direcionam a saída do nó para o Preview compartilhado | Prévia acompanha o tempo do clipe; selecionar o nó a visualizar é temporário. Reproduzir/navegar por quadro ainda usa ações registradas na janela/Edit; no contrato, esses comandos compartilhados ficam disponíveis em Edit e Fusion, não em Render | Fusion controla composição/target; playback permanece compartilhado |
 
 ### Render
 
@@ -366,25 +405,16 @@ o comportamento atuais que sustentam a proposta.
 | `Start Queue`, `Cancel`, `Remove`, `Move Up`, `Move Down` | Botões e seleção montados por `RenderWorkspace`; `RenderQueueController` executa/cancela jobs, `RenderQueueModel` guarda ordem/estado | Atua na fila de sessão. Progresso, conclusão, cancelamento, falha e aviso não modificam histórico da Timeline. Habilitação depende de fila, seleção e job ativo | Render |
 | Preview em Render e Timeline read-only | `WorkspaceHost` move o Preview compartilhado para a página; callback do `RenderWorkspace` coloca Edit/Timeline em read-only durante Render | O Viewer pode apresentar a saída compartilhada; operações da Timeline ficam bloqueadas. Não há comandos de atalho próprios de Render atualmente | Render para saída/fila; Viewer e projeto continuam compartilhados |
 
-### Classificações que exigem decisão posterior
+### Pontos preservados para etapas posteriores
 
-- **Play/Pause e navegação por quadro em Render:** hoje os atalhos globais chamam
-  `EditWorkspaceController`; a especificação atual não determina se devem
-  continuar ativos em Render.
-- **Ações de Edit durante Render:** os menus e atalhos de Edit são registrados
-  na janela principal, enquanto a Timeline visual fica read-only. Confirmar na
-  Etapa 2 quais ações devem ser desabilitadas ou indisponíveis nesse workspace.
-- **Effects/Functions:** a lista é uma interface comum, mas o significado do
-  drop depende do alvo: pilha de efeitos da Timeline ou grafo Fusion. A futura
-  API de comandos precisa representar o destino sem transferir propriedade do
-  catálogo para uma tela.
-- **Open in Fusion e edição no Image Editor:** as ações surgem em menus de Edit,
-  mas executam navegação ou integração com outro aplicativo. A Etapa 2 deve
-  definir se a declaração fica com Edit e o encaminhamento com a estrutura do
-  aplicativo — proposta atual — ou se o shell fornece ambas as ações.
-- **Undo/Redo:** ficam no menu Edit, mas o histórico usado por Fusion é o mesmo
-  serviço de edição. A responsabilidade proposta é Compartilhado, mantendo o
-  menu atual até uma mudança explícita de interface.
+- **Disponibilidade em Render:** ficou definida na Etapa 2: comandos próprios
+  de Render funcionam nessa tela; comandos de Edit, Fusion, Undo/Redo e
+  reprodução permanecem inativos.
+- **Effects/Functions:** o catálogo continua compartilhado; a ação pertence ao
+  destino do drop (Edit para Timeline, Fusion para o grafo). A montagem de
+  comandos deve manter esse encaminhamento sem duplicar o catálogo.
+- **Open in Fusion e edição no Image Editor:** Edit declara a ação contextual;
+  a estrutura principal executa a navegação entre workspaces ou aplicativos.
 - **Ações de mídia e bins:** alteram o documento do projeto fora do histórico
   `TimelineCommandService`; avaliar se essa separação é intencional antes de
   mudanças de ownership ou Undo/Redo.
@@ -396,6 +426,8 @@ o comportamento atuais que sustentam a proposta.
   Render e editor em foco, incluindo combinações duplicadas permitidas ou
   rejeitadas.
 - Persistência das combinações padrão e das personalizações existentes.
+- Uma combinação pode ser reutilizada por comandos de workspaces exclusivos;
+  conflitos entre comandos que se sobrepõem são rejeitados.
 - Estado habilitado de menus e barras de ferramentas ao mudar workspace e
   seleção.
 - Campos de texto mantêm os atalhos normais de edição.
@@ -427,12 +459,9 @@ o comportamento atuais que sustentam a proposta.
 
 ## Decisões ainda pendentes
 
-- A estrutura exata dos descritores e do registro de comandos.
-- Se cada workspace monta seus menus diretamente ou fornece ações para a
-  estrutura principal montar.
-- Quais comandos de reprodução e navegação por quadro ficam ativos em Render.
-- Se a personalização de atalhos mostra todos os escopos numa página ou em
-  seções separadas por workspace.
 - O momento exato de mover arquivos de `ui/workspace/pages/` para `workspaces/`;
   movê-los junto com a transferência de responsabilidade, não como uma limpeza
   isolada.
+- Se as ações de mídia e bins devem futuramente participar do histórico Undo/Redo;
+  essa decisão depende de uma análise própria do modelo de mídia e não muda o
+  contrato de comandos da Etapa 2.
