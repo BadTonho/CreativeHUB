@@ -82,6 +82,17 @@ void FusionWorkspace::createPanels(QWidget* parent) {
             }
             commitGraph(std::move(*candidate), QStringLiteral("Nodes connected."));
         });
+    node_canvas->setDisconnectionRequestedHandler(
+        [this](fusion::nodes::NodeId to, std::uint8_t input) {
+            auto* status = inspector_panel_->findChild<QLabel*>("fusionNodeStatus");
+            auto candidate = fusion::nodes::disconnect(graph_, to, input);
+            if (!candidate) {
+                if (status) status->setText(
+                    "This connection cannot be removed while keeping the graph valid.");
+                return;
+            }
+            commitGraph(std::move(*candidate), QStringLiteral("Connection removed."));
+        });
     connect(add_button, &QPushButton::clicked, this, [this, add_type] {
         if (clip_id_ == 0) return;
         auto candidate = graph_;
@@ -114,43 +125,7 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     property_layout->setContentsMargins(0, 0, 0, 8);
     inspector_layout->addWidget(node_properties_);
 
-    auto* from = new QComboBox(inspector_panel_);
-    from->setObjectName("fusionConnectionFrom");
-    auto* to = new QComboBox(inspector_panel_);
-    to->setObjectName("fusionConnectionTo");
-    auto* input = new QComboBox(inspector_panel_);
-    input->setObjectName("fusionConnectionInput");
-    input->addItem("Input 1", 0);
-    input->addItem("Input 2", 1);
-    auto* connection_form = new QFormLayout;
-    connection_form->addRow("From", from);
-    connection_form->addRow("To", to);
-    connection_form->addRow("Target", input);
-    auto* connection_widget = new QWidget(inspector_panel_);
-    connection_widget->setLayout(connection_form);
-    auto* connect_button = new QPushButton("Connect", inspector_panel_);
-    connect_button->setObjectName("fusionConnectNodesButton");
-    auto* disconnect_button = new QPushButton("Disconnect", inspector_panel_);
-    disconnect_button->setObjectName("fusionDisconnectNodeButton");
-    inspector_layout->addWidget(connection_widget);
-    inspector_layout->addWidget(connect_button);
-    inspector_layout->addWidget(disconnect_button);
     inspector_layout->addStretch(1);
-    connect(connect_button, &QPushButton::clicked, this, [this, from, to, input, status] {
-        auto candidate = fusion::nodes::connect(graph_, from->currentData().toULongLong(),
-            to->currentData().toULongLong(), static_cast<std::uint8_t>(input->currentData().toInt()));
-        if (!candidate) {
-            status->setText("Connection rejected: the ports are incompatible or the link creates a cycle.");
-            return;
-        }
-        commitGraph(std::move(*candidate), QStringLiteral("Nodes connected."));
-    });
-    connect(disconnect_button, &QPushButton::clicked, this, [this, to, input, status] {
-        auto candidate = fusion::nodes::disconnect(graph_, to->currentData().toULongLong(),
-            static_cast<std::uint8_t>(input->currentData().toInt()));
-        if (!candidate) { status->setText("This input has no connection to remove."); return; }
-        commitGraph(std::move(*candidate), QStringLiteral("Connection removed."));
-    });
     setSelection(nullptr, {});
 }
 
@@ -212,10 +187,6 @@ void FusionWorkspace::refreshInspector() {
     auto* layout = qobject_cast<QFormLayout*>(node_properties_->layout());
     if (layout == nullptr) return;
     while (layout->rowCount() > 0) layout->removeRow(0);
-    auto* from = inspector_panel_->findChild<QComboBox*>("fusionConnectionFrom");
-    auto* to = inspector_panel_->findChild<QComboBox*>("fusionConnectionTo");
-    if (from != nullptr) from->clear();
-    if (to != nullptr) to->clear();
     const auto* node = fusion::nodes::findNode(graph_, selected_node_id_);
     if (clip_id_ == 0) {
         status->setText("Select a video or image clip in the Timeline.");
@@ -225,16 +196,6 @@ void FusionWorkspace::refreshInspector() {
     status->setText(node ? QStringLiteral("Selected node #%1").arg(node->id)
                          : QStringLiteral("Select a node to edit its settings."));
     node_properties_->setEnabled(node != nullptr);
-    if (from != nullptr && to != nullptr) for (const auto& item : graph_.nodes) {
-        const QString label = QStringLiteral("%1 #%2")
-            .arg(item.type == fusion::nodes::NodeType::Input ? "Input" :
-                 item.type == fusion::nodes::NodeType::Transform ? "Transform" :
-                 item.type == fusion::nodes::NodeType::Color ? "Color" :
-                 item.type == fusion::nodes::NodeType::Merge ? "Merge" : "Output")
-            .arg(item.id);
-        from->addItem(label, QVariant::fromValue<qulonglong>(item.id));
-        to->addItem(label, QVariant::fromValue<qulonglong>(item.id));
-    }
     if (node == nullptr) return;
     auto* apply = new QPushButton("Apply Settings", node_properties_);
     apply->setObjectName("fusionApplyNodeSettingsButton");

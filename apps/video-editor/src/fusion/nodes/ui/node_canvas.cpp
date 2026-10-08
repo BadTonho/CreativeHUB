@@ -1,5 +1,6 @@
 #include "node_canvas.h"
 
+#include <QApplication>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsItem>
 #include <QGraphicsLineItem>
@@ -11,7 +12,7 @@
 #include <QBrush>
 #include <QColor>
 #include <QFont>
-
+#include <algorithm>
 #include <cstdint>
 #include <unordered_map>
 
@@ -61,7 +62,9 @@ NodeCanvas::NodeCanvas(QWidget* parent) : QGraphicsView(parent) {
 
 void NodeCanvas::setGraph(const NodeGraph& graph) {
     dragging_from_output_ = 0;
+    dragging_from_input_ = 0;
     pending_connection_line_ = nullptr;
+    connections_ = graph.connections;
     scene_->clear();
     std::unordered_map<NodeId, QGraphicsRectItem*> items;
     for (const auto& node : graph.nodes) {
@@ -159,9 +162,40 @@ void NodeCanvas::setConnectionRequestedHandler(
     connection_requested_ = std::move(handler);
 }
 
+void NodeCanvas::setDisconnectionRequestedHandler(
+    std::function<void(NodeId, std::uint8_t)> handler) {
+    disconnection_requested_ = std::move(handler);
+}
+
 void NodeCanvas::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         auto* item = itemAt(event->pos());
+        if (item != nullptr && item->data(1).toInt() == 1) {
+            auto* node = item->parentItem();
+            if (node != nullptr) {
+                scene_->clearSelection();
+                node->setSelected(true);
+            }
+            const auto node_id = static_cast<NodeId>(item->data(0).toULongLong());
+            const auto input = static_cast<std::uint8_t>(item->data(2).toInt());
+            const bool is_connected = std::any_of(
+                connections_.begin(), connections_.end(),
+                [node_id, input](const Connection& connection) {
+                    return connection.to == node_id && connection.input == input;
+                });
+            if (is_connected) {
+                dragging_from_input_ = node_id;
+                dragging_input_index_ = input;
+                dragging_input_start_ = event->pos();
+                const auto position = mapToScene(event->pos());
+                pending_connection_line_ = scene_->addLine(
+                    QLineF(position, position),
+                    QPen(QColor("#9ad3ff"), 2.0, Qt::DashLine));
+                pending_connection_line_->setZValue(-2);
+            }
+            event->accept();
+            return;
+        }
         if (item != nullptr && item->data(1).toInt() == 2) {
             dragging_from_output_ = static_cast<NodeId>(item->data(0).toULongLong());
             if (item->parentItem() != nullptr) item->parentItem()->setSelected(true);
@@ -193,7 +227,8 @@ void NodeCanvas::mousePressEvent(QMouseEvent* event) {
 }
 
 void NodeCanvas::mouseMoveEvent(QMouseEvent* event) {
-    if (dragging_from_output_ != 0 && pending_connection_line_ != nullptr) {
+    if ((dragging_from_output_ != 0 || dragging_from_input_ != 0) &&
+        pending_connection_line_ != nullptr) {
         const auto line = pending_connection_line_->line();
         pending_connection_line_->setLine(line.x1(), line.y1(),
                                            mapToScene(event->pos()).x(),
@@ -218,9 +253,47 @@ void NodeCanvas::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void NodeCanvas::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton && dragging_from_input_ != 0) {
+        const auto target_node = dragging_from_input_;
+        const auto target_input = dragging_input_index_;
+        QGraphicsItem* target = nullptr;
+        for (auto* candidate : items(event->pos())) {
+            if (dynamic_cast<QGraphicsLineItem*>(candidate) != nullptr) continue;
+            target = candidate;
+            break;
+        }
+        const bool dropped_on_output =
+            target != nullptr && target->data(1).toInt() == 2;
+        const bool dropped_on_empty_canvas = target == nullptr;
+        const auto source_node = dropped_on_output
+            ? static_cast<NodeId>(target->data(0).toULongLong()) : NodeId{0};
+        if (pending_connection_line_ != nullptr) {
+            scene_->removeItem(pending_connection_line_);
+            delete pending_connection_line_;
+            pending_connection_line_ = nullptr;
+        }
+        const bool was_dragged =
+            (event->pos() - dragging_input_start_).manhattanLength() >=
+            QApplication::startDragDistance();
+        dragging_from_input_ = 0;
+        dragging_input_index_ = 0;
+        if (dropped_on_output && connection_requested_) {
+            connection_requested_(source_node, target_node, target_input);
+        } else if (was_dragged && dropped_on_empty_canvas &&
+                   disconnection_requested_) {
+            disconnection_requested_(target_node, target_input);
+        }
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton && dragging_from_output_ != 0) {
         const auto source = dragging_from_output_;
-        auto* target = itemAt(event->pos());
+        QGraphicsItem* target = nullptr;
+        for (auto* candidate : items(event->pos())) {
+            if (dynamic_cast<QGraphicsLineItem*>(candidate) != nullptr) continue;
+            target = candidate;
+            break;
+        }
         NodeId target_id = 0;
         std::uint8_t target_input = 0;
         if (target != nullptr && target->data(1).toInt() == 1) {

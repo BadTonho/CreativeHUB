@@ -55,14 +55,14 @@ int runFusionWorkspaceTest() {
 
     auto* canvas = root.findChild<QGraphicsView*>("fusionNodeCanvas");
     require(canvas != nullptr, "The Fusion node canvas was not created.");
-    root.resize(1000, 700);
+    root.resize(1250, 700);
     root.show();
     auto* canvas_panel = canvas->parentWidget()->parentWidget();
-    canvas_panel->resize(950, 650);
+    canvas_panel->resize(1200, 650);
     canvas_panel->move(0, 0);
     canvas_panel->show();
-    canvas->parentWidget()->resize(950, 600);
-    canvas->resize(950, 600);
+    canvas->parentWidget()->resize(1200, 600);
+    canvas->resize(1200, 600);
     canvas->show();
     QApplication::processEvents();
     const auto port_position = [canvas](fusion::nodes::NodeId node_id,
@@ -75,37 +75,90 @@ int runFusionWorkspaceTest() {
         }
         throw std::runtime_error("A requested node port was not drawn.");
     };
-    const auto source_port = port_position(1, 2, 0);
-    const auto transform_input_port = port_position(transform_id, 1, 0);
-    QMouseEvent press(QEvent::MouseButtonPress, QPointF(source_port),
-                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-    QApplication::sendEvent(canvas->viewport(), &press);
-    QMouseEvent move(QEvent::MouseMove, QPointF(transform_input_port),
-                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
-    QApplication::sendEvent(canvas->viewport(), &move);
-    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(transform_input_port),
-                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-    QApplication::sendEvent(canvas->viewport(), &release);
+    const auto drag_between_ports = [canvas](const QPoint& from, const QPoint& to) {
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(from),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &press);
+        QMouseEvent move(QEvent::MouseMove, QPointF(to),
+                         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &move);
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(to),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &release);
+    };
+    const auto input_to_empty = [canvas](const QPoint& input, const QPoint& empty) {
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(input),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &press);
+        QMouseEvent move(QEvent::MouseMove, QPointF(empty),
+                         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &move);
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(empty),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &release);
+    };
+    drag_between_ports(port_position(1, 2, 0), port_position(transform_id, 1, 0));
     require(edit_count == 2 && edited.connections.size() == 2,
             "Dragging an output port to an input port did not connect the nodes.");
 
-    auto* from = root.findChild<QComboBox*>("fusionConnectionFrom");
-    auto* to = root.findChild<QComboBox*>("fusionConnectionTo");
-    auto* input = root.findChild<QComboBox*>("fusionConnectionInput");
-    auto* connect = root.findChild<QPushButton*>("fusionConnectNodesButton");
-    require(from && to && input && connect, "Connection controls were not created.");
-    from->setCurrentIndex(from->findData(QVariant::fromValue<qulonglong>(transform_id)));
-    to->setCurrentIndex(to->findData(QVariant::fromValue<qulonglong>(2)));
-    connect->click();
+    drag_between_ports(port_position(transform_id, 2, 0), port_position(2, 1, 0));
     require(edit_count == 3 && static_cast<bool>(fusion::nodes::validate(edited)),
-            "Compatible node connections were not applied.");
+            "Dragging a node output to the Output input did not connect the graph.");
 
-    from->setCurrentIndex(from->findData(QVariant::fromValue<qulonglong>(2)));
-    to->setCurrentIndex(to->findData(QVariant::fromValue<qulonglong>(transform_id)));
-    connect->click();
     auto* status = root.findChild<QLabel*>("fusionNodeStatus");
-    require(edit_count == 3 && status && status->text().contains("rejected"),
-            "The canvas did not explain a rejected cyclic connection.");
+    require(root.findChild<QComboBox*>("fusionConnectionFrom") == nullptr &&
+                root.findChild<QComboBox*>("fusionConnectionTo") == nullptr &&
+                root.findChild<QComboBox*>("fusionConnectionInput") == nullptr &&
+                root.findChild<QPushButton*>("fusionConnectNodesButton") == nullptr &&
+                root.findChild<QPushButton*>("fusionDisconnectNodeButton") == nullptr,
+            "Node connection dropdowns and buttons should not appear in the Inspector.");
+
+    const auto transform_input_position = port_position(transform_id, 1, 0);
+    QMouseEvent input_click_press(QEvent::MouseButtonPress,
+                                  QPointF(transform_input_position),
+                                  Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &input_click_press);
+    QMouseEvent input_click_release(QEvent::MouseButtonRelease,
+                                    QPointF(transform_input_position),
+                                    Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &input_click_release);
+    require(edit_count == 3 && edited.connections.size() == 2,
+            "Clicking a connected input port disconnected it without a drag.");
+
+    QPoint blank_canvas_position;
+    bool found_blank_canvas_position = false;
+    const auto viewport_size = canvas->viewport()->size();
+    for (int y = 8; y < viewport_size.height() && !found_blank_canvas_position; y += 16) {
+        for (int x = 8; x < viewport_size.width(); x += 16) {
+            if (canvas->itemAt(QPoint(x, y)) == nullptr) {
+                blank_canvas_position = QPoint(x, y);
+                found_blank_canvas_position = true;
+                break;
+            }
+        }
+    }
+    require(found_blank_canvas_position,
+            "Fusion node canvas has no empty viewport area for a wire drop.");
+    input_to_empty(transform_input_position, blank_canvas_position);
+    require(edit_count == 4 && edited.connections.size() == 1 &&
+                status && status->text() == QStringLiteral("Connection removed."),
+            "Dragging a connected input wire to empty canvas did not disconnect it.");
+    drag_between_ports(port_position(1, 2, 0), port_position(transform_id, 1, 0));
+    require(edit_count == 5 && edited.connections.size() == 2,
+            "Dragging an output back to a disconnected input did not reconnect it.");
+
+    add_type->setCurrentIndex(add_type->findData(
+        static_cast<int>(fusion::nodes::NodeType::Color)));
+    add->click();
+    const auto color_id = edited.nodes.back().id;
+    require(edit_count == 6,
+            "Adding a Color node did not update the selected graph.");
+    drag_between_ports(port_position(transform_id, 1, 0), port_position(color_id, 2, 0));
+    require(edit_count == 7 && edited.connections.size() == 2,
+            "Dragging a connected input to another output did not rewire it.");
+    drag_between_ports(port_position(transform_id, 2, 0), port_position(color_id, 1, 0));
+    require(edit_count == 7 && status && status->text().contains("rejected"),
+            "Dragging a wire that would create a cycle did not show an explanation.");
 
     auto* node_canvas = static_cast<fusion::nodes::NodeCanvas*>(canvas);
     node_canvas->setSelectedNode(transform_id);
@@ -115,7 +168,7 @@ int runFusionWorkspaceTest() {
     scale->setValue(2.0);
     apply->click();
     const auto* transformed = fusion::nodes::findNode(edited, transform_id);
-    require(edit_count == 4 && transformed && transformed->transform.scale == 2.0,
+    require(edit_count == 8 && transformed && transformed->transform.scale == 2.0,
             "Inspector edits were not committed to the graph.");
     workspace.setSelection(&selected, {});
     auto* preserved_scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
@@ -140,7 +193,7 @@ int runFusionWorkspaceTest() {
     QMouseEvent click_release(QEvent::MouseButtonRelease, QPointF(node_body),
                               Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     QApplication::sendEvent(canvas->viewport(), &click_release);
-    require(edit_count == 4,
+    require(edit_count == 8,
             "Selecting a node without moving it created a graph edit.");
     const auto moved_body = node_body + QPoint(40, 20);
     QMouseEvent move_press(QEvent::MouseButtonPress, QPointF(node_body),
@@ -153,17 +206,17 @@ int runFusionWorkspaceTest() {
                              Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     QApplication::sendEvent(canvas->viewport(), &move_release);
     transformed = fusion::nodes::findNode(edited, transform_id);
-    if (transformed == nullptr || edit_count != 5 || transformed->x <= original_x) {
+    if (transformed == nullptr || edit_count != 9 || transformed->x <= original_x) {
         std::fprintf(stderr, "node drag: edits=%d x-before=%.3f x-after=%.3f\n",
             edit_count, original_x, transformed ? transformed->x : -1.0);
     }
-    require(edit_count == 5 && transformed && transformed->x > original_x,
+    require(edit_count == 9 && transformed && transformed->x > original_x,
             "Dragging a node body did not save its canvas position.");
 
     auto* remove = root.findChild<QPushButton*>("fusionRemoveNodeButton");
     require(remove != nullptr, "The Inspector did not provide node removal.");
     remove->click();
-    require(edit_count == 6 &&
+    require(edit_count == 10 &&
                 fusion::nodes::findNode(edited, transform_id) == nullptr &&
                 static_cast<bool>(fusion::nodes::validate(edited)),
             "Removing a node did not preserve a valid pass-through graph.");
