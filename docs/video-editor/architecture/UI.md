@@ -557,11 +557,15 @@ text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
 the current `.csp` version 20 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
-externalized on its Audio track. Image media context menus can open a
-shared Image Editor document, and image clip context menus can open a
-clip-specific variant. The Main Window records those references in the project
-and polls published PNG revisions asynchronously; UI presentation updates only
-after a valid current-project decode completes.
+externalized on its Audio track. Right-clicking a video or image clip offers
+**Open in Fusion** and opens the selected clip's node graph. A video with linked
+audio also keeps **Unlink Audio** in that menu, while the audio companion offers
+only **Unlink Audio**. Image clip menus also retain **Edit Clip Image in Image
+Editor**. Image media context menus can open a shared Image Editor document,
+and image clip context menus can open a clip-specific variant. The Main Window
+records those references in the project and polls published PNG revisions
+asynchronously; UI presentation updates only after a valid current-project
+decode completes.
 
 Text rasterization is performed with `QImage/QPainter` by the playback worker;
 the UI only edits the values and receives the composed RGBA frame. No new

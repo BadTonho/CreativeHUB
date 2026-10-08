@@ -4,6 +4,7 @@
 #include "ui/preview/preview_widget.h"
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
+#include "fusion/nodes/ui/node_canvas.h"
 #include "ui/workspace/pages/render/render_queue_model.h"
 #include "ui/workspace/pages/render/render_queue_controller.h"
 #include "ui/workspace/pages/render/render_workspace.h"
@@ -45,10 +46,14 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QMouseEvent>
+#include <QPointingDevice>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QDropEvent>
+#include <QEvent>
+#include <QGraphicsScene>
 #include <QScrollArea>
 #include <QSlider>
 #include <QTabWidget>
@@ -660,6 +665,58 @@ public:
 
             auto* edit_controller = window.edit_workspace_->controller();
             const auto selected_clip_id = first_track.clips.front().clip_id;
+            auto* timeline_widget = window.edit_workspace_->ui().timeline;
+            const auto fusion_target_location =
+                window.editor_session_.timeline().locateClip(selected_clip_id);
+            require(timeline_widget != nullptr && fusion_target_location.has_value(),
+                    "The Fusion context-menu test could not locate the selected Timeline clip.");
+            const auto& fusion_target_track = window.editor_session_.timeline().tracks()[
+                fusion_target_location->track_index];
+            const auto& fusion_target_clip = fusion_target_track.clips[
+                fusion_target_location->clip_index];
+            const timeline::TimelineGeometry fusion_context_geometry(
+                window.editor_session_.timeline().tracks(),
+                QSizeF(timeline_widget->size()), timeline_widget->trackRowHeight(),
+                timeline_widget->zoomFactor(), std::nullopt, 30.0);
+            const auto fusion_context_position = fusion_context_geometry.clipRect(
+                fusion_target_clip, fusion_target_location->track_index).center().toPoint();
+            bool fusion_context_action_found = false;
+            QTimer::singleShot(0, [timeline_widget, &fusion_context_action_found]() {
+                auto* menu = timeline_widget->findChild<QMenu*>();
+                if (menu == nullptr) return;
+                for (auto* action : menu->actions()) {
+                    if (action->text() == QStringLiteral("Open in Fusion")) {
+                        fusion_context_action_found = true;
+                        action->trigger();
+                        break;
+                    }
+                }
+                menu->close();
+            });
+            QMouseEvent open_fusion_mouse_event(
+                QEvent::MouseButtonPress,
+                QPointF(fusion_context_position),
+                QPointF(fusion_context_position),
+                QPointF(timeline_widget->mapToGlobal(fusion_context_position)),
+                Qt::RightButton, Qt::RightButton, Qt::NoModifier,
+                Qt::MouseEventNotSynthesized,
+                QPointingDevice::primaryPointingDevice());
+            QApplication::sendEvent(timeline_widget, &open_fusion_mouse_event);
+            QApplication::processEvents();
+            auto* fusion_canvas = window.fusion_workspace_->nodeEditorPanel()
+                ->findChild<fusion::nodes::NodeCanvas*>("fusionNodeCanvas");
+            require(fusion_context_action_found &&
+                        window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Fusion &&
+                        window.editor_session_.selection().active_clip_id ==
+                            selected_clip_id && fusion_canvas != nullptr &&
+                        fusion_canvas->isEnabled() && fusion_canvas->scene() != nullptr &&
+                        fusion_canvas->scene()->items().size() >= 2,
+                    "Timeline Open in Fusion did not open the selected clip's node graph.");
+            window.setWorkspacePage(ui::WorkspacePageId::Edit);
+            QApplication::processEvents();
+            require(window.workspace_host_->currentPage() == ui::WorkspacePageId::Edit,
+                    "The integration test could not restore the Edit workspace after Fusion routing.");
             edit_controller->addEffectToSelectedClip(QStringLiteral("video.grayscale"));
             auto* effect_item = inspector_ui.clip_effects_list->item(0);
             require(effect_item != nullptr &&

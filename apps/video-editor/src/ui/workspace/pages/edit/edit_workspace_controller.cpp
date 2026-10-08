@@ -1038,6 +1038,8 @@ void EditWorkspaceController::setTimelineWidget(
             this, &EditWorkspaceController::timelineMediaDropRequested);
     connect(timeline_widget_, &timeline::TimelineWidget::externalFilesDropRequested,
             this, &EditWorkspaceController::timelineExternalFilesDropRequested);
+    connect(timeline_widget_, &timeline::TimelineWidget::openFusionClipRequested,
+            this, &EditWorkspaceController::timelineFusionClipOpenRequested);
     connect(timeline_widget_, &timeline::TimelineWidget::effectDropRequested,
             this, &EditWorkspaceController::handleTimelineEffectDrop);
     connect(timeline_widget_, &timeline::TimelineWidget::editImageClipRequested,

@@ -165,6 +165,22 @@ void MainWindow::createWorkspace() {
         &MainWindow::editTimelineImageClip);
     connect(
         edit_workspace_->controller(),
+        &ui::EditWorkspaceController::timelineFusionClipOpenRequested,
+        this,
+        [this](timeline::ClipId clip_id) {
+            if (editor_session_.selection().active_clip_id != clip_id) return;
+            const auto location = editor_session_.timeline().locateClip(clip_id);
+            if (!location.has_value()) return;
+            const auto& track = editor_session_.timeline().tracks()[location->track_index];
+            if (location->clip_index >= track.clips.size()) return;
+            const auto kind = track.clips[location->clip_index].kind;
+            if (kind != timeline::ClipKind::Video &&
+                kind != timeline::ClipKind::Image) return;
+            refreshFusionSelection();
+            setWorkspacePage(ui::WorkspacePageId::Fusion);
+        });
+    connect(
+        edit_workspace_->controller(),
         &ui::EditWorkspaceController::timelineMediaDropRequested,
         this,
         &MainWindow::handleMediaDropAt);

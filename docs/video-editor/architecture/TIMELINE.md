@@ -148,9 +148,12 @@ dropping it over a video track creates a new `Audio N` track at the end of the
 list and places the clip at the indicated frame. Dropping a video with audio
 creates a linked, synchronized Audio companion and chooses a non-overlapping
 Audio track or creates one. Linked clips move, trim, split, and delete together.
-The clip context menu can unlink a pair; afterward the audio remains
-externalized, and the two clips are edited independently. The same source may
-appear repeatedly as independent occurrences. Clip hit testing is local to
+Right-clicking a video or image clip offers **Open in Fusion** and selects that
+clip before switching workspaces. A linked video also offers **Unlink Audio**;
+its audio companion keeps **Unlink Audio** without the Fusion action. Image clip
+menus retain **Edit Clip Image in Image Editor**. After unlinking, the audio
+remains externalized, and the two clips are edited independently. The same
+source may appear repeatedly as independent occurrences. Clip hit testing is local to
 the track row under the pointer, so a clip on another row cannot be selected
 or moved through an empty row. Direct selection in the Timeline changes the
 active clip and Media Browser selection. Clicking a content gap clears both

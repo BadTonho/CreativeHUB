@@ -192,6 +192,7 @@ signals:
         const QStringList& source_paths,
         timeline::TrackId track_id,
         qint64 timeline_frame);
+    void timelineFusionClipOpenRequested(timeline::ClipId clip_id);
     void timelineImageClipEditRequested(timeline::ClipId clip_id);
     void timelineSnapChanged(bool enabled);
     void projectDirtyStateUpdateRequested();

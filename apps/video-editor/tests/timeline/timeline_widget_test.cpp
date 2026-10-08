@@ -2709,6 +2709,7 @@ int main(int argc, char* argv[]) {
         image_context_widget.show();
         application.processEvents();
         bool image_clip_selected = false;
+        bool image_fusion_requested = false;
         bool image_edit_requested = false;
         QObject::connect(
             &image_context_widget,
@@ -2718,18 +2719,25 @@ int main(int argc, char* argv[]) {
             });
         QObject::connect(
             &image_context_widget,
+            &timeline::TimelineWidget::openFusionClipRequested,
+            [&image_fusion_requested](timeline::ClipId clip_id) {
+                image_fusion_requested = clip_id == 919;
+            });
+        QObject::connect(
+            &image_context_widget,
             &timeline::TimelineWidget::editImageClipRequested,
             [&image_edit_requested](timeline::ClipId clip_id) {
                 image_edit_requested = clip_id == 919;
             });
         const QPoint image_context_position(
             static_cast<int>(image_context_widget.contentXForFrame(15)), 100);
-        QTimer::singleShot(0, [&image_context_widget]() {
+        bool image_fusion_action_found = false;
+        QTimer::singleShot(0, [&image_context_widget, &image_fusion_action_found]() {
             auto* menu = image_context_widget.findChild<QMenu*>();
             if (menu == nullptr) return;
             for (auto* action : menu->actions()) {
-                if (action->text() ==
-                    QStringLiteral("Edit Clip Image in Image Editor")) {
+                if (action->text() == QStringLiteral("Open in Fusion")) {
+                    image_fusion_action_found = true;
                     action->trigger();
                     break;
                 }
@@ -2742,11 +2750,84 @@ int main(int argc, char* argv[]) {
             image_context_widget.mapToGlobal(image_context_position),
             Qt::NoModifier);
         QApplication::sendEvent(&image_context_widget, &image_context_event);
-        require(image_clip_selected && image_edit_requested,
-                "The image clip context menu did not select and route the stable clip ID "
+        require(image_clip_selected && image_fusion_requested &&
+                    image_fusion_action_found,
+                "The image clip context menu did not expose Fusion and route its stable clip ID "
                 "(selected=" + std::to_string(image_clip_selected) +
-                ", edit requested=" + std::to_string(image_edit_requested) + ").");
+                ", Fusion action=" + std::to_string(image_fusion_action_found) +
+                ", Fusion requested=" + std::to_string(image_fusion_requested) + ").");
+        bool image_editor_action_found = false;
+        QTimer::singleShot(0, [&image_context_widget, &image_editor_action_found]() {
+            auto* menu = image_context_widget.findChild<QMenu*>();
+            if (menu == nullptr) return;
+            for (auto* action : menu->actions()) {
+                if (action->text() ==
+                    QStringLiteral("Edit Clip Image in Image Editor")) {
+                    image_editor_action_found = true;
+                    action->trigger();
+                    break;
+                }
+            }
+            menu->close();
+        });
+        QContextMenuEvent image_editor_context_event(
+            QContextMenuEvent::Mouse,
+            image_context_position,
+            image_context_widget.mapToGlobal(image_context_position),
+            Qt::NoModifier);
+        QApplication::sendEvent(&image_context_widget, &image_editor_context_event);
+        require(image_editor_action_found && image_edit_requested,
+                "The image clip context menu lost its Image Editor action.");
         image_context_widget.close();
+
+        timeline::TimelineWidget video_context_widget;
+        video_context_widget.resize(900, 180);
+        video_context_widget.setTimelineViewportWidth(900);
+        auto video_context_clip = makeClip("video.mp4", 0, 100, "Video clip");
+        video_context_clip.clip_id = 923;
+        video_context_clip.kind = timeline::ClipKind::Video;
+        video_context_widget.setTracks({timeline::TimelineTrack{
+            721, "Video 1", 1.0, false, {video_context_clip}}});
+        video_context_widget.show();
+        application.processEvents();
+        bool video_clip_selected = false;
+        bool video_fusion_requested = false;
+        bool video_fusion_action_found = false;
+        QObject::connect(
+            &video_context_widget,
+            &timeline::TimelineWidget::clipSelected,
+            [&video_clip_selected](timeline::TrackId track_id, timeline::ClipId clip_id) {
+                video_clip_selected = track_id == 721 && clip_id == 923;
+            });
+        QObject::connect(
+            &video_context_widget,
+            &timeline::TimelineWidget::openFusionClipRequested,
+            [&video_fusion_requested](timeline::ClipId clip_id) {
+                video_fusion_requested = clip_id == 923;
+            });
+        const QPoint video_context_position(
+            static_cast<int>(video_context_widget.contentXForFrame(15)), 100);
+        QTimer::singleShot(0, [&video_context_widget, &video_fusion_action_found]() {
+            auto* menu = video_context_widget.findChild<QMenu*>();
+            if (menu == nullptr) return;
+            for (auto* action : menu->actions()) {
+                if (action->text() == QStringLiteral("Open in Fusion")) {
+                    video_fusion_action_found = true;
+                    action->trigger();
+                    break;
+                }
+            }
+            menu->close();
+        });
+        QContextMenuEvent video_context_event(
+            QContextMenuEvent::Mouse,
+            video_context_position,
+            video_context_widget.mapToGlobal(video_context_position),
+            Qt::NoModifier);
+        QApplication::sendEvent(&video_context_widget, &video_context_event);
+        require(video_clip_selected && video_fusion_action_found && video_fusion_requested,
+                "The video clip context menu did not select and route its stable ID to Fusion.");
+        video_context_widget.close();
 
         timeline::TimelineWidget linked_audio_context_widget;
         linked_audio_context_widget.resize(900, 240);
@@ -2775,11 +2856,19 @@ int main(int argc, char* argv[]) {
         bool linked_video_selected = false;
         bool linked_audio_menu_found = false;
         bool linked_audio_action_found = false;
+        bool linked_fusion_action_found = false;
+        timeline::ClipId linked_fusion_clip_id = 0;
         QObject::connect(
             &linked_audio_context_widget,
             &timeline::TimelineWidget::audioUnlinkRequested,
             [&unlinked_clip_id](timeline::ClipId clip_id) {
                 unlinked_clip_id = clip_id;
+            });
+        QObject::connect(
+            &linked_audio_context_widget,
+            &timeline::TimelineWidget::openFusionClipRequested,
+            [&linked_fusion_clip_id](timeline::ClipId clip_id) {
+                linked_fusion_clip_id = clip_id;
             });
         QObject::connect(
             &linked_audio_context_widget,
@@ -2794,15 +2883,18 @@ int main(int argc, char* argv[]) {
         const QPoint linked_video_context_position(
             linked_audio_geometry.clipRect(linked_video_clip, 0).center().toPoint());
         QTimer::singleShot(0, [&linked_audio_context_widget, &linked_audio_menu_found,
-                               &linked_audio_action_found]() {
+                               &linked_audio_action_found,
+                               &linked_fusion_action_found]() {
             auto* menu = linked_audio_context_widget.findChild<QMenu*>();
             if (menu == nullptr) return;
             linked_audio_menu_found = true;
             for (auto* action : menu->actions()) {
-                if (action->text() == QStringLiteral("Unlink Audio")) {
+                if (action->text() == QStringLiteral("Open in Fusion")) {
+                    linked_fusion_action_found = true;
+                    action->trigger();
+                } else if (action->text() == QStringLiteral("Unlink Audio")) {
                     linked_audio_action_found = true;
                     action->trigger();
-                    break;
                 }
             }
             menu->close();
@@ -2814,12 +2906,44 @@ int main(int argc, char* argv[]) {
             Qt::NoModifier);
         QApplication::sendEvent(
             &linked_audio_context_widget, &linked_audio_context_event);
-        require(unlinked_clip_id == 921,
-                "The linked video context menu did not request audio unlink for its stable clip ID (received " +
+        require(unlinked_clip_id == 921 && linked_fusion_clip_id == 921 &&
+                    linked_fusion_action_found && linked_audio_action_found,
+                "The linked video context menu did not retain Unlink Audio and add Fusion for its stable clip ID (received " +
                     std::to_string(unlinked_clip_id) + ", selected=" +
                     std::to_string(linked_video_selected) + ", menu=" +
-                    std::to_string(linked_audio_menu_found) + ", action=" +
-                    std::to_string(linked_audio_action_found) + ").");
+                    std::to_string(linked_audio_menu_found) + ", unlink=" +
+                    std::to_string(linked_audio_action_found) + ", Fusion=" +
+                    std::to_string(linked_fusion_clip_id) + ").");
+
+        bool linked_audio_fusion_action_found = false;
+        bool linked_audio_unlink_action_found = false;
+        QTimer::singleShot(0, [&linked_audio_context_widget,
+                               &linked_audio_fusion_action_found,
+                               &linked_audio_unlink_action_found]() {
+            auto* menu = linked_audio_context_widget.findChild<QMenu*>();
+            if (menu == nullptr) return;
+            for (auto* action : menu->actions()) {
+                if (action->text() == QStringLiteral("Open in Fusion")) {
+                    linked_audio_fusion_action_found = true;
+                } else if (action->text() == QStringLiteral("Unlink Audio")) {
+                    linked_audio_unlink_action_found = true;
+                    action->trigger();
+                }
+            }
+            menu->close();
+        });
+        const QPoint linked_audio_context_position(
+            linked_audio_geometry.clipRect(linked_audio_clip, 1).center().toPoint());
+        QContextMenuEvent linked_audio_companion_context_event(
+            QContextMenuEvent::Mouse,
+            linked_audio_context_position,
+            linked_audio_context_widget.mapToGlobal(linked_audio_context_position),
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            &linked_audio_context_widget, &linked_audio_companion_context_event);
+        require(unlinked_clip_id == 922 && linked_audio_unlink_action_found &&
+                    !linked_audio_fusion_action_found,
+                "The linked audio companion must retain Unlink Audio and omit Open in Fusion.");
         linked_audio_context_widget.close();
 
         timeline::TimelineWidget read_only_widget;
