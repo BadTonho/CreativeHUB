@@ -87,9 +87,11 @@ The active track and clip use a highlighted border; drop targets and the
 playhead are shown directly over the timeline content.
 Video tracks are projected into an upper pane and Audio tracks into a lower
 pane. Each pane has its own vertical scrollbar and wheel scrolling follows the
-pointer's pane. Dragging the centered 120-by-18-pixel grip in the divider
-scrolls both groups by the same vertical delta; each group clamps to its own
-scroll range. The bars and wheel remain independent. With the untouched 50/50
+pointer's pane. Dragging the divider's central region, which spans the full
+width except for 48-pixel resize zones at both ends, scrolls both groups by the
+same vertical delta. The movement is clamped to the distance both groups can
+travel, so they stop together at the first group's limit. The bars and wheel
+remain independent. With the untouched 50/50
 default, pane heights fit their rows when the combined content fits, keeping
 the Audio rows next to the Video group instead of leaving unused space between
 them. When both groups overflow, the available height is split 50/50; if only
@@ -98,7 +100,8 @@ explicitly resized divider uses its saved ratio. Dragging either divider edge
 resizes the panes. The relative order of tracks within each type is preserved;
 Track Up and Track Down stop at the visible first and last row of that type.
 The divider has an 18-pixel drag area and highlights on hover or while
-dragging. Its position is stored in local
+dragging; the central region uses open- and closed-hand cursors, while the end
+zones use the vertical-resize cursor. Its position is stored in local
 `QSettings` under `timeline/track_group_split_ratio` for use across projects.
 Both panes keep a minimum usable height. Track row height remains shared by
 Video and Audio. Vertical scroll positions are temporary view state and are

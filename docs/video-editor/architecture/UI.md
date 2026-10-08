@@ -163,10 +163,13 @@ The Timeline is hosted inside a scrollable viewport with one shared horizontal
 scrollbar. Video and Audio occupy stacked panes with independent vertical
 scrollbars; the outer scroll area's vertical scrollbar is disabled. The mouse
 wheel scrolls the pane under the pointer, while Ctrl + wheel changes shared
-horizontal zoom. Dragging the centered 120-by-18-pixel divider grip scrolls
-Video and Audio together by the same delta, clamped to each pane's range;
-scrollbars and wheel scrolling remain independent. Dragging either divider
-edge adjusts the pane heights. The grip highlights on hover and while dragging.
+horizontal zoom. Dragging the central divider region, which spans the full
+width except for 48-pixel resize zones at both ends, scrolls Video and Audio
+together by the same delta. Both groups stop when either reaches its scroll
+limit; scrollbars and wheel scrolling remain independent. Dragging either end
+zone adjusts the pane heights. The central region highlights on hover and
+while dragging, with open- and closed-hand cursors; the end zones use the
+vertical-resize cursor.
 At the untouched 50/50 default, each pane fits its rows when possible so Audio
 tracks sit directly after the Video group; overflow uses the available height,
 and an explicitly resized divider uses its saved ratio. The preference uses

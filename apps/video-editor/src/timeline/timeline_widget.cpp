@@ -36,7 +36,7 @@ constexpr double edge_width = 8.0;
 constexpr double shared_roll_half_width = 4.0;
 constexpr double shared_single_clip_handle_width = 8.0;
 constexpr double track_group_splitter_height = 18.0;
-constexpr double track_group_splitter_grip_hit_width = 120.0;
+constexpr double track_group_splitter_resize_edge_width = 48.0;
 constexpr double ruler_minor_target_spacing_pixels = 8.0;
 
 TrimPointerPosition trimPointer(const QPointF& position) noexcept {
@@ -135,13 +135,13 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     // the timeline instead of the rest of the editor.
     if (QWidget::mouseGrabber() == this) releaseMouse();
     if (split_drag_active_ || group_scroll_drag_active_ ||
-        splitter_hover_active_ || splitter_handle_hover_active_) {
+        splitter_hover_active_ || splitter_scroll_hover_active_) {
         unsetCursor();
     }
     split_drag_active_ = false;
     group_scroll_drag_active_ = false;
     splitter_hover_active_ = false;
-    splitter_handle_hover_active_ = false;
+    splitter_scroll_hover_active_ = false;
     if (interaction_controller_.trimGesture().active()) unsetCursor();
 
     tracks_ = tracks;
@@ -464,12 +464,12 @@ QRectF TimelineWidget::trackSplitterRect() const noexcept {
     return trackViewLayout().splitter_rect;
 }
 
-QRectF TimelineWidget::trackSplitterHandleRect() const noexcept {
+QRectF TimelineWidget::trackSplitterScrollRect() const noexcept {
     const auto splitter = trackSplitterRect();
-    const auto width = std::min(
-        track_group_splitter_grip_hit_width, splitter.width());
+    const auto width = std::max(
+        0.0, splitter.width() - 2.0 * track_group_splitter_resize_edge_width);
     return QRectF(
-        splitter.center().x() - width / 2.0,
+        splitter.left() + track_group_splitter_resize_edge_width,
         splitter.top(),
         width,
         splitter.height());
@@ -477,17 +477,17 @@ QRectF TimelineWidget::trackSplitterHandleRect() const noexcept {
 
 void TimelineWidget::updateTrackSplitterHoverState(const QPointF& position) {
     const auto splitter_hovered = trackSplitterRect().contains(position);
-    const auto handle_hovered = splitter_hovered &&
-        trackSplitterHandleRect().contains(position);
+    const auto scroll_area_hovered = splitter_hovered &&
+        trackSplitterScrollRect().contains(position);
     const auto hover_changed = splitter_hover_active_ != splitter_hovered ||
-        splitter_handle_hover_active_ != handle_hovered;
+        splitter_scroll_hover_active_ != scroll_area_hovered;
     splitter_hover_active_ = splitter_hovered;
-    splitter_handle_hover_active_ = handle_hovered;
+    splitter_scroll_hover_active_ = scroll_area_hovered;
     if (hover_changed) update();
 
     if (group_scroll_drag_active_) {
         setCursor(Qt::ClosedHandCursor);
-    } else if (handle_hovered) {
+    } else if (scroll_area_hovered) {
         setCursor(Qt::OpenHandCursor);
     } else if (splitter_hovered) {
         setCursor(Qt::SplitVCursor);
@@ -1323,7 +1323,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     const auto splitter_highlighted =
         splitter_hover_active_ || split_drag_active_ || group_scroll_drag_active_;
     const auto splitter_grip_highlighted =
-        splitter_handle_hover_active_ || group_scroll_drag_active_;
+        splitter_scroll_hover_active_ || group_scroll_drag_active_;
     const auto splitter_background = split_drag_active_ || group_scroll_drag_active_
         ? QColor("#214463")
         : splitter_highlighted ? QColor("#26394b") : QColor("#202630");
@@ -1347,7 +1347,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         12.0);
     const auto grip_border = group_scroll_drag_active_
         ? QColor("#80c7ff")
-        : splitter_handle_hover_active_ ? QColor("#66b7ff") : QColor("#566476");
+        : splitter_scroll_hover_active_ ? QColor("#66b7ff") : QColor("#566476");
     painter.setPen(QPen(grip_border, 1.0));
     painter.setBrush(group_scroll_drag_active_
         ? QColor("#214463")
@@ -2373,9 +2373,9 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
 }
 
 void TimelineWidget::leaveEvent(QEvent* event) {
-    if (splitter_hover_active_ || splitter_handle_hover_active_) {
+    if (splitter_hover_active_ || splitter_scroll_hover_active_) {
         splitter_hover_active_ = false;
-        splitter_handle_hover_active_ = false;
+        splitter_scroll_hover_active_ = false;
         update();
     }
     if (!split_drag_active_ && !group_scroll_drag_active_ &&
@@ -2389,9 +2389,9 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton &&
         trackSplitterRect().contains(event->position())) {
         splitter_hover_active_ = true;
-        splitter_handle_hover_active_ =
-            trackSplitterHandleRect().contains(event->position());
-        if (splitter_handle_hover_active_) {
+        splitter_scroll_hover_active_ =
+            trackSplitterScrollRect().contains(event->position());
+        if (splitter_scroll_hover_active_) {
             group_scroll_drag_active_ = true;
             group_scroll_drag_start_y_ = event->position().y();
             group_scroll_drag_video_start_offset_ = video_scroll_offset_;
@@ -2694,16 +2694,24 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
     if (group_scroll_drag_active_) {
-        const auto scroll_delta = static_cast<int>(std::lround(
+        const auto requested_delta = static_cast<int>(std::lround(
             event->position().y() - group_scroll_drag_start_y_));
+        const auto video_start = static_cast<int>(std::lround(
+            group_scroll_drag_video_start_offset_));
+        const auto audio_start = static_cast<int>(std::lround(
+            group_scroll_drag_audio_start_offset_));
+        const auto minimum_delta = -std::min(video_start, audio_start);
+        const auto maximum_delta = std::min(
+            trackScrollMaximum(TrackKind::Video) - video_start,
+            trackScrollMaximum(TrackKind::Audio) - audio_start);
+        const auto scroll_delta = std::clamp(
+            requested_delta, minimum_delta, maximum_delta);
         setTrackScrollOffset(
             TrackKind::Video,
-            static_cast<int>(std::lround(
-                group_scroll_drag_video_start_offset_)) + scroll_delta);
+            video_start + scroll_delta);
         setTrackScrollOffset(
             TrackKind::Audio,
-            static_cast<int>(std::lround(
-                group_scroll_drag_audio_start_offset_)) + scroll_delta);
+            audio_start + scroll_delta);
         event->accept();
         return;
     }

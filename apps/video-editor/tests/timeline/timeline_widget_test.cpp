@@ -1338,15 +1338,25 @@ int main(int argc, char* argv[]) {
                 "The Video/Audio divider does not expose the expanded drag area.");
 
         sendMouse(*viewport_timeline, QEvent::MouseMove,
-            QPointF(splitter.center().x() + 55.0, splitter.center().y()),
+            QPointF(splitter.left() + 60.0, splitter.center().y()),
             Qt::NoButton);
         require(viewport_timeline->cursor().shape() == Qt::OpenHandCursor,
-                "The central divider grip did not use the open-hand cursor.");
+                "The left side of the central divider did not use the open-hand cursor.");
         sendMouse(*viewport_timeline, QEvent::MouseMove,
-            QPointF(splitter.center().x() + 65.0, splitter.center().y()),
+            QPointF(splitter.right() - 60.0, splitter.center().y()),
+            Qt::NoButton);
+        require(viewport_timeline->cursor().shape() == Qt::OpenHandCursor,
+                "The right side of the central divider did not use the open-hand cursor.");
+        sendMouse(*viewport_timeline, QEvent::MouseMove,
+            QPointF(splitter.left() + 24.0, splitter.center().y()),
             Qt::NoButton);
         require(viewport_timeline->cursor().shape() == Qt::SplitVCursor,
-                "The divider edge did not use the resize cursor.");
+                "The left divider endpoint did not use the resize cursor.");
+        sendMouse(*viewport_timeline, QEvent::MouseMove,
+            QPointF(splitter.right() - 24.0, splitter.center().y()),
+            Qt::NoButton);
+        require(viewport_timeline->cursor().shape() == Qt::SplitVCursor,
+                "The right divider endpoint did not use the resize cursor.");
 
         QImage divider_idle(
             viewport_timeline->size(), QImage::Format_ARGB32_Premultiplied);
@@ -1374,48 +1384,69 @@ int main(int argc, char* argv[]) {
             15, video_scroll->maximum(), audio_scroll->maximum()});
         require(linked_scroll_delta > 0,
                 "The linked-scroll test does not have overflow in both groups.");
-        const auto expanded_hit_target = QPointF(
-            splitter.center().x(), splitter.top() + 15.0);
+        const auto left_linked_scroll_target = QPointF(
+            splitter.left() + 60.0, splitter.top() + 15.0);
         sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
-            expanded_hit_target, Qt::LeftButton);
+            left_linked_scroll_target, Qt::LeftButton);
         require(viewport_timeline->cursor().shape() == Qt::ClosedHandCursor,
-                "Dragging the central divider grip did not use the closed-hand cursor.");
+                "Dragging the central divider did not use the closed-hand cursor.");
         QImage divider_active(
             viewport_timeline->size(), QImage::Format_ARGB32_Premultiplied);
         divider_active.fill(Qt::transparent);
         viewport_timeline->render(&divider_active);
         require(divider_active.pixelColor(grip_sample) !=
                     divider_hover.pixelColor(grip_sample),
-                "Dragging the Video/Audio divider did not highlight its grip.");
+                "Dragging the central scroll area did not highlight its grip.");
         sendMouse(*viewport_timeline, QEvent::MouseMove,
-            expanded_hit_target + QPointF(0.0, linked_scroll_delta), Qt::LeftButton);
+            left_linked_scroll_target + QPointF(0.0, linked_scroll_delta),
+            Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
-            expanded_hit_target + QPointF(0.0, linked_scroll_delta), Qt::NoButton);
+            left_linked_scroll_target + QPointF(0.0, linked_scroll_delta),
+            Qt::NoButton);
         require(video_scroll->value() == linked_scroll_delta &&
                     audio_scroll->value() == linked_scroll_delta &&
                     std::abs(viewport_timeline->trackGroupSplitRatio() -
                              initial_split) < 0.001,
-                "Dragging the central grip did not scroll both groups equally without resizing.");
+                "Dragging the left side of the central bar did not scroll both groups equally without resizing.");
 
         const auto video_scroll_headroom = std::min({
             5, video_scroll->maximum() - 1, audio_scroll->maximum() - 1});
-        const auto bounded_linked_delta = video_scroll_headroom + 1;
-        require(video_scroll_headroom >= 0 && bounded_linked_delta <= 12,
+        const auto requested_linked_delta = std::min(
+            12, audio_scroll->maximum());
+        require(video_scroll_headroom >= 0 &&
+                    requested_linked_delta > video_scroll_headroom,
                 "The linked-scroll bound test needs overflow in both groups.");
         video_scroll->setValue(video_scroll->maximum() - video_scroll_headroom);
         audio_scroll->setValue(0);
         application.processEvents();
+        const auto right_linked_scroll_target = QPointF(
+            splitter.right() - 60.0, splitter.center().y());
         sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
-            expanded_hit_target, Qt::LeftButton);
+            right_linked_scroll_target, Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseMove,
-            expanded_hit_target + QPointF(0.0, bounded_linked_delta),
+            right_linked_scroll_target + QPointF(0.0, requested_linked_delta),
             Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
-            expanded_hit_target + QPointF(0.0, bounded_linked_delta),
+            right_linked_scroll_target + QPointF(0.0, requested_linked_delta),
             Qt::NoButton);
         require(video_scroll->value() == video_scroll->maximum() &&
-                    audio_scroll->value() == bounded_linked_delta,
-                "Linked scrolling did not clamp each group independently at its own limit.");
+                    audio_scroll->value() == video_scroll_headroom,
+                "Linked scrolling did not stop both groups at the first group's limit.");
+
+        video_scroll->setValue(0);
+        audio_scroll->setValue(video_scroll_headroom);
+        application.processEvents();
+        const auto left_limit_scroll_target = QPointF(
+            splitter.left() + 60.0, splitter.center().y());
+        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
+            left_limit_scroll_target, Qt::LeftButton);
+        sendMouse(*viewport_timeline, QEvent::MouseMove,
+            left_limit_scroll_target + QPointF(0.0, -10.0), Qt::LeftButton);
+        sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
+            left_limit_scroll_target + QPointF(0.0, -10.0), Qt::NoButton);
+        require(video_scroll->value() == 0 &&
+                    audio_scroll->value() == video_scroll_headroom,
+                "Linked scrolling did not stop both groups at the first group's top limit.");
 
         const auto upper_splitter = viewport_timeline->trackSplitterRect();
         const auto left_splitter_edge = QPointF(
@@ -1465,6 +1496,9 @@ int main(int argc, char* argv[]) {
         audio_scroll->setValue(0);
         application.processEvents();
         const auto single_group_delta = std::min(10, video_scroll->maximum());
+        const auto expanded_hit_target = QPointF(
+            viewport_timeline->trackSplitterRect().center().x(),
+            viewport_timeline->trackSplitterRect().center().y());
         sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
             expanded_hit_target, Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseMove,
@@ -1473,9 +1507,9 @@ int main(int argc, char* argv[]) {
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
             expanded_hit_target + QPointF(0.0, single_group_delta),
             Qt::NoButton);
-        require(video_scroll->value() == single_group_delta &&
+        require(video_scroll->value() == 0 &&
                     audio_scroll->value() == 0,
-                "Linked scrolling moved a group that has no vertical overflow.");
+                "Linked scrolling moved one group when the other had no vertical overflow.");
 
         scroll_area.close();
 

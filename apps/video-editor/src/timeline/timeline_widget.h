@@ -190,7 +190,7 @@ private:
     [[nodiscard]] QRectF trackRect(std::size_t index) const noexcept;
     [[nodiscard]] TimelineGeometry geometry() const noexcept;
     [[nodiscard]] TimelineTrackViewLayout trackViewLayout() const noexcept;
-    [[nodiscard]] QRectF trackSplitterHandleRect() const noexcept;
+    [[nodiscard]] QRectF trackSplitterScrollRect() const noexcept;
     void updateTrackSplitterHoverState(const QPointF& position);
     [[nodiscard]] QRectF rulerRect() const noexcept;
     [[nodiscard]] double rowHeight() const noexcept;
@@ -284,7 +284,7 @@ private:
     bool split_drag_active_ = false;
     bool group_scroll_drag_active_ = false;
     bool splitter_hover_active_ = false;
-    bool splitter_handle_hover_active_ = false;
+    bool splitter_scroll_hover_active_ = false;
     double group_scroll_drag_start_y_ = 0.0;
     double group_scroll_drag_video_start_offset_ = 0.0;
     double group_scroll_drag_audio_start_offset_ = 0.0;
