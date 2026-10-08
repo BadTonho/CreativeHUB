@@ -1,7 +1,10 @@
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Test)
+
 add_executable(creative-suite-main-editor-settings-dialog-tests
     settings_dialog_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/settings_dialog.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/settings_dialog.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.h
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/user_preferences.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/user_preferences.h
@@ -13,6 +16,7 @@ target_include_directories(creative-suite-main-editor-settings-dialog-tests PRIV
 
 target_link_libraries(creative-suite-main-editor-settings-dialog-tests PRIVATE
     Qt6::Widgets
+    Qt6::Test
     creative-suite::shortcuts
 )
 
@@ -63,10 +67,9 @@ set_tests_properties(creative-suite-main-editor-settings-dialog PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Test)
-
 add_executable(creative-suite-main-editor-shortcut-manager-tests
     shortcut_manager_test.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette.h

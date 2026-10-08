@@ -3,14 +3,20 @@
 #include "settings/user_preferences.h"
 
 #include <QApplication>
+#include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialogButtonBox>
+#include <QKeySequenceEdit>
+#include <QLabel>
 #include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTabWidget>
+#include <QTemporaryDir>
+#include <QTest>
 
 #include <cstdio>
 #include <stdexcept>
@@ -25,9 +31,15 @@ void require(bool condition, const char* message) {
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
+    QCoreApplication::setOrganizationName("CreativeSuiteTests");
+    QCoreApplication::setApplicationName("SettingsDialogTest");
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QTemporaryDir settings_directory;
+    if (!settings_directory.isValid()) return 1;
+    QSettings::setPath(
+        QSettings::IniFormat, QSettings::UserScope, settings_directory.path());
 
     try {
-        QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings settings;
         settings.clear();
         settings.sync();
@@ -54,7 +66,31 @@ int main(int argc, char* argv[]) {
                 "Monitor volume lower bound was not applied.");
         settings.clear();
 
+        QAction app_shortcut_action;
+        app_shortcut_action.setShortcut(QKeySequence("Ctrl+N"));
+        QAction edit_shortcut_action;
+        edit_shortcut_action.setShortcut(QKeySequence("Ctrl+K"));
         settings::ShortcutManager shortcut_manager;
+        shortcut_manager.registerAction(
+            QStringLiteral("settings.test.new"), QStringLiteral("New Project"),
+            &app_shortcut_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
+        shortcut_manager.registerAction(
+            QStringLiteral("settings.test.split"), QStringLiteral("Split Clip"),
+            &edit_shortcut_action, settings::ShortcutScope::Edit,
+            QStringLiteral("Edit workspace"));
+        QString settings_shortcut_load_error;
+        const bool settings_shortcuts_loaded =
+            shortcut_manager.load(&settings_shortcut_load_error);
+        if (!settings_shortcuts_loaded) {
+            std::fprintf(
+                stderr, "%s\n", settings_shortcut_load_error.toUtf8().constData());
+        }
+        require(settings_shortcuts_loaded,
+                "Shortcut preferences could not be loaded for Settings.");
+        require(shortcut_manager.setShortcut(
+                    QStringLiteral("settings.test.new"), QKeySequence("Ctrl+P")),
+                "Settings shortcut fixture could not be customized.");
         settings::SettingsDialog dialog(nullptr, shortcut_manager);
         require(dialog.windowTitle() == "Settings",
                 "Settings dialog title is incorrect.");
@@ -62,7 +98,7 @@ int main(int argc, char* argv[]) {
         require(dialog.width() >= 900 && dialog.height() >= 680,
                 "Settings dialog default size is too small.");
 
-        const auto* tabs = dialog.findChild<QTabWidget*>();
+        auto* tabs = dialog.findChild<QTabWidget*>();
         require(tabs != nullptr, "Settings dialog tabs are missing.");
         require(tabs->count() == 4,
                 "Settings dialog must contain four tabs.");
@@ -74,6 +110,78 @@ int main(int argc, char* argv[]) {
                 "Timeline settings tab is missing.");
         require(tabs->tabText(3) == "Shortcuts",
                 "Shortcuts settings tab is missing.");
+
+        require(dialog.findChild<QLabel*>("shortcutScope_application") != nullptr &&
+                    dialog.findChild<QLabel*>("shortcutScope_edit") != nullptr &&
+                    dialog.findChild<QLabel*>(
+                        "shortcutScopeDescription_application") != nullptr &&
+                    dialog.findChild<QLabel*>(
+                        "shortcutScopeDescription_edit") != nullptr,
+                "Shortcut Settings must group commands and explain availability.");
+        require(dialog.findChild<QLabel*>("shortcutScope_shared") == nullptr &&
+                    dialog.findChild<QLabel*>("shortcutScope_fusion") == nullptr &&
+                    dialog.findChild<QLabel*>("shortcutScope_render") == nullptr,
+                "Shortcut Settings must omit scopes without registered commands.");
+        auto* app_sequence_editor = dialog.findChild<QKeySequenceEdit*>(
+            "shortcutEditor_settings.test.new");
+        auto* app_reset_button = dialog.findChild<QPushButton*>(
+            "shortcutReset_settings.test.new");
+        auto* app_clear_button = dialog.findChild<QPushButton*>(
+            "shortcutClear_settings.test.new");
+        require(app_sequence_editor != nullptr && app_reset_button != nullptr &&
+                    app_clear_button != nullptr &&
+                    app_sequence_editor->keySequence() == QKeySequence("Ctrl+P"),
+                "Settings did not show the saved configured shortcut.");
+        dialog.show();
+        tabs->setCurrentWidget(tabs->widget(3));
+        QApplication::processEvents();
+        app_sequence_editor->setFocus();
+        QApplication::processEvents();
+        QTest::keyClick(
+            app_sequence_editor, Qt::Key_F6,
+            Qt::ControlModifier | Qt::AltModifier);
+        QTest::qWait(1100);
+        require(shortcut_manager.shortcut(QStringLiteral("settings.test.new")) ==
+                    QKeySequence("Ctrl+Alt+F6") &&
+                    app_shortcut_action.shortcut() == QKeySequence("Ctrl+Alt+F6"),
+                "Capturing a key sequence in Settings must apply it immediately.");
+        require(shortcut_manager.setShortcut(
+                    QStringLiteral("settings.test.split"),
+                    QKeySequence("Ctrl+Alt+F8")),
+                "Settings conflict fixture could not be customized.");
+        app_sequence_editor->setFocus();
+        QTest::keyClick(
+            app_sequence_editor, Qt::Key_F8,
+            Qt::ControlModifier | Qt::AltModifier);
+        QTest::qWait(1100);
+        auto* shortcut_feedback = dialog.findChild<QLabel*>("shortcutFeedback");
+        const bool conflict_was_reported = shortcut_feedback != nullptr &&
+            shortcut_feedback->text().contains("Split Clip") &&
+            shortcut_feedback->text().contains("Edit workspace") &&
+            app_sequence_editor->keySequence() == QKeySequence("Ctrl+Alt+F6");
+        if (!conflict_was_reported) {
+            std::fprintf(
+                stderr, "feedback='%s', editor='%s', configured='%s'\n",
+                shortcut_feedback == nullptr
+                    ? "<missing>" : shortcut_feedback->text().toUtf8().constData(),
+                app_sequence_editor->keySequence().toString().toUtf8().constData(),
+                shortcut_manager.shortcut(QStringLiteral("settings.test.new"))
+                    .toString().toUtf8().constData());
+        }
+        require(conflict_was_reported,
+                "Settings must explain a conflicting binding and keep its previous value.");
+        require(shortcut_manager.resetShortcut(
+                    QStringLiteral("settings.test.split")),
+                "Settings conflict fixture did not reset its edited scope shortcut.");
+        app_clear_button->click();
+        require(shortcut_manager.shortcut(QStringLiteral("settings.test.new")).isEmpty() &&
+                    app_sequence_editor->keySequence().isEmpty() &&
+                    app_shortcut_action.shortcut().isEmpty(),
+                "Settings Clear must disable the shortcut immediately.");
+        app_reset_button->click();
+        require(app_sequence_editor->keySequence() == QKeySequence("Ctrl+N") &&
+                    app_shortcut_action.shortcut() == QKeySequence("Ctrl+N"),
+                "Settings individual Reset did not update the shortcut immediately.");
 
         require(settings::audioWaveformDisplayMode() ==
                     settings::AudioWaveformDisplayMode::Mono,

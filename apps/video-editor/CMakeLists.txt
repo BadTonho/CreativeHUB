@@ -48,6 +48,7 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/main_window/main_window_inspector.cpp
     src/settings/settings_dialog.cpp
     src/settings/settings_dialog.h
+    src/settings/shortcut_manager.cpp
     src/settings/shortcut_manager.h
     src/settings/user_preferences.cpp
     src/settings/user_preferences.h

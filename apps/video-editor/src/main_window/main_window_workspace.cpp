@@ -506,6 +506,9 @@ void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
 }
 
 void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
+    if (shortcut_manager_ != nullptr) {
+        shortcut_manager_->setWorkspace(page);
+    }
     if (playback_controller_ == nullptr) return;
     if (page != ui::WorkspacePageId::Fusion) {
         playback_controller_->setFusionNodePreviewTarget(std::nullopt);
@@ -601,8 +604,13 @@ void MainWindow::createMenus() {
         }
     };
     const auto register_shortcut =
-        [this](const QString& id, const QString& label, QAction* action) {
-            shortcut_manager_->registerAction(id, label, action);
+        [this](const QString& id,
+               const QString& label,
+               QAction* action,
+               settings::ShortcutScope scope,
+               const QString& availability) {
+            shortcut_manager_->registerAction(
+                id, label, action, scope, availability);
         };
 
     auto* file_menu = menuBar()->addMenu("&File");
@@ -612,7 +620,8 @@ void MainWindow::createMenus() {
     new_project_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("file.new_project"), QStringLiteral("New Project"),
-        new_project_action_);
+        new_project_action_, settings::ShortcutScope::Application,
+        QStringLiteral("All workspaces"));
     connect(new_project_action_, &QAction::triggered, this, &MainWindow::newProject);
     project_settings_action_ = file_menu->addAction("Project Settings...");
     project_settings_action_->setObjectName(QStringLiteral("projectSettingsAction"));
@@ -628,7 +637,8 @@ void MainWindow::createMenus() {
     open_project_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("file.open_project"), QStringLiteral("Open Project"),
-        open_project_action_);
+        open_project_action_, settings::ShortcutScope::Application,
+        QStringLiteral("All workspaces"));
     connect(open_project_action_, &QAction::triggered, this, &MainWindow::openProject);
     save_project_action_ = file_menu->addAction("&Save Project");
     disableDuringProjectLoad(save_project_action_);
@@ -636,7 +646,8 @@ void MainWindow::createMenus() {
     save_project_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("file.save_project"), QStringLiteral("Save Project"),
-        save_project_action_);
+        save_project_action_, settings::ShortcutScope::Application,
+        QStringLiteral("All workspaces"));
     connect(save_project_action_, &QAction::triggered, this, &MainWindow::saveProject);
     save_project_as_action_ = file_menu->addAction("Save Project &As...");
     disableDuringProjectLoad(save_project_as_action_);
@@ -644,7 +655,9 @@ void MainWindow::createMenus() {
     save_project_as_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("file.save_project_as"),
-        QStringLiteral("Save Project As"), save_project_as_action_);
+        QStringLiteral("Save Project As"), save_project_as_action_,
+        settings::ShortcutScope::Application,
+        QStringLiteral("All workspaces"));
     connect(save_project_as_action_, &QAction::triggered, this, &MainWindow::saveProjectAs);
     file_menu->addSeparator();
     auto* exit_action = file_menu->addAction("E&xit");
@@ -657,7 +670,9 @@ void MainWindow::createMenus() {
     undo_action->setShortcutContext(Qt::WindowShortcut);
     undo_action_ = undo_action;
     register_shortcut(
-        QStringLiteral("edit.undo"), QStringLiteral("Undo"), undo_action_);
+        QStringLiteral("edit.undo"), QStringLiteral("Undo"), undo_action_,
+        settings::ShortcutScope::Shared,
+        QStringLiteral("Edit and Fusion workspaces"));
     connect(undo_action_, &QAction::triggered, this, [this]() {
         static_cast<void>(edit_workspace_->controller()->undo());
     });
@@ -667,7 +682,9 @@ void MainWindow::createMenus() {
     redo_action->setShortcutContext(Qt::WindowShortcut);
     redo_action_ = redo_action;
     register_shortcut(
-        QStringLiteral("edit.redo"), QStringLiteral("Redo"), redo_action_);
+        QStringLiteral("edit.redo"), QStringLiteral("Redo"), redo_action_,
+        settings::ShortcutScope::Shared,
+        QStringLiteral("Edit and Fusion workspaces"));
     connect(redo_action_, &QAction::triggered, this, [this]() {
         static_cast<void>(edit_workspace_->controller()->redo());
     });
@@ -679,13 +696,34 @@ void MainWindow::createMenus() {
     delete_clip_action_ = delete_clip_action;
     register_shortcut(
         QStringLiteral("edit.delete_clip"),
-        QStringLiteral("Delete Selected Clip"), delete_clip_action_);
+        QStringLiteral("Delete Selected Clip"), delete_clip_action_,
+        settings::ShortcutScope::Edit,
+        QStringLiteral("Edit workspace"));
     delete_clip_action_->setEnabled(false);
-    connect(
-        delete_clip_action_,
-        &QAction::triggered,
-        edit_workspace_->controller(),
-        &ui::EditWorkspaceController::deleteActiveTimelineClip);
+    connect(delete_clip_action_, &QAction::triggered, this, [this]() {
+        auto* focus = QApplication::focusWidget();
+        if (auto* line_edit = qobject_cast<QLineEdit*>(focus)) {
+            line_edit->del();
+            return;
+        }
+        if (auto* text_edit = qobject_cast<QTextEdit*>(focus)) {
+            if (text_edit->isReadOnly()) return;
+            auto cursor = text_edit->textCursor();
+            cursor.deleteChar();
+            text_edit->setTextCursor(cursor);
+            return;
+        }
+        if (auto* plain_text_edit = qobject_cast<QPlainTextEdit*>(focus)) {
+            if (plain_text_edit->isReadOnly()) return;
+            auto cursor = plain_text_edit->textCursor();
+            cursor.deleteChar();
+            plain_text_edit->setTextCursor(cursor);
+            return;
+        }
+        if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+            edit_workspace_->controller()->deleteActiveTimelineClip();
+        }
+    });
     ripple_delete_clip_action_ = edit_menu->addAction("Ripple Delete Selected Clip");
     disableDuringProjectLoad(ripple_delete_clip_action_);
     ripple_delete_clip_action_->setObjectName(
@@ -695,7 +733,8 @@ void MainWindow::createMenus() {
     register_shortcut(
         QStringLiteral("edit.ripple_delete_clip"),
         QStringLiteral("Ripple Delete Selected Clip"),
-        ripple_delete_clip_action_);
+        ripple_delete_clip_action_, settings::ShortcutScope::Edit,
+        QStringLiteral("Edit workspace"));
     ripple_delete_clip_action_->setEnabled(false);
     connect(ripple_delete_clip_action_, &QAction::triggered, this, [this]() {
         auto* focus = QApplication::focusWidget();
@@ -722,7 +761,9 @@ void MainWindow::createMenus() {
     split_clip_action->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("edit.split_clip"),
-        QStringLiteral("Split Clip at Playhead"), split_clip_action);
+        QStringLiteral("Split Clip at Playhead"), split_clip_action,
+        settings::ShortcutScope::Edit,
+        QStringLiteral("Edit workspace"));
     connect(
         split_clip_action,
         &QAction::triggered,
@@ -735,7 +776,8 @@ void MainWindow::createMenus() {
     copy_attributes_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("edit.copy_attributes"), QStringLiteral("Copy Attributes"),
-        copy_attributes_action_);
+        copy_attributes_action_, settings::ShortcutScope::Edit,
+        QStringLiteral("Edit workspace"));
     connect(copy_attributes_action_, &QAction::triggered, this, [this]() {
         auto* focus = QApplication::focusWidget();
         if (auto* line_edit = qobject_cast<QLineEdit*>(focus)) {
@@ -761,7 +803,8 @@ void MainWindow::createMenus() {
     paste_attributes_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("edit.paste_attributes"), QStringLiteral("Paste Attributes"),
-        paste_attributes_action_);
+        paste_attributes_action_, settings::ShortcutScope::Edit,
+        QStringLiteral("Edit workspace"));
     connect(paste_attributes_action_, &QAction::triggered, this, [this]() {
         if (edit_workspace_ == nullptr || edit_workspace_->controller() == nullptr) return;
         edit_workspace_->controller()->showPasteCopiedClipAttributesDialog(this);
@@ -1034,7 +1077,9 @@ void MainWindow::createMenus() {
     play_action->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("playback.play_pause"),
-        QStringLiteral("Play or Pause"), play_action);
+        QStringLiteral("Play or Pause"), play_action,
+        settings::ShortcutScope::Shared,
+        QStringLiteral("Edit and Fusion workspaces"));
     connect(play_action, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->togglePlayback();
     });
@@ -1045,7 +1090,9 @@ void MainWindow::createMenus() {
     previous_frame_action->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("playback.previous_frame"),
-        QStringLiteral("Previous Frame"), previous_frame_action);
+        QStringLiteral("Previous Frame"), previous_frame_action,
+        settings::ShortcutScope::Shared,
+        QStringLiteral("Edit and Fusion workspaces"));
     connect(previous_frame_action, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->requestPlaybackCommand(
             playback::PlaybackCommand::StepBackward);
@@ -1057,7 +1104,9 @@ void MainWindow::createMenus() {
     next_frame_action->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("playback.next_frame"),
-        QStringLiteral("Next Frame"), next_frame_action);
+        QStringLiteral("Next Frame"), next_frame_action,
+        settings::ShortcutScope::Shared,
+        QStringLiteral("Edit and Fusion workspaces"));
     connect(next_frame_action, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->requestPlaybackCommand(
             playback::PlaybackCommand::StepForward);
@@ -1070,7 +1119,9 @@ void MainWindow::createMenus() {
     move_left_action->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("timeline.nudge_left"),
-        QStringLiteral("Nudge Clip Left"), move_left_action);
+        QStringLiteral("Nudge Clip Left"), move_left_action,
+        settings::ShortcutScope::Edit,
+        QStringLiteral("Edit workspace"));
     connect(move_left_action, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->moveActiveTimelineClip(-1);
     });
@@ -1082,13 +1133,18 @@ void MainWindow::createMenus() {
     move_right_action->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
         QStringLiteral("timeline.nudge_right"),
-        QStringLiteral("Nudge Clip Right"), move_right_action);
+        QStringLiteral("Nudge Clip Right"), move_right_action,
+        settings::ShortcutScope::Edit,
+        QStringLiteral("Edit workspace"));
     connect(move_right_action, &QAction::triggered, this, [this]() {
         edit_workspace_->controller()->moveActiveTimelineClip(1);
     });
     addAction(move_right_action);
 
     shortcut_manager_->load();
+    if (workspace_host_ != nullptr) {
+        shortcut_manager_->setWorkspace(workspace_host_->currentPage());
+    }
     updateHistoryActions();
     updateAttributeClipboardActions();
 }

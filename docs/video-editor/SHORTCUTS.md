@@ -5,23 +5,23 @@ It must change in the same commit as any shortcut change.
 
 | Shortcut | Action | Context |
 | --- | --- | --- |
-| Space | Play or pause the selected timeline media | Video Editor |
-| Shift + Space | Open or close the Functions filter picker | Video Editor |
-| Left Arrow | Previous frame, crossing a clip boundary when applicable | Video Editor |
-| Right Arrow | Next frame, crossing a clip boundary when applicable | Video Editor |
-| Ctrl + Left | Nudge the active clip one frame left when valid | Video Editor |
-| Ctrl + Right | Nudge the active clip one frame right when valid | Video Editor |
-| Delete | Delete the active timeline clip and leave later clips in place | Video Editor; editable text fields keep their normal Delete behavior |
-| Shift + Delete | Ripple-delete the active clip, closing the gap on its track until a collision | Video Editor; editable text fields keep their normal cut behavior |
-| Ctrl + K | Split the active clip at the playhead | Video Editor |
-| Ctrl + C | Copy the primary selected Timeline clip's editable attributes; focused text fields keep their normal copy behavior | Video Editor; enabled when a Timeline clip is selected |
-| Ctrl + Shift + V | Open Paste Attributes for the selected Timeline clip or multi-selection | Video Editor; enabled after a Timeline clip has been copied |
-| Ctrl + Z | Undo the last successful Timeline edit | Video Editor |
-| Ctrl + Y / Ctrl + Shift + Z | Redo the last undone edit | Video Editor |
-| Ctrl + N | Create a new project | Video Editor |
-| Ctrl + O | Open a project | Video Editor |
-| Ctrl + S | Save the current project or open Save As | Video Editor |
-| Ctrl + Shift + S | Save the current project under a new path | Video Editor |
+| Space | Play or pause the selected timeline media | Edit and Fusion |
+| Shift + Space | Open or close the Functions filter picker | Edit and Fusion |
+| Left Arrow | Previous frame, crossing a clip boundary when applicable | Edit and Fusion |
+| Right Arrow | Next frame, crossing a clip boundary when applicable | Edit and Fusion |
+| Ctrl + Left | Nudge the active clip one frame left when valid | Edit |
+| Ctrl + Right | Nudge the active clip one frame right when valid | Edit |
+| Delete | Delete the active timeline clip and leave later clips in place | Edit; editable text fields keep their normal Delete behavior |
+| Shift + Delete | Ripple-delete the active clip, closing the gap on its track until a collision | Edit; editable text fields keep their normal cut behavior |
+| Ctrl + K | Split the active clip at the playhead | Edit |
+| Ctrl + C | Copy the primary selected Timeline clip's editable attributes; focused text fields keep their normal copy behavior | Edit; enabled when a Timeline clip is selected |
+| Ctrl + Shift + V | Open Paste Attributes for the selected Timeline clip or multi-selection | Edit; enabled after a Timeline clip has been copied |
+| Ctrl + Z | Undo the last successful Timeline edit | Edit and Fusion |
+| Ctrl + Y / Ctrl + Shift + Z | Redo the last undone edit | Edit and Fusion |
+| Ctrl + N | Create a new project | All workspaces |
+| Ctrl + O | Open a project | All workspaces |
+| Ctrl + S | Save the current project or open Save As | All workspaces |
+| Ctrl + Shift + S | Save the current project under a new path | All workspaces |
 | Ctrl + Mouse Wheel | Zoom the timeline around the playhead | Timeline |
 | Shift + Mouse Wheel | Adjust the height of all Timeline track rows | Timeline |
 | Drag the time ruler | Scrub the playhead without selecting a clip | Timeline |
@@ -32,8 +32,9 @@ dragging moves a clip between tracks and absolute positions while Alt + drag
 seeks. The Edit > Require Alt to Move Clips option can enable the modifier
 requirement; in that mode, Alt + dragging moves clips and normal dragging
 seeks. Edge dragging trims, and the persistent Blade Tool changes a click into
-a split request. Playback shortcuts are disabled when no playable selected
-media is available.
+a split request. Playback shortcuts are available in Edit and Fusion and are
+disabled when no playable selected media is available. Render has no editing,
+playback, or undo shortcuts by default.
 In the Selection tool, Ctrl + click adds/removes clips for Paste Attributes;
 normal click returns to a single selected clip.
 
@@ -55,10 +56,16 @@ selected destination, the dialog explains that a clip must be selected and
 keeps Apply disabled. Other editing commands continue to target the primary
 clip and reduce the group to that clip when an individual edit begins.
 
-Keyboard shortcuts can be customized in `Settings > Shortcuts`. Changes apply
-immediately and are stored as global user preferences. Clear a shortcut to
-disable that command; duplicate combinations are rejected. Each command can
-be reset individually, or all commands can be restored with `Reset All`.
+Keyboard shortcuts can be customized in `Settings > Shortcuts`. Commands are
+grouped by Application, Shared, Edit, Fusion, and Render; groups without
+registered commands are omitted. Each group states where its commands work.
+Changes apply immediately and are stored as global user preferences. Use the
+`Clear` button beside a shortcut to disable that command. Edit, Fusion, and
+Render commands can reuse the same sequence because those workspaces are
+exclusive. Application commands conflict with every scope; Shared commands
+conflict with Edit and Fusion commands, but may reuse a Render-only sequence.
+Other conflicting combinations are rejected. Each command can be reset
+individually, or all commands can be restored with `Reset All`.
 Mouse gestures remain outside the customizable shortcut list.
 
 ## Image Editor

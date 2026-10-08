@@ -7,6 +7,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QFont>
 #include <QHeaderView>
 #include <QHash>
 #include <QHBoxLayout>
@@ -21,6 +22,8 @@
 #include <QTableWidgetItem>
 #include <QTabWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace settings {
 namespace {
@@ -346,54 +349,131 @@ QWidget* SettingsDialog::createShortcutsPage() {
     QHash<QString, QKeySequenceEdit*> editors;
 
     auto* feedback = new QLabel(page);
+    feedback->setObjectName(QStringLiteral("shortcutFeedback"));
     feedback->setWordWrap(true);
     feedback->setStyleSheet("color: #d26a6a;");
 
-    for (const auto& entry : shortcut_manager_.entries()) {
-        auto* row = new QWidget(content);
-        auto* row_layout = new QHBoxLayout(row);
-        row_layout->setContentsMargins(0, 0, 0, 0);
+    const auto add_scope = [this, content, content_layout, feedback, &editors](
+                               ShortcutScope scope,
+                               const QString& description_text) {
+        const auto first = std::find_if(
+            shortcut_manager_.entries().cbegin(),
+            shortcut_manager_.entries().cend(),
+            [scope](const ShortcutEntry& entry) { return entry.scope == scope; });
+        if (first == shortcut_manager_.entries().cend()) return;
 
-        auto* label = new QLabel(entry.label, row);
-        label->setMinimumWidth(210);
-        auto* editor = new QKeySequenceEdit(entry.action->shortcut(), row);
-        editor->setToolTip(QString("Shortcut for %1").arg(entry.label));
-        auto* reset_button = new QPushButton("Reset", row);
-        reset_button->setToolTip(
-            QString("Restore the default shortcut for %1").arg(entry.label));
+        auto* heading = new QLabel(
+            shortcut_manager_.scopeLabel(scope), content);
+        heading->setObjectName(
+            QStringLiteral("shortcutScope_%1")
+                .arg(shortcut_manager_.scopeLabel(scope).toLower()));
+        QFont heading_font = heading->font();
+        heading_font.setBold(true);
+        heading->setFont(heading_font);
+        content_layout->addWidget(heading);
 
-        row_layout->addWidget(label);
-        row_layout->addWidget(editor, 1);
-        row_layout->addWidget(reset_button);
-        content_layout->addWidget(row);
-        editors.insert(entry.id, editor);
+        auto* availability = new QLabel(description_text, content);
+        availability->setObjectName(
+            QStringLiteral("shortcutScopeDescription_%1")
+                .arg(shortcut_manager_.scopeLabel(scope).toLower()));
+        availability->setWordWrap(true);
+        content_layout->addWidget(availability);
 
-        connect(editor, &QKeySequenceEdit::keySequenceChanged, this,
-                [this, editor, feedback, id = entry.id](
-                    const QKeySequence& sequence) {
-                    QString conflict_message;
-                    if (!shortcut_manager_.setShortcut(
-                            id, sequence, &conflict_message)) {
+        for (const auto& entry : shortcut_manager_.entries()) {
+            if (entry.scope != scope) continue;
+            auto* row = new QWidget(content);
+            row->setObjectName(QStringLiteral("shortcutRow_%1").arg(entry.id));
+            auto* row_layout = new QHBoxLayout(row);
+            row_layout->setContentsMargins(0, 0, 0, 0);
+
+            auto* label = new QLabel(entry.label, row);
+            label->setMinimumWidth(210);
+            auto* editor = new QKeySequenceEdit(
+                shortcut_manager_.shortcut(entry.id), row);
+            editor->setObjectName(
+                QStringLiteral("shortcutEditor_%1").arg(entry.id));
+            editor->setToolTip(QString("Shortcut for %1").arg(entry.label));
+            auto* reset_button = new QPushButton("Reset", row);
+            reset_button->setObjectName(
+                QStringLiteral("shortcutReset_%1").arg(entry.id));
+            reset_button->setToolTip(
+                QString("Restore the default shortcut for %1").arg(entry.label));
+            auto* clear_button = new QPushButton("Clear", row);
+            clear_button->setObjectName(
+                QStringLiteral("shortcutClear_%1").arg(entry.id));
+            clear_button->setToolTip(
+                QString("Disable the shortcut for %1").arg(entry.label));
+
+            row_layout->addWidget(label);
+            row_layout->addWidget(editor, 1);
+            row_layout->addWidget(clear_button);
+            row_layout->addWidget(reset_button);
+            content_layout->addWidget(row);
+            editors.insert(entry.id, editor);
+
+            connect(editor, &QKeySequenceEdit::keySequenceChanged, this,
+                    [this, editor, feedback, id = entry.id](
+                        const QKeySequence& sequence) {
+                        // QKeySequenceEdit emits an empty sequence while a new
+                        // combination is being captured. Keep the configured
+                        // binding until the user finishes or explicitly clears it.
+                        if (sequence.isEmpty()) return;
+                        QString conflict_message;
+                        if (!shortcut_manager_.setShortcut(
+                                id, sequence, &conflict_message)) {
+                            const QSignalBlocker blocker(editor);
+                            editor->setKeySequence(shortcut_manager_.shortcut(id));
+                            feedback->setText(conflict_message);
+                            return;
+                        }
+                        feedback->clear();
+                    });
+            connect(editor, &QKeySequenceEdit::editingFinished, this,
+                    [this, editor, id = entry.id]() {
+                        if (!editor->keySequence().isEmpty() ||
+                            shortcut_manager_.shortcut(id).isEmpty()) {
+                            return;
+                        }
                         const QSignalBlocker blocker(editor);
                         editor->setKeySequence(shortcut_manager_.shortcut(id));
-                        feedback->setText(conflict_message);
-                        return;
-                    }
-                    feedback->clear();
-                });
-        connect(reset_button, &QPushButton::clicked, this,
-                [this, editor, feedback, id = entry.id]() {
-                    QString conflict_message;
-                    if (!shortcut_manager_.resetShortcut(
-                            id, &conflict_message)) {
-                        feedback->setText(conflict_message);
-                        return;
-                    }
-                    const QSignalBlocker blocker(editor);
-                    editor->setKeySequence(shortcut_manager_.shortcut(id));
-                    feedback->clear();
-                });
-    }
+                    });
+            connect(clear_button, &QPushButton::clicked, this,
+                    [this, editor, feedback, id = entry.id]() {
+                        QString error_message;
+                        if (!shortcut_manager_.setShortcut(
+                                id, {}, &error_message)) {
+                            feedback->setText(error_message);
+                            return;
+                        }
+                        const QSignalBlocker blocker(editor);
+                        editor->clear();
+                        feedback->clear();
+                    });
+            connect(reset_button, &QPushButton::clicked, this,
+                    [this, editor, feedback, id = entry.id]() {
+                        QString conflict_message;
+                        if (!shortcut_manager_.resetShortcut(
+                                id, &conflict_message)) {
+                            feedback->setText(conflict_message);
+                            return;
+                        }
+                        const QSignalBlocker blocker(editor);
+                        editor->setKeySequence(shortcut_manager_.shortcut(id));
+                        feedback->clear();
+                    });
+        }
+    };
+
+    add_scope(ShortcutScope::Application,
+              QStringLiteral("Available in every workspace."));
+    add_scope(ShortcutScope::Shared,
+              QStringLiteral("Available in the Edit and Fusion workspaces."));
+    add_scope(ShortcutScope::Edit,
+              QStringLiteral("Available only in the Edit workspace."));
+    add_scope(ShortcutScope::Fusion,
+              QStringLiteral("Available only in the Fusion workspace."));
+    add_scope(ShortcutScope::Render,
+              QStringLiteral("Available only in the Render workspace."));
     content_layout->addStretch();
     scroll->setWidget(content);
     layout->addWidget(scroll, 1);

@@ -153,7 +153,7 @@ dos editores.
 | Edit | Comandos de Timeline, faixas, inserção de mídia, aplicação de efeitos na Timeline e Inspector de Edit ficam ativos somente em Edit. |
 | Fusion | Comandos do grafo e de sua prévia ficam ativos somente em Fusion. |
 | Render | Configuração de saída e comandos da fila ficam ativos somente em Render. |
-| Contexto do editor em foco | Comandos como Copy e Delete seguem o editor ou campo de texto que tem foco e prevalecem sobre atalhos de workspace conflitantes. |
+| Contexto do editor em foco | Comandos como Copy e Delete seguem o editor ou campo de texto que tem foco e prevalecem sobre atalhos de workspace conflitantes. Este é um roteamento do comando focado, não um escopo de QAction separado. |
 
 O contrato permanece no Video Editor. Não se expande a biblioteca compartilhada
 de atalhos até que outro aplicativo precise do mesmo comportamento estável.
@@ -194,8 +194,15 @@ a sobreposição real dos contextos.
 
 ### Etapa 3 — Adicionar escopos aos atalhos sem mudar os padrões
 
+**Estado: implementação e cobertura automatizada concluídas em 2026-10-08;**
+a conferência manual de alternância e captura de atalhos permanece pendente.
+O registro local do Video Editor mantém os IDs e valores no grupo `shortcuts`,
+separa a sequência configurada da sequência ativa da `QAction` e não altera
+`libs/shortcuts`. O contexto do editor em foco continua sendo respeitado pelos
+handlers de Copy/Delete; não é um sexto escopo de binding.
+
 1. Estender o registro de atalhos para representar Aplicativo, Compartilhado,
-   Edit, Fusion, Render e contexto do editor em foco.
+   Edit, Fusion e Render, preservando o roteamento do editor em foco.
 2. Resolver os atalhos usando o contexto ativo e as prioridades definidas na
    Etapa 2.
 3. Permitir a mesma combinação em escopos mutuamente exclusivos e rejeitar
@@ -209,7 +216,9 @@ a sobreposição real dos contextos.
 
 **Critério para concluir:** os atalhos atuais continuam funcionando, e os
 testes demonstram reutilização entre workspaces, rejeição de conflitos,
-prioridade de contexto e persistência das preferências.
+prioridade de contexto e persistência das preferências. O teste manual de
+alternância entre telas está documentado em
+[`REGRESSION_TESTING.md`](../REGRESSION_TESTING.md) e ainda precisa ser feito.
 
 ### Etapa 4 — Estabelecer os limites entre workspaces e estrutura principal
 

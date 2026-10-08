@@ -91,7 +91,9 @@ FunctionPalette::FunctionPalette(
     shortcut_manager.registerAction(
         QStringLiteral("workspace.functions_window"),
         QStringLiteral("Open Functions Window"),
-        toggle_action_);
+        toggle_action_,
+        settings::ShortcutScope::Shared,
+        QStringLiteral("Edit and Fusion workspaces"));
 
     connect(
         toggle_action_,

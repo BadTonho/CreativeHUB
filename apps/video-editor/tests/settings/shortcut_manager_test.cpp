@@ -19,6 +19,7 @@
 #include <QSettings>
 #include <QStringList>
 #include <QTest>
+#include <QTemporaryDir>
 #include <QWidget>
 
 #include <cstdio>
@@ -76,7 +77,8 @@ void verifyFunctionPalette(QSettings& settings) {
     shortcut_manager.registerAction(
         QStringLiteral("playback.play_pause"),
         QStringLiteral("Play or Pause"),
-        &playback_action);
+        &playback_action, settings::ShortcutScope::Application,
+        QStringLiteral("All workspaces"));
     shortcut_manager.load();
 
     require(palette.dialog()->objectName() ==
@@ -364,6 +366,10 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName("CreativeSuiteTests");
     QCoreApplication::setApplicationName("ShortcutManagerTest");
     QSettings::setDefaultFormat(QSettings::IniFormat);
+    QTemporaryDir settings_directory;
+    if (!settings_directory.isValid()) return 1;
+    QSettings::setPath(
+        QSettings::IniFormat, QSettings::UserScope, settings_directory.path());
 
     QSettings settings;
     settings.clear();
@@ -377,10 +383,12 @@ int main(int argc, char* argv[]) {
         settings::ShortcutManager manager;
         manager.registerAction(
             QStringLiteral("file.save"), QStringLiteral("Save"),
-            &save_action);
+            &save_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
         manager.registerAction(
             QStringLiteral("file.open"), QStringLiteral("Open"),
-            &open_action);
+            &open_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
         manager.load();
 
         require(manager.entries().size() == 2,
@@ -414,10 +422,12 @@ int main(int argc, char* argv[]) {
         settings::ShortcutManager loaded_manager;
         loaded_manager.registerAction(
             QStringLiteral("file.save"), QStringLiteral("Save"),
-            &loaded_save_action);
+            &loaded_save_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
         loaded_manager.registerAction(
             QStringLiteral("file.open"), QStringLiteral("Open"),
-            &loaded_open_action);
+            &loaded_open_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
         loaded_manager.load();
         require(loaded_save_action.shortcut().isEmpty(),
                 "Empty shortcut was not persisted.");
@@ -434,6 +444,203 @@ int main(int argc, char* argv[]) {
                 "Reset All did not restore the Save default.");
         require(loaded_open_action.shortcut() == QKeySequence("Ctrl+O"),
                 "Reset All did not restore the Open default.");
+
+        QAction app_action;
+        app_action.setShortcut(QKeySequence("Ctrl+N"));
+        QAction shared_action;
+        shared_action.setShortcut(QKeySequence("Ctrl+Shift+P"));
+        QAction edit_action;
+        edit_action.setShortcut(QKeySequence("Ctrl+K"));
+        QAction fusion_action;
+        fusion_action.setShortcut(QKeySequence("Ctrl+F"));
+        QAction render_action;
+        render_action.setShortcut(QKeySequence("Ctrl+R"));
+        settings::ShortcutManager scoped_manager;
+        scoped_manager.registerAction(
+            QStringLiteral("scoped.application"), QStringLiteral("Application"),
+            &app_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
+        scoped_manager.registerAction(
+            QStringLiteral("scoped.shared"), QStringLiteral("Shared"),
+            &shared_action, settings::ShortcutScope::Shared,
+            QStringLiteral("Edit and Fusion"));
+        scoped_manager.registerAction(
+            QStringLiteral("scoped.edit"), QStringLiteral("Edit command"),
+            &edit_action, settings::ShortcutScope::Edit,
+            QStringLiteral("Edit"));
+        scoped_manager.registerAction(
+            QStringLiteral("scoped.fusion"), QStringLiteral("Fusion command"),
+            &fusion_action, settings::ShortcutScope::Fusion,
+            QStringLiteral("Fusion"));
+        scoped_manager.registerAction(
+            QStringLiteral("scoped.render"), QStringLiteral("Render command"),
+            &render_action, settings::ShortcutScope::Render,
+            QStringLiteral("Render"));
+        QString scoped_load_error;
+        const bool scoped_load_succeeded =
+            scoped_manager.load(&scoped_load_error);
+        if (!scoped_load_succeeded) {
+            std::fprintf(stderr, "%s\n", scoped_load_error.toUtf8().constData());
+        }
+        require(scoped_load_succeeded,
+                "Scoped shortcut preferences could not be loaded.");
+
+        require(scoped_manager.setShortcut(
+                    QStringLiteral("scoped.edit"), QKeySequence("Ctrl+P")) &&
+                    scoped_manager.setShortcut(
+                        QStringLiteral("scoped.fusion"), QKeySequence("Ctrl+P")) &&
+                    scoped_manager.setShortcut(
+                        QStringLiteral("scoped.render"), QKeySequence("Ctrl+P")),
+                "Edit, Fusion, and Render must be able to reuse a key sequence.");
+        require(!scoped_manager.setShortcut(
+                    QStringLiteral("scoped.shared"), QKeySequence("Ctrl+P"),
+                    &conflict_message) && conflict_message.contains("Edit command"),
+                "Shared must reject a sequence that overlaps Edit or Fusion.");
+        require(scoped_manager.setShortcut(
+                    QStringLiteral("scoped.edit"), QKeySequence("Ctrl+M")) &&
+                    !scoped_manager.setShortcut(
+                        QStringLiteral("scoped.shared"), QKeySequence("Ctrl+P"),
+                        &conflict_message) &&
+                    conflict_message.contains("Fusion command") &&
+                    scoped_manager.setShortcut(
+                        QStringLiteral("scoped.edit"), QKeySequence("Ctrl+P")),
+                "Shared must also reject a sequence that overlaps Fusion.");
+        require(scoped_manager.setShortcut(
+                    QStringLiteral("scoped.shared"), QKeySequence("Ctrl+R")),
+                "Shared must be allowed to reuse a Render-only sequence.");
+        require(!scoped_manager.setShortcut(
+                    QStringLiteral("scoped.application"), QKeySequence("Ctrl+R"),
+                    &conflict_message) && conflict_message.contains("Shared") &&
+                    !scoped_manager.setShortcut(
+                        QStringLiteral("scoped.application"), QKeySequence("Ctrl+P"),
+                        &conflict_message) && conflict_message.contains("Edit command"),
+                "Application must conflict with Shared and Edit sequences.");
+        require(scoped_manager.setShortcut(
+                    QStringLiteral("scoped.edit"), QKeySequence("Ctrl+M")) &&
+                    !scoped_manager.setShortcut(
+                        QStringLiteral("scoped.application"), QKeySequence("Ctrl+P"),
+                        &conflict_message) && conflict_message.contains("Fusion command") &&
+                    scoped_manager.setShortcut(
+                        QStringLiteral("scoped.fusion"), QKeySequence("Ctrl+G")) &&
+                    !scoped_manager.setShortcut(
+                        QStringLiteral("scoped.application"), QKeySequence("Ctrl+P"),
+                        &conflict_message) && conflict_message.contains("Render command") &&
+                    scoped_manager.setShortcut(
+                        QStringLiteral("scoped.fusion"), QKeySequence("Ctrl+P")) &&
+                    scoped_manager.setShortcut(
+                        QStringLiteral("scoped.edit"), QKeySequence("Ctrl+P")),
+                "Application must conflict with Fusion and Render sequences too.");
+
+        scoped_manager.setWorkspace(ui::WorkspacePageId::Edit);
+        require(app_action.shortcut() == QKeySequence("Ctrl+N") &&
+                    shared_action.shortcut() == QKeySequence("Ctrl+R") &&
+                    edit_action.shortcut() == QKeySequence("Ctrl+P") &&
+                    fusion_action.shortcut().isEmpty() &&
+                    render_action.shortcut().isEmpty(),
+                "Edit must activate only Application, Shared, and Edit bindings.");
+        scoped_manager.setWorkspace(ui::WorkspacePageId::Fusion);
+        require(app_action.shortcut() == QKeySequence("Ctrl+N") &&
+                    shared_action.shortcut() == QKeySequence("Ctrl+R") &&
+                    edit_action.shortcut().isEmpty() &&
+                    fusion_action.shortcut() == QKeySequence("Ctrl+P") &&
+                    render_action.shortcut().isEmpty(),
+                "Fusion must activate only Application, Shared, and Fusion bindings.");
+        scoped_manager.setWorkspace(ui::WorkspacePageId::Render);
+        require(app_action.shortcut() == QKeySequence("Ctrl+N") &&
+                    shared_action.shortcut().isEmpty() &&
+                    edit_action.shortcut().isEmpty() &&
+                    fusion_action.shortcut().isEmpty() &&
+                    render_action.shortcut() == QKeySequence("Ctrl+P"),
+                "Render must activate only Application and Render bindings.");
+        require(scoped_manager.shortcut(QStringLiteral("scoped.shared")) ==
+                    QKeySequence("Ctrl+R"),
+                "Inactive shortcut configuration must remain queryable.");
+
+        QAction loaded_app_action;
+        loaded_app_action.setShortcut(QKeySequence("Ctrl+N"));
+        QAction loaded_shared_action;
+        loaded_shared_action.setShortcut(QKeySequence("Ctrl+Shift+P"));
+        QAction loaded_edit_action;
+        loaded_edit_action.setShortcut(QKeySequence("Ctrl+K"));
+        QAction loaded_fusion_action;
+        loaded_fusion_action.setShortcut(QKeySequence("Ctrl+F"));
+        QAction loaded_render_action;
+        loaded_render_action.setShortcut(QKeySequence("Ctrl+R"));
+        settings::ShortcutManager reopened_scoped_manager;
+        reopened_scoped_manager.registerAction(
+            QStringLiteral("scoped.application"), QStringLiteral("Application"),
+            &loaded_app_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
+        reopened_scoped_manager.registerAction(
+            QStringLiteral("scoped.shared"), QStringLiteral("Shared"),
+            &loaded_shared_action, settings::ShortcutScope::Shared,
+            QStringLiteral("Edit and Fusion"));
+        reopened_scoped_manager.registerAction(
+            QStringLiteral("scoped.edit"), QStringLiteral("Edit command"),
+            &loaded_edit_action, settings::ShortcutScope::Edit,
+            QStringLiteral("Edit"));
+        reopened_scoped_manager.registerAction(
+            QStringLiteral("scoped.fusion"), QStringLiteral("Fusion command"),
+            &loaded_fusion_action, settings::ShortcutScope::Fusion,
+            QStringLiteral("Fusion"));
+        reopened_scoped_manager.registerAction(
+            QStringLiteral("scoped.render"), QStringLiteral("Render command"),
+            &loaded_render_action, settings::ShortcutScope::Render,
+            QStringLiteral("Render"));
+        require(reopened_scoped_manager.load() &&
+                    reopened_scoped_manager.shortcut(
+                        QStringLiteral("scoped.edit")) == QKeySequence("Ctrl+P") &&
+                    reopened_scoped_manager.shortcut(
+                        QStringLiteral("scoped.shared")) == QKeySequence("Ctrl+R") &&
+                    reopened_scoped_manager.shortcut(
+                        QStringLiteral("scoped.render")) == QKeySequence("Ctrl+P") &&
+                    loaded_render_action.shortcut().isEmpty(),
+                "Scoped shortcuts did not persist across inactive workspaces.");
+        reopened_scoped_manager.setWorkspace(ui::WorkspacePageId::Render);
+        require(loaded_render_action.shortcut() == QKeySequence("Ctrl+P"),
+                "Reopened Render binding was not activated from its saved configuration.");
+        reopened_scoped_manager.setWorkspace(ui::WorkspacePageId::Edit);
+        require(reopened_scoped_manager.resetShortcut(
+                    QStringLiteral("scoped.edit")) &&
+                    loaded_edit_action.shortcut() == QKeySequence("Ctrl+K"),
+                "Scoped shortcut individual reset failed.");
+        reopened_scoped_manager.resetAll();
+        require(reopened_scoped_manager.shortcut(
+                    QStringLiteral("scoped.shared")) ==
+                        QKeySequence("Ctrl+Shift+P") &&
+                    reopened_scoped_manager.shortcut(
+                        QStringLiteral("scoped.render")) == QKeySequence("Ctrl+R"),
+                "Scoped Reset All did not restore defaults.");
+
+        settings.beginGroup(QStringLiteral("shortcuts"));
+        settings.setValue(QStringLiteral("repair.application"),
+                          QStringLiteral("Ctrl+P"));
+        settings.setValue(QStringLiteral("repair.edit"), QStringLiteral("Ctrl+P"));
+        settings.endGroup();
+        settings.sync();
+        QAction repair_application_action;
+        repair_application_action.setShortcut(QKeySequence("Ctrl+N"));
+        QAction repair_edit_action;
+        repair_edit_action.setShortcut(QKeySequence("Ctrl+K"));
+        settings::ShortcutManager repair_manager;
+        repair_manager.registerAction(
+            QStringLiteral("repair.application"), QStringLiteral("Repair Application"),
+            &repair_application_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
+        repair_manager.registerAction(
+            QStringLiteral("repair.edit"), QStringLiteral("Repair Edit"),
+            &repair_edit_action, settings::ShortcutScope::Edit,
+            QStringLiteral("Edit workspace"));
+        const bool repair_preferences_loaded = repair_manager.load();
+        settings.sync();
+        require(repair_preferences_loaded &&
+                    repair_manager.shortcut(QStringLiteral("repair.application")) ==
+                        QKeySequence("Ctrl+P") &&
+                    repair_manager.shortcut(QStringLiteral("repair.edit")) ==
+                        QKeySequence("Ctrl+K") &&
+                    settings.value(QStringLiteral("shortcuts/repair.edit")).toString() ==
+                        QStringLiteral("Ctrl+K"),
+                "Conflicting stored preferences must restore a valid default and persist the repair.");
 
         verifyFunctionPalette(settings);
         settings.clear();

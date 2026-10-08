@@ -1159,8 +1159,26 @@ void MainWindow::updatePlaybackControls() {
             playback_controller_ != nullptr && playback_controller_->available());
     }
     if (delete_clip_action_ != nullptr) {
-        delete_clip_action_->setEnabled(
-            canPlaybackSelectedMedia() && !playback_activation_loading_);
+        const auto selected_clip_id = editor_session_.selection().active_clip_id;
+        bool can_delete_selected_clip = false;
+        if (selected_clip_id.has_value() &&
+            !editor_session_.selection().active_transition.has_value() &&
+            !playback_activation_loading_) {
+            const auto location = timeline_model_.locateClip(*selected_clip_id);
+            if (location.has_value()) {
+                const auto& clip = timeline_model_.tracks()[location->track_index]
+                    .clips[location->clip_index];
+                can_delete_selected_clip = clip.kind == timeline::ClipKind::Text ||
+                    std::any_of(
+                        media_items_.cbegin(), media_items_.cend(),
+                        [&clip](const ImportedMedia& item) {
+                            return !item.offline &&
+                                normalizedPath(item.metadata.source_path) ==
+                                    normalizedPath(clip.source_path);
+                        });
+            }
+        }
+        delete_clip_action_->setEnabled(can_delete_selected_clip);
     }
     if (ripple_delete_clip_action_ != nullptr) {
         const auto selected_clip_id = editor_session_.selection().active_clip_id;

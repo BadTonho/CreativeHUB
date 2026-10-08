@@ -34,6 +34,7 @@
 #include <QImage>
 #include <QImageReader>
 #include <QImageWriter>
+#include <QKeyEvent>
 #include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
@@ -79,6 +80,16 @@ namespace {
 
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
+}
+
+void sendShortcutKey(
+    QWidget* target,
+    int key,
+    Qt::KeyboardModifiers modifiers) {
+    QKeyEvent press(QEvent::KeyPress, key, modifiers);
+    QApplication::sendEvent(target, &press);
+    QKeyEvent release(QEvent::KeyRelease, key, modifiers);
+    QApplication::sendEvent(target, &release);
 }
 
 std::filesystem::path uniqueTestDirectory() {
@@ -289,6 +300,26 @@ public:
                         render_window.copy_attributes_action_->shortcut() ==
                             QKeySequence(QStringLiteral("Ctrl+C")),
                     "Copy Attributes must support shortcut customization and reset to its default.");
+            render_window.setWorkspacePage(ui::WorkspacePageId::Fusion);
+            require(render_window.save_project_action_->shortcut() ==
+                        QKeySequence(QStringLiteral("Ctrl+S")) &&
+                        render_window.undo_action_->shortcut() == QKeySequence::Undo &&
+                        render_window.delete_clip_action_->shortcut().isEmpty() &&
+                        render_window.shortcut_manager_->shortcut(
+                            QStringLiteral("edit.delete_clip")) ==
+                            QKeySequence(Qt::Key_Delete),
+                    "Fusion must retain Application and Shared shortcuts while preserving inactive Edit assignments.");
+            render_window.setWorkspacePage(ui::WorkspacePageId::Render);
+            require(render_window.save_project_action_->shortcut() ==
+                        QKeySequence(QStringLiteral("Ctrl+S")) &&
+                        render_window.undo_action_->shortcut().isEmpty() &&
+                        render_window.delete_clip_action_->shortcut().isEmpty(),
+                    "Render must retain Application shortcuts and disable Shared and Edit shortcuts.");
+            render_window.setWorkspacePage(ui::WorkspacePageId::Edit);
+            require(render_window.undo_action_->shortcut() == QKeySequence::Undo &&
+                        render_window.delete_clip_action_->shortcut() ==
+                            QKeySequence(Qt::Key_Delete),
+                    "Returning to Edit must restore its configured shortcuts.");
             const bool dirty_before_inspector_tab_change = render_window.project_dirty_;
             inspector_tabs->setCurrentIndex(2);
             QApplication::processEvents();
@@ -1860,12 +1891,39 @@ public:
             effects_window.updatePlaybackControls();
             require(effects_window.copy_attributes_action_->isEnabled() &&
                         !effects_window.paste_attributes_action_->isEnabled() &&
+                        effects_window.delete_clip_action_->isEnabled() &&
                         effects_window.ripple_delete_clip_action_->isEnabled(),
-                    "Copy Attributes and Ripple Delete must be enabled for a selected Timeline clip, while Paste remains disabled before copying.");
-            const bool dirty_before_copy = effects_window.project_dirty_;
+                    "Copy Attributes, Delete, and Ripple Delete must be enabled for a selected Timeline clip, while Paste remains disabled before copying.");
+            const bool dirty_before_timeline_shortcut = effects_window.project_dirty_;
             effects_window.show();
             QApplication::processEvents();
-            QLineEdit text_field;
+            auto* timeline_widget = effects_window.edit_workspace_->ui().timeline;
+            timeline_widget->setFocus();
+            QApplication::processEvents();
+            require(QApplication::focusWidget() == timeline_widget,
+                    "The Timeline shortcut fixture could not focus the Timeline.");
+            sendShortcutKey(
+                timeline_widget, Qt::Key_C, Qt::ControlModifier);
+            require(effects_window.paste_attributes_action_->isEnabled() &&
+                        effects_window.project_dirty_ == dirty_before_timeline_shortcut,
+                    "Ctrl+C with Timeline focus must copy clip attributes without dirtying the project.");
+            sendShortcutKey(timeline_widget, Qt::Key_Delete, Qt::NoModifier);
+            require(!effects_window.timeline_model_.locateClip(source_clip_id).has_value() &&
+                        effects_window.edit_workspace_->controller()->undo().changed() &&
+                        effects_window.timeline_model_.locateClip(source_clip_id).has_value(),
+                    "Delete with Timeline focus must remove the clip and remain undoable.");
+            selection.active_track_id = source_track_id;
+            selection.active_clip_id = source_clip_id;
+            selection.active_transition.reset();
+            effects_window.updateAttributeClipboardActions();
+            sendShortcutKey(timeline_widget, Qt::Key_Delete, Qt::ShiftModifier);
+            require(!effects_window.timeline_model_.locateClip(source_clip_id).has_value() &&
+                        effects_window.edit_workspace_->controller()->undo().changed() &&
+                        effects_window.timeline_model_.locateClip(source_clip_id).has_value(),
+                    "Shift+Delete with Timeline focus must ripple-delete and remain undoable.");
+
+            QLineEdit text_field(&effects_window);
+            text_field.setGeometry(16, 16, 240, 28);
             text_field.setText(QStringLiteral("normal text copy"));
             text_field.show();
             text_field.selectAll();
@@ -1874,14 +1932,25 @@ public:
             require(QApplication::focusWidget() == &text_field,
                     "The text-copy fixture could not focus its editable field.");
             QApplication::clipboard()->clear();
-            effects_window.copy_attributes_action_->trigger();
+            sendShortcutKey(
+                &text_field, Qt::Key_C, Qt::ControlModifier);
             require(QApplication::clipboard()->text() == QStringLiteral("normal text copy"),
                     "Ctrl+C must preserve normal text-field copy when a clip is selected.");
-            QApplication::clipboard()->clear();
-            effects_window.ripple_delete_clip_action_->trigger();
+
+            text_field.setText(QStringLiteral("normal text delete"));
+            text_field.selectAll();
+            sendShortcutKey(&text_field, Qt::Key_Delete, Qt::NoModifier);
             require(text_field.text().isEmpty() &&
-                        QApplication::clipboard()->text() ==
-                            QStringLiteral("normal text copy") &&
+                        effects_window.timeline_model_.locateClip(source_clip_id).has_value(),
+                    "Delete must edit focused text instead of deleting a Timeline clip.");
+
+            text_field.setText(QStringLiteral("normal text cut"));
+            text_field.selectAll();
+            QApplication::clipboard()->clear();
+            sendShortcutKey(
+                &text_field, Qt::Key_Delete, Qt::ShiftModifier);
+            require(text_field.text().isEmpty() &&
+                        QApplication::clipboard()->text() == QStringLiteral("normal text cut") &&
                         effects_window.timeline_model_.locateClip(source_clip_id).has_value(),
                     "Shift+Delete must preserve normal text-field cut instead of Ripple Delete.");
             text_field.hide();
@@ -1889,6 +1958,11 @@ public:
             QApplication::processEvents();
             require(QApplication::focusWidget() == nullptr,
                     "The attribute-copy fixture could not clear text focus before testing clip copy.");
+            selection.active_track_id = source_track_id;
+            selection.active_clip_id = source_clip_id;
+            selection.active_transition.reset();
+            effects_window.updateAttributeClipboardActions();
+            const bool dirty_before_copy = effects_window.project_dirty_;
             effects_window.copy_attributes_action_->trigger();
             effects_window.show();
             QApplication::processEvents();
