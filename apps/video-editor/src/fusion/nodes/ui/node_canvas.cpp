@@ -63,6 +63,8 @@ NodeCanvas::NodeCanvas(QWidget* parent) : QGraphicsView(parent) {
 void NodeCanvas::setGraph(const NodeGraph& graph) {
     dragging_from_output_ = 0;
     dragging_from_input_ = 0;
+    dragging_input_index_ = 0;
+    dragging_node_ = 0;
     pending_connection_line_ = nullptr;
     connections_ = graph.connections;
     scene_->clear();
@@ -134,7 +136,16 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         const auto start = from->second->pos() + QPointF(210, outputPortY(from_node->type));
         const auto end = to->second->pos() + QPointF(0, inputPortY(to_node->type, edge.input));
         auto* line = scene_->addLine(QLineF(start, end), QPen(QColor("#66b5ff"), 2.0));
+        line->setData(0, QVariant::fromValue<qulonglong>(edge.to));
+        line->setData(1, 3);
+        line->setData(2, static_cast<int>(edge.input));
         line->setZValue(-1);
+        auto* hit_target = scene_->addLine(
+            QLineF(start, end), QPen(QColor(0, 0, 0, 0), 12.0));
+        hit_target->setData(0, QVariant::fromValue<qulonglong>(edge.to));
+        hit_target->setData(1, 3);
+        hit_target->setData(2, static_cast<int>(edge.input));
+        hit_target->setZValue(-0.5);
     }
 }
 
@@ -202,6 +213,18 @@ void NodeCanvas::mousePressEvent(QMouseEvent* event) {
             const auto position = mapToScene(event->pos());
             pending_connection_line_ = scene_->addLine(
                 QLineF(position, position), QPen(QColor("#9ad3ff"), 2.0, Qt::DashLine));
+            pending_connection_line_->setZValue(-2);
+            event->accept();
+            return;
+        }
+        if (item != nullptr && item->data(1).toInt() == 3) {
+            dragging_from_input_ = static_cast<NodeId>(item->data(0).toULongLong());
+            dragging_input_index_ = static_cast<std::uint8_t>(item->data(2).toInt());
+            dragging_input_start_ = event->pos();
+            const auto position = mapToScene(event->pos());
+            pending_connection_line_ = scene_->addLine(
+                QLineF(position, position),
+                QPen(QColor("#9ad3ff"), 2.0, Qt::DashLine));
             pending_connection_line_->setZValue(-2);
             event->accept();
             return;

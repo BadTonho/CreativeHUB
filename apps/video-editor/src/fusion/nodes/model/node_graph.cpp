@@ -89,11 +89,6 @@ GraphValidation validate(const NodeGraph& graph) {
         if (!occupied.emplace(edge.to, edge.input).second)
             return {GraphError::InputAlreadyConnected, edge.to};
     }
-    const auto output = std::find_if(graph.nodes.begin(), graph.nodes.end(),
-        [](const Node& node) { return node.type == NodeType::Output; });
-    if (std::none_of(graph.connections.begin(), graph.connections.end(),
-        [output](const Connection& edge) { return edge.to == output->id; }))
-        return {GraphError::MissingOutput, output->id};
     if (!evaluationOrder(graph)) return {GraphError::Cycle, 0};
     return {};
 }

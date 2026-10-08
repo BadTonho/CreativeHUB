@@ -114,6 +114,9 @@ int main(int argc, char** argv) {
         node_graph.connections = {{1, 4, 0}, {3, 4, 1}, {4, 2, 0}};
         node_graph.next_id = 5;
         original.timeline_tracks.front().clips.front().node_graph = node_graph;
+        auto disconnected_graph = fusion::nodes::makePassthroughGraph();
+        disconnected_graph.connections.clear();
+        original.timeline_tracks.front().clips.back().node_graph = disconnected_graph;
         original.timeline_tracks.front().clips[1].timeline_start_frame = 45;
         original.timeline_tracks.front().clips.back().timeline_start_frame = 85;
         original.timeline_tracks.front().transitions.push_back(

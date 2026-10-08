@@ -32,6 +32,23 @@ int main() {
     require(transformed.has_value() && transformed->rgba_pixels[3] == 255 &&
                 transformed->rgba_pixels[7] == 0,
             "Transform should update pixel geometry and preserve transparency.");
+    const auto detached_transform = disconnect(transform_graph, 2, 0);
+    require(detached_transform && static_cast<bool>(validate(*detached_transform)),
+            "A node input should be disconnectable without invalidating the graph.");
+    const auto empty_transform = evaluate(*detached_transform, {{1, solid}});
+    require(empty_transform.has_value() && empty_transform->rgba_pixels[3] == 0 &&
+                empty_transform->rgba_pixels[7] == 0,
+            "A node with a disconnected input should render transparent output.");
+
+    const auto passthrough = makePassthroughGraph();
+    const auto detached_output = disconnect(passthrough, 2, 0);
+    require(detached_output && static_cast<bool>(validate(*detached_output)) &&
+                detached_output->connections.empty(),
+            "The default Input-to-Output cable should be disconnectable.");
+    const auto empty_output = evaluate(*detached_output, {{1, solid}});
+    require(empty_output.has_value() && empty_output->rgba_pixels[3] == 0 &&
+                empty_output->rgba_pixels[7] == 0,
+            "An Output node without an input should render transparent output.");
 
     NodeGraph color_graph;
     color_graph.nodes = {{1, NodeType::Input}, {2, NodeType::Color},

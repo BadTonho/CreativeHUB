@@ -20,8 +20,14 @@ store brightness in [-100, 100] and contrast/saturation percentages in
 0 is background and input 1 is foreground; other processing nodes have one
 input. The reader and writer reject duplicate node IDs, invalid parameters,
 missing endpoints, duplicate target inputs, incompatible ports, multiple or
-missing outputs, and cycles. Every nonempty extra Input path must identify
+missing Output nodes, and cycles. Every nonempty extra Input path must identify
 video or image media already present in the project Media Pool.
+
+Node inputs may remain disconnected so the user can freely rewire a graph.
+The evaluator treats an unconnected input as transparent; an unconnected
+Output therefore produces a transparent frame using the selected clip's
+dimensions. Disconnected graphs are saved and reopened without losing nodes or
+their remaining connections.
 
 The selected clip's default graph is an Input-to-Output pass-through. Graphs
 are evaluated before the clip's existing effect stack and Timeline

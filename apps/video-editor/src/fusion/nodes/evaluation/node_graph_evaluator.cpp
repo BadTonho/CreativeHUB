@@ -116,13 +116,14 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph, const InputFra
             continue;
         }
         const auto* first = incoming(graph, id, 0);
-        if (!first) continue;
-        const auto input = values.find(first->from);
-        if (input == values.end()) continue;
+        const auto input = first != nullptr ? values.find(first->from) : values.end();
+        const media::VideoFrame empty_input = input == values.end()
+            ? transparent() : media::VideoFrame{};
+        const auto& background = input != values.end() ? input->second : empty_input;
         if (node->type == NodeType::Transform) {
-            values.emplace(id, transformFrame(input->second, node->transform));
+            values.emplace(id, transformFrame(background, node->transform));
         } else if (node->type == NodeType::Color) {
-            auto frame = input->second;
+            auto frame = background;
             if (creative_suite::effects::applyColorAdjustment(frame,
                 {node->color.brightness, node->color.contrast_percent,
                  node->color.saturation_percent}) !=
@@ -131,12 +132,15 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph, const InputFra
             values.emplace(id, std::move(frame));
         } else if (node->type == NodeType::Merge) {
             const auto* second = incoming(graph, id, 1);
-            if (!second) continue;
-            const auto foreground = values.find(second->from);
-            if (foreground == values.end()) values.emplace(id, input->second);
-            else values.emplace(id, mergeFrames(input->second, foreground->second));
+            const auto foreground = second != nullptr
+                ? values.find(second->from) : values.end();
+            const media::VideoFrame empty_foreground = foreground == values.end()
+                ? transparent() : media::VideoFrame{};
+            const auto& foreground_frame = foreground != values.end()
+                ? foreground->second : empty_foreground;
+            values.emplace(id, mergeFrames(background, foreground_frame));
         } else if (node->type == NodeType::Output) {
-            values.emplace(id, input->second);
+            values.emplace(id, background);
         }
     }
     const auto output = std::find_if(graph.nodes.begin(), graph.nodes.end(),

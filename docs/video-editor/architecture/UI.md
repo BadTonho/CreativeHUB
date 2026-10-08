@@ -372,9 +372,10 @@ Editor. The Node Editor provides Input, Transform, Color, Merge, and Output
 nodes for the selected visual clip. Drag an output port to an input port to
 connect nodes; drag a node body to move it. Its Inspector chooses Media Pool
 sources for additional Input nodes and edits the selected node's parameters;
-the Inspector also removes nodes. Drag a connected input wire to empty canvas
-space to disconnect it, or to another output to rewire it. Graph changes are
-Timeline commands, so they update project dirty state and support Undo/Redo.
+the Inspector also removes nodes. Drag a connected input port or the cable
+itself to empty canvas space to disconnect it, or to another output to rewire
+it. Disconnected inputs render transparently until reconnected. Graph changes
+are Timeline commands, so they update project dirty state and support Undo/Redo.
 Switching pages changes only the visible workspace panels; it does not change
 the selected clip, playhead,
 playback, project data, history, or dirty state.
@@ -671,11 +672,11 @@ service and therefore update project dirty state and Undo/Redo. Selecting a
 video or image clip loads its stored graph or a default Input-to-Output
 pass-through. The Inspector edits the selected node's parameters and chooses
 additional video or image inputs from the project Media Pool. To connect nodes,
-drag an output port onto an input port; drag a connected input wire to empty
-canvas space to remove it. Releasing an output on another input rewires that
-input. Connection validation rejects incompatible ports and cycles with a
-visible explanation. The existing clip effect stack and Timeline
-transform/keyframes run after the graph output.
+drag an output port onto an input port; drag a connected input port or cable to
+empty canvas space to remove it. Releasing an output on another input rewires
+that input. Disconnected inputs evaluate as transparent. Connection validation
+rejects incompatible ports and cycles with a visible explanation. The existing
+clip effect stack and Timeline transform/keyframes run after the graph output.
 
 `ui/workspace/pages/render/RenderWorkspace` builds the output form, a central
 slot for the shared Preview, and the session-only queue UI. `WorkspaceHost`
