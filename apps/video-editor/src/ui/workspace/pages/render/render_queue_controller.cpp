@@ -40,6 +40,7 @@ bool RenderQueueController::start(std::vector<RenderJob> jobs) {
             bool canceled = false;
             for (const auto& job : jobs) {
                 if (cancel_requested_.load(std::memory_order_acquire)) {
+                    emit jobCanceled(static_cast<qulonglong>(job.id));
                     canceled = true;
                     break;
                 }

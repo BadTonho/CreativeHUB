@@ -2,7 +2,7 @@
 
 Status: **plano provisório de uso pessoal do mantenedor; escrito em português**.
 Este documento descreve uma direção gradual para separar Edit, Fusion e
-Render. Não registra uma implementação concluída nem aprova uma reescrita ampla.
+Render. Registra a direção e o andamento incremental; não aprova uma reescrita ampla.
 
 ## Objetivo
 
@@ -27,16 +27,19 @@ dependências e não exige novas funções visíveis ao usuário.
 - `ui/workspace/pages/fusion/FusionWorkspace` monta o canvas e o Inspector de
   Fusion. A implementação do grafo permanece no módulo dedicado
   `src/fusion/nodes/`.
-- `ui/workspace/pages/render/RenderWorkspace` monta o formulário de Render e a
-  interface da fila; o modelo e o controlador da fila já estão em arquivos
-  separados.
-- `MainWindow` é a estrutura principal do aplicativo, mas ainda cria muitas
-  ações de menu e conecta operações específicas dos workspaces. Isso faz dela
-  um ponto central que tende a crescer.
+- `ui/workspace/pages/render/RenderWorkspace` monta o formulário, os comandos
+  da fila e seu ciclo de vida; o modelo e o controlador permanecem em arquivos
+  separados dentro do módulo.
+- `MainWindow` coordena o ciclo de vida do aplicativo, projeto e serviços
+  compartilhados, além de montar menus adaptáveis. Comandos de Timeline são
+  responsabilidade de `EditWorkspaceActions`; o ciclo de vida da prévia
+  temporária pertence a `FusionWorkspace`; a fila de saída pertence a
+  `RenderWorkspace`.
 - Os atalhos do Video Editor usam escopos de Aplicativo, Compartilhado, Edit,
   Fusion e Render, com preferências globais e combinações reutilizáveis entre
-  telas exclusivas. As ações ainda são criadas principalmente em `MainWindow`;
-  a extração gradual para cada workspace continua sendo trabalho futuro.
+  telas exclusivas. Ações globais e compartilhadas permanecem em `MainWindow`;
+  comandos exclusivos de Edit e controles de fila de Render são registrados nos
+  seus módulos. Fusion ainda não tem ações globais próprias.
 - O comportamento atual dos atalhos está documentado em
   [`SHORTCUTS.md`](../SHORTCUTS.md). Esse documento deve servir de referência
   durante a separação.
@@ -312,18 +315,30 @@ a prévia durante reprodução e o retorno da composição normal ao sair.
 
 ### Etapa 7 — Separar as responsabilidades de Render
 
-1. Mover as declarações de ações e atalhos específicos de Render para o módulo
-   desse workspace.
-2. Manter o modelo da fila, a descoberta de formatos de saída e as fronteiras
-   de execução e exportação sob responsabilidade de Render ou dos serviços do
-   aplicativo, conforme os contratos atuais.
-3. Manter as operações da fila independentes do histórico de edição da
-   Timeline e do estado alterado do projeto.
-4. Definir quais comandos globais permanecem disponíveis durante uma fila
-   ativa e como funcionam cancelamento e troca de workspace.
+**Estado:** implementada em 2026-10-08; conferência manual na build Release
+pendente.
 
-**Critério para concluir:** Render é responsável por seus comandos de saída e
-fila, e os testes de ciclo de vida da fila e transições entre workspaces passam.
+1. `RenderWorkspace` é responsável pelo formulário e pelos comandos Add,
+   Start, Cancel, Remove e Move da fila. Não havia ações globais ou atalhos
+   específicos de Render em `MainWindow` para transferir; nenhum foi criado.
+2. A fila continua quando a página muda, usando os snapshots de projeto e
+   configurações capturados ao adicionar cada job. Cancel permanece no
+   workspace Render; ao retornar à página, seus controles refletem o estado
+   atual da fila. Comandos globais seguem os escopos da página ativa.
+3. Preparar e executar jobs não altera o projeto nem o histórico Undo/Redo.
+   `MainWindow` fornece o snapshot e a taxa de quadros do projeto e encaminha
+   ao workspace o pedido de cancelamento durante o fechamento aceito. O
+   controlador da fila termina e junta o worker antes de liberar seus recursos;
+   o fechamento não adiciona um diálogo novo.
+4. `main_window_integration_test.cpp` cobre o término dos jobs a partir dos
+   snapshots após Render → Fusion; a integração de fechamento cobre o
+   cancelamento solicitado pelo fechamento. Os testes de exportação mantêm a
+   cobertura de cancelamento, limpeza e preservação do destino anterior.
+
+**Critério automatizado:** atendido pelos testes focados da integração da
+janela, troca de workspace, fila e exportação. **Validação manual:** pendente
+na build Release para confirmar continuação ao trocar de tela, retorno para
+Cancel e cancelamento ao fechar.
 
 ### Etapa 8 — Consolidar pastas e remover conexões antigas
 

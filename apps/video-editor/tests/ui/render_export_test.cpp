@@ -863,6 +863,38 @@ void validateQueueCancellationStopsLaterJobs(
     require(!std::filesystem::exists(pathFromQString(current.settings.output_path)) &&
                 !std::filesystem::exists(pathFromQString(later.settings.output_path)),
             "Canceled and unstarted jobs must not publish output files.");
+
+    auto pending = makeImageJob(
+        output, image_path, root / ("cancel-before-start." + extension), 303, 100000);
+    auto pending_later = makeImageJob(
+        output, image_path, root / ("after-cancel-before-start." + extension), 304);
+    ui::RenderQueueController pending_controller;
+    QEventLoop pending_loop;
+    std::vector<qulonglong> pending_started;
+    std::vector<qulonglong> pending_canceled;
+    QObject::connect(&pending_controller, &ui::RenderQueueController::jobStarted,
+                     &pending_loop, [&pending_started](qulonglong id) {
+                         pending_started.push_back(id);
+                     });
+    QObject::connect(&pending_controller, &ui::RenderQueueController::jobCanceled,
+                     &pending_loop, [&pending_canceled](qulonglong id) {
+                         pending_canceled.push_back(id);
+                     });
+    QObject::connect(&pending_controller, &ui::RenderQueueController::queueFinished,
+                     &pending_loop, &QEventLoop::quit);
+    require(pending_controller.start({pending, pending_later}),
+            "The not-yet-started queue did not start.");
+    pending_controller.cancel();
+    QTimer::singleShot(15000, &pending_loop, &QEventLoop::quit);
+    pending_loop.exec();
+    require(!pending_controller.isRunning() &&
+                (pending_started.empty() ||
+                 pending_started == std::vector<qulonglong>{303}) &&
+                pending_canceled == std::vector<qulonglong>{303},
+            "Canceling as the queue starts must mark its first job canceled and leave later jobs unstarted.");
+    require(!std::filesystem::exists(pathFromQString(pending.settings.output_path)) &&
+                !std::filesystem::exists(pathFromQString(pending_later.settings.output_path)),
+            "Canceling as the queue starts must not publish either destination.");
 }
 
 double decodedAudioRms(const std::filesystem::path& path) {

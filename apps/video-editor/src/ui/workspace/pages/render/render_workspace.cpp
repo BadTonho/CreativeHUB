@@ -638,34 +638,16 @@ void RenderWorkspace::createQueuePanel() {
     action_layout->addWidget(move_job_down_button_);
     layout->addWidget(queue_actions);
 
-    connect(remove_job_button_, &QPushButton::clicked, this, [this] {
-        const int row = queue_view_->currentIndex().row();
-        if (queue_model_->removeJobAt(row)) {
-            queue_view_->clearSelection();
-            updateQueueActions();
-        }
-    });
+    connect(remove_job_button_, &QPushButton::clicked,
+            this, [this] { removeSelectedJob(); });
     connect(start_queue_button_, &QPushButton::clicked,
             this, [this] { startQueue(); });
     connect(cancel_queue_button_, &QPushButton::clicked,
-            this, [this] {
-                if (queue_controller_ != nullptr) {
-                    queue_controller_->cancel();
-                    cancel_queue_button_->setEnabled(false);
-                }
-            });
-    connect(move_job_up_button_, &QPushButton::clicked, this, [this] {
-        const int row = queue_view_->currentIndex().row();
-        if (queue_model_->moveJob(row, row - 1)) {
-            queue_view_->setCurrentIndex(queue_model_->index(row - 1, 0));
-        }
-    });
-    connect(move_job_down_button_, &QPushButton::clicked, this, [this] {
-        const int row = queue_view_->currentIndex().row();
-        if (queue_model_->moveJob(row, row + 1)) {
-            queue_view_->setCurrentIndex(queue_model_->index(row + 1, 0));
-        }
-    });
+            this, [this] { cancelActiveQueue(); });
+    connect(move_job_up_button_, &QPushButton::clicked,
+            this, [this] { moveSelectedJob(-1); });
+    connect(move_job_down_button_, &QPushButton::clicked,
+            this, [this] { moveSelectedJob(1); });
     connect(queue_view_->selectionModel(), &QItemSelectionModel::currentChanged,
             this, [this] { updateQueueActions(); });
     connect(queue_model_, &QAbstractItemModel::rowsInserted,
@@ -1005,6 +987,24 @@ void RenderWorkspace::startQueue() {
     updateQueueActions();
 }
 
+void RenderWorkspace::removeSelectedJob() {
+    if (queue_model_ == nullptr || queue_view_ == nullptr || isQueueRunning()) return;
+    const int row = queue_view_->currentIndex().row();
+    if (queue_model_->removeJobAt(row)) {
+        queue_view_->clearSelection();
+        updateQueueActions();
+    }
+}
+
+void RenderWorkspace::moveSelectedJob(int row_delta) {
+    if (queue_model_ == nullptr || queue_view_ == nullptr || isQueueRunning()) return;
+    const int row = queue_view_->currentIndex().row();
+    const int destination_row = row + row_delta;
+    if (queue_model_->moveJob(row, destination_row)) {
+        queue_view_->setCurrentIndex(queue_model_->index(destination_row, 0));
+    }
+}
+
 void RenderWorkspace::handleQueueFinished(bool canceled) {
     if (queue_model_ != nullptr) queue_model_->setLocked(false);
     updateQueueActions();
@@ -1151,6 +1151,20 @@ void RenderWorkspace::setActive(bool active) {
     if (timeline_read_only_handler_) {
         timeline_read_only_handler_(active_);
     }
+}
+
+bool RenderWorkspace::isQueueRunning() const noexcept {
+    return queue_controller_ != nullptr && queue_controller_->isRunning();
+}
+
+void RenderWorkspace::cancelActiveQueue() noexcept {
+    if (!isQueueRunning()) return;
+    queue_controller_->cancel();
+    if (cancel_queue_button_ != nullptr) cancel_queue_button_->setEnabled(false);
+}
+
+void RenderWorkspace::prepareForApplicationClose() noexcept {
+    cancelActiveQueue();
 }
 
 void RenderWorkspace::setPreviewWidget(QWidget* preview_widget) {

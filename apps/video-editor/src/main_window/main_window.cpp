@@ -5,6 +5,7 @@
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
 #include "rendering/preview_performance_metrics.h"
+#include "ui/workspace/pages/render/render_workspace.h"
 #include "ui/workspace/workspace_transition_controller.h"
 
 #include <QDateTime>
@@ -118,6 +119,10 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     if (!confirmProjectChange()) {
         event->ignore();
         return;
+    }
+
+    if (render_workspace_ != nullptr) {
+        render_workspace_->prepareForApplicationClose();
     }
 
     if (workspace_transition_controller_ != nullptr) {

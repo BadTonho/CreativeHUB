@@ -209,8 +209,13 @@ tasks.
   playback requests through the existing shared controller; graph edits still
   use Edit's project and history services. Tests cover entering/leaving Fusion,
   clip activation at its start, preview-target changes, and fallback to Output.
-  Manual preview restoration checks in the Release build remain pending, and
-  Render ownership transfer remains planned in
+  Manual preview restoration checks in the Release build remain pending.
+  `RenderWorkspace` now owns queue commands and lifecycle; prepared jobs keep
+  running across workspace changes, and accepted application shutdown requests
+  cancellation through Render. Automated integration covers background queue
+  completion after switching to Edit and Fusion, and shutdown cancellation.
+  Manual checks for switching, returning to Cancel, and closing during a queue
+  remain pending in the Release build. See
   [Workspace Modularization](architecture/WORKSPACE_MODULARIZATION_PLAN.md).
 
 The detailed implemented scope and deferred behaviors are recorded in

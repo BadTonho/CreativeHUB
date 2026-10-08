@@ -44,6 +44,9 @@ public:
 
     void createPanels(QWidget* parent);
     void setActive(bool active);
+    [[nodiscard]] bool isQueueRunning() const noexcept;
+    void cancelActiveQueue() noexcept;
+    void prepareForApplicationClose() noexcept;
     void refreshProjectSettings();
     void setPreviewWidget(QWidget* preview_widget);
     [[nodiscard]] QWidget* takePreviewWidget();
@@ -72,6 +75,8 @@ private:
     void updateQualitySuggestions();
     void updateQueueActions();
     void startQueue();
+    void removeSelectedJob();
+    void moveSelectedJob(int row_delta);
     void handleQueueFinished(bool canceled);
     void updateAddAction();
     void updateDefaultFrameRate();

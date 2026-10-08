@@ -196,6 +196,97 @@ public:
         run(first_source, second_source, true);
     }
 
+    static void verifyRenderQueueCancellationOnClose(
+        const std::filesystem::path& directory) {
+        const auto image_path = directory / "render-close-source.png";
+        QImage image(4, 4, QImage::Format_RGBA8888);
+        image.fill(QColor(48, 112, 176, 255));
+        require(writePngAtomically(image_path, image),
+                "The shutdown Render image could not be created.");
+
+        MainWindow window;
+        window.show();
+        QApplication::processEvents();
+        window.setWorkspacePage(ui::WorkspacePageId::Render);
+
+        auto* render_page = window.render_workspace_->centralPage();
+        auto* container = render_page->findChild<QComboBox*>("renderContainerCombo");
+        auto* video_encoder = render_page->findChild<QComboBox*>("renderVideoEncoderCombo");
+        auto* start_button = render_page->findChild<QPushButton*>("renderStartQueueButton");
+        auto* controller = window.render_workspace_->findChild<ui::RenderQueueController*>();
+        require(container != nullptr && video_encoder != nullptr &&
+                    start_button != nullptr && controller != nullptr &&
+                    container->currentIndex() >= 0 && video_encoder->currentIndex() >= 0,
+                "The shutdown Render queue controls were unavailable.");
+
+        ui::RenderJob job;
+        job.display_name = QStringLiteral("Canceled on application close");
+        job.settings.output_path = QString::fromStdString(
+            (directory / "render-canceled-on-close.mp4").string());
+        job.settings.container_name = container->currentData().toString();
+        job.settings.video_encoder_name = video_encoder->currentData().toString();
+        job.settings.width = 320;
+        job.settings.height = 180;
+        job.settings.frame_rate = 30.0;
+        job.settings.video_bitrate_mbps = 1.0;
+        job.settings.export_audio = false;
+        job.project_snapshot.timeline_frame_rate = timeline::FrameRate{30, 1};
+        project::ProjectTrack track;
+        track.track_id = 701;
+        track.name = "Still image";
+        project::ProjectClip clip;
+        clip.source_path = image_path;
+        clip.duration_frames = 3000;
+        clip.kind = timeline::ClipKind::Image;
+        track.clips.push_back(std::move(clip));
+        job.project_snapshot.timeline_tracks.push_back(std::move(track));
+        require(window.render_workspace_->queueModel()->addJob(std::move(job)) != 0,
+                "The shutdown Render job could not be queued.");
+
+        bool queue_finished = false;
+        QEventLoop queue_loop;
+        QTimer timeout;
+        timeout.setSingleShot(true);
+        QTimer dismiss_dialogs;
+        dismiss_dialogs.setInterval(10);
+        QObject::connect(controller, &ui::RenderQueueController::queueFinished,
+            &queue_loop, [&] {
+                queue_finished = true;
+                queue_loop.quit();
+            });
+        QObject::connect(&timeout, &QTimer::timeout,
+            &queue_loop, &QEventLoop::quit);
+        QObject::connect(&dismiss_dialogs, &QTimer::timeout,
+            &queue_loop, [] {
+                if (auto* dialog = qobject_cast<QMessageBox*>(
+                        QApplication::activeModalWidget())) {
+                    dialog->accept();
+                }
+            });
+
+        start_button->click();
+        require(window.render_workspace_->isQueueRunning(),
+                "The shutdown fixture did not start its Render queue.");
+        require(window.close(),
+                "Closing the application with a clean project should be accepted.");
+        require(!window.isVisible(),
+                "The application window remained visible after an accepted close.");
+        if (!queue_finished) {
+            timeout.start(30000);
+            dismiss_dialogs.start();
+            queue_loop.exec();
+            dismiss_dialogs.stop();
+        }
+        const auto* canceled_job = window.render_workspace_->queueModel()->jobAt(0);
+        require(queue_finished && !window.render_workspace_->isQueueRunning(),
+                "The shutdown Render queue did not finish after the application close request.");
+        require(canceled_job != nullptr &&
+                    canceled_job->status == ui::RenderJobStatus::Canceled,
+                "Closing the application must mark the active Render job Canceled.");
+        require(!std::filesystem::exists(directory / "render-canceled-on-close.mp4"),
+                "Closing during Render published an incomplete destination file.");
+    }
+
     static void run(
         const std::filesystem::path& first_source,
         const std::filesystem::path& second_source,
@@ -1074,6 +1165,10 @@ public:
                 ->findChild<QLineEdit*>("renderOutputPath");
             auto* add_render_job = window.render_workspace_->centralPage()
                 ->findChild<QPushButton*>("renderAddToQueueButton");
+            auto* start_render_queue = window.render_workspace_->centralPage()
+                ->findChild<QPushButton*>("renderStartQueueButton");
+            auto* cancel_render_queue = window.render_workspace_->centralPage()
+                ->findChild<QPushButton*>("renderCancelQueueButton");
             auto* gpu_export = window.render_workspace_->centralPage()->findChild<QCheckBox*>("renderGpuCompositionCheck");
             require(gpu_export && !gpu_export->isChecked() && !gpu_export->accessibleDescription().isEmpty(),
                 "Render GPU option must default off and describe fallback accessibly.");
@@ -1084,7 +1179,8 @@ public:
                             "renderPreviewPanel") != nullptr &&
                         window.workspace_host_->renderPage()->findChild<QWidget*>(
                             "renderQueuePanel") != nullptr &&
-                        render_output_path != nullptr && add_render_job != nullptr,
+                        render_output_path != nullptr && add_render_job != nullptr &&
+                        start_render_queue != nullptr && cancel_render_queue != nullptr,
                     "Render must expose settings, the shared Preview, and queue from left to right.");
             render_output_path->setText(QString::fromStdString(
                 (directory / "queued-render.mp4").string()));
@@ -1109,6 +1205,65 @@ public:
             export_controller->jobWarning(queued_render_job->id, "Export is continuing with CPU fallback.", "-37");
             require(!gpu_warning->isHidden() && gpu_warning->text().contains("CPU fallback") &&
                 QApplication::activeModalWidget() == nullptr, "Export fallback must show a nonmodal warning.");
+
+            const auto background_image_path = directory / "render-queue-background.png";
+            QImage background_image(4, 4, QImage::Format_RGBA8888);
+            background_image.fill(QColor(32, 96, 160, 255));
+            require(writePngAtomically(background_image_path, background_image),
+                    "The workspace lifecycle render image could not be created.");
+            auto background_job = *queued_render_job;
+            background_job.id = 0;
+            background_job.display_name = QStringLiteral("Background queue lifecycle");
+            background_job.settings.output_path = QString::fromStdString(
+                (directory / "queued-background-render.mp4").string());
+            background_job.settings.width = 320;
+            background_job.settings.height = 180;
+            background_job.settings.frame_rate = 30.0;
+            background_job.settings.export_audio = false;
+            background_job.settings.gpu_composition_enabled = false;
+            background_job.project_snapshot = project::ProjectDocument{};
+            background_job.project_snapshot.timeline_frame_rate =
+                timeline::FrameRate{30, 1};
+            project::ProjectTrack background_track;
+            background_track.track_id = 301;
+            background_track.name = "Background fixture";
+            project::ProjectClip background_clip;
+            background_clip.source_path = background_image_path;
+            background_clip.duration_frames = 90;
+            background_clip.kind = timeline::ClipKind::Image;
+            background_track.clips.push_back(std::move(background_clip));
+            background_job.project_snapshot.timeline_tracks.push_back(
+                std::move(background_track));
+            require(window.render_workspace_->queueModel()->addJob(
+                        std::move(background_job)) != 0 &&
+                        window.render_workspace_->queueModel()->jobCount() == 2,
+                    "The Render workspace did not accept a second immutable queue snapshot.");
+
+            bool render_queue_finished = false;
+            QEventLoop render_queue_loop;
+            QTimer render_queue_timeout;
+            render_queue_timeout.setSingleShot(true);
+            QTimer dismiss_render_dialogs;
+            dismiss_render_dialogs.setInterval(10);
+            QObject::connect(export_controller, &ui::RenderQueueController::queueFinished,
+                &render_queue_loop, [&] {
+                    render_queue_finished = true;
+                    render_queue_loop.quit();
+                });
+            QObject::connect(&render_queue_timeout, &QTimer::timeout,
+                &render_queue_loop, &QEventLoop::quit);
+            QObject::connect(&dismiss_render_dialogs, &QTimer::timeout,
+                &render_queue_loop, [] {
+                    if (auto* dialog = qobject_cast<QMessageBox*>(
+                            QApplication::activeModalWidget())) {
+                        dialog->accept();
+                    }
+                });
+            start_render_queue->click();
+            require(window.render_workspace_->isQueueRunning() &&
+                        cancel_render_queue->isEnabled() &&
+                        window.render_workspace_->queueModel()->isLocked(),
+                    "Starting a Render must transfer queue ownership to RenderWorkspace and enable its Cancel command.");
             require(window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Render &&
                         window.workspace_host_->lowerWorkspacePanel()->currentWidget() ==
@@ -1126,6 +1281,44 @@ public:
                         "Entering Render must keep only the Timeline dock visible.");
             }
             window.setWorkspacePage(ui::WorkspacePageId::Fusion);
+            require(window.render_workspace_->isQueueRunning() &&
+                        !cancel_render_queue->isVisible() &&
+                        !window.edit_workspace_->ui().timeline->isReadOnly(),
+                    "Leaving Render must keep its queued snapshot running while restoring Timeline interaction; Cancel remains on the Render page.");
+            window.setWorkspacePage(ui::WorkspacePageId::Edit);
+            require(window.render_workspace_->isQueueRunning() &&
+                        !cancel_render_queue->isVisible() &&
+                        window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Edit &&
+                        !window.edit_workspace_->ui().timeline->isReadOnly(),
+                    "Switching from Render to Edit must leave the background queue running and keep Cancel available only in Render.");
+            window.setWorkspacePage(ui::WorkspacePageId::Fusion);
+            require(window.render_workspace_->isQueueRunning() &&
+                        !cancel_render_queue->isVisible() &&
+                        window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Fusion,
+                    "Switching from Render to Fusion must also leave the background queue running.");
+            if (!render_queue_finished) {
+                render_queue_timeout.start(30000);
+                dismiss_render_dialogs.start();
+                render_queue_loop.exec();
+                dismiss_render_dialogs.stop();
+            }
+            const auto* finished_render_job =
+                window.render_workspace_->queueModel()->jobAt(0);
+            const auto* finished_background_job =
+                window.render_workspace_->queueModel()->jobAt(1);
+            require(render_queue_finished &&
+                        !window.render_workspace_->isQueueRunning() &&
+                        finished_render_job != nullptr &&
+                        finished_render_job->status == ui::RenderJobStatus::Completed &&
+                        finished_background_job != nullptr &&
+                        finished_background_job->status == ui::RenderJobStatus::Completed &&
+                        std::filesystem::is_regular_file(
+                            directory / "queued-render.mp4") &&
+                        std::filesystem::is_regular_file(
+                            directory / "queued-background-render.mp4"),
+                    "A Render queue started before switching workspaces must finish every captured snapshot without being canceled.");
             QApplication::processEvents();
             require_workspace_state_unchanged();
             require_menu_scopes(ui::WorkspacePageId::Fusion);
@@ -2233,6 +2426,8 @@ public:
             require(no_target_dialog_verified,
                     "Paste Attributes without a selected clip must explain the missing target and disable Apply.");
         }
+
+        verifyRenderQueueCancellationOnClose(directory);
 
         std::error_code cleanup_error;
         std::filesystem::remove_all(directory, cleanup_error);

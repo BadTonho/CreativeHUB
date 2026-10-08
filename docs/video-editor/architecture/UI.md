@@ -437,6 +437,15 @@ checked with FFmpeg, then moved into place; a failed or canceled job removes
 only its temporary file. Preparing or rendering a job does not change project
 data or its dirty state.
 
+The queue keeps running when the user switches to Edit or Fusion because each
+job owns its prepared project and settings snapshot. **Cancel** remains a
+Render-page command; returning to Render restores access to the active queue's
+controls. Application and workspace commands otherwise follow the active
+workspace scopes. Closing the application after the project-close decision
+requests queue cancellation through `RenderWorkspace`; the worker is joined
+before its resources are released, and the existing export path keeps an
+incomplete output from replacing its destination.
+
 The Timeline dock remains visible at the bottom and displays the project
 tracks, clips, time ruler, and playhead. Its playback, editing, track-management,
 and zoom controls and its footer are hidden. The Timeline canvas is read-only in
@@ -713,7 +722,9 @@ before they reach the form. `RenderQueueModel` stores immutable project/settings
 snapshots and their in-memory execution state. `RenderQueueController` runs the
 jobs away from the UI and playback threads, while `OfflineExportRenderer`
 composes and encodes each snapshot. Export does not modify project history or
-dirty state.
+dirty state. The workspace owns Add/Start/Cancel/Remove/Move behavior and
+requests cancellation during accepted application shutdown; `MainWindow` only
+provides project snapshot data and forwards the shutdown lifecycle request.
 
 The internal `frame_step_navigation` module decides whether a Previous/Next
 Frame command stays within the active clip, activates a clip at the boundary,
