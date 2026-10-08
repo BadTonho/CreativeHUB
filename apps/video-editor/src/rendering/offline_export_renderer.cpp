@@ -7,7 +7,7 @@
 #include "media/still_image_decoder.h"
 #include "media/video_playback.h"
 #include "media/video_probe.h"
-#include "fusion/nodes/evaluation/node_graph_evaluator.h"
+#include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
 #include "rendering/frame_compositor.h"
 #include "rendering/text_renderer.h"
 #include "timeline/timeline_transform.h"

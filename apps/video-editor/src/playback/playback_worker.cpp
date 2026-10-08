@@ -8,7 +8,7 @@
 #include "../rendering/text_renderer.h"
 #include "../timeline/timeline_time.h"
 #include "../media/still_image_decoder.h"
-#include "fusion/nodes/evaluation/node_graph_evaluator.h"
+#include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
 
 #include <QFileInfo>
 #include <QByteArray>

@@ -77,6 +77,10 @@ src/
       ui/
     fusion/
       ui/
+      nodes/
+        model/
+        evaluation/
+        ui/
     render/
       queue/
       ui/
@@ -103,11 +107,6 @@ tests/
   rendering/
   settings/
   system/
-  fusion/
-    nodes/
-      model/
-      ui/
-      evaluation/
   timeline/
   ui/
 ```
@@ -128,13 +127,13 @@ main_window/
 
 Workspace-specific UI and commands live under `src/workspaces/`. Edit owns its
 Timeline commands, controller, and workspace UI; Fusion owns its workspace UI
-while the node graph remains in `src/fusion/nodes/`; Render owns its workspace
-UI and queue. The export job contract and discovered output capabilities live
-in `src/rendering/` because both the Render queue and shared offline exporter
-use them. `src/ui/workspace/` contains the shared host, page identifiers, and
-transition controller. `WorkspaceHost` forwards page lifecycle activation to
-Fusion and Render; `MainWindow` adapts workspace requests to shared project,
-playback, and history services.
+and node graph model, evaluator, and canvas under `src/workspaces/fusion/`;
+Render owns its workspace UI and queue. The export job contract and discovered
+output capabilities live in `src/rendering/` because both the Render queue and
+shared offline exporter use them. `src/ui/workspace/` contains the shared host,
+page identifiers, and transition controller. `WorkspaceHost` forwards page
+lifecycle activation to Fusion and Render; `MainWindow` adapts workspace
+requests to shared project, playback, and history services.
 
 `ui/preview/preview_widget.*` contains the preview container, while its OpenGL
 presentation surface and CPU composition adapter remain in `rendering/`; the

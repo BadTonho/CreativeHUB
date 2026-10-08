@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fusion/nodes/model/node_graph.h"
+#include "workspaces/fusion/nodes/model/node_graph.h"
 #include "timeline/timeline_model.h"
 
 #include <QObject>

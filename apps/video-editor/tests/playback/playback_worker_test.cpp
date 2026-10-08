@@ -1,7 +1,7 @@
 #include "playback/playback_worker.h"
 #include "playback/playback_frame_mailbox.h"
 #include "playback/playback_transition_plan.h"
-#include "fusion/nodes/evaluation/node_graph_evaluator.h"
+#include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
 #include "logging/logger.h"
 #include "media/video_playback.h"
 #include "rendering/frame_compositor.h"

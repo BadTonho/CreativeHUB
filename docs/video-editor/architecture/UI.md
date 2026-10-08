@@ -683,8 +683,8 @@ node canvas, and Inspector, then exposes those widgets to `WorkspaceHost`.
 `WorkspaceHost` calls `setActive` on page transitions, so `MainWindow` only
 adapts the workspace's playback requests to the shared controller. The
 shared Preview remains owned by the application shell and is reused as the
-Viewer surface. The dedicated `fusion/nodes/` module owns the graph model, Qt
-canvas, and evaluator; graph edits go through the existing Timeline command
+Viewer surface. The `workspaces/fusion/nodes/` submodule owns the graph model,
+Qt canvas, and evaluator; graph edits go through the existing Timeline command
 service and therefore update project dirty state and Undo/Redo. Selecting a
 video or image clip loads its stored graph or a default Input-to-Output
 pass-through. The Inspector edits the selected node's parameters and chooses

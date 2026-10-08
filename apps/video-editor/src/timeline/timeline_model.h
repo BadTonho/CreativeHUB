@@ -3,7 +3,7 @@
 #include "../media/video_metadata.h"
 #include "timeline_frame_rate.h"
 #include "timeline_transform.h"
-#include "fusion/nodes/model/node_graph.h"
+#include "workspaces/fusion/nodes/model/node_graph.h"
 #include <creative_suite/effects/effects.h>
 
 #include <algorithm>

@@ -218,8 +218,9 @@ tasks.
   remain pending in the Release build. See
   [Workspace Modularization](architecture/WORKSPACE_MODULARIZATION_PLAN.md).
 - [x] Consolidate Edit, Fusion, and Render under `src/workspaces/`: Edit has
-  `commands/`, `controllers/`, and `ui/`; Fusion has `ui/`; Render has `ui/`
-  and `queue/`. Shared export job and output-capability contracts live in
+  `commands/`, `controllers/`, and `ui/`; Fusion has `ui/` and
+  `nodes/{model,evaluation,ui}/`; Render has `ui/` and `queue/`. Shared export
+  job and output-capability contracts live in
   `src/rendering/`. `WorkspaceHost` now forwards Fusion activation and
   deactivation, removing the duplicate lifecycle dispatch from `MainWindow`.
   Focused workspace, queue, export, and window integration tests pass. This

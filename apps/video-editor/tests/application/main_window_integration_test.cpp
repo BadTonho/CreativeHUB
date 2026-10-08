@@ -4,7 +4,7 @@
 #include "ui/preview/preview_widget.h"
 #include "ui/workspace/workspace_host.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
-#include "fusion/nodes/ui/node_canvas.h"
+#include "workspaces/fusion/nodes/ui/node_canvas.h"
 #include "workspaces/render/queue/render_queue_model.h"
 #include "workspaces/render/queue/render_queue_controller.h"
 #include "workspaces/render/ui/render_workspace.h"

@@ -6,7 +6,7 @@ add_executable(creative-suite-main-editor-timeline-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_history.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_history.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -43,7 +43,7 @@ add_executable(creative-suite-main-editor-timeline-command-service-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_history.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_history.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -73,10 +73,10 @@ add_creative_suite_test(
 
 add_executable(creative-suite-main-editor-node-graph-tests
     node_graph_test.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/evaluation/node_graph_evaluator.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/evaluation/node_graph_evaluator.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/evaluation/node_graph_evaluator.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/evaluation/node_graph_evaluator.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
 )
 target_include_directories(creative-suite-main-editor-node-graph-tests PRIVATE
@@ -91,7 +91,7 @@ add_creative_suite_test(
 add_executable(creative-suite-main-editor-timeline-trim-gesture-tests
     timeline_trim_gesture_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -122,7 +122,7 @@ add_executable(creative-suite-main-editor-timeline-widget-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_time.h
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_metadata.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_layout.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_geometry.cpp
@@ -210,7 +210,7 @@ add_executable(creative-suite-main-editor-timeline-geometry-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_interaction_painter.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_interaction_painter.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -236,7 +236,7 @@ add_executable(creative-suite-main-editor-timeline-interaction-controller-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_trim_gesture.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_trim_gesture.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/fusion/nodes/model/node_graph.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h

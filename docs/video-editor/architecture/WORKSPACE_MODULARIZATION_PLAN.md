@@ -26,7 +26,7 @@ dependências e não exige novas funções visíveis ao usuário.
   Timeline e do Inspector usando `EditorSession` e `TimelineCommandService`.
 - `workspaces/fusion/ui/FusionWorkspace` monta o canvas e o Inspector de
   Fusion. `WorkspaceHost` encaminha a entrada e saída do Fusion; o grafo
-  continua no módulo dedicado `src/fusion/nodes/`.
+  continua no módulo dedicado `src/workspaces/fusion/nodes/`.
 - `workspaces/render/ui/RenderWorkspace` monta o formulário e coordena a fila;
   o modelo e o controller ficam em `workspaces/render/queue/`. O contrato de
   exportação e a descoberta de capacidades ficam em `src/rendering/`.
@@ -62,13 +62,16 @@ apps/video-editor/src/
       commands/                # ações de Edit
       controllers/             # interação da Timeline e do Inspector
       ui/                      # montagem da tela de Edit
-    fusion/ui/                 # montagem de Fusion e seu Inspector
+    fusion/
+      ui/                      # montagem de Fusion e seu Inspector
+      nodes/
+        model/                 # modelo do grafo
+        evaluation/            # avaliação do grafo
+        ui/                    # canvas de nós
     render/
       queue/                   # modelo e execução da fila
       ui/                      # formulário de Render e controles da fila
   rendering/                   # job de exportação e capacidades de saída
-  fusion/
-    nodes/                     # modelo, canvas e avaliação do grafo existente
 ```
 
 `WorkspaceHost` exibe as telas, move interfaces realmente compartilhadas e
@@ -83,10 +86,10 @@ Viewer compartilhado continuam tendo uma única instância. Os módulos de
 workspace não devem criar cópias do projeto, do playhead, da reprodução ou do
 histórico de desfazer/refazer.
 
-Os nomes de pastas indicam o destino desejado, mas não são motivo para criar
-diretórios vazios antes de existir um módulo real. A fronteira atual
-`src/fusion/nodes/` será mantida, salvo se uma decisão de arquitetura separada
-justificar sua mudança.
+Os nomes de pastas indicam responsabilidades existentes; não criar diretórios
+vazios para funções futuras. O grafo é um submódulo de Fusion: modelo,
+avaliação e canvas permanecem separados em `nodes/model/`, `nodes/evaluation/`
+e `nodes/ui/`, dentro de `workspaces/fusion/`.
 
 ## Responsabilidade por comandos e atalhos
 
@@ -289,9 +292,9 @@ pendente.
    `PlaybackController`; não decide o ciclo de vida do workspace. Viewer e
    reprodução continuam serviços compartilhados.
 3. As edições do grafo continuam passando pelo `EditWorkspaceController` e pelo
-   histórico único para manter persistência, dirty state, Undo e Redo. O modelo
-   e a avaliação permanecem em `src/fusion/nodes/`; canvas e interações ficam
-   sob Fusion.
+   histórico único para manter persistência, dirty state, Undo e Redo. O modelo,
+   avaliação e canvas ficam juntos no submódulo
+   `src/workspaces/fusion/nodes/{model,evaluation,ui}/`.
 4. Os controles existentes são locais ao workspace; não havia ações globais
    nem atalhos específicos de Fusion registrados para transferir. Nenhum atalho
    foi adicionado.
@@ -338,10 +341,11 @@ Cancel e cancelamento ao fechar.
 **Estado:** implementada em 2026-10-08; compilação Release e conferência dos
 testes focados concluídas.
 
-1. Mover Fusion para `workspaces/fusion/ui/`; manter o grafo em
-   `fusion/nodes/`. `WorkspaceHost` agora chama `FusionWorkspace::setActive`
-   durante a transição; remover esse despacho duplicado de `MainWindow` e
-   preservar os adaptadores de pedidos ao `PlaybackController`.
+1. Consolidar Fusion em `workspaces/fusion/`, com a tela em `ui/` e o grafo em
+   `nodes/{model,evaluation,ui}/`. `WorkspaceHost` chama
+   `FusionWorkspace::setActive` durante a transição; remover o despacho
+   duplicado de `MainWindow` e preservar os adaptadores de pedidos ao
+   `PlaybackController`.
 2. Mover a interface e a fila de Render para `workspaces/render/ui/` e
    `workspaces/render/queue/`. Mover `RenderJob` e `RenderOutputCapabilities`
    para `rendering/`, atualizando seus namespaces internos e referências do
@@ -357,8 +361,8 @@ testes focados concluídas.
    protegem os módulos movidos.
 
 **Critério automatizado:** atendido pelos testes focados e pela compilação limpa
-do Video Editor Release. Não restam referências de código ou CMake ao caminho
-antigo `ui/workspace/pages/`.
+do Video Editor Release. Não restam referências de código ou CMake aos caminhos
+anteriores `ui/workspace/pages/` e `src/fusion/nodes/`.
 
 ### Etapa 9 — Documentação e aceitação
 
@@ -448,11 +452,11 @@ o comportamento atuais que sustentam a proposta.
 
 | Ação ou controle | Declaração e execução atuais | Disponibilidade, estado e Undo/Redo | Responsabilidade proposta |
 | --- | --- | --- | --- |
-| Adicionar Input, Transform, Color ou Merge por seletor + `Add Node`; Output padrão | Seletor/botão em `FusionWorkspace`; modelo e validação ficam em `fusion/nodes`; graph edits são encaminhados ao controlador de Edit e ao histórico único | Só habilitado com clipe visual selecionado na Timeline. Alteração do grafo é persistida no clipe, marca projeto como alterado e participa do Undo/Redo. Output exigido nasce no grafo padrão e não pode ser removido | Fusion |
+| Adicionar Input, Transform, Color ou Merge por seletor + `Add Node`; Output padrão | Seletor/botão em `FusionWorkspace`; modelo e validação ficam em `workspaces/fusion/nodes`; graph edits são encaminhados ao controlador de Edit e ao histórico único | Só habilitado com clipe visual selecionado na Timeline. Alteração do grafo é persistida no clipe, marca projeto como alterado e participa do Undo/Redo. Output exigido nasce no grafo padrão e não pode ser removido | Fusion |
 | Arrastar Grayscale, Brightness, Contrast ou Saturation de Effects/Functions ao canvas/cabo | `NodeCanvas` decodifica o MIME e `FusionWorkspace` cria o nó; inserção sobre cabo divide a conexão se o grafo continuar válido | Somente os quatro efeitos visuais aceitos; item inválido/rejeitado não altera grafo. Criação/inserção altera grafo e histórico | Fusion para criação/conexão; catálogo é UI compartilhada |
 | Selecionar e mover nós; conectar/rewire por arraste de saída para entrada; desconectar arrastando entrada/cabo para área vazia | Gestos de `NodeCanvas`; `FusionWorkspace` chama modelo `connect`/`disconnect` e envia o grafo ao controlador de Edit | Canvas e Inspector dependem de clipe visual selecionado; incompatibilidade/ciclo é rejeitado com status. Posições e conexões são dados persistidos e entram no Undo/Redo | Fusion |
 | `VIEW` por nó | Botão desenhado no `NodeCanvas`; `FusionWorkspace` solicita prévia temporária pelo Viewer compartilhado | Não muda seleção do Inspector, projeto, dirty state nem histórico; ao sair do Fusion ou perder nó/clipe válido, alvo retorna ao Output/Viewer normal | Fusion para estado temporário da prévia; Viewer permanece compartilhado |
-| Inspector Fusion: fonte de Input; controles de Transform/Color/Merge; parâmetros e enable de efeito; losangos de keyframe; `Apply Settings` e `Remove Node` | Montagem e callbacks em `FusionWorkspace`; avaliação em `fusion/nodes`; alterações de grafo são encaminhadas a `EditWorkspaceController` | Edições de parâmetros/estado/keyframes alteram grafo e histórico; keyframes usam quadro local do clipe. Seleção de nó e valores apresentados não são, por si, alterações do projeto | Fusion |
+| Inspector Fusion: fonte de Input; controles de Transform/Color/Merge; parâmetros e enable de efeito; losangos de keyframe; `Apply Settings` e `Remove Node` | Montagem e callbacks em `FusionWorkspace`; avaliação em `workspaces/fusion/nodes`; alterações de grafo são encaminhadas a `EditWorkspaceController` | Edições de parâmetros/estado/keyframes alteram grafo e histórico; keyframes usam quadro local do clipe. Seleção de nó e valores apresentados não são, por si, alterações do projeto | Fusion |
 | Playhead e preview do grafo | `FusionWorkspace` recebe seleção/playhead; `MainWindow` e `PlaybackController` direcionam a saída do nó para o Preview compartilhado | Prévia acompanha o tempo do clipe; selecionar o nó a visualizar é temporário. Reproduzir/navegar por quadro ainda usa ações registradas na janela/Edit; no contrato, esses comandos compartilhados ficam disponíveis em Edit e Fusion, não em Render | Fusion controla composição/target; playback permanece compartilhado |
 
 ### Render

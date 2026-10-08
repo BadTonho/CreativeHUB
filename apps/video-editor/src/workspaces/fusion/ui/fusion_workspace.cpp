@@ -1,5 +1,5 @@
 #include "workspaces/fusion/ui/fusion_workspace.h"
-#include "fusion/nodes/ui/node_canvas.h"
+#include "workspaces/fusion/nodes/ui/node_canvas.h"
 
 #include <creative_suite/effects/effects.h>
 
