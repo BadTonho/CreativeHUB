@@ -1,4 +1,4 @@
-#include "ui/workspace/pages/render/render_queue_model.h"
+#include "workspaces/render/queue/render_queue_model.h"
 
 #include <QStringList>
 
@@ -7,6 +7,9 @@
 #include <utility>
 
 namespace ui {
+
+using rendering::RenderJob;
+using rendering::RenderJobStatus;
 
 QString renderJobStatusName(RenderJobStatus status) {
     switch (status) {

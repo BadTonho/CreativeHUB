@@ -162,24 +162,24 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/ui/workspace/workspace_page_id.h
     src/ui/workspace/workspace_transition_controller.cpp
     src/ui/workspace/workspace_transition_controller.h
-    src/ui/workspace/pages/edit/edit_workspace.cpp
-    src/ui/workspace/pages/edit/edit_workspace.h
-    src/ui/workspace/pages/edit/edit_workspace_actions.cpp
-    src/ui/workspace/pages/edit/edit_workspace_actions.h
-    src/ui/workspace/pages/edit/edit_workspace_ui.h
-    src/ui/workspace/pages/edit/edit_workspace_controller.cpp
-    src/ui/workspace/pages/edit/edit_workspace_controller.h
-    src/ui/workspace/pages/fusion/fusion_workspace.cpp
-    src/ui/workspace/pages/fusion/fusion_workspace.h
-    src/ui/workspace/pages/render/render_workspace.cpp
-    src/ui/workspace/pages/render/render_workspace.h
-    src/ui/workspace/pages/render/render_job.h
-    src/ui/workspace/pages/render/render_output_capabilities.cpp
-    src/ui/workspace/pages/render/render_output_capabilities.h
-    src/ui/workspace/pages/render/render_queue_model.cpp
-    src/ui/workspace/pages/render/render_queue_model.h
-    src/ui/workspace/pages/render/render_queue_controller.cpp
-    src/ui/workspace/pages/render/render_queue_controller.h
+    src/workspaces/edit/ui/edit_workspace.cpp
+    src/workspaces/edit/ui/edit_workspace.h
+    src/workspaces/edit/commands/edit_workspace_actions.cpp
+    src/workspaces/edit/commands/edit_workspace_actions.h
+    src/workspaces/edit/ui/edit_workspace_ui.h
+    src/workspaces/edit/controllers/edit_workspace_controller.cpp
+    src/workspaces/edit/controllers/edit_workspace_controller.h
+    src/workspaces/fusion/ui/fusion_workspace.cpp
+    src/workspaces/fusion/ui/fusion_workspace.h
+    src/workspaces/render/ui/render_workspace.cpp
+    src/workspaces/render/ui/render_workspace.h
+    src/rendering/render_job.h
+    src/rendering/render_output_capabilities.cpp
+    src/rendering/render_output_capabilities.h
+    src/workspaces/render/queue/render_queue_model.cpp
+    src/workspaces/render/queue/render_queue_model.h
+    src/workspaces/render/queue/render_queue_controller.cpp
+    src/workspaces/render/queue/render_queue_controller.h
 )
 
 add_library(creative-suite-main-editor-core STATIC

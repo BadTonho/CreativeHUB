@@ -41,6 +41,7 @@ public:
 
 private:
     QWidget* preview_widget_ = nullptr;
+    FusionWorkspace* fusion_workspace_ = nullptr;
     RenderWorkspace* render_workspace_ = nullptr;
     QWidget* timeline_panel_ = nullptr;
     QWidget* node_editor_panel_ = nullptr;

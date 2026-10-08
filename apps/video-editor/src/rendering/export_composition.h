@@ -20,23 +20,23 @@ private:
 
 class ExportMetricsScope {
 public:
-    ExportMetricsScope(const ui::RenderJob&, const OfflineExportOptions&);
+    ExportMetricsScope(const RenderJob&, const OfflineExportOptions&);
     ~ExportMetricsScope();
     OfflineExportMetrics metrics;
 private:
-    const ui::RenderJob& job_;
+    const RenderJob& job_;
     const OfflineExportOptions& options_;
     std::chrono::steady_clock::time_point start_ = std::chrono::steady_clock::now();
 };
 
 class ExportComposition {
 public:
-    ExportComposition(const ui::RenderJob&, const OfflineExportOptions&, OfflineExportMetrics&);
+    ExportComposition(const RenderJob&, const OfflineExportOptions&, OfflineExportMetrics&);
     std::optional<creative_suite::media::RgbaFrame> compose(const std::vector<composition::CompositionLayer>&,
         std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled);
 private:
     void fallback(const composition::OpenGlCompositionResult&, std::int64_t, std::int64_t);
-    const ui::RenderJob& job_;
+    const RenderJob& job_;
     const OfflineExportOptions& options_;
     OfflineExportMetrics& metrics_;
     std::unique_ptr<ExportGpuCompositor> gpu_;

@@ -5,7 +5,7 @@
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
 #include "rendering/preview_performance_metrics.h"
-#include "ui/workspace/pages/render/render_workspace.h"
+#include "workspaces/render/ui/render_workspace.h"
 #include "ui/workspace/workspace_transition_controller.h"
 
 #include <QDateTime>

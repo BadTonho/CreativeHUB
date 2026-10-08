@@ -1,4 +1,4 @@
-#include "ui/workspace/pages/render/render_queue_controller.h"
+#include "workspaces/render/queue/render_queue_controller.h"
 
 #include "rendering/offline_export_renderer.h"
 #include "logging/logger.h"
@@ -12,6 +12,9 @@
 #include <system_error>
 
 namespace ui {
+
+using rendering::RenderJob;
+using rendering::RenderJobStatus;
 
 RenderQueueController::RenderQueueController(QObject* parent)
     : QObject(parent) {}

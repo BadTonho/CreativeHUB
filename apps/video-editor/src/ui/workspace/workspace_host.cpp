@@ -1,7 +1,7 @@
 #include "ui/workspace/workspace_host.h"
-#include "ui/workspace/pages/edit/edit_workspace.h"
-#include "ui/workspace/pages/fusion/fusion_workspace.h"
-#include "ui/workspace/pages/render/render_workspace.h"
+#include "workspaces/edit/ui/edit_workspace.h"
+#include "workspaces/fusion/ui/fusion_workspace.h"
+#include "workspaces/render/ui/render_workspace.h"
 
 #include <QStackedWidget>
 #include <QVBoxLayout>
@@ -31,6 +31,7 @@ WorkspaceHost::WorkspaceHost(
     QWidget* parent)
     : QWidget(parent),
       preview_widget_(preview_widget),
+      fusion_workspace_(fusion_workspace),
       render_workspace_(render_workspace),
       timeline_panel_(timeline_panel),
       node_editor_panel_(fusion_workspace != nullptr
@@ -86,6 +87,9 @@ WorkspaceHost::WorkspaceHost(
 }
 
 void WorkspaceHost::setPage(WorkspacePageId page) {
+    if (fusion_workspace_ != nullptr) {
+        fusion_workspace_->setActive(page == WorkspacePageId::Fusion);
+    }
     if (render_workspace_ != nullptr) {
         render_workspace_->setActive(page == WorkspacePageId::Render);
     }

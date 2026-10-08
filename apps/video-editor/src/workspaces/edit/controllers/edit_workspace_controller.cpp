@@ -1,4 +1,4 @@
-#include "ui/workspace/pages/edit/edit_workspace_controller.h"
+#include "workspaces/edit/controllers/edit_workspace_controller.h"
 
 #include <creative_suite/effects/effects.h>
 

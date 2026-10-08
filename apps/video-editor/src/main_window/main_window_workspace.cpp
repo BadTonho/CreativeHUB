@@ -12,8 +12,8 @@
 #include "ui/timeline/timeline_end_buttons.h"
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/workspace_transition_controller.h"
-#include "ui/workspace/pages/fusion/fusion_workspace.h"
-#include "ui/workspace/pages/render/render_workspace.h"
+#include "workspaces/fusion/ui/fusion_workspace.h"
+#include "workspaces/render/ui/render_workspace.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -537,8 +537,6 @@ void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
         shortcut_manager_->setWorkspace(page);
     }
     refreshWorkspaceMenuVisibility();
-    if (fusion_workspace_ != nullptr)
-        fusion_workspace_->setActive(page == ui::WorkspacePageId::Fusion);
 }
 
 void MainWindow::registerWorkspaceMenuAction(

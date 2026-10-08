@@ -21,15 +21,15 @@ dependências e não exige novas funções visíveis ao usuário.
 - `ui/workspace/WorkspaceHost` seleciona a página central, o painel inferior e
   o Inspector para Edit, Fusion e Render. O controlador de transição coordena
   a troca de página e a visibilidade dos docks em Render.
-- `ui/workspace/pages/edit/EditWorkspace` monta a interface de Edit, e
-  `EditWorkspaceController` coordena interações da Timeline e do Inspector por
-  meio do `EditorSession` e do `TimelineCommandService` existentes.
-- `ui/workspace/pages/fusion/FusionWorkspace` monta o canvas e o Inspector de
-  Fusion. A implementação do grafo permanece no módulo dedicado
-  `src/fusion/nodes/`.
-- `ui/workspace/pages/render/RenderWorkspace` monta o formulário, os comandos
-  da fila e seu ciclo de vida; o modelo e o controlador permanecem em arquivos
-  separados dentro do módulo.
+- `workspaces/edit/ui/EditWorkspace` monta a interface de Edit;
+  `workspaces/edit/controllers/EditWorkspaceController` coordena interações da
+  Timeline e do Inspector usando `EditorSession` e `TimelineCommandService`.
+- `workspaces/fusion/ui/FusionWorkspace` monta o canvas e o Inspector de
+  Fusion. `WorkspaceHost` encaminha a entrada e saída do Fusion; o grafo
+  continua no módulo dedicado `src/fusion/nodes/`.
+- `workspaces/render/ui/RenderWorkspace` monta o formulário e coordena a fila;
+  o modelo e o controller ficam em `workspaces/render/queue/`. O contrato de
+  exportação e a descoberta de capacidades ficam em `src/rendering/`.
 - `MainWindow` coordena o ciclo de vida do aplicativo, projeto e serviços
   compartilhados, além de montar menus adaptáveis. Comandos de Timeline são
   responsabilidade de `EditWorkspaceActions`; o ciclo de vida da prévia
@@ -44,12 +44,11 @@ dependências e não exige novas funções visíveis ao usuário.
   [`SHORTCUTS.md`](../SHORTCUTS.md). Esse documento deve servir de referência
   durante a separação.
 
-## Organização pretendida
+## Organização atual após a Etapa 8
 
-O destino é ter módulos responsáveis por cada workspace, além de uma estrutura
-principal pequena e infraestrutura compartilhada bem delimitada. Os arquivos
-existentes devem ser movidos quando sua responsabilidade estiver clara; não se
-deve mover tudo em uma única alteração mecânica.
+Os módulos de Edit, Fusion e Render estão em `workspaces/`, além de uma
+estrutura principal pequena e infraestrutura compartilhada bem delimitada. As
+pastas são criadas somente quando representam responsabilidades existentes.
 
 ```text
 apps/video-editor/src/
@@ -60,30 +59,24 @@ apps/video-editor/src/
     workspace/                 # WorkspaceHost, IDs e transições entre telas
   workspaces/
     edit/
-      commands/                # comandos e ações de Edit
-      controllers/             # coordenação das interações de Edit
-      shortcuts/               # atalhos declarados por Edit
-      ui/                      # Timeline, Inspector de Edit e montagem da tela
-    fusion/
-      commands/
-      controllers/
-      shortcuts/
-      ui/                      # montagem de Fusion e seu Inspector
+      commands/                # ações de Edit
+      controllers/             # interação da Timeline e do Inspector
+      ui/                      # montagem da tela de Edit
+    fusion/ui/                 # montagem de Fusion e seu Inspector
     render/
-      commands/
-      controllers/
-      shortcuts/
-      ui/                      # formulário de Render e interface da fila
+      queue/                   # modelo e execução da fila
+      ui/                      # formulário de Render e controles da fila
+  rendering/                   # job de exportação e capacidades de saída
   fusion/
     nodes/                     # modelo, canvas e avaliação do grafo existente
 ```
 
-`WorkspaceHost` continua responsável por exibir as telas e mover interfaces
-realmente compartilhadas; ele não implementa comandos de Edit, Fusion ou
-Render. `MainWindow` continua sendo a estrutura principal do aplicativo e
-mantém o ciclo de vida do projeto, menus globais, preferências e serviços
-compartilhados. As declarações e o comportamento das ações específicas de cada
-tela devem ficar sob responsabilidade do workspace correspondente.
+`WorkspaceHost` exibe as telas, move interfaces realmente compartilhadas e
+encaminha a ativação de Fusion e Render. Ele não implementa comandos de Edit,
+Fusion ou Render. `MainWindow` continua sendo a estrutura principal do
+aplicativo e mantém o ciclo de vida do projeto, menus globais, preferências e
+serviços compartilhados. As declarações e o comportamento das ações específicas
+de cada tela ficam sob responsabilidade do workspace correspondente.
 
 O `TimelineCommandService`, o modelo do projeto, a sessão de reprodução e o
 Viewer compartilhado continuam tendo uma única instância. Os módulos de
@@ -258,7 +251,7 @@ validação manual de aparência e atalhos ainda precisa ser feita no aplicativo
 continua pendente.
 
 1. `EditWorkspaceActions`, em
-   `apps/video-editor/src/ui/workspace/pages/edit/`, cria e executa Delete,
+   `apps/video-editor/src/workspaces/edit/commands/`, cria e executa Delete,
    Ripple Delete, Split, Copy/Paste Attributes, comandos de faixas, Blade Tool,
    preferências da Timeline e os atalhos de movimentação Ctrl+Left/Ctrl+Right.
 2. Preservar os IDs de atalho, combinações padrão, personalizações em
@@ -288,13 +281,13 @@ carregamento do projeto.
 **Estado:** implementada em 2026-10-08; conferência manual na build Release
 pendente.
 
-1. `FusionWorkspace` mantém o estado temporário do alvo de prévia e recebe sua
-   ativação/desativação a cada troca de página. Ao entrar, solicita pausa,
-   direciona o Viewer ao nó atual e ativa o clipe no quadro local zero; ao sair,
-   limpa o alvo. Troca ou perda de clipe/nó atualiza o alvo ou volta a Output.
+1. `workspaces/fusion/ui/FusionWorkspace` mantém o estado temporário do alvo de
+   prévia. `WorkspaceHost` encaminha a ativação/desativação a cada troca de
+   página. Ao entrar, o workspace solicita pausa, direciona o Viewer ao nó
+   atual e ativa o clipe no quadro local zero; ao sair, limpa o alvo.
 2. `MainWindow` adapta os pedidos de preview e ativação do Fusion ao
-   `PlaybackController`; a decisão sobre o nó e o ciclo de vida não fica mais na
-   janela. Viewer e reprodução continuam serviços compartilhados.
+   `PlaybackController`; não decide o ciclo de vida do workspace. Viewer e
+   reprodução continuam serviços compartilhados.
 3. As edições do grafo continuam passando pelo `EditWorkspaceController` e pelo
    histórico único para manter persistência, dirty state, Undo e Redo. O modelo
    e a avaliação permanecem em `src/fusion/nodes/`; canvas e interações ficam
@@ -331,7 +324,7 @@ pendente.
    controlador da fila termina e junta o worker antes de liberar seus recursos;
    o fechamento não adiciona um diálogo novo.
 4. `main_window_integration_test.cpp` cobre o término dos jobs a partir dos
-   snapshots após Render → Fusion; a integração de fechamento cobre o
+   snapshots após Render → Edit → Fusion; a integração de fechamento cobre o
    cancelamento solicitado pelo fechamento. Os testes de exportação mantêm a
    cobertura de cancelamento, limpeza e preservação do destino anterior.
 
@@ -342,21 +335,30 @@ Cancel e cancelamento ao fechar.
 
 ### Etapa 8 — Consolidar pastas e remover conexões antigas
 
-1. Conforme as responsabilidades forem transferidas, mover grupos pequenos de
-   arquivos de `ui/workspace/pages/<workspace>/` para
-   `workspaces/<workspace>/`.
-2. Manter `ui/workspace/` para o host, identificadores de página e coordenação
-   das transições entre workspaces.
-3. Manter interfaces realmente compartilhadas em `ui/shared/`; não duplicar
-   Viewer, projeto, reprodução, mídia, renderização ou serviços de atalhos.
-4. Atualizar listas de arquivos do CMake, caminhos de inclusão, registros de
-   recursos e organização de testes a cada mudança.
-5. Remover conexões antigas de `MainWindow` somente depois que a substituição
-   tiver cobertura de regressão.
+**Estado:** implementada em 2026-10-08; compilação Release e conferência dos
+testes focados concluídas.
 
-**Critério para concluir:** os nomes das pastas refletem as responsabilidades,
-não há registros duplicados ou obsoletos e uma compilação limpa do Video Editor
-é concluída.
+1. Mover Fusion para `workspaces/fusion/ui/`; manter o grafo em
+   `fusion/nodes/`. `WorkspaceHost` agora chama `FusionWorkspace::setActive`
+   durante a transição; remover esse despacho duplicado de `MainWindow` e
+   preservar os adaptadores de pedidos ao `PlaybackController`.
+2. Mover a interface e a fila de Render para `workspaces/render/ui/` e
+   `workspaces/render/queue/`. Mover `RenderJob` e `RenderOutputCapabilities`
+   para `rendering/`, atualizando seus namespaces internos e referências do
+   exportador, da interface e dos testes.
+3. Mover as ações, controller e UI de Edit para
+   `workspaces/edit/commands/`, `workspaces/edit/controllers/` e
+   `workspaces/edit/ui/`; não criar uma pasta de atalhos vazia.
+4. Atualizar CMake e todos os includes. `ui/workspace/` mantém somente o host,
+   os IDs e o controller de transição; estado e serviços compartilhados não
+   são duplicados.
+5. A integração da janela e o teste de troca de página cobrem a ativação do
+   Fusion pelo host; os testes focados de Edit, Fusion, fila e exportação
+   protegem os módulos movidos.
+
+**Critério automatizado:** atendido pelos testes focados e pela compilação limpa
+do Video Editor Release. Não restam referências de código ou CMake ao caminho
+antigo `ui/workspace/pages/`.
 
 ### Etapa 9 — Documentação e aceitação
 
@@ -518,9 +520,6 @@ o comportamento atuais que sustentam a proposta.
 
 ## Decisões ainda pendentes
 
-- O momento exato de mover arquivos de `ui/workspace/pages/` para `workspaces/`;
-  movê-los junto com a transferência de responsabilidade, não como uma limpeza
-  isolada.
 - Se as ações de mídia e bins devem futuramente participar do histórico Undo/Redo;
   essa decisão depende de uma análise própria do modelo de mídia e não muda o
   contrato de comandos da Etapa 2.

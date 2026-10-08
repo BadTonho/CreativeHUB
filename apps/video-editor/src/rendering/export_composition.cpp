@@ -21,7 +21,7 @@ private:
     composition::OpenGlFrameCompositor backend_;
 };
 
-logging::Context jobContext(const ui::RenderJob& job) {
+logging::Context jobContext(const RenderJob& job) {
     logging::Context context{{"job_id", std::to_string(job.id)},
         {"output_path", job.settings.output_path.toUtf8().toStdString()},
         {"width", std::to_string(job.settings.width)}, {"height", std::to_string(job.settings.height)},
@@ -44,7 +44,7 @@ logging::Context jobContext(const ui::RenderJob& job) {
 }
 } // namespace
 
-ExportMetricsScope::ExportMetricsScope(const ui::RenderJob& job, const OfflineExportOptions& options)
+ExportMetricsScope::ExportMetricsScope(const RenderJob& job, const OfflineExportOptions& options)
     : job_(job), options_(options) { metrics.gpu_requested = job.settings.gpu_composition_enabled; }
 
 ExportMetricsScope::~ExportMetricsScope() {
@@ -79,7 +79,7 @@ ExportMetricsScope::~ExportMetricsScope() {
     }
 }
 
-ExportComposition::ExportComposition(const ui::RenderJob& job, const OfflineExportOptions& options, OfflineExportMetrics& metrics)
+ExportComposition::ExportComposition(const RenderJob& job, const OfflineExportOptions& options, OfflineExportMetrics& metrics)
     : job_(job), options_(options), metrics_(metrics) {}
 
 void ExportComposition::fallback(const composition::OpenGlCompositionResult& result,

@@ -1,5 +1,5 @@
-#include "ui/workspace/pages/render/render_output_capabilities.h"
-#include "ui/workspace/pages/render/render_queue_model.h"
+#include "rendering/render_output_capabilities.h"
+#include "workspaces/render/queue/render_queue_model.h"
 
 #include <QCoreApplication>
 
@@ -12,12 +12,12 @@ void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
-ui::RenderJob makeJob(
+rendering::RenderJob makeJob(
     const QString& name,
     const QString& output_path,
     const std::string& container,
     const std::string& encoder) {
-    ui::RenderJob job;
+    rendering::RenderJob job;
     job.display_name = name;
     job.settings.output_path = output_path;
     job.settings.container_name = QString::fromStdString(container);
@@ -35,23 +35,23 @@ ui::RenderJob makeJob(
 int main(int argc, char* argv[]) {
     QCoreApplication application(argc, argv);
     try {
-        const auto containers = ui::RenderOutputCapabilities::availableContainers();
+        const auto containers = rendering::RenderOutputCapabilities::availableContainers();
         require(!containers.empty(),
                 "The current FFmpeg runtime did not expose a video output container.");
         for (const auto& container : containers) {
             require(!container.video_encoders.empty(),
                     "A listed container must have at least one compatible video encoder.");
             for (const auto& encoder : container.video_encoders) {
-                require(ui::RenderOutputCapabilities::supportsVideoEncoder(
+                require(rendering::RenderOutputCapabilities::supportsVideoEncoder(
                             container, encoder.name),
                         "A listed video encoder must be valid for its container.");
             }
             for (const auto& encoder : container.audio_encoders) {
-                require(ui::RenderOutputCapabilities::supportsAudioEncoder(
+                require(rendering::RenderOutputCapabilities::supportsAudioEncoder(
                             container, encoder.name),
                         "A listed audio encoder must be valid for its container.");
             }
-            require(!ui::RenderOutputCapabilities::supportsVideoEncoder(
+            require(!rendering::RenderOutputCapabilities::supportsVideoEncoder(
                         container, "render-test-unsupported-encoder"),
                     "An encoder absent from FFmpeg must not be reported as compatible.");
         }
@@ -87,17 +87,17 @@ int main(int argc, char* argv[]) {
                     queue.data(queue.index(0, 0), Qt::UserRole + 1).toString() ==
                         QStringLiteral("Prepared"),
                 "Queue rows must expose their stable ID and prepared state.");
-        require(queue.setJobStatus(first_id, ui::RenderJobStatus::Rendering, 42) &&
+        require(queue.setJobStatus(first_id, rendering::RenderJobStatus::Rendering, 42) &&
                     queue.data(queue.index(0, 0), Qt::UserRole + 1).toString() ==
                         QStringLiteral("Rendering") &&
                     queue.data(queue.index(0, 0), Qt::UserRole + 2).toInt() == 42,
                 "Queue rows must expose live render status and progress.");
-        require(queue.setJobStatus(first_id, ui::RenderJobStatus::Failed, 0,
+        require(queue.setJobStatus(first_id, rendering::RenderJobStatus::Failed, 0,
                                    QStringLiteral("Synthetic failure")) &&
                     queue.data(queue.index(0, 0), Qt::ToolTipRole).toString().contains(
                         QStringLiteral("Synthetic failure")),
                 "Failed queue rows must retain their diagnostic message.");
-        require(queue.setJobStatus(first_id, ui::RenderJobStatus::Prepared, 0) &&
+        require(queue.setJobStatus(first_id, rendering::RenderJobStatus::Prepared, 0) &&
                     queue.data(queue.index(0, 0), Qt::UserRole + 1).toString() ==
                         QStringLiteral("Prepared") &&
                     queue.data(queue.index(0, 0), Qt::UserRole + 3).toString().isEmpty(),

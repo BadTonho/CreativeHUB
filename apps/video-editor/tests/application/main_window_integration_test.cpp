@@ -3,11 +3,11 @@
 
 #include "ui/preview/preview_widget.h"
 #include "ui/workspace/workspace_host.h"
-#include "ui/workspace/pages/fusion/fusion_workspace.h"
+#include "workspaces/fusion/ui/fusion_workspace.h"
 #include "fusion/nodes/ui/node_canvas.h"
-#include "ui/workspace/pages/render/render_queue_model.h"
-#include "ui/workspace/pages/render/render_queue_controller.h"
-#include "ui/workspace/pages/render/render_workspace.h"
+#include "workspaces/render/queue/render_queue_model.h"
+#include "workspaces/render/queue/render_queue_controller.h"
+#include "workspaces/render/ui/render_workspace.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "settings/settings_dialog.h"
@@ -219,7 +219,7 @@ public:
                     container->currentIndex() >= 0 && video_encoder->currentIndex() >= 0,
                 "The shutdown Render queue controls were unavailable.");
 
-        ui::RenderJob job;
+        rendering::RenderJob job;
         job.display_name = QStringLiteral("Canceled on application close");
         job.settings.output_path = QString::fromStdString(
             (directory / "render-canceled-on-close.mp4").string());
@@ -281,7 +281,7 @@ public:
         require(queue_finished && !window.render_workspace_->isQueueRunning(),
                 "The shutdown Render queue did not finish after the application close request.");
         require(canceled_job != nullptr &&
-                    canceled_job->status == ui::RenderJobStatus::Canceled,
+                    canceled_job->status == rendering::RenderJobStatus::Canceled,
                 "Closing the application must mark the active Render job Canceled.");
         require(!std::filesystem::exists(directory / "render-canceled-on-close.mp4"),
                 "Closing during Render published an incomplete destination file.");
@@ -1311,9 +1311,9 @@ public:
             require(render_queue_finished &&
                         !window.render_workspace_->isQueueRunning() &&
                         finished_render_job != nullptr &&
-                        finished_render_job->status == ui::RenderJobStatus::Completed &&
+                        finished_render_job->status == rendering::RenderJobStatus::Completed &&
                         finished_background_job != nullptr &&
-                        finished_background_job->status == ui::RenderJobStatus::Completed &&
+                        finished_background_job->status == rendering::RenderJobStatus::Completed &&
                         std::filesystem::is_regular_file(
                             directory / "queued-render.mp4") &&
                         std::filesystem::is_regular_file(

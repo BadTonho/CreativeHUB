@@ -1,11 +1,11 @@
-#include "ui/workspace/pages/edit/edit_workspace_actions.h"
+#include "workspaces/edit/commands/edit_workspace_actions.h"
 
 #include "media/media_library.h"
 #include "settings/shortcut_manager.h"
 #include "timeline/timeline_model.h"
 #include "timeline/timeline_widget.h"
-#include "ui/workspace/pages/edit/edit_workspace_controller.h"
-#include "ui/workspace/pages/edit/edit_workspace_ui.h"
+#include "workspaces/edit/controllers/edit_workspace_controller.h"
+#include "workspaces/edit/ui/edit_workspace_ui.h"
 
 #include <QAction>
 #include <QApplication>

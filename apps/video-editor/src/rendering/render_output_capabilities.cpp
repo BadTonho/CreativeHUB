@@ -1,6 +1,6 @@
-#include "ui/workspace/pages/render/render_output_capabilities.h"
+#include "rendering/render_output_capabilities.h"
 
-namespace ui {
+namespace rendering {
 
 std::vector<RenderContainerOption> RenderOutputCapabilities::availableContainers() {
     return creative_suite::media::availableVideoContainers();
@@ -18,4 +18,4 @@ bool RenderOutputCapabilities::supportsAudioEncoder(
     return creative_suite::media::supportsAudioEncoder(container, encoder_name);
 }
 
-}  // namespace ui
+}  // namespace rendering

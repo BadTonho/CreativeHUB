@@ -9,7 +9,7 @@
 #include "timeline/timeline_time.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
-#include "ui/workspace/pages/fusion/fusion_workspace.h"
+#include "workspaces/fusion/ui/fusion_workspace.h"
 
 #include <QAction>
 #include <QCheckBox>

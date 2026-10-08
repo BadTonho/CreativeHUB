@@ -1,9 +1,9 @@
 #include "ui/timeline/timeline_end_buttons.h"
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/workspace_transition_controller.h"
-#include "ui/workspace/pages/fusion/fusion_workspace.h"
-#include "ui/workspace/pages/render/render_queue_model.h"
-#include "ui/workspace/pages/render/render_workspace.h"
+#include "workspaces/fusion/ui/fusion_workspace.h"
+#include "workspaces/render/queue/render_queue_model.h"
+#include "workspaces/render/ui/render_workspace.h"
 
 #include <QApplication>
 #include <QComboBox>
@@ -156,8 +156,7 @@ int main(int argc, char* argv[]) {
             &window);
         std::vector<ui::WorkspacePageId> page_changes;
         transition_controller.setPageChangedHandler(
-            [&page_changes, fusion_workspace](ui::WorkspacePageId page) {
-                fusion_workspace->setActive(page == ui::WorkspacePageId::Fusion);
+            [&page_changes](ui::WorkspacePageId page) {
                 page_changes.push_back(page);
             });
         transition_controller.setPage(ui::WorkspacePageId::Edit);

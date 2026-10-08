@@ -3,7 +3,7 @@
 #include "application/editor_session.h"
 #include "application/timeline_command_service.h"
 #include "playback/playback_controller.h"
-#include "ui/workspace/pages/edit/edit_workspace_ui.h"
+#include "workspaces/edit/ui/edit_workspace_ui.h"
 
 #include <QObject>
 #include <QString>

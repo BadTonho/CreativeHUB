@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/workspace/pages/render/render_job.h"
+#include "rendering/render_job.h"
 #include <creative_suite/composition/opengl_frame_compositor.h>
 
 #include <atomic>
@@ -72,7 +72,7 @@ public:
 
     // Renders every output frame synchronously. Call this from a worker thread.
     static void render(
-        const ui::RenderJob& job,
+        const RenderJob& job,
         const std::atomic_bool& cancel_requested,
         ProgressCallback report_progress = {},
         const OfflineExportOptions& options = {});

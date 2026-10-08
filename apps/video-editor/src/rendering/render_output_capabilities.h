@@ -2,7 +2,7 @@
 
 #include <creative_suite/media/video_encoder.h>
 
-namespace ui {
+namespace rendering {
 
 using RenderEncoderOption = creative_suite::media::VideoEncoderOption;
 using RenderContainerOption = creative_suite::media::VideoContainerOption;
@@ -18,4 +18,4 @@ public:
         const std::string& encoder_name);
 };
 
-}  // namespace ui
+}  // namespace rendering

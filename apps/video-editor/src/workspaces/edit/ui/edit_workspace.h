@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ui/workspace/pages/edit/edit_workspace_controller.h"
-#include "ui/workspace/pages/edit/edit_workspace_ui.h"
+#include "workspaces/edit/controllers/edit_workspace_controller.h"
+#include "workspaces/edit/ui/edit_workspace_ui.h"
 
 #include <QObject>
 #include <QString>

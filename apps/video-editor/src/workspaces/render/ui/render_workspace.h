@@ -1,7 +1,7 @@
 #pragma once
 
 #include "project/project_document.h"
-#include "ui/workspace/pages/render/render_output_capabilities.h"
+#include "rendering/render_output_capabilities.h"
 
 #include <QObject>
 #include <QSize>
@@ -124,7 +124,7 @@ private:
     RenderQueueModel* queue_model_ = nullptr;
     RenderQueueController* queue_controller_ = nullptr;
     QStringList failed_job_names_;
-    std::vector<RenderContainerOption> containers_;
+    std::vector<rendering::RenderContainerOption> containers_;
     int project_width_ = 1920;
     int project_height_ = 1080;
     std::array<int, 3> horizontal_splitter_sizes_{480, 860, 570};

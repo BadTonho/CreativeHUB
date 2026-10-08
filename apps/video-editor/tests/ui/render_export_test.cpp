@@ -1,8 +1,8 @@
 #include "media/video_playback.h"
 #include "media/audio_playback.h"
 #include "rendering/offline_export_renderer.h"
-#include "ui/workspace/pages/render/render_output_capabilities.h"
-#include "ui/workspace/pages/render/render_queue_controller.h"
+#include "rendering/render_output_capabilities.h"
+#include "workspaces/render/queue/render_queue_controller.h"
 #include "logging/logger.h"
 #include "playback/playback_worker.h"
 
@@ -79,7 +79,7 @@ private:
     creative_suite::composition::OpenGlFrameCompositor gpu_;
 };
 
-void renderJob(const ui::RenderJob& job, const std::atomic_bool& canceled,
+void renderJob(const rendering::RenderJob& job, const std::atomic_bool& canceled,
     rendering::OfflineExportRenderer::ProgressCallback progress = {}) {
     auto options = native_options;
     options.metrics_callback = [](const auto& metrics) { last_metrics = metrics; };
@@ -112,9 +112,9 @@ QString pathToQString(const std::filesystem::path& value) {
 }
 
 struct OutputChoice {
-    ui::RenderContainerOption container;
-    ui::RenderEncoderOption video;
-    ui::RenderEncoderOption audio;
+    rendering::RenderContainerOption container;
+    rendering::RenderEncoderOption video;
+    rendering::RenderEncoderOption audio;
 };
 
 bool softwareEncoder(const std::string& name) {
@@ -125,7 +125,7 @@ bool softwareEncoder(const std::string& name) {
 }
 
 OutputChoice chooseOutput() {
-    auto containers = ui::RenderOutputCapabilities::availableContainers();
+    auto containers = rendering::RenderOutputCapabilities::availableContainers();
     std::stable_sort(containers.begin(), containers.end(), [](const auto& left, const auto& right) {
         return left.name == "matroska" && right.name != "matroska";
     });
@@ -137,12 +137,12 @@ OutputChoice chooseOutput() {
         for (const auto& video : encoders) {
             if (!softwareEncoder(video.name)) continue;
             for (const auto& audio : container.audio_encoders) {
-                if (ui::RenderOutputCapabilities::supportsAudioEncoder(container, audio.name)) {
+                if (rendering::RenderOutputCapabilities::supportsAudioEncoder(container, audio.name)) {
                     const auto pcm = std::find_if(
                         container.audio_encoders.begin(), container.audio_encoders.end(),
                         [&container](const auto& candidate) {
                             return candidate.name == "pcm_s16le" &&
-                                ui::RenderOutputCapabilities::supportsAudioEncoder(
+                                rendering::RenderOutputCapabilities::supportsAudioEncoder(
                                     container, candidate.name);
                         });
                     return {container, video,
@@ -356,13 +356,13 @@ std::filesystem::path createIndependentAudioFixture(
     return path;
 }
 
-ui::RenderJob makeImageJob(
+rendering::RenderJob makeImageJob(
     const OutputChoice& output,
     const std::filesystem::path& image_path,
     const std::filesystem::path& output_path,
     std::uint64_t id,
     std::int64_t duration_frames = 4) {
-    ui::RenderJob job;
+    rendering::RenderJob job;
     job.id = id;
     job.display_name = QStringLiteral("Fixture %1").arg(id);
     job.settings.output_path = pathToQString(output_path);
@@ -703,7 +703,7 @@ void validateQueueContinuesAfterFailure(
     cpu_next.settings.gpu_composition_enabled = false;
     auto already_completed = makeImageJob(
         output, root / "completed-source.png", root / ("already-done." + extension), 200);
-    already_completed.status = ui::RenderJobStatus::Completed;
+    already_completed.status = rendering::RenderJobStatus::Completed;
     auto& track = next.project_snapshot.timeline_tracks.front();
     track.clips.front().duration_frames = 2;
     project::ProjectClip incoming;

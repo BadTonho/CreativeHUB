@@ -3,7 +3,7 @@
 
 #include "logging/logger.h"
 #include "ui/preview/preview_widget.h"
-#include "ui/workspace/pages/render/render_workspace.h"
+#include "workspaces/render/ui/render_workspace.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "timeline/timeline_clip_edge_command.h"

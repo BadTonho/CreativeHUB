@@ -1,5 +1,5 @@
-#include "ui/workspace/pages/edit/edit_workspace.h"
-#include "ui/workspace/pages/edit/edit_workspace_actions.h"
+#include "workspaces/edit/ui/edit_workspace.h"
+#include "workspaces/edit/commands/edit_workspace_actions.h"
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
 #include "timeline/timeline_track_header_overlay.h"

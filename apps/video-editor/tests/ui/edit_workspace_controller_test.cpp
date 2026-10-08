@@ -1,7 +1,7 @@
 #include "application/editor_session.h"
 #include "application/media_controller.h"
 #include "application/timeline_command_service.h"
-#include "ui/workspace/pages/edit/edit_workspace_controller.h"
+#include "workspaces/edit/controllers/edit_workspace_controller.h"
 
 #include <creative_suite/effects/effects.h>
 

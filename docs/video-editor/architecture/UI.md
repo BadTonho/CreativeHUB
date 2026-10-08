@@ -9,10 +9,11 @@ non-widget services, but do not own application panels or workflows. Public
 interfaces remain explicit about their Qt dependencies and do not expose Qt
 types unless that dependency is part of the documented contract.
 
-UI components live under `apps/video-editor/src/ui/`, grouped into `effects`,
-`functions`, `media_browser`, `preview`, `system`, `timeline`, and `workspace`.
-The Video Editor window declaration and implementation live together under
-`apps/video-editor/src/main_window/`.
+Shared UI components live under `apps/video-editor/src/ui/`, grouped into
+`effects`, `functions`, `media_browser`, `preview`, `system`, `timeline`, and
+`workspace`. Edit, Fusion, and Render workspace modules live under
+`apps/video-editor/src/workspaces/`. The Video Editor window declaration and
+implementation live together under `apps/video-editor/src/main_window/`.
 
 The preview uses provisional Qt OpenGL with a CPU fallback. View > Grayscale
 Preview is optional and off by default. `View > Playback Preview Quality`
@@ -383,13 +384,14 @@ Switching pages changes only the visible workspace panels; it does not change
 the selected clip, playhead,
 playback, project data, history, or dirty state.
 
-`ui/workspace/pages/render/RenderWorkspace` supplies the Render settings,
+`workspaces/render/ui/RenderWorkspace` supplies the Render settings,
 shared Preview, and queue columns and activates the shared Timeline's read-only
 presentation through a handler bound to `EditWorkspaceController`. Its queue
 model stores session-scoped jobs and execution state; each job contains a copy
 of the current project document and its output settings, while media remains
 referenced by path. Leaving Render restores Timeline controls and its footer.
-`WorkspaceHost` remains responsible for selecting that page, while
+`WorkspaceHost` remains responsible for selecting that page and forwarding
+Fusion and Render activation to their workspaces, while
 `WorkspaceTransitionController` coordinates page changes, workspace selectors,
 the lower dock title, and Render's temporary dock visibility snapshot.
 `MainWindow` continues to own the native docks and persist their layout.
@@ -649,12 +651,13 @@ workspace selectors, menus, and playback-controller lifecycle.
 the workspace host, native docks, and workspace selectors. It coordinates
 Edit, Fusion, and Render transitions, including the temporary visibility
 snapshot for Render. `WorkspaceHost` remains the source of the current page
-and selects the central, lower, and Inspector panels; the transition
-controller does not own docks or persist layout. `MainWindow` remains
+and selects the central, lower, and Inspector panels; it forwards lifecycle
+activation to Fusion and Render. The transition controller does not own docks
+or persist layout. `MainWindow` remains
 responsible for creating the docks, restoring and saving their native layout,
 and returning to Edit before an accepted close from Render.
 
-`ui/workspace/pages/edit/EditWorkspace` builds the Inspector and Timeline
+`workspaces/edit/ui/EditWorkspace` builds the Inspector and Timeline
 surfaces and exposes them to `WorkspaceHost`. Edit, Fusion, and Render keep the
 same Preview and Timeline widgets and the same project data. Its
 `EditWorkspaceController` holds references to the single `EditorSession` and
@@ -675,8 +678,10 @@ application boundary and accesses Edit widgets through the shared non-owning UI
 handle set for shell-level tasks such as preferences and layout persistence; it
 keeps no additional widget pointers.
 
-`ui/workspace/pages/fusion/FusionWorkspace` builds the Fusion Viewer title,
-node canvas, and Inspector, then exposes those widgets to `WorkspaceHost`. The
+`workspaces/fusion/ui/FusionWorkspace` builds the Fusion Viewer title,
+node canvas, and Inspector, then exposes those widgets to `WorkspaceHost`.
+`WorkspaceHost` calls `setActive` on page transitions, so `MainWindow` only
+adapts the workspace's playback requests to the shared controller. The
 shared Preview remains owned by the application shell and is reused as the
 Viewer surface. The dedicated `fusion/nodes/` module owns the graph model, Qt
 canvas, and evaluator; graph edits go through the existing Timeline command
@@ -713,13 +718,14 @@ playhead is outside its range. Opening Fusion pauses playback and seeks to the
 selected clip's start. Leaving Fusion clears the temporary target and restores
 the normal multi-track Timeline composition.
 
-`ui/workspace/pages/render/RenderWorkspace` builds the output form, a central
+`workspaces/render/ui/RenderWorkspace` builds the output form, a central
 slot for the shared Preview, and the session-only queue UI. `WorkspaceHost`
 moves the existing Preview widget into that slot for Render and returns it to
-the central workspace stack for Edit or Fusion. `RenderOutputCapabilities`
+the central workspace stack for Edit or Fusion. `rendering::RenderJob` stores
+each immutable project/settings snapshot; `rendering::RenderOutputCapabilities`
 enumerates the active FFmpeg runtime and filters container/encoder combinations
-before they reach the form. `RenderQueueModel` stores immutable project/settings
-snapshots and their in-memory execution state. `RenderQueueController` runs the
+before they reach the form. `workspaces/render/queue/RenderQueueModel` stores
+queue execution state. `RenderQueueController` runs the
 jobs away from the UI and playback threads, while `OfflineExportRenderer`
 composes and encodes each snapshot. Export does not modify project history or
 dirty state. The workspace owns Add/Start/Cancel/Remove/Move behavior and

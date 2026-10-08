@@ -11,7 +11,6 @@
 #include "rendering/frame_compositor.h"
 #include "rendering/text_renderer.h"
 #include "timeline/timeline_transform.h"
-#include "ui/workspace/pages/render/render_output_capabilities.h"
 
 #include <creative_suite/effects/effects.h>
 
@@ -370,7 +369,7 @@ bool publishFile(const std::filesystem::path& temporary,
 
 class OutputEncoder final {
 public:
-    OutputEncoder(const ui::RenderJob& job,
+    OutputEncoder(const RenderJob& job,
                   const std::filesystem::path& output_path,
                   double frame_rate,
                   bool with_audio)
@@ -393,7 +392,7 @@ public:
 
 private:
     static creative_suite::media::VideoEncodingSettings makeSettings(
-        const ui::RenderJob& job,
+        const RenderJob& job,
         const std::filesystem::path& output_path,
         double frame_rate,
         bool with_audio) {
@@ -423,7 +422,7 @@ private:
 std::vector<RenderClip> prepareClips(
     const project::ProjectDocument& document,
     double& timeline_fps,
-    const ui::RenderJob& job,
+    const RenderJob& job,
     const std::atomic_bool& canceled) {
     std::vector<RenderClip> clips;
     if (!timeline::validFrameRate(document.timeline_frame_rate)) {
@@ -636,7 +635,7 @@ bool verifyOutput(const std::filesystem::path& path, bool expect_audio) {
 }  // namespace
 
 void OfflineExportRenderer::render(
-    const ui::RenderJob& job,
+    const RenderJob& job,
     const std::atomic_bool& cancel_requested,
     ProgressCallback report_progress,
     const OfflineExportOptions& options) {

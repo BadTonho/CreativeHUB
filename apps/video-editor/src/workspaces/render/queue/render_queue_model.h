@@ -1,13 +1,16 @@
 #pragma once
 
-#include "ui/workspace/pages/render/render_job.h"
+#include "rendering/render_job.h"
 
 #include <QAbstractListModel>
+#include <QString>
 
 #include <cstdint>
 #include <vector>
 
 namespace ui {
+
+[[nodiscard]] QString renderJobStatusName(rendering::RenderJobStatus status);
 
 class RenderQueueModel final : public QAbstractListModel {
 public:
@@ -18,21 +21,20 @@ public:
         const QModelIndex& index,
         int role = Qt::DisplayRole) const override;
 
-    [[nodiscard]] std::uint64_t addJob(RenderJob job);
+    [[nodiscard]] std::uint64_t addJob(rendering::RenderJob job);
     [[nodiscard]] bool removeJobAt(int row);
     [[nodiscard]] bool moveJob(int source_row, int destination_row);
     [[nodiscard]] bool setJobStatus(
         std::uint64_t id,
-        RenderJobStatus status,
+        rendering::RenderJobStatus status,
         int progress_percent = 0,
         QString error_message = {});
     void setLocked(bool locked);
     [[nodiscard]] bool isLocked() const noexcept { return locked_; }
-    [[nodiscard]] const RenderJob* jobAt(int row) const noexcept;
+    [[nodiscard]] const rendering::RenderJob* jobAt(int row) const noexcept;
     [[nodiscard]] int jobCount() const noexcept;
-
 private:
-    std::vector<RenderJob> jobs_;
+    std::vector<rendering::RenderJob> jobs_;
     std::uint64_t next_id_ = 1;
     bool locked_ = false;
 };

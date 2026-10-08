@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace ui {
+namespace rendering {
 
 enum class RenderQualityPreset {
     Low,
@@ -48,6 +48,4 @@ struct RenderJob {
     QString error_message;
 };
 
-[[nodiscard]] QString renderJobStatusName(RenderJobStatus status);
-
-}  // namespace ui
+}  // namespace rendering

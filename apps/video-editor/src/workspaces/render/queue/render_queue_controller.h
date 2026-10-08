@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/workspace/pages/render/render_job.h"
+#include "rendering/render_job.h"
 
 #include <QObject>
 
@@ -20,7 +20,7 @@ public:
     explicit RenderQueueController(QObject* parent = nullptr);
     ~RenderQueueController() override;
 
-    [[nodiscard]] bool start(std::vector<RenderJob> jobs);
+    [[nodiscard]] bool start(std::vector<rendering::RenderJob> jobs);
     void cancel() noexcept;
     [[nodiscard]] bool isRunning() const noexcept;
 

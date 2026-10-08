@@ -1,8 +1,8 @@
-#include "ui/workspace/pages/render/render_workspace.h"
+#include "workspaces/render/ui/render_workspace.h"
 
-#include "ui/workspace/pages/render/render_job.h"
-#include "ui/workspace/pages/render/render_queue_controller.h"
-#include "ui/workspace/pages/render/render_queue_model.h"
+#include "rendering/render_job.h"
+#include "workspaces/render/queue/render_queue_controller.h"
+#include "workspaces/render/queue/render_queue_model.h"
 #include "logging/logger.h"
 
 #include <QAbstractSpinBox>
@@ -45,6 +45,13 @@
 #include <utility>
 
 namespace ui {
+using rendering::RenderContainerOption;
+using rendering::RenderJob;
+using rendering::RenderJobSettings;
+using rendering::RenderJobStatus;
+using rendering::RenderOutputCapabilities;
+using rendering::RenderQualityPreset;
+
 namespace {
 
 constexpr int kCompactRenderLayoutWidth = 1100;
