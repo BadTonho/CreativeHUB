@@ -599,3 +599,41 @@ void MainWindow::handleMediaDropAt(
             "The dropped media could not be added to the timeline.");
     }
 }
+
+void MainWindow::handleMediaGroupDropAt(
+    const QString& source_path,
+    timeline::TrackKind track_kind,
+    qint64 timeline_frame) {
+    try {
+        const auto path = normalizedPath(
+            QFileInfo(source_path).filesystemFilePath());
+        const auto media = std::find_if(
+            media_items_.begin(), media_items_.end(),
+            [&path](const ImportedMedia& item) {
+                return normalizedPath(item.metadata.source_path) == path;
+            });
+        if (media == media_items_.end()) {
+            statusBar()->showMessage(
+                "Import this media before adding it to the timeline.");
+            return;
+        }
+        if (media->offline) {
+            statusBar()->showMessage(
+                "Offline media cannot be added to the timeline.");
+            return;
+        }
+        const auto result = edit_workspace_->controller()->addMediaClips(
+            {media->metadata.source_path}, 0, timeline_frame, track_kind);
+        if (result.changed()) {
+            updateMediaDetails(static_cast<int>(
+                std::distance(media_items_.begin(), media)));
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "add_media_to_empty_group",
+            error.what(), {{"source_path", source_path.toStdString()},
+                           {"timeline_frame", std::to_string(timeline_frame)}});
+        statusBar()->showMessage(
+            "The media could not be added to the Timeline.");
+    }
+}

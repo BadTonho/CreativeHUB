@@ -42,7 +42,7 @@ void run() {
 
     const auto row = geometry.trackRect(0);
     const auto content = geometry.trackContentRect(0);
-    require(row == QRectF(12.0, 48.0, 876.0, 70.0),
+    require(row == QRectF(12.0, 48.0, 860.0, 70.0),
             "Track geometry did not preserve the established margins and row height.");
     require(geometry.trackRect(1).top() == 128.0,
             "Track row geometry did not preserve the vertical gap.");
@@ -66,6 +66,42 @@ void run() {
     require(TimelineHitTester::trackAt(geometry, tracks.size(), 120.0) == std::nullopt &&
                 TimelineHitTester::trackAt(geometry, tracks.size(), 135.0) == 1,
             "Track hit testing did not respect row gaps and row boundaries.");
+
+    TimelineTrack group_video_first{10, "Video 1", 1.0, false, {}};
+    TimelineTrack group_audio_first{11, "Audio 1", 1.0, false, {}};
+    TimelineTrack group_video_second{12, "Video 2", 1.0, false, {}};
+    TimelineTrack group_audio_second{13, "Audio 2", 1.0, false, {}};
+    group_audio_first.kind = TrackKind::Audio;
+    group_audio_second.kind = TrackKind::Audio;
+    const std::vector<TimelineTrack> grouped_tracks{
+        group_video_first, group_audio_first,
+        group_video_second, group_audio_second};
+    TimelineTrackViewLayout grouped_layout;
+    grouped_layout.video_viewport = QRectF(12.0, 48.0, 460.0, 100.0);
+    grouped_layout.splitter_rect = QRectF(12.0, 148.0, 460.0, 10.0);
+    grouped_layout.audio_viewport = QRectF(12.0, 158.0, 460.0, 100.0);
+    grouped_layout.video_scroll_offset = 10.0;
+    grouped_layout.audio_scroll_offset = 0.0;
+    const TimelineGeometry grouped_geometry(
+        grouped_tracks, QSizeF(500.0, 270.0), 50.0, 1.0, 100, 30.0,
+        grouped_layout);
+    require(grouped_geometry.trackRect(0).top() == 38.0 &&
+                grouped_geometry.trackRect(2).top() == 98.0 &&
+                grouped_geometry.trackRect(1).top() == 158.0 &&
+                grouped_geometry.trackRect(3).top() == 218.0 &&
+                grouped_geometry.trackGroupScrollMaximum(TrackKind::Video) == 10.0 &&
+                grouped_geometry.trackGroupScrollMaximum(TrackKind::Audio) == 10.0,
+            "Grouped geometry did not keep independent offsets and type-relative row order.");
+    grouped_layout.video_scroll_offset = 0.0;
+    const TimelineGeometry grouped_unscrolled_geometry(
+        grouped_tracks, QSizeF(500.0, 270.0), 50.0, 1.0, 100, 30.0,
+        grouped_layout);
+    require(TimelineHitTester::trackAt(
+                grouped_unscrolled_geometry, grouped_tracks.size(), 150.0) ==
+                    std::nullopt &&
+                TimelineHitTester::trackAt(
+                    grouped_unscrolled_geometry, grouped_tracks.size(), 160.0) == 1,
+            "Track hit testing crossed a group viewport boundary or lost the Audio header row.");
 
     const std::vector<TimelineTrack> transition_tracks{{
         8, "Transition", 1.0, false, {clip(8, 0, 50), clip(9, 45, 30)},

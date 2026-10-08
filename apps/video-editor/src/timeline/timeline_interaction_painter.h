@@ -23,6 +23,7 @@ struct TimelineInteractionPaintState {
     bool media_drop_hovered = false;
     std::optional<std::size_t> drop_hover_track;
     std::optional<std::int64_t> drop_hover_frame;
+    std::optional<TrackKind> drop_empty_group;
     std::int64_t drop_duration_frames = 1;
     QString drop_label;
     bool drop_valid = false;

@@ -44,6 +44,23 @@ int main(int argc, char* argv[]) {
         settings.clear();
         settings.sync();
 
+        require(settings::timelineTrackGroupSplitRatio() == 0.5,
+                "Timeline track group split ratio must default to 50/50.");
+        settings::setTimelineTrackGroupSplitRatio(0.68);
+        settings.sync();
+        require(settings::timelineTrackGroupSplitRatio() == 0.68 &&
+                    settings.value(
+                        settings::kTimelineTrackGroupSplitRatioKey).toDouble() == 0.68,
+                "Timeline track group split ratio was not persisted locally.");
+        settings::setTimelineTrackGroupSplitRatio(1.0);
+        require(settings::timelineTrackGroupSplitRatio() ==
+                    settings::kMaximumTimelineTrackGroupSplitRatio,
+                "Timeline track group split ratio did not enforce its upper bound.");
+        settings.setValue(settings::kTimelineTrackGroupSplitRatioKey, "invalid");
+        require(settings::timelineTrackGroupSplitRatio() == 0.5,
+                "Invalid Timeline split ratio did not fall back to the default.");
+        settings.clear();
+
         require(settings::monitorVolumePercent() ==
                     settings::kDefaultMonitorVolumePercent,
                 "Monitor volume default is incorrect.");

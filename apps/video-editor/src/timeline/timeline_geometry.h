@@ -12,10 +12,19 @@
 
 namespace timeline {
 
+struct TimelineTrackViewLayout final {
+    QRectF video_viewport;
+    QRectF audio_viewport;
+    QRectF splitter_rect;
+    double video_scroll_offset = 0.0;
+    double audio_scroll_offset = 0.0;
+};
+
 class TimelineGeometry final {
 public:
     static constexpr double left_margin = 12.0;
-    static constexpr double right_margin = 12.0;
+    // Keep room for the two group scrollbars hosted at the viewport edge.
+    static constexpr double right_margin = 28.0;
     static constexpr double top_margin = 48.0;
     static constexpr double row_gap = 10.0;
     static constexpr double track_header_width = 142.0;
@@ -27,7 +36,8 @@ public:
         double row_height,
         double zoom_factor,
         std::optional<std::int64_t> fixed_duration = std::nullopt,
-        double timeline_frame_rate = 0.0) noexcept;
+        double timeline_frame_rate = 0.0,
+        std::optional<TimelineTrackViewLayout> track_view_layout = std::nullopt) noexcept;
 
     [[nodiscard]] double frameRate() const noexcept;
     [[nodiscard]] std::int64_t totalDuration() const noexcept;
@@ -35,6 +45,12 @@ public:
     [[nodiscard]] std::int64_t displayDuration() const noexcept;
     [[nodiscard]] double pixelsPerFrame() const noexcept;
     [[nodiscard]] QRectF trackRect(std::size_t index) const noexcept;
+    [[nodiscard]] QRectF trackGroupViewportRect(TrackKind kind) const noexcept;
+    [[nodiscard]] QRectF trackGroupViewportRectForTrack(
+        std::size_t track_index) const noexcept;
+    [[nodiscard]] QRectF emptyTrackRect(TrackKind kind) const noexcept;
+    [[nodiscard]] double trackGroupScrollMaximum(TrackKind kind) const noexcept;
+    [[nodiscard]] std::size_t trackGroupCount(TrackKind kind) const noexcept;
     [[nodiscard]] QRectF rulerRect() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
     [[nodiscard]] QRectF clipRect(
@@ -51,6 +67,7 @@ private:
     double zoom_factor_ = 1.0;
     std::optional<std::int64_t> fixed_duration_;
     double timeline_frame_rate_ = 0.0;
+    std::optional<TimelineTrackViewLayout> track_view_layout_;
 };
 
 class TimelineHitTester final {

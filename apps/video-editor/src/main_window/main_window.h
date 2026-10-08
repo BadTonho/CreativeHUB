@@ -102,6 +102,7 @@ private:
         std::string bin_path;
         timeline::TrackId track_id = 0;
         std::int64_t timeline_frame = 0;
+        std::optional<timeline::TrackKind> create_track_kind;
     };
     void createMenus();
     void createWorkspace();
@@ -166,6 +167,10 @@ private:
     void handleExternalTimelineFilesDrop(
         const QStringList& paths,
         timeline::TrackId track_id,
+        qint64 timeline_frame);
+    void handleExternalTimelineFilesGroupDrop(
+        const QStringList& paths,
+        timeline::TrackKind track_kind,
         qint64 timeline_frame);
     void handleMediaBrowserBinDrop(
         const QString& source_bin,
@@ -235,6 +240,10 @@ private:
     void handleMediaDropAt(
         const QString& source_path,
         timeline::TrackId track_id,
+        qint64 timeline_frame);
+    void handleMediaGroupDropAt(
+        const QString& source_path,
+        timeline::TrackKind track_kind,
         qint64 timeline_frame);
     void applyTimelineEditResult(
         const application::TimelineEditResult& result,

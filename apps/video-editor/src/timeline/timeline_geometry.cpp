@@ -33,7 +33,8 @@ TimelineGeometry::TimelineGeometry(
     double row_height,
     double zoom_factor,
     std::optional<std::int64_t> fixed_duration,
-    double timeline_frame_rate) noexcept
+    double timeline_frame_rate,
+    std::optional<TimelineTrackViewLayout> track_view_layout) noexcept
     : tracks_(tracks),
       bounds_(bounds),
       row_height_(std::max(0.0, row_height)),
@@ -42,7 +43,8 @@ TimelineGeometry::TimelineGeometry(
       timeline_frame_rate_(std::isfinite(timeline_frame_rate) &&
                                timeline_frame_rate > 0.0
           ? timeline_frame_rate
-          : 0.0) {}
+          : 0.0),
+      track_view_layout_(std::move(track_view_layout)) {}
 
 double TimelineGeometry::frameRate() const noexcept {
     if (timeline_frame_rate_ > 0.0) return timeline_frame_rate_;
@@ -98,11 +100,72 @@ std::int64_t TimelineGeometry::displayDuration() const noexcept {
 QRectF TimelineGeometry::trackRect(std::size_t index) const noexcept {
     const double width = std::max(
         0.0, bounds_.width() - left_margin - right_margin);
+    if (track_view_layout_.has_value() && index < tracks_.size()) {
+        const auto kind = tracks_[index].kind;
+        const auto viewport = trackGroupViewportRect(kind);
+        std::size_t group_index = 0;
+        for (std::size_t previous = 0; previous < index; ++previous) {
+            if (tracks_[previous].kind == kind) ++group_index;
+        }
+        const auto scroll_offset = kind == TrackKind::Audio
+            ? track_view_layout_->audio_scroll_offset
+            : track_view_layout_->video_scroll_offset;
+        return QRectF(
+            left_margin,
+            viewport.top() + static_cast<double>(group_index) *
+                (row_height_ + row_gap) - std::max(0.0, scroll_offset),
+            width,
+            row_height_);
+    }
     return QRectF(
         left_margin,
         top_margin + static_cast<double>(index) * (row_height_ + row_gap),
         width,
         row_height_);
+}
+
+QRectF TimelineGeometry::trackGroupViewportRect(TrackKind kind) const noexcept {
+    if (track_view_layout_.has_value()) {
+        return kind == TrackKind::Audio
+            ? track_view_layout_->audio_viewport
+            : track_view_layout_->video_viewport;
+    }
+    return QRectF(
+        left_margin,
+        top_margin,
+        std::max(0.0, bounds_.width() - left_margin - right_margin),
+        std::max(0.0, bounds_.height() - top_margin - 12.0));
+}
+
+QRectF TimelineGeometry::trackGroupViewportRectForTrack(
+    std::size_t track_index) const noexcept {
+    if (track_index >= tracks_.size()) return {};
+    return trackGroupViewportRect(tracks_[track_index].kind);
+}
+
+QRectF TimelineGeometry::emptyTrackRect(TrackKind kind) const noexcept {
+    const auto viewport = trackGroupViewportRect(kind);
+    return QRectF(
+        left_margin,
+        viewport.top(),
+        std::max(0.0, bounds_.width() - left_margin - right_margin),
+        row_height_);
+}
+
+std::size_t TimelineGeometry::trackGroupCount(TrackKind kind) const noexcept {
+    return static_cast<std::size_t>(std::count_if(
+        tracks_.begin(), tracks_.end(), [kind](const TimelineTrack& track) {
+            return track.kind == kind;
+        }));
+}
+
+double TimelineGeometry::trackGroupScrollMaximum(TrackKind kind) const noexcept {
+    const auto count = trackGroupCount(kind);
+    const auto viewport = trackGroupViewportRect(kind);
+    if (count == 0 || viewport.height() <= 0.0) return 0.0;
+    const auto content_height = static_cast<double>(count) * row_height_ +
+        static_cast<double>(count - 1) * row_gap;
+    return std::max(0.0, content_height - viewport.height());
 }
 
 QRectF TimelineGeometry::rulerRect() const noexcept {
@@ -176,7 +239,9 @@ std::optional<std::size_t> TimelineHitTester::trackAt(
     std::size_t track_count,
     double y) noexcept {
     for (std::size_t index = 0; index < track_count; ++index) {
-        if (geometry.trackRect(index).contains(QPointF(TimelineGeometry::left_margin, y))) {
+        const auto position = QPointF(TimelineGeometry::left_margin, y);
+        if (geometry.trackGroupViewportRectForTrack(index).contains(position) &&
+            geometry.trackRect(index).contains(position)) {
             return index;
         }
     }

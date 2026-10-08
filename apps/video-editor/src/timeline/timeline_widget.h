@@ -33,6 +33,7 @@ class QMouseEvent;
 class QPaintEvent;
 class QPainter;
 class QContextMenuEvent;
+class QResizeEvent;
 class QWheelEvent;
 class QPoint;
 class QEvent;
@@ -76,10 +77,19 @@ public:
     [[nodiscard]] bool isReadOnly() const noexcept;
     void setSnapEnabled(bool enabled);
     [[nodiscard]] bool snapEnabled() const noexcept;
+    void setTrackScrollOffset(TrackKind kind, int offset);
+    [[nodiscard]] int trackScrollOffset(TrackKind kind) const noexcept;
+    [[nodiscard]] int trackScrollMaximum(TrackKind kind) const noexcept;
+    [[nodiscard]] QRectF trackGroupViewportRect(TrackKind kind) const noexcept;
+    [[nodiscard]] QRectF trackBounds(std::size_t track_index) const noexcept;
+    [[nodiscard]] QRectF clipBounds(const ClipLocation& location) const noexcept;
+    [[nodiscard]] QRectF trackSplitterRect() const noexcept;
+    [[nodiscard]] double trackGroupSplitRatio() const noexcept;
+    void setTrackGroupSplitRatio(double ratio);
     // Rendering bridge used by the fixed header overlay hosted by the
     // Timeline scroll area's viewport.
     [[nodiscard]] int trackHeaderOverlayWidth() const noexcept;
-    void paintTrackHeaderOverlay(QPainter& painter, int vertical_offset) const;
+    void paintTrackHeaderOverlay(QPainter& painter) const;
     void setTimelineViewportWidth(int width);
     [[nodiscard]] double zoomFactor() const noexcept;
     void setZoomFactor(double factor);
@@ -149,7 +159,17 @@ signals:
     void trackRowHeightChanged(double height);
     void snapEnabledChanged(bool enabled);
     void trackHeaderVisualsChanged();
+    void trackScrollMetricsChanged();
+    void trackGroupSplitRatioChanged(double ratio);
     void playheadVisualChanged();
+    void mediaGroupDropRequested(
+        const QString& source_path,
+        timeline::TrackKind track_kind,
+        qint64 timeline_frame);
+    void externalFilesGroupDropRequested(
+        const QStringList& source_paths,
+        timeline::TrackKind track_kind,
+        qint64 timeline_frame);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -164,10 +184,12 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private:
     [[nodiscard]] QRectF trackRect(std::size_t index) const noexcept;
     [[nodiscard]] TimelineGeometry geometry() const noexcept;
+    [[nodiscard]] TimelineTrackViewLayout trackViewLayout() const noexcept;
     [[nodiscard]] QRectF rulerRect() const noexcept;
     [[nodiscard]] double rowHeight() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
@@ -184,6 +206,13 @@ private:
     [[nodiscard]] std::int64_t totalDuration() const noexcept;
     [[nodiscard]] double pixelsPerFrame() const noexcept;
     void updateVerticalExtent();
+    [[nodiscard]] std::optional<TrackKind> emptyTrackGroupAt(double y) const noexcept;
+    [[nodiscard]] std::optional<TrackKind> trackGroupAt(double y) const noexcept;
+    [[nodiscard]] bool handleWheel(
+        QPointF position,
+        QPoint pixel_delta,
+        QPoint angle_delta,
+        Qt::KeyboardModifiers modifiers);
     void updateHorizontalExtent();
     [[nodiscard]] std::optional<std::size_t> trackAt(double y) const noexcept;
     [[nodiscard]] std::optional<ClipLocation> clipAt(double x, double y) const noexcept;
@@ -247,6 +276,10 @@ private:
     int timeline_viewport_width_ = 0;
     double zoom_factor_ = 1.0;
     double track_row_height_ = kDefaultTrackRowHeight;
+    double track_group_split_ratio_ = 0.5;
+    double video_scroll_offset_ = 0.0;
+    double audio_scroll_offset_ = 0.0;
+    bool split_drag_active_ = false;
     bool snap_enabled_ = true;
     std::optional<ClipLocation> active_clip_;
     std::vector<ClipId> selected_clip_ids_;

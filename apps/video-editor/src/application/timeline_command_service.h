@@ -98,6 +98,7 @@ struct AddMediaClipsCommand {
     std::vector<std::filesystem::path> source_paths;
     timeline::TrackId track_id = 0;
     std::int64_t timeline_start_frame = 0;
+    std::optional<timeline::TrackKind> create_track_kind;
 };
 
 struct AddTextClipCommand {

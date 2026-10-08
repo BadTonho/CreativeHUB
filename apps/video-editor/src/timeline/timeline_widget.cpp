@@ -417,6 +417,58 @@ bool TimelineWidget::snapEnabled() const noexcept {
     return snap_enabled_;
 }
 
+void TimelineWidget::setTrackScrollOffset(TrackKind kind, int offset) {
+    const auto maximum = trackScrollMaximum(kind);
+    const auto normalized = std::clamp(offset, 0, maximum);
+    auto& current = kind == TrackKind::Audio
+        ? audio_scroll_offset_ : video_scroll_offset_;
+    if (std::abs(current - static_cast<double>(normalized)) < 0.001) return;
+    current = static_cast<double>(normalized);
+    update();
+    emit trackHeaderVisualsChanged();
+}
+
+int TimelineWidget::trackScrollOffset(TrackKind kind) const noexcept {
+    return static_cast<int>(std::lround(
+        kind == TrackKind::Audio ? audio_scroll_offset_ : video_scroll_offset_));
+}
+
+int TimelineWidget::trackScrollMaximum(TrackKind kind) const noexcept {
+    return static_cast<int>(std::ceil(
+        geometry().trackGroupScrollMaximum(kind)));
+}
+
+QRectF TimelineWidget::trackGroupViewportRect(TrackKind kind) const noexcept {
+    return geometry().trackGroupViewportRect(kind);
+}
+
+QRectF TimelineWidget::trackBounds(std::size_t track_index) const noexcept {
+    return trackRect(track_index);
+}
+
+QRectF TimelineWidget::clipBounds(const ClipLocation& location) const noexcept {
+    return clipRect(location);
+}
+
+QRectF TimelineWidget::trackSplitterRect() const noexcept {
+    return trackViewLayout().splitter_rect;
+}
+
+double TimelineWidget::trackGroupSplitRatio() const noexcept {
+    return track_group_split_ratio_;
+}
+
+void TimelineWidget::setTrackGroupSplitRatio(double ratio) {
+    if (!std::isfinite(ratio)) return;
+    const auto normalized = std::clamp(ratio, 0.2, 0.8);
+    if (std::abs(normalized - track_group_split_ratio_) < 0.0001) return;
+    track_group_split_ratio_ = normalized;
+    updateVerticalExtent();
+    update();
+    emit trackHeaderVisualsChanged();
+    emit trackGroupSplitRatioChanged(track_group_split_ratio_);
+}
+
 double TimelineWidget::zoomFactor() const noexcept {
     return zoom_factor_;
 }
@@ -575,14 +627,9 @@ void TimelineWidget::paintTrackHeaderCell(
 }
 
 void TimelineWidget::paintTrackHeaderOverlay(
-    QPainter& painter,
-    int vertical_offset) const {
-    const auto normalized_offset = std::max(0, vertical_offset);
+    QPainter& painter) const {
     const auto overlay_width = static_cast<double>(trackHeaderOverlayWidth());
-    const auto first_row_top = TimelineGeometry::top_margin - normalized_offset;
-    const auto last_row_bottom = tracks_.empty()
-        ? first_row_top
-        : trackRect(tracks_.size() - 1).bottom() - normalized_offset;
+    const auto view = trackViewLayout();
 
     painter.save();
     painter.setClipRect(QRectF(
@@ -597,25 +644,60 @@ void TimelineWidget::paintTrackHeaderOverlay(
     painter.drawLine(
         QPointF(overlay_width - 1.0, 12.0),
         QPointF(overlay_width - 1.0, 37.0));
-    if (last_row_bottom > first_row_top) {
-        painter.fillRect(
-            QRectF(0.0, first_row_top, overlay_width, last_row_bottom - first_row_top),
-            QColor("#171a20"));
-    }
+    painter.fillRect(view.video_viewport, QColor("#171a20"));
+    painter.fillRect(view.audio_viewport, QColor("#171a20"));
 
     for (std::size_t track_index = 0;
          track_index < tracks_.size();
          ++track_index) {
-        auto row = trackRect(track_index);
-        row.moveTop(row.top() - normalized_offset);
+        const auto row = trackRect(track_index);
+        const auto group = tracks_[track_index].kind;
+        painter.save();
+        painter.setClipRect(trackGroupViewportRect(group));
         paintTrackHeaderCell(painter, track_index, row);
-        // The overlay ends at the content boundary so the frame-zero
-        // playhead remains visible. Draw the fixed divider one pixel inside
-        // that boundary instead of relying on the scrolled widget's divider.
         painter.setPen(QColor("#384250"));
         painter.drawLine(
             QPointF(overlay_width - 1.0, row.top() + 4),
             QPointF(overlay_width - 1.0, row.bottom() - 4));
+        painter.restore();
+    }
+    const auto paint_empty_group = [&painter](
+        const QRectF& viewport, const QString& title, const QString& hint) {
+        if (viewport.height() < 18.0) return;
+        painter.save();
+        painter.setClipRect(viewport);
+        painter.setPen(QColor("#9aa4b2"));
+        painter.setFont(QFont(painter.font().family(), 8, QFont::DemiBold));
+        if (viewport.height() < 38.0) {
+            painter.drawText(viewport.adjusted(10.0, 1.0, -5.0, -1.0),
+                Qt::AlignLeft | Qt::AlignVCenter, hint);
+            painter.restore();
+            return;
+        }
+        painter.drawText(
+            viewport.adjusted(10.0, 2.0, -5.0, -viewport.height() / 2.0),
+            Qt::AlignLeft | Qt::AlignVCenter,
+            title);
+        painter.setPen(QColor("#707b8b"));
+        painter.setFont(QFont(painter.font().family(), 7));
+        painter.drawText(
+            viewport.adjusted(10.0, viewport.height() / 2.0, -5.0, -2.0),
+            Qt::AlignLeft | Qt::AlignVCenter,
+            hint);
+        painter.restore();
+    };
+    const auto current_geometry = geometry();
+    if (current_geometry.trackGroupCount(TrackKind::Video) == 0) {
+        paint_empty_group(
+            view.video_viewport,
+            QStringLiteral("No video tracks"),
+            QStringLiteral("Drop video or image media"));
+    }
+    if (current_geometry.trackGroupCount(TrackKind::Audio) == 0) {
+        paint_empty_group(
+            view.audio_viewport,
+            QStringLiteral("No audio tracks"),
+            QStringLiteral("Drop audio media"));
     }
     painter.restore();
 }
@@ -624,10 +706,22 @@ bool TimelineWidget::eventFilter(QObject* watched, QEvent* event) {
     if (event != nullptr && event->type() == QEvent::Resize) {
         const auto* resize_event = static_cast<const QResizeEvent*>(event);
         setTimelineViewportWidth(resize_event->size().width());
+        updateVerticalExtent();
     }
 
     auto* watched_widget = qobject_cast<QWidget*>(watched);
     if (watched_widget != nullptr && watched != this && event != nullptr) {
+        if (event->type() == QEvent::Wheel) {
+            auto* wheel_event = static_cast<QWheelEvent*>(event);
+            const auto position = mapFrom(
+                watched_widget, wheel_event->position().toPoint());
+            if (handleWheel(
+                    position, wheel_event->pixelDelta(), wheel_event->angleDelta(),
+                    wheel_event->modifiers())) {
+                wheel_event->accept();
+                return true;
+            }
+        }
         if (read_only_) {
             switch (event->type()) {
             case QEvent::DragEnter:
@@ -699,7 +793,48 @@ TimelineGeometry TimelineWidget::geometry() const noexcept {
         : std::nullopt;
     return TimelineGeometry(
         tracks_, QSizeF(width(), height()), track_row_height_, zoom_factor_,
-        fixed_duration, frame_rate_.asDouble());
+        fixed_duration, frame_rate_.asDouble(), trackViewLayout());
+}
+
+TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
+    constexpr double bottom_margin = 12.0;
+    constexpr double splitter_height = 10.0;
+    const auto available_height = std::max(
+        0.0,
+        static_cast<double>(height()) - TimelineGeometry::top_margin -
+            bottom_margin - splitter_height);
+    const auto minimum_height = std::min(
+        kMinimumTrackRowHeight, available_height / 2.0);
+    const auto minimum_ratio = available_height > 0.0
+        ? minimum_height / available_height : 0.5;
+    const auto ratio = std::clamp(
+        track_group_split_ratio_, minimum_ratio, 1.0 - minimum_ratio);
+    const auto video_height = available_height * ratio;
+    const auto audio_top = TimelineGeometry::top_margin + video_height +
+        splitter_height;
+    const auto width = std::max(
+        0.0,
+        static_cast<double>(this->width()) - TimelineGeometry::left_margin -
+            TimelineGeometry::right_margin);
+    TimelineTrackViewLayout layout;
+    layout.video_viewport = QRectF(
+        TimelineGeometry::left_margin,
+        TimelineGeometry::top_margin,
+        width,
+        video_height);
+    layout.splitter_rect = QRectF(
+        TimelineGeometry::left_margin,
+        TimelineGeometry::top_margin + video_height,
+        width,
+        splitter_height);
+    layout.audio_viewport = QRectF(
+        TimelineGeometry::left_margin,
+        audio_top,
+        width,
+        std::max(0.0, static_cast<double>(height()) - bottom_margin - audio_top));
+    layout.video_scroll_offset = video_scroll_offset_;
+    layout.audio_scroll_offset = audio_scroll_offset_;
+    return layout;
 }
 
 QRectF TimelineWidget::rulerRect() const noexcept {
@@ -711,12 +846,54 @@ double TimelineWidget::rowHeight() const noexcept {
 }
 
 void TimelineWidget::updateVerticalExtent() {
-    const auto track_count = std::max<std::size_t>(1, tracks_.size());
-    const auto required_height = TimelineGeometry::top_margin +
-        static_cast<double>(track_count) * track_row_height_ +
-        static_cast<double>(track_count - 1) * TimelineGeometry::row_gap + 12.0;
-    setMinimumHeight(std::max(100, static_cast<int>(std::ceil(required_height))));
+    constexpr double splitter_height = 10.0;
+    constexpr double bottom_margin = 12.0;
+    const auto minimum_height = static_cast<int>(std::ceil(
+        TimelineGeometry::top_margin + 2.0 * track_row_height_ +
+        splitter_height + bottom_margin));
+    setMinimumHeight(std::max(100, minimum_height));
     updateGeometry();
+    const auto current_geometry = geometry();
+    video_scroll_offset_ = std::clamp(
+        video_scroll_offset_, 0.0,
+        current_geometry.trackGroupScrollMaximum(TrackKind::Video));
+    audio_scroll_offset_ = std::clamp(
+        audio_scroll_offset_, 0.0,
+        current_geometry.trackGroupScrollMaximum(TrackKind::Audio));
+    emit trackScrollMetricsChanged();
+}
+
+std::optional<TrackKind> TimelineWidget::emptyTrackGroupAt(double y) const noexcept {
+    const auto current_geometry = geometry();
+    if (current_geometry.trackGroupCount(TrackKind::Video) == 0 &&
+        current_geometry.trackGroupViewportRect(TrackKind::Video)
+            .contains(QPointF(TimelineGeometry::left_margin, y))) {
+        return TrackKind::Video;
+    }
+    if (current_geometry.trackGroupCount(TrackKind::Audio) == 0 &&
+        current_geometry.trackGroupViewportRect(TrackKind::Audio)
+            .contains(QPointF(TimelineGeometry::left_margin, y))) {
+        return TrackKind::Audio;
+    }
+    return std::nullopt;
+}
+
+std::optional<TrackKind> TimelineWidget::trackGroupAt(double y) const noexcept {
+    const auto current_geometry = geometry();
+    if (current_geometry.trackGroupViewportRect(TrackKind::Video)
+            .contains(QPointF(TimelineGeometry::left_margin, y))) {
+        return TrackKind::Video;
+    }
+    if (current_geometry.trackGroupViewportRect(TrackKind::Audio)
+            .contains(QPointF(TimelineGeometry::left_margin, y))) {
+        return TrackKind::Audio;
+    }
+    return std::nullopt;
+}
+
+void TimelineWidget::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    updateVerticalExtent();
 }
 
 QRectF TimelineWidget::trackContentRect(std::size_t index) const noexcept {
@@ -1063,6 +1240,37 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(rect(), QColor("#171a20"));
 
+    const auto track_view = trackViewLayout();
+    const auto current_geometry = geometry();
+    painter.fillRect(track_view.video_viewport, QColor("#1b2028"));
+    painter.fillRect(track_view.audio_viewport, QColor("#1b2028"));
+    painter.fillRect(track_view.splitter_rect, QColor("#11151b"));
+    painter.setPen(QPen(QColor("#3b4655"), 1.0));
+    painter.drawLine(track_view.splitter_rect.topLeft(),
+                     track_view.splitter_rect.topRight());
+    painter.drawLine(track_view.splitter_rect.bottomLeft(),
+                     track_view.splitter_rect.bottomRight());
+    const auto paint_empty_group = [&painter](
+        const QRectF& viewport, const QString& message) {
+        if (viewport.height() < 18.0) return;
+        painter.save();
+        painter.setClipRect(viewport);
+        painter.setPen(QColor("#727e8e"));
+        painter.setFont(QFont(painter.font().family(), 9));
+        painter.drawText(viewport.adjusted(
+            TimelineGeometry::track_header_width + 18.0, 0.0, -22.0, 0.0),
+            Qt::AlignCenter, message);
+        painter.restore();
+    };
+    if (current_geometry.trackGroupCount(TrackKind::Video) == 0) {
+        paint_empty_group(track_view.video_viewport,
+                          QStringLiteral("Drop video or image media here"));
+    }
+    if (current_geometry.trackGroupCount(TrackKind::Audio) == 0) {
+        paint_empty_group(track_view.audio_viewport,
+                          QStringLiteral("Drop audio media here"));
+    }
+
     const auto total = displayDuration();
     const auto ruler = rulerRect();
     painter.setPen(QColor("#4b5565"));
@@ -1135,6 +1343,9 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     for (std::size_t track_index = 0; track_index < tracks_.size(); ++track_index) {
         const auto row = trackRect(track_index);
         const auto content = trackContentRect(track_index);
+        painter.save();
+        painter.setClipRect(
+            trackGroupViewportRect(tracks_[track_index].kind), Qt::IntersectClip);
         const bool active_track = active_clip_.has_value() &&
             active_clip_->track_index == track_index;
         painter.setPen(active_track ? QColor("#d5a94b") : QColor("#3d4654"));
@@ -1471,6 +1682,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                     : transition.kind == TransitionKind::FadeToBlack
                         ? "Fade" : "Dissolve");
         }
+        painter.restore();
     }
 
     // At frame-level zoom, draw only the frame boundaries that intersect the
@@ -1533,6 +1745,8 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         ? drop.target_track_index : std::nullopt;
     interaction_paint.drop_hover_frame = drop.hovering
         ? drop.target_frame : std::nullopt;
+    interaction_paint.drop_empty_group = drop.hovering
+        ? drop.target_empty_group : std::nullopt;
     interaction_paint.drop_duration_frames = drop.duration_frames;
     interaction_paint.drop_label = drop.label;
     interaction_paint.drop_valid = drop.valid;
@@ -1566,13 +1780,13 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             content.right());
         painter.setPen(QPen(QColor("#ffcf5c"), 2));
         painter.drawLine(
-            QPointF(x, trackRect(0).top() - 20),
-            QPointF(x, trackRect(tracks_.size() - 1).bottom()));
+            QPointF(x, track_view.video_viewport.top()),
+            QPointF(x, track_view.audio_viewport.bottom()));
         painter.setBrush(QColor("#ffcf5c"));
         painter.drawPolygon({
-            QPointF(x - 4, trackRect(0).top() - 20),
-            QPointF(x + 4, trackRect(0).top() - 20),
-            QPointF(x, trackRect(0).top() - 13)});
+            QPointF(x - 4, ruler.top() + 1),
+            QPointF(x + 4, ruler.top() + 1),
+            QPointF(x, ruler.bottom() + 4)});
     }
 }
 
@@ -1643,10 +1857,11 @@ bool TimelineWidget::updateDropHover(
     const QMimeData* mime_data,
     const QPointF& position) {
     const auto track = trackAt(position.y());
+    const auto empty_group = emptyTrackGroupAt(position.y());
     const auto frame = globalFrameAt(position.x());
     const bool supported = isSupportedDrop(mime_data);
     bool accepted = supported &&
-        track.has_value() && frame.has_value();
+        (track.has_value() || empty_group.has_value()) && frame.has_value();
     bool media_target_valid = true;
     TimelineDropPreview preview;
     preview.hovering = supported;
@@ -1654,12 +1869,13 @@ bool TimelineWidget::updateDropHover(
     if (accepted) {
         preview.target_track_index = track;
         preview.target_frame = frame;
+        preview.target_empty_group = empty_group;
     }
     if (supported && mime_data->hasFormat(ui::kMediaPathMimeType)) {
         preview.media = true;
         preview.duration_frames = mediaDropDuration(mime_data);
         preview.label = mediaDropLabel(mime_data);
-        if (accepted) {
+        if (accepted && track.has_value()) {
             const auto snapped = snapPlacement(
                 *track,
                 *frame,
@@ -1680,14 +1896,23 @@ bool TimelineWidget::updateDropHover(
                     *track, *preview.target_frame, preview.duration_frames);
                 media_target_valid = !target_is_audio;
             }
+        } else if (accepted && empty_group.has_value()) {
+            const auto media_kind = mime_data->hasFormat(ui::kMediaKindMimeType)
+                ? QString::fromUtf8(mime_data->data(ui::kMediaKindMimeType))
+                : QStringLiteral("video");
+            const auto destination_kind = media_kind == QStringLiteral("audio")
+                ? TrackKind::Audio : TrackKind::Video;
+            preview.valid = destination_kind == *empty_group;
+            media_target_valid = preview.valid;
         }
     } else if (supported && !media_browser_ui::localFilesFromUrls(mime_data).isEmpty()) {
         preview.media = true;
         preview.duration_frames = 1;
         preview.label = QStringLiteral("Import media");
-        media_target_valid = accepted &&
-            (tracks_[*track].kind == TrackKind::Video ||
-             tracks_[*track].kind == TrackKind::Audio);
+        media_target_valid = accepted && (empty_group.has_value() ||
+            (track.has_value() &&
+             (tracks_[*track].kind == TrackKind::Video ||
+              tracks_[*track].kind == TrackKind::Audio)));
         preview.valid = media_target_valid;
     } else if (supported && mime_data->hasFormat(ui::kEffectIdMimeType)) {
         const auto effect_id = QString::fromUtf8(
@@ -1732,6 +1957,7 @@ bool TimelineWidget::processDrop(
     const QMimeData* mime_data,
     const QPointF& position) {
     const auto track = trackAt(position.y());
+    const auto empty_group = emptyTrackGroupAt(position.y());
     const auto frame = globalFrameAt(position.x());
     const bool is_media_drop = mime_data != nullptr &&
         mime_data->hasFormat(ui::kMediaPathMimeType);
@@ -1740,35 +1966,45 @@ bool TimelineWidget::processDrop(
     const bool is_effect_drop = mime_data != nullptr &&
         mime_data->hasFormat(ui::kEffectIdMimeType);
     if ((!is_media_drop && !is_external_file_drop && !is_effect_drop) ||
-        !track.has_value() || !frame.has_value()) {
+        (!track.has_value() && !empty_group.has_value()) || !frame.has_value()) {
         return false;
     }
 
     if (is_external_file_drop) {
-        const auto& target_track = tracks_[*track];
-        if (target_track.kind != TrackKind::Video &&
-            target_track.kind != TrackKind::Audio) return false;
         QStringList paths = external_paths;
         clearDropHover();
-        emit externalFilesDropRequested(paths, target_track.track_id, *frame);
+        if (empty_group.has_value()) {
+            emit externalFilesGroupDropRequested(paths, *empty_group, *frame);
+        } else {
+            const auto& target_track = tracks_[*track];
+            if (target_track.kind != TrackKind::Video &&
+                target_track.kind != TrackKind::Audio) return false;
+            emit externalFilesDropRequested(paths, target_track.track_id, *frame);
+        }
         return true;
     }
 
     auto target_frame = *frame;
     if (is_media_drop) {
-        const auto duration = mediaDropDuration(mime_data);
-        target_frame = snapPlacement(*track, *frame, duration).start_frame;
         const auto media_kind = mime_data->hasFormat(ui::kMediaKindMimeType)
             ? QString::fromUtf8(mime_data->data(ui::kMediaKindMimeType))
             : QStringLiteral("video");
         const bool audio_drop = media_kind == QStringLiteral("audio");
-        const bool target_is_audio = tracks_[*track].kind == TrackKind::Audio;
-        if ((target_is_audio && !audio_drop) ||
-            (target_is_audio && audio_drop &&
-             placementOverlaps(*track, target_frame, duration))) {
-            return false;
+        if (empty_group.has_value()) {
+            const auto target_kind = audio_drop ? TrackKind::Audio : TrackKind::Video;
+            if (target_kind != *empty_group) return false;
+        } else {
+            const auto duration = mediaDropDuration(mime_data);
+            target_frame = snapPlacement(*track, *frame, duration).start_frame;
+            const bool target_is_audio = tracks_[*track].kind == TrackKind::Audio;
+            if ((target_is_audio && !audio_drop) ||
+                (target_is_audio && audio_drop &&
+                 placementOverlaps(*track, target_frame, duration))) {
+                return false;
+            }
         }
     }
+    if (empty_group.has_value() && is_effect_drop) return false;
     if (is_effect_drop) {
         const auto effect_id = QString::fromUtf8(
             mime_data->data(ui::kEffectIdMimeType));
@@ -1805,14 +2041,19 @@ bool TimelineWidget::processDrop(
         const auto path = QString::fromUtf8(
             mime_data->data(ui::kMediaPathMimeType));
         if (path.isEmpty()) return false;
-        emit mediaDropRequested(
-            path,
-            tracks_[*track].track_id,
-            target_frame);
+        if (empty_group.has_value()) {
+            emit mediaGroupDropRequested(path, *empty_group, target_frame);
+        } else {
+            emit mediaDropRequested(
+                path,
+                tracks_[*track].track_id,
+                target_frame);
+        }
     } else {
         const auto effect_id = QString::fromUtf8(
             mime_data->data(ui::kEffectIdMimeType));
         if (effect_id.isEmpty()) return false;
+        if (!track.has_value()) return false;
         emit effectDropRequested(effect_id, tracks_[*track].track_id, *frame);
     }
     return true;
@@ -2028,6 +2269,14 @@ void TimelineWidget::leaveEvent(QEvent* event) {
 }
 
 void TimelineWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton &&
+        trackSplitterRect().contains(event->position())) {
+        split_drag_active_ = true;
+        setCursor(Qt::SplitVCursor);
+        grabMouse();
+        event->accept();
+        return;
+    }
     if (read_only_) {
         event->ignore();
         return;
@@ -2315,6 +2564,25 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (split_drag_active_) {
+        constexpr double splitter_height = 10.0;
+        constexpr double bottom_margin = 12.0;
+        const auto available_height = std::max(
+            1.0,
+            static_cast<double>(height()) - TimelineGeometry::top_margin -
+                bottom_margin - splitter_height);
+        setTrackGroupSplitRatio(
+            (event->position().y() - TimelineGeometry::top_margin -
+             splitter_height / 2.0) / available_height);
+        event->accept();
+        return;
+    }
+    if (trackSplitterRect().contains(event->position())) {
+        if (cursor().shape() != Qt::SplitVCursor) setCursor(Qt::SplitVCursor);
+        event->accept();
+        return;
+    }
+    if (cursor().shape() == Qt::SplitVCursor) unsetCursor();
     if (read_only_) {
         event->ignore();
         return;
@@ -2475,6 +2743,13 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (split_drag_active_ && event->button() == Qt::LeftButton) {
+        split_drag_active_ = false;
+        releaseMouse();
+        unsetCursor();
+        event->accept();
+        return;
+    }
     if (read_only_) {
         event->ignore();
         return;
@@ -2577,41 +2852,54 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
 
 void TimelineWidget::wheelEvent(QWheelEvent* event) {
     if (event == nullptr) return;
-    if (read_only_) {
-        event->ignore();
-        return;
-    }
-    const auto modifiers = event->modifiers();
-    if (modifiers.testFlag(Qt::ControlModifier)) {
-        const auto vertical_delta = event->angleDelta().y();
-        if (vertical_delta == 0) {
-            event->ignore();
-            return;
-        }
-        const auto next_factor = nextZoomFactor(vertical_delta > 0 ? 1 : -1);
-        if (std::abs(next_factor - zoom_factor_) < 0.000001) {
-            event->accept();
-            return;
-        }
-        emit zoomRequested(next_factor);
+    if (handleWheel(event->position(), event->pixelDelta(),
+                    event->angleDelta(), event->modifiers())) {
         event->accept();
-        return;
+    } else {
+        event->ignore();
+    }
+}
+
+bool TimelineWidget::handleWheel(
+    QPointF position,
+    QPoint pixel_delta,
+    QPoint angle_delta,
+    Qt::KeyboardModifiers modifiers) {
+    if (read_only_ && (modifiers.testFlag(Qt::ControlModifier) ||
+                       modifiers.testFlag(Qt::ShiftModifier))) {
+        return true;
+    }
+    if (modifiers.testFlag(Qt::ControlModifier)) {
+        const auto vertical_delta = angle_delta.y() != 0
+            ? angle_delta.y() : pixel_delta.y();
+        if (vertical_delta == 0) return false;
+        const auto next_factor = nextZoomFactor(vertical_delta > 0 ? 1 : -1);
+        if (std::abs(next_factor - zoom_factor_) >= 0.000001) {
+            emit zoomRequested(next_factor);
+        }
+        return true;
     }
     if (modifiers.testFlag(Qt::ShiftModifier)) {
-        const auto pixel_delta = event->pixelDelta().y();
-        const auto angle_delta = event->angleDelta().y();
-        const auto height_delta = pixel_delta != 0
-            ? static_cast<double>(pixel_delta)
-            : static_cast<double>(angle_delta) / 8.0;
-        if (std::abs(height_delta) < 0.000001) {
-            event->ignore();
-            return;
-        }
+        const auto height_delta = pixel_delta.y() != 0
+            ? static_cast<double>(pixel_delta.y())
+            : static_cast<double>(angle_delta.y()) / 8.0;
+        if (std::abs(height_delta) < 0.000001) return false;
         setTrackRowHeight(track_row_height_ + height_delta);
-        event->accept();
-        return;
+        return true;
     }
-    event->ignore();
+
+    const auto group = trackGroupAt(position.y());
+    if (!group.has_value()) return false;
+    double scroll_delta = static_cast<double>(pixel_delta.y());
+    if (std::abs(scroll_delta) < 0.000001) {
+        const auto steps = static_cast<double>(angle_delta.y()) / 120.0;
+        if (std::abs(steps) < 0.000001) return false;
+        scroll_delta = steps * 3.0 *
+            (track_row_height_ + TimelineGeometry::row_gap);
+    }
+    setTrackScrollOffset(*group, trackScrollOffset(*group) -
+        static_cast<int>(std::lround(scroll_delta)));
+    return true;
 }
 
 } // namespace timeline

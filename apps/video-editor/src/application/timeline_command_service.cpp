@@ -927,11 +927,44 @@ TimelineEditResult TimelineCommandService::execute(const AddMediaClipsCommand& c
         return result(EditStatus::Rejected, EditReason::InvalidPosition);
     }
     auto staged_timeline = session_.timeline_;
-    const auto initial_track = staged_timeline.locateTrack(command.track_id);
+    auto initial_track = staged_timeline.locateTrack(command.track_id);
+    if (command.create_track_kind.has_value()) {
+        const auto requested_kind = *command.create_track_kind;
+        if (requested_kind != timeline::TrackKind::Video &&
+            requested_kind != timeline::TrackKind::Audio) {
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        if (std::any_of(
+                staged_timeline.tracks().begin(), staged_timeline.tracks().end(),
+                [requested_kind](const timeline::TimelineTrack& track) {
+                    return track.kind == requested_kind;
+                })) {
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        std::size_t number = 1;
+        std::string name;
+        for (;;) {
+            name = (requested_kind == timeline::TrackKind::Audio ? "Audio " : "Video ") +
+                std::to_string(number++);
+            const auto used = std::any_of(
+                staged_timeline.tracks().begin(), staged_timeline.tracks().end(),
+                [&name, requested_kind](const timeline::TimelineTrack& track) {
+                    return track.kind == requested_kind && track.name == name;
+                });
+            if (!used) break;
+        }
+        const auto new_track_id = staged_timeline.snapshot().next_track_id;
+        if (staged_timeline.addTrack(name, requested_kind) !=
+            timeline::AddTrackResult::Added) {
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        initial_track = staged_timeline.locateTrack(new_track_id);
+    }
     if (!initial_track.has_value()) {
         return result(EditStatus::Rejected, EditReason::InvalidTarget);
     }
     const auto initial_kind = staged_timeline.tracks()[*initial_track].kind;
+    const auto initial_track_id = staged_timeline.tracks()[*initial_track].track_id;
     if (initial_kind != timeline::TrackKind::Video &&
         initial_kind != timeline::TrackKind::Audio) {
         return result(EditStatus::Rejected, EditReason::InvalidTarget);
@@ -963,6 +996,10 @@ TimelineEditResult TimelineCommandService::execute(const AddMediaClipsCommand& c
         const auto& item = session_.media_library_.items()[media_index];
         if (item.offline) return result(EditStatus::Rejected, EditReason::OfflineMedia);
         const bool audio_only = item.metadata.kind == media::MediaKind::Audio;
+        if (command.create_track_kind.has_value() &&
+            ((initial_kind == timeline::TrackKind::Audio) != audio_only)) {
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
         if (!audio_only && initial_kind != timeline::TrackKind::Video) {
             return result(EditStatus::Rejected, EditReason::InvalidTarget);
         }
@@ -1011,7 +1048,7 @@ TimelineEditResult TimelineCommandService::execute(const AddMediaClipsCommand& c
             }
             destination_track = *free_audio_track;
         } else {
-            const auto found = staged_timeline.locateTrack(command.track_id);
+            const auto found = staged_timeline.locateTrack(initial_track_id);
             if (!found.has_value()) return result(EditStatus::Rejected, EditReason::InvalidTarget);
             destination_track = *found;
         }

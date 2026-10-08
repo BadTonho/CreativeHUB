@@ -203,6 +203,89 @@ void runExternalMediaBatchCommands() {
             "An incompatible video drop changed the Timeline.");
 }
 
+void runEmptyTrackGroupDropCommands() {
+    application::EditorSession audio_session;
+    application::TimelineCommandService audio_service(audio_session);
+    const auto audio_path = std::filesystem::temp_directory_path() /
+        "empty-group-audio.wav";
+    const auto incompatible_video_path = std::filesystem::temp_directory_path() /
+        "empty-group-incompatible.mp4";
+    addAudioMedia(audio_session, audio_path);
+    addMedia(audio_session, incompatible_video_path);
+    require(audio_session.legacyTimelineForUi().removeTrack(1) ==
+                timeline::TrackMutationResult::Changed,
+            "Could not prepare a Timeline with an empty Audio group.");
+    const auto audio_before = audio_session.timeline().snapshot();
+    const auto added_audio = audio_service.execute(application::AddMediaClipsCommand{
+        {audio_path}, 0, 45, timeline::TrackKind::Audio});
+    require(added_audio.changed() && audio_service.undoCount() == 1 &&
+                audio_session.timeline().trackCount() == 2 &&
+                audio_session.timeline().tracks().back().kind ==
+                    timeline::TrackKind::Audio &&
+                audio_session.timeline().tracks().back().name == "Audio 1" &&
+                audio_session.timeline().tracks().back().clips.size() == 1 &&
+                audio_session.timeline().tracks().back().clips.front()
+                    .timeline_start_frame == 45,
+            "Dropping audio into an empty Audio group did not create and populate one track.");
+    require(audio_service.undo().changed() &&
+                audio_session.timeline().snapshot() == audio_before &&
+                audio_service.redo().changed() &&
+                audio_session.timeline().tracks().back().clips.size() == 1,
+            "Undo and Redo did not treat empty-group track creation and clip insertion as one edit.");
+
+    application::EditorSession incompatible_session;
+    application::TimelineCommandService incompatible_service(incompatible_session);
+    addMedia(incompatible_session, incompatible_video_path);
+    require(incompatible_session.legacyTimelineForUi().removeTrack(1) ==
+                timeline::TrackMutationResult::Changed,
+            "Could not prepare an empty Audio group for incompatible media.");
+    const auto incompatible_before = incompatible_session.timeline().snapshot();
+    const auto incompatible = incompatible_service.execute(
+        application::AddMediaClipsCommand{
+            {incompatible_video_path}, 0, 0, timeline::TrackKind::Audio});
+    require(incompatible.status == application::EditStatus::Rejected &&
+                incompatible.reason == application::EditReason::InvalidTarget &&
+                incompatible_session.timeline().snapshot() == incompatible_before &&
+                incompatible_service.undoCount() == 0,
+            "Incompatible media created a track or changed Timeline history.");
+
+    application::EditorSession video_session;
+    application::TimelineCommandService video_service(video_session);
+    auto& video_model = video_session.legacyTimelineForUi();
+    require(video_model.removeTrack(0) == timeline::TrackMutationResult::Changed,
+            "Could not create an Audio-only Timeline to test an empty Video group.");
+    const auto video_track_only_before = video_session.timeline().snapshot();
+    const auto video_with_audio_path = std::filesystem::temp_directory_path() /
+        "empty-group-video-with-audio.mp4";
+    addVideoWithAudioMedia(video_session, video_with_audio_path);
+    const auto before_drop = video_session.timeline().snapshot();
+    const auto added_video = video_service.execute(application::AddMediaClipsCommand{
+        {video_with_audio_path}, 0, 90, timeline::TrackKind::Video});
+    require(added_video.changed() && video_service.undoCount() == 1 &&
+                added_video.affected_clip_ids.size() == 2 &&
+                video_session.timeline().trackCount() == 2,
+            "Dropping video into an empty Video group did not add its linked Audio companion.");
+    const auto video_location = video_session.timeline().locateClip(
+        added_video.affected_clip_ids.front());
+    const auto companion_location = video_session.timeline().locateClip(
+        added_video.affected_clip_ids.back());
+    require(video_location.has_value() && companion_location.has_value() &&
+                video_session.timeline().tracks()[video_location->track_index].kind ==
+                    timeline::TrackKind::Video &&
+                video_session.timeline().tracks()[companion_location->track_index].kind ==
+                    timeline::TrackKind::Audio &&
+                video_session.timeline().tracks()[video_location->track_index]
+                    .clips[video_location->clip_index].linked_clip_id ==
+                    added_video.affected_clip_ids.back(),
+            "The new Video track did not preserve the existing linked-audio creation flow.");
+    require(video_service.undo().changed() &&
+                video_session.timeline().snapshot() == before_drop &&
+                video_service.redo().changed() &&
+                video_session.timeline().clipCount() == 2 &&
+                video_track_only_before.tracks.size() == 1,
+            "Undo and Redo did not restore the empty Video group as one atomic edit.");
+}
+
 void run() {
     application::EditorSession session;
     application::TimelineCommandService service(session);
@@ -1605,6 +1688,7 @@ void runProjectSettingsCommands() {
 int main() {
     try {
         runExternalMediaBatchCommands();
+        runEmptyTrackGroupDropCommands();
         run();
         runVisualEffectCommands();
         runInspectorAndTrackCommands();

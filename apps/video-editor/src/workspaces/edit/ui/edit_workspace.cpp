@@ -685,13 +685,20 @@ void EditWorkspace::createTimelineViewport(QWidget* container, QVBoxLayout* layo
     ui_.timeline->setStereoWaveformDisplayEnabled(
         settings::audioWaveformDisplayMode() ==
         settings::AudioWaveformDisplayMode::Stereo);
+    ui_.timeline->setTrackGroupSplitRatio(
+        settings::timelineTrackGroupSplitRatio());
+    connect(
+        ui_.timeline,
+        &timeline::TimelineWidget::trackGroupSplitRatioChanged,
+        this,
+        &settings::setTimelineTrackGroupSplitRatio);
     controller_->setTimelineWidget(ui_.timeline);
     ui_.timeline_scroll = new QScrollArea(container);
     ui_.timeline_scroll->setWidgetResizable(true);
     ui_.timeline_scroll->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
     ui_.timeline_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     ui_.timeline_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    ui_.timeline_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    ui_.timeline_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     ui_.timeline_scroll->setAcceptDrops(true);
     ui_.timeline_scroll->viewport()->setAcceptDrops(true);
     ui_.timeline_scroll->setFrameShape(QFrame::NoFrame);
@@ -705,13 +712,6 @@ void EditWorkspace::createTimelineViewport(QWidget* container, QVBoxLayout* layo
     ui_.track_header = new timeline::TimelineTrackHeaderOverlay(
         ui_.timeline,
         ui_.timeline_scroll->viewport());
-    ui_.track_header->setVerticalScrollOffset(
-        ui_.timeline_scroll->verticalScrollBar()->value());
-    connect(
-        ui_.timeline_scroll->verticalScrollBar(),
-        &QScrollBar::valueChanged,
-        ui_.track_header,
-        &timeline::TimelineTrackHeaderOverlay::setVerticalScrollOffset);
     layout->addWidget(ui_.timeline_scroll, 1);
 }
 

@@ -64,6 +64,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -854,16 +855,8 @@ public:
                 window.editor_session_.timeline().locateClip(selected_clip_id);
             require(timeline_widget != nullptr && fusion_target_location.has_value(),
                     "The Fusion context-menu test could not locate the selected Timeline clip.");
-            const auto& fusion_target_track = window.editor_session_.timeline().tracks()[
-                fusion_target_location->track_index];
-            const auto& fusion_target_clip = fusion_target_track.clips[
-                fusion_target_location->clip_index];
-            const timeline::TimelineGeometry fusion_context_geometry(
-                window.editor_session_.timeline().tracks(),
-                QSizeF(timeline_widget->size()), timeline_widget->trackRowHeight(),
-                timeline_widget->zoomFactor(), std::nullopt, 30.0);
-            const auto fusion_context_position = fusion_context_geometry.clipRect(
-                fusion_target_clip, fusion_target_location->track_index).center().toPoint();
+            const auto fusion_context_position = timeline_widget->clipBounds(
+                *fusion_target_location).center().toPoint();
             const auto playback_start_result = window.playback_controller_->activateClip(
                 selected_clip_id, 0, true);
             require((playback_start_result == playback::PlaybackCommandResult::Applied ||
@@ -1636,17 +1629,9 @@ public:
             const auto video_track_id = video_track->track_id;
 
             const auto waitForDropImport = [&window](const char* failure_message) {
-                QEventLoop loop;
-                QTimer timeout;
-                timeout.setSingleShot(true);
-                QTimer poll;
-                QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-                QObject::connect(&poll, &QTimer::timeout, &loop, [&]() {
-                    if (!window.active_media_import_cancel_) loop.quit();
-                });
-                timeout.start(30000);
-                poll.start(10);
-                loop.exec();
+                require(window.media_task_pool_.waitForDone(30000),
+                        "Background media import work did not finish within 30 seconds.");
+                QApplication::processEvents();
                 require(!window.active_media_import_cancel_, failure_message);
             };
             const auto sendFileDrop = [](QWidget* viewport,
@@ -1766,15 +1751,10 @@ public:
             require(track_location.has_value() && edit_ui.timeline != nullptr &&
                         edit_ui.timeline_scroll != nullptr,
                     "The external-drop integration test could not find the production Timeline viewport.");
-            const timeline::TimelineGeometry timeline_geometry(
-                window.timeline_model_.tracks(),
-                QSizeF(edit_ui.timeline->size()),
-                edit_ui.timeline->trackRowHeight(),
-                edit_ui.timeline->zoomFactor());
             const auto timeline_local_position = QPoint(
                 360,
-                static_cast<int>(timeline_geometry.trackRect(
-                    *track_location).center().y()));
+                static_cast<int>(std::lround(edit_ui.timeline->trackBounds(
+                    *track_location).center().y())));
             const auto expected_timeline_frame =
                 edit_ui.timeline->frameAtContentX(timeline_local_position.x());
             require(expected_timeline_frame.has_value(),
@@ -1782,10 +1762,25 @@ public:
             const auto timeline_drop_position = edit_ui.timeline->mapTo(
                 edit_ui.timeline_scroll->viewport(),
                 timeline_local_position);
+            const auto timeline_drop_first_source = directory / "timeline-drop-first.png";
+            const auto timeline_drop_second_source = directory / "timeline-drop-second.png";
+            QImage timeline_drop_first_image(4, 4, QImage::Format_RGBA8888);
+            timeline_drop_first_image.fill(QColor(72, 144, 216, 255));
+            QImage timeline_drop_second_image(4, 4, QImage::Format_RGBA8888);
+            timeline_drop_second_image.fill(QColor(144, 216, 72, 255));
+            require(writePngAtomically(
+                        timeline_drop_first_source, timeline_drop_first_image) &&
+                        writePngAtomically(
+                            timeline_drop_second_source, timeline_drop_second_image),
+                    "The Timeline drop image fixtures could not be created.");
+            const auto timeline_drop_first_source_qt =
+                QString::fromStdWString(timeline_drop_first_source.wstring());
+            const auto timeline_drop_second_source_qt =
+                QString::fromStdWString(timeline_drop_second_source.wstring());
             QMimeData timeline_drop_mime;
             timeline_drop_mime.setUrls({
-                QUrl::fromLocalFile(first_source_qt),
-                QUrl::fromLocalFile(second_source_qt)});
+                QUrl::fromLocalFile(timeline_drop_first_source_qt),
+                QUrl::fromLocalFile(timeline_drop_second_source_qt)});
             require(sendFileDrop(
                         edit_ui.timeline_scroll->viewport(),
                         timeline_drop_position,
@@ -1799,13 +1794,12 @@ public:
                     "The Timeline drop target disappeared during import.");
             const auto& placed_clips = window.timeline_model_.tracks()[
                 *placed_track_index].clips;
-            require(placed_clips.size() == 2,
-                    "External Timeline drop did not insert two video clips.");
-            require(placed_clips[0].source_path ==
-                            media::MediaLibrary::canonicalPath(first_source) &&
+            require(placed_clips.size() == 2 &&
+                        placed_clips[0].source_path ==
+                            media::MediaLibrary::canonicalPath(timeline_drop_first_source) &&
                         placed_clips[1].source_path ==
-                            media::MediaLibrary::canonicalPath(second_source),
-                    "External Timeline drop did not preserve file order.");
+                            media::MediaLibrary::canonicalPath(timeline_drop_second_source),
+                    "External Timeline drop did not preserve image batch order on the Video track.");
             require(placed_clips[0].timeline_start_frame ==
                             *expected_timeline_frame,
                     "External Timeline drop did not preserve its insertion frame: expected " +
@@ -1816,15 +1810,68 @@ public:
                             placed_clips[0].timeline_duration_frames,
                     "External Timeline batch clips were not placed sequentially.");
             require(window.timeline_command_service_.undoCount() == 1,
-                    "External Timeline batch did not create one undo step.");
+                    "External Timeline batch drop did not create one undo step.");
             static_cast<void>(window.edit_workspace_->controller()->undo());
             const auto emptied_track_index = window.timeline_model_.locateTrack(
                 video_track_id);
             require(emptied_track_index.has_value() &&
                         window.timeline_model_.tracks()[*emptied_track_index].clips.empty() &&
-                        window.media_controller_.library().contains(first_source) &&
-                        window.media_controller_.library().contains(second_source),
+                        window.media_controller_.library().contains(timeline_drop_first_source) &&
+                        window.media_controller_.library().contains(timeline_drop_second_source),
                     "Undo of a dropped Timeline batch removed imported media or left partial clips.");
+
+            std::vector<timeline::TrackId> video_track_ids;
+            require(window.editor_session_.legacyTimelineForUi().addTrack(
+                        "Empty-group audio fixture", timeline::TrackKind::Audio) ==
+                        timeline::AddTrackResult::Added,
+                    "The empty-group integration test could not prepare an Audio track.");
+            window.updateTimelineState();
+            for (const auto& track : window.timeline_model_.tracks()) {
+                if (track.kind == timeline::TrackKind::Video) {
+                    video_track_ids.push_back(track.track_id);
+                }
+            }
+            for (const auto track_id : video_track_ids) {
+                require(window.edit_workspace_->controller()->removeTrack(track_id).changed(),
+                        "The empty-group integration test could not remove a Video track.");
+            }
+            window.timeline_command_service_.clearHistory();
+            const auto empty_group_source = directory / "empty-group.png";
+            QImage empty_group_image(4, 4, QImage::Format_RGBA8888);
+            empty_group_image.fill(QColor(96, 168, 240, 255));
+            require(writePngAtomically(empty_group_source, empty_group_image),
+                    "The empty-group drop image fixture could not be created.");
+            const auto empty_group_source_qt =
+                QString::fromStdWString(empty_group_source.wstring());
+            window.handleExternalTimelineFilesGroupDrop(
+                {empty_group_source_qt}, timeline::TrackKind::Video, 0);
+            waitForDropImport(
+                "An external file dropped on an empty Video pane did not finish importing.");
+            const auto created_video = std::find_if(
+                window.timeline_model_.tracks().begin(),
+                window.timeline_model_.tracks().end(),
+                [&empty_group_source](const timeline::TimelineTrack& track) {
+                    return track.kind == timeline::TrackKind::Video &&
+                        std::any_of(
+                            track.clips.begin(), track.clips.end(),
+                            [&empty_group_source](const timeline::TimelineClip& clip) {
+                                return media::MediaLibrary::canonicalPath(clip.source_path) ==
+                                    media::MediaLibrary::canonicalPath(empty_group_source);
+                            });
+                });
+            require(created_video != window.timeline_model_.tracks().end() &&
+                        window.timeline_command_service_.undoCount() == 1,
+                    "An external drop did not create the first Video track and clip in one operation.");
+            const auto created_video_track_id = created_video->track_id;
+            static_cast<void>(window.edit_workspace_->controller()->undo());
+            require(!window.timeline_model_.locateTrack(created_video_track_id).has_value(),
+                    "Undo did not remove the empty-group Video track with its dropped clip.");
+            static_cast<void>(window.edit_workspace_->controller()->redo());
+            const auto restored_video = window.timeline_model_.locateTrack(
+                created_video_track_id);
+            require(restored_video.has_value() &&
+                        window.timeline_model_.tracks()[*restored_video].clips.size() == 1,
+                    "Redo did not restore the empty-group Video track and clip together.");
         }
 
         const auto waveform_source = directory / "waveform-background.wav";

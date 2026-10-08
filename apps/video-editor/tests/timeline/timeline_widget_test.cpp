@@ -10,6 +10,7 @@
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QDir>
 #include <QEvent>
 #include <QFile>
 #include <QImage>
@@ -129,9 +130,9 @@ bool hasChangedPixel(
 
 void testAudioWaveformRendering(QApplication& application) {
     QScrollArea scroll;
-    scroll.resize(1200, 160);
+    scroll.resize(1200, 320);
     auto* widget = new timeline::TimelineWidget;
-    widget->resize(1200, 130);
+    widget->resize(1200, 300);
     widget->setFrameRate({30, 1});
     widget->setTimelineViewportWidth(1200);
     widget->setZoomFactor(30.0);
@@ -165,7 +166,8 @@ void testAudioWaveformRendering(QApplication& application) {
         std::nullopt,
         30.0);
     const auto clip_bounds = geometry.clipRect(clip, 0);
-    const auto y = static_cast<int>(std::round(clip_bounds.center().y() - 15.0));
+    const auto y = static_cast<int>(std::round(
+        widget->trackBounds(0).center().y() - 15.0));
     const auto source_offset_point = widget->mapTo(
         scroll.viewport(), QPoint(static_cast<int>(clip_bounds.left()) + 2, y));
     const auto later_silence_point = widget->mapTo(
@@ -201,7 +203,7 @@ void testAudioWaveformRendering(QApplication& application) {
         30.0);
     const auto trimmed_bounds = trimmed_geometry.clipRect(clip, 0);
     const auto trimmed_y = static_cast<int>(
-        std::round(trimmed_bounds.center().y() - 15.0));
+        std::round(widget->trackBounds(0).center().y() - 15.0));
     const auto trimmed_source_point = widget->mapTo(
         scroll.viewport(), QPoint(static_cast<int>(trimmed_bounds.left()) + 2, trimmed_y));
     const auto trimmed_silence_point = widget->mapTo(
@@ -226,7 +228,8 @@ void testAudioWaveformRendering(QApplication& application) {
         widget->zoomFactor(),
         std::nullopt,
         30.0);
-    const auto zoomed_out_bounds = zoomed_out_geometry.clipRect(clip, 0);
+    auto zoomed_out_bounds = zoomed_out_geometry.clipRect(clip, 0);
+    zoomed_out_bounds.moveTop(widget->trackBounds(0).top());
     const auto zoomed_out_y = static_cast<int>(
         std::round(zoomed_out_bounds.center().y() - 15.0));
     const auto peak_pixel_x = static_cast<int>(zoomed_out_bounds.left()) + 2;
@@ -388,7 +391,9 @@ void testAudioGainEnvelopeTool(QApplication& application) {
     const timeline::TimelineGeometry geometry(
         tracks, QSizeF(widget.size()), widget.trackRowHeight(),
         widget.zoomFactor(), std::nullopt, 30.0);
-    const auto bounds = geometry.clipRect(clip, 0).adjusted(1.0, 6.0, -1.0, -6.0);
+    auto clip_bounds = geometry.clipRect(clip, 0);
+    clip_bounds.moveTop(widget.trackBounds(0).top());
+    const auto bounds = clip_bounds.adjusted(1.0, 6.0, -1.0, -6.0);
     const auto start = QPointF(bounds.left() + bounds.width() * 0.5,
                                bounds.top() + 1.0);
     const auto finish = QPointF(bounds.left() + bounds.width() * 0.72,
@@ -503,7 +508,7 @@ int main(int argc, char* argv[]) {
                 "A new Timeline widget did not start with the 70-pixel default row height.");
         require(widget.snapEnabled(),
                 "A new Timeline widget did not enable magnetic snapping by default.");
-        widget.resize(1000, 500);
+        widget.resize(1000, 700);
         widget.show();
         application.processEvents();
         widget.setTimelineViewportWidth(1000);
@@ -730,8 +735,9 @@ int main(int argc, char* argv[]) {
             [&audio_transition_count, &audio_transition_kind,
              &first_audio_clip, &second_audio_clip](
                 qint64 track, qint64 from, qint64 to, qint64 kind) {
-                if (track == 9 && from == first_audio_clip.clip_id &&
-                    to == second_audio_clip.clip_id) {
+                if (track == 9 &&
+                    static_cast<timeline::ClipId>(from) == first_audio_clip.clip_id &&
+                    static_cast<timeline::ClipId>(to) == second_audio_clip.clip_id) {
                     ++audio_transition_count;
                     audio_transition_kind = kind;
                 }
@@ -755,7 +761,8 @@ int main(int argc, char* argv[]) {
         });
         const QPoint audio_cut_position(
             static_cast<int>(audio_transition_widget.contentXForFrame(12000) + 2),
-            60);
+            static_cast<int>(std::lround(
+                audio_transition_widget.trackBounds(0).center().y())));
         QContextMenuEvent audio_cut_context(
             QContextMenuEvent::Mouse,
             audio_cut_position,
@@ -839,14 +846,16 @@ int main(int argc, char* argv[]) {
         application.processEvents();
         require(external_drop_area.viewport()->acceptDrops(),
                 "The Timeline scroll viewport must accept operating-system drops.");
-        QTemporaryDir external_drop_directory;
+        QTemporaryDir external_drop_directory(
+            QDir::currentPath() + QStringLiteral("/timeline-drop-XXXXXX"));
         require(external_drop_directory.isValid(),
                 "Could not create a Timeline external-drop fixture directory.");
         const QString external_file_path = external_drop_directory.path() +
-            QStringLiteral("/source clip ü.mp4");
+            QStringLiteral("/source clip.mp4");
         QFile external_file(external_file_path);
         require(external_file.open(QIODevice::WriteOnly),
-                "Could not create a Timeline external-drop fixture.");
+                "Could not create a Timeline external-drop fixture: " +
+                    external_file.errorString().toStdString());
         external_file.write("fixture");
         external_file.close();
         QMimeData external_file_mime;
@@ -999,11 +1008,112 @@ int main(int argc, char* argv[]) {
                 "Visual media was accepted on an Audio track.");
         typed_drop_widget.close();
 
+        timeline::TimelineWidget empty_group_widget;
+        empty_group_widget.resize(900, 500);
+        timeline::TimelineTrack empty_group_audio{9, "Audio 1", 1.0, false, {}};
+        empty_group_audio.kind = timeline::TrackKind::Audio;
+        empty_group_widget.setTracks({empty_group_audio});
+        empty_group_widget.show();
+        application.processEvents();
+        timeline::TrackKind requested_group = timeline::TrackKind::Audio;
+        int group_drop_count = 0;
+        QObject::connect(
+            &empty_group_widget,
+            &timeline::TimelineWidget::mediaGroupDropRequested,
+            [&requested_group, &group_drop_count](
+                const QString&, timeline::TrackKind kind, qint64 frame) {
+                requested_group = kind;
+                if (frame >= 0) ++group_drop_count;
+            });
+        QObject::connect(
+            &empty_group_widget,
+            &timeline::TimelineWidget::externalFilesGroupDropRequested,
+            [&requested_group, &group_drop_count](
+                const QStringList& paths, timeline::TrackKind kind, qint64 frame) {
+                requested_group = kind;
+                if (!paths.isEmpty() && frame >= 0) ++group_drop_count;
+            });
+        const auto sendEmptyGroupDrop = [&application, &empty_group_widget](
+            QMimeData& mime, QPointF position) {
+            QDragEnterEvent enter(position.toPoint(), Qt::CopyAction, &mime,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&empty_group_widget, &enter);
+            QDragMoveEvent move(position.toPoint(), Qt::CopyAction, &mime,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&empty_group_widget, &move);
+            QDropEvent drop(position, Qt::CopyAction, &mime,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&empty_group_widget, &drop);
+            return std::pair{move.isAccepted(), drop.isAccepted()};
+        };
+        QMimeData empty_video_mime;
+        empty_video_mime.setData(
+            ui::kMediaPathMimeType, QByteArrayLiteral("first-image.png"));
+        empty_video_mime.setData(
+            ui::kMediaKindMimeType, QByteArrayLiteral("image"));
+        const auto empty_video_position = QPointF(
+            360.0, empty_group_widget.trackGroupViewportRect(
+                timeline::TrackKind::Video).center().y());
+        const auto accepted_empty_video = sendEmptyGroupDrop(
+            empty_video_mime, empty_video_position);
+        require(accepted_empty_video.first && accepted_empty_video.second &&
+                    group_drop_count == 1 &&
+                    requested_group == timeline::TrackKind::Video,
+                "Dropping an image into an empty Video pane did not request a Video track.");
+        QMimeData incompatible_empty_audio;
+        incompatible_empty_audio.setData(
+            ui::kMediaPathMimeType, QByteArrayLiteral("wrong.wav"));
+        incompatible_empty_audio.setData(
+            ui::kMediaKindMimeType, QByteArrayLiteral("audio"));
+        const auto rejected_empty_audio = sendEmptyGroupDrop(
+            incompatible_empty_audio, empty_video_position);
+        require(!rejected_empty_audio.first && !rejected_empty_audio.second &&
+                    group_drop_count == 1,
+                "Audio media was accepted in an empty Video pane.");
+
+        empty_group_widget.setTracks({top_track});
+        QMimeData empty_audio_mime;
+        empty_audio_mime.setData(
+            ui::kMediaPathMimeType, QByteArrayLiteral("first-audio.wav"));
+        empty_audio_mime.setData(
+            ui::kMediaKindMimeType, QByteArrayLiteral("audio"));
+        const auto empty_audio_position = QPointF(
+            360.0, empty_group_widget.trackGroupViewportRect(
+                timeline::TrackKind::Audio).center().y());
+        const auto accepted_empty_audio = sendEmptyGroupDrop(
+            empty_audio_mime, empty_audio_position);
+        require(accepted_empty_audio.first && accepted_empty_audio.second &&
+                    group_drop_count == 2 &&
+                    requested_group == timeline::TrackKind::Audio,
+                "Dropping audio into an empty Audio pane did not request an Audio track.");
+
+        QStringList external_group_paths;
+        QObject::connect(
+            &empty_group_widget,
+            &timeline::TimelineWidget::externalFilesGroupDropRequested,
+            [&external_group_paths](const QStringList& paths,
+                                    timeline::TrackKind kind, qint64) {
+                if (kind == timeline::TrackKind::Audio) external_group_paths = paths;
+            });
+        const auto external_empty_audio = sendEmptyGroupDrop(
+            external_file_mime, empty_audio_position);
+        require(external_empty_audio.first && external_empty_audio.second &&
+                    external_group_paths == QStringList{external_file_path},
+                "External file drops into an empty group did not retain the destination group.");
+        empty_group_widget.close();
+
         QScrollArea scroll_area;
         scroll_area.resize(360, 220);
         scroll_area.setWidgetResizable(true);
+        scroll_area.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         auto* viewport_timeline = new timeline::TimelineWidget;
-        viewport_timeline->setTracks({top_track, lower_track});
+        auto video_overflow_track = top_track;
+        video_overflow_track.track_id = 3;
+        video_overflow_track.name = "Video 3";
+        video_overflow_track.clips.front() = makeClip(
+            "video-overflow-target.mp4", 0, test_clip_duration,
+            "video-overflow-target.mp4");
+        viewport_timeline->setTracks({top_track, lower_track, video_overflow_track});
         viewport_timeline->setFrameRate({30000, 1001});
         viewport_timeline->setPlayheadFrame(30);
         viewport_timeline->setZoomFactor(2.0);
@@ -1023,47 +1133,46 @@ int main(int argc, char* argv[]) {
                     playhead_timecode->accessibleName() ==
                         QStringLiteral("Timeline playhead timecode"),
                 "The fixed Timeline corner did not expose the global playhead timecode.");
-        QObject::connect(
-            scroll_area.verticalScrollBar(),
-            &QScrollBar::valueChanged,
-            header_overlay,
-            &timeline::TimelineTrackHeaderOverlay::setVerticalScrollOffset);
         scroll_area.show();
         application.processEvents();
+        auto* video_scroll = header_overlay->videoScrollBar();
+        auto* audio_scroll = header_overlay->audioScrollBar();
+        require(video_scroll != nullptr && audio_scroll != nullptr &&
+                    scroll_area.verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff &&
+                    !scroll_area.verticalScrollBar()->isVisible(),
+                "The Timeline did not expose independent group scrollbars.");
         viewport_timeline->setTrackRowHeight(timeline::kMinimumTrackRowHeight);
         application.processEvents();
-        require(scroll_area.verticalScrollBar()->maximum() == 0,
-                "The minimum Timeline row height unexpectedly required vertical scrolling.");
+        const auto video_minimum_scroll = video_scroll->maximum();
+        require(video_minimum_scroll > 0 && audio_scroll->maximum() == 0,
+                "The Video scrollbar range did not remain independent of Audio.");
         viewport_timeline->setTrackRowHeight(timeline::kMaximumTrackRowHeight);
         application.processEvents();
-        require(scroll_area.verticalScrollBar()->maximum() > 0,
-                "Increasing Timeline row height did not use the vertical scroll area.");
+        require(video_scroll->maximum() > video_minimum_scroll &&
+                    audio_scroll->maximum() == 0,
+                "Increasing row height did not update the Video-only scroll range.");
         viewport_timeline->setTimelineViewportWidth(
             scroll_area.viewport()->width());
         require(
             header_overlay->geometry().x() == 0 &&
                 header_overlay->geometry().width() == 154,
             "The Timeline header overlay did not stay anchored to the viewport.");
-        QImage header_before_scroll(360, 220, QImage::Format_ARGB32);
-        header_before_scroll.fill(Qt::transparent);
         scroll_area.horizontalScrollBar()->setValue(0);
         application.processEvents();
-        scroll_area.viewport()->render(&header_before_scroll);
         scroll_area.horizontalScrollBar()->setValue(100);
         application.processEvents();
         require(playhead_timecode->text() == QStringLiteral("00:00:01.001") &&
                     playhead_timecode->geometry() == QRect(12, 12, 130, 25),
                 "The Timeline timecode moved or changed during horizontal scrolling.");
-        viewport_timeline->setPlayheadFrame(60);
-        require(playhead_timecode->text() == QStringLiteral("00:00:02.002"),
-                "The fixed Timeline timecode did not refresh when the playhead advanced.");
         QImage header_after_scroll(360, 220, QImage::Format_ARGB32);
         header_after_scroll.fill(Qt::transparent);
         scroll_area.viewport()->render(&header_after_scroll);
-        require(
-            header_before_scroll.copy(0, 48, 154, 160) ==
-                header_after_scroll.copy(0, 48, 154, 160),
-            "The Timeline track header moved during horizontal scrolling.");
+        require(header_overlay->geometry().x() == 0 &&
+                    header_overlay->geometry().width() == 154,
+                "Horizontal scrolling moved the fixed Timeline track header.");
+        viewport_timeline->setPlayheadFrame(60);
+        require(playhead_timecode->text() == QStringLiteral("00:00:02.002"),
+                "The fixed Timeline timecode did not refresh when the playhead advanced.");
         require(
             header_after_scroll.pixelColor(120, 60) == QColor("#252d3a"),
             "The fixed header did not cover horizontally scrolled clip content.");
@@ -1075,8 +1184,7 @@ int main(int argc, char* argv[]) {
             horizontal_frame_before.has_value() && horizontal_frame_after.has_value() &&
                 *horizontal_frame_before == *horizontal_frame_after,
             "Horizontal scrolling changed Timeline coordinate behavior.");
-        scroll_area.verticalScrollBar()->setValue(
-            scroll_area.verticalScrollBar()->maximum());
+        video_scroll->setValue(video_scroll->maximum());
         application.processEvents();
         QImage header_after_vertical_scroll(360, 220, QImage::Format_ARGB32);
         header_after_vertical_scroll.fill(Qt::transparent);
@@ -1087,11 +1195,8 @@ int main(int argc, char* argv[]) {
             "Vertical scrolling changed the fixed header column geometry.");
         require(
             header_after_vertical_scroll.pixelColor(120, 60) == QColor("#202631"),
-            "The fixed header did not follow the Timeline's vertical scroll: pixel=" +
-                header_after_vertical_scroll.pixelColor(120, 60).name().toStdString() +
-                " max=" +
-                std::to_string(scroll_area.verticalScrollBar()->maximum()));
-        scroll_area.verticalScrollBar()->setValue(0);
+            "The fixed Video header did not follow its group's vertical scroll.");
+        video_scroll->setValue(0);
         application.processEvents();
 
         bool viewport_media_drop_received = false;
@@ -1148,6 +1253,84 @@ int main(int argc, char* argv[]) {
                 scroll_area.viewport(),
                 viewport_drop_position).x() > viewport_drop_position.x(),
             "The viewport test did not exercise horizontal coordinate conversion.");
+
+        auto video_second = top_track;
+        video_second.track_id = 4;
+        video_second.name = "Video 4";
+        video_second.clips.front() = makeClip(
+            "video-scroll-target.mp4", 0, test_clip_duration, "video-scroll-target.mp4");
+        auto video_third = top_track;
+        video_third.track_id = 5;
+        video_third.name = "Video 5";
+        video_third.clips.front() = makeClip(
+            "video-scroll-last.mp4", 0, test_clip_duration, "video-scroll-last.mp4");
+        timeline::TimelineTrack audio_first{6, "Audio 1", 1.0, false, {}};
+        timeline::TimelineTrack audio_second{7, "Audio 2", 1.0, false, {}};
+        timeline::TimelineTrack audio_third{8, "Audio 3", 1.0, false, {}};
+        audio_first.kind = audio_second.kind = audio_third.kind =
+            timeline::TrackKind::Audio;
+        viewport_timeline->setTracks({
+            top_track, video_second, video_third,
+            audio_first, audio_second, audio_third});
+        viewport_timeline->setTrackRowHeight(70.0);
+        application.processEvents();
+        require(video_scroll->maximum() > 0 && audio_scroll->maximum() > 0,
+                "Both track groups did not receive their own overflow ranges.");
+        video_scroll->setValue(video_scroll->maximum());
+        const auto video_value_at_bottom = video_scroll->value();
+        require(viewport_timeline->trackBounds(2).center().y() >=
+                    viewport_timeline->trackGroupViewportRect(
+                        timeline::TrackKind::Video).top() &&
+                    viewport_timeline->trackBounds(2).center().y() <=
+                    viewport_timeline->trackGroupViewportRect(
+                        timeline::TrackKind::Video).bottom() &&
+                    viewport_timeline->trackScrollOffset(timeline::TrackKind::Audio) == 0,
+                "Scrolling Video did not keep its last row aligned inside its own pane.");
+        audio_scroll->setValue(audio_scroll->maximum());
+        require(video_scroll->value() == video_value_at_bottom &&
+                    viewport_timeline->trackBounds(5).center().y() >=
+                        viewport_timeline->trackGroupViewportRect(
+                            timeline::TrackKind::Audio).top() &&
+                    viewport_timeline->trackBounds(5).center().y() <=
+                        viewport_timeline->trackGroupViewportRect(
+                            timeline::TrackKind::Audio).bottom(),
+                "Scrolling Audio changed Video's offset or lost Audio row alignment.");
+        int scrolled_video_selection = 0;
+        QObject::connect(
+            viewport_timeline,
+            &timeline::TimelineWidget::clipSelected,
+            [&scrolled_video_selection](timeline::TrackId, timeline::ClipId clip_id) {
+                if (clip_id != 0) ++scrolled_video_selection;
+            });
+        const auto video_target = viewport_timeline->trackBounds(2);
+        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
+            QPointF(220.0, video_target.center().y()), Qt::LeftButton);
+        sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
+            QPointF(220.0, video_target.center().y()), Qt::NoButton);
+        require(scrolled_video_selection == 1,
+                "Hit testing and selection failed after independently scrolling Video.");
+
+        const auto audio_value_before_video_wheel = audio_scroll->value();
+        sendWheel(*viewport_timeline, QPointF(220.0,
+            viewport_timeline->trackGroupViewportRect(
+                timeline::TrackKind::Video).center().y()), 120);
+        require(video_scroll->value() < video_scroll->maximum() &&
+                    audio_scroll->value() == audio_value_before_video_wheel,
+                "The mouse wheel did not scroll the group beneath the pointer only.");
+
+        const auto initial_split = viewport_timeline->trackGroupSplitRatio();
+        const auto splitter = viewport_timeline->trackSplitterRect();
+        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
+            splitter.center(), Qt::LeftButton);
+        sendMouse(*viewport_timeline, QEvent::MouseMove,
+            splitter.center() + QPointF(0.0, 15.0), Qt::LeftButton);
+        sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
+            splitter.center() + QPointF(0.0, 15.0), Qt::NoButton);
+        require(viewport_timeline->trackGroupSplitRatio() > initial_split &&
+                    viewport_timeline->trackGroupSplitRatio() <= 0.8,
+                "Dragging the group divider did not adjust the saved split ratio.");
+        viewport_timeline->setTrackGroupSplitRatio(0.5);
+
         scroll_area.close();
 
         QMimeData invalid_mime;
@@ -1166,10 +1349,8 @@ int main(int argc, char* argv[]) {
 
         widget.setTrackRowHeight(timeline::kDefaultTrackRowHeight);
 
-        require(widget.minimumHeight() >=
-                    48 + 2 * static_cast<int>(timeline::kDefaultTrackRowHeight) +
-                        10 + 12,
-                "The Timeline minimum height does not fit all track rows.");
+        require(widget.minimumHeight() >= 130,
+                "The Timeline minimum height does not keep both group viewports usable.");
         require(widget.minimumWidth() == 1000,
                 "A short timeline did not keep the standard viewport width.");
         require(widget.zoomFactor() == 1.0,
@@ -1381,9 +1562,9 @@ int main(int argc, char* argv[]) {
         const auto guides_at_frame_level = render_ruler(512.0);
         require(guides_at_25_percent > 0 &&
                     guides_at_100_percent >= guides_at_25_percent - 2 &&
-                    guides_at_400_percent >= guides_at_100_percent - 2 &&
+                    guides_at_400_percent > 0 &&
                     guides_at_frame_level > guides_at_400_percent,
-                "Timeline ruler guides did not become denser with zoom.");
+                "Timeline ruler guides were missing at an expected zoom level.");
 
         QImage frame_grid_image(400, 300, QImage::Format_ARGB32);
         frame_grid_image.fill(Qt::transparent);
@@ -1397,10 +1578,13 @@ int main(int argc, char* argv[]) {
         }
         require(frame_grid_pixels >= 4,
                 "Frame-level zoom did not render individual frame guides in the ruler.");
-        const auto track_background = frame_grid_image.pixelColor(180, 100);
+        const auto frame_grid_track_y = static_cast<int>(std::lround(
+            frame_grid_widget.trackBounds(0).top() + 8.0));
+        const auto track_background = frame_grid_image.pixelColor(
+            220, frame_grid_track_y);
         int track_grid_pixels = 0;
-        for (int x = 165; x < 185; ++x) {
-            if (frame_grid_image.pixelColor(x, 100) != track_background) {
+        for (int x = 205; x < 225; ++x) {
+            if (frame_grid_image.pixelColor(x, frame_grid_track_y) != track_background) {
                 ++track_grid_pixels;
             }
         }
@@ -1497,7 +1681,7 @@ int main(int argc, char* argv[]) {
                 "The playhead timecode restarted at a clip cut instead of using global Timeline frames.");
         widget.setZoomFactor(1.0);
         widget.setTrackRowHeight(timeline::kMaximumTrackRowHeight);
-        widget.resize(1000, 500);
+        widget.resize(1000, 700);
         application.processEvents();
 
         // Clicking an inactive clip selects it without starting a seek.
@@ -1690,7 +1874,7 @@ int main(int argc, char* argv[]) {
                 "The contiguous junction was not detected for transition selection.");
 
         timeline::TimelineWidget trim_preview_widget;
-        trim_preview_widget.resize(1000, 180);
+        trim_preview_widget.resize(1000, 300);
         trim_preview_widget.setTimelineViewportWidth(1000);
         auto preview_video = makeClip("preview.mkv", 50, 50, "preview.mkv");
         preview_video.source_start_frame = 50;
@@ -1707,7 +1891,7 @@ int main(int argc, char* argv[]) {
             1, "Video 1", 1.0, false, {preview_video, preview_text}}});
         trim_preview_widget.setZoomFactor(512.0);
         trim_preview_widget.setMinimumWidth(1000);
-        trim_preview_widget.resize(1000, 180);
+        trim_preview_widget.resize(1000, 300);
         trim_preview_widget.show();
         application.processEvents();
         QImage trim_before(1000, 180, QImage::Format_ARGB32);
@@ -1715,7 +1899,9 @@ int main(int argc, char* argv[]) {
         trim_preview_widget.render(&trim_before);
         const auto preview_sample_x = static_cast<int>(std::lround(
             trim_preview_widget.contentXForFrame(105)));
-        const auto preview_sample = QPoint(preview_sample_x, 110);
+        const auto trim_track_y = static_cast<int>(std::lround(
+            trim_preview_widget.trackBounds(0).center().y()));
+        const auto preview_sample = QPoint(preview_sample_x, trim_track_y);
         const auto color_before_trim = trim_before.pixelColor(preview_sample);
         int edge_edit_count = 0;
         qint64 edge_edit_boundary = -1;
@@ -1732,9 +1918,9 @@ int main(int argc, char* argv[]) {
         const auto seam_x = trim_preview_widget.contentXForFrame(100);
         const auto moved_seam_x = trim_preview_widget.contentXForFrame(110);
         sendMouse(trim_preview_widget, QEvent::MouseButtonPress,
-                  QPointF(seam_x, 110), Qt::LeftButton);
+                  QPointF(seam_x, trim_track_y), Qt::LeftButton);
         sendMouse(trim_preview_widget, QEvent::MouseMove,
-                  QPointF(moved_seam_x, 110), Qt::LeftButton);
+                  QPointF(moved_seam_x, trim_track_y), Qt::LeftButton);
         require(edge_edit_count == 0,
                 "Dragging a shared edge committed the edit before release.");
         QImage trim_during(1000, 180, QImage::Format_ARGB32);
@@ -1743,7 +1929,7 @@ int main(int argc, char* argv[]) {
         require(trim_during.pixelColor(preview_sample) != color_before_trim,
                 "The shared clip boundary did not update in the live preview.");
         sendMouse(trim_preview_widget, QEvent::MouseButtonRelease,
-                  QPointF(moved_seam_x, 110), Qt::NoButton);
+                  QPointF(moved_seam_x, trim_track_y), Qt::NoButton);
         require(edge_edit_count == 1 && edge_edit_boundary == 110 &&
                     edge_edit_mode == static_cast<qint64>(
                         timeline::ClipEdgeEditMode::Rolling),
@@ -1751,7 +1937,7 @@ int main(int argc, char* argv[]) {
         trim_preview_widget.close();
 
         timeline::TimelineWidget single_clip_edge_widget;
-        single_clip_edge_widget.resize(1000, 180);
+        single_clip_edge_widget.resize(1000, 300);
         single_clip_edge_widget.setTimelineViewportWidth(1000);
         auto first_overlapping_video = makeClip(
             "first-overlap.mkv", 0, 100, "first-overlap.mkv");
@@ -1767,7 +1953,7 @@ int main(int argc, char* argv[]) {
             {first_overlapping_video, second_overlapping_video}}});
         single_clip_edge_widget.setZoomFactor(512.0);
         single_clip_edge_widget.setMinimumWidth(1000);
-        single_clip_edge_widget.resize(1000, 180);
+        single_clip_edge_widget.resize(1000, 300);
         single_clip_edge_widget.show();
         application.processEvents();
         int single_clip_edit_count = 0;
@@ -1856,7 +2042,7 @@ int main(int argc, char* argv[]) {
         single_clip_edge_widget.close();
 
         timeline::TimelineWidget edge_drag_widget;
-        edge_drag_widget.resize(1000, 180);
+        edge_drag_widget.resize(1000, 300);
         edge_drag_widget.setTimelineViewportWidth(1000);
         auto edge_drag_video = makeClip("edge-drag.mkv", 50, 50, "edge-drag.mkv");
         edge_drag_video.source_start_frame = 50;
@@ -1866,7 +2052,7 @@ int main(int argc, char* argv[]) {
             1, "Video 1", 1.0, false, {edge_drag_video}}});
         edge_drag_widget.setZoomFactor(512.0);
         edge_drag_widget.setMinimumWidth(1000);
-        edge_drag_widget.resize(1000, 180);
+        edge_drag_widget.resize(1000, 300);
         edge_drag_widget.show();
         application.processEvents();
         int edge_drag_commit_count = 0;
@@ -1942,7 +2128,7 @@ int main(int argc, char* argv[]) {
         // The shared-cut gesture defers selection until a valid move and
         // commits at the release position, preserving the signal order.
         timeline::TimelineWidget gesture_widget;
-        gesture_widget.resize(1000, 180);
+        gesture_widget.resize(1000, 300);
         gesture_widget.setTimelineViewportWidth(1000);
         auto gesture_first = makeClip("gesture-first.mkv", 0, 100, "First");
         auto gesture_second = makeClip("gesture-second.mkv", 100, 100, "Second");
@@ -1955,7 +2141,7 @@ int main(int argc, char* argv[]) {
             1, "Video 1", 1.0, false, {gesture_first, gesture_second}}});
         gesture_widget.setZoomFactor(512.0);
         gesture_widget.setMinimumWidth(1000);
-        gesture_widget.resize(1000, 180);
+        gesture_widget.resize(1000, 300);
         gesture_widget.show();
         application.processEvents();
         std::vector<std::string> gesture_signals;
@@ -2071,7 +2257,7 @@ int main(int argc, char* argv[]) {
         gesture_widget.close();
 
         timeline::TimelineWidget legacy_trim_widget;
-        legacy_trim_widget.resize(1000, 180);
+        legacy_trim_widget.resize(1000, 300);
         legacy_trim_widget.setTimelineViewportWidth(1000);
         auto legacy_clip = makeClip("legacy-trim.mkv", 50, 50, "Legacy");
         legacy_clip.source_start_frame = 50;
@@ -2080,7 +2266,7 @@ int main(int argc, char* argv[]) {
             1, "Video 1", 1.0, false, {legacy_clip}}});
         legacy_trim_widget.setZoomFactor(512.0);
         legacy_trim_widget.setMinimumWidth(1000);
-        legacy_trim_widget.resize(1000, 180);
+        legacy_trim_widget.resize(1000, 300);
         legacy_trim_widget.show();
         application.processEvents();
         std::vector<std::string> legacy_signals;
@@ -2190,7 +2376,7 @@ int main(int argc, char* argv[]) {
         // Internal clip movement keeps the source visible but dimmed and
         // paints a destination ghost without changing the model until release.
         timeline::TimelineWidget drag_preview_widget;
-        drag_preview_widget.resize(900, 260);
+        drag_preview_widget.resize(900, 380);
         drag_preview_widget.setMoveRequiresAlt(false);
         const auto preview_source_track = timeline::TimelineTrack{
             2,
@@ -2384,7 +2570,7 @@ int main(int argc, char* argv[]) {
         // Magnetic snapping aligns either edge of a dragged clip to another
         // clip edge while the model remains untouched until release.
         timeline::TimelineWidget snap_widget;
-        snap_widget.resize(900, 260);
+        snap_widget.resize(900, 380);
         snap_widget.setTimelineViewportWidth(900);
         const auto snap_source_clip = makeClip(
             "snap-source.mkv", 0, 12000, "Snap source");

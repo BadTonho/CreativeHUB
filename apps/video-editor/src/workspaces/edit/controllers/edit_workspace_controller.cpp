@@ -291,10 +291,12 @@ application::TimelineEditResult EditWorkspaceController::addMediaClip(
 application::TimelineEditResult EditWorkspaceController::addMediaClips(
     const std::vector<std::filesystem::path>& source_paths,
     timeline::TrackId track_id,
-    std::int64_t timeline_frame) {
+    std::int64_t timeline_frame,
+    std::optional<timeline::TrackKind> create_track_kind) {
     application::TimelineEditResult rejected;
     const auto track_index = timeline_model_.locateTrack(track_id);
-    if (source_paths.empty() || timeline_frame < 0 || !track_index.has_value()) {
+    if (source_paths.empty() || timeline_frame < 0 ||
+        (!create_track_kind.has_value() && !track_index.has_value())) {
         rejected.reason = timeline_frame < 0
             ? application::EditReason::InvalidPosition
             : application::EditReason::InvalidTarget;
@@ -308,7 +310,7 @@ application::TimelineEditResult EditWorkspaceController::addMediaClips(
         collapseTimelineSelectionToPrimary();
         const auto result = command_service_.execute(
             application::AddMediaClipsCommand{
-                source_paths, track_id, timeline_frame});
+                source_paths, track_id, timeline_frame, create_track_kind});
         publishResult(result);
         if (!result.changed()) {
             const auto message = result.reason == application::EditReason::Overlap
@@ -962,11 +964,21 @@ void EditWorkspaceController::moveActiveTrack(int direction) {
     if (!track_id.has_value()) return;
     const auto source_index = session_.timeline().locateTrack(*track_id);
     if (!source_index.has_value()) return;
-    if ((direction < 0 && *source_index == 0) ||
-        (direction > 0 && *source_index + 1 >= session_.timeline().trackCount())) {
-        return;
+    const auto& tracks = session_.timeline().tracks();
+    const auto kind = tracks[*source_index].kind;
+    auto target_index = *source_index;
+    if (direction < 0) {
+        while (target_index > 0) {
+            --target_index;
+            if (tracks[target_index].kind == kind) break;
+        }
+    } else {
+        while (target_index + 1 < tracks.size()) {
+            ++target_index;
+            if (tracks[target_index].kind == kind) break;
+        }
     }
-    const auto target_index = direction < 0 ? *source_index - 1 : *source_index + 1;
+    if (target_index == *source_index || tracks[target_index].kind != kind) return;
     try {
         static_cast<void>(moveTrack(*track_id, target_index));
     } catch (const std::exception& error) {
@@ -1038,6 +1050,10 @@ void EditWorkspaceController::setTimelineWidget(
             this, &EditWorkspaceController::timelineMediaDropRequested);
     connect(timeline_widget_, &timeline::TimelineWidget::externalFilesDropRequested,
             this, &EditWorkspaceController::timelineExternalFilesDropRequested);
+    connect(timeline_widget_, &timeline::TimelineWidget::mediaGroupDropRequested,
+            this, &EditWorkspaceController::timelineMediaGroupDropRequested);
+    connect(timeline_widget_, &timeline::TimelineWidget::externalFilesGroupDropRequested,
+            this, &EditWorkspaceController::timelineExternalFilesGroupDropRequested);
     connect(timeline_widget_, &timeline::TimelineWidget::openFusionClipRequested,
             this, &EditWorkspaceController::timelineFusionClipOpenRequested);
     connect(timeline_widget_, &timeline::TimelineWidget::effectDropRequested,

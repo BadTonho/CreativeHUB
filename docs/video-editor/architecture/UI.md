@@ -159,11 +159,23 @@ the destination is incompatible, occupied, removed, or stale. Folders and
 non-local URLs are rejected. Existing internal Media Browser drags and Open
 Media remain available.
 
-The Timeline is hosted inside a scrollable viewport. Media and effect drops are
-handled through that viewport and their coordinates are converted back to the
-Timeline content before the target track and frame are resolved. Only the
-content area of a track accepts a drop; the track header, ruler, and empty
-viewport space remain invalid targets.
+The Timeline is hosted inside a scrollable viewport with one shared horizontal
+scrollbar. Video and Audio occupy stacked panes with independent vertical
+scrollbars; the outer scroll area's vertical scrollbar is disabled. The mouse
+wheel scrolls the pane under the pointer, while Ctrl + wheel changes shared
+horizontal zoom. A draggable divider adjusts the pane heights; its 50/50 default
+and saved local preference use `timeline/track_group_split_ratio` in
+`QSettings`. Scroll offsets remain temporary view state and are not stored in
+the project. The two fixed track-header groups scroll with their respective
+panes.
+
+Media and effect drops are handled through the scroll viewport and their
+coordinates are converted back to Timeline content before the target track and
+frame are resolved. Drops on populated tracks target only the track content;
+the header, ruler, divider, and gaps remain invalid. An empty group pane accepts
+only compatible media: video or image in Video, and audio in Audio. Operating
+system file drops capture the empty group as their destination while importing;
+the created track and placed clips commit together as one Undo/Redo action.
 
 Visual-filter drops are accepted only over a video or image clip. The filter is
 appended to that clip's effect stack; it is not applied to audio, text, gaps,

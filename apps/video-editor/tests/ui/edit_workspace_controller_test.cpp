@@ -7,11 +7,13 @@
 
 #include <QCoreApplication>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -446,6 +448,68 @@ void run() {
                 track_session.timeline().trackCount() == 2 &&
                 track_commands.undoCount() == 4 && committed_track_edits == 4,
             "Track editing did not preserve shared state, history, or commit signals.");
+
+    application::EditorSession grouped_track_session;
+    application::TimelineCommandService grouped_track_commands(grouped_track_session);
+    ui::EditWorkspaceController grouped_track_controller(
+        grouped_track_session, grouped_track_commands);
+    auto& grouped_track_model = grouped_track_session.legacyTimelineForUi();
+    require(grouped_track_model.addTrack("Video 2", timeline::TrackKind::Video) ==
+                timeline::AddTrackResult::Added &&
+                grouped_track_model.addTrack("Video 3", timeline::TrackKind::Video) ==
+                    timeline::AddTrackResult::Added &&
+                grouped_track_model.addTrack("Audio 2", timeline::TrackKind::Audio) ==
+                    timeline::AddTrackResult::Added,
+            "Could not prepare interleaved Video and Audio track groups.");
+    const auto findTrackId = [&grouped_track_session](
+        timeline::TrackKind kind, const std::string& name) {
+        const auto& tracks = grouped_track_session.timeline().tracks();
+        const auto found = std::find_if(tracks.begin(), tracks.end(),
+            [kind, &name](const timeline::TimelineTrack& track) {
+                return track.kind == kind && track.name == name;
+            });
+        return found == tracks.end() ? timeline::TrackId{0} : found->track_id;
+    };
+    const auto top_video_id = findTrackId(timeline::TrackKind::Video, "Video 3");
+    const auto middle_video_id = findTrackId(timeline::TrackKind::Video, "Video 2");
+    const auto bottom_video_id = findTrackId(timeline::TrackKind::Video, "Video 1");
+    const auto first_audio_id = findTrackId(timeline::TrackKind::Audio, "Audio 1");
+    const auto second_audio_id = findTrackId(timeline::TrackKind::Audio, "Audio 2");
+    const auto before_boundary_move = grouped_track_session.timeline().snapshot();
+    grouped_track_session.selectionForUi().active_track_id = top_video_id;
+    grouped_track_controller.moveActiveTrack(-1);
+    grouped_track_session.selectionForUi().active_track_id = bottom_video_id;
+    grouped_track_controller.moveActiveTrack(1);
+    require(grouped_track_session.timeline().snapshot() == before_boundary_move &&
+                grouped_track_commands.undoCount() == 0,
+            "Track Up or Down crossed the boundary of the Video group.");
+    grouped_track_session.selectionForUi().active_track_id = middle_video_id;
+    grouped_track_controller.moveActiveTrack(-1);
+    const auto& moved_tracks = grouped_track_session.timeline().tracks();
+    std::vector<timeline::TrackId> visual_video_ids;
+    std::vector<timeline::TrackId> visual_audio_ids;
+    for (const auto& track : moved_tracks) {
+        (track.kind == timeline::TrackKind::Audio
+            ? visual_audio_ids : visual_video_ids).push_back(track.track_id);
+    }
+    require(visual_video_ids == std::vector<timeline::TrackId>{
+                middle_video_id, top_video_id, bottom_video_id} &&
+                visual_audio_ids == std::vector<timeline::TrackId>{
+                    first_audio_id, second_audio_id} &&
+                grouped_track_commands.undoCount() == 1,
+            "Track Up did not reorder within the Video group while preserving Audio order.");
+    grouped_track_session.selectionForUi().active_track_id = middle_video_id;
+    grouped_track_controller.moveActiveTrack(1);
+    visual_video_ids.clear();
+    for (const auto& track : grouped_track_session.timeline().tracks()) {
+        if (track.kind == timeline::TrackKind::Video) {
+            visual_video_ids.push_back(track.track_id);
+        }
+    }
+    require(visual_video_ids == std::vector<timeline::TrackId>{
+                top_video_id, middle_video_id, bottom_video_id} &&
+                grouped_track_commands.undoCount() == 2,
+            "Track Down did not reorder to the next Video row only.");
 
     application::EditorSession clip_session;
     application::TimelineCommandService clip_commands(clip_session);

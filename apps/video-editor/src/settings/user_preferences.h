@@ -23,6 +23,8 @@ inline constexpr char kMonitorVolumePercentKey[] =
     "playback/monitor_volume_percent";
 inline constexpr char kAudioWaveformDisplayModeKey[] =
     "timeline/audio_waveform_display_mode";
+inline constexpr char kTimelineTrackGroupSplitRatioKey[] =
+    "timeline/track_group_split_ratio";
 
 inline constexpr int kDefaultProjectAutosaveIntervalSeconds = 30;
 inline constexpr int kMinimumProjectAutosaveIntervalSeconds = 10;
@@ -33,6 +35,9 @@ inline constexpr int kMaximumProjectAutosaveRetention = 20;
 inline constexpr int kDefaultMonitorVolumePercent = 100;
 inline constexpr int kMinimumMonitorVolumePercent = 0;
 inline constexpr int kMaximumMonitorVolumePercent = 200;
+inline constexpr double kDefaultTimelineTrackGroupSplitRatio = 0.5;
+inline constexpr double kMinimumTimelineTrackGroupSplitRatio = 0.2;
+inline constexpr double kMaximumTimelineTrackGroupSplitRatio = 0.8;
 
 [[nodiscard]] bool previewPerformanceMetricsEnabled();
 void setPreviewPerformanceMetricsEnabled(bool enabled);
@@ -47,5 +52,7 @@ void setProjectAutosaveRetention(int count);
 void setMonitorVolumePercent(int percent);
 [[nodiscard]] AudioWaveformDisplayMode audioWaveformDisplayMode();
 void setAudioWaveformDisplayMode(AudioWaveformDisplayMode mode);
+[[nodiscard]] double timelineTrackGroupSplitRatio();
+void setTimelineTrackGroupSplitRatio(double ratio);
 
 } // namespace settings

@@ -3,6 +3,7 @@
 #include <QSettings>
 
 #include <algorithm>
+#include <cmath>
 
 namespace settings {
 
@@ -111,6 +112,29 @@ void setAudioWaveformDisplayMode(AudioWaveformDisplayMode mode) {
         mode = AudioWaveformDisplayMode::Mono;
     }
     QSettings().setValue(kAudioWaveformDisplayModeKey, static_cast<int>(mode));
+}
+
+double timelineTrackGroupSplitRatio() {
+    const auto stored = QSettings().value(
+        kTimelineTrackGroupSplitRatioKey,
+        kDefaultTimelineTrackGroupSplitRatio);
+    bool ok = false;
+    const auto value = stored.toDouble(&ok);
+    if (!ok || !std::isfinite(value)) {
+        return kDefaultTimelineTrackGroupSplitRatio;
+    }
+    return std::clamp(value,
+        kMinimumTimelineTrackGroupSplitRatio,
+        kMaximumTimelineTrackGroupSplitRatio);
+}
+
+void setTimelineTrackGroupSplitRatio(double ratio) {
+    if (!std::isfinite(ratio)) return;
+    QSettings().setValue(
+        kTimelineTrackGroupSplitRatioKey,
+        std::clamp(ratio,
+            kMinimumTimelineTrackGroupSplitRatio,
+            kMaximumTimelineTrackGroupSplitRatio));
 }
 
 } // namespace settings

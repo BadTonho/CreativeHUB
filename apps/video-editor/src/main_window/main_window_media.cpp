@@ -1551,7 +1551,8 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
         const auto placement = edit_workspace_->controller()->addMediaClips(
             timeline_candidates,
             import_intent->track_id,
-            import_intent->timeline_frame);
+            import_intent->timeline_frame,
+            import_intent->create_track_kind);
         if (placement.changed() && placement.selection.active_clip_id.has_value()) {
             const auto selected = std::find_if(
                 media_items_.begin(), media_items_.end(),
@@ -1628,6 +1629,25 @@ void MainWindow::handleExternalTimelineFilesDrop(
     intent.destination = MediaImportIntent::Destination::Timeline;
     intent.track_id = track_id;
     intent.timeline_frame = timeline_frame;
+    static_cast<void>(startMediaImport(std::move(local_paths), std::move(intent)));
+}
+
+void MainWindow::handleExternalTimelineFilesGroupDrop(
+    const QStringList& paths,
+    timeline::TrackKind track_kind,
+    qint64 timeline_frame) {
+    std::vector<std::filesystem::path> local_paths;
+    local_paths.reserve(static_cast<std::size_t>(paths.size()));
+    for (const auto& path : paths) {
+        const QFileInfo info(path);
+        if (info.isFile()) local_paths.push_back(normalizedPath(info.filesystemFilePath()));
+    }
+    if (local_paths.empty()) return;
+
+    MediaImportIntent intent;
+    intent.destination = MediaImportIntent::Destination::Timeline;
+    intent.timeline_frame = timeline_frame;
+    intent.create_track_kind = track_kind;
     static_cast<void>(startMediaImport(std::move(local_paths), std::move(intent)));
 }
 

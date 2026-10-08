@@ -38,6 +38,7 @@ struct TimelineDropPreview {
     QString label;
     bool valid = false;
     std::optional<std::int64_t> snap_guide_frame;
+    std::optional<TrackKind> target_empty_group;
 };
 
 // Owns pointer-gesture state and turns completed gestures into stable-ID

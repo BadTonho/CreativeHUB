@@ -85,6 +85,15 @@ TimelineWidget presents the sequence with a shared `HH:MM:SS.mmm` timecode ruler
 separate track headers, per-track clip counts, and track-specific clip colors.
 The active track and clip use a highlighted border; drop targets and the
 playhead are shown directly over the timeline content.
+Video tracks are projected into an upper pane and Audio tracks into a lower
+pane. Each pane has its own vertical scrollbar and wheel scrolling follows the
+pointer's pane. The relative order of tracks within each type is preserved;
+Track Up and Track Down stop at the visible first and last row of that type.
+The divider starts at 50/50, is draggable, and is stored in local
+`QSettings` under `timeline/track_group_split_ratio` for use across projects.
+Both panes keep a minimum usable height. Track row height remains shared by
+Video and Audio. Vertical scroll positions are temporary view state and are
+not written to the `.csp` project.
 Clip rectangles fill the vertical extent of their track row; the track header
 remains reserved on the left, while no top or bottom inset is applied to clips.
 The visual timeline uses a minimum one-hour range, independent of the
@@ -99,8 +108,9 @@ and track names, clip counts, and the active-track highlight remain visible
 while the ruler and clip content move horizontally. The timecode uses the
 project's rational Timeline rate and follows playback, seeking, and scrubbing;
 it remains fixed during horizontal scrolling and is visible in the Render
-workspace because the same Timeline widget is shared. Vertical scrolling still
-moves the header rows together with their corresponding tracks. The overlay is
+workspace because the same Timeline widget is shared. Vertical scrolling moves
+each header group with its corresponding tracks while keeping the two groups
+independent. The playhead remains shared across both panes. The overlay is
 visual only and does not change Timeline coordinate conversion or input event
 routing.
 The horizontal view can be zoomed from 25% through 51,200% using discrete
@@ -115,14 +125,21 @@ minus and plus controls zoom around the playhead, keeping that timeline instant
 in place.
 Zoom changes only the timeline's horizontal presentation and are saved in the
 project; they do not change clip frames, playback, preview, or Undo/Redo.
-The timeline surface grows only as much as its track rows require; additional
-tracks are available through vertical scrolling. Shift + mouse wheel changes
-the height of every track row uniformly, from 30 to 180 pixels; new projects
-start at 70 pixels. The gesture
+Each pane shows as many rows as fit and scrolls independently when its group
+has more tracks. Shift + mouse wheel changes the height of every track row
+uniformly, from 30 to 180 pixels; new projects start at 70 pixels. The gesture
 uses pixel wheel deltas when available and angle deltas as a smooth fallback.
-The selected height is a per-project view setting; Ctrl + mouse wheel remains
-reserved for horizontal zoom and an unmodified wheel remains available to the
-scroll area.
+The selected height is a per-project view setting. Ctrl + mouse wheel remains
+reserved for shared horizontal zoom; an unmodified vertical wheel scrolls the
+pane beneath the pointer, and horizontal scrolling remains shared.
+
+An empty Video or Audio group remains visible and shows a drop hint. Dropping
+video or image media into an empty Video pane, or audio media into an empty
+Audio pane, creates the first track and adds the clip in one Undo/Redo edit.
+External file batches use the same group destination after import. Incompatible
+media is rejected without creating a track. Video with audio keeps the normal
+linked Audio companion behavior. Render uses this same two-pane Timeline; it
+keeps navigation available while blocking clip edits.
 
 The Timeline toolbar also provides a global monitoring-volume slider from 0% to
 200%, with 100% as the neutral default. It affects only audio heard during

@@ -112,6 +112,40 @@ void TimelineInteractionPainter::paint(
         if (state.drop_hover_track.has_value() && state.drop_hover_frame.has_value()) {
             draw_ghost(*state.drop_hover_track, *state.drop_hover_frame,
                        state.drop_duration_frames, state.drop_label, state.drop_valid);
+        } else if (state.drop_empty_group.has_value()) {
+            const auto viewport = geometry.trackGroupViewportRect(
+                *state.drop_empty_group);
+            const auto start_frame = state.drop_hover_frame.value_or(0);
+            const auto end_frame = start_frame >
+                    std::numeric_limits<std::int64_t>::max() -
+                        std::max<std::int64_t>(1, state.drop_duration_frames)
+                ? std::numeric_limits<std::int64_t>::max()
+                : start_frame + std::max<std::int64_t>(1, state.drop_duration_frames);
+            const auto left = geometry.contentXForFrame(start_frame);
+            const auto right = geometry.contentXForFrame(end_frame);
+            const auto content = QRectF(
+                left, viewport.top() + 4.0,
+                std::max(2.0, right - left),
+                std::max(0.0, viewport.height() - 8.0));
+            if (!content.isEmpty()) {
+                const auto valid_color = state.drop_valid
+                    ? QColor("#3c75ae") : QColor("#d85a5a");
+                painter.save();
+                painter.setClipRect(viewport, Qt::IntersectClip);
+                painter.setPen(QPen(
+                    state.drop_valid ? QColor("#9ed8ff") : QColor("#ff7777"),
+                    2.0, Qt::DashLine));
+                painter.setBrush(QColor(
+                    valid_color.red(), valid_color.green(), valid_color.blue(), 80));
+                painter.drawRoundedRect(content, 3.0, 3.0);
+                painter.setPen(QColor("#f4f7fb"));
+                painter.drawText(content.adjusted(8.0, 0.0, -8.0, 0.0),
+                    Qt::AlignVCenter,
+                    QFontMetrics(painter.font()).elidedText(
+                        state.drop_label, Qt::ElideRight,
+                        std::max(1, static_cast<int>(content.width() - 16.0))));
+                painter.restore();
+            }
         } else {
             draw_invalid_marker(state.invalid_marker_position);
         }
