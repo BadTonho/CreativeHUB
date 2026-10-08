@@ -12,6 +12,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSettings>
+#include <QSlider>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTabWidget>
@@ -43,6 +44,37 @@ int main(int argc, char* argv[]) {
         QSettings settings;
         settings.clear();
         settings.sync();
+
+        require(settings::workspacePageTransitionsEnabled() &&
+                    settings::workspacePageTransitionDurationMs() ==
+                        settings::kDefaultWorkspacePageTransitionDurationMs,
+                "Workspace transitions must be enabled by default at 250 ms.");
+        settings::setWorkspacePageTransitionsEnabled(false);
+        require(!settings::workspacePageTransitionsEnabled(),
+                "Disabling workspace transitions was not persisted.");
+        settings::setWorkspacePageTransitionsEnabled(true);
+        settings::setWorkspacePageTransitionDurationMs(137);
+        require(settings::workspacePageTransitionDurationMs() == 125,
+                "Workspace transition duration must snap to 25 ms steps.");
+        settings::setWorkspacePageTransitionDurationMs(1);
+        require(settings::workspacePageTransitionDurationMs() ==
+                    settings::kMinimumWorkspacePageTransitionDurationMs,
+                "Workspace transition duration did not enforce its lower bound.");
+        settings::setWorkspacePageTransitionDurationMs(999);
+        require(settings::workspacePageTransitionDurationMs() ==
+                    settings::kMaximumWorkspacePageTransitionDurationMs,
+                "Workspace transition duration did not enforce its upper bound.");
+        settings.setValue(settings::kWorkspacePageTransitionDurationMsKey,
+                          QStringLiteral("invalid"));
+        require(settings::workspacePageTransitionDurationMs() ==
+                    settings::kDefaultWorkspacePageTransitionDurationMs,
+                "Invalid workspace transition duration did not fall back to 250 ms.");
+        settings.setValue(settings::kWorkspacePageTransitionsEnabledKey,
+                          QStringLiteral("invalid"));
+        require(settings::workspacePageTransitionsEnabled(),
+                "Invalid workspace transition toggle did not use its default.");
+        settings.remove(settings::kWorkspacePageTransitionDurationMsKey);
+        settings.remove(settings::kWorkspacePageTransitionsEnabledKey);
 
         require(settings::timelineTrackGroupSplitRatio() == 0.5,
                 "Timeline track group split ratio must default to 50/50.");
@@ -127,6 +159,53 @@ int main(int argc, char* argv[]) {
                 "Timeline settings tab is missing.");
         require(tabs->tabText(3) == "Shortcuts",
                 "Shortcuts settings tab is missing.");
+
+        auto* workspace_transitions = dialog.findChild<QCheckBox*>(
+            "workspacePageTransitionsCheckBox");
+        auto* workspace_transition_duration = dialog.findChild<QSlider*>(
+            "workspacePageTransitionDurationSlider");
+        auto* workspace_transition_duration_label = dialog.findChild<QLabel*>(
+            "workspacePageTransitionDurationLabel");
+        require(workspace_transitions != nullptr &&
+                    workspace_transition_duration != nullptr &&
+                    workspace_transition_duration_label != nullptr &&
+                    workspace_transitions->isChecked() &&
+                    workspace_transition_duration->isEnabled() &&
+                    workspace_transition_duration->minimum() == 100 &&
+                    workspace_transition_duration->maximum() == 600 &&
+                    workspace_transition_duration->singleStep() == 25 &&
+                    workspace_transition_duration->value() == 250 &&
+                    workspace_transition_duration_label->text() == "250 ms",
+                "Workspace transition settings controls have incorrect defaults.");
+        workspace_transition_duration->setValue(400);
+        require(settings::workspacePageTransitionDurationMs() == 400 &&
+                    workspace_transition_duration_label->text() == "400 ms",
+                "Changing the workspace duration must apply and persist immediately.");
+        workspace_transitions->setChecked(false);
+        require(!settings::workspacePageTransitionsEnabled() &&
+                    !workspace_transition_duration->isEnabled(),
+                "Disabling workspace animation must persist and disable its slider.");
+        {
+            settings::SettingsDialog reopened(nullptr, shortcut_manager);
+            auto* reopened_toggle = reopened.findChild<QCheckBox*>(
+                "workspacePageTransitionsCheckBox");
+            auto* reopened_duration = reopened.findChild<QSlider*>(
+                "workspacePageTransitionDurationSlider");
+            require(reopened_toggle != nullptr && reopened_duration != nullptr &&
+                        !reopened_toggle->isChecked() &&
+                        !reopened_duration->isEnabled() &&
+                        reopened_duration->value() == 400,
+                    "Reopened Settings did not restore workspace transition preferences.");
+        }
+        workspace_transitions->setChecked(true);
+        workspace_transition_duration->setValue(100);
+        require(settings::workspacePageTransitionsEnabled() &&
+                    settings::workspacePageTransitionDurationMs() == 100,
+                "The minimum workspace transition duration was not applied.");
+        workspace_transition_duration->setValue(600);
+        require(settings::workspacePageTransitionDurationMs() == 600,
+                "The maximum workspace transition duration was not applied.");
+        workspace_transition_duration->setValue(250);
 
         require(dialog.findChild<QLabel*>("shortcutScope_application") != nullptr &&
                     dialog.findChild<QLabel*>("shortcutScope_edit") != nullptr &&

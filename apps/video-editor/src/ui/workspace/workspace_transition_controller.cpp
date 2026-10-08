@@ -1,6 +1,8 @@
 #include "ui/workspace/workspace_transition_controller.h"
 
+#include "settings/user_preferences.h"
 #include "ui/workspace/workspace_host.h"
+#include "ui/workspace/workspace_page_transition.h"
 
 #include <QDockWidget>
 #include <QPushButton>
@@ -19,6 +21,10 @@ WorkspaceTransitionController::WorkspaceTransitionController(
       workspace_host_(workspace_host),
       docks_(docks),
       selectors_(selectors) {
+    page_transition_ = new WorkspacePageTransition(this);
+    connect(page_transition_, &WorkspacePageTransition::finished,
+            this, &WorkspaceTransitionController::applyQueuedPage);
+
     if (selectors_.edit != nullptr) {
         connect(selectors_.edit, &QPushButton::clicked, this, [this]() {
             setPage(WorkspacePageId::Edit);
@@ -37,6 +43,39 @@ WorkspaceTransitionController::WorkspaceTransitionController(
 }
 
 void WorkspaceTransitionController::setPage(WorkspacePageId page) {
+    if (workspace_host_ == nullptr) return;
+    if (page_transition_ != nullptr && page_transition_->isRunning()) {
+        if (workspace_host_->currentPage() == page) {
+            queued_page_.reset();
+            updateSelectors(page);
+        } else {
+            queued_page_ = page;
+            updateSelectors(workspace_host_->currentPage());
+        }
+        return;
+    }
+    if (workspace_host_->currentPage() == page) {
+        updateSelectors(page);
+        return;
+    }
+
+    const auto current_page = workspace_host_->currentPage();
+    if (page_transition_ != nullptr &&
+        settings::workspacePageTransitionsEnabled() &&
+        workspace_host_->isVisible()) {
+        page_transition_->start(
+            {workspace_host_, docks_.timeline, docks_.inspector},
+            current_page,
+            page,
+            settings::workspacePageTransitionDurationMs(),
+            [this, page]() { applyPage(page); });
+        return;
+    }
+
+    applyPage(page);
+}
+
+void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
     if (workspace_host_ == nullptr) return;
     if (workspace_host_->currentPage() == page) {
         updateSelectors(page);
@@ -91,9 +130,21 @@ void WorkspaceTransitionController::setPageChangedHandler(
 }
 
 void WorkspaceTransitionController::prepareForClose() {
+    if (page_transition_ != nullptr) page_transition_->cancel();
+    queued_page_.reset();
     if (workspace_host_ != nullptr &&
         workspace_host_->currentPage() == WorkspacePageId::Render) {
-        setPage(WorkspacePageId::Edit);
+        applyPage(WorkspacePageId::Edit);
+    }
+}
+
+void WorkspaceTransitionController::applyQueuedPage() {
+    if (!queued_page_.has_value()) return;
+    const auto page = *queued_page_;
+    queued_page_.reset();
+    if (workspace_host_ != nullptr &&
+        workspace_host_->currentPage() != page) {
+        setPage(page);
     }
 }
 

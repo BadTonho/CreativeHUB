@@ -276,6 +276,32 @@ set_tests_properties(creative-suite-main-editor-workspace-page-switch PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(creative-suite-main-editor-workspace-page-transition-tests
+    workspace_page_transition_test.cpp
+)
+
+target_link_libraries(creative-suite-main-editor-workspace-page-transition-tests PRIVATE
+    creative-suite-main-editor-core
+)
+
+target_compile_features(creative-suite-main-editor-workspace-page-transition-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-workspace-page-transition-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-workspace-page-transition-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+copy_ffmpeg_test_runtime(creative-suite-main-editor-workspace-page-transition-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-workspace-page-transition-tests)
+
+add_creative_suite_test(
+    NAME creative-suite-main-editor-workspace-page-transition
+    COMMAND creative-suite-main-editor-workspace-page-transition-tests
+)
+set_tests_properties(creative-suite-main-editor-workspace-page-transition PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
 preserve_video_editor_test_working_directory()
 
 add_executable(creative-suite-main-editor-fusion-workspace-tests

@@ -8,6 +8,7 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFont>
+#include <QGroupBox>
 #include <QHeaderView>
 #include <QHash>
 #include <QHBoxLayout>
@@ -17,6 +18,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QSlider>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -88,6 +90,76 @@ QWidget* SettingsDialog::createGeneralPage() {
         settings::setGpuCompositionEnabled(enabled);
         emit gpuCompositionEnabledChanged(enabled);
     });
+
+    auto* transitions_group = new QGroupBox(
+        "Workspace transitions", page);
+    transitions_group->setObjectName("workspaceTransitionsGroup");
+    auto* transitions_layout = new QVBoxLayout(transitions_group);
+    auto* transitions_check = new QCheckBox(
+        "Animate workspace switches", transitions_group);
+    transitions_check->setObjectName("workspacePageTransitionsCheckBox");
+    transitions_check->setToolTip(
+        "Slide the workspace panels when switching among Edit, Fusion, and Render.");
+    transitions_check->setChecked(settings::workspacePageTransitionsEnabled());
+    transitions_layout->addWidget(transitions_check);
+
+    auto* duration_row = new QWidget(transitions_group);
+    auto* duration_layout = new QHBoxLayout(duration_row);
+    duration_layout->setContentsMargins(0, 0, 0, 0);
+    auto* duration_label = new QLabel("Duration:", duration_row);
+    auto* duration_slider = new QSlider(Qt::Horizontal, duration_row);
+    duration_slider->setObjectName("workspacePageTransitionDurationSlider");
+    duration_slider->setRange(
+        settings::kMinimumWorkspacePageTransitionDurationMs,
+        settings::kMaximumWorkspacePageTransitionDurationMs);
+    duration_slider->setSingleStep(
+        settings::kWorkspacePageTransitionDurationStepMs);
+    duration_slider->setPageStep(
+        settings::kWorkspacePageTransitionDurationStepMs);
+    duration_slider->setTickInterval(
+        settings::kWorkspacePageTransitionDurationStepMs);
+    duration_slider->setTickPosition(QSlider::TicksBelow);
+    duration_slider->setValue(settings::workspacePageTransitionDurationMs());
+    duration_slider->setAccessibleName("Workspace transition duration");
+    auto* duration_value = new QLabel(
+        QStringLiteral("%1 ms").arg(duration_slider->value()), duration_row);
+    duration_value->setObjectName("workspacePageTransitionDurationLabel");
+    duration_value->setMinimumWidth(64);
+    duration_value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    duration_layout->addWidget(duration_label);
+    duration_layout->addWidget(duration_slider, 1);
+    duration_layout->addWidget(duration_value);
+    transitions_layout->addWidget(duration_row);
+
+    auto* transitions_description = new QLabel(
+        "A higher duration makes the lateral slide slower. This preference is saved on this device and does not modify projects.",
+        transitions_group);
+    transitions_description->setWordWrap(true);
+    transitions_layout->addWidget(transitions_description);
+    transitions_check->setAccessibleDescription(
+        transitions_description->text());
+    duration_slider->setToolTip(
+        "Choose a duration from 100 to 600 milliseconds in 25 millisecond steps.");
+    duration_slider->setEnabled(transitions_check->isChecked());
+
+    connect(transitions_check, &QCheckBox::toggled, this,
+            [duration_slider](bool enabled) {
+                settings::setWorkspacePageTransitionsEnabled(enabled);
+                duration_slider->setEnabled(enabled);
+            });
+    connect(duration_slider, &QSlider::valueChanged, this,
+            [duration_slider, duration_value](int value) {
+                settings::setWorkspacePageTransitionDurationMs(value);
+                const auto normalized =
+                    settings::workspacePageTransitionDurationMs();
+                if (normalized != value) {
+                    const QSignalBlocker blocker(duration_slider);
+                    duration_slider->setValue(normalized);
+                }
+                duration_value->setText(
+                    QStringLiteral("%1 ms").arg(normalized));
+            });
+    layout->addWidget(transitions_group);
 
     auto* autosave_check = new QCheckBox(
         "Enable project autosave", page);

@@ -238,6 +238,11 @@ application log; it never becomes project data or marks the project dirty.
 The same tab provides the enabled-by-default `Enable project autosave` option,
 an interval from 10 to 300 seconds (30 by default), and a retention limit from
 5 to 20 snapshots (5 by default). These global settings apply immediately.
+It also provides the enabled-by-default `Animate workspace switches` option
+and a duration slider from 100 to 600 ms in 25 ms steps (250 ms by default).
+These local `QSettings` preferences control the lateral transition between
+Edit, Fusion, and Render and do not modify project data. The duration slider is
+disabled when animation is turned off.
 Autosave writes atomic recovery snapshots beside a saved project, or under
 the application data recovery directory for an unsaved project; it never
 overwrites the main `.csp` file or clears the dirty state. The `Autosave` tab
@@ -686,6 +691,15 @@ activation to Fusion and Render. The transition controller does not own docks
 or persist layout. `MainWindow` remains
 responsible for creating the docks, restoring and saving their native layout,
 and returning to Edit before an accepted close from Render.
+
+The internal `WorkspacePageTransition` helper animates snapshots of the central
+workspace, Timeline/Node Editor dock, and Inspector dock in sync. Moving forward
+through Edit → Fusion → Render brings the destination in from the right; moving
+back brings it in from the left. The workspace selectors remain fixed. The
+helper uses the locally configured duration and does not animate initial page
+selection, same-page requests, or shutdown restoration. While a slide is
+running, only the latest additional page request is kept for the next
+transition.
 
 `workspaces/edit/ui/EditWorkspace` builds the Inspector and Timeline
 surfaces and exposes them to `WorkspaceHost`. Edit, Fusion, and Render keep the

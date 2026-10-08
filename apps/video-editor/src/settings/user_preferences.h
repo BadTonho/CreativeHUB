@@ -25,6 +25,10 @@ inline constexpr char kAudioWaveformDisplayModeKey[] =
     "timeline/audio_waveform_display_mode";
 inline constexpr char kTimelineTrackGroupSplitRatioKey[] =
     "timeline/track_group_split_ratio";
+inline constexpr char kWorkspacePageTransitionsEnabledKey[] =
+    "workspace/page_transitions_enabled";
+inline constexpr char kWorkspacePageTransitionDurationMsKey[] =
+    "workspace/page_transition_duration_ms";
 
 inline constexpr int kDefaultProjectAutosaveIntervalSeconds = 30;
 inline constexpr int kMinimumProjectAutosaveIntervalSeconds = 10;
@@ -38,6 +42,11 @@ inline constexpr int kMaximumMonitorVolumePercent = 200;
 inline constexpr double kDefaultTimelineTrackGroupSplitRatio = 0.5;
 inline constexpr double kMinimumTimelineTrackGroupSplitRatio = 0.2;
 inline constexpr double kMaximumTimelineTrackGroupSplitRatio = 0.8;
+inline constexpr bool kDefaultWorkspacePageTransitionsEnabled = true;
+inline constexpr int kDefaultWorkspacePageTransitionDurationMs = 250;
+inline constexpr int kMinimumWorkspacePageTransitionDurationMs = 100;
+inline constexpr int kMaximumWorkspacePageTransitionDurationMs = 600;
+inline constexpr int kWorkspacePageTransitionDurationStepMs = 25;
 
 [[nodiscard]] bool previewPerformanceMetricsEnabled();
 void setPreviewPerformanceMetricsEnabled(bool enabled);
@@ -54,5 +63,9 @@ void setMonitorVolumePercent(int percent);
 void setAudioWaveformDisplayMode(AudioWaveformDisplayMode mode);
 [[nodiscard]] double timelineTrackGroupSplitRatio();
 void setTimelineTrackGroupSplitRatio(double ratio);
+[[nodiscard]] bool workspacePageTransitionsEnabled();
+void setWorkspacePageTransitionsEnabled(bool enabled);
+[[nodiscard]] int workspacePageTransitionDurationMs();
+void setWorkspacePageTransitionDurationMs(int duration_ms);
 
 } // namespace settings

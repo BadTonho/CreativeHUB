@@ -1,6 +1,7 @@
 #include "user_preferences.h"
 
 #include <QSettings>
+#include <QString>
 
 #include <algorithm>
 #include <cmath>
@@ -135,6 +136,57 @@ void setTimelineTrackGroupSplitRatio(double ratio) {
         std::clamp(ratio,
             kMinimumTimelineTrackGroupSplitRatio,
             kMaximumTimelineTrackGroupSplitRatio));
+}
+
+bool workspacePageTransitionsEnabled() {
+    const auto stored = QSettings().value(
+        kWorkspacePageTransitionsEnabledKey);
+    if (!stored.isValid()) return kDefaultWorkspacePageTransitionsEnabled;
+
+    const auto value = stored.toString().trimmed().toLower();
+    if (value == QStringLiteral("true") || value == QStringLiteral("1")) {
+        return true;
+    }
+    if (value == QStringLiteral("false") || value == QStringLiteral("0")) {
+        return false;
+    }
+    return kDefaultWorkspacePageTransitionsEnabled;
+}
+
+void setWorkspacePageTransitionsEnabled(bool enabled) {
+    QSettings().setValue(kWorkspacePageTransitionsEnabledKey, enabled);
+}
+
+int workspacePageTransitionDurationMs() {
+    const auto stored = QSettings().value(
+        kWorkspacePageTransitionDurationMsKey);
+    bool ok = false;
+    const auto value = stored.toInt(&ok);
+    if (!ok) return kDefaultWorkspacePageTransitionDurationMs;
+
+    const auto clamped = std::clamp(
+        value,
+        kMinimumWorkspacePageTransitionDurationMs,
+        kMaximumWorkspacePageTransitionDurationMs);
+    const auto steps = (clamped - kMinimumWorkspacePageTransitionDurationMs +
+                        kWorkspacePageTransitionDurationStepMs / 2) /
+        kWorkspacePageTransitionDurationStepMs;
+    return kMinimumWorkspacePageTransitionDurationMs +
+        steps * kWorkspacePageTransitionDurationStepMs;
+}
+
+void setWorkspacePageTransitionDurationMs(int duration_ms) {
+    const auto clamped = std::clamp(
+        duration_ms,
+        kMinimumWorkspacePageTransitionDurationMs,
+        kMaximumWorkspacePageTransitionDurationMs);
+    const auto steps = (clamped - kMinimumWorkspacePageTransitionDurationMs +
+                        kWorkspacePageTransitionDurationStepMs / 2) /
+        kWorkspacePageTransitionDurationStepMs;
+    QSettings().setValue(
+        kWorkspacePageTransitionDurationMsKey,
+        kMinimumWorkspacePageTransitionDurationMs +
+            steps * kWorkspacePageTransitionDurationStepMs);
 }
 
 } // namespace settings

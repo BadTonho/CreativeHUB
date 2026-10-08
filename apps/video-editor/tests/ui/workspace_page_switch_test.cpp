@@ -1,4 +1,5 @@
 #include "ui/timeline/timeline_end_buttons.h"
+#include "settings/user_preferences.h"
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/workspace_transition_controller.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
@@ -6,24 +7,31 @@
 #include "workspaces/render/ui/render_workspace.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QDockWidget>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSettings>
 #include <QStackedWidget>
 #include <QSplitter>
 #include <QSpinBox>
 #include <QToolBar>
+#include <QTemporaryDir>
+#include <QThread>
 #include <QWheelEvent>
 
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -32,6 +40,22 @@ namespace {
 
 void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
+}
+
+bool hasTransitionOverlay(QWidget* widget) {
+    return widget != nullptr && widget->findChild<QWidget*>(
+        QStringLiteral("workspacePageTransitionOverlay")) != nullptr;
+}
+
+bool waitUntil(const std::function<bool()>& predicate, int timeout_ms) {
+    QElapsedTimer timer;
+    timer.start();
+    while (!predicate() && timer.elapsed() < timeout_ms) {
+        QApplication::processEvents(QEventLoop::AllEvents, 10);
+        QThread::msleep(2);
+    }
+    QApplication::processEvents(QEventLoop::AllEvents, 10);
+    return predicate();
 }
 
 void sendWheel(QWidget* target, int angle_delta_y) {
@@ -52,6 +76,14 @@ void sendWheel(QWidget* target, int angle_delta_y) {
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
+    QCoreApplication::setOrganizationName("CreativeSuiteTests");
+    QCoreApplication::setApplicationName("WorkspacePageSwitchTest");
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QTemporaryDir settings_directory;
+    if (!settings_directory.isValid()) return 1;
+    QSettings::setPath(
+        QSettings::IniFormat, QSettings::UserScope, settings_directory.path());
+    settings::setWorkspacePageTransitionsEnabled(false);
 
     try {
         QMainWindow window;
@@ -530,6 +562,68 @@ int main(int argc, char* argv[]) {
                         visibility_before_close[index],
                     "Preparing to close must restore the previous dock layout.");
         }
+
+        settings::setWorkspacePageTransitionsEnabled(true);
+        settings::setWorkspacePageTransitionDurationMs(100);
+        const auto changes_before_animated_switches = page_changes.size();
+        buttons.fusion->click();
+        application.processEvents();
+        require(workspace_host->currentPage() == ui::WorkspacePageId::Fusion &&
+                    hasTransitionOverlay(workspace_host) &&
+                    hasTransitionOverlay(lower_dock),
+                "An animated page switch must begin on the workspace and lower dock.");
+        auto* forward_overlay = workspace_host->findChild<QWidget*>(
+            QStringLiteral("workspacePageTransitionOverlay"));
+        require(forward_overlay != nullptr &&
+                    forward_overlay->property("slideDirection").toInt() == 1,
+                "Edit-to-Fusion must slide the workspace from right to left.");
+
+        buttons.render->click();
+        buttons.edit->click();
+        buttons.render->click();
+        require(workspace_host->currentPage() == ui::WorkspacePageId::Fusion &&
+                    buttons.fusion->isChecked() && !buttons.render->isChecked(),
+                "Queued page requests must wait without moving the active selector.");
+        require(waitUntil(
+                    [&]() {
+                        return workspace_host->currentPage() ==
+                                ui::WorkspacePageId::Render &&
+                            !hasTransitionOverlay(workspace_host) &&
+                            !hasTransitionOverlay(lower_dock);
+                    },
+                    1200),
+                "The latest queued workspace request did not finish on Render.");
+        require(page_changes.size() == changes_before_animated_switches + 2 &&
+                    page_changes[changes_before_animated_switches] ==
+                        ui::WorkspacePageId::Fusion &&
+                    page_changes[changes_before_animated_switches + 1] ==
+                        ui::WorkspacePageId::Render &&
+                    buttons.render->isChecked(),
+                "Rapid page requests must keep only the latest queued destination.");
+
+        const auto changes_before_same_page = page_changes.size();
+        buttons.render->click();
+        application.processEvents();
+        require(page_changes.size() == changes_before_same_page &&
+                    !hasTransitionOverlay(workspace_host),
+                "Selecting the active page must not start another animation.");
+
+        buttons.edit->click();
+        application.processEvents();
+        auto* reverse_overlay = workspace_host->findChild<QWidget*>(
+            QStringLiteral("workspacePageTransitionOverlay"));
+        require(reverse_overlay != nullptr &&
+                    reverse_overlay->property("slideDirection").toInt() == -1,
+                "Render-to-Edit must slide the workspace from left to right.");
+        require(waitUntil(
+                    [&]() {
+                        return workspace_host->currentPage() ==
+                                ui::WorkspacePageId::Edit &&
+                            !hasTransitionOverlay(workspace_host) &&
+                            !hasTransitionOverlay(lower_dock);
+                    },
+                    700),
+                "The reverse workspace transition did not complete.");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

@@ -160,6 +160,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/ui/workspace/workspace_host.cpp
     src/ui/workspace/workspace_host.h
     src/ui/workspace/workspace_page_id.h
+    src/ui/workspace/workspace_page_transition.cpp
+    src/ui/workspace/workspace_page_transition.h
     src/ui/workspace/workspace_transition_controller.cpp
     src/ui/workspace/workspace_transition_controller.h
     src/workspaces/edit/ui/edit_workspace.cpp
