@@ -110,7 +110,6 @@ private:
     void registerWorkspaceMenuAction(
         QAction* action, settings::ShortcutScope scope);
     void refreshWorkspaceMenuVisibility();
-    void refreshFusionNodePreviewTarget();
     void showSettingsDialog();
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();

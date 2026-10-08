@@ -46,7 +46,11 @@ int runFusionWorkspaceTest() {
     timeline::ClipId preview_clip_id = 0;
     fusion::nodes::NodeId preview_node_id = 0;
     int preview_request_count = 0;
+    int preview_clear_count = 0;
     int pause_request_count = 0;
+    int activation_request_count = 0;
+    timeline::ClipId activation_clip_id = 0;
+    std::int64_t activation_local_frame = -1;
     QObject::connect(&workspace, &ui::FusionWorkspace::graphEditRequested,
         [&edited, &edit_count, &selected_clip_id_was_preserved, &selected](timeline::ClipId clip_id,
             const fusion::nodes::NodeGraph& graph) {
@@ -56,15 +60,32 @@ int runFusionWorkspaceTest() {
             selected.node_graph = graph;
             ++edit_count;
         });
-    QObject::connect(&workspace, &ui::FusionWorkspace::nodePreviewRequested,
+    QObject::connect(&workspace, &ui::FusionWorkspace::previewTargetRequested,
         [&preview_clip_id, &preview_node_id, &preview_request_count](
             timeline::ClipId clip_id, fusion::nodes::NodeId node_id) {
             preview_clip_id = clip_id;
             preview_node_id = node_id;
             ++preview_request_count;
         });
+    QObject::connect(&workspace, &ui::FusionWorkspace::previewTargetCleared,
+        [&preview_clear_count] { ++preview_clear_count; });
     QObject::connect(&workspace, &ui::FusionWorkspace::playbackPauseRequested,
         [&pause_request_count] { ++pause_request_count; });
+    QObject::connect(&workspace,
+        &ui::FusionWorkspace::playbackClipActivationRequested,
+        [&activation_request_count, &activation_clip_id, &activation_local_frame](
+            timeline::ClipId clip_id, std::int64_t local_frame) {
+            ++activation_request_count;
+            activation_clip_id = clip_id;
+            activation_local_frame = local_frame;
+        });
+    workspace.setActive(true);
+    require(workspace.isActive() && pause_request_count == 1 &&
+                activation_request_count == 1 && activation_clip_id == 42 &&
+                activation_local_frame == 0 && preview_request_count == 1 &&
+                preview_clip_id == 42 && preview_node_id == 2 &&
+                preview_clear_count == 0,
+            "Entering Fusion must pause playback, activate the clip at its start, and target Output.");
     auto* add_type = root.findChild<QComboBox*>("fusionAddNodeType");
     auto* add = root.findChild<QPushButton*>("fusionAddNodeButton");
     require(add_type && add, "Node controls were not created.");
@@ -179,7 +200,7 @@ int runFusionWorkspaceTest() {
         QPointF(input_view_position), Qt::LeftButton, Qt::NoButton,
         Qt::NoModifier);
     QApplication::sendEvent(canvas->viewport(), &viewer_release);
-    require(preview_request_count == 1 && preview_clip_id == 42 &&
+    require(preview_request_count == 2 && preview_clip_id == 42 &&
                 preview_node_id == 1 && workspace.previewNodeId() == 1 &&
                 workspace.selectedNodeId() == transform_id && edit_count == 3,
             "The node Viewer indicator changed the graph or failed to select its preview target.");
@@ -465,6 +486,65 @@ int runFusionWorkspaceTest() {
     require(animated_brightness && edit_count == 22 &&
                 animated_brightness->effect_parameter_keyframes.front().keyframes.empty(),
             "The Brightness diamond did not remove the keyframe at the current frame.");
+
+    const auto preview_requests_before_reentry = preview_request_count;
+    workspace.setActive(false);
+    require(!workspace.isActive() && preview_clear_count == 1,
+            "Leaving Fusion must clear its temporary Viewer target.");
+    workspace.setActive(true);
+    require(workspace.isActive() && activation_request_count == 2 &&
+                activation_local_frame == 0 &&
+                preview_request_count == preview_requests_before_reentry + 1 &&
+                preview_node_id == 1,
+            "Reentering Fusion must restore its current node target at the clip start.");
+    workspace.setSelection(nullptr, {});
+    require(workspace.selectedClipId() == 0 && preview_clear_count == 2,
+            "Losing the selected clip while Fusion is active must clear the Viewer target.");
+    workspace.setSelection(&selected, {});
+    require(workspace.selectedClipId() == 42 && workspace.previewNodeId() == 2 &&
+                preview_request_count == preview_requests_before_reentry + 2 &&
+                preview_clip_id == 42 &&
+                preview_node_id == 2,
+            "A replacement clip must fall back to its Output node while Fusion is active.");
+
+    node_canvas->setSelectedNode(detached_effect_id);
+    QGraphicsItem* detached_view_button = nullptr;
+    for (auto* item : canvas->scene()->items()) {
+        if (item->data(0).toULongLong() == detached_effect_id &&
+            item->data(1).toInt() == 4) {
+            detached_view_button = item;
+            break;
+        }
+    }
+    require(detached_view_button != nullptr,
+            "The detached effect node does not expose a Viewer indicator.");
+    const auto detached_view_position = canvas->mapFromScene(
+        detached_view_button->sceneBoundingRect().center());
+    QMouseEvent detached_view_press(QEvent::MouseButtonPress,
+        QPointF(detached_view_position), Qt::LeftButton, Qt::LeftButton,
+        Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &detached_view_press);
+    QMouseEvent detached_view_release(QEvent::MouseButtonRelease,
+        QPointF(detached_view_position), Qt::LeftButton, Qt::NoButton,
+        Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &detached_view_release);
+    require(preview_request_count == preview_requests_before_reentry + 3 &&
+                preview_node_id == detached_effect_id,
+            "Selecting a node for preview did not update the active Viewer target.");
+    auto* remove_preview_node = root.findChild<QPushButton*>(
+        "fusionRemoveNodeButton");
+    require(remove_preview_node != nullptr,
+            "The selected preview node did not expose its Remove Node action.");
+    remove_preview_node->click();
+    workspace.setSelection(&selected, {});
+    require(fusion::nodes::findNode(edited, detached_effect_id) == nullptr &&
+                workspace.previewNodeId() == 2 &&
+                preview_request_count == preview_requests_before_reentry + 4 &&
+                preview_node_id == 2,
+            "Removing the preview node must restore the Output target.");
+    workspace.setActive(false);
+    require(preview_clear_count == 3,
+            "Leaving Fusion after a preview-node fallback must clear the target.");
     return 0;
 }
 

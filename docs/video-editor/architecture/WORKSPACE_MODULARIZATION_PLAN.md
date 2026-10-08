@@ -282,21 +282,33 @@ carregamento do projeto.
 
 ### Etapa 6 — Separar as responsabilidades de Fusion
 
-1. Mover as declarações de ações e atalhos específicos de Fusion para o módulo
-   desse workspace.
-2. Manter o modelo e a avaliação do grafo em `src/fusion/nodes/`; canvas e
-   interações do grafo ficam sob a fronteira de interface e controle de Fusion.
-3. Encaminhar edições do grafo pelos serviços existentes de projeto e histórico
-   da Timeline para preservar estado alterado, Undo e Redo.
-4. Manter Viewer e reprodução como serviços compartilhados. Fusion é
-   responsável pelo alvo temporário de prévia por nó e deve limpá-lo ao sair da
-   tela.
-5. Não adicionar atalhos antes que o comando visível e sua combinação padrão
-   sejam escolhidos explicitamente.
+**Estado:** implementada em 2026-10-08; conferência manual na build Release
+pendente.
 
-**Critério para concluir:** os comandos de Fusion só são ativados em Fusion,
-salvo os explicitamente compartilhados, e passam os testes de edição do grafo,
-prévia, salvar/reabrir e Undo/Redo.
+1. `FusionWorkspace` mantém o estado temporário do alvo de prévia e recebe sua
+   ativação/desativação a cada troca de página. Ao entrar, solicita pausa,
+   direciona o Viewer ao nó atual e ativa o clipe no quadro local zero; ao sair,
+   limpa o alvo. Troca ou perda de clipe/nó atualiza o alvo ou volta a Output.
+2. `MainWindow` adapta os pedidos de preview e ativação do Fusion ao
+   `PlaybackController`; a decisão sobre o nó e o ciclo de vida não fica mais na
+   janela. Viewer e reprodução continuam serviços compartilhados.
+3. As edições do grafo continuam passando pelo `EditWorkspaceController` e pelo
+   histórico único para manter persistência, dirty state, Undo e Redo. O modelo
+   e a avaliação permanecem em `src/fusion/nodes/`; canvas e interações ficam
+   sob Fusion.
+4. Os controles existentes são locais ao workspace; não havia ações globais
+   nem atalhos específicos de Fusion registrados para transferir. Nenhum atalho
+   foi adicionado.
+5. `fusion_workspace_test.cpp`, `workspace_page_switch_test.cpp` e a integração
+   de `MainWindow` cobrem ativação/limpeza, troca de alvo, fallback para Output,
+   pausa, início do clipe e preservação dos serviços compartilhados. Testes de
+   projeto, grafo, histórico e Preview/Render continuam cobrindo persistência e
+   avaliação.
+
+**Critério automatizado:** atendido pelos testes focados de Fusion, troca de
+workspace, janela principal, playback, projeto, grafo, histórico e Render.
+**Validação manual:** pendente na build Release para confirmar os indicadores,
+a prévia durante reprodução e o retorno da composição normal ao sair.
 
 ### Etapa 7 — Separar as responsabilidades de Render
 

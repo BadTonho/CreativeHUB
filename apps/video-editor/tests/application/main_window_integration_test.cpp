@@ -807,6 +807,7 @@ public:
             require(fusion_context_action_found &&
                         window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Fusion &&
+                        window.fusion_workspace_->isActive() &&
                         window.editor_session_.selection().active_clip_id ==
                             selected_clip_id && fusion_canvas != nullptr &&
                         window.editor_session_.playheadFrame() == 0 &&
@@ -817,8 +818,9 @@ public:
                     "Timeline Open in Fusion did not open the selected clip's node graph.");
             window.setWorkspacePage(ui::WorkspacePageId::Edit);
             QApplication::processEvents();
-            require(window.workspace_host_->currentPage() == ui::WorkspacePageId::Edit,
-                    "The integration test could not restore the Edit workspace after Fusion routing.");
+            require(window.workspace_host_->currentPage() == ui::WorkspacePageId::Edit &&
+                        !window.fusion_workspace_->isActive(),
+                    "The integration test could not restore Edit or deactivate Fusion after routing.");
             edit_controller->addEffectToSelectedClip(QStringLiteral("video.grayscale"));
             auto* effect_item = inspector_ui.clip_effects_list->item(0);
             require(effect_item != nullptr &&

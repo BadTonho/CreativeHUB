@@ -205,7 +205,12 @@ tasks.
   state. Automated coverage checks command ownership, existing assignments,
   focus routing, persisted Timeline preferences, and workspace visibility;
   manual command and shortcut checks in the Release build remain pending.
-  Fusion and Render ownership transfers remain planned in
+  `FusionWorkspace` now owns the temporary node-preview lifecycle and sends
+  playback requests through the existing shared controller; graph edits still
+  use Edit's project and history services. Tests cover entering/leaving Fusion,
+  clip activation at its start, preview-target changes, and fallback to Output.
+  Manual preview restoration checks in the Release build remain pending, and
+  Render ownership transfer remains planned in
   [Workspace Modularization](architecture/WORKSPACE_MODULARIZATION_PLAN.md).
 
 The detailed implemented scope and deferred behaviors are recorded in

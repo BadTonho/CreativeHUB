@@ -4,6 +4,7 @@
 #include "timeline/timeline_model.h"
 
 #include <QObject>
+#include <cstdint>
 #include <filesystem>
 #include <vector>
 
@@ -28,6 +29,8 @@ public:
                       std::vector<MediaChoice> media_choices);
     void setMediaChoices(std::vector<MediaChoice> media_choices);
     void setTimelinePlayheadFrame(std::int64_t timeline_frame);
+    void setActive(bool active);
+    [[nodiscard]] bool isActive() const noexcept { return active_; }
     [[nodiscard]] timeline::ClipId selectedClipId() const noexcept {
         return clip_id_;
     }
@@ -48,10 +51,13 @@ public:
 
 signals:
     void playbackPauseRequested();
+    void playbackClipActivationRequested(timeline::ClipId clip_id,
+                                         std::int64_t local_frame);
     void graphEditRequested(timeline::ClipId clip_id,
                             const fusion::nodes::NodeGraph& graph);
-    void nodePreviewRequested(timeline::ClipId clip_id,
-                              fusion::nodes::NodeId node_id);
+    void previewTargetRequested(timeline::ClipId clip_id,
+                                fusion::nodes::NodeId node_id);
+    void previewTargetCleared();
 
 private:
     QWidget* viewer_title_ = nullptr;
@@ -67,7 +73,9 @@ private:
     std::int64_t clip_timeline_start_frame_ = 0;
     std::int64_t clip_duration_frames_ = 0;
     std::int64_t local_frame_ = 0;
+    bool active_ = false;
     bool refreshing_ = false;
+    void publishPreviewTarget();
     void refreshCanvas();
     void refreshInspector();
     void refreshAnimatedControls();

@@ -406,9 +406,25 @@ void MainWindow::createWorkspace() {
         this, [this] {
             if (playback_controller_ != nullptr) playback_controller_->pause();
         });
-    connect(fusion_workspace_, &ui::FusionWorkspace::nodePreviewRequested,
-        this, [this](timeline::ClipId, fusion::nodes::NodeId) {
-            refreshFusionNodePreviewTarget();
+    connect(fusion_workspace_, &ui::FusionWorkspace::previewTargetRequested,
+        this, [this](timeline::ClipId clip_id, fusion::nodes::NodeId node_id) {
+            if (playback_controller_ != nullptr) {
+                playback_controller_->setFusionNodePreviewTarget(
+                    playback::FusionNodePreviewTarget{clip_id, node_id});
+            }
+        });
+    connect(fusion_workspace_, &ui::FusionWorkspace::previewTargetCleared,
+        this, [this] {
+            if (playback_controller_ != nullptr)
+                playback_controller_->setFusionNodePreviewTarget(std::nullopt);
+        });
+    connect(fusion_workspace_,
+        &ui::FusionWorkspace::playbackClipActivationRequested,
+        this, [this](timeline::ClipId clip_id, std::int64_t local_frame) {
+            if (playback_controller_ != nullptr) {
+                static_cast<void>(playback_controller_->activateClip(
+                    clip_id, local_frame, false));
+            }
         });
     connect(edit_controller, &ui::EditWorkspaceController::timelineSelectionPresentationChanged,
         this, &MainWindow::refreshFusionSelection);
@@ -508,9 +524,6 @@ void MainWindow::refreshFusionSelection() {
             selected = &model.tracks()[location->track_index].clips[location->clip_index];
     }
     fusion_workspace_->setSelection(selected, std::move(choices));
-    if (workspace_host_ != nullptr &&
-        workspace_host_->currentPage() == ui::WorkspacePageId::Fusion)
-        refreshFusionNodePreviewTarget();
 }
 
 void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
@@ -524,22 +537,8 @@ void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
         shortcut_manager_->setWorkspace(page);
     }
     refreshWorkspaceMenuVisibility();
-    if (playback_controller_ == nullptr) return;
-    if (page != ui::WorkspacePageId::Fusion) {
-        playback_controller_->setFusionNodePreviewTarget(std::nullopt);
-        return;
-    }
-
-    if (fusion_workspace_ == nullptr || fusion_workspace_->selectedClipId() == 0) {
-        playback_controller_->setFusionNodePreviewTarget(std::nullopt);
-        return;
-    }
-
-    const auto clip_id = fusion_workspace_->selectedClipId();
-    playback_controller_->pause();
-    playback_controller_->setFusionNodePreviewTarget(
-        playback::FusionNodePreviewTarget{clip_id, fusion_workspace_->previewNodeId()});
-    static_cast<void>(playback_controller_->activateClip(clip_id, 0, false));
+    if (fusion_workspace_ != nullptr)
+        fusion_workspace_->setActive(page == ui::WorkspacePageId::Fusion);
 }
 
 void MainWindow::registerWorkspaceMenuAction(
@@ -576,19 +575,6 @@ void MainWindow::refreshWorkspaceMenuVisibility() {
             refreshMenuVisibility(action->menu());
         }
     }
-}
-
-void MainWindow::refreshFusionNodePreviewTarget() {
-    if (playback_controller_ == nullptr) return;
-    if (workspace_host_ == nullptr ||
-        workspace_host_->currentPage() != ui::WorkspacePageId::Fusion ||
-        fusion_workspace_ == nullptr || fusion_workspace_->selectedClipId() == 0) {
-        playback_controller_->setFusionNodePreviewTarget(std::nullopt);
-        return;
-    }
-    playback_controller_->setFusionNodePreviewTarget(
-        playback::FusionNodePreviewTarget{
-            fusion_workspace_->selectedClipId(), fusion_workspace_->previewNodeId()});
 }
 
 void MainWindow::showSettingsDialog() {

@@ -64,6 +64,41 @@ int main(int argc, char* argv[]) {
         timeline->setObjectName("timelinePage");
         auto* fusion_workspace = new ui::FusionWorkspace(&window);
         fusion_workspace->createPanels(&window);
+        timeline::TimelineClip fusion_clip;
+        fusion_clip.clip_id = 77;
+        fusion_clip.kind = timeline::ClipKind::Video;
+        fusion_clip.timeline_start_frame = 48;
+        fusion_clip.timeline_duration_frames = 120;
+        fusion_workspace->setSelection(&fusion_clip, {});
+        int preview_target_requests = 0;
+        int preview_target_clears = 0;
+        int playback_pause_requests = 0;
+        int clip_activation_requests = 0;
+        timeline::ClipId activated_clip_id = 0;
+        std::int64_t activated_local_frame = -1;
+        fusion::nodes::NodeId targeted_node_id = 0;
+        QObject::connect(fusion_workspace,
+            &ui::FusionWorkspace::previewTargetRequested,
+            [&preview_target_requests, &activated_clip_id, &targeted_node_id](
+                timeline::ClipId clip_id, fusion::nodes::NodeId node_id) {
+                ++preview_target_requests;
+                activated_clip_id = clip_id;
+                targeted_node_id = node_id;
+            });
+        QObject::connect(fusion_workspace,
+            &ui::FusionWorkspace::previewTargetCleared,
+            [&preview_target_clears] { ++preview_target_clears; });
+        QObject::connect(fusion_workspace,
+            &ui::FusionWorkspace::playbackPauseRequested,
+            [&playback_pause_requests] { ++playback_pause_requests; });
+        QObject::connect(fusion_workspace,
+            &ui::FusionWorkspace::playbackClipActivationRequested,
+            [&clip_activation_requests, &activated_clip_id, &activated_local_frame](
+                timeline::ClipId clip_id, std::int64_t local_frame) {
+                ++clip_activation_requests;
+                activated_clip_id = clip_id;
+                activated_local_frame = local_frame;
+            });
         project::ProjectDocument project_snapshot;
         project::ProjectTrack project_track;
         project_track.track_id = 41;
@@ -121,7 +156,10 @@ int main(int argc, char* argv[]) {
             &window);
         std::vector<ui::WorkspacePageId> page_changes;
         transition_controller.setPageChangedHandler(
-            [&page_changes](ui::WorkspacePageId page) { page_changes.push_back(page); });
+            [&page_changes, fusion_workspace](ui::WorkspacePageId page) {
+                fusion_workspace->setActive(page == ui::WorkspacePageId::Fusion);
+                page_changes.push_back(page);
+            });
         transition_controller.setPage(ui::WorkspacePageId::Edit);
 
         window.resize(1400, 720);
@@ -175,6 +213,11 @@ int main(int argc, char* argv[]) {
         require(viewer_title != nullptr && viewer_title->isVisible() &&
                     viewer_title == fusion_workspace->viewerTitle(),
                 "Fusion must label the existing Preview as Viewer.");
+        require(fusion_workspace->isActive() && preview_target_requests == 1 &&
+                    activated_clip_id == 77 && targeted_node_id == 2 &&
+                    playback_pause_requests == 1 && clip_activation_requests == 1 &&
+                    activated_local_frame == 0 && preview_target_clears == 0,
+                "Entering Fusion must request its Output preview and activate the clip at frame zero.");
 
         const std::array<QDockWidget*, 7> workspace_docks{
             bins_dock,
@@ -207,6 +250,8 @@ int main(int argc, char* argv[]) {
                 "Render must show the same shared Preview widget.");
         require(viewer_title->isHidden(),
                 "Render must hide the Viewer title.");
+        require(!fusion_workspace->isActive() && preview_target_clears == 1,
+                "Leaving Fusion for Render must clear its temporary preview target.");
         require(workspace_host->lowerWorkspacePanel()->currentWidget() == timeline,
                 "Render must keep the shared Timeline page in the lower workspace dock.");
         auto* render_splitter = render_workspace->splitter();
@@ -420,6 +465,10 @@ int main(int argc, char* argv[]) {
         application.processEvents();
         require(buttons.fusion->isChecked() && !buttons.render->isChecked(),
                 "Returning from Render to Fusion must select Fusion only.");
+        require(fusion_workspace->isActive() && preview_target_requests == 2 &&
+                    playback_pause_requests == 2 && clip_activation_requests == 2 &&
+                    activated_local_frame == 0,
+                "Returning to Fusion must reactivate its preview at the clip start.");
         require(workspace_host->currentPage() == ui::WorkspacePageId::Fusion &&
                     workspace_host->previewWidget() == preview && preview->isVisible(),
                 "Returning to Fusion must restore the shared Preview.");
@@ -445,6 +494,8 @@ int main(int argc, char* argv[]) {
         require(!page_changes.empty() &&
                     page_changes.back() == ui::WorkspacePageId::Edit,
                 "Leaving Fusion did not report the Edit page change.");
+        require(!fusion_workspace->isActive() && preview_target_clears == 2,
+                "Returning to Edit must clear Fusion's temporary preview target.");
         require(buttons.edit->isChecked() && !buttons.fusion->isChecked() &&
                     !buttons.render->isChecked(),
                 "Returning to Edit must restore the exclusive button state.");

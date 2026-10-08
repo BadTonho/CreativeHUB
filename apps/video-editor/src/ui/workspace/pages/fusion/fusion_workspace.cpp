@@ -136,7 +136,7 @@ void FusionWorkspace::createPanels(QWidget* parent) {
             preview_node_id_ == id) return;
         preview_node_id_ = id;
         refreshCanvas();
-        emit nodePreviewRequested(clip_id_, preview_node_id_);
+        publishPreviewTarget();
     });
     node_canvas->setPositionChangedHandler([this](fusion::nodes::NodeId id, double x, double y) {
         if (refreshing_) return;
@@ -271,6 +271,35 @@ void FusionWorkspace::setSelection(const timeline::TimelineClip* clip,
             ? previous_preview_node_id : output_id;
     refreshCanvas();
     refreshInspector();
+    if (active_) publishPreviewTarget();
+}
+
+void FusionWorkspace::setActive(bool active) {
+    if (active_ == active) return;
+    active_ = active;
+    if (!active_) {
+        emit previewTargetCleared();
+        return;
+    }
+
+    if (clip_id_ == 0 ||
+        fusion::nodes::findNode(graph_, preview_node_id_) == nullptr) {
+        emit previewTargetCleared();
+        return;
+    }
+
+    emit playbackPauseRequested();
+    publishPreviewTarget();
+    emit playbackClipActivationRequested(clip_id_, 0);
+}
+
+void FusionWorkspace::publishPreviewTarget() {
+    if (!active_ || clip_id_ == 0 ||
+        fusion::nodes::findNode(graph_, preview_node_id_) == nullptr) {
+        emit previewTargetCleared();
+        return;
+    }
+    emit previewTargetRequested(clip_id_, preview_node_id_);
 }
 
 void FusionWorkspace::setTimelinePlayheadFrame(std::int64_t timeline_frame) {
