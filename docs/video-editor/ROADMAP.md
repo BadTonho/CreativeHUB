@@ -242,10 +242,11 @@ and required manual validation pass.
 - [-] Fusion graph and node-animation code, tests, and documentation are in
   place. The focused animation, graph, Timeline, project, Fusion workspace, and
   Preview/Render tests passed on 2026-10-08. The canonical Windows Release app
-  was relinked at `build/apps/video-editor/Release/creative-suite-video-editor.exe`
-  (2026-10-08 00:24:26); MSBuild's `windeployqt` post-build step still reports
-  that it cannot query `qtpaths` (3221225794). Manual checks of animated
-  playback, save/reopen, Undo/Redo, and Timeline restoration remain pending.
+  build and Qt runtime deployment completed successfully on 2026-10-08. The
+  executable is `build/apps/video-editor/Release/creative-suite-video-editor.exe`
+  (last modified 2026-10-08 00:24:26) and launched successfully. Manual checks
+  of animated playback, save/reopen, Undo/Redo, and Timeline restoration remain
+  pending.
 - [x] Repeatedly migrate the same long-lived `.csp` project when advancing
   persisted-format versions. The owner reports doing this since the application
   was created and says the migrations have worked.

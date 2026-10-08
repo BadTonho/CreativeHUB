@@ -1081,8 +1081,10 @@ passed. Coverage includes scalar interpolation and editing, Transform and
 Brightness node evaluation, clip split/trim/frame-rate conversion, v22
 round-trip with v20/v21 compatibility, Inspector diamonds and playhead updates,
 and Preview/Render pixel parity at matching Timeline frames. The canonical
-Release app linked at
-`build/apps/video-editor/Release/creative-suite-video-editor.exe` (last
-modified 2026-10-08 00:24:26). MSBuild returned an error after linking because
-`windeployqt` could not query `qtpaths` (exit code `3221225794`). Manual animated
-playback, save/reopen, Undo/Redo, and Timeline conversion checks remain pending.
+Release build and Qt runtime deployment completed successfully on 2026-10-08.
+The executable at `build/apps/video-editor/Release/creative-suite-video-editor.exe`
+was last modified 2026-10-08 00:24:26 and launched successfully. An initial
+restricted build attempt could not start `qtpaths` from `windeployqt`; rerunning
+the build outside that process restriction completed the deployment. Manual
+animated playback, save/reopen, Undo/Redo, and Timeline conversion checks
+remain pending.
