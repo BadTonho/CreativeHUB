@@ -11,6 +11,7 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 | Product distribution | [Product and Distribution Architecture (Portuguese planning document)](../PRODUCT_DISTRIBUTION.md) | Provisional boundaries for the editors, future Hub, integrated and standalone recovery, and GitHub-based releases |
 | Repository | [Repository Structure](architecture/REPOSITORY_STRUCTURE.md) | Applications, modules, shared libraries, and folder boundaries |
 | UI | [UI Boundary](architecture/UI.md) | Qt Widgets, desktop interaction, and UI-only responsibilities |
+| Workspaces | [Workspace Modularization Plan (Portuguese maintainer planning document)](architecture/WORKSPACE_MODULARIZATION_PLAN.md) | Provisional staged plan for workspace-owned functions and shortcuts |
 | Media | [Media Boundary](architecture/MEDIA.md) | FFmpeg probing, decoding, playback sessions, and ownership |
 | Timeline | [Timeline Boundary](architecture/TIMELINE.md) | Timeline model, visual timeline, seeking, and media insertion |
 | Rendering | [Rendering Boundary](architecture/RENDERING.md) | CPU default, shared experimental GPU preview/export, texture delivery, 4K geometry and resource ownership |
