@@ -8,7 +8,7 @@ An open-source, lightweight, cross-platform creative ecosystem for **video editi
 
 ## The Vision & Core Proposal
 
-Creative tools are essential to modern storytelling, communication, and digital art. However, today's dominant proprietary creative suites (such as Adobe Creative Cloud) increasingly burden creators with:
+Creative tools are essential to modern storytelling, communication, and digital art. However, today's dominant proprietary creative suites increasingly burden creators with:
 
 - **Aggressive Subscription Walls:** Expensive recurring licenses that lock access to your own work if a payment lapses.
 - **Resource Bloat & Sluggish Runtimes:** Heavy background telemetry daemons, constant DRM checks, and memory-hungry web-wrapper shells (Electron) that consume gigabytes of RAM before any project even loads.
