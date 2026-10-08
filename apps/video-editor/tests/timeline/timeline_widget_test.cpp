@@ -1015,6 +1015,20 @@ int main(int argc, char* argv[]) {
         empty_group_widget.setTracks({empty_group_audio});
         empty_group_widget.show();
         application.processEvents();
+
+        timeline::TimelineWidget compact_groups_widget;
+        compact_groups_widget.resize(900, 500);
+        compact_groups_widget.setTracks({top_track, empty_group_audio});
+        compact_groups_widget.show();
+        application.processEvents();
+        const auto compact_video_row = compact_groups_widget.trackBounds(0);
+        const auto compact_splitter = compact_groups_widget.trackSplitterRect();
+        const auto compact_audio_row = compact_groups_widget.trackBounds(1);
+        require(std::abs(compact_splitter.top() - compact_video_row.bottom()) < 0.001 &&
+                    std::abs(compact_audio_row.top() - compact_splitter.bottom()) < 0.001,
+                "The default layout left a large empty band between short Video and Audio groups.");
+        compact_groups_widget.close();
+
         timeline::TrackKind requested_group = timeline::TrackKind::Audio;
         int group_drop_count = 0;
         QObject::connect(

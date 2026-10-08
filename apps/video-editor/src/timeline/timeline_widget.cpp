@@ -852,7 +852,41 @@ TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
         ? minimum_height / available_height : 0.5;
     const auto ratio = std::clamp(
         track_group_split_ratio_, minimum_ratio, 1.0 - minimum_ratio);
-    const auto video_height = available_height * ratio;
+    auto video_height = available_height * ratio;
+    auto audio_height = available_height - video_height;
+
+    // At the untouched 50/50 default, fit each pane to its rows when possible
+    // instead of leaving a large empty band between the Video and Audio rows.
+    // If the combined rows overflow the available height, the unused space in
+    // the smaller group is given to the group that needs to scroll. Once the
+    // user resizes the divider, honor the saved ratio as an explicit layout.
+    if (std::abs(track_group_split_ratio_ - 0.5) < 0.0001) {
+        const auto group_content_height = [this, available_height](TrackKind kind) {
+            const auto count = static_cast<double>(std::count_if(
+                tracks_.begin(), tracks_.end(), [kind](const TimelineTrack& track) {
+                    return track.kind == kind;
+                }));
+            if (count == 0.0) {
+                return std::min(
+                    std::max(kMinimumTrackRowHeight, track_row_height_),
+                    available_height / 2.0);
+            }
+            return count * track_row_height_ +
+                std::max(0.0, count - 1.0) * TimelineGeometry::row_gap;
+        };
+        const auto video_content_height = group_content_height(TrackKind::Video);
+        const auto audio_content_height = group_content_height(TrackKind::Audio);
+        if (video_content_height + audio_content_height <= available_height) {
+            video_height = video_content_height;
+            audio_height = audio_content_height;
+        } else if (video_content_height < video_height) {
+            video_height = video_content_height;
+            audio_height = available_height - video_height;
+        } else if (audio_content_height < audio_height) {
+            audio_height = audio_content_height;
+            video_height = available_height - audio_height;
+        }
+    }
     const auto audio_top = TimelineGeometry::top_margin + video_height +
         track_group_splitter_height;
     const auto width = std::max(
@@ -874,7 +908,7 @@ TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
         TimelineGeometry::left_margin,
         audio_top,
         width,
-        std::max(0.0, static_cast<double>(height()) - bottom_margin - audio_top));
+        audio_height);
     layout.video_scroll_offset = video_scroll_offset_;
     layout.audio_scroll_offset = audio_scroll_offset_;
     return layout;

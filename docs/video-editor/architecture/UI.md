@@ -167,7 +167,9 @@ horizontal zoom. Dragging the centered 120-by-18-pixel divider grip scrolls
 Video and Audio together by the same delta, clamped to each pane's range;
 scrollbars and wheel scrolling remain independent. Dragging either divider
 edge adjusts the pane heights. The grip highlights on hover and while dragging.
-Its 50/50 default and saved local preference use
+At the untouched 50/50 default, each pane fits its rows when possible so Audio
+tracks sit directly after the Video group; overflow uses the available height,
+and an explicitly resized divider uses its saved ratio. The preference uses
 `timeline/track_group_split_ratio` in `QSettings`. Scroll offsets remain
 temporary view state and are not stored in the project. The two fixed
 track-header groups scroll with their respective panes.
