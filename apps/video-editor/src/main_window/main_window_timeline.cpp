@@ -279,22 +279,6 @@ void MainWindow::updateHistoryActions() {
         : timeline_command_service_.canRedo();
     if (undo_action_ != nullptr) undo_action_->setEnabled(can_undo);
     if (redo_action_ != nullptr) redo_action_->setEnabled(can_redo);
-    updateAttributeClipboardActions();
-}
-
-void MainWindow::updateAttributeClipboardActions() {
-    auto* controller = edit_workspace_ != nullptr
-        ? edit_workspace_->controller()
-        : nullptr;
-    const bool available = controller != nullptr && !project_load_pending_;
-    if (copy_attributes_action_ != nullptr) {
-        copy_attributes_action_->setEnabled(
-            available && controller->canCopySelectedClipAttributes());
-    }
-    if (paste_attributes_action_ != nullptr) {
-        paste_attributes_action_->setEnabled(
-            available && controller->canPasteCopiedClipAttributes());
-    }
 }
 
 void MainWindow::applyTimelineEditResult(
@@ -358,7 +342,6 @@ void MainWindow::updateTimelineState() {
         edit_workspace_->controller()->updateTimelineState();
         synchronizeActiveTimelineSelection();
         requestTimelineAudioWaveforms();
-        updateAttributeClipboardActions();
         return;
     }
     synchronizeActiveTimelineSelection();
@@ -367,7 +350,6 @@ void MainWindow::updateTimelineState() {
         editUi().timeline->setTracks(timeline_model_.tracks());
     }
     requestTimelineAudioWaveforms();
-    updateAttributeClipboardActions();
 }
 
 void MainWindow::requestTimelineAudioWaveforms() {

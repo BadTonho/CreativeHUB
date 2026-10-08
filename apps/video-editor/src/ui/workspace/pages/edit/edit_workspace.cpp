@@ -1,4 +1,6 @@
 #include "ui/workspace/pages/edit/edit_workspace.h"
+#include "ui/workspace/pages/edit/edit_workspace_actions.h"
+#include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
 #include "timeline/timeline_track_header_overlay.h"
 #include "timeline/timeline_zoom.h"
@@ -37,6 +39,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <utility>
 
 namespace ui {
 
@@ -145,10 +148,16 @@ EditWorkspace::EditWorkspace(
     application::EditorSession& session,
     application::TimelineCommandService& command_service,
     QWidget* preview_widget,
+    settings::ShortcutManager& shortcut_manager,
+    QWidget* command_dialog_parent,
+    std::function<void(const QString&)> status_message,
     QObject* parent)
     : QObject(parent),
       preview_widget_(preview_widget),
-      controller_(new EditWorkspaceController(session, command_service, this)) {}
+      controller_(new EditWorkspaceController(session, command_service, this)),
+      shortcut_manager_(shortcut_manager),
+      command_dialog_parent_(command_dialog_parent),
+      status_message_(std::move(status_message)) {}
 
 void EditWorkspace::createPanels(QWidget* parent) {
     inspector_panel_ = createInspector(parent);
@@ -156,8 +165,33 @@ void EditWorkspace::createPanels(QWidget* parent) {
     ui_.inspector_panel = inspector_panel_;
     ui_.timeline_panel = timeline_panel_;
     controller_->setUi(ui_);
+    actions_ = new EditWorkspaceActions(
+        *controller_, ui_, shortcut_manager_, command_dialog_parent_,
+        status_message_, this);
     controller_->updateTimelineState();
     controller_->updateInspector();
+}
+
+const std::vector<QAction*>& EditWorkspace::menuActions() const noexcept {
+    static const std::vector<QAction*> empty;
+    return actions_ != nullptr ? actions_->menuActions() : empty;
+}
+
+const std::vector<QAction*>& EditWorkspace::shortcutOnlyActions() const noexcept {
+    static const std::vector<QAction*> empty;
+    return actions_ != nullptr ? actions_->shortcutOnlyActions() : empty;
+}
+
+void EditWorkspace::setProjectLoading(bool loading) {
+    if (actions_ != nullptr) actions_->setProjectLoading(loading);
+}
+
+void EditWorkspace::setPlaybackActivationLoading(bool loading) {
+    if (actions_ != nullptr) actions_->setPlaybackActivationLoading(loading);
+}
+
+void EditWorkspace::refreshCommandAvailability() {
+    if (actions_ != nullptr) actions_->refreshAvailability();
 }
 
 QWidget* EditWorkspace::createInspector(QWidget* parent) {

@@ -199,8 +199,14 @@ tasks.
   and Edit-only commands are hidden elsewhere. Empty menus and separators are
   pruned without changing action enablement. Automated workspace-switch
   coverage is in place; manual appearance and shortcut checks remain pending.
-  The gradual transfer of action ownership from `MainWindow` remains planned
-  in [Workspace Modularization](architecture/WORKSPACE_MODULARIZATION_PLAN.md).
+  Edit-only Timeline commands now belong to `EditWorkspaceActions`, including
+  their handlers, shortcut registrations, and availability rules. `MainWindow`
+  mounts those actions and forwards project-loading and playback-activation
+  state. Automated coverage checks command ownership, existing assignments,
+  focus routing, persisted Timeline preferences, and workspace visibility;
+  manual command and shortcut checks in the Release build remain pending.
+  Fusion and Render ownership transfers remain planned in
+  [Workspace Modularization](architecture/WORKSPACE_MODULARIZATION_PLAN.md).
 
 The detailed implemented scope and deferred behaviors are recorded in
 [Current Scope and Non-goals](architecture/SCOPE.md). The active `.csp` schema

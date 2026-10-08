@@ -96,7 +96,12 @@ void refreshMenuVisibility(QMenu* menu) {
 void MainWindow::createWorkspace() {
     preview_widget_ = new PreviewWidget(this);
     edit_workspace_ = new ui::EditWorkspace(
-        editor_session_, timeline_command_service_, preview_widget_, this);
+        editor_session_, timeline_command_service_, preview_widget_,
+        *shortcut_manager_, this,
+        [this](const QString& message) {
+            statusBar()->showMessage(message);
+        },
+        this);
     connect(
         edit_workspace_->controller(),
         &ui::EditWorkspaceController::historyStateChanged,
@@ -175,17 +180,6 @@ void MainWindow::createWorkspace() {
         &ui::EditWorkspaceController::monitorVolumeChangedRequested,
         this,
         &MainWindow::applyMonitorVolumePercent);
-    connect(
-        edit_workspace_->controller(),
-        &ui::EditWorkspaceController::razorToolStateChanged,
-        this,
-        [this](bool enabled) {
-            if (razor_tool_action_ != nullptr &&
-                razor_tool_action_->isChecked() != enabled) {
-                const QSignalBlocker blocker(razor_tool_action_);
-                razor_tool_action_->setChecked(enabled);
-            }
-        });
     connect(
         edit_workspace_->controller(),
         &ui::EditWorkspaceController::timelineImageClipEditRequested,
@@ -305,11 +299,6 @@ void MainWindow::createWorkspace() {
         &ui::EditWorkspaceController::timelineSelectionPresentationChanged,
         this,
         &MainWindow::synchronizeActiveTimelineSelection);
-    connect(
-        edit_workspace_->controller(),
-        &ui::EditWorkspaceController::timelineSelectionPresentationChanged,
-        this,
-        &MainWindow::updateAttributeClipboardActions);
     connect(
         edit_workspace_->controller(),
         &ui::EditWorkspaceController::refreshPlaybackUiRequested,
@@ -489,9 +478,6 @@ void MainWindow::createWorkspace() {
     connect(edit_workspace_->controller(),
             &ui::EditWorkspaceController::effectTargetAvailabilityChanged,
             function_palette_, &ui::FunctionPalette::setEffectTargetAvailable);
-    connect(edit_workspace_->controller(),
-            &ui::EditWorkspaceController::effectTargetAvailabilityChanged,
-            this, &MainWindow::updateAttributeClipboardActions);
     function_palette_->setEffectTargetAvailable(
         edit_workspace_->controller()->selectedClipSupportsEffects());
 
@@ -769,217 +755,17 @@ void MainWindow::createMenus() {
         static_cast<void>(edit_workspace_->controller()->redo());
     });
     edit_menu->addSeparator();
-    auto* delete_clip_action = edit_menu->addAction("Delete Selected Clip");
-    register_menu_action(delete_clip_action, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(delete_clip_action);
-    delete_clip_action->setShortcut(QKeySequence(Qt::Key_Delete));
-    delete_clip_action->setShortcutContext(Qt::WindowShortcut);
-    delete_clip_action_ = delete_clip_action;
-    register_shortcut(
-        QStringLiteral("edit.delete_clip"),
-        QStringLiteral("Delete Selected Clip"), delete_clip_action_,
-        settings::ShortcutScope::Edit,
-        QStringLiteral("Edit workspace"));
-    delete_clip_action_->setEnabled(false);
-    connect(delete_clip_action_, &QAction::triggered, this, [this]() {
-        auto* focus = QApplication::focusWidget();
-        if (auto* line_edit = qobject_cast<QLineEdit*>(focus)) {
-            line_edit->del();
-            return;
+    for (auto* action : edit_workspace_->menuActions()) {
+        if (action == nullptr) {
+            edit_menu->addSeparator();
+            continue;
         }
-        if (auto* text_edit = qobject_cast<QTextEdit*>(focus)) {
-            if (text_edit->isReadOnly()) return;
-            auto cursor = text_edit->textCursor();
-            cursor.deleteChar();
-            text_edit->setTextCursor(cursor);
-            return;
-        }
-        if (auto* plain_text_edit = qobject_cast<QPlainTextEdit*>(focus)) {
-            if (plain_text_edit->isReadOnly()) return;
-            auto cursor = plain_text_edit->textCursor();
-            cursor.deleteChar();
-            plain_text_edit->setTextCursor(cursor);
-            return;
-        }
-        if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
-            edit_workspace_->controller()->deleteActiveTimelineClip();
-        }
-    });
-    ripple_delete_clip_action_ = edit_menu->addAction("Ripple Delete Selected Clip");
-    register_menu_action(ripple_delete_clip_action_, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(ripple_delete_clip_action_);
-    ripple_delete_clip_action_->setObjectName(
-        QStringLiteral("edit.ripple_delete_clip"));
-    ripple_delete_clip_action_->setShortcut(QKeySequence("Shift+Delete"));
-    ripple_delete_clip_action_->setShortcutContext(Qt::WindowShortcut);
-    register_shortcut(
-        QStringLiteral("edit.ripple_delete_clip"),
-        QStringLiteral("Ripple Delete Selected Clip"),
-        ripple_delete_clip_action_, settings::ShortcutScope::Edit,
-        QStringLiteral("Edit workspace"));
-    ripple_delete_clip_action_->setEnabled(false);
-    connect(ripple_delete_clip_action_, &QAction::triggered, this, [this]() {
-        auto* focus = QApplication::focusWidget();
-        if (auto* line_edit = qobject_cast<QLineEdit*>(focus)) {
-            line_edit->cut();
-            return;
-        }
-        if (auto* text_edit = qobject_cast<QTextEdit*>(focus)) {
-            text_edit->cut();
-            return;
-        }
-        if (auto* plain_text_edit = qobject_cast<QPlainTextEdit*>(focus)) {
-            plain_text_edit->cut();
-            return;
-        }
-        if (edit_workspace_ != nullptr &&
-            edit_workspace_->controller() != nullptr) {
-            edit_workspace_->controller()->rippleDeleteActiveTimelineClip();
-        }
-    });
-    auto* split_clip_action = edit_menu->addAction("Split Clip at Playhead");
-    register_menu_action(split_clip_action, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(split_clip_action);
-    split_clip_action->setShortcut(QKeySequence("Ctrl+K"));
-    split_clip_action->setShortcutContext(Qt::WindowShortcut);
-    register_shortcut(
-        QStringLiteral("edit.split_clip"),
-        QStringLiteral("Split Clip at Playhead"), split_clip_action,
-        settings::ShortcutScope::Edit,
-        QStringLiteral("Edit workspace"));
-    connect(
-        split_clip_action,
-        &QAction::triggered,
-        edit_workspace_->controller(),
-        &ui::EditWorkspaceController::splitActiveClipAtPlayhead);
-    copy_attributes_action_ = edit_menu->addAction("Copy Attributes");
-    register_menu_action(copy_attributes_action_, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(copy_attributes_action_);
-    copy_attributes_action_->setObjectName(QStringLiteral("edit.copy_attributes"));
-    copy_attributes_action_->setShortcut(QKeySequence("Ctrl+C"));
-    copy_attributes_action_->setShortcutContext(Qt::WindowShortcut);
-    register_shortcut(
-        QStringLiteral("edit.copy_attributes"), QStringLiteral("Copy Attributes"),
-        copy_attributes_action_, settings::ShortcutScope::Edit,
-        QStringLiteral("Edit workspace"));
-    connect(copy_attributes_action_, &QAction::triggered, this, [this]() {
-        auto* focus = QApplication::focusWidget();
-        if (auto* line_edit = qobject_cast<QLineEdit*>(focus)) {
-            line_edit->copy();
-            return;
-        }
-        if (auto* text_edit = qobject_cast<QTextEdit*>(focus)) {
-            text_edit->copy();
-            return;
-        }
-        if (auto* plain_text_edit = qobject_cast<QPlainTextEdit*>(focus)) {
-            plain_text_edit->copy();
-            return;
-        }
-        if (edit_workspace_ == nullptr || edit_workspace_->controller() == nullptr) return;
-        edit_workspace_->controller()->copySelectedClipAttributes();
-        updateAttributeClipboardActions();
-    });
-    paste_attributes_action_ = edit_menu->addAction("Paste Attributes");
-    register_menu_action(paste_attributes_action_, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(paste_attributes_action_);
-    paste_attributes_action_->setObjectName(QStringLiteral("edit.paste_attributes"));
-    paste_attributes_action_->setShortcut(QKeySequence("Ctrl+Shift+V"));
-    paste_attributes_action_->setShortcutContext(Qt::WindowShortcut);
-    register_shortcut(
-        QStringLiteral("edit.paste_attributes"), QStringLiteral("Paste Attributes"),
-        paste_attributes_action_, settings::ShortcutScope::Edit,
-        QStringLiteral("Edit workspace"));
-    connect(paste_attributes_action_, &QAction::triggered, this, [this]() {
-        if (edit_workspace_ == nullptr || edit_workspace_->controller() == nullptr) return;
-        edit_workspace_->controller()->showPasteCopiedClipAttributesDialog(this);
-        updateAttributeClipboardActions();
-    });
-    edit_menu->addSeparator();
-    add_video_track_action_ = edit_menu->addAction("Add Video Track");
-    register_menu_action(add_video_track_action_, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(add_video_track_action_);
-    connect(add_video_track_action_, &QAction::triggered, this, [this]() {
-        edit_workspace_->controller()->promptAddVideoTrack(this);
-    });
-    rename_track_action_ = edit_menu->addAction("Rename Track");
-    register_menu_action(rename_track_action_, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(rename_track_action_);
-    connect(rename_track_action_, &QAction::triggered, this, [this]() {
-        edit_workspace_->controller()->promptRenameActiveTrack(this);
-    });
-    move_track_up_action_ = edit_menu->addAction("Move Track Up");
-    register_menu_action(move_track_up_action_, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(move_track_up_action_);
-    connect(move_track_up_action_, &QAction::triggered, this, [this]() {
-        edit_workspace_->controller()->moveActiveTrack(-1);
-    });
-    move_track_down_action_ = edit_menu->addAction("Move Track Down");
-    register_menu_action(move_track_down_action_, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(move_track_down_action_);
-    connect(move_track_down_action_, &QAction::triggered, this, [this]() {
-        edit_workspace_->controller()->moveActiveTrack(1);
-    });
-    remove_track_action_ = edit_menu->addAction("Remove Track");
-    register_menu_action(remove_track_action_, settings::ShortcutScope::Edit);
-    disableDuringProjectLoad(remove_track_action_);
-    connect(remove_track_action_, &QAction::triggered, this, [this]() {
-        edit_workspace_->controller()->removeActiveTrack();
-    });
-    auto* razor_tool_action = edit_menu->addAction("Blade Tool");
-    register_menu_action(razor_tool_action, settings::ShortcutScope::Edit);
-    razor_tool_action->setCheckable(true);
-    razor_tool_action_ = razor_tool_action;
-    connect(razor_tool_action_, &QAction::toggled, this, [this](bool enabled) {
-        if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
-            edit_workspace_->controller()->setRazorMode(enabled);
-        }
-    });
-    edit_menu->addSeparator();
-    require_alt_to_move_action_ = edit_menu->addAction("Require Alt to Move Clips");
-    register_menu_action(require_alt_to_move_action_, settings::ShortcutScope::Edit);
-    require_alt_to_move_action_->setCheckable(true);
-    QSettings settings;
-    const bool require_alt_to_move = settings.value(
-        "timeline/require_alt_to_move", false).toBool();
-    require_alt_to_move_action_->setChecked(require_alt_to_move);
-    if (editUi().timeline != nullptr) {
-        editUi().timeline->setMoveRequiresAlt(require_alt_to_move);
+        edit_menu->addAction(action);
+        register_menu_action(action, settings::ShortcutScope::Edit);
     }
-    connect(require_alt_to_move_action_, &QAction::toggled, this, [this](bool enabled) {
-        QSettings settings;
-        settings.setValue("timeline/require_alt_to_move", enabled);
-        if (editUi().timeline != nullptr) editUi().timeline->setMoveRequiresAlt(enabled);
-        statusBar()->showMessage(enabled
-            ? "Alt is required to move timeline clips."
-            : "Timeline clips can be moved by dragging.");
-    });
-
-    move_playhead_on_clip_selection_action_ = edit_menu->addAction(
-        "Move Playhead to Selected Clip Start");
-    register_menu_action(
-        move_playhead_on_clip_selection_action_, settings::ShortcutScope::Edit);
-    move_playhead_on_clip_selection_action_->setCheckable(true);
-    QSettings timeline_selection_settings;
-    const bool move_playhead_on_selection = timeline_selection_settings.value(
-        "timeline/move_playhead_on_clip_selection", false).toBool();
-    move_playhead_on_clip_selection_action_->setChecked(
-        move_playhead_on_selection);
-    connect(
-        move_playhead_on_clip_selection_action_,
-        &QAction::toggled,
-        this,
-        [this](bool enabled) {
-            QSettings settings;
-            settings.setValue(
-                "timeline/move_playhead_on_clip_selection", enabled);
-            if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
-                edit_workspace_->controller()->setMovePlayheadOnClipSelection(enabled);
-            }
-        });
-    edit_workspace_->controller()->setMovePlayheadOnClipSelection(
-        move_playhead_on_clip_selection_action_->isChecked());
-
+    for (auto* action : edit_workspace_->shortcutOnlyActions()) {
+        addAction(action);
+    }
     auto* view_menu = menuBar()->addMenu("&View");
     view_menu->setObjectName(QStringLiteral("viewMenu"));
     auto* media_pool_menu = view_menu->addMenu("Media Pool");
@@ -1236,41 +1022,12 @@ void MainWindow::createMenus() {
     });
     addAction(next_frame_action);
 
-    auto* move_left_action = new QAction(this);
-    disableDuringProjectLoad(move_left_action);
-    move_left_action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Left));
-    move_left_action->setShortcutContext(Qt::WindowShortcut);
-    register_shortcut(
-        QStringLiteral("timeline.nudge_left"),
-        QStringLiteral("Nudge Clip Left"), move_left_action,
-        settings::ShortcutScope::Edit,
-        QStringLiteral("Edit workspace"));
-    connect(move_left_action, &QAction::triggered, this, [this]() {
-        edit_workspace_->controller()->moveActiveTimelineClip(-1);
-    });
-    addAction(move_left_action);
-
-    auto* move_right_action = new QAction(this);
-    disableDuringProjectLoad(move_right_action);
-    move_right_action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Right));
-    move_right_action->setShortcutContext(Qt::WindowShortcut);
-    register_shortcut(
-        QStringLiteral("timeline.nudge_right"),
-        QStringLiteral("Nudge Clip Right"), move_right_action,
-        settings::ShortcutScope::Edit,
-        QStringLiteral("Edit workspace"));
-    connect(move_right_action, &QAction::triggered, this, [this]() {
-        edit_workspace_->controller()->moveActiveTimelineClip(1);
-    });
-    addAction(move_right_action);
-
     shortcut_manager_->load();
     if (workspace_host_ != nullptr) {
         shortcut_manager_->setWorkspace(workspace_host_->currentPage());
     }
     refreshWorkspaceMenuVisibility();
     updateHistoryActions();
-    updateAttributeClipboardActions();
 }
 
 void MainWindow::restoreWorkspaceLayout() {

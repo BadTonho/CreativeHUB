@@ -78,6 +78,10 @@ extern "C" {
 
 namespace {
 
+QAction* editAction(MainWindow& window, const char* object_name) {
+    return window.findChild<QAction*>(QString::fromLatin1(object_name));
+}
+
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
 }
@@ -257,54 +261,103 @@ public:
             require(!inspector_ui.clip_effects_controls->isEnabled() &&
                         !inspector_ui.effect_selection_hint->isHidden(),
                     "The Effects tab must guide users and disable controls when no clip is selected.");
-            require(render_window.copy_attributes_action_ != nullptr &&
-                        render_window.paste_attributes_action_ != nullptr &&
-                        render_window.copy_attributes_action_->shortcut() ==
+            require(editAction(render_window, "edit.copy_attributes") != nullptr &&
+                        editAction(render_window, "edit.paste_attributes") != nullptr &&
+                        render_window.edit_workspace_->findChild<QAction*>(
+                            "edit.copy_attributes") ==
+                            editAction(render_window, "edit.copy_attributes") &&
+                        render_window.edit_workspace_->findChild<QAction*>(
+                            "edit.delete_clip") ==
+                            editAction(render_window, "edit.delete_clip") &&
+                        editAction(render_window, "edit.copy_attributes")->shortcut() ==
                             QKeySequence(QStringLiteral("Ctrl+C")) &&
-                        render_window.paste_attributes_action_->shortcut() ==
+                        editAction(render_window, "edit.paste_attributes")->shortcut() ==
                             QKeySequence(QStringLiteral("Ctrl+Shift+V")) &&
-                        !render_window.copy_attributes_action_->isEnabled() &&
-                        !render_window.paste_attributes_action_->isEnabled() &&
+                        !editAction(render_window, "edit.copy_attributes")->isEnabled() &&
+                        !editAction(render_window, "edit.paste_attributes")->isEnabled() &&
                         !render_window.shortcut_manager_->shortcut(
                             QStringLiteral("edit.copy_attributes")).isEmpty() &&
                         !render_window.shortcut_manager_->shortcut(
                             QStringLiteral("edit.paste_attributes")).isEmpty(),
-                    "Copy Attributes and Paste Attributes must be registered shortcuts and unavailable before a clip is copied.");
-            require(render_window.delete_clip_action_ != nullptr &&
-                        render_window.ripple_delete_clip_action_ != nullptr &&
-                        render_window.delete_clip_action_->shortcut() ==
+                    "EditWorkspace must own Copy/Delete actions and retain their shortcut registration and default availability.");
+            auto* require_alt_action = editAction(
+                render_window, "edit.require_alt_to_move");
+            auto* move_playhead_action = editAction(
+                render_window, "edit.move_playhead_on_clip_selection");
+            require(require_alt_action != nullptr && move_playhead_action != nullptr &&
+                        !render_window.edit_workspace_->ui().timeline->moveRequiresAlt() &&
+                        !QSettings().value(
+                            QStringLiteral("timeline/move_playhead_on_clip_selection"),
+                            false).toBool(),
+                    "Timeline preference commands must initialize from their persisted defaults.");
+            require_alt_action->setChecked(true);
+            move_playhead_action->setChecked(true);
+            require(render_window.edit_workspace_->ui().timeline->moveRequiresAlt() &&
+                        QSettings().value(
+                            QStringLiteral("timeline/require_alt_to_move")).toBool() &&
+                        QSettings().value(
+                            QStringLiteral("timeline/move_playhead_on_clip_selection")).toBool(),
+                    "EditWorkspace preference commands must apply and persist their Timeline settings.");
+            require_alt_action->setChecked(false);
+            move_playhead_action->setChecked(false);
+            auto* blade_tool_action = editAction(render_window, "edit.blade_tool");
+            require(blade_tool_action != nullptr,
+                    "The EditWorkspace must provide the Blade Tool command.");
+            blade_tool_action->trigger();
+            require(blade_tool_action->isChecked() &&
+                        render_window.edit_workspace_->ui().timeline->razorMode(),
+                    "Blade Tool must update the Timeline mode through the Edit workspace.");
+            blade_tool_action->trigger();
+            require(!blade_tool_action->isChecked() &&
+                        !render_window.edit_workspace_->ui().timeline->razorMode(),
+                    "Blade Tool must return the Timeline to its normal mode when toggled off.");
+            require(editAction(render_window, "edit.delete_clip") != nullptr &&
+                        editAction(render_window, "edit.ripple_delete_clip") != nullptr &&
+                        editAction(render_window, "edit.delete_clip")->shortcut() ==
                             QKeySequence(Qt::Key_Delete) &&
-                        render_window.ripple_delete_clip_action_->shortcut() ==
+                        editAction(render_window, "edit.ripple_delete_clip")->shortcut() ==
                             QKeySequence(QStringLiteral("Shift+Delete")) &&
-                        !render_window.ripple_delete_clip_action_->isEnabled() &&
+                        !editAction(render_window, "edit.ripple_delete_clip")->isEnabled() &&
                         !render_window.shortcut_manager_->shortcut(
                             QStringLiteral("edit.ripple_delete_clip")).isEmpty(),
                     "Ripple Delete must be a separate registered command with Shift+Delete and be disabled without a selected clip.");
+            require(
+                render_window.shortcut_manager_->shortcut(
+                    QStringLiteral("timeline.nudge_left")) ==
+                    QKeySequence(QStringLiteral("Ctrl+Left")) &&
+                    render_window.shortcut_manager_->shortcut(
+                        QStringLiteral("timeline.nudge_right")) ==
+                    QKeySequence(QStringLiteral("Ctrl+Right")) &&
+                    editAction(render_window, "timeline.nudge_left") != nullptr &&
+                    editAction(render_window, "timeline.nudge_right") != nullptr,
+                "EditWorkspace must own the existing Timeline nudge shortcut assignments.");
             require(render_window.shortcut_manager_->setShortcut(
                         QStringLiteral("edit.ripple_delete_clip"),
                         QKeySequence(QStringLiteral("Ctrl+Alt+Delete"))) &&
-                        render_window.ripple_delete_clip_action_->shortcut() ==
+                        editAction(render_window, "edit.ripple_delete_clip")->shortcut() ==
                             QKeySequence(QStringLiteral("Ctrl+Alt+Delete")) &&
                         render_window.shortcut_manager_->resetShortcut(
                             QStringLiteral("edit.ripple_delete_clip")) &&
-                        render_window.ripple_delete_clip_action_->shortcut() ==
+                        editAction(render_window, "edit.ripple_delete_clip")->shortcut() ==
                             QKeySequence(QStringLiteral("Shift+Delete")),
                     "Ripple Delete must support shortcut customization and reset to Shift+Delete.");
             require(render_window.shortcut_manager_->setShortcut(
                         QStringLiteral("edit.copy_attributes"),
                         QKeySequence(QStringLiteral("Ctrl+Alt+C"))) &&
-                        render_window.copy_attributes_action_->shortcut() ==
+                        editAction(render_window, "edit.copy_attributes")->shortcut() ==
                             QKeySequence(QStringLiteral("Ctrl+Alt+C")) &&
                         render_window.shortcut_manager_->resetShortcut(
                             QStringLiteral("edit.copy_attributes")) &&
-                        render_window.copy_attributes_action_->shortcut() ==
+                        editAction(render_window, "edit.copy_attributes")->shortcut() ==
                             QKeySequence(QStringLiteral("Ctrl+C")),
                     "Copy Attributes must support shortcut customization and reset to its default.");
             render_window.setWorkspacePage(ui::WorkspacePageId::Fusion);
             require(render_window.save_project_action_->shortcut() ==
                         QKeySequence(QStringLiteral("Ctrl+S")) &&
                         render_window.undo_action_->shortcut() == QKeySequence::Undo &&
-                        render_window.delete_clip_action_->shortcut().isEmpty() &&
+                        editAction(render_window, "edit.delete_clip")->shortcut().isEmpty() &&
+                        editAction(render_window, "timeline.nudge_left")->shortcut().isEmpty() &&
+                        editAction(render_window, "timeline.nudge_right")->shortcut().isEmpty() &&
                         render_window.shortcut_manager_->shortcut(
                             QStringLiteral("edit.delete_clip")) ==
                             QKeySequence(Qt::Key_Delete),
@@ -313,12 +366,16 @@ public:
             require(render_window.save_project_action_->shortcut() ==
                         QKeySequence(QStringLiteral("Ctrl+S")) &&
                         render_window.undo_action_->shortcut().isEmpty() &&
-                        render_window.delete_clip_action_->shortcut().isEmpty(),
+                        editAction(render_window, "edit.delete_clip")->shortcut().isEmpty(),
                     "Render must retain Application shortcuts and disable Shared and Edit shortcuts.");
             render_window.setWorkspacePage(ui::WorkspacePageId::Edit);
             require(render_window.undo_action_->shortcut() == QKeySequence::Undo &&
-                        render_window.delete_clip_action_->shortcut() ==
-                            QKeySequence(Qt::Key_Delete),
+                        editAction(render_window, "edit.delete_clip")->shortcut() ==
+                            QKeySequence(Qt::Key_Delete) &&
+                        editAction(render_window, "timeline.nudge_left")->shortcut() ==
+                            QKeySequence(QStringLiteral("Ctrl+Left")) &&
+                        editAction(render_window, "timeline.nudge_right")->shortcut() ==
+                            QKeySequence(QStringLiteral("Ctrl+Right")),
                     "Returning to Edit must restore its configured shortcuts.");
             const bool dirty_before_inspector_tab_change = render_window.project_dirty_;
             inspector_tabs->setCurrentIndex(2);
@@ -660,6 +717,8 @@ public:
                         window.project_load_progress_->windowModality() == Qt::NonModal &&
                         window.new_project_action_ != nullptr &&
                         !window.new_project_action_->isEnabled() &&
+                        !editAction(window, "edit.split_clip")->isEnabled() &&
+                        !editAction(window, "timeline.nudge_left")->isEnabled() &&
                         window.timeline_model_.trackCount() == 2 &&
                         !window.timeline_model_.hasClip(),
                     "Opening a project did not preserve the visible session while disabling editing.");
@@ -682,6 +741,9 @@ public:
             open_loop.exec();
             require(open_succeeded && !window.project_load_pending_,
                     "The background project open did not finish successfully.");
+            require(editAction(window, "edit.split_clip")->isEnabled() &&
+                        editAction(window, "timeline.nudge_left")->isEnabled(),
+                    "Edit-only commands disabled during loading must return to their enabled state afterward.");
             const auto& inspector_ui = window.edit_workspace_->ui();
             const auto& first_track = window.editor_session_.timeline().tracks().front();
             require(!first_track.clips.empty(),
@@ -877,7 +939,7 @@ public:
                     ui::WorkspacePageId page) {
                 const bool undo_enabled = window.undo_action_->isEnabled();
                 const bool redo_enabled = window.redo_action_->isEnabled();
-                const bool delete_enabled = window.delete_clip_action_->isEnabled();
+                const bool delete_enabled = editAction(window, "edit.delete_clip")->isEnabled();
                 const bool edit_or_fusion = page != ui::WorkspacePageId::Render;
                 const bool edit_active = page == ui::WorkspacePageId::Edit;
                 const bool fusion_active = page == ui::WorkspacePageId::Fusion;
@@ -889,7 +951,7 @@ public:
                             window.new_project_action_->isVisible() &&
                             window.undo_action_->isVisible() == edit_or_fusion &&
                             window.redo_action_->isVisible() == edit_or_fusion &&
-                            window.delete_clip_action_->isVisible() == edit_active &&
+                            editAction(window, "edit.delete_clip")->isVisible() == edit_active &&
                             edit_menu->menuAction()->isVisible() == edit_or_fusion &&
                             media_pool_view_menu->menuAction()->isVisible() ==
                                 edit_or_fusion &&
@@ -904,6 +966,18 @@ public:
                             render_fixture_menu->menuAction()->isVisible() ==
                                 render_active,
                         "Menu and toolbar actions must follow their workspace scopes.");
+                for (const auto* command_id : {
+                         "edit.delete_clip", "edit.ripple_delete_clip",
+                         "edit.split_clip", "edit.copy_attributes",
+                         "edit.paste_attributes", "edit.add_video_track",
+                         "edit.rename_track", "edit.move_track_up",
+                         "edit.move_track_down", "edit.remove_track",
+                         "edit.blade_tool", "edit.require_alt_to_move",
+                         "edit.move_playhead_on_clip_selection"}) {
+                    auto* action = editAction(window, command_id);
+                    require(action != nullptr && action->isVisible() == edit_active,
+                            "Every EditWorkspace command must be mounted with the Edit menu scope.");
+                }
                 bool found_separator = false;
                 const bool separators_active = page == ui::WorkspacePageId::Edit;
                 for (auto* action : edit_menu->actions()) {
@@ -917,7 +991,7 @@ public:
                 window.refreshWorkspaceMenuVisibility();
                 require(window.undo_action_->isEnabled() == undo_enabled &&
                             window.redo_action_->isEnabled() == redo_enabled &&
-                            window.delete_clip_action_->isEnabled() == delete_enabled,
+                            editAction(window, "edit.delete_clip")->isEnabled() == delete_enabled,
                         "Refreshing command visibility must not change QAction enablement.");
             };
             window.refreshWorkspaceMenuVisibility();
@@ -1982,12 +2056,12 @@ public:
             selection.active_track_id = source_track_id;
             selection.active_clip_id = source_clip_id;
             selection.active_transition.reset();
-            effects_window.updateAttributeClipboardActions();
+            effects_window.edit_workspace_->refreshCommandAvailability();
             effects_window.updatePlaybackControls();
-            require(effects_window.copy_attributes_action_->isEnabled() &&
-                        !effects_window.paste_attributes_action_->isEnabled() &&
-                        effects_window.delete_clip_action_->isEnabled() &&
-                        effects_window.ripple_delete_clip_action_->isEnabled(),
+            require(editAction(effects_window, "edit.copy_attributes")->isEnabled() &&
+                        !editAction(effects_window, "edit.paste_attributes")->isEnabled() &&
+                        editAction(effects_window, "edit.delete_clip")->isEnabled() &&
+                        editAction(effects_window, "edit.ripple_delete_clip")->isEnabled(),
                     "Copy Attributes, Delete, and Ripple Delete must be enabled for a selected Timeline clip, while Paste remains disabled before copying.");
             const bool dirty_before_timeline_shortcut = effects_window.project_dirty_;
             effects_window.show();
@@ -1999,7 +2073,7 @@ public:
                     "The Timeline shortcut fixture could not focus the Timeline.");
             sendShortcutKey(
                 timeline_widget, Qt::Key_C, Qt::ControlModifier);
-            require(effects_window.paste_attributes_action_->isEnabled() &&
+            require(editAction(effects_window, "edit.paste_attributes")->isEnabled() &&
                         effects_window.project_dirty_ == dirty_before_timeline_shortcut,
                     "Ctrl+C with Timeline focus must copy clip attributes without dirtying the project.");
             sendShortcutKey(timeline_widget, Qt::Key_Delete, Qt::NoModifier);
@@ -2010,7 +2084,7 @@ public:
             selection.active_track_id = source_track_id;
             selection.active_clip_id = source_clip_id;
             selection.active_transition.reset();
-            effects_window.updateAttributeClipboardActions();
+            effects_window.edit_workspace_->refreshCommandAvailability();
             sendShortcutKey(timeline_widget, Qt::Key_Delete, Qt::ShiftModifier);
             require(!effects_window.timeline_model_.locateClip(source_clip_id).has_value() &&
                         effects_window.edit_workspace_->controller()->undo().changed() &&
@@ -2056,13 +2130,13 @@ public:
             selection.active_track_id = source_track_id;
             selection.active_clip_id = source_clip_id;
             selection.active_transition.reset();
-            effects_window.updateAttributeClipboardActions();
+            effects_window.edit_workspace_->refreshCommandAvailability();
             const bool dirty_before_copy = effects_window.project_dirty_;
-            effects_window.copy_attributes_action_->trigger();
+            editAction(effects_window, "edit.copy_attributes")->trigger();
             effects_window.show();
             QApplication::processEvents();
             require(effects_window.project_dirty_ == dirty_before_copy &&
-                        effects_window.paste_attributes_action_->isEnabled(),
+                        editAction(effects_window, "edit.paste_attributes")->isEnabled(),
                     "Copy Attributes must fill the in-memory clipboard without dirtying the project.");
 
             selection.active_track_id = target_track_id;
@@ -2070,7 +2144,7 @@ public:
             effects_window.edit_workspace_->controller()->updateTimelineState();
             effects_window.edit_workspace_->ui().timeline->setSelectedClipIds(
                 {target_clip_id, mixed_text_clip_id});
-            effects_window.updateAttributeClipboardActions();
+            effects_window.edit_workspace_->refreshCommandAvailability();
             const auto history_before_paste =
                 effects_window.timeline_command_service_.undoCount();
             bool paste_dialog_verified = false;
@@ -2103,7 +2177,7 @@ public:
                     apply->click();
                 }
             });
-            effects_window.paste_attributes_action_->trigger();
+            editAction(effects_window, "edit.paste_attributes")->trigger();
             require(paste_dialog_verified,
                     "Paste Attributes must show compatible groups checked and incompatible groups disabled.");
             const auto target_location =
@@ -2136,7 +2210,7 @@ public:
             selection.selected_source_path.reset();
             selection.active_transition.reset();
             effects_window.edit_workspace_->controller()->updateTimelineState();
-            effects_window.updateAttributeClipboardActions();
+            effects_window.edit_workspace_->refreshCommandAvailability();
             bool no_target_dialog_verified = false;
             QTimer::singleShot(0, [&no_target_dialog_verified]() {
                 auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -2153,7 +2227,7 @@ public:
                     cancel->click();
                 }
             });
-            effects_window.paste_attributes_action_->trigger();
+            editAction(effects_window, "edit.paste_attributes")->trigger();
             require(no_target_dialog_verified,
                     "Paste Attributes without a selected clip must explain the missing target and disable Apply.");
         }

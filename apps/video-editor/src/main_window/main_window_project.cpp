@@ -737,6 +737,9 @@ bool MainWindow::openProjectPath(
 
 void MainWindow::setProjectLoadingState(bool loading) {
     if (loading) {
+        if (edit_workspace_ != nullptr) {
+            edit_workspace_->setProjectLoading(true);
+        }
         project_loading_widget_states_.clear();
         project_loading_action_states_.clear();
         const auto remember_widget = [this](QWidget* widget) {
@@ -764,6 +767,9 @@ void MainWindow::setProjectLoadingState(bool loading) {
     }
     project_loading_widget_states_.clear();
     project_loading_action_states_.clear();
+    if (edit_workspace_ != nullptr) {
+        edit_workspace_->setProjectLoading(false);
+    }
 }
 
 void MainWindow::finishProjectOpen(

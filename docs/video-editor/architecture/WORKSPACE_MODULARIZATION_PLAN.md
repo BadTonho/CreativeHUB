@@ -249,25 +249,36 @@ sem alterar estado habilitado, documento, seleção, playhead, reprodução ou
 histórico. Os testes de integração cobrem as três telas e menus vazios; a
 validação manual de aparência e atalhos ainda precisa ser feita no aplicativo.
 
-### Etapa 5 — Separar as responsabilidades de Edit
+### Etapa 5 — Transferir os comandos de Edit para o workspace
 
-1. Mover as declarações de ações e atalhos específicos de Edit para o módulo
-   desse workspace, retirando-as gradualmente da configuração central dos
-   menus.
-2. Manter o comportamento da Timeline e do Inspector em
-   `EditWorkspaceController` e `TimelineCommandService`; o modelo da Timeline
-   não deve ser transferido para a interface.
-3. Agrupar o código de Edit em comandos, controladores, atalhos e interface
-   somente quando houver arquivos suficientes para justificar cada subpasta.
-4. Manter importação de mídia e ciclo de vida do projeto nos serviços
-   compartilhados do aplicativo. Edit deve solicitá-los por sinais ou
-   interfaces explícitas.
-5. Preservar o comportamento atual da Timeline, menus contextuais, docks e
-   campos de texto.
+**Estado:** transferência implementada; conferência manual na build Release
+continua pendente.
 
-**Critério para concluir:** Edit registra seus próprios comandos e atalhos; os
-testes existentes da Timeline passam e o índice de funcionalidade e regressão
-de Edit está atualizado.
+1. `EditWorkspaceActions`, em
+   `apps/video-editor/src/ui/workspace/pages/edit/`, cria e executa Delete,
+   Ripple Delete, Split, Copy/Paste Attributes, comandos de faixas, Blade Tool,
+   preferências da Timeline e os atalhos de movimentação Ctrl+Left/Ctrl+Right.
+2. Preservar os IDs de atalho, combinações padrão, personalizações em
+   `QSettings`, rótulos, escopo Edit, comportamento de foco em campos de texto
+   e regras de habilitação. Não atribuir combinações novas.
+3. Injetar o `ShortcutManager` compartilhado no módulo Edit. A `MainWindow`
+   monta o menu Edit, associa as ações à visibilidade do workspace e adiciona
+   os atalhos sem rótulo à janela; ela repassa ao módulo apenas carregamento de
+   projeto e ativação de reprodução para atualizar a disponibilidade.
+4. Manter Undo/Redo, reprodução, navegação, ciclo de vida do projeto, mídia e
+   coordenação dos serviços compartilhados na `MainWindow`. O controller Edit
+   e `TimelineCommandService` continuam responsáveis pelas operações e pelo
+   histórico. Menus contextuais continuam nos widgets da Timeline.
+5. Cobrir ownership, registro e escopo dos comandos, personalização dos
+   atalhos, carregamento do projeto, preferências da Timeline e roteamento de
+   Copy/Delete/Shift+Delete com foco em campos de texto em
+   `tests/application/main_window_integration_test.cpp`.
+
+**Critério automatizado:** atendido pelos testes focados de integração da
+janela, configurações, atalhos e troca de workspace. **Validação manual:**
+pendente na build Release para conferir comandos, preferências e atalhos nas
+três telas, incluindo foco em campos de texto e retorno dos comandos após o
+carregamento do projeto.
 
 ### Etapa 6 — Separar as responsabilidades de Fusion
 

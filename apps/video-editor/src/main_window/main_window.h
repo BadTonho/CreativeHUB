@@ -241,7 +241,6 @@ private:
         const application::TimelineEditResult& result,
         bool stop_playback = true);
     void updateHistoryActions();
-    void updateAttributeClipboardActions();
     void updateTimelineState();
     void requestTimelineAudioWaveforms();
     void cancelTimelineAudioWaveforms() noexcept;
@@ -327,22 +326,10 @@ private:
     QAction* open_project_action_ = nullptr;
     QAction* save_project_action_ = nullptr;
     QAction* save_project_as_action_ = nullptr;
-    QAction* delete_clip_action_ = nullptr;
-    QAction* ripple_delete_clip_action_ = nullptr;
-    QAction* copy_attributes_action_ = nullptr;
-    QAction* paste_attributes_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
-    QAction* razor_tool_action_ = nullptr;
-    QAction* require_alt_to_move_action_ = nullptr;
-    QAction* move_playhead_on_clip_selection_action_ = nullptr;
     QAction* media_pool_action_ = nullptr;
     QAction* effects_action_ = nullptr;
-    QAction* add_video_track_action_ = nullptr;
-    QAction* rename_track_action_ = nullptr;
-    QAction* move_track_up_action_ = nullptr;
-    QAction* move_track_down_action_ = nullptr;
-    QAction* remove_track_action_ = nullptr;
     std::array<std::vector<QAction*>, 5> workspace_menu_actions_;
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
     application::EditorSession editor_session_;
