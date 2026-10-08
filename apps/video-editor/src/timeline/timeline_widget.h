@@ -280,6 +280,7 @@ private:
     double video_scroll_offset_ = 0.0;
     double audio_scroll_offset_ = 0.0;
     bool split_drag_active_ = false;
+    bool splitter_hover_active_ = false;
     bool snap_enabled_ = true;
     std::optional<ClipLocation> active_clip_;
     std::vector<ClipId> selected_clip_ids_;

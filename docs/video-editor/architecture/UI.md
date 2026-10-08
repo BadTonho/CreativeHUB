@@ -163,7 +163,8 @@ The Timeline is hosted inside a scrollable viewport with one shared horizontal
 scrollbar. Video and Audio occupy stacked panes with independent vertical
 scrollbars; the outer scroll area's vertical scrollbar is disabled. The mouse
 wheel scrolls the pane under the pointer, while Ctrl + wheel changes shared
-horizontal zoom. A draggable divider adjusts the pane heights; its 50/50 default
+horizontal zoom. An 18-pixel draggable divider with a centered grip adjusts the
+pane heights; the grip highlights on hover and while dragging. Its 50/50 default
 and saved local preference use `timeline/track_group_split_ratio` in
 `QSettings`. Scroll offsets remain temporary view state and are not stored in
 the project. The two fixed track-header groups scroll with their respective

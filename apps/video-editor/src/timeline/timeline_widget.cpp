@@ -35,6 +35,7 @@ namespace {
 constexpr double edge_width = 8.0;
 constexpr double shared_roll_half_width = 4.0;
 constexpr double shared_single_clip_handle_width = 8.0;
+constexpr double track_group_splitter_height = 18.0;
 constexpr double ruler_minor_target_spacing_pixels = 8.0;
 
 TrimPointerPosition trimPointer(const QPointF& position) noexcept {
@@ -798,11 +799,10 @@ TimelineGeometry TimelineWidget::geometry() const noexcept {
 
 TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
     constexpr double bottom_margin = 12.0;
-    constexpr double splitter_height = 10.0;
     const auto available_height = std::max(
         0.0,
         static_cast<double>(height()) - TimelineGeometry::top_margin -
-            bottom_margin - splitter_height);
+            bottom_margin - track_group_splitter_height);
     const auto minimum_height = std::min(
         kMinimumTrackRowHeight, available_height / 2.0);
     const auto minimum_ratio = available_height > 0.0
@@ -811,7 +811,7 @@ TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
         track_group_split_ratio_, minimum_ratio, 1.0 - minimum_ratio);
     const auto video_height = available_height * ratio;
     const auto audio_top = TimelineGeometry::top_margin + video_height +
-        splitter_height;
+        track_group_splitter_height;
     const auto width = std::max(
         0.0,
         static_cast<double>(this->width()) - TimelineGeometry::left_margin -
@@ -826,7 +826,7 @@ TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
         TimelineGeometry::left_margin,
         TimelineGeometry::top_margin + video_height,
         width,
-        splitter_height);
+        track_group_splitter_height);
     layout.audio_viewport = QRectF(
         TimelineGeometry::left_margin,
         audio_top,
@@ -846,11 +846,10 @@ double TimelineWidget::rowHeight() const noexcept {
 }
 
 void TimelineWidget::updateVerticalExtent() {
-    constexpr double splitter_height = 10.0;
     constexpr double bottom_margin = 12.0;
     const auto minimum_height = static_cast<int>(std::ceil(
         TimelineGeometry::top_margin + 2.0 * track_row_height_ +
-        splitter_height + bottom_margin));
+        track_group_splitter_height + bottom_margin));
     setMinimumHeight(std::max(100, minimum_height));
     updateGeometry();
     const auto current_geometry = geometry();
@@ -1244,12 +1243,40 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     const auto current_geometry = geometry();
     painter.fillRect(track_view.video_viewport, QColor("#1b2028"));
     painter.fillRect(track_view.audio_viewport, QColor("#1b2028"));
-    painter.fillRect(track_view.splitter_rect, QColor("#11151b"));
-    painter.setPen(QPen(QColor("#3b4655"), 1.0));
+    const auto splitter_highlighted =
+        splitter_hover_active_ || split_drag_active_;
+    const auto splitter_background = split_drag_active_
+        ? QColor("#214463")
+        : splitter_highlighted ? QColor("#26394b") : QColor("#202630");
+    const auto splitter_border = split_drag_active_
+        ? QColor("#80c7ff")
+        : splitter_highlighted ? QColor("#66b7ff") : QColor("#566476");
+    const auto splitter_grip = split_drag_active_
+        ? QColor("#b8e2ff")
+        : splitter_highlighted ? QColor("#9bd5ff") : QColor("#aab6c5");
+    painter.fillRect(track_view.splitter_rect, splitter_background);
+    painter.setPen(QPen(splitter_border, 1.0));
     painter.drawLine(track_view.splitter_rect.topLeft(),
                      track_view.splitter_rect.topRight());
     painter.drawLine(track_view.splitter_rect.bottomLeft(),
                      track_view.splitter_rect.bottomRight());
+    const auto grip_center = track_view.splitter_rect.center();
+    const QRectF grip_bounds(
+        grip_center.x() - 18.0,
+        grip_center.y() - 6.0,
+        36.0,
+        12.0);
+    painter.setPen(QPen(splitter_border, 1.0));
+    painter.setBrush(split_drag_active_
+        ? QColor("#214463")
+        : splitter_highlighted ? QColor("#26394b") : QColor("#2a303a"));
+    painter.drawRoundedRect(grip_bounds, 5.0, 5.0);
+    painter.setPen(QPen(splitter_grip, 1.4, Qt::SolidLine, Qt::RoundCap));
+    for (const auto offset : {-3.0, 0.0, 3.0}) {
+        painter.drawLine(
+            QPointF(grip_center.x() - 6.0, grip_center.y() + offset),
+            QPointF(grip_center.x() + 6.0, grip_center.y() + offset));
+    }
     const auto paint_empty_group = [&painter](
         const QRectF& viewport, const QString& message) {
         if (viewport.height() < 18.0) return;
@@ -2264,7 +2291,14 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
 }
 
 void TimelineWidget::leaveEvent(QEvent* event) {
-    if (!interaction_controller_.trimGesture().active()) unsetCursor();
+    if (splitter_hover_active_) {
+        splitter_hover_active_ = false;
+        update();
+    }
+    if (!split_drag_active_ &&
+        !interaction_controller_.trimGesture().active()) {
+        unsetCursor();
+    }
     QWidget::leaveEvent(event);
 }
 
@@ -2272,8 +2306,10 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton &&
         trackSplitterRect().contains(event->position())) {
         split_drag_active_ = true;
+        splitter_hover_active_ = true;
         setCursor(Qt::SplitVCursor);
         grabMouse();
+        update();
         event->accept();
         return;
     }
@@ -2565,22 +2601,29 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
     if (split_drag_active_) {
-        constexpr double splitter_height = 10.0;
         constexpr double bottom_margin = 12.0;
         const auto available_height = std::max(
             1.0,
             static_cast<double>(height()) - TimelineGeometry::top_margin -
-                bottom_margin - splitter_height);
+                bottom_margin - track_group_splitter_height);
         setTrackGroupSplitRatio(
             (event->position().y() - TimelineGeometry::top_margin -
-             splitter_height / 2.0) / available_height);
+             track_group_splitter_height / 2.0) / available_height);
         event->accept();
         return;
     }
     if (trackSplitterRect().contains(event->position())) {
+        if (!splitter_hover_active_) {
+            splitter_hover_active_ = true;
+            update();
+        }
         if (cursor().shape() != Qt::SplitVCursor) setCursor(Qt::SplitVCursor);
         event->accept();
         return;
+    }
+    if (splitter_hover_active_) {
+        splitter_hover_active_ = false;
+        update();
     }
     if (cursor().shape() == Qt::SplitVCursor) unsetCursor();
     if (read_only_) {
@@ -2746,7 +2789,10 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (split_drag_active_ && event->button() == Qt::LeftButton) {
         split_drag_active_ = false;
         releaseMouse();
-        unsetCursor();
+        splitter_hover_active_ = trackSplitterRect().contains(event->position());
+        if (splitter_hover_active_) setCursor(Qt::SplitVCursor);
+        else unsetCursor();
+        update();
         event->accept();
         return;
     }

@@ -1320,15 +1320,68 @@ int main(int argc, char* argv[]) {
 
         const auto initial_split = viewport_timeline->trackGroupSplitRatio();
         const auto splitter = viewport_timeline->trackSplitterRect();
-        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
-            splitter.center(), Qt::LeftButton);
+        require(std::abs(splitter.height() - 18.0) < 0.001,
+                "The Video/Audio divider does not expose the expanded drag area.");
+
+        QImage divider_idle(
+            viewport_timeline->size(), QImage::Format_ARGB32_Premultiplied);
+        divider_idle.fill(Qt::transparent);
+        viewport_timeline->render(&divider_idle);
+        const auto grip_sample = QPoint(
+            static_cast<int>(std::lround(splitter.center().x() + 12.0)),
+            static_cast<int>(std::lround(splitter.center().y())));
+        const auto idle_grip_color = divider_idle.pixelColor(grip_sample);
+
         sendMouse(*viewport_timeline, QEvent::MouseMove,
-            splitter.center() + QPointF(0.0, 15.0), Qt::LeftButton);
+            splitter.center(), Qt::NoButton);
+        application.processEvents();
+        QImage divider_hover(
+            viewport_timeline->size(), QImage::Format_ARGB32_Premultiplied);
+        divider_hover.fill(Qt::transparent);
+        viewport_timeline->render(&divider_hover);
+        require(divider_hover.pixelColor(grip_sample) != idle_grip_color,
+                "Hovering the Video/Audio divider did not highlight its grip.");
+
+        const auto expanded_hit_target = QPointF(
+            splitter.center().x(), splitter.top() + 15.0);
+        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
+            expanded_hit_target, Qt::LeftButton);
+        QImage divider_active(
+            viewport_timeline->size(), QImage::Format_ARGB32_Premultiplied);
+        divider_active.fill(Qt::transparent);
+        viewport_timeline->render(&divider_active);
+        require(divider_active.pixelColor(grip_sample) !=
+                    divider_hover.pixelColor(grip_sample),
+                "Dragging the Video/Audio divider did not highlight its grip.");
+        sendMouse(*viewport_timeline, QEvent::MouseMove,
+            expanded_hit_target + QPointF(0.0, 15.0), Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
-            splitter.center() + QPointF(0.0, 15.0), Qt::NoButton);
+            expanded_hit_target + QPointF(0.0, 15.0), Qt::NoButton);
         require(viewport_timeline->trackGroupSplitRatio() > initial_split &&
                     viewport_timeline->trackGroupSplitRatio() <= 0.8,
-                "Dragging the group divider did not adjust the saved split ratio.");
+                "Dragging near the edge of the expanded divider did not resize the panes.");
+
+        const auto upper_splitter = viewport_timeline->trackSplitterRect();
+        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
+            upper_splitter.center(), Qt::LeftButton);
+        sendMouse(*viewport_timeline, QEvent::MouseMove,
+            QPointF(upper_splitter.center().x(), -100.0), Qt::LeftButton);
+        sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
+            QPointF(upper_splitter.center().x(), -100.0), Qt::NoButton);
+        require(std::abs(viewport_timeline->trackGroupSplitRatio() - 0.2) < 0.001,
+                "Dragging the divider above its range did not preserve the lower bound.");
+
+        const auto lower_splitter = viewport_timeline->trackSplitterRect();
+        sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
+            lower_splitter.center(), Qt::LeftButton);
+        sendMouse(*viewport_timeline, QEvent::MouseMove,
+            QPointF(lower_splitter.center().x(), viewport_timeline->height() + 100.0),
+            Qt::LeftButton);
+        sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
+            QPointF(lower_splitter.center().x(), viewport_timeline->height() + 100.0),
+            Qt::NoButton);
+        require(std::abs(viewport_timeline->trackGroupSplitRatio() - 0.8) < 0.001,
+                "Dragging the divider below its range did not preserve the upper bound.");
         viewport_timeline->setTrackGroupSplitRatio(0.5);
 
         scroll_area.close();
