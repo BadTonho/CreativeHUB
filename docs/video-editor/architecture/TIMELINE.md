@@ -89,8 +89,10 @@ Video tracks are projected into an upper pane and Audio tracks into a lower
 pane. Each pane has its own vertical scrollbar and wheel scrolling follows the
 pointer's pane. The 18-pixel divider resizes the two pane viewports across its
 entire width; it never changes individual track row heights. Its initial
-allocation is 50/50, and dragging it reallocates the available height between
-Video and Audio. Both groups retain independent scrollbar and wheel behavior.
+allocation is 50/50. Dragging it reallocates the available height and moves the
+Video and Audio track rows by the same vertical distance, preserving their
+relative positions even after independent scrolling. Both groups retain
+independent scrollbar and wheel behavior.
 The relative order of tracks within each type is preserved; Track Up and Track
 Down stop at the visible first and last row of that type. The divider
 highlights on hover or while dragging and uses the vertical-resize cursor. Its

@@ -164,11 +164,13 @@ scrollbar. Video and Audio occupy stacked panes with independent vertical
 scrollbars; the outer scroll area's vertical scrollbar is disabled. The mouse
 wheel scrolls the pane under the pointer, while Ctrl + wheel changes shared
 horizontal zoom. Dragging anywhere on the 18-pixel divider reallocates the
-available height between the Video and Audio panes. The initial split is 50/50
-and the user's split is saved locally. Resizing changes how many rows fit in
-each viewport without changing track row height. The divider highlights on
-hover and while dragging and uses the vertical-resize cursor. Scrollbars and
-wheel scrolling remain independent for each pane.
+available height between the Video and Audio panes and moves both groups'
+track rows by the same vertical distance. The initial split is 50/50 and the
+user's split is saved locally. Resizing changes how many rows fit in each
+viewport without changing track row height or the relative positions of the
+two groups. The divider highlights on hover and while dragging and uses the
+vertical-resize cursor. Scrollbars and wheel scrolling remain independent for
+each pane.
 The preference uses
 `timeline/track_group_split_ratio` in `QSettings`. Scroll offsets remain
 temporary view state and are not stored in the project. The two fixed

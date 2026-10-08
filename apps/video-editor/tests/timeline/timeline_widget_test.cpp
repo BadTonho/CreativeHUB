@@ -1386,6 +1386,8 @@ int main(int argc, char* argv[]) {
 
         video_scroll->setValue(0);
         audio_scroll->setValue(0);
+        video_scroll->setValue(std::min(5, video_scroll->maximum()));
+        audio_scroll->setValue(std::min(11, audio_scroll->maximum()));
         application.processEvents();
         const auto drag_divider_at = [
             &application, viewport_timeline,
@@ -1396,6 +1398,10 @@ int main(int argc, char* argv[]) {
             const auto drag_position =
                 press_position + QPointF(0.0, vertical_delta);
             const auto ratio_before = viewport_timeline->trackGroupSplitRatio();
+            const auto video_track_y_before =
+                viewport_timeline->trackBounds(0).center().y();
+            const auto audio_track_y_before =
+                viewport_timeline->trackBounds(3).center().y();
             const auto video_view_height_before = viewport_timeline
                 ->trackGroupViewportRect(timeline::TrackKind::Video).height();
             sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
@@ -1411,12 +1417,21 @@ int main(int argc, char* argv[]) {
             sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
                 drag_position, Qt::NoButton);
             application.processEvents();
+            const auto actual_split_delta = viewport_timeline
+                ->trackSplitterRect().center().y() - current_splitter.center().y();
+            const auto video_track_delta = viewport_timeline
+                ->trackBounds(0).center().y() - video_track_y_before;
+            const auto audio_track_delta = viewport_timeline
+                ->trackBounds(3).center().y() - audio_track_y_before;
             require(std::abs(viewport_timeline->trackGroupSplitRatio() -
                              ratio_before) > 0.01 &&
                         std::abs(viewport_timeline->trackGroupViewportRect(
                             timeline::TrackKind::Video).height() -
                             video_view_height_before) > 1.0,
                     "Dragging the divider did not resize the pane viewports.");
+            require(std::abs(video_track_delta - actual_split_delta) < 0.001 &&
+                        std::abs(audio_track_delta - actual_split_delta) < 0.001,
+                    "Dragging the divider did not move the Video and Audio track stacks together.");
             require(std::abs(viewport_timeline->trackBounds(0).height() -
                              video_row_height_before_split) < 0.001 &&
                         std::abs(viewport_timeline->trackBounds(3).height() -
@@ -1449,6 +1464,10 @@ int main(int argc, char* argv[]) {
         audio_scroll->setValue(0);
         application.processEvents();
         const auto upper_splitter = viewport_timeline->trackSplitterRect();
+        const auto upper_video_track_y =
+            viewport_timeline->trackBounds(0).center().y();
+        const auto upper_audio_track_y =
+            viewport_timeline->trackBounds(3).center().y();
         const auto left_splitter_edge = QPointF(
             upper_splitter.left() + 2.0, upper_splitter.center().y());
         sendMouse(*viewport_timeline, QEvent::MouseMove,
@@ -1461,10 +1480,21 @@ int main(int argc, char* argv[]) {
             QPointF(left_splitter_edge.x(), -100.0), Qt::LeftButton);
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
             QPointF(left_splitter_edge.x(), -100.0), Qt::NoButton);
+        const auto upper_delta = viewport_timeline
+            ->trackSplitterRect().center().y() - upper_splitter.center().y();
         require(std::abs(viewport_timeline->trackGroupSplitRatio() - 0.2) < 0.001,
                 "Dragging the divider above its range did not preserve the lower bound.");
+        require(std::abs(viewport_timeline->trackBounds(0).center().y() -
+                             upper_video_track_y - upper_delta) < 0.001 &&
+                    std::abs(viewport_timeline->trackBounds(3).center().y() -
+                             upper_audio_track_y - upper_delta) < 0.001,
+                "Dragging to the upper split limit did not move both track groups together.");
 
         const auto lower_splitter = viewport_timeline->trackSplitterRect();
+        const auto lower_video_track_y =
+            viewport_timeline->trackBounds(0).center().y();
+        const auto lower_audio_track_y =
+            viewport_timeline->trackBounds(3).center().y();
         const auto right_splitter_edge = QPointF(
             lower_splitter.right() - 2.0, lower_splitter.center().y());
         sendMouse(*viewport_timeline, QEvent::MouseButtonPress,
@@ -1475,8 +1505,15 @@ int main(int argc, char* argv[]) {
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
             QPointF(right_splitter_edge.x(), viewport_timeline->height() + 100.0),
             Qt::NoButton);
+        const auto lower_delta = viewport_timeline
+            ->trackSplitterRect().center().y() - lower_splitter.center().y();
         require(std::abs(viewport_timeline->trackGroupSplitRatio() - 0.8) < 0.001,
                 "Dragging the divider below its range did not preserve the upper bound.");
+        require(std::abs(viewport_timeline->trackBounds(0).center().y() -
+                             lower_video_track_y - lower_delta) < 0.001 &&
+                    std::abs(viewport_timeline->trackBounds(3).center().y() -
+                             lower_audio_track_y - lower_delta) < 0.001,
+                "Dragging to the lower split limit did not move both track groups together.");
         viewport_timeline->setTrackGroupSplitRatio(0.5);
 
         std::vector<timeline::TimelineTrack> video_overflow_tracks;
@@ -1497,6 +1534,10 @@ int main(int argc, char* argv[]) {
         application.processEvents();
         const auto split_before_empty_group_drag =
             viewport_timeline->trackGroupSplitRatio();
+        const auto video_row_before_empty_group_drag =
+            viewport_timeline->trackBounds(0).center().y();
+        const auto audio_row_before_empty_group_drag =
+            viewport_timeline->trackBounds(6).center().y();
         const auto expanded_hit_target = QPointF(
             viewport_timeline->trackSplitterRect().center().x(),
             viewport_timeline->trackSplitterRect().center().y());
@@ -1508,10 +1549,18 @@ int main(int argc, char* argv[]) {
         sendMouse(*viewport_timeline, QEvent::MouseButtonRelease,
             expanded_hit_target + QPointF(0.0, 20.0),
             Qt::NoButton);
+        const auto empty_group_drag_delta = viewport_timeline
+            ->trackSplitterRect().center().y() - expanded_hit_target.y();
         require(viewport_timeline->trackGroupSplitRatio() >
                     split_before_empty_group_drag &&
-                    video_scroll->value() == 0 && audio_scroll->value() == 0,
-                "Dragging the divider with a non-overflowing group did not resize panes independently of scrolling.");
+                    video_scroll->value() == 0 && audio_scroll->value() == 0 &&
+                    std::abs(viewport_timeline->trackBounds(0).center().y() -
+                             video_row_before_empty_group_drag -
+                             empty_group_drag_delta) < 0.001 &&
+                    std::abs(viewport_timeline->trackBounds(6).center().y() -
+                             audio_row_before_empty_group_drag -
+                             empty_group_drag_delta) < 0.001,
+                "Dragging the divider with one non-overflowing group did not move both track groups together.");
 
         scroll_area.close();
 

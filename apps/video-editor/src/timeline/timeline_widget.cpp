@@ -481,8 +481,15 @@ void TimelineWidget::setTrackGroupSplitRatio(double ratio) {
     if (!std::isfinite(ratio)) return;
     const auto normalized = std::clamp(ratio, 0.2, 0.8);
     if (std::abs(normalized - track_group_split_ratio_) < 0.0001) return;
+    const auto video_offset_before = video_scroll_offset_;
+    const auto audio_offset_before = audio_scroll_offset_;
     track_group_split_ratio_ = normalized;
     updateVerticalExtent();
+    // Changing the splitter also moves the Audio viewport's origin. Translate
+    // Video by the same amount, and compensate either group's translation if
+    // its independent scroll offset had to be clamped for the new viewport.
+    video_splitter_translation_ += video_scroll_offset_ - video_offset_before;
+    audio_splitter_translation_ += audio_scroll_offset_ - audio_offset_before;
     update();
     emit trackHeaderVisualsChanged();
     emit trackGroupSplitRatioChanged(track_group_split_ratio_);
@@ -854,6 +861,9 @@ TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
         audio_height);
     layout.video_scroll_offset = video_scroll_offset_;
     layout.audio_scroll_offset = audio_scroll_offset_;
+    layout.video_track_translation = video_splitter_translation_ +
+        video_height - available_height * 0.5;
+    layout.audio_track_translation = audio_splitter_translation_;
     return layout;
 }
 

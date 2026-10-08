@@ -18,6 +18,8 @@ struct TimelineTrackViewLayout final {
     QRectF splitter_rect;
     double video_scroll_offset = 0.0;
     double audio_scroll_offset = 0.0;
+    double video_track_translation = 0.0;
+    double audio_track_translation = 0.0;
 };
 
 class TimelineGeometry final {

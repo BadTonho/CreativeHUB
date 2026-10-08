@@ -110,10 +110,14 @@ QRectF TimelineGeometry::trackRect(std::size_t index) const noexcept {
         const auto scroll_offset = kind == TrackKind::Audio
             ? track_view_layout_->audio_scroll_offset
             : track_view_layout_->video_scroll_offset;
+        const auto track_translation = kind == TrackKind::Audio
+            ? track_view_layout_->audio_track_translation
+            : track_view_layout_->video_track_translation;
         return QRectF(
             left_margin,
             viewport.top() + static_cast<double>(group_index) *
-                (row_height_ + row_gap) - std::max(0.0, scroll_offset),
+                (row_height_ + row_gap) - std::max(0.0, scroll_offset) +
+                track_translation,
             width,
             row_height_);
     }

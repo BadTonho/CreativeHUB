@@ -280,6 +280,8 @@ private:
     double track_group_split_ratio_ = 0.5;
     double video_scroll_offset_ = 0.0;
     double audio_scroll_offset_ = 0.0;
+    double video_splitter_translation_ = 0.0;
+    double audio_splitter_translation_ = 0.0;
     bool split_drag_active_ = false;
     bool splitter_hover_active_ = false;
     bool snap_enabled_ = true;
