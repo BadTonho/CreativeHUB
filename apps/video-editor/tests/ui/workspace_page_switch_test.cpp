@@ -16,6 +16,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMainWindow>
+#include <QMenuBar>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -53,6 +54,16 @@ bool waitUntil(const std::function<bool()>& predicate, int timeout_ms) {
     return predicate();
 }
 
+void settleEventLoop(int duration_ms) {
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < duration_ms) {
+        QApplication::processEvents(QEventLoop::AllEvents, 10);
+        QThread::msleep(2);
+    }
+    QApplication::processEvents(QEventLoop::AllEvents, 10);
+}
+
 void sendWheel(QWidget* target, int angle_delta_y) {
     const QPoint position = target->rect().center();
     QWheelEvent event(
@@ -82,6 +93,11 @@ int main(int argc, char* argv[]) {
 
     try {
         QMainWindow window;
+        window.menuBar()->addMenu("File");
+        window.menuBar()->addMenu("Edit");
+        window.menuBar()->addMenu("View");
+        window.menuBar()->addMenu("Settings");
+        window.menuBar()->addMenu("Help");
         auto* preview = new QWidget;
         preview->setObjectName("sharedPreview");
         preview->setMinimumSize(320, 180);
@@ -559,6 +575,8 @@ int main(int argc, char* argv[]) {
         }
 
         settings::setWorkspacePageTransitionsEnabled(true);
+        settings::setWorkspacePageTransitionStyle(
+            settings::WorkspacePageTransitionStyle::EntireApplicationWindow);
         settings::setWorkspacePageTransitionDurationMs(100);
         const auto changes_before_animated_switches = page_changes.size();
         const auto original_window_position = window.pos();
@@ -631,6 +649,53 @@ int main(int argc, char* argv[]) {
                     [&]() { return window.pos() == reverse_original_position; },
                     700),
                 "The reverse window transition did not restore its original position.");
+        settleEventLoop(60);
+
+        settings::setWorkspacePageTransitionStyle(
+            settings::WorkspacePageTransitionStyle::WorkspaceContent);
+        const auto fixed_window_position = window.pos();
+        const auto fixed_menu_position = window.menuBar()->mapToGlobal(
+            QPoint(0, 0));
+        const auto fixed_selector_position = buttons.edit->mapToGlobal(
+            QPoint(0, 0));
+        buttons.fusion->click();
+        auto* content_overlay = window.findChild<QWidget*>(
+            "workspacePageTransitionOverlay");
+        require(content_overlay != nullptr,
+                "Workspace-content mode did not create its single transition surface.");
+        require(content_overlay->isVisible(),
+                "The workspace-content transition surface is not visible.");
+        require(workspace_host->currentPage() == ui::WorkspacePageId::Edit,
+                "Workspace-content mode applied the page before the outgoing block exited.");
+        require(window.pos() == fixed_window_position &&
+                    window.menuBar()->mapToGlobal(QPoint(0, 0)) ==
+                        fixed_menu_position,
+                "Workspace-content mode moved the window or menu bar.");
+        require(waitUntil(
+                    [&]() {
+                        return workspace_host->currentPage() ==
+                            ui::WorkspacePageId::Fusion;
+                    },
+                    1000),
+                "The workspace-content transition did not apply Fusion at its midpoint.");
+        require(buttons.fusion->isChecked() &&
+                    window.pos() == fixed_window_position &&
+                    window.menuBar()->mapToGlobal(QPoint(0, 0)) ==
+                        fixed_menu_position &&
+                    buttons.edit->mapToGlobal(QPoint(0, 0)) ==
+                        fixed_selector_position &&
+                    content_overlay != nullptr &&
+                    content_overlay->geometry().left() == 0 &&
+                    content_overlay->property("slideOffset").toInt() > 0,
+                "The content block must include the workspace selector row while menus and window stay fixed.");
+        require(waitUntil(
+                    [&]() {
+                        return window.findChild<QWidget*>(
+                                   "workspacePageTransitionOverlay") == nullptr;
+                    },
+                    1000) &&
+                    window.pos() == fixed_window_position,
+                "The workspace-content transition did not finish in place.");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

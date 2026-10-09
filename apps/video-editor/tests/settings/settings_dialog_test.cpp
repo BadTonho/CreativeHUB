@@ -46,9 +46,22 @@ int main(int argc, char* argv[]) {
         settings.sync();
 
         require(settings::workspacePageTransitionsEnabled() &&
+                    settings::workspacePageTransitionStyle() ==
+                        settings::WorkspacePageTransitionStyle::WorkspaceContent &&
                     settings::workspacePageTransitionDurationMs() ==
                         settings::kDefaultWorkspacePageTransitionDurationMs,
-                "Workspace transitions must be enabled by default at 250 ms.");
+                "Workspace content transitions must be the default at 250 ms.");
+        settings::setWorkspacePageTransitionStyle(
+            settings::WorkspacePageTransitionStyle::EntireApplicationWindow);
+        settings.sync();
+        require(settings::workspacePageTransitionStyle() ==
+                    settings::WorkspacePageTransitionStyle::EntireApplicationWindow,
+                "The whole-window transition style was not persisted.");
+        settings.setValue(settings::kWorkspacePageTransitionStyleKey, 99);
+        require(settings::workspacePageTransitionStyle() ==
+                    settings::kDefaultWorkspacePageTransitionStyle,
+                "An invalid workspace transition style did not use its default.");
+        settings.remove(settings::kWorkspacePageTransitionStyleKey);
         settings::setWorkspacePageTransitionsEnabled(false);
         require(!settings::workspacePageTransitionsEnabled(),
                 "Disabling workspace transitions was not persisted.");
@@ -164,12 +177,19 @@ int main(int argc, char* argv[]) {
             "workspacePageTransitionsCheckBox");
         auto* workspace_transition_duration = dialog.findChild<QSlider*>(
             "workspacePageTransitionDurationSlider");
+        auto* workspace_transition_style = dialog.findChild<QComboBox*>(
+            "workspacePageTransitionStyleComboBox");
         auto* workspace_transition_duration_label = dialog.findChild<QLabel*>(
             "workspacePageTransitionDurationLabel");
         require(workspace_transitions != nullptr &&
                     workspace_transition_duration != nullptr &&
+                    workspace_transition_style != nullptr &&
                     workspace_transition_duration_label != nullptr &&
                     workspace_transitions->isChecked() &&
+                    workspace_transition_style->isEnabled() &&
+                    workspace_transition_style->currentData().toInt() ==
+                        static_cast<int>(
+                            settings::WorkspacePageTransitionStyle::WorkspaceContent) &&
                     workspace_transition_duration->isEnabled() &&
                     workspace_transition_duration->minimum() == 100 &&
                     workspace_transition_duration->maximum() == 600 &&
@@ -177,27 +197,50 @@ int main(int argc, char* argv[]) {
                     workspace_transition_duration->value() == 250 &&
                     workspace_transition_duration_label->text() == "250 ms",
                 "Workspace transition settings controls have incorrect defaults.");
+        const auto whole_window_style_index =
+            workspace_transition_style->findData(static_cast<int>(
+                settings::WorkspacePageTransitionStyle::EntireApplicationWindow));
+        require(whole_window_style_index >= 0,
+                "The whole-window transition option is missing.");
+        workspace_transition_style->setCurrentIndex(whole_window_style_index);
+        require(settings::workspacePageTransitionStyle() ==
+                    settings::WorkspacePageTransitionStyle::EntireApplicationWindow,
+                "Changing the workspace transition style must persist immediately.");
         workspace_transition_duration->setValue(400);
         require(settings::workspacePageTransitionDurationMs() == 400 &&
                     workspace_transition_duration_label->text() == "400 ms",
                 "Changing the workspace duration must apply and persist immediately.");
         workspace_transitions->setChecked(false);
         require(!settings::workspacePageTransitionsEnabled() &&
-                    !workspace_transition_duration->isEnabled(),
-                "Disabling workspace animation must persist and disable its slider.");
+                    !workspace_transition_duration->isEnabled() &&
+                    !workspace_transition_style->isEnabled(),
+                "Disabling workspace animation must persist and disable its controls.");
         {
             settings::SettingsDialog reopened(nullptr, shortcut_manager);
             auto* reopened_toggle = reopened.findChild<QCheckBox*>(
                 "workspacePageTransitionsCheckBox");
             auto* reopened_duration = reopened.findChild<QSlider*>(
                 "workspacePageTransitionDurationSlider");
+            auto* reopened_style = reopened.findChild<QComboBox*>(
+                "workspacePageTransitionStyleComboBox");
             require(reopened_toggle != nullptr && reopened_duration != nullptr &&
+                        reopened_style != nullptr &&
                         !reopened_toggle->isChecked() &&
                         !reopened_duration->isEnabled() &&
+                        !reopened_style->isEnabled() &&
+                        reopened_style->currentData().toInt() ==
+                            static_cast<int>(
+                                settings::WorkspacePageTransitionStyle::EntireApplicationWindow) &&
                         reopened_duration->value() == 400,
                     "Reopened Settings did not restore workspace transition preferences.");
         }
         workspace_transitions->setChecked(true);
+        workspace_transition_style->setCurrentIndex(
+            workspace_transition_style->findData(static_cast<int>(
+                settings::WorkspacePageTransitionStyle::WorkspaceContent)));
+        require(settings::workspacePageTransitionStyle() ==
+                    settings::WorkspacePageTransitionStyle::WorkspaceContent,
+                "The workspace-content style could not be selected again.");
         workspace_transition_duration->setValue(100);
         require(settings::workspacePageTransitionsEnabled() &&
                     settings::workspacePageTransitionDurationMs() == 100,

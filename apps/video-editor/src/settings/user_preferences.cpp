@@ -157,6 +157,30 @@ void setWorkspacePageTransitionsEnabled(bool enabled) {
     QSettings().setValue(kWorkspacePageTransitionsEnabledKey, enabled);
 }
 
+WorkspacePageTransitionStyle workspacePageTransitionStyle() {
+    const auto stored = QSettings().value(kWorkspacePageTransitionStyleKey);
+    bool ok = false;
+    const auto value = stored.toInt(&ok);
+    if (!ok) return kDefaultWorkspacePageTransitionStyle;
+    switch (static_cast<WorkspacePageTransitionStyle>(value)) {
+    case WorkspacePageTransitionStyle::WorkspaceContent:
+    case WorkspacePageTransitionStyle::EntireApplicationWindow:
+        return static_cast<WorkspacePageTransitionStyle>(value);
+    }
+    return kDefaultWorkspacePageTransitionStyle;
+}
+
+void setWorkspacePageTransitionStyle(WorkspacePageTransitionStyle style) {
+    switch (style) {
+    case WorkspacePageTransitionStyle::WorkspaceContent:
+    case WorkspacePageTransitionStyle::EntireApplicationWindow:
+        QSettings().setValue(
+            kWorkspacePageTransitionStyleKey,
+            static_cast<int>(style));
+        break;
+    }
+}
+
 int workspacePageTransitionDurationMs() {
     const auto stored = QSettings().value(
         kWorkspacePageTransitionDurationMsKey);

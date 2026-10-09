@@ -74,7 +74,8 @@ void WorkspaceTransitionController::setPage(WorkspacePageId page) {
             current_page,
             page,
             settings::workspacePageTransitionDurationMs(),
-            [this, page]() { applyPage(page); });
+            [this, page]() { applyPage(page); },
+            settings::workspacePageTransitionStyle());
         return;
     }
 

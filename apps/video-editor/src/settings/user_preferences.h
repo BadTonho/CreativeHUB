@@ -7,6 +7,11 @@ enum class AudioWaveformDisplayMode : int {
     Stereo = 1,
 };
 
+enum class WorkspacePageTransitionStyle : int {
+    WorkspaceContent = 0,
+    EntireApplicationWindow = 1,
+};
+
 inline constexpr char kGpuCompositionEnabledKey[] = "performance/gpu_composition_enabled";
 [[nodiscard]] bool gpuCompositionEnabled();
 void setGpuCompositionEnabled(bool enabled);
@@ -29,6 +34,8 @@ inline constexpr char kWorkspacePageTransitionsEnabledKey[] =
     "workspace/page_transitions_enabled";
 inline constexpr char kWorkspacePageTransitionDurationMsKey[] =
     "workspace/page_transition_duration_ms";
+inline constexpr char kWorkspacePageTransitionStyleKey[] =
+    "workspace/page_transition_style";
 
 inline constexpr int kDefaultProjectAutosaveIntervalSeconds = 30;
 inline constexpr int kMinimumProjectAutosaveIntervalSeconds = 10;
@@ -43,6 +50,9 @@ inline constexpr double kDefaultTimelineTrackGroupSplitRatio = 0.5;
 inline constexpr double kMinimumTimelineTrackGroupSplitRatio = 0.2;
 inline constexpr double kMaximumTimelineTrackGroupSplitRatio = 0.8;
 inline constexpr bool kDefaultWorkspacePageTransitionsEnabled = true;
+inline constexpr WorkspacePageTransitionStyle
+    kDefaultWorkspacePageTransitionStyle =
+        WorkspacePageTransitionStyle::WorkspaceContent;
 inline constexpr int kDefaultWorkspacePageTransitionDurationMs = 250;
 inline constexpr int kMinimumWorkspacePageTransitionDurationMs = 100;
 inline constexpr int kMaximumWorkspacePageTransitionDurationMs = 600;
@@ -65,6 +75,8 @@ void setAudioWaveformDisplayMode(AudioWaveformDisplayMode mode);
 void setTimelineTrackGroupSplitRatio(double ratio);
 [[nodiscard]] bool workspacePageTransitionsEnabled();
 void setWorkspacePageTransitionsEnabled(bool enabled);
+[[nodiscard]] WorkspacePageTransitionStyle workspacePageTransitionStyle();
+void setWorkspacePageTransitionStyle(WorkspacePageTransitionStyle style);
 [[nodiscard]] int workspacePageTransitionDurationMs();
 void setWorkspacePageTransitionDurationMs(int duration_ms);
 

@@ -5,6 +5,7 @@
 #include <QEventLoop>
 #include <QGuiApplication>
 #include <QMainWindow>
+#include <QMenuBar>
 #include <QScreen>
 #include <QThread>
 
@@ -72,7 +73,8 @@ int main(int argc, char* argv[]) {
                         "The outgoing page changed before the window left the screen.");
                 forward_exit_frame = window.frameGeometry();
                 page = ui::WorkspacePageId::Fusion;
-            });
+            },
+            settings::WorkspacePageTransitionStyle::EntireApplicationWindow);
         require(transition.isRunning() && transition.slideDirection() == 1 &&
                     !transition.pageWasApplied() &&
                     page == ui::WorkspacePageId::Edit &&
@@ -115,7 +117,8 @@ int main(int argc, char* argv[]) {
                         "The reverse page changed before the window left the screen.");
                 reverse_exit_frame = window.frameGeometry();
                 page = ui::WorkspacePageId::Edit;
-            });
+            },
+            settings::WorkspacePageTransitionStyle::EntireApplicationWindow);
         require(transition.isRunning() && transition.slideDirection() == -1,
                 "Backward navigation must move the current window right.");
         require(waitUntil(
@@ -138,7 +141,8 @@ int main(int argc, char* argv[]) {
             ui::WorkspacePageId::Edit,
             ui::WorkspacePageId::Render,
             100,
-            [&page]() { page = ui::WorkspacePageId::Render; });
+            [&page]() { page = ui::WorkspacePageId::Render; },
+            settings::WorkspacePageTransitionStyle::EntireApplicationWindow);
         require(transition.slideDirection() == 1,
                 "A non-adjacent forward page change must use the forward direction.");
         require(waitUntil(
@@ -154,7 +158,8 @@ int main(int argc, char* argv[]) {
             ui::WorkspacePageId::Render,
             ui::WorkspacePageId::Render,
             100,
-            [&same_page_applied]() { same_page_applied = true; });
+            [&same_page_applied]() { same_page_applied = true; },
+            settings::WorkspacePageTransitionStyle::EntireApplicationWindow);
         require(same_page_applied && !transition.isRunning() &&
                     completed == completed_before_same_page &&
                     window.pos() == normal_position,
@@ -166,7 +171,8 @@ int main(int argc, char* argv[]) {
             ui::WorkspacePageId::Edit,
             ui::WorkspacePageId::Fusion,
             600,
-            [&canceled_before_switch]() { canceled_before_switch = true; });
+            [&canceled_before_switch]() { canceled_before_switch = true; },
+            settings::WorkspacePageTransitionStyle::EntireApplicationWindow);
         transition.cancel();
         require(!transition.isRunning() && !canceled_before_switch &&
                     window.geometry() == normal_geometry &&
@@ -179,7 +185,8 @@ int main(int argc, char* argv[]) {
             ui::WorkspacePageId::Edit,
             ui::WorkspacePageId::Fusion,
             600,
-            [&canceled_after_switch]() { canceled_after_switch = true; });
+            [&canceled_after_switch]() { canceled_after_switch = true; },
+            settings::WorkspacePageTransitionStyle::EntireApplicationWindow);
         require(waitUntil(
                     [&transition]() { return transition.pageWasApplied(); },
                     1000),
@@ -203,7 +210,8 @@ int main(int argc, char* argv[]) {
             100,
             [&]() {
                 switched_while_restored = !window.isMaximized();
-            });
+            },
+            settings::WorkspacePageTransitionStyle::EntireApplicationWindow);
         require(!window.isMaximized(),
                 "A maximized window must be restored before it moves.");
         require(waitUntil(
@@ -213,6 +221,112 @@ int main(int argc, char* argv[]) {
         require(switched_while_restored && window.isMaximized() &&
                     window.geometry() == maximized_geometry,
                 "A maximized window must return to its original maximized state and geometry.");
+
+        QMainWindow content_window;
+        content_window.menuBar()->addMenu("File");
+        content_window.menuBar()->addMenu("Edit");
+        content_window.menuBar()->addMenu("View");
+        content_window.menuBar()->addMenu("Settings");
+        content_window.menuBar()->addMenu("Help");
+        auto* content = new QWidget(&content_window);
+        content->setStyleSheet("background-color: #263746;");
+        content_window.setCentralWidget(content);
+        content_window.resize(500, 320);
+        content_window.move(160, 120);
+        content_window.show();
+        QApplication::processEvents();
+        const auto content_window_position = content_window.pos();
+        const auto menu_position = content_window.menuBar()->mapToGlobal(
+            QPoint(0, 0));
+        const auto menu_geometry = content_window.menuBar()->geometry();
+        auto content_page = ui::WorkspacePageId::Edit;
+        ui::WorkspacePageTransition content_transition;
+        content_transition.start(
+            &content_window,
+            ui::WorkspacePageId::Edit,
+            ui::WorkspacePageId::Fusion,
+            120,
+            [&content_page]() { content_page = ui::WorkspacePageId::Fusion; },
+            settings::WorkspacePageTransitionStyle::WorkspaceContent);
+        auto* overlay = content_window.findChild<QWidget*>(
+            "workspacePageTransitionOverlay");
+        require(overlay != nullptr && overlay->isVisible() &&
+                    content_window.pos() == content_window_position &&
+                    content_window.menuBar()->mapToGlobal(QPoint(0, 0)) ==
+                        menu_position &&
+                    overlay->geometry().top() == menu_geometry.bottom() + 1 &&
+                    overlay->geometry().left() == 0 &&
+                    overlay->property("slideOffset").toInt() == 0 &&
+                    overlay->size() == QSize(
+                        content_window.width(),
+                        content_window.height() - menu_geometry.bottom() - 1),
+                "Workspace content mode must cover everything below the fixed menu bar.");
+        require(waitUntil(
+                    [&content_transition]() {
+                        return content_transition.pageWasApplied();
+                    },
+                    1000),
+                "Workspace content transition did not apply the destination at its midpoint.");
+        require(content_page == ui::WorkspacePageId::Fusion &&
+                    content_window.pos() == content_window_position &&
+                    content_window.menuBar()->mapToGlobal(QPoint(0, 0)) ==
+                        menu_position &&
+                    overlay->geometry().left() == 0 &&
+                    overlay->property("slideOffset").toInt() > 0,
+                "The fixed window and menus must remain still while the destination block enters from the right.");
+        require(waitUntil(
+                    [&content_transition]() {
+                        return !content_transition.isRunning();
+                    },
+                    1000) &&
+                    content_window.findChild<QWidget*>(
+                        "workspacePageTransitionOverlay") == nullptr &&
+                    content_window.pos() == content_window_position,
+                "Workspace content transition did not clean up its moving surface.");
+
+        content_transition.start(
+            &content_window,
+            ui::WorkspacePageId::Render,
+            ui::WorkspacePageId::Edit,
+            120,
+            [&content_page]() { content_page = ui::WorkspacePageId::Edit; },
+            settings::WorkspacePageTransitionStyle::WorkspaceContent);
+        overlay = content_window.findChild<QWidget*>(
+            "workspacePageTransitionOverlay");
+        require(waitUntil(
+                    [&content_transition]() {
+                        return content_transition.pageWasApplied();
+                    },
+                    1000) &&
+                    content_page == ui::WorkspacePageId::Edit &&
+                    overlay != nullptr &&
+                    overlay->property("slideOffset").toInt() < 0 &&
+                    content_window.pos() == content_window_position,
+                "The reverse workspace block must enter from the left without moving the window.");
+        content_transition.cancel();
+        require(content_window.pos() == content_window_position &&
+                    content_window.findChild<QWidget*>(
+                        "workspacePageTransitionOverlay") == nullptr,
+                "Canceling a content transition must remove its surface and keep window geometry.");
+
+        content_transition.start(
+            &content_window,
+            ui::WorkspacePageId::Edit,
+            ui::WorkspacePageId::Fusion,
+            600,
+            [&content_page]() { content_page = ui::WorkspacePageId::Fusion; },
+            settings::WorkspacePageTransitionStyle::WorkspaceContent);
+        require(content_window.findChild<QWidget*>(
+                    "workspacePageTransitionOverlay") != nullptr,
+                "A cancelable content transition did not create its surface.");
+        content_transition.cancel();
+        require(content_page == ui::WorkspacePageId::Edit &&
+                    content_window.pos() == content_window_position &&
+                    content_window.menuBar()->mapToGlobal(QPoint(0, 0)) ==
+                        menu_position &&
+                    content_window.findChild<QWidget*>(
+                        "workspacePageTransitionOverlay") == nullptr,
+                "Canceling before the content switch must keep the current page and clean up the surface.");
 
         return 0;
     } catch (const std::exception& error) {

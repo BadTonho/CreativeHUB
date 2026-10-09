@@ -1,9 +1,11 @@
 #pragma once
 
+#include "settings/user_preferences.h"
 #include "ui/workspace/workspace_page_id.h"
 
 #include <QObject>
 #include <QPoint>
+#include <QPixmap>
 #include <QPointer>
 #include <QRect>
 #include <QVariantAnimation>
@@ -14,20 +16,21 @@ class QWidget;
 
 namespace ui {
 
-// Moves the application window off-screen, switches pages, then returns it
-// from the opposite side while preserving its original geometry and state.
+// Animates either the workspace content below the menu bar or the full window.
 class WorkspacePageTransition final : public QObject {
     Q_OBJECT
 
 public:
     explicit WorkspacePageTransition(QObject* parent = nullptr);
+    ~WorkspacePageTransition() override;
 
     void start(
         QWidget* window,
         WorkspacePageId from_page,
         WorkspacePageId to_page,
         int duration_ms,
-        std::function<void()> apply_page);
+        std::function<void()> apply_page,
+        settings::WorkspacePageTransitionStyle style);
     void cancel();
 
     [[nodiscard]] bool isRunning() const noexcept;
@@ -49,14 +52,25 @@ private:
     void advancePhase();
     void restoreWindow();
     void clearTransitionState();
+    [[nodiscard]] QRect contentRect(QWidget* window) const;
+    void startContentTransition(
+        QWidget* window,
+        int duration_ms,
+        std::function<void()> apply_page);
+    void advanceContentTransition();
 
     QPointer<QWidget> window_;
+    QPointer<QWidget> content_overlay_;
     QVariantAnimation animation_;
     std::function<void()> apply_page_;
     QRect original_geometry_;
     QPoint original_position_;
     QPoint exit_position_;
     QPoint entry_position_;
+    QRect content_rect_;
+    QPixmap content_image_;
+    settings::WorkspacePageTransitionStyle style_ =
+        settings::WorkspacePageTransitionStyle::EntireApplicationWindow;
     Phase phase_ = Phase::None;
     int slide_direction_ = 1;
     int exit_duration_ms_ = 0;

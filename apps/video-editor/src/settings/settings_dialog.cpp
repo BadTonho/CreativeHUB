@@ -103,6 +103,28 @@ QWidget* SettingsDialog::createGeneralPage() {
     transitions_check->setChecked(settings::workspacePageTransitionsEnabled());
     transitions_layout->addWidget(transitions_check);
 
+    auto* style_row = new QWidget(transitions_group);
+    auto* style_layout = new QHBoxLayout(style_row);
+    style_layout->setContentsMargins(0, 0, 0, 0);
+    auto* style_label = new QLabel("Style:", style_row);
+    auto* style_combo = new QComboBox(style_row);
+    style_combo->setObjectName("workspacePageTransitionStyleComboBox");
+    style_combo->addItem(
+        "Workspace content",
+        static_cast<int>(
+            WorkspacePageTransitionStyle::WorkspaceContent));
+    style_combo->addItem(
+        "Entire application window",
+        static_cast<int>(
+            WorkspacePageTransitionStyle::EntireApplicationWindow));
+    style_combo->setAccessibleName("Workspace transition style");
+    const auto selected_style = settings::workspacePageTransitionStyle();
+    style_combo->setCurrentIndex(style_combo->findData(
+        static_cast<int>(selected_style)));
+    style_layout->addWidget(style_label);
+    style_layout->addWidget(style_combo, 1);
+    transitions_layout->addWidget(style_row);
+
     auto* duration_row = new QWidget(transitions_group);
     auto* duration_layout = new QHBoxLayout(duration_row);
     duration_layout->setContentsMargins(0, 0, 0, 0);
@@ -132,7 +154,7 @@ QWidget* SettingsDialog::createGeneralPage() {
     transitions_layout->addWidget(duration_row);
 
     auto* transitions_description = new QLabel(
-        "A higher duration makes the lateral slide slower. This preference is saved on this device and does not modify projects.",
+        "Workspace content slides everything below the menu bar as one block. Entire application window also moves the native window frame. These preferences are saved on this device and do not modify projects.",
         transitions_group);
     transitions_description->setWordWrap(true);
     transitions_layout->addWidget(transitions_description);
@@ -141,11 +163,19 @@ QWidget* SettingsDialog::createGeneralPage() {
     duration_slider->setToolTip(
         "Choose a duration from 100 to 600 milliseconds in 25 millisecond steps.");
     duration_slider->setEnabled(transitions_check->isChecked());
+    style_combo->setEnabled(transitions_check->isChecked());
 
     connect(transitions_check, &QCheckBox::toggled, this,
-            [duration_slider](bool enabled) {
+            [duration_slider, style_combo](bool enabled) {
                 settings::setWorkspacePageTransitionsEnabled(enabled);
                 duration_slider->setEnabled(enabled);
+                style_combo->setEnabled(enabled);
+            });
+    connect(style_combo, &QComboBox::currentIndexChanged, this,
+            [style_combo](int index) {
+                const auto value = style_combo->itemData(index).toInt();
+                settings::setWorkspacePageTransitionStyle(
+                    static_cast<WorkspacePageTransitionStyle>(value));
             });
     connect(duration_slider, &QSlider::valueChanged, this,
             [duration_slider, duration_value](int value) {

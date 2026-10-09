@@ -238,11 +238,16 @@ application log; it never becomes project data or marks the project dirty.
 The same tab provides the enabled-by-default `Enable project autosave` option,
 an interval from 10 to 300 seconds (30 by default), and a retention limit from
 5 to 20 snapshots (5 by default). These global settings apply immediately.
-It also provides the enabled-by-default `Animate workspace switches` option
-and a duration slider from 100 to 600 ms in 25 ms steps (250 ms by default).
-These local `QSettings` preferences control the lateral transition between
-Edit, Fusion, and Render and do not modify project data. The duration slider is
-disabled when animation is turned off.
+It also provides the enabled-by-default `Animate workspace switches` option,
+a style selector, and a duration slider from 100 to 600 ms in 25 ms steps
+(250 ms by default). `Workspace content` is the default style and slides one
+captured surface containing the toolbar, workspace selectors, docks, and page
+content below the menu bar; the window and menu bar remain fixed. `Entire
+application window` retains the native-window slide, including its frame and
+the desktop reveal between pages. These local `QSettings` preferences control
+the lateral transition between Edit, Fusion, and Render and do not modify
+project data. The style selector and duration slider are disabled when
+animation is turned off.
 Autosave writes atomic recovery snapshots beside a saved project, or under
 the application data recovery directory for an unsaved project; it never
 overwrites the main `.csp` file or clears the dirty state. The `Autosave` tab
@@ -692,18 +697,18 @@ or persist layout. `MainWindow` remains
 responsible for creating the docks, restoring and saving their native layout,
 and returning to Edit before an accepted close from Render.
 
-The internal `WorkspacePageTransition` helper moves the complete top-level
-Video Editor window, including its native window frame, toolbars, workspace
-selectors, docks, and page content. Moving forward through Edit → Fusion →
-Render sends the current window off-screen to the left, applies the destination
-page, and brings the same window back from the right. Moving backward reverses
-those directions. The desktop is visible while the window is off-screen. A
-maximized window is temporarily restored to its normal geometry and maximized
-again when the transition finishes. The helper uses the locally configured
-duration, preserves the original window geometry, and does not animate initial
-page selection, same-page requests, or shutdown restoration. While a slide is
-running, only the latest additional page request is kept for the next
-transition.
+The internal `WorkspacePageTransition` helper supports two local styles.
+`Workspace content` captures the complete area below the menu bar as one
+surface, including the top toolbar, workspace selectors, docks, and page
+content. The outgoing capture slides away and the destination capture enters
+from the opposite side while the native window and menu bar stay fixed.
+`Entire application window` moves the complete top-level Video Editor window,
+including its native frame, off-screen before applying the destination page and
+returns it from the opposite side. A maximized window is temporarily restored
+to its normal geometry and maximized again when that style finishes. Both
+styles use the locally configured duration and direction, do not animate
+initial page selection, same-page requests, or shutdown restoration, and keep
+only the latest additional page request while a slide is running.
 
 `workspaces/edit/ui/EditWorkspace` builds the Inspector and Timeline
 surfaces and exposes them to `WorkspaceHost`. Edit, Fusion, and Render keep the
