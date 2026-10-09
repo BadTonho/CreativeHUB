@@ -19,9 +19,12 @@
 #include <QImage>
 #include <QPushButton>
 #include <QDialog>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSettings>
 #include <QSlider>
 #include <QTemporaryDir>
+#include <QWheelEvent>
 #include <QWidget>
 
 #include <cstdio>
@@ -31,6 +34,35 @@
 namespace {
 void require(bool value, const char* message) {
     if (!value) throw std::runtime_error(message);
+}
+
+void verifyFusionInspectorScrolling(QScrollArea* scroll_area) {
+    require(scroll_area != nullptr && scroll_area->widgetResizable() &&
+                scroll_area->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff &&
+                scroll_area->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded,
+            "Fusion Inspector must use a vertical on-demand scroll area.");
+    auto* content = scroll_area->widget();
+    require(content != nullptr, "Fusion Inspector has no scrollable content.");
+    const auto original_minimum_height = content->minimumHeight();
+    content->setMinimumHeight(scroll_area->viewport()->height() + 300);
+    QApplication::processEvents();
+
+    auto* vertical_bar = scroll_area->verticalScrollBar();
+    require(vertical_bar->maximum() > 0,
+            "Fusion Inspector did not expose overflow through its scrollbar.");
+    vertical_bar->setValue(0);
+    const auto local_position = QPoint(8, 8);
+    QWheelEvent wheel_event(
+        local_position, scroll_area->viewport()->mapToGlobal(local_position),
+        QPoint(), QPoint(0, -120), Qt::NoButton, Qt::NoModifier,
+        Qt::NoScrollPhase, false);
+    QApplication::sendEvent(scroll_area->viewport(), &wheel_event);
+    QApplication::processEvents();
+    require(vertical_bar->value() > 0,
+            "Fusion Inspector did not scroll in response to the mouse wheel.");
+    vertical_bar->setValue(0);
+    content->setMinimumHeight(original_minimum_height);
+    QApplication::processEvents();
 }
 
 bool imagesDiffer(const QImage& first, const QImage& second) {
@@ -121,7 +153,22 @@ void testGridPreferencesAndRendering() {
 int runFusionWorkspaceTest() {
     ui::FusionWorkspace workspace;
     QWidget root;
+    root.resize(1100, 700);
     workspace.createPanels(&root);
+    auto* inspector_panel = workspace.inspectorPanel();
+    inspector_panel->setGeometry(800, 80, 280, 240);
+    root.show();
+    QApplication::processEvents();
+    auto* inspector_scroll = root.findChild<QScrollArea*>(
+        "fusionInspectorScrollArea");
+    verifyFusionInspectorScrolling(inspector_scroll);
+    inspector_panel->resize(280, 2000);
+    QApplication::processEvents();
+    require(inspector_scroll->verticalScrollBar()->maximum() == 0,
+            "Fusion Inspector showed overflow when its content fit the viewport.");
+    inspector_panel->resize(280, 240);
+    QApplication::processEvents();
+
     timeline::TimelineClip selected;
     selected.clip_id = 42;
     selected.kind = timeline::ClipKind::Video;
@@ -393,6 +440,7 @@ int runFusionWorkspaceTest() {
             "Dragging a wire that would create a cycle did not show an explanation.");
 
     node_canvas->setSelectedNode(transform_id);
+    verifyFusionInspectorScrolling(inspector_scroll);
     auto* scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
     auto* apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
     require(scale && apply, "Transform settings were not shown for the selected node.");

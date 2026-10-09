@@ -8,10 +8,12 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QFrame>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QVBoxLayout>
@@ -307,25 +309,40 @@ void FusionWorkspace::createPanels(QWidget* parent) {
 
     inspector_panel_ = new QWidget(parent);
     inspector_panel_->setObjectName("fusionInspector");
-    auto* inspector_layout = new QVBoxLayout(inspector_panel_);
+    auto* inspector_panel_layout = new QVBoxLayout(inspector_panel_);
+    inspector_panel_layout->setContentsMargins(0, 0, 0, 0);
+    inspector_panel_layout->setSpacing(0);
+
+    auto* inspector_scroll_area = new QScrollArea(inspector_panel_);
+    inspector_scroll_area->setObjectName("fusionInspectorScrollArea");
+    inspector_scroll_area->setWidgetResizable(true);
+    inspector_scroll_area->setFrameShape(QFrame::NoFrame);
+    inspector_scroll_area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    inspector_scroll_area->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    auto* inspector_content = new QWidget(inspector_scroll_area);
+    inspector_content->setObjectName("fusionInspectorContent");
+    auto* inspector_layout = new QVBoxLayout(inspector_content);
     inspector_layout->setContentsMargins(12, 12, 12, 12);
     inspector_layout->setSpacing(8);
-    auto* inspector_title = new QLabel("Fusion Inspector", inspector_panel_);
+    auto* inspector_title = new QLabel("Fusion Inspector", inspector_content);
     inspector_title->setObjectName("fusionInspectorTitle");
     inspector_title->setStyleSheet("font-weight: 600; font-size: 14px;");
     inspector_layout->addWidget(inspector_title);
-    auto* status = new QLabel("Select a video or image clip in the Timeline.", inspector_panel_);
+    auto* status = new QLabel("Select a video or image clip in the Timeline.", inspector_content);
     status->setObjectName("fusionNodeStatus");
     status->setWordWrap(true);
     status->setStyleSheet("color: #9aa4b2;");
     inspector_layout->addWidget(status);
-    node_properties_ = new QWidget(inspector_panel_);
+    node_properties_ = new QWidget(inspector_content);
     node_properties_->setObjectName("fusionNodeProperties");
     auto* property_layout = new QFormLayout(node_properties_);
     property_layout->setContentsMargins(0, 0, 0, 8);
     inspector_layout->addWidget(node_properties_);
 
     inspector_layout->addStretch(1);
+    inspector_scroll_area->setWidget(inspector_content);
+    inspector_panel_layout->addWidget(inspector_scroll_area);
     setSelection(nullptr, {});
 }
 

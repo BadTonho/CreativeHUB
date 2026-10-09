@@ -71,6 +71,20 @@ double transformValueFromSlider(int slider_value, double minimum, double maximum
     return minimum + fraction * (maximum - minimum);
 }
 
+QScrollArea* createInspectorScrollArea(
+    QWidget* content,
+    const QString& object_name,
+    QWidget* parent) {
+    auto* scroll_area = new QScrollArea(parent);
+    scroll_area->setObjectName(object_name);
+    scroll_area->setWidgetResizable(true);
+    scroll_area->setFrameShape(QFrame::NoFrame);
+    scroll_area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll_area->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scroll_area->setWidget(content);
+    return scroll_area;
+}
+
 
 int timelineZoomLevelIndex(double factor) {
     const auto match = std::min_element(
@@ -423,9 +437,21 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     audio_layout->addWidget(track_audio_group);
     audio_layout->addStretch();
 
-    ui_.inspector_tabs->addTab(inspector_page, "Inspector");
-    ui_.inspector_tabs->addTab(audio_page, "Audio");
-    ui_.inspector_tabs->addTab(effects_page, "Effects");
+    ui_.inspector_tabs->addTab(
+        createInspectorScrollArea(
+            inspector_page, QStringLiteral("editInspectorScrollArea"),
+            ui_.inspector_tabs),
+        "Inspector");
+    ui_.inspector_tabs->addTab(
+        createInspectorScrollArea(
+            audio_page, QStringLiteral("audioInspectorScrollArea"),
+            ui_.inspector_tabs),
+        "Audio");
+    ui_.inspector_tabs->addTab(
+        createInspectorScrollArea(
+            effects_page, QStringLiteral("effectsInspectorScrollArea"),
+            ui_.inspector_tabs),
+        "Effects");
     outer_layout->addWidget(ui_.inspector_tabs);
 
     QSettings settings;

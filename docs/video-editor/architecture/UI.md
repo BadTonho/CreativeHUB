@@ -582,6 +582,10 @@ removal. Disabled rows are dimmed and their parameters remain editable. Its cont
 disabled with guidance when the selection is not a video or image clip. The
 active tab is restored from global user settings and does not affect project
 dirty state or `.csp` data. Selecting a clip does not change the active tab.
+Each Edit tab and the Fusion Inspector content use a vertical scroll area. The
+scrollbar appears only when controls exceed the available panel height; the
+mouse wheel and scrollbar move the panel content without changing dock size or
+project state.
 Audio output follows the worker playback clock when possible. Missing audio,
 disabled output, or an unavailable device keeps the video fallback running and
 reports a short status message while the detailed cause goes to the local log.

@@ -59,9 +59,11 @@
 #include <QEvent>
 #include <QGraphicsScene>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QTabWidget>
 #include <QUrl>
+#include <QWheelEvent>
 #include <QRunnable>
 
 #include <algorithm>
@@ -88,6 +90,41 @@ QAction* editAction(MainWindow& window, const char* object_name) {
 
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
+}
+
+void verifyInspectorScrollArea(QScrollArea* scroll_area, const char* name) {
+    require(scroll_area != nullptr && scroll_area->widgetResizable() &&
+                scroll_area->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff &&
+                scroll_area->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded,
+            std::string(name) + " does not use a vertical on-demand scroll area.");
+    auto* content = scroll_area->widget();
+    require(content != nullptr,
+            std::string(name) + " has no scrollable content.");
+
+    const auto original_minimum_height = content->minimumHeight();
+    content->setMinimumHeight(std::max(
+        original_minimum_height, scroll_area->viewport()->height() + 300));
+    QApplication::processEvents();
+
+    auto* vertical_bar = scroll_area->verticalScrollBar();
+    require(vertical_bar->maximum() > 0,
+            std::string(name) + " did not expose overflow through its scrollbar.");
+    vertical_bar->setValue(0);
+    const auto local_position = QPoint(8, 8);
+    QWheelEvent wheel_event(
+        local_position, scroll_area->viewport()->mapToGlobal(local_position),
+        QPoint(), QPoint(0, -120), Qt::NoButton, Qt::NoModifier,
+        Qt::NoScrollPhase, false);
+    QApplication::sendEvent(scroll_area->viewport(), &wheel_event);
+    QApplication::processEvents();
+    require(vertical_bar->value() > 0,
+            std::string(name) + " did not scroll in response to the mouse wheel.");
+    vertical_bar->setValue(vertical_bar->maximum());
+    require(vertical_bar->value() == vertical_bar->maximum(),
+            std::string(name) + " could not scroll to the end of its content.");
+
+    content->setMinimumHeight(original_minimum_height);
+    QApplication::processEvents();
 }
 
 void sendShortcutKey(
@@ -357,6 +394,15 @@ public:
                         inspector_tabs->widget(2)->isAncestorOf(
                             inspector_ui.effect_selection_hint),
                     "Inspector, Audio, and Effects controls must live on their dedicated tabs.");
+            for (int index = 0; index < inspector_tabs->count(); ++index) {
+                inspector_tabs->setCurrentIndex(index);
+                QApplication::processEvents();
+                verifyInspectorScrollArea(
+                    qobject_cast<QScrollArea*>(inspector_tabs->widget(index)),
+                    inspector_tabs->tabText(index).toUtf8().constData());
+            }
+            inspector_tabs->setCurrentIndex(0);
+            QApplication::processEvents();
             require(!inspector_ui.clip_effects_controls->isEnabled() &&
                         !inspector_ui.effect_selection_hint->isHidden(),
                     "The Effects tab must guide users and disable controls when no clip is selected.");
