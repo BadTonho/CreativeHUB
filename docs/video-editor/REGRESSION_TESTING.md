@@ -211,6 +211,10 @@ in the running Video Editor after UI or integration changes:
   opens a modal dialog with `General`, `Autosave`, `Timeline`, and `Shortcuts` tabs, closes
   without changing project dirty state, and leaves the existing Edit menu
   preferences available;
+- Settings persistence: in the Release application, change the GPU preview
+  toggle and workspace transition style, close and reopen Settings, then restart
+  the application and confirm both values remain selected. Changes apply
+  immediately; no separate Save action is needed;
 - Settings > General: confirm preview performance metrics are disabled by
   default, can be enabled immediately, persist globally after reopening the
   editor, write aggregated numeric `preview/performance_metrics` samples about

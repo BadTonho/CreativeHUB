@@ -229,6 +229,11 @@ preferences stored by `QSettings` under `shortcuts/<id>`; mouse gestures are
 intentionally excluded. The shared registration, conflict, and persistence
 logic lives in `libs/shortcuts`; the Video Editor keeps its own settings dialog
 and applies valid changes immediately.
+Before creating any default `QSettings` object, application startup sets the
+organization name to `Creative Suite` and the application name to `Video
+Editor`. This identity is required for Qt to read and write the application's
+local preferences. Settings controls save changes immediately; closing the
+dialog does not discard them, and no separate Save action is required.
 The `General` tab also provides the enabled-by-default `Enable preview
 performance metrics` preference while Preview diagnostics are under active
 testing. It is stored globally under `performance/preview_metrics_enabled` and

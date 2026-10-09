@@ -72,6 +72,7 @@ int main(int argc, char* argv[]) {
         QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
         QApplication application(argc, argv);
         application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
+        QApplication::setOrganizationName("Creative Suite");
         QApplication::setApplicationName("Video Editor");
         QApplication::setApplicationVersion(CREATIVE_SUITE_APP_VERSION);
 
