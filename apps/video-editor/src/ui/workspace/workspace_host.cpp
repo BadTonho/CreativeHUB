@@ -3,7 +3,10 @@
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/render/ui/render_workspace.h"
 
+#include <QLayout>
+#include <QMainWindow>
 #include <QStackedWidget>
+#include <QSizePolicy>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -13,9 +16,11 @@ WorkspaceHost::WorkspaceHost(
     EditWorkspace* edit_workspace,
     FusionWorkspace* fusion_workspace,
     RenderWorkspace* render_workspace,
+    QWidget* preview_dock_contents,
     QWidget* parent)
     : WorkspaceHost(
           edit_workspace != nullptr ? edit_workspace->previewWidget() : nullptr,
+          preview_dock_contents,
           edit_workspace != nullptr ? edit_workspace->inspectorPanel() : nullptr,
           edit_workspace != nullptr ? edit_workspace->timelinePanel() : nullptr,
           fusion_workspace,
@@ -24,6 +29,7 @@ WorkspaceHost::WorkspaceHost(
 
 WorkspaceHost::WorkspaceHost(
     QWidget* preview_widget,
+    QWidget* preview_dock_contents,
     QWidget* edit_inspector,
     QWidget* timeline_panel,
     FusionWorkspace* fusion_workspace,
@@ -31,6 +37,7 @@ WorkspaceHost::WorkspaceHost(
     QWidget* parent)
     : QWidget(parent),
       preview_widget_(preview_widget),
+      preview_dock_contents_(preview_dock_contents),
       fusion_workspace_(fusion_workspace),
       render_workspace_(render_workspace),
       timeline_panel_(timeline_panel),
@@ -43,24 +50,39 @@ WorkspaceHost::WorkspaceHost(
                             : nullptr),
       viewer_title_(fusion_workspace != nullptr
                         ? fusion_workspace->viewerTitle()
-                        : nullptr) {
+                        : nullptr),
+      render_page_(render_workspace != nullptr
+                       ? render_workspace->centralPage()
+                       : nullptr) {
     setObjectName("workspaceHost");
+    setMinimumSize(0, 0);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+    central_placeholder_ = new QWidget(parent != nullptr ? parent : this);
+    central_placeholder_->setObjectName("emptyWorkspaceCentralPlaceholder");
+    central_placeholder_->setMinimumSize(0, 0);
+    central_placeholder_->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Ignored);
 
     auto* viewer_layout = new QVBoxLayout(this);
     viewer_layout->setContentsMargins(0, 0, 0, 0);
     viewer_layout->setSpacing(0);
-    if (viewer_title_ != nullptr) {
-        viewer_layout->addWidget(viewer_title_);
-    }
 
     central_workspace_pages_ = new QStackedWidget(this);
     central_workspace_pages_->setObjectName("centralWorkspacePages");
-    if (preview_widget_ != nullptr) {
-        central_workspace_pages_->addWidget(preview_widget_);
-    }
-    if (render_workspace_ != nullptr &&
-        render_workspace_->centralPage() != nullptr) {
-        central_workspace_pages_->addWidget(render_workspace_->centralPage());
+    central_workspace_pages_->setMinimumSize(0, 0);
+    central_workspace_pages_->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Expanding);
+    empty_central_page_ = new QWidget(central_workspace_pages_);
+    empty_central_page_->setObjectName("emptyWorkspaceCenterPage");
+    empty_central_page_->setMinimumSize(0, 0);
+    empty_central_page_->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Ignored);
+    central_workspace_pages_->addWidget(empty_central_page_);
+    if (render_page_ != nullptr) {
+        // Keep Render's page owned and hidden by the stack until Render is
+        // selected. It is initially created with MainWindow as its parent.
+        central_workspace_pages_->addWidget(render_page_);
     }
     viewer_layout->addWidget(central_workspace_pages_, 1);
 
@@ -87,44 +109,68 @@ WorkspaceHost::WorkspaceHost(
 }
 
 void WorkspaceHost::setPage(WorkspacePageId page) {
+    if (current_page_ == page) {
+        if (viewer_title_ != nullptr) {
+            viewer_title_->setVisible(page == WorkspacePageId::Fusion);
+        }
+        setCentralWorkspaceVisible(page == WorkspacePageId::Render);
+        return;
+    }
+
+    const bool entering_render =
+        page == WorkspacePageId::Render &&
+        current_page_ != WorkspacePageId::Render;
+    const bool leaving_render =
+        page != WorkspacePageId::Render &&
+        current_page_ == WorkspacePageId::Render;
+
     if (fusion_workspace_ != nullptr) {
         fusion_workspace_->setActive(page == WorkspacePageId::Fusion);
     }
     if (render_workspace_ != nullptr) {
         render_workspace_->setActive(page == WorkspacePageId::Render);
     }
-    current_page_ = page;
-    if (page == WorkspacePageId::Render) {
+    if (entering_render) {
+        if (preview_widget_ != nullptr && preview_dock_contents_ != nullptr &&
+            preview_widget_->parentWidget() == preview_dock_contents_) {
+            if (auto* layout = preview_dock_contents_->layout()) {
+                layout->removeWidget(preview_widget_);
+            }
+            preview_widget_->setParent(nullptr);
+        }
         if (render_workspace_ != nullptr && preview_widget_ != nullptr &&
             render_workspace_->previewWidget() != preview_widget_) {
-            central_workspace_pages_->removeWidget(preview_widget_);
             render_workspace_->setPreviewWidget(preview_widget_);
         }
-        if (viewer_title_ != nullptr) viewer_title_->hide();
-        if (render_workspace_ != nullptr &&
-            render_workspace_->centralPage() != nullptr) {
-            central_workspace_pages_->setCurrentWidget(
-                render_workspace_->centralPage());
+        if (render_page_ != nullptr) {
+            central_workspace_pages_->setCurrentWidget(render_page_);
         }
+        current_page_ = page;
+        if (viewer_title_ != nullptr) viewer_title_->hide();
         if (timeline_panel_ != nullptr) {
             lower_workspace_panel_->setCurrentWidget(timeline_panel_);
         }
+        setCentralWorkspaceVisible(true);
         return;
     }
 
-    if (render_workspace_ != nullptr &&
+    if (leaving_render && render_workspace_ != nullptr &&
         render_workspace_->previewWidget() == preview_widget_) {
         auto* preview_widget = render_workspace_->takePreviewWidget();
-        if (preview_widget != nullptr) {
-            central_workspace_pages_->addWidget(preview_widget);
+        if (preview_widget != nullptr && preview_dock_contents_ != nullptr &&
+            preview_dock_contents_->layout() != nullptr) {
+            preview_dock_contents_->layout()->addWidget(preview_widget);
+            preview_widget->show();
         }
     }
+
+    central_workspace_pages_->setCurrentWidget(empty_central_page_);
 
     if (viewer_title_ != nullptr) {
         viewer_title_->setVisible(page == WorkspacePageId::Fusion);
     }
     if (preview_widget_ != nullptr) {
-        central_workspace_pages_->setCurrentWidget(preview_widget_);
+        preview_widget_->setVisible(true);
     }
     if (page == WorkspacePageId::Fusion) {
         if (node_editor_panel_ != nullptr) {
@@ -137,6 +183,21 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
         lower_workspace_panel_->setCurrentWidget(timeline_panel_);
         inspector_panel_->setCurrentWidget(edit_inspector_);
     }
+    setCentralWorkspaceVisible(false);
+    current_page_ = page;
+}
+
+void WorkspaceHost::setCentralWorkspaceVisible(bool visible) {
+    auto* main_window = qobject_cast<QMainWindow*>(window());
+    if (main_window == nullptr) return;
+
+    QWidget* desired = visible ? this : central_placeholder_;
+    if (desired == nullptr || main_window->centralWidget() == desired) return;
+
+    if (auto* current = main_window->takeCentralWidget()) {
+        current->setParent(main_window);
+    }
+    main_window->setCentralWidget(desired);
 }
 
 WorkspacePageId WorkspaceHost::currentPage() const noexcept {

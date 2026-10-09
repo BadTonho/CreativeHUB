@@ -305,6 +305,7 @@ private:
     QDockWidget* toolbox_dock_ = nullptr;
     QDockWidget* favorites_dock_ = nullptr;
     QDockWidget* effects_dock_ = nullptr;
+    QDockWidget* preview_dock_ = nullptr;
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;

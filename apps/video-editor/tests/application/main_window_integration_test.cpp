@@ -231,6 +231,15 @@ bool writePngAtomically(const std::filesystem::path& path, const QImage& image) 
 
 class MainWindowIntegrationTest final {
 public:
+    static void setWorkspacePageImmediately(
+        MainWindow& window,
+        ui::WorkspacePageId page) {
+        const bool was_visible = window.isVisible();
+        if (was_visible) window.hide();
+        window.setWorkspacePage(page);
+        if (was_visible) window.show();
+    }
+
     static void runProjectSettingsOnly(
         const std::filesystem::path& first_source,
         const std::filesystem::path& second_source) {
@@ -248,7 +257,7 @@ public:
         MainWindow window;
         window.show();
         QApplication::processEvents();
-        window.setWorkspacePage(ui::WorkspacePageId::Render);
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Render);
 
         auto* render_page = window.render_workspace_->centralPage();
         auto* container = render_page->findChild<QComboBox*>("renderContainerCombo");
@@ -368,7 +377,7 @@ public:
         // dedicated workspace-page-transition test.
         settings::setWorkspacePageTransitionsEnabled(false);
 
-        std::array<bool, 7> dock_visibility_before_close{};
+        std::array<bool, 8> dock_visibility_before_close{};
         {
             MainWindow render_window;
             render_window.show();
@@ -380,6 +389,17 @@ public:
                             timeline::FrameRate{30, 1} &&
                         !render_window.project_dirty_,
                     "The editor must open on a clean default 16:9, 30 fps project.");
+            require(render_window.preview_dock_ != nullptr &&
+                        render_window.preview_dock_->isVisible() &&
+                        render_window.dockWidgetArea(
+                            render_window.preview_dock_) == Qt::RightDockWidgetArea &&
+                        render_window.preview_widget_->parentWidget() ==
+                            render_window.preview_dock_->widget() &&
+                        render_window.preview_dock_->geometry().left() <
+                            render_window.inspector_dock_->geometry().left() &&
+                        render_window.preview_dock_->height() > 100 &&
+                        render_window.render_workspace_->centralPage()->isHidden(),
+                    "The default layout must show Preview as a dock in the central work area.");
             const auto& inspector_ui = render_window.edit_workspace_->ui();
             auto* inspector_tabs = inspector_ui.inspector_tabs;
             require(inspector_tabs != nullptr && inspector_tabs->count() == 3 &&
@@ -496,7 +516,7 @@ public:
                         editAction(render_window, "edit.copy_attributes")->shortcut() ==
                             QKeySequence(QStringLiteral("Ctrl+C")),
                     "Copy Attributes must support shortcut customization and reset to its default.");
-            render_window.setWorkspacePage(ui::WorkspacePageId::Fusion);
+            setWorkspacePageImmediately(render_window, ui::WorkspacePageId::Fusion);
             require(render_window.save_project_action_->shortcut() ==
                         QKeySequence(QStringLiteral("Ctrl+S")) &&
                         render_window.undo_action_->shortcut() == QKeySequence::Undo &&
@@ -507,13 +527,13 @@ public:
                             QStringLiteral("edit.delete_clip")) ==
                             QKeySequence(Qt::Key_Delete),
                     "Fusion must retain Application and Shared shortcuts while preserving inactive Edit assignments.");
-            render_window.setWorkspacePage(ui::WorkspacePageId::Render);
+            setWorkspacePageImmediately(render_window, ui::WorkspacePageId::Render);
             require(render_window.save_project_action_->shortcut() ==
                         QKeySequence(QStringLiteral("Ctrl+S")) &&
                         render_window.undo_action_->shortcut().isEmpty() &&
                         editAction(render_window, "edit.delete_clip")->shortcut().isEmpty(),
                     "Render must retain Application shortcuts and disable Shared and Edit shortcuts.");
-            render_window.setWorkspacePage(ui::WorkspacePageId::Edit);
+            setWorkspacePageImmediately(render_window, ui::WorkspacePageId::Edit);
             require(render_window.undo_action_->shortcut() == QKeySequence::Undo &&
                         editAction(render_window, "edit.delete_clip")->shortcut() ==
                             QKeySequence(Qt::Key_Delete) &&
@@ -773,34 +793,45 @@ public:
                             QStringLiteral("Project (1920 × 1080)") &&
                         render_frame_rate->value() == 30.0,
                     "The New Project defaults or clean-state behavior changed.");
-            const std::array<QDockWidget*, 7> docks{
+            render_window.tabifyDockWidget(
+                render_window.preview_dock_, render_window.inspector_dock_);
+            render_window.preview_dock_->raise();
+            QApplication::processEvents();
+            const std::array<QDockWidget*, 8> docks{
                 render_window.bins_dock_, render_window.media_dock_,
                 render_window.toolbox_dock_, render_window.favorites_dock_,
                 render_window.effects_dock_, render_window.inspector_dock_,
-                render_window.timeline_dock_};
+                render_window.preview_dock_, render_window.timeline_dock_};
             for (std::size_t index = 0; index < docks.size(); ++index) {
                 if (index == docks.size() - 1) {
                     docks[index]->hide();
                 }
-                dock_visibility_before_close[index] = docks[index]->isVisible();
+                dock_visibility_before_close[index] = !docks[index]->isHidden();
             }
-            render_window.setWorkspacePage(ui::WorkspacePageId::Render);
+            setWorkspacePageImmediately(render_window, ui::WorkspacePageId::Render);
             for (std::size_t index = 0; index < docks.size(); ++index) {
                 require(docks[index]->isVisible() == (index == docks.size() - 1),
                         "Render must keep only the Timeline dock visible before the close-persistence check.");
             }
             require(render_window.close(),
                     "Closing the editor from Render must be accepted.");
+            require(render_window.tabifiedDockWidgets(
+                        render_window.preview_dock_).contains(
+                            render_window.inspector_dock_),
+                    "Closing from Render must restore the Preview dock's tab arrangement.");
         }
         {
             MainWindow reopened_window;
             reopened_window.show();
             QApplication::processEvents();
-            const std::array<QDockWidget*, 7> docks{
+            const std::array<QDockWidget*, 8> docks{
                 reopened_window.bins_dock_, reopened_window.media_dock_,
                 reopened_window.toolbox_dock_, reopened_window.favorites_dock_,
                 reopened_window.effects_dock_, reopened_window.inspector_dock_,
-                reopened_window.timeline_dock_};
+                reopened_window.preview_dock_, reopened_window.timeline_dock_};
+            require(reopened_window.preview_dock_->isVisible() &&
+                        reopened_window.preview_dock_->height() > 100,
+                    "The Preview dock must remain available after reopening the editor.");
             require(reopened_window.edit_workspace_button_->isChecked(),
                     "The application must reopen in Edit after closing from Render.");
             require(reopened_window.edit_workspace_->ui().inspector_tabs->currentIndex() == 2,
@@ -824,9 +855,43 @@ public:
             require(QSettings().value("preview/playback_quality").toInt() == 0,
                     "The Full Playback Preview Quality selection was not persisted.");
             for (std::size_t index = 0; index < docks.size(); ++index) {
-                require(docks[index]->isVisible() == dock_visibility_before_close[index],
+                require(!docks[index]->isHidden() == dock_visibility_before_close[index],
                         "Closing from Render must preserve the previous dock layout.");
             }
+        }
+
+        QByteArray version_eight_layout;
+        {
+            MainWindow legacy_layout_window;
+            legacy_layout_window.show();
+            QApplication::processEvents();
+            legacy_layout_window.addDockWidget(
+                Qt::RightDockWidgetArea, legacy_layout_window.preview_dock_);
+            legacy_layout_window.splitDockWidget(
+                legacy_layout_window.inspector_dock_,
+                legacy_layout_window.preview_dock_, Qt::Vertical);
+            QApplication::processEvents();
+            version_eight_layout = legacy_layout_window.saveState(8);
+            require(!version_eight_layout.isEmpty(),
+                    "The Preview layout migration fixture could not be saved.");
+            require(legacy_layout_window.close(),
+                    "The legacy Preview layout fixture did not close cleanly.");
+        }
+        QSettings().setValue(
+            QStringLiteral("workspace/dock_layout_state"), version_eight_layout);
+        QSettings().sync();
+        {
+            MainWindow migrated_layout_window;
+            migrated_layout_window.show();
+            QApplication::processEvents();
+            require(migrated_layout_window.preview_dock_->isVisible() &&
+                        migrated_layout_window.preview_dock_->geometry().left() <
+                            migrated_layout_window.inspector_dock_->geometry().left() &&
+                        migrated_layout_window.preview_dock_->height() > 100 &&
+                        migrated_layout_window.render_workspace_->centralPage()->isHidden(),
+                    "A version 8 layout must repair the Preview dock beside Inspector and keep Render hidden.");
+            require(migrated_layout_window.close(),
+                    "The repaired Preview layout did not close cleanly.");
         }
         QSettings().remove("workspace/dock_layout_state");
         QSettings().sync();
@@ -1106,7 +1171,7 @@ public:
                         fusion_canvas->isEnabled() && fusion_canvas->scene() != nullptr &&
                         fusion_canvas->scene()->items().size() >= 2,
                     "Timeline Open in Fusion did not open the selected clip's node graph.");
-            window.setWorkspacePage(ui::WorkspacePageId::Edit);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
             QApplication::processEvents();
             require(window.workspace_host_->currentPage() == ui::WorkspacePageId::Edit &&
                         !window.fusion_workspace_->isActive(),
@@ -1145,19 +1210,20 @@ public:
                         !window.project_dirty_,
                     "Undoing the Effects UI test must restore the clean project state.");
 
-            const std::array<QDockWidget*, 7> workspace_docks{
+            const std::array<QDockWidget*, 8> workspace_docks{
                 window.bins_dock_, window.media_dock_, window.toolbox_dock_,
                 window.favorites_dock_, window.effects_dock_,
-                window.inspector_dock_, window.timeline_dock_};
+                window.inspector_dock_, window.preview_dock_,
+                window.timeline_dock_};
             const auto dock_visibility = [&workspace_docks]() {
-                std::array<bool, 7> visibility{};
+                std::array<bool, 8> visibility{};
                 for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
                     visibility[index] = workspace_docks[index]->isVisible();
                 }
                 return visibility;
             };
             const auto require_dock_visibility =
-                [&workspace_docks](const std::array<bool, 7>& expected,
+                [&workspace_docks](const std::array<bool, 8>& expected,
                                    const char* message) {
                     for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
                         require(workspace_docks[index]->isVisible() == expected[index],
@@ -1183,7 +1249,13 @@ public:
                             window.fusion_workspace_->nodeEditorPanel() &&
                         window.workspace_host_->fusionInspectorPage() ==
                             window.fusion_workspace_->inspectorPanel() &&
-                        window.workspace_host_->findChild<QWidget*>(
+                        window.preview_dock_ != nullptr &&
+                        window.preview_dock_->objectName() ==
+                            QStringLiteral("previewDock") &&
+                        window.preview_dock_->widget() != nullptr &&
+                        window.preview_dock_->widget()->objectName() ==
+                            QStringLiteral("previewDockContents") &&
+                        window.preview_dock_->widget()->findChild<QWidget*>(
                             "workspaceViewerTitle") ==
                             window.fusion_workspace_->viewerTitle() &&
                         window.render_workspace_ != nullptr &&
@@ -1200,12 +1272,25 @@ public:
                 window.menuBar()->findChild<QMenu*>("mediaPoolViewMenu");
             auto* effects_view_menu =
                 window.menuBar()->findChild<QMenu*>("effectsViewMenu");
+            auto* preview_view_action =
+                window.findChild<QAction*>("previewViewAction");
             require(file_menu != nullptr && edit_menu != nullptr &&
                         view_menu != nullptr && help_menu != nullptr &&
                         settings_menu_action != nullptr &&
                         media_pool_view_menu != nullptr &&
-                        effects_view_menu != nullptr,
+                        effects_view_menu != nullptr &&
+                        preview_view_action != nullptr &&
+                        preview_view_action->isCheckable() &&
+                        preview_view_action->isChecked(),
                     "The MainWindow must expose its scoped menus for integration coverage.");
+            preview_view_action->trigger();
+            require(!window.preview_dock_->isVisible() &&
+                        !preview_view_action->isChecked(),
+                    "View > Preview must close the Preview dock.");
+            preview_view_action->trigger();
+            require(window.preview_dock_->isVisible() &&
+                        preview_view_action->isChecked(),
+                    "View > Preview must restore a closed Preview dock.");
 
             auto* fusion_fixture_menu =
                 new QMenu(QStringLiteral("Fusion Fixture"), window.menuBar());
@@ -1225,7 +1310,7 @@ public:
                 render_fixture_action, settings::ShortcutScope::Render);
             const auto require_menu_scopes = [&window, file_menu, edit_menu,
                 view_menu, help_menu, settings_menu_action,
-                media_pool_view_menu, effects_view_menu,
+                media_pool_view_menu, effects_view_menu, preview_view_action,
                 fusion_fixture_menu, fusion_fixture_action,
                 render_fixture_menu, render_fixture_action](
                     ui::WorkspacePageId page) {
@@ -1249,6 +1334,7 @@ public:
                                 edit_or_fusion &&
                             effects_view_menu->menuAction()->isVisible() ==
                                 edit_or_fusion &&
+                            preview_view_action->isVisible() == edit_or_fusion &&
                             window.media_pool_action_->isVisible() == edit_or_fusion &&
                             window.effects_action_->isVisible() == edit_or_fusion &&
                             fusion_fixture_action->isVisible() == fusion_active &&
@@ -1335,7 +1421,7 @@ public:
                         window.project_dirty_ == project_dirty_before_workspace_switch,
                     "Switching workspaces must preserve selection, history, and dirty state.");
             };
-            window.setWorkspacePage(ui::WorkspacePageId::Fusion);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Fusion);
             require_workspace_state_unchanged();
             QApplication::processEvents();
             require_menu_scopes(ui::WorkspacePageId::Fusion);
@@ -1343,7 +1429,7 @@ public:
                         !window.playback_controller_->isPlaying(),
                     "Entering Fusion must pause playback and seek to the selected clip's start.");
             const auto fusion_playhead = window.editor_session_.playheadFrame();
-            window.setWorkspacePage(ui::WorkspacePageId::Render);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Render);
             require_workspace_state_unchanged();
             QApplication::processEvents();
             require_menu_scopes(ui::WorkspacePageId::Render);
@@ -1479,19 +1565,19 @@ public:
                             (workspace_docks[index] == window.timeline_dock_),
                         "Entering Render must keep only the Timeline dock visible.");
             }
-            window.setWorkspacePage(ui::WorkspacePageId::Fusion);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Fusion);
             require(window.render_workspace_->isQueueRunning() &&
                         !cancel_render_queue->isVisible() &&
                         !window.edit_workspace_->ui().timeline->isReadOnly(),
                     "Leaving Render must keep its queued snapshot running while restoring Timeline interaction; Cancel remains on the Render page.");
-            window.setWorkspacePage(ui::WorkspacePageId::Edit);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
             require(window.render_workspace_->isQueueRunning() &&
                         !cancel_render_queue->isVisible() &&
                         window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Edit &&
                         !window.edit_workspace_->ui().timeline->isReadOnly(),
                     "Switching from Render to Edit must leave the background queue running and keep Cancel available only in Render.");
-            window.setWorkspacePage(ui::WorkspacePageId::Fusion);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Fusion);
             require(window.render_workspace_->isQueueRunning() &&
                         !cancel_render_queue->isVisible() &&
                         window.workspace_host_->currentPage() ==
@@ -1540,8 +1626,8 @@ public:
             window.effects_dock_->show();
             QApplication::processEvents();
             const auto mixed_dock_visibility = dock_visibility();
-            window.setWorkspacePage(ui::WorkspacePageId::Render);
-            window.setWorkspacePage(ui::WorkspacePageId::Edit);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Render);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
             QApplication::processEvents();
             require_workspace_state_unchanged();
             require_menu_scopes(ui::WorkspacePageId::Edit);
@@ -1552,12 +1638,12 @@ public:
             window.timeline_dock_->hide();
             QApplication::processEvents();
             const auto hidden_timeline_visibility = dock_visibility();
-            window.setWorkspacePage(ui::WorkspacePageId::Render);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Render);
             QApplication::processEvents();
             require_menu_scopes(ui::WorkspacePageId::Render);
             require(window.timeline_dock_->isVisible(),
                     "Render must show the Timeline even when its prior workspace visibility was hidden.");
-            window.setWorkspacePage(ui::WorkspacePageId::Edit);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
             QApplication::processEvents();
             require_menu_scopes(ui::WorkspacePageId::Edit);
             require_dock_visibility(
@@ -1569,7 +1655,7 @@ public:
                         !window.project_dirty_,
                     "Workspace changes must restore Timeline interaction and preserve the global footer without dirtying the project.");
             window.restoreDefaultLayout();
-            window.setWorkspacePage(ui::WorkspacePageId::Edit);
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
             QApplication::processEvents();
 
             require(window.timeline_model_.trackCount() == 2,

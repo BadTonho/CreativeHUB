@@ -1,5 +1,6 @@
 #include "user_preferences.h"
 
+#include <QMetaType>
 #include <QSettings>
 #include <QString>
 
@@ -169,6 +170,7 @@ bool workspacePageTransitionsEnabled() {
     const auto stored = QSettings().value(
         kWorkspacePageTransitionsEnabledKey);
     if (!stored.isValid()) return kDefaultWorkspacePageTransitionsEnabled;
+    if (stored.metaType().id() == QMetaType::Bool) return stored.toBool();
 
     const auto value = stored.toString().trimmed().toLower();
     if (value == QStringLiteral("true") || value == QStringLiteral("1")) {

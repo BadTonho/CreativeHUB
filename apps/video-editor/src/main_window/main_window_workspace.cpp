@@ -43,6 +43,7 @@
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSettings>
+#include <QSizePolicy>
 #include <QStackedWidget>
 #include <QSlider>
 #include <QStatusBar>
@@ -457,6 +458,24 @@ void MainWindow::createWorkspace() {
     render_workspace_->createPanels(this);
     applyMonitorVolumePercent(edit_workspace_->ui().monitor_volume->value());
 
+    auto* preview_dock_contents = new QWidget(this);
+    preview_dock_contents->setObjectName("previewDockContents");
+    preview_dock_contents->setMinimumSize(0, 0);
+    preview_dock_contents->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Ignored);
+    auto* preview_dock_layout = new QVBoxLayout(preview_dock_contents);
+    preview_dock_layout->setContentsMargins(0, 0, 0, 0);
+    preview_dock_layout->setSpacing(0);
+    if (fusion_workspace_->viewerTitle() != nullptr) {
+        preview_dock_layout->addWidget(fusion_workspace_->viewerTitle());
+    }
+    preview_dock_layout->addWidget(preview_widget_, 1);
+    preview_dock_ = createDock(
+        "Preview",
+        "previewDock",
+        preview_dock_contents);
+    addDockWidget(Qt::RightDockWidgetArea, preview_dock_);
+
     const auto workspace_buttons = ui::createTimelineEndButtons(
         edit_workspace_->ui().workspace_navigation_slot);
     workspace_buttons_container_ = workspace_buttons.container;
@@ -468,7 +487,8 @@ void MainWindow::createWorkspace() {
         navigation_layout->addWidget(workspace_buttons_container_);
     }
     workspace_host_ = new ui::WorkspaceHost(
-        edit_workspace_, fusion_workspace_, render_workspace_, this);
+        edit_workspace_, fusion_workspace_, render_workspace_,
+        preview_dock_contents, this);
     setCentralWidget(workspace_host_);
     statusBar()->setSizeGripEnabled(false);
     statusBar()->setFixedHeight(26);
@@ -481,6 +501,7 @@ void MainWindow::createWorkspace() {
         "inspectorDock",
         workspace_host_->inspectorPanel());
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+    splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
 
     timeline_dock_ = createDock(
         "Timeline",
@@ -498,6 +519,7 @@ void MainWindow::createWorkspace() {
                 favorites_dock_,
                 effects_dock_,
                 inspector_dock_,
+                preview_dock_,
                 timeline_dock_},
             {
                 edit_workspace_button_,
@@ -797,6 +819,10 @@ void MainWindow::createMenus() {
     register_menu_action(toolbox_view_action, settings::ShortcutScope::Shared);
     register_menu_action(favorites_view_action, settings::ShortcutScope::Shared);
     register_menu_action(effects_view_action, settings::ShortcutScope::Shared);
+    auto* preview_view_action = preview_dock_->toggleViewAction();
+    preview_view_action->setObjectName(QStringLiteral("previewViewAction"));
+    view_menu->addAction(preview_view_action);
+    register_menu_action(preview_view_action, settings::ShortcutScope::Shared);
     auto* inspector_view_action = inspector_dock_->toggleViewAction();
     auto* timeline_view_action = timeline_dock_->toggleViewAction();
     view_menu->addAction(inspector_view_action);
@@ -1101,14 +1127,55 @@ void MainWindow::restoreWorkspaceLayout() {
     QSettings settings;
     const auto saved_state = settings.value(
         "workspace/dock_layout_state").toByteArray();
-    if (!saved_state.isEmpty() && restoreState(saved_state, 7)) return;
+    if (!saved_state.isEmpty() && restoreState(saved_state, 9)) {
+        initial_window_layout_pending_ = false;
+        return;
+    }
+
+    const auto placePreviewBesideInspector = [this]() {
+        if (preview_dock_ == nullptr || inspector_dock_ == nullptr) return;
+        preview_dock_->setFloating(false);
+        addDockWidget(Qt::RightDockWidgetArea, preview_dock_);
+        splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
+        const auto window_width = std::max(1, width());
+        resizeDocks(
+            {preview_dock_, inspector_dock_},
+            {std::max(640, static_cast<int>(std::lround(window_width * 0.62))),
+             std::max(280, static_cast<int>(std::lround(window_width * 0.19)))},
+            Qt::Horizontal);
+    };
+
+    if (!saved_state.isEmpty() && restoreState(saved_state, 8)) {
+        // Version 8 introduced Preview, but could save it in a narrow
+        // vertical split after restoring a pre-dock layout. Repair that
+        // default placement once while retaining intentional tab/floating,
+        // hidden, and other-area arrangements.
+        const bool has_preview_tabs = !tabifiedDockWidgets(preview_dock_).isEmpty();
+        if (!preview_dock_->isHidden() && !preview_dock_->isFloating() &&
+            !has_preview_tabs &&
+            dockWidgetArea(preview_dock_) == Qt::RightDockWidgetArea) {
+            placePreviewBesideInspector();
+        }
+        initial_window_layout_pending_ = false;
+        saveWorkspaceLayout();
+        return;
+    }
+    if (!saved_state.isEmpty() && restoreState(saved_state, 7)) {
+        // Version 7 predates the Preview dock. Keep its existing panel layout
+        // and add Preview as the large panel beside Inspector.
+        placePreviewBesideInspector();
+        preview_dock_->show();
+        initial_window_layout_pending_ = false;
+        saveWorkspaceLayout();
+        return;
+    }
 
     restoreDefaultLayout();
 }
 
 void MainWindow::saveWorkspaceLayout() {
     QSettings settings;
-    settings.setValue("workspace/dock_layout_state", saveState(7));
+    settings.setValue("workspace/dock_layout_state", saveState(9));
     settings.sync();
 }
 
@@ -1125,6 +1192,11 @@ void MainWindow::applyInitialWindowLayout() {
     resizeDocks(
         {inspector_dock_},
         {std::max(280, static_cast<int>(std::lround(window_width * 0.19)))},
+        Qt::Horizontal);
+    resizeDocks(
+        {preview_dock_, inspector_dock_},
+        {std::max(640, static_cast<int>(std::lround(window_width * 0.62))),
+         std::max(280, static_cast<int>(std::lround(window_width * 0.19)))},
         Qt::Horizontal);
     resizeDocks(
         {timeline_dock_},
@@ -1195,6 +1267,7 @@ void MainWindow::restoreDefaultLayout() {
     toolbox_dock_->setFloating(false);
     favorites_dock_->setFloating(false);
     effects_dock_->setFloating(false);
+    preview_dock_->setFloating(false);
     inspector_dock_->setFloating(false);
     timeline_dock_->setFloating(false);
 
@@ -1210,7 +1283,9 @@ void MainWindow::restoreDefaultLayout() {
     addDockWidget(Qt::LeftDockWidgetArea, favorites_dock_);
     splitDockWidget(toolbox_dock_, favorites_dock_, Qt::Vertical);
     resizeDocks({toolbox_dock_, favorites_dock_}, {300, 300}, Qt::Vertical);
+    addDockWidget(Qt::RightDockWidgetArea, preview_dock_);
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+    splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 
     bins_dock_->show();
@@ -1218,6 +1293,7 @@ void MainWindow::restoreDefaultLayout() {
     toolbox_dock_->hide();
     favorites_dock_->hide();
     effects_dock_->hide();
+    preview_dock_->show();
     inspector_dock_->show();
     timeline_dock_->show();
     updateMediaPoolActionState();

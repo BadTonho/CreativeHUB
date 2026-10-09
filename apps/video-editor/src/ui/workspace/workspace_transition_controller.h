@@ -8,6 +8,8 @@
 #include <functional>
 #include <optional>
 
+#include <QByteArray>
+
 class QDockWidget;
 class QPushButton;
 
@@ -26,6 +28,7 @@ public:
         QDockWidget* favorites = nullptr;
         QDockWidget* effects = nullptr;
         QDockWidget* inspector = nullptr;
+        QDockWidget* preview = nullptr;
         QDockWidget* timeline = nullptr;
     };
 
@@ -46,7 +49,7 @@ public:
     void setPageChangedHandler(std::function<void(WorkspacePageId)> handler);
 
 private:
-    [[nodiscard]] std::array<QDockWidget*, 7> dockWidgets() const noexcept;
+    [[nodiscard]] std::array<QDockWidget*, 8> dockWidgets() const noexcept;
     void updateSelectors(WorkspacePageId page);
     void applyPage(WorkspacePageId page);
     void applyQueuedPage();
@@ -55,7 +58,8 @@ private:
     WorkspacePageTransition* page_transition_ = nullptr;
     DockWidgets docks_;
     Selectors selectors_;
-    std::array<bool, 7> dock_visibility_before_render_{};
+    QByteArray dock_layout_before_render_;
+    std::array<bool, 8> dock_visibility_before_render_{};
     bool has_render_dock_visibility_snapshot_ = false;
     std::optional<WorkspacePageId> queued_page_;
     std::function<void(WorkspacePageId)> page_changed_handler_;

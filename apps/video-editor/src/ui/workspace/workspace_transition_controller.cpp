@@ -5,6 +5,7 @@
 #include "ui/workspace/workspace_page_transition.h"
 
 #include <QDockWidget>
+#include <QMainWindow>
 #include <QPushButton>
 #include <QSignalBlocker>
 
@@ -55,6 +56,7 @@ void WorkspaceTransitionController::setPage(WorkspacePageId page) {
         return;
     }
     if (workspace_host_->currentPage() == page) {
+        workspace_host_->setPage(page);
         updateSelectors(page);
         return;
     }
@@ -98,6 +100,12 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
     const auto docks = dockWidgets();
 
     if (entering_render) {
+        if (auto* main_window = qobject_cast<QMainWindow*>(
+                workspace_host_->window())) {
+            // Hiding every dock for Render can disturb tab groups and dock
+            // geometry. Restore the complete native layout when leaving.
+            dock_layout_before_render_ = main_window->saveState(9);
+        }
         for (std::size_t index = 0; index < docks.size(); ++index) {
             dock_visibility_before_render_[index] =
                 docks[index] != nullptr && !docks[index]->isHidden();
@@ -116,14 +124,22 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
     }
 
     if (leaving_render && has_render_dock_visibility_snapshot_) {
-        for (std::size_t index = 0; index < docks.size(); ++index) {
-            if (docks[index] == nullptr) continue;
-            if (dock_visibility_before_render_[index]) {
-                docks[index]->show();
-            } else {
-                docks[index]->hide();
+        auto* main_window = qobject_cast<QMainWindow*>(
+            workspace_host_->window());
+        const bool restored_layout = main_window != nullptr &&
+            !dock_layout_before_render_.isEmpty() &&
+            main_window->restoreState(dock_layout_before_render_, 9);
+        if (!restored_layout) {
+            for (std::size_t index = 0; index < docks.size(); ++index) {
+                if (docks[index] == nullptr) continue;
+                if (dock_visibility_before_render_[index]) {
+                    docks[index]->show();
+                } else {
+                    docks[index]->hide();
+                }
             }
         }
+        dock_layout_before_render_.clear();
         has_render_dock_visibility_snapshot_ = false;
     }
 
@@ -155,7 +171,7 @@ void WorkspaceTransitionController::applyQueuedPage() {
     }
 }
 
-std::array<QDockWidget*, 7>
+std::array<QDockWidget*, 8>
 WorkspaceTransitionController::dockWidgets() const noexcept {
     return {
         docks_.bins,
@@ -164,6 +180,7 @@ WorkspaceTransitionController::dockWidgets() const noexcept {
         docks_.favorites,
         docks_.effects,
         docks_.inspector,
+        docks_.preview,
         docks_.timeline};
 }
 

@@ -102,15 +102,24 @@ then creates a moving overlap and ripples the incoming and later clips left by
 its duration. Fade to Black leaves clip positions unchanged. The toolbar `Effects` action
 activates all three docks and hides the Media Pool pair, while `View > Effects` controls
 `Toolbox`, `Favorites`, and `Effects` individually. The workspace layout is
-stored globally in `workspace/dock_layout_state` with layout version 7 and
+stored globally in `workspace/dock_layout_state` with layout version 9 and
 does not affect project state. The default layout shows Media Pool and keeps
 the Effects docks hidden until activated. The native separators are draggable;
 the minimum widths are 20 px for `Toolbox` and `Favorites`, and 30 px for
 `Effects`. The selected dock sizes are part of the global layout state and are
-restored with the workspace. On first launch, the Video Editor opens maximized
-with Media Pool on the left, Inspector on the right, Preview in the center,
-and Timeline across the bottom. The window geometry and maximized state are
-then restored globally without affecting project state.
+restored with the workspace. `Preview` is a native dock that can be moved,
+resized, floated, closed, re-docked, and tabified like the other panels. Its
+`View > Preview` action reopens it when closed. The default layout keeps the
+Preview large in the central work area beside the Inspector. Version 8 dock
+layouts receive a one-time repair that returns a collapsed, vertically split
+Preview to the default side-by-side arrangement while preserving hidden,
+floating, tabified, and other-area layouts. Version 7 layouts are upgraded
+with Preview beside Inspector. On first launch,
+the Video Editor opens maximized with Media Pool on the left, Preview in the
+center, Inspector on the right, and Timeline across the bottom. Version 7 dock
+layouts are restored and upgraded with Preview in its default area. The window
+geometry and maximized state are then restored globally without affecting
+project state.
 The saved dock and toolbar state is restored only after the workspace docks,
 menus, and top toolbar have all been created, so Qt can resolve every saved
 layout item before applying its geometry.
@@ -422,9 +431,9 @@ Fusion, and Render from any workspace. They can be changed, cleared, or reset
 in `Settings > Shortcuts`, and each selector tooltip reflects its current key
 binding.
 
-Edit preserves the current Preview, Inspector, and Timeline presentation. In
-Fusion, Bins and Media remain on the left, the existing Preview is labeled
-`Viewer`, and the bottom dock switches from Timeline to a visual-only Node
+Edit keeps the Preview dock, Inspector, and Timeline presentation. In Fusion,
+Bins and Media remain on the left, the Preview dock keeps its `Viewer` heading,
+and the bottom dock switches from Timeline to a visual-only Node
 Editor. The Node Editor provides Input, Transform, Color, Merge, and Output
 nodes for the selected visual clip. Drag an output port to an input port to
 connect nodes; drag a node body to move it. Its Inspector chooses Media Pool
@@ -452,16 +461,23 @@ footer stays visible on every page.
 `WorkspaceHost` remains responsible for selecting that page and forwarding
 Fusion and Render activation to their workspaces, while
 `WorkspaceTransitionController` coordinates page changes, workspace selectors,
-the lower dock title, and Render's temporary dock visibility snapshot.
-`MainWindow` continues to own the native docks and persist their layout.
-Closing from Render restores the previous dock visibility before the window
-saves its layout.
+the lower dock title, and Render's temporary dock layout snapshot.
+`MainWindow` continues to own the native docks and persist their layout,
+including Preview's dock position, tab group, floating state, and visibility.
+Entering Render snapshots the full dock arrangement before hiding the panels;
+leaving Render restores that native layout after returning Preview to its dock.
+This preserves the previous dock position, tab groups, floating state, and
+visibility. Closing from Render performs the same restoration before saving
+the layout.
 
 Render divides its central page into resizable settings, Preview, and queue
 columns from left to right. The same Preview widget used by Edit and Fusion is
-moved into the middle column while Render is active; it continues to display
-the current project frame and follows playback. The Preview is returned to the
-central workspace page when leaving Render. At central-page widths below
+moved from its dock into the middle column while Render is active; the dock is
+temporarily hidden and its prior visibility is remembered. The same widget
+continues to display the current project frame and follows playback. When
+leaving Render, the Preview returns to its dock contents before the previous
+dock visibility is restored, preserving custom, tabified, floating, or hidden
+layout state. At central-page widths below
 1100 px, the three panels switch to a vertically scrollable Settings, Preview,
 and queue layout. Settings controls shrink to the available width; long codec
 names remain available in the selector and its tooltip instead of forcing
@@ -513,10 +529,10 @@ and zoom controls are hidden while the application-wide footer remains visible.
 The Timeline canvas is read-only in Render: pointer input cannot select, seek,
 edit, drop media or effects, open
 context menus, or change zoom or track height. Its scrollbars remain available
-for navigating the project. The other six workspace docks are hidden. The
+for navigating the project. The other seven workspace docks are hidden. The
 Timeline dock is shown in Render even when it was hidden in the prior
 workspace; returning to Edit or Fusion restores the previous visibility of all
-seven docks. Closing the application from Render restores and saves that prior
+eight docks. Closing the application from Render restores and saves that prior
 layout, and the next launch still opens on Edit.
 
 Gesture priority is configurable: by default, normal drag moves clips and

@@ -27,6 +27,7 @@
 #include <QToolBar>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QVBoxLayout>
 #include <QWheelEvent>
 
 #include <array>
@@ -101,6 +102,10 @@ int main(int argc, char* argv[]) {
         auto* preview = new QWidget;
         preview->setObjectName("sharedPreview");
         preview->setMinimumSize(320, 180);
+        auto* preview_dock_contents = new QWidget;
+        preview_dock_contents->setObjectName("previewDockContents");
+        auto* preview_layout = new QVBoxLayout(preview_dock_contents);
+        preview_layout->setContentsMargins(0, 0, 0, 0);
         auto* edit_inspector = new QWidget;
         edit_inspector->setObjectName("editInspectorPage");
         auto* timeline = new QWidget;
@@ -156,14 +161,22 @@ int main(int argc, char* argv[]) {
             [] { return 23.976; },
             &window);
         render_workspace->createPanels(&window);
+        auto* viewer_title = fusion_workspace->viewerTitle();
+        preview_layout->addWidget(viewer_title);
+        preview_layout->addWidget(preview, 1);
+        auto* preview_dock = new QDockWidget("Preview", &window);
+        preview_dock->setObjectName("previewDock");
+        preview_dock->setWidget(preview_dock_contents);
+        window.addDockWidget(Qt::RightDockWidgetArea, preview_dock);
         auto* workspace_host = new ui::WorkspaceHost(
-            preview, edit_inspector, timeline, fusion_workspace,
-            render_workspace, &window);
+            preview, preview_dock_contents, edit_inspector, timeline,
+            fusion_workspace, render_workspace, &window);
         window.setCentralWidget(workspace_host);
 
         auto* inspector_dock = new QDockWidget("Inspector", &window);
         inspector_dock->setWidget(workspace_host->inspectorPanel());
         window.addDockWidget(Qt::RightDockWidgetArea, inspector_dock);
+        window.splitDockWidget(preview_dock, inspector_dock, Qt::Horizontal);
 
         auto* lower_dock = new QDockWidget("Timeline", &window);
         lower_dock->setWidget(workspace_host->lowerWorkspacePanel());
@@ -194,6 +207,7 @@ int main(int argc, char* argv[]) {
                 favorites_dock,
                 effects_dock,
                 inspector_dock,
+                preview_dock,
                 lower_dock},
             {buttons.edit, buttons.fusion, buttons.render},
             &window);
@@ -208,6 +222,8 @@ int main(int argc, char* argv[]) {
         window.show();
         application.processEvents();
 
+        require(render_workspace->centralPage()->isHidden(),
+                "Render Settings must stay inside the Render page while Edit is active.");
         require(buttons.edit->isChecked() && !buttons.fusion->isChecked() &&
                     !buttons.render->isChecked(),
                 "The workspace must open on Edit.");
@@ -250,7 +266,7 @@ int main(int argc, char* argv[]) {
                 "The Fusion Node Editor must come from FusionWorkspace.");
         require(workspace_host->previewWidget() == preview && preview->isVisible(),
                 "Fusion must keep the same Preview visible as its Viewer.");
-        auto* viewer_title = workspace_host->findChild<QLabel*>(
+        viewer_title = preview_dock_contents->findChild<QLabel*>(
             "workspaceViewerTitle");
         require(viewer_title != nullptr && viewer_title->isVisible() &&
                     viewer_title == fusion_workspace->viewerTitle(),
@@ -261,16 +277,17 @@ int main(int argc, char* argv[]) {
                     activated_local_frame == 0 && preview_target_clears == 0,
                 "Entering Fusion must request its Output preview and activate the clip at frame zero.");
 
-        const std::array<QDockWidget*, 7> workspace_docks{
+        const std::array<QDockWidget*, 8> workspace_docks{
             bins_dock,
             media_dock,
             toolbox_dock,
             favorites_dock,
             effects_dock,
             inspector_dock,
+            preview_dock,
             lower_dock};
-        const std::array<bool, 7> visibility_before_render{
-            false, true, false, true, false, true, false};
+        const std::array<bool, 8> visibility_before_render{
+            false, true, false, true, false, true, true, false};
         for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
             workspace_docks[index]->setVisible(visibility_before_render[index]);
         }
@@ -493,7 +510,7 @@ int main(int argc, char* argv[]) {
                         "Video 1",
                 "Widening Render must restore its columns and retain settings and jobs.");
         for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
-            require(workspace_docks[index]->isVisible() == (index == 6),
+            require(workspace_docks[index]->isVisible() == (index == 7),
                     "Render must show only the Timeline dock.");
         }
 
@@ -515,9 +532,8 @@ int main(int argc, char* argv[]) {
                     workspace_host->previewWidget() == preview && preview->isVisible(),
                 "Returning to Fusion must restore the shared Preview.");
         require(render_workspace->previewWidget() == nullptr &&
-                    preview->parentWidget() == workspace_host->findChild<QStackedWidget*>(
-                        "centralWorkspacePages"),
-                "Leaving Render must return the Preview to the central workspace stack.");
+                    preview->parentWidget() == preview_dock_contents,
+                "Leaving Render must return the Preview to its dock contents.");
         require(!render_workspace->isActive() && !timeline_read_only,
                 "Leaving Render for Fusion must restore Timeline interaction.");
         require(workspace_host->lowerWorkspacePanel()->currentWidget() ==
@@ -552,9 +568,40 @@ int main(int argc, char* argv[]) {
                 "Returning to Edit must restore the normal Inspector.");
         require(workspace_host->previewWidget() == preview && preview->isVisible(),
                 "Returning to Edit must preserve the Preview widget.");
+        require(render_workspace->centralPage()->isHidden(),
+                "Leaving Render must hide its page instead of exposing its controls over Edit.");
 
-        const std::array<bool, 7> visibility_before_close{
-            true, false, true, false, true, false, true};
+        preview_dock->hide();
+        buttons.render->click();
+        application.processEvents();
+        require(preview_dock->isHidden() && preview->isVisible() &&
+                    render_workspace->previewWidget() == preview,
+                "Render must use the shared Preview without changing its prior hidden dock state.");
+        buttons.edit->click();
+        application.processEvents();
+        require(preview_dock->isHidden() &&
+                    preview->parentWidget() == preview_dock_contents &&
+                    render_workspace->previewWidget() == nullptr,
+                "Leaving Render must restore a previously hidden Preview to its dock.");
+        preview_dock->show();
+
+        preview_dock->setFloating(true);
+        application.processEvents();
+        buttons.render->click();
+        application.processEvents();
+        buttons.fusion->click();
+        application.processEvents();
+        require(preview_dock->isFloating() && preview_dock->isVisible() &&
+                    preview->parentWidget() == preview_dock_contents &&
+                    render_workspace->previewWidget() == nullptr,
+                "Leaving Render must restore a floating Preview dock.");
+        preview_dock->setFloating(false);
+        window.addDockWidget(Qt::RightDockWidgetArea, preview_dock);
+        window.splitDockWidget(preview_dock, inspector_dock, Qt::Horizontal);
+        application.processEvents();
+
+        const std::array<bool, 8> visibility_before_close{
+            true, false, true, false, true, false, true, true};
         for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
             workspace_docks[index]->setVisible(visibility_before_close[index]);
         }
