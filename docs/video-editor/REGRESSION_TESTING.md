@@ -98,9 +98,9 @@ hardware and drivers. No percentage target is set from this measurement.
 | Cross Dissolve project migration | Version 11 legacy Cross Dissolves become moving overlaps; the incoming clip and later clips on the affected track shift left by D; Fade to Black remains unchanged; chained transitions remain valid; version 12 save/reopen preserves migrated positions and transitions |
 | Timeline edge-trim command | Rolling and individual trim outcomes for video, image, and text, edited-clip identity after reordering, local playback frame and preserved global playhead, no-change and invalid requests, and Undo/Redo snapshot compatibility |
 | Timeline edge-trim gesture | Pending transition selection versus valid shared-cut drag, rolling and individual previews, final release boundary, retained preview after an invalid pointer boundary, no-op and invalid requests, legacy trim range, signal order and single commit, and cancellation on track replacement or clearing |
-| Timeline workspace selectors | Edit, icon-free Fusion, and Render button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
+| Workspace footer selectors | `tests/application/main_window_integration_test.cpp` and `tests/timeline/timeline_end_buttons_test.cpp`; Edit, icon-free Fusion, and Render order, dimensions, exclusive state, tooltips, and accessible names; removal from the top toolbar; exact footer centering at 1100 px and 1400 px window widths; left playback status and right memory indicator; visibility in Edit, Fusion, and Render |
 | Workspace page transition | `tests/ui/workspace_page_transition_test.cpp` (`creative-suite-main-editor-workspace-page-transition`) covers the content surface below the fixed menu bar moving as one block in both directions, destination activation between phases, fixed window/menu geometry, cleanup and cancellation, plus legacy whole-window movement, off-screen activation, original geometry and maximized-state restoration; `tests/ui/workspace_page_switch_test.cpp` (`creative-suite-main-editor-workspace-page-switch`) covers both styles through the shared workspace controller, selector-row inclusion, fixed menu/window in content mode, navigation, and latest-request queueing |
-| Workspace page switching | Edit startup state; FusionWorkspace-provided Viewer title, Node Editor, and Inspector; Render settings, shared Preview, and queue columns; responsive horizontal/vertical layout switching at 1100 px; constrained Settings fields with accessible Browse action and no horizontal scrolling; fixed Add to Queue footer outside the Settings scroll area; wheel scrolling over closed selectors and numeric controls without changing their values; runtime FFmpeg output discovery; project-derived defaults; prepared-job snapshots; WorkspaceHost-driven Fusion activation and deactivation; controller-coordinated Edit → Fusion → Render transitions; exclusive selectors and lower dock titles; replacement of the Timeline with the Node Editor in the same lower dock; shared Timeline identity; Preview transfer into the middle Render column and restoration to the Edit/Fusion central stack; hidden Timeline controls/footer and blocked Timeline input in Render; project dirty-state preservation when preparing jobs; background Render queue continuing from captured snapshots after switching to Edit and Fusion; Cancel remaining available only on the Render page; active-queue cancellation on accepted application close with no final destination published; preservation of mixed prior dock visibility across repeated Render selection and exit, including a previously hidden Timeline; prepare-for-close restoration; and MainWindow close/reopen layout persistence |
+| Workspace page switching | Edit startup state; FusionWorkspace-provided Viewer title, Node Editor, and Inspector; Render settings, shared Preview, and queue columns; responsive horizontal/vertical layout switching at 1100 px; constrained Settings fields with accessible Browse action and no horizontal scrolling; fixed Add to Queue footer outside the Settings scroll area; wheel scrolling over closed selectors and numeric controls without changing their values; runtime FFmpeg output discovery; project-derived defaults; prepared-job snapshots; WorkspaceHost-driven Fusion activation and deactivation; controller-coordinated Edit → Fusion → Render transitions; exclusive selectors and lower dock titles; replacement of the Timeline with the Node Editor in the same lower dock; shared Timeline identity; Preview transfer into the middle Render column and restoration to the Edit/Fusion central stack; hidden Timeline controls and blocked Timeline input in Render while the application footer remains visible; project dirty-state preservation when preparing jobs; background Render queue continuing from captured snapshots after switching to Edit and Fusion; Cancel remaining available only on the Render page; active-queue cancellation on accepted application close with no final destination published; preservation of mixed prior dock visibility across repeated Render selection and exit, including a previously hidden Timeline; prepare-for-close restoration; and MainWindow close/reopen layout persistence |
 | Fusion preview lifecycle | `tests/ui/fusion_workspace_test.cpp` (`creative-suite-main-editor-fusion-workspace`); `tests/ui/workspace_page_switch_test.cpp` (`creative-suite-main-editor-workspace-page-switch`); `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`); `tests/playback/playback_controller_test.cpp` (`creative-suite-main-editor-playback-controller`) | WorkspaceHost forwards Fusion entry and exit; Fusion requests a pause, current-node target, and selected-clip activation at local frame zero on entry; switching preview nodes does not alter Inspector selection or graph history; losing a clip clears the target; removing the selected preview node falls back to Output; leaving Fusion clears the target and returns to normal Timeline composition; save/reopen and graph Undo/Redo continue through the existing project/history services. Manual Release check: Edit → Fusion → Edit, inspect several node previews during playback, then confirm the normal multi-track Viewer returns. **Automated coverage present; manual check documented and pending.** |
 | Fusion node workspace | `tests/ui/fusion_workspace_test.cpp`; `tests/timeline/timeline_command_service_test.cpp`; `tests/timeline/node_graph_test.cpp` | Adding, moving, and removing nodes; connecting by dragging an output port to an input; rewiring and disconnecting by dragging the cable or input port to empty canvas; dragging existing video effects from Effects and Functions onto blank canvas or a cable; cable splitting, effect Inspector state/parameters, rejection of text/transitions/audio effects, effect evaluation and bypass, alpha preservation and chained/repeated effects; Transform and Brightness diamonds, clip-local Inspector values, seeded/updated/removed keys, playback pause, graph Undo/Redo; disconnected-input transparency; compatible connections; visible cycle rejection; selected-clip mutation; dirty state; and playback invalidation. Grid coverage verifies Lines/Dots rendering, visibility, live spacing and intensity changes, setting restoration and invalid-value normalization, and no graph edit from the controls. Manual Release check: adjust the grid in Fusion and confirm the pattern stays behind nodes and cables while nodes remain selectable and draggable. **Automated coverage present; manual check documented and pending.** |
 | Render queue model | Default-off per-job GPU settings and independent snapshots/tooltips; runtime container/encoder compatibility filtering; stable job IDs and status/progress/error roles; project-document snapshot isolation; append, remove, and reorder behavior; retry reset; structure locking during execution; invalid operation rejection; and a new session starting with an empty queue |
@@ -226,8 +226,8 @@ in the running Video Editor after UI or integration changes:
   window`, disable animation, and reopen Settings to confirm style, toggle, and
   duration persist. In the Release editor, switch Edit → Fusion → Render and
   back in content mode; confirm the window and File/Edit/View/Settings/Help menu
-  bar stay fixed while the Media Pool/Effects and page-selector toolbar, docks,
-  and all workspace content slide together below it. Confirm no controls above
+  bar stay fixed while the Media Pool/Effects toolbar, docks, global footer,
+  page selectors, and all workspace content slide together below it. Confirm no controls above
   the menu bar or project dirty state changes. Select whole-window mode and
   repeat; confirm the native frame, navigation, toolbars, and docks move
   off-screen and return from the opposite side at the original position, with
@@ -270,24 +270,27 @@ in the running Video Editor after UI or integration changes:
 - dock resizing, floating, re-docking, and restoration;
 - Timeline: confirm the dock shows only its official Timeline title, without
   a duplicate internal title or the former Click to select interaction hint,
-  while the playback controls, ruler, clips, and footer remain available;
+  while the playback controls, ruler, and clips remain available; confirm the
+  application footer keeps playback status at the left, workspace selectors
+  centered, and memory usage at the right in Edit, Fusion, and Render;
   confirm Previous Frame, Play/Pause, and Next Frame show only media icons,
   update the Play/Pause icon correctly, and retain working tooltips; confirm
   the mouse Selection Tool icon is checked initially, the Blade Tool is an
   icon-only mutually exclusive mode, and both accessible names and tooltips
-  remain available; confirm no Add Text button is shown; confirm the far right
-  of the top workspace toolbar shows the active `Edit` button, icon-free Fusion
-  button with no text or icon, and labeled `Render` button;
+  remain available; confirm no Add Text button is shown; confirm the center of
+  the application footer shows the active `Edit` button, icon-free Fusion
+  button with no text or icon, and labeled `Render` button in the centered
+  application footer rather than the top toolbar;
 - Timeline construction (F1): confirm the control row, scrolling viewport,
-  fixed track headers, and footer retain their layout. Check the saved monitor
+  and fixed track headers retain their layout. Check the saved monitor
   volume at startup, zoom slider and buttons, checked initial Snap state,
   Selection/Blade switching, and each add/rename/move/remove track action.
-  Switch Edit/Fusion and back; check footer status updates and playback buttons
-  and shortcuts. Each action should respond once, with the same preview and
+  Switch Edit/Fusion and back; check global footer status updates and playback
+  buttons and shortcuts. Each action should respond once, with the same preview and
   playhead behavior; Timeline selection, project dirty state, and Undo/Redo
   history should change only when the corresponding edit requires it. The
-  existing widget, workspace selector, and Timeline end-button tests cover
-  those components, but do not instantiate the application `MainWindow`;
+  widget and workspace selector tests cover their components, and the
+  MainWindow integration test covers global footer placement and page visibility;
 - independent Timeline panes: load a project with one or two Video and Audio
   tracks and confirm the default 50/50 split leaves each track row at its
   configured height, Video's last row meets the divider from above, and Audio's
@@ -743,11 +746,11 @@ in the running Video Editor after UI or integration changes:
   clip indices, and playback frame index correlate with the active playback
   session; verify missing track or clip selections are recorded as `-1` and
   no media paths are added to performance samples;
-- the Timeline footer RAM indicator: confirm it is aligned to the right, uses
+- the application footer RAM indicator: confirm it is aligned to the right, uses
   the `RAM: <megabytes> MB` format, refreshes approximately once per
   second, reports only the Video Editor process, and does not affect playback,
   Timeline state, project dirty state, or Undo/Redo;
-- clicking the Timeline footer RAM indicator: confirm the non-modal `Memory
+- clicking the application footer RAM indicator: confirm the non-modal `Memory
   Usage` window opens and can remain open during playback and editing; verify
   System Memory shows total, used, and available values, Video Editor shows
   Working Set and Private Usage, values refresh approximately once per second,

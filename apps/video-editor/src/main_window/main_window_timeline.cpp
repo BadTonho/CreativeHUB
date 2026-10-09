@@ -12,7 +12,6 @@
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "ui/system/system_memory_indicator.h"
-#include "ui/timeline/timeline_end_buttons.h"
 
 #include <QAction>
 #include <QCheckBox>

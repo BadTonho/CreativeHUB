@@ -30,7 +30,8 @@ struct EditWorkspaceUi final {
     QWidget* inspector_panel = nullptr;
     QWidget* timeline_panel = nullptr;
     QWidget* timeline_controls = nullptr;
-    QWidget* timeline_footer = nullptr;
+    QWidget* workspace_footer = nullptr;
+    QWidget* workspace_navigation_slot = nullptr;
     timeline::TimelineWidget* timeline = nullptr;
     timeline::TimelineTrackHeaderOverlay* track_header = nullptr;
     QScrollArea* timeline_scroll = nullptr;

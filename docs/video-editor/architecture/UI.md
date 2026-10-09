@@ -249,8 +249,9 @@ an interval from 10 to 300 seconds (30 by default), and a retention limit from
 It also provides the enabled-by-default `Animate workspace switches` option,
 a style selector, and a duration slider from 100 to 600 ms in 25 ms steps
 (250 ms by default). `Workspace content` is the default style and slides one
-captured surface containing the toolbar, workspace selectors, docks, and page
-content below the menu bar; the window and menu bar remain fixed. `Entire
+captured surface containing the top toolbar, docks, global footer, and page
+content below the menu bar; the window and menu bar remain fixed. The page
+selectors are centered in the global footer. `Entire
 application window` retains the native-window slide, including its frame and
 the desktop reveal between pages. These local `QSettings` preferences control
 the lateral transition between Edit, Fusion, and Render and do not modify
@@ -369,8 +370,8 @@ visible Timeline range when the nearest point is within approximately eight
 visual pixels. A light guide shows the contact frame. The button state lasts
 for the editor session, is not project data, and snapping does not apply to
 effect drops.
-The same footer shows the Video Editor process working-set memory at the right
-in the form `RAM: <megabytes> MB`, refreshed every second. Windows reads
+The application-wide footer shows the Video Editor process working-set memory
+at the right in the form `RAM: <megabytes> MB`, refreshed every second. Windows reads
 the value through `GetProcessMemoryInfo`; platforms without an implementation,
 or a failed query, display `RAM: N/A`. This indicator is display-only and
 does not affect playback, Timeline data, project dirty state, Undo/Redo, or
@@ -380,7 +381,7 @@ System Memory and Video Editor sections. The system section shows total, used,
 and available memory in GB with the exact MB value. The Video Editor section
 shows Working Set and Private Usage. The window refreshes every second and is
 organized so future CPU and GPU sections can be added without changing the
-Timeline footer.
+Timeline or workspace navigation.
 The horizontal timeline scale has a one-hour minimum range independent of
 the actual clip duration. The one-hour range fills the visible viewport so
 short projects keep a stable scale and retain empty space after their last
@@ -405,12 +406,14 @@ labeling every frame or drawing guides across clip content. The guides are
 limited to the current paint region so long timelines remain responsive.
 Zoom affects only horizontal timeline presentation and is persisted per project
 without creating a clip-edit history entry.
-At the far right of the top workspace toolbar, after `Media Pool` and `Effects`,
-the `Edit`, icon-free Fusion, and `Render` selectors are shown in that order. The
-Fusion selector has no visible text or icon; its tooltip and accessible name
-identify it as `Fusion`. The active page is highlighted, and the application
-always opens on Edit without saving the selected page as project or workspace
-state.
+The application-wide footer keeps `No media selected.` and playback messages
+at the left, the `Edit`, icon-free Fusion, and `Render` selectors in the exact
+horizontal center, and the memory indicator at the right. It remains visible
+in Edit, Fusion, and Render. The Fusion selector has no visible text or icon;
+its tooltip and accessible name identify it as `Fusion`. The active page is
+highlighted, and the application always opens on Edit without saving the
+selected page as project or workspace state. The top workspace toolbar keeps
+the `Media Pool` and `Effects` controls.
 
 Edit preserves the current Preview, Inspector, and Timeline presentation. In
 Fusion, Bins and Media remain on the left, the existing Preview is labeled
@@ -437,7 +440,8 @@ shared Preview, and queue columns and activates the shared Timeline's read-only
 presentation through a handler bound to `EditWorkspaceController`. Its queue
 model stores session-scoped jobs and execution state; each job contains a copy
 of the current project document and its output settings, while media remains
-referenced by path. Leaving Render restores Timeline controls and its footer.
+referenced by path. Leaving Render restores Timeline controls; the application
+footer stays visible on every page.
 `WorkspaceHost` remains responsible for selecting that page and forwarding
 Fusion and Render activation to their workspaces, while
 `WorkspaceTransitionController` coordinates page changes, workspace selectors,
@@ -498,8 +502,9 @@ incomplete output from replacing its destination.
 
 The Timeline dock remains visible at the bottom and displays the project
 tracks, clips, time ruler, and playhead. Its playback, editing, track-management,
-and zoom controls and its footer are hidden. The Timeline canvas is read-only in
-Render: pointer input cannot select, seek, edit, drop media or effects, open
+and zoom controls are hidden while the application-wide footer remains visible.
+The Timeline canvas is read-only in Render: pointer input cannot select, seek,
+edit, drop media or effects, open
 context menus, or change zoom or track height. Its scrollbars remain available
 for navigating the project. The other six workspace docks are hidden. The
 Timeline dock is shown in Render even when it was hidden in the prior
@@ -707,9 +712,9 @@ and returning to Edit before an accepted close from Render.
 
 The internal `WorkspacePageTransition` helper supports two local styles.
 `Workspace content` captures the complete area below the menu bar as one
-surface, including the top toolbar, workspace selectors, docks, and page
-content. The outgoing capture slides away and the destination capture enters
-from the opposite side while the native window and menu bar stay fixed.
+surface, including the top toolbar, docks, global footer, and page content. The
+outgoing capture slides away and the destination capture enters from the
+opposite side while the native window and menu bar stay fixed.
 `Entire application window` moves the complete top-level Video Editor window,
 including its native frame, off-screen before applying the destination page and
 returns it from the opposite side. A maximized window is temporarily restored

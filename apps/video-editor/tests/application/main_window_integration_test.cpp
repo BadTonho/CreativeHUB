@@ -15,6 +15,7 @@
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_bin_tree_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
+#include "ui/system/system_memory_indicator.h"
 #include <creative_suite/effects/effects.h>
 #if defined(CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS)
 #include "image_document_session.h"
@@ -43,8 +44,10 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QStackedWidget>
+#include <QStatusBar>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QToolBar>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
@@ -323,6 +326,10 @@ public:
         QSettings().clear();
         settings::setProjectAutosaveEnabled(false);
         settings::setPreviewPerformanceMetricsEnabled(false);
+        // This integration test makes immediate workspace assertions for
+        // shortcuts and dock state. Transition timing is covered by the
+        // dedicated workspace-page-transition test.
+        settings::setWorkspacePageTransitionsEnabled(false);
 
         std::array<bool, 7> dock_visibility_before_close{};
         {
@@ -787,6 +794,49 @@ public:
         {
             MainWindow window;
             window.show();
+            QApplication::processEvents();
+            const auto& workspace_ui = window.edit_workspace_->ui();
+            auto* media_pool_toolbar =
+                window.findChild<QToolBar*>("mediaPoolToolbar");
+            require(media_pool_toolbar != nullptr &&
+                        window.statusBar()->isVisible() &&
+                        workspace_ui.workspace_footer != nullptr &&
+                        workspace_ui.workspace_footer->isVisible() &&
+                        workspace_ui.workspace_footer->parentWidget() ==
+                            window.statusBar() &&
+                        workspace_ui.workspace_navigation_slot != nullptr &&
+                        window.workspace_buttons_container_->parentWidget() ==
+                            workspace_ui.workspace_navigation_slot &&
+                        !media_pool_toolbar->isAncestorOf(
+                            window.workspace_buttons_container_) &&
+                        workspace_ui.playback_status->text() ==
+                            QStringLiteral("No media selected.") &&
+                        workspace_ui.system_memory_indicator->isVisible(),
+                    "The workspace selectors, playback status, and memory indicator must share the persistent application footer, outside the top toolbar.");
+            const auto require_footer_centered = [&window, &workspace_ui]() {
+                const auto nav_center_x =
+                    window.workspace_buttons_container_->mapTo(
+                        workspace_ui.workspace_footer,
+                        window.workspace_buttons_container_->rect().center()).x();
+                require(std::abs(
+                            nav_center_x -
+                            workspace_ui.workspace_footer->rect().center().x()) <= 1,
+                        "The workspace selectors must be centered in the global footer.");
+            };
+            const bool footer_test_was_maximized = window.isMaximized();
+            const auto footer_test_geometry = window.geometry();
+            window.showNormal();
+            window.resize(1100, 720);
+            QApplication::processEvents();
+            require_footer_centered();
+            window.resize(1400, 900);
+            QApplication::processEvents();
+            require_footer_centered();
+            if (footer_test_was_maximized) {
+                window.showMaximized();
+            } else {
+                window.setGeometry(footer_test_geometry);
+            }
             QApplication::processEvents();
             QEventLoop open_loop;
             QTimer timeout;
@@ -1264,8 +1314,8 @@ public:
                         window.timeline_dock_->windowTitle() == "Timeline" &&
                         window.edit_workspace_->ui().timeline->isReadOnly() &&
                         window.edit_workspace_->ui().timeline_controls->isHidden() &&
-                        window.edit_workspace_->ui().timeline_footer->isHidden(),
-                    "Render must show the read-only Timeline without its controls or footer.");
+                        window.edit_workspace_->ui().workspace_footer->isVisible(),
+                    "Render must show the read-only Timeline without its controls while keeping the global footer visible.");
             require(window.render_workspace_button_->isVisible(),
                     "The Render selector must remain visible while Render is active.");
             for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
@@ -1327,8 +1377,8 @@ public:
                     "Returning to Fusion must restore the Node Editor title.");
             require(!window.edit_workspace_->ui().timeline->isReadOnly() &&
                         !window.edit_workspace_->ui().timeline_controls->isHidden() &&
-                        !window.edit_workspace_->ui().timeline_footer->isHidden(),
-                    "Returning to Fusion must restore Timeline interaction and controls.");
+                        window.edit_workspace_->ui().workspace_footer->isVisible(),
+                    "Returning to Fusion must restore Timeline interaction and keep the global footer visible.");
 
             window.media_dock_->hide();
             window.effects_dock_->show();
@@ -1359,9 +1409,9 @@ public:
                 "Leaving Render must restore the prior hidden state of the Timeline dock.");
             require(!window.edit_workspace_->ui().timeline->isReadOnly() &&
                         !window.edit_workspace_->ui().timeline_controls->isHidden() &&
-                        !window.edit_workspace_->ui().timeline_footer->isHidden() &&
+                        window.edit_workspace_->ui().workspace_footer->isVisible() &&
                         !window.project_dirty_,
-                    "Workspace changes must restore Timeline interaction without dirtying the project.");
+                    "Workspace changes must restore Timeline interaction and preserve the global footer without dirtying the project.");
             window.restoreDefaultLayout();
             window.setWorkspacePage(ui::WorkspacePageId::Edit);
             QApplication::processEvents();

@@ -1305,9 +1305,6 @@ void EditWorkspaceController::setTimelineReadOnly(bool read_only) {
     if (ui_.timeline_controls != nullptr) {
         ui_.timeline_controls->setVisible(!read_only);
     }
-    if (ui_.timeline_footer != nullptr) {
-        ui_.timeline_footer->setVisible(!read_only);
-    }
 }
 
 void EditWorkspaceController::applyTimelineZoom(double factor) {

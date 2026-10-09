@@ -62,7 +62,7 @@ private:
     [[nodiscard]] QWidget* createTimeline(QWidget* parent);
     void createTimelineControls(QWidget* container, QVBoxLayout* layout);
     void createTimelineViewport(QWidget* container, QVBoxLayout* layout);
-    void createTimelineFooter(QWidget* container, QVBoxLayout* layout);
+    void createWorkspaceFooter(QWidget* parent);
 
     QWidget* preview_widget_ = nullptr;
     QWidget* inspector_panel_ = nullptr;

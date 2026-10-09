@@ -456,15 +456,23 @@ void MainWindow::createWorkspace() {
     render_workspace_->createPanels(this);
     applyMonitorVolumePercent(edit_workspace_->ui().monitor_volume->value());
 
-    const auto workspace_buttons = ui::createTimelineEndButtons(this);
+    const auto workspace_buttons = ui::createTimelineEndButtons(
+        edit_workspace_->ui().workspace_navigation_slot);
     workspace_buttons_container_ = workspace_buttons.container;
     edit_workspace_button_ = workspace_buttons.edit;
     fusion_workspace_button_ = workspace_buttons.fusion;
     render_workspace_button_ = workspace_buttons.render;
+    if (auto* navigation_layout = qobject_cast<QHBoxLayout*>(
+            edit_workspace_->ui().workspace_navigation_slot->layout())) {
+        navigation_layout->addWidget(workspace_buttons_container_);
+    }
     workspace_host_ = new ui::WorkspaceHost(
         edit_workspace_, fusion_workspace_, render_workspace_, this);
     setCentralWidget(workspace_host_);
-    statusBar()->setVisible(false);
+    statusBar()->setSizeGripEnabled(false);
+    statusBar()->addPermanentWidget(
+        edit_workspace_->ui().workspace_footer, 1);
+    statusBar()->setVisible(true);
 
     inspector_dock_ = createDock(
         "Inspector",
@@ -877,9 +885,6 @@ void MainWindow::createMenus() {
     workspace_toolbar_spacer->setSizePolicy(
         QSizePolicy::Expanding, QSizePolicy::Preferred);
     media_pool_toolbar->addWidget(workspace_toolbar_spacer);
-    if (workspace_buttons_container_ != nullptr) {
-        media_pool_toolbar->addWidget(workspace_buttons_container_);
-    }
     connect(media_pool_action_, &QAction::triggered,
             this, [this](bool) { activateMediaPoolGroup(); });
     connect(bins_dock_, &QDockWidget::visibilityChanged, this,

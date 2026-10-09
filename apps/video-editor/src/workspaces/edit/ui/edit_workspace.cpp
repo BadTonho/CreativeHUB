@@ -15,6 +15,7 @@
 #include <QFormLayout>
 #include <QFontComboBox>
 #include <QFrame>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -161,6 +162,8 @@ EditWorkspace::EditWorkspace(
 
 void EditWorkspace::createPanels(QWidget* parent) {
     inspector_panel_ = createInspector(parent);
+    createWorkspaceFooter(
+        command_dialog_parent_ != nullptr ? command_dialog_parent_ : parent);
     timeline_panel_ = createTimeline(parent);
     ui_.inspector_panel = inspector_panel_;
     ui_.timeline_panel = timeline_panel_;
@@ -715,33 +718,59 @@ void EditWorkspace::createTimelineViewport(QWidget* container, QVBoxLayout* layo
     layout->addWidget(ui_.timeline_scroll, 1);
 }
 
-void EditWorkspace::createTimelineFooter(QWidget* container, QVBoxLayout* layout) {
-    // Keep the playback status as a compact footer while giving the timeline
-    // the expandable space in the dock.
-    ui_.timeline_footer = new QWidget(container);
-    ui_.timeline_footer->setObjectName("timelinePlaybackFooter");
-    auto* playback_footer_layout = new QHBoxLayout(ui_.timeline_footer);
-    playback_footer_layout->setContentsMargins(0, 0, 0, 0);
-    playback_footer_layout->setSpacing(12);
+void EditWorkspace::createWorkspaceFooter(QWidget* parent) {
+    ui_.workspace_footer = new QWidget(parent);
+    ui_.workspace_footer->setObjectName("workspaceFooter");
+    auto* footer_layout = new QGridLayout(ui_.workspace_footer);
+    footer_layout->setContentsMargins(8, 0, 8, 0);
+    footer_layout->setHorizontalSpacing(8);
+    footer_layout->setVerticalSpacing(0);
+    footer_layout->setColumnStretch(0, 1);
+    footer_layout->setColumnStretch(2, 1);
 
-    ui_.playback_status = new QLabel("No media selected.", ui_.timeline_footer);
+    auto* status_group = new QWidget(ui_.workspace_footer);
+    status_group->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    auto* status_layout = new QHBoxLayout(status_group);
+    status_layout->setContentsMargins(0, 0, 0, 0);
+    status_layout->setSpacing(12);
+
+    ui_.playback_status = new QLabel("No media selected.", status_group);
     ui_.playback_status->setStyleSheet("color: #9aa4b2;");
     ui_.playback_status->setSizePolicy(
         QSizePolicy::Preferred,
         QSizePolicy::Fixed);
-    playback_footer_layout->addWidget(ui_.playback_status);
+    status_layout->addWidget(ui_.playback_status);
 
-    ui_.timeline_message = new QLabel(ui_.timeline_footer);
+    ui_.timeline_message = new QLabel(status_group);
     ui_.timeline_message->setStyleSheet("color: #9aa4b2;");
     ui_.timeline_message->setSizePolicy(
         QSizePolicy::Preferred,
         QSizePolicy::Fixed);
-    playback_footer_layout->addWidget(ui_.timeline_message);
-    playback_footer_layout->addStretch(1);
-    ui_.system_memory_indicator = new SystemMemoryIndicator(ui_.timeline_footer);
-    playback_footer_layout->addWidget(ui_.system_memory_indicator);
-    ui_.timeline_footer->setFixedHeight(ui_.timeline_footer->sizeHint().height());
-    layout->addWidget(ui_.timeline_footer);
+    status_layout->addWidget(ui_.timeline_message);
+    footer_layout->addWidget(
+        status_group, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+
+    ui_.workspace_navigation_slot = new QWidget(ui_.workspace_footer);
+    ui_.workspace_navigation_slot->setObjectName("workspaceNavigationSlot");
+    ui_.workspace_navigation_slot->setSizePolicy(
+        QSizePolicy::Fixed, QSizePolicy::Preferred);
+    auto* navigation_layout = new QHBoxLayout(ui_.workspace_navigation_slot);
+    navigation_layout->setContentsMargins(0, 0, 0, 0);
+    navigation_layout->setSpacing(0);
+    footer_layout->addWidget(
+        ui_.workspace_navigation_slot, 0, 1, Qt::AlignCenter);
+
+    auto* memory_group = new QWidget(ui_.workspace_footer);
+    memory_group->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    auto* memory_layout = new QHBoxLayout(memory_group);
+    memory_layout->setContentsMargins(0, 0, 0, 0);
+    memory_layout->addStretch(1);
+    ui_.system_memory_indicator = new SystemMemoryIndicator(memory_group);
+    memory_layout->addWidget(ui_.system_memory_indicator);
+    footer_layout->addWidget(
+        memory_group, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
+
+    ui_.workspace_footer->setFixedHeight(32);
 
     connect(
         controller_,
@@ -763,8 +792,6 @@ QWidget* EditWorkspace::createTimeline(QWidget* parent) {
     ui_.monitor_volume->setValue(settings::monitorVolumePercent());
     createTimelineViewport(container, layout);
     ui_.snap->setChecked(ui_.timeline->snapEnabled());
-    createTimelineFooter(container, layout);
-
     return container;
 }
 
