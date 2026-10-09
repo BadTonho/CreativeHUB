@@ -770,7 +770,7 @@ void EditWorkspace::createWorkspaceFooter(QWidget* parent) {
     footer_layout->addWidget(
         memory_group, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
 
-    ui_.workspace_footer->setFixedHeight(32);
+    ui_.workspace_footer->setFixedHeight(22);
 
     connect(
         controller_,

@@ -470,6 +470,7 @@ void MainWindow::createWorkspace() {
         edit_workspace_, fusion_workspace_, render_workspace_, this);
     setCentralWidget(workspace_host_);
     statusBar()->setSizeGripEnabled(false);
+    statusBar()->setFixedHeight(26);
     statusBar()->addPermanentWidget(
         edit_workspace_->ui().workspace_footer, 1);
     statusBar()->setVisible(true);

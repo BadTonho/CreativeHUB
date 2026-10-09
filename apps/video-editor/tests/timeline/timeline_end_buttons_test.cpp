@@ -42,8 +42,8 @@ int main(int argc, char* argv[]) {
                 "The first timeline end button must be Edit.");
         require(edit_button->text() == "Edit",
                 "The first timeline end button label must be Edit.");
-        require(edit_button->size() == QSize(68, 28),
-                "The Edit button must be 68 by 28 pixels so its label fits.");
+        require(edit_button->size() == QSize(68, 22),
+                "The Edit selector must fit the compact application footer.");
         require(edit_button == buttons.edit,
                 "The first timeline end button must be the Edit selector.");
         require(edit_button->isCheckable() && edit_button->isChecked(),
@@ -64,8 +64,8 @@ int main(int argc, char* argv[]) {
                 "The blank button must be accessible as Fusion.");
         require(!unnamed_button->toolTip().isEmpty(),
                 "The blank button must explain that it opens Fusion.");
-        require(unnamed_button->size() == QSize(32, 28),
-                "The blank timeline end button must be 32 by 28 pixels.");
+        require(unnamed_button->size() == QSize(32, 22),
+                "The blank Fusion selector must fit the compact application footer.");
         require(unnamed_button->isCheckable() &&
                     !unnamed_button->isChecked(),
                 "The Fusion selector must start inactive.");
@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
                 "The third timeline end button must be the Render selector.");
         require(render_button->text() == "Render",
                 "The Render selector must have a visible label.");
-        require(render_button->size() == QSize(68, 28),
+        require(render_button->size() == QSize(68, 22),
                 "The Render selector must match the labeled Edit button size.");
         require(render_button->isCheckable() && !render_button->isChecked(),
                 "The Render selector must start inactive.");

@@ -14,7 +14,7 @@ TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
 
     auto* edit_button = new QPushButton("Edit", container);
     edit_button->setObjectName("timelineEditButton");
-    edit_button->setFixedSize(68, 28);
+    edit_button->setFixedSize(68, 22);
     edit_button->setCheckable(true);
     edit_button->setAutoExclusive(true);
     edit_button->setToolTip("Switch to the Edit workspace");
@@ -25,13 +25,13 @@ TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
     unnamed_button->setObjectName("timelineUnnamedButton");
     unnamed_button->setAccessibleName("Fusion");
     unnamed_button->setToolTip("Switch to the Fusion workspace");
-    unnamed_button->setFixedSize(32, 28);
+    unnamed_button->setFixedSize(32, 22);
     unnamed_button->setCheckable(true);
     unnamed_button->setAutoExclusive(true);
 
     auto* render_button = new QPushButton("Render", container);
     render_button->setObjectName("timelineRenderButton");
-    render_button->setFixedSize(68, 28);
+    render_button->setFixedSize(68, 22);
     render_button->setCheckable(true);
     render_button->setAutoExclusive(true);
     render_button->setToolTip("Switch to the Render workspace");

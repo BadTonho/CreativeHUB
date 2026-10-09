@@ -413,7 +413,8 @@ in Edit, Fusion, and Render. The Fusion selector has no visible text or icon;
 its tooltip and accessible name identify it as `Fusion`. The active page is
 highlighted, and the application always opens on Edit without saving the
 selected page as project or workspace state. The top workspace toolbar keeps
-the `Media Pool` and `Effects` controls.
+the `Media Pool` and `Effects` controls. The footer retains a compact 26 px
+status-bar height, with 22 px navigation buttons.
 
 Edit preserves the current Preview, Inspector, and Timeline presentation. In
 Fusion, Bins and Media remain on the left, the existing Preview is labeled

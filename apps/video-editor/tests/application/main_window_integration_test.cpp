@@ -802,6 +802,8 @@ public:
                         window.statusBar()->isVisible() &&
                         workspace_ui.workspace_footer != nullptr &&
                         workspace_ui.workspace_footer->isVisible() &&
+                        workspace_ui.workspace_footer->height() == 22 &&
+                        window.statusBar()->height() == 26 &&
                         workspace_ui.workspace_footer->parentWidget() ==
                             window.statusBar() &&
                         workspace_ui.workspace_navigation_slot != nullptr &&
