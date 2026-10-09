@@ -692,12 +692,16 @@ or persist layout. `MainWindow` remains
 responsible for creating the docks, restoring and saving their native layout,
 and returning to Edit before an accepted close from Render.
 
-The internal `WorkspacePageTransition` helper animates snapshots of the central
-workspace, Timeline/Node Editor dock, and Inspector dock in sync. Moving forward
-through Edit → Fusion → Render brings the destination in from the right; moving
-back brings it in from the left. The workspace selectors remain fixed. The
-helper uses the locally configured duration and does not animate initial page
-selection, same-page requests, or shutdown restoration. While a slide is
+The internal `WorkspacePageTransition` helper moves the complete top-level
+Video Editor window, including its native window frame, toolbars, workspace
+selectors, docks, and page content. Moving forward through Edit → Fusion →
+Render sends the current window off-screen to the left, applies the destination
+page, and brings the same window back from the right. Moving backward reverses
+those directions. The desktop is visible while the window is off-screen. A
+maximized window is temporarily restored to its normal geometry and maximized
+again when the transition finishes. The helper uses the locally configured
+duration, preserves the original window geometry, and does not animate initial
+page selection, same-page requests, or shutdown restoration. While a slide is
 running, only the latest additional page request is kept for the next
 transition.
 

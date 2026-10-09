@@ -42,11 +42,6 @@ void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
-bool hasTransitionOverlay(QWidget* widget) {
-    return widget != nullptr && widget->findChild<QWidget*>(
-        QStringLiteral("workspacePageTransitionOverlay")) != nullptr;
-}
-
 bool waitUntil(const std::function<bool()>& predicate, int timeout_ms) {
     QElapsedTimer timer;
     timer.start();
@@ -566,30 +561,43 @@ int main(int argc, char* argv[]) {
         settings::setWorkspacePageTransitionsEnabled(true);
         settings::setWorkspacePageTransitionDurationMs(100);
         const auto changes_before_animated_switches = page_changes.size();
+        const auto original_window_position = window.pos();
+        const auto original_navigation_position =
+            buttons.edit->mapToGlobal(QPoint(0, 0));
         buttons.fusion->click();
-        application.processEvents();
-        require(workspace_host->currentPage() == ui::WorkspacePageId::Fusion &&
-                    hasTransitionOverlay(workspace_host) &&
-                    hasTransitionOverlay(lower_dock),
-                "An animated page switch must begin on the workspace and lower dock.");
-        auto* forward_overlay = workspace_host->findChild<QWidget*>(
-            QStringLiteral("workspacePageTransitionOverlay"));
-        require(forward_overlay != nullptr &&
-                    forward_overlay->property("slideDirection").toInt() == 1,
-                "Edit-to-Fusion must slide the workspace from right to left.");
+        require(workspace_host->currentPage() == ui::WorkspacePageId::Edit,
+                "The outgoing page must remain active until the window exits.");
+        require(buttons.edit->isChecked(),
+                "The outgoing selector must remain active until the window exits.");
+        require(window.pos() == original_window_position,
+                "The window must begin its transition at the original position.");
 
         buttons.render->click();
         buttons.edit->click();
         buttons.render->click();
-        require(workspace_host->currentPage() == ui::WorkspacePageId::Fusion &&
-                    buttons.fusion->isChecked() && !buttons.render->isChecked(),
+        require(workspace_host->currentPage() == ui::WorkspacePageId::Edit &&
+                    buttons.edit->isChecked() && !buttons.render->isChecked(),
                 "Queued page requests must wait without moving the active selector.");
         require(waitUntil(
                     [&]() {
                         return workspace_host->currentPage() ==
+                            ui::WorkspacePageId::Fusion;
+                    },
+                    1000),
+                "The first page must be applied after the whole window exits the screen.");
+        const auto navigation_delta =
+            buttons.edit->mapToGlobal(QPoint(0, 0)) -
+            original_navigation_position;
+        require(buttons.fusion->isChecked() &&
+                    !buttons.render->isChecked() &&
+                    window.pos().x() > original_window_position.x() &&
+                    navigation_delta == window.pos() - original_window_position,
+                "Navigation and workspace content must travel with the entire window.");
+        require(waitUntil(
+                    [&]() {
+                        return workspace_host->currentPage() ==
                                 ui::WorkspacePageId::Render &&
-                            !hasTransitionOverlay(workspace_host) &&
-                            !hasTransitionOverlay(lower_dock);
+                            window.pos() == original_window_position;
                     },
                     1200),
                 "The latest queued workspace request did not finish on Render.");
@@ -602,28 +610,27 @@ int main(int argc, char* argv[]) {
                 "Rapid page requests must keep only the latest queued destination.");
 
         const auto changes_before_same_page = page_changes.size();
+        const auto position_before_same_page = window.pos();
         buttons.render->click();
         application.processEvents();
         require(page_changes.size() == changes_before_same_page &&
-                    !hasTransitionOverlay(workspace_host),
-                "Selecting the active page must not start another animation.");
+                    window.pos() == position_before_same_page,
+                "Selecting the active page must not move the application window.");
 
+        const auto reverse_original_position = window.pos();
         buttons.edit->click();
-        application.processEvents();
-        auto* reverse_overlay = workspace_host->findChild<QWidget*>(
-            QStringLiteral("workspacePageTransitionOverlay"));
-        require(reverse_overlay != nullptr &&
-                    reverse_overlay->property("slideDirection").toInt() == -1,
-                "Render-to-Edit must slide the workspace from left to right.");
         require(waitUntil(
                     [&]() {
                         return workspace_host->currentPage() ==
                                 ui::WorkspacePageId::Edit &&
-                            !hasTransitionOverlay(workspace_host) &&
-                            !hasTransitionOverlay(lower_dock);
+                            window.pos().x() < reverse_original_position.x();
                     },
                     700),
-                "The reverse workspace transition did not complete.");
+                "Render-to-Edit must apply the page off-screen and enter from the left.");
+        require(waitUntil(
+                    [&]() { return window.pos() == reverse_original_position; },
+                    700),
+                "The reverse window transition did not restore its original position.");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

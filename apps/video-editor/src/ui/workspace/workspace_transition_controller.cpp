@@ -60,11 +60,17 @@ void WorkspaceTransitionController::setPage(WorkspacePageId page) {
     }
 
     const auto current_page = workspace_host_->currentPage();
+    auto* top_level_window = workspace_host_->window();
     if (page_transition_ != nullptr &&
         settings::workspacePageTransitionsEnabled() &&
-        workspace_host_->isVisible()) {
+        top_level_window != nullptr &&
+        top_level_window->isVisible() &&
+        !top_level_window->isMinimized()) {
+        // QPushButton's auto-exclusive state changes before its clicked slot.
+        // Keep the outgoing page selected until it has left the screen.
+        updateSelectors(current_page);
         page_transition_->start(
-            {workspace_host_, docks_.timeline, docks_.inspector},
+            top_level_window,
             current_page,
             page,
             settings::workspacePageTransitionDurationMs(),

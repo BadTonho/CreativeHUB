@@ -1,96 +1,14 @@
 #include "ui/workspace/workspace_page_transition.h"
 
 #include <QCoreApplication>
-#include <QEvent>
-#include <QLayout>
-#include <QPainter>
-#include <QPalette>
-#include <QPixmap>
+#include <QGuiApplication>
+#include <QEventLoop>
+#include <QScreen>
 #include <QWidget>
 
 #include <algorithm>
-#include <utility>
-#include <vector>
 
 namespace ui {
-namespace {
-
-class SlideSnapshotOverlay final : public QWidget {
-public:
-    SlideSnapshotOverlay(
-        QWidget* parent,
-        QPixmap outgoing,
-        QPixmap incoming,
-        int direction)
-        : QWidget(parent),
-          outgoing_(std::move(outgoing)),
-          incoming_(std::move(incoming)),
-          direction_(direction) {
-        setObjectName(QStringLiteral("workspacePageTransitionOverlay"));
-        setProperty("slideDirection", direction_);
-        setAttribute(Qt::WA_NoSystemBackground);
-        setFocusPolicy(Qt::NoFocus);
-    }
-
-    void setProgress(qreal progress) {
-        progress_ = std::clamp(progress, 0.0, 1.0);
-        setProperty("transitionProgress", progress_);
-        setProperty("incomingOffset", qRound(
-            static_cast<qreal>(direction_) * (1.0 - progress_) * width()));
-        setProperty("outgoingOffset", qRound(
-            -static_cast<qreal>(direction_) * progress_ * width()));
-        update();
-    }
-
-protected:
-    bool event(QEvent* event) override {
-        switch (event->type()) {
-        case QEvent::MouseButtonPress:
-        case QEvent::MouseButtonRelease:
-        case QEvent::MouseButtonDblClick:
-        case QEvent::MouseMove:
-        case QEvent::Wheel:
-        case QEvent::ContextMenu:
-        case QEvent::DragEnter:
-        case QEvent::DragMove:
-        case QEvent::DragLeave:
-        case QEvent::Drop:
-            event->accept();
-            return true;
-        default:
-            return QWidget::event(event);
-        }
-    }
-
-    void paintEvent(QPaintEvent*) override {
-        QPainter painter(this);
-        painter.fillRect(rect(), palette().color(QPalette::Window));
-
-        const int travel = width();
-        const int outgoing_x = qRound(
-            -static_cast<qreal>(direction_) * progress_ * travel);
-        const int incoming_x = qRound(
-            static_cast<qreal>(direction_) * (1.0 - progress_) * travel);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        painter.drawPixmap(
-            QRect(outgoing_x, 0, width(), height()), outgoing_);
-        painter.drawPixmap(
-            QRect(incoming_x, 0, width(), height()), incoming_);
-    }
-
-private:
-    QPixmap outgoing_;
-    QPixmap incoming_;
-    int direction_ = 1;
-    qreal progress_ = 0.0;
-};
-
-struct SurfaceSnapshot {
-    QPointer<QWidget> surface;
-    QPixmap outgoing;
-};
-
-}  // namespace
 
 WorkspacePageTransition::WorkspacePageTransition(QObject* parent)
     : QObject(parent) {
@@ -99,21 +17,35 @@ WorkspacePageTransition::WorkspacePageTransition(QObject* parent)
     animation_.setEasingCurve(QEasingCurve::InOutCubic);
     connect(&animation_, &QVariantAnimation::valueChanged, this,
             [this](const QVariant& value) {
-                progress_ = value.toReal();
-                for (const auto& overlay : overlays_) {
-                    if (overlay.widget == nullptr || !overlay.set_progress) continue;
-                    overlay.set_progress(progress_);
+                if (window_ == nullptr) return;
+
+                const auto phase_progress = std::clamp(
+                    value.toReal(), 0.0, 1.0);
+                int from_x = 0;
+                int to_x = 0;
+                if (phase_ == Phase::Exiting) {
+                    progress_ = phase_progress * 0.5;
+                    from_x = original_position_.x();
+                    to_x = exit_position_.x();
+                } else if (phase_ == Phase::Entering) {
+                    progress_ = 0.5 + phase_progress * 0.5;
+                    from_x = entry_position_.x();
+                    to_x = original_position_.x();
+                } else {
+                    return;
                 }
+
+                const int x = qRound(
+                    static_cast<qreal>(from_x) +
+                    static_cast<qreal>(to_x - from_x) * phase_progress);
+                window_->move(x, original_position_.y());
             });
-    connect(&animation_, &QVariantAnimation::finished, this, [this]() {
-        progress_ = 1.0;
-        clearOverlays();
-        emit finished();
-    });
+    connect(&animation_, &QVariantAnimation::finished,
+            this, &WorkspacePageTransition::advancePhase);
 }
 
 void WorkspacePageTransition::start(
-    const QList<QWidget*>& surfaces,
+    QWidget* window,
     WorkspacePageId from_page,
     WorkspacePageId to_page,
     int duration_ms,
@@ -130,69 +62,75 @@ void WorkspacePageTransition::start(
         ? 1
         : -1;
 
-    std::vector<SurfaceSnapshot> snapshots;
-    snapshots.reserve(static_cast<std::size_t>(surfaces.size()));
-    for (auto* surface : surfaces) {
-        if (surface == nullptr) continue;
-        const auto outgoing = surface->isVisible() && !surface->size().isEmpty()
-            ? surface->grab()
-            : QPixmap{};
-        snapshots.push_back({surface, outgoing});
-    }
-
-    apply_page();
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::LayoutRequest);
-    for (const auto& snapshot : snapshots) {
-        auto* surface = snapshot.surface.data();
-        if (surface == nullptr || !surface->isVisible() ||
-            surface->size().isEmpty()) {
-            continue;
-        }
-
-        const auto incoming = surface->grab();
-        if (incoming.isNull()) continue;
-
-        auto outgoing = snapshot.outgoing;
-        if (outgoing.isNull()) {
-            outgoing = QPixmap(incoming.size());
-            outgoing.fill(surface->palette().color(QPalette::Window));
-        }
-
-        auto* overlay = new SlideSnapshotOverlay(
-            surface, std::move(outgoing), incoming, slide_direction_);
-        overlay->setGeometry(surface->rect());
-        overlay->setProgress(0.0);
-        overlay->show();
-        overlay->raise();
-        const QPointer<SlideSnapshotOverlay> guarded_overlay(overlay);
-        overlays_.push_back({
-            overlay,
-            [guarded_overlay](qreal progress) {
-                if (guarded_overlay != nullptr) {
-                    guarded_overlay->setProgress(progress);
-                }
-            }});
-    }
-
-    if (overlays_.isEmpty()) {
+    if (window == nullptr || !window->isVisible() || window->isMinimized()) {
+        apply_page();
         progress_ = 1.0;
         emit finished();
         return;
     }
 
+    window_ = window;
+    was_maximized_ = window->isMaximized();
+    if (was_maximized_) {
+        window->showNormal();
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    }
+
+    original_geometry_ = window->geometry();
+    original_position_ = window->pos();
+    if (original_geometry_.isEmpty()) {
+        restoreWindow();
+        apply_page();
+        progress_ = 1.0;
+        clearTransitionState();
+        emit finished();
+        return;
+    }
+
+    auto* screen = QGuiApplication::screenAt(
+        window->frameGeometry().center());
+    if (screen == nullptr) screen = window->screen();
+    if (screen == nullptr) screen = QGuiApplication::primaryScreen();
+    if (screen == nullptr) {
+        restoreWindow();
+        clearTransitionState();
+        apply_page();
+        progress_ = 1.0;
+        emit finished();
+        return;
+    }
+
+    const auto screen_geometry = screen->geometry();
+    const int framed_width = std::max(
+        1, window->frameGeometry().width());
+    const int offscreen_left = screen_geometry.left() - framed_width - 1;
+    const int offscreen_right = screen_geometry.right() + 2;
+    exit_position_ = QPoint(
+        slide_direction_ > 0 ? offscreen_left : offscreen_right,
+        original_position_.y());
+    entry_position_ = QPoint(
+        slide_direction_ > 0 ? offscreen_right : offscreen_left,
+        original_position_.y());
+
+    const int total_duration = std::max(duration_ms, 2);
+    exit_duration_ms_ = std::max(total_duration / 2, 1);
+    entry_duration_ms_ = std::max(total_duration - exit_duration_ms_, 1);
     progress_ = 0.0;
-    animation_.setDuration(std::max(duration_ms, 1));
-    animation_.start();
+    page_was_applied_ = false;
+    apply_page_ = std::move(apply_page);
+    startPhase(Phase::Exiting, exit_duration_ms_);
 }
 
 void WorkspacePageTransition::cancel() {
     animation_.stop();
-    clearOverlays();
+    if (phase_ != Phase::None) restoreWindow();
+    clearTransitionState();
     progress_ = 0.0;
 }
 
 bool WorkspacePageTransition::isRunning() const noexcept {
-    return animation_.state() != QAbstractAnimation::Stopped;
+    return phase_ != Phase::None &&
+        animation_.state() != QAbstractAnimation::Stopped;
 }
 
 int WorkspacePageTransition::slideDirection() const noexcept {
@@ -203,11 +141,74 @@ qreal WorkspacePageTransition::progress() const noexcept {
     return progress_;
 }
 
-void WorkspacePageTransition::clearOverlays() {
-    for (const auto& overlay : overlays_) {
-        if (overlay.widget != nullptr) delete overlay.widget.data();
+bool WorkspacePageTransition::pageWasApplied() const noexcept {
+    return page_was_applied_;
+}
+
+void WorkspacePageTransition::startPhase(
+    Phase phase,
+    int duration_ms) {
+    phase_ = phase;
+    animation_.setStartValue(0.0);
+    animation_.setEndValue(1.0);
+    animation_.setDuration(std::max(duration_ms, 1));
+    if (window_ != nullptr) {
+        window_->move(
+            phase == Phase::Exiting
+                ? original_position_
+                : entry_position_);
     }
-    overlays_.clear();
+    animation_.start();
+}
+
+void WorkspacePageTransition::advancePhase() {
+    if (window_ == nullptr) {
+        clearTransitionState();
+        progress_ = 1.0;
+        emit finished();
+        return;
+    }
+
+    if (phase_ == Phase::Exiting) {
+        window_->move(exit_position_);
+        progress_ = 0.5;
+        if (apply_page_) apply_page_();
+        page_was_applied_ = true;
+        window_->move(entry_position_);
+        startPhase(Phase::Entering, entry_duration_ms_);
+        return;
+    }
+
+    if (phase_ == Phase::Entering) {
+        restoreWindow();
+        clearTransitionState();
+        progress_ = 1.0;
+        emit finished();
+    }
+}
+
+void WorkspacePageTransition::restoreWindow() {
+    if (window_ == nullptr) return;
+    if (!original_geometry_.isEmpty()) {
+        window_->setGeometry(original_geometry_);
+    } else {
+        window_->move(original_position_);
+    }
+    if (was_maximized_) window_->showMaximized();
+}
+
+void WorkspacePageTransition::clearTransitionState() {
+    window_.clear();
+    apply_page_ = {};
+    original_geometry_ = {};
+    original_position_ = {};
+    exit_position_ = {};
+    entry_position_ = {};
+    phase_ = Phase::None;
+    exit_duration_ms_ = 0;
+    entry_duration_ms_ = 0;
+    was_maximized_ = false;
+    page_was_applied_ = false;
 }
 
 }  // namespace ui

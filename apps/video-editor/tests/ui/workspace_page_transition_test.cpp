@@ -1,17 +1,13 @@
 #include "ui/workspace/workspace_page_transition.h"
 
 #include <QApplication>
-#include <QColor>
 #include <QElapsedTimer>
 #include <QEventLoop>
-#include <QHBoxLayout>
-#include <QImage>
-#include <QPalette>
+#include <QGuiApplication>
+#include <QMainWindow>
+#include <QScreen>
 #include <QThread>
-#include <QWidget>
 
-#include <array>
-#include <cmath>
 #include <cstdio>
 #include <functional>
 #include <stdexcept>
@@ -20,13 +16,6 @@ namespace {
 
 void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
-}
-
-void setColor(QWidget* widget, const QColor& color) {
-    auto palette = widget->palette();
-    palette.setColor(QPalette::Window, color);
-    widget->setPalette(palette);
-    widget->setAutoFillBackground(true);
 }
 
 bool waitUntil(const std::function<bool()>& predicate, int timeout_ms) {
@@ -40,15 +29,12 @@ bool waitUntil(const std::function<bool()>& predicate, int timeout_ms) {
     return predicate();
 }
 
-bool hasOverlay(QWidget* widget) {
-    return widget->findChild<QWidget*>(
-        QStringLiteral("workspacePageTransitionOverlay")) != nullptr;
-}
-
-QColor pixelAt(QWidget* widget, int x, int y) {
-    const QImage image = widget->grab().toImage();
-    require(!image.isNull(), "A transition surface snapshot is empty.");
-    return image.pixelColor(x, y);
+QRect screenGeometryFor(const QWidget& window) {
+    auto* screen = QGuiApplication::screenAt(
+        window.frameGeometry().center());
+    if (screen == nullptr) screen = window.screen();
+    if (screen == nullptr) screen = QGuiApplication::primaryScreen();
+    return screen != nullptr ? screen->geometry() : QRect{};
 }
 
 }  // namespace
@@ -57,134 +43,176 @@ int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
 
     try {
-        QWidget root;
-        root.setObjectName("workspaceTransitionTestRoot");
-        auto* layout = new QHBoxLayout(&root);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(0);
-
-        const std::array colors{
-            QColor(220, 20, 30),
-            QColor(20, 170, 60),
-            QColor(30, 60, 220)};
-        std::array<QWidget*, 3> surfaces{};
-        for (std::size_t index = 0; index < surfaces.size(); ++index) {
-            surfaces[index] = new QWidget(&root);
-            surfaces[index]->setFixedSize(120, 100);
-            setColor(surfaces[index], colors[0]);
-            layout->addWidget(surfaces[index]);
-        }
-        root.show();
+        QMainWindow window;
+        window.resize(420, 260);
+        window.move(140, 110);
+        window.show();
         QApplication::processEvents();
+        if (window.isMaximized()) window.showNormal();
+        const QRect normal_geometry = window.geometry();
+        const QPoint normal_position = window.pos();
+        const QRect screen_geometry = screenGeometryFor(window);
+        require(!screen_geometry.isEmpty(),
+                "The test window has no screen geometry.");
 
         ui::WorkspacePageTransition transition;
         int completed = 0;
         QObject::connect(&transition, &ui::WorkspacePageTransition::finished,
                          [&completed]() { ++completed; });
 
+        auto page = ui::WorkspacePageId::Edit;
+        QRect forward_exit_frame;
         transition.start(
-            {surfaces[0], surfaces[1], surfaces[2]},
+            &window,
             ui::WorkspacePageId::Edit,
             ui::WorkspacePageId::Fusion,
-            500,
-            [&surfaces]() {
-                for (auto* surface : surfaces) {
-                    setColor(surface, QColor(20, 170, 60));
-                }
+            300,
+            [&]() {
+                require(page == ui::WorkspacePageId::Edit,
+                        "The outgoing page changed before the window left the screen.");
+                forward_exit_frame = window.frameGeometry();
+                page = ui::WorkspacePageId::Fusion;
             });
-        require(transition.isRunning() && transition.slideDirection() == 1,
-                "Moving from Edit to Fusion must slide from the right.");
-        require(std::abs(transition.progress()) < 0.001,
-                "A workspace slide must begin at its first frame.");
-        for (auto* surface : surfaces) {
-            require(hasOverlay(surface),
-                    "Every workspace surface must animate together.");
-            auto* overlay = surface->findChild<QWidget*>(
-                QStringLiteral("workspacePageTransitionOverlay"));
-            require(overlay->property("slideDirection").toInt() == 1,
-                    "Forward navigation must move incoming content from the right.");
-        }
-        require(pixelAt(surfaces[0], 60, 50).red() > 150,
-                "The outgoing page must cover the destination at the start.");
+        require(transition.isRunning() && transition.slideDirection() == 1 &&
+                    !transition.pageWasApplied() &&
+                    page == ui::WorkspacePageId::Edit &&
+                    window.pos() == normal_position,
+                "Forward navigation must begin by moving the current window left.");
+        require(waitUntil(
+                    [&transition]() { return transition.pageWasApplied(); },
+                    1000),
+                "The forward page was not applied after the window exited.");
+        require(page == ui::WorkspacePageId::Fusion &&
+                    forward_exit_frame.right() < screen_geometry.left() &&
+                    window.frameGeometry().left() > screen_geometry.right() &&
+                    transition.progress() >= 0.5,
+                "Forward navigation must switch pages off-screen and enter from the right.");
         require(waitUntil(
                     [&transition]() {
-                        return transition.progress() >= 0.12 &&
-                            transition.progress() <= 0.78;
+                        return transition.progress() >= 0.7 &&
+                            transition.isRunning();
                     },
-                    400),
-                "The forward slide did not advance smoothly.");
-        for (auto* surface : surfaces) {
-            auto* overlay = surface->findChild<QWidget*>(
-                QStringLiteral("workspacePageTransitionOverlay"));
-            require(overlay != nullptr &&
-                        std::abs(overlay->property("transitionProgress").toReal() -
-                                 transition.progress()) < 0.001,
-                    "Workspace surfaces must use the same animation progress.");
-            require(overlay->property("incomingOffset").toInt() > 0 &&
-                        overlay->property("outgoingOffset").toInt() < 0,
-                    "Forward navigation must move the incoming and outgoing pages in opposite directions.");
-        }
-        require(pixelAt(surfaces[0], 5, 50).red() > 150,
-                "Forward navigation must move the incoming page in from the right.");
-        require(waitUntil([&transition]() { return !transition.isRunning(); }, 800),
-                "The forward workspace slide did not finish.");
-        require(completed == 1 && !hasOverlay(surfaces[0]) &&
-                    pixelAt(surfaces[0], 60, 50).green() > 120,
-                "The destination page was not revealed after the slide.");
+                    500),
+                "The incoming window did not advance from the right.");
+        require(window.pos().x() > normal_position.x(),
+                "The whole application window must move during page entry.");
+        require(waitUntil(
+                    [&transition]() { return !transition.isRunning(); },
+                    1000),
+                "The forward window transition did not finish.");
+        require(completed == 1 && window.geometry() == normal_geometry &&
+                    window.pos() == normal_position,
+                "Forward navigation must restore the original window geometry.");
 
+        QRect reverse_exit_frame;
         transition.start(
-            {surfaces[0], surfaces[1], surfaces[2]},
+            &window,
             ui::WorkspacePageId::Render,
             ui::WorkspacePageId::Edit,
-            500,
-            [&surfaces]() {
-                for (auto* surface : surfaces) {
-                    setColor(surface, QColor(220, 20, 30));
-                }
+            300,
+            [&]() {
+                require(page == ui::WorkspacePageId::Fusion,
+                        "The reverse page changed before the window left the screen.");
+                reverse_exit_frame = window.frameGeometry();
+                page = ui::WorkspacePageId::Edit;
             });
         require(transition.isRunning() && transition.slideDirection() == -1,
-                "Moving from Render to Edit must slide from the left.");
+                "Backward navigation must move the current window right.");
         require(waitUntil(
-                    [&transition]() {
-                        return transition.progress() >= 0.12 &&
-                            transition.progress() <= 0.78;
-                    },
-                    400),
-                "The reverse slide did not advance smoothly.");
-        auto* reverse_midpoint_overlay = surfaces[0]->findChild<QWidget*>(
-            QStringLiteral("workspacePageTransitionOverlay"));
-        require(reverse_midpoint_overlay != nullptr &&
-                    reverse_midpoint_overlay->property("incomingOffset").toInt() < 0 &&
-                    reverse_midpoint_overlay->property("outgoingOffset").toInt() > 0,
-                "Backward navigation must move the incoming and outgoing pages in opposite directions.");
-        require(pixelAt(surfaces[0], 5, 50).red() > 150,
-                "Backward navigation must reveal the destination from the left.");
-        require(waitUntil([&transition]() { return !transition.isRunning(); }, 800),
-                "The reverse workspace slide did not finish.");
-        require(completed == 2 && pixelAt(surfaces[0], 60, 50).red() > 150,
-                "The reverse slide did not reveal its destination page.");
+                    [&transition]() { return transition.pageWasApplied(); },
+                    1000),
+                "The reverse page was not applied after the window exited.");
+        require(reverse_exit_frame.left() > screen_geometry.right() &&
+                    window.frameGeometry().right() <= screen_geometry.left(),
+                "Backward navigation must switch pages at the right edge and enter from the left.");
+        require(waitUntil(
+                    [&transition]() { return !transition.isRunning(); },
+                    1000),
+                "The reverse window transition did not finish.");
+        require(completed == 2 && window.pos() == normal_position &&
+                    window.geometry() == normal_geometry,
+                "Backward navigation must restore the original window geometry.");
 
         transition.start(
-            {surfaces[0]},
+            &window,
             ui::WorkspacePageId::Edit,
             ui::WorkspacePageId::Render,
             100,
-            [&surfaces]() { setColor(surfaces[0], QColor(30, 60, 220)); });
+            [&page]() { page = ui::WorkspacePageId::Render; });
         require(transition.slideDirection() == 1,
-                "Skipping from Edit to Render must follow the forward direction.");
-        require(waitUntil([&transition]() { return !transition.isRunning(); }, 500),
-                "The non-adjacent workspace slide did not finish.");
+                "A non-adjacent forward page change must use the forward direction.");
+        require(waitUntil(
+                    [&transition]() { return !transition.isRunning(); },
+                    1000) &&
+                    window.pos() == normal_position,
+                "A non-adjacent page transition did not restore the window.");
 
+        const auto completed_before_same_page = completed;
         bool same_page_applied = false;
         transition.start(
-            {surfaces[0]},
-            ui::WorkspacePageId::Fusion,
-            ui::WorkspacePageId::Fusion,
+            &window,
+            ui::WorkspacePageId::Render,
+            ui::WorkspacePageId::Render,
             100,
             [&same_page_applied]() { same_page_applied = true; });
         require(same_page_applied && !transition.isRunning() &&
-                    !hasOverlay(surfaces[0]),
-                "Selecting the current page must not create a slide.");
+                    completed == completed_before_same_page &&
+                    window.pos() == normal_position,
+                "Selecting the current page must not move the application window.");
+
+        bool canceled_before_switch = false;
+        transition.start(
+            &window,
+            ui::WorkspacePageId::Edit,
+            ui::WorkspacePageId::Fusion,
+            600,
+            [&canceled_before_switch]() { canceled_before_switch = true; });
+        transition.cancel();
+        require(!transition.isRunning() && !canceled_before_switch &&
+                    window.geometry() == normal_geometry &&
+                    window.pos() == normal_position,
+                "Canceling before the page switch must restore the window without applying the page.");
+
+        bool canceled_after_switch = false;
+        transition.start(
+            &window,
+            ui::WorkspacePageId::Edit,
+            ui::WorkspacePageId::Fusion,
+            600,
+            [&canceled_after_switch]() { canceled_after_switch = true; });
+        require(waitUntil(
+                    [&transition]() { return transition.pageWasApplied(); },
+                    1000),
+                "The cancel-after-switch scenario did not reach its page change.");
+        transition.cancel();
+        require(canceled_after_switch && !transition.isRunning() &&
+                    window.geometry() == normal_geometry &&
+                    window.pos() == normal_position,
+                "Canceling after the page switch must restore the window geometry.");
+
+        window.showMaximized();
+        QApplication::processEvents();
+        require(window.isMaximized(),
+                "The test platform did not enter the maximized state.");
+        const QRect maximized_geometry = window.geometry();
+        bool switched_while_restored = false;
+        transition.start(
+            &window,
+            ui::WorkspacePageId::Fusion,
+            ui::WorkspacePageId::Render,
+            100,
+            [&]() {
+                switched_while_restored = !window.isMaximized();
+            });
+        require(!window.isMaximized(),
+                "A maximized window must be restored before it moves.");
+        require(waitUntil(
+                    [&transition]() { return !transition.isRunning(); },
+                    1000),
+                "The maximized window transition did not finish.");
+        require(switched_while_restored && window.isMaximized() &&
+                    window.geometry() == maximized_geometry,
+                "A maximized window must return to its original maximized state and geometry.");
 
         return 0;
     } catch (const std::exception& error) {

@@ -3,10 +3,10 @@
 #include "ui/workspace/workspace_page_id.h"
 
 #include <QObject>
-#include <QList>
+#include <QPoint>
 #include <QPointer>
+#include <QRect>
 #include <QVariantAnimation>
-#include <QVector>
 
 #include <functional>
 
@@ -14,8 +14,8 @@ class QWidget;
 
 namespace ui {
 
-// Animates snapshots of the visible workspace surfaces while the destination
-// page is activated underneath them.
+// Moves the application window off-screen, switches pages, then returns it
+// from the opposite side while preserving its original geometry and state.
 class WorkspacePageTransition final : public QObject {
     Q_OBJECT
 
@@ -23,7 +23,7 @@ public:
     explicit WorkspacePageTransition(QObject* parent = nullptr);
 
     void start(
-        const QList<QWidget*>& surfaces,
+        QWidget* window,
         WorkspacePageId from_page,
         WorkspacePageId to_page,
         int duration_ms,
@@ -33,21 +33,36 @@ public:
     [[nodiscard]] bool isRunning() const noexcept;
     [[nodiscard]] int slideDirection() const noexcept;
     [[nodiscard]] qreal progress() const noexcept;
+    [[nodiscard]] bool pageWasApplied() const noexcept;
 
 signals:
     void finished();
 
 private:
-    struct OverlayHandle {
-        QPointer<QWidget> widget;
-        std::function<void(qreal)> set_progress;
+    enum class Phase {
+        None,
+        Exiting,
+        Entering,
     };
 
-    void clearOverlays();
+    void startPhase(Phase phase, int duration_ms);
+    void advancePhase();
+    void restoreWindow();
+    void clearTransitionState();
 
-    QVector<OverlayHandle> overlays_;
+    QPointer<QWidget> window_;
     QVariantAnimation animation_;
+    std::function<void()> apply_page_;
+    QRect original_geometry_;
+    QPoint original_position_;
+    QPoint exit_position_;
+    QPoint entry_position_;
+    Phase phase_ = Phase::None;
     int slide_direction_ = 1;
+    int exit_duration_ms_ = 0;
+    int entry_duration_ms_ = 0;
+    bool was_maximized_ = false;
+    bool page_was_applied_ = false;
     qreal progress_ = 0.0;
 };
 
