@@ -1060,6 +1060,8 @@ void EditWorkspaceController::setTimelineWidget(
             this, &EditWorkspaceController::handleTimelineEffectDrop);
     connect(timeline_widget_, &timeline::TimelineWidget::editImageClipRequested,
             this, &EditWorkspaceController::timelineImageClipEditRequested);
+    connect(timeline_widget_, &timeline::TimelineWidget::openMotionClipRequested,
+            this, &EditWorkspaceController::timelineMotionClipOpenRequested);
     connect(timeline_widget_, &timeline::TimelineWidget::audioUnlinkRequested,
             this, [this](timeline::ClipId clip_id) {
                 try {

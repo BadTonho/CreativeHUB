@@ -460,6 +460,37 @@ media::LinkedImageReference parseLinkedImageReference(
     return link;
 }
 
+media::MotionLinkReference parseMotionLinkReference(
+    const QJsonObject& owner,
+    const char* key,
+    const std::filesystem::path& project_path) {
+    const auto value = owner.value(QLatin1String(key));
+    if (!value.isObject()) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid Motion Studio link.");
+    }
+    const auto object = value.toObject();
+    media::MotionLinkReference link;
+    link.id = requiredString(object, "id", project_path).toUtf8().toStdString();
+    link.document_path = resolvedPath(project_path,
+        requiredString(object, "document", project_path));
+    link.published_output_path = resolvedPath(project_path,
+        requiredString(object, "output", project_path));
+    link.source_path = resolvedPath(project_path,
+        requiredString(object, "source", project_path));
+    link.source_kind = requiredString(object, "source_kind", project_path).toUtf8().toStdString();
+    link.container = requiredString(object, "container", project_path).toUtf8().toStdString();
+    link.codec = requiredString(object, "codec", project_path).toUtf8().toStdString();
+    link.quality = requiredString(object, "quality", project_path).toUtf8().toStdString();
+    const auto bitrate = object.value(QStringLiteral("bitrate_mbps"));
+    if (!bitrate.isDouble()) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid Motion Studio quality profile.");
+    }
+    link.bitrate_mbps = bitrate.toDouble();
+    return link;
+}
+
 timeline::TextStyle parseTextStyle(
     const QJsonObject& clip_object,
     const std::filesystem::path& project_path) {
@@ -647,6 +678,9 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
             object.contains("image_editor_link")) {
             media.image_editor_link = parseLinkedImageReference(
                 object, "image_editor_link", project_path);
+        }
+        if (version >= linked_motion_format_version && object.contains("motion_link")) {
+            media.motion_link = parseMotionLinkReference(object, "motion_link", project_path);
         }
         document.media.push_back(std::move(media));
     }
@@ -836,6 +870,10 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     clip_object.contains("image_editor_variant")) {
                     clip.image_editor_variant = parseLinkedImageReference(
                         clip_object, "image_editor_variant", project_path);
+                }
+                if (version >= linked_motion_format_version && clip_object.contains("motion_link")) {
+                    clip.motion_link = parseMotionLinkReference(
+                        clip_object, "motion_link", project_path);
                 }
                 clip.timeline_start_frame = requiredInteger(clip_object, "timeline_start_frame", project_path);
                 clip.duration_frames = requiredInteger(clip_object, "duration_frames", project_path);

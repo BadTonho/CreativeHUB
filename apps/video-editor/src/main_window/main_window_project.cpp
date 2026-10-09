@@ -898,6 +898,7 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     project_controller_.commitPrepared(
         std::move(prepared.media_library),
         std::move(prepared.image_editor_links),
+        std::move(prepared.motion_links),
         std::move(prepared.timeline),
         std::move(prepared.active_project_path),
         loaded_document,

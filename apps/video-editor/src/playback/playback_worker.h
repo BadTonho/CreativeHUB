@@ -91,6 +91,7 @@ struct CompositionLayerSpec {
     std::optional<fusion::nodes::NodeGraph> node_graph;
     // Ephemeral viewer routing; never serialized to the project document.
     std::optional<fusion::nodes::NodeId> fusion_preview_node_id;
+    QString linked_render_path;
 };
 
 struct CompositionTransitionSpec {

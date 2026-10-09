@@ -157,7 +157,9 @@ private:
     void selectMediaBrowserBin(const QString& path);
     void showMediaContextMenu(const QPoint& position);
     void editSelectedMediaInImageEditor();
+    void editSelectedMediaInMotionStudio();
     void editTimelineImageClip(timeline::ClipId clip_id);
+    void editTimelineVideoClipInMotionStudio(timeline::ClipId clip_id);
     void handleMediaBrowserMediaDrop(
         const QString& source_path,
         const QString& destination_bin);
@@ -209,6 +211,14 @@ private:
     void initializeLinkedImageCompatibility();
     void refreshLinkedImageTargets();
     void pollLinkedImageOutputs();
+    void refreshLinkedMotionTargets();
+    void pollLinkedMotionOutputs();
+    [[nodiscard]] bool openMotionStudio(
+        media::MotionLinkReference link,
+        const std::filesystem::path& source_path,
+        const QString& origin_kind,
+        const QString& source_kind,
+        const timeline::TimelineClip* clip = nullptr);
     void refreshLinkedImageOutput(
         const media::LinkedImageReference& link,
         const std::filesystem::path& source_path,
@@ -328,6 +338,7 @@ private:
     QTimer* preview_metrics_timer_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QTimer* linked_image_poll_timer_ = nullptr;
+    QTimer* linked_motion_poll_timer_ = nullptr;
     system_monitor::PerformanceSampler performance_sampler_;
     bool media_browser_inline_rename_pending_ = false;
     QAction* new_project_action_ = nullptr;
@@ -403,6 +414,18 @@ private:
         bool refresh_pending = false;
     };
     std::vector<LinkedImageWatchTarget> linked_image_watch_targets_;
+    struct LinkedMotionWatchTarget {
+        media::MotionLinkReference link;
+        std::filesystem::path source_path;
+        std::vector<timeline::ClipId> clip_ids;
+        bool media_asset = false;
+        bool has_signature = false;
+        std::uintmax_t size = 0;
+        std::filesystem::file_time_type modified{};
+        bool refresh_pending = false;
+        bool missing_reported = false;
+    };
+    std::vector<LinkedMotionWatchTarget> linked_motion_watch_targets_;
     std::filesystem::path active_project_source_path_;
     bool project_load_pending_ = false;
     QProgressDialog* project_load_progress_ = nullptr;

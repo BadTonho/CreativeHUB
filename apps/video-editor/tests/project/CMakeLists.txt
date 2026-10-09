@@ -16,6 +16,7 @@ add_executable(creative-suite-main-editor-project-tests
 
 target_include_directories(creative-suite-main-editor-project-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/libs/motion-handoff/include
 )
 
 target_link_libraries(creative-suite-main-editor-project-tests PRIVATE

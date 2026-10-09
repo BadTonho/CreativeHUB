@@ -41,6 +41,8 @@ public:
     [[nodiscard]] const media::MediaLibrary& mediaLibrary() const noexcept;
     [[nodiscard]] std::optional<media::LinkedImageReference> imageEditorLinkForPath(
         const std::filesystem::path& path) const;
+    [[nodiscard]] std::optional<media::MotionLinkReference> motionLinkForPath(
+        const std::filesystem::path& path) const;
 
     [[nodiscard]] const EditorSelection& selection() const noexcept;
     [[nodiscard]] EditorSelection& selectionForUi() noexcept;
@@ -74,6 +76,7 @@ private:
     timeline::TimelineHistory history_;
     media::MediaLibrary media_library_;
     std::map<std::filesystem::path, media::LinkedImageReference> image_editor_links_;
+    std::map<std::filesystem::path, media::MotionLinkReference> motion_links_;
     EditorSelection selection_;
     std::optional<std::filesystem::path> project_path_;
     std::optional<project::ProjectDocument> saved_project_document_;

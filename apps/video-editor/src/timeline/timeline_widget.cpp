@@ -2435,6 +2435,14 @@ void TimelineWidget::showVisualClipMenu(
             emit editImageClipRequested(clip_id);
         });
     }
+    if (clip_kind == ClipKind::Video) {
+        auto* motion = menu.addAction(clip.motion_link.has_value()
+            ? QStringLiteral("Open Linked Composition in Motion Studio")
+            : QStringLiteral("Create Motion Composition..."));
+        connect(motion, &QAction::triggered, this, [this, clip_id]() {
+            emit openMotionClipRequested(clip_id);
+        });
+    }
     if (has_linked_audio) {
         auto* unlink = menu.addAction(QStringLiteral("Unlink Audio"));
         connect(unlink, &QAction::triggered, this, [this, clip_id]() {

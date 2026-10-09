@@ -754,8 +754,32 @@ void PlaybackWorker::setComposition(
             composition_session.spec = spec;
             if (spec.kind == timeline::ClipKind::Video) {
                 if (spec.source_path.isEmpty()) continue;
-                composition_session.session = openVideoPlaybackSession(
-                    QFileInfo(spec.source_path).filesystemFilePath());
+                const auto decode_path = spec.linked_render_path.isEmpty()
+                    ? spec.source_path : spec.linked_render_path;
+                std::error_code decode_path_error;
+                const auto decode_file = QFileInfo(decode_path).filesystemFilePath();
+                if (!std::filesystem::is_regular_file(decode_file, decode_path_error) ||
+                    decode_path_error) {
+                    composition_session.spec.linked_render_path.clear();
+                    composition_session.session = openVideoPlaybackSession(
+                        QFileInfo(spec.source_path).filesystemFilePath());
+                } else {
+                    try {
+                        composition_session.session = openVideoPlaybackSession(decode_file);
+                    } catch (const std::exception& error) {
+                        if (spec.linked_render_path.isEmpty()) throw;
+                        logging::Logger::instance().log(
+                            logging::Level::Warning, "motion_compatibility",
+                            "open_linked_render",
+                            error.what(),
+                            {{"render_path", safePathForLog(decode_file)},
+                             {"source_path", safePathForLog(
+                                 QFileInfo(spec.source_path).filesystemFilePath())}});
+                        composition_session.spec.linked_render_path.clear();
+                        composition_session.session = openVideoPlaybackSession(
+                            QFileInfo(spec.source_path).filesystemFilePath());
+                    }
+                }
             } else if (spec.kind == timeline::ClipKind::Image) {
                 if (spec.still_frame == nullptr) continue;
                 composition_session.static_frame = spec.still_frame;
@@ -2269,9 +2293,11 @@ void PlaybackWorker::collectTransitionPreroll() {
     auto& composition = composition_sessions_[result->session_index];
     std::filesystem::path current_source_path;
     try {
-        current_source_path = composition.spec.source_path.isEmpty()
+        const auto preroll_source_path = composition.spec.linked_render_path.isEmpty()
+            ? composition.spec.source_path : composition.spec.linked_render_path;
+        current_source_path = preroll_source_path.isEmpty()
             ? std::filesystem::path{}
-            : QFileInfo(composition.spec.source_path).filesystemFilePath();
+            : QFileInfo(preroll_source_path).filesystemFilePath();
     } catch (const std::exception& error) {
         try {
             logging::Context context{
@@ -2397,6 +2423,7 @@ void PlaybackWorker::updateTransitionPreroll() {
     }
 
     const auto& incoming = composition_sessions_[target->session_index];
+    if (!incoming.spec.linked_render_path.isEmpty()) return;
     if (incoming.session != nullptr &&
         incoming.session->current_frame_index() == target->source_frame) {
         return;
@@ -2721,7 +2748,9 @@ PlaybackWorker::decodeCompositionLayers(
                 spec.source_start_frame) {
             continue;
         }
-        const auto source_frame = spec.source_start_frame + *source_offset;
+        const auto source_frame = spec.linked_render_path.isEmpty()
+            ? spec.source_start_frame + *source_offset
+            : request.local_frame;
         std::shared_ptr<const media::VideoFrame> frame;
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
         const bool collect_layer_timing = playing_ && metrics.isEnabled();

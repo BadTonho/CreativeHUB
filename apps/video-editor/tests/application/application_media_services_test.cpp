@@ -281,6 +281,26 @@ void testMediaController() {
             "A clip referencing renamed media could not be prepared.");
     require(controller.library().contains(source),
             "The canonical media path index did not resolve the imported item.");
+    const auto linked_output = root / u8"Motion render-é final.mp4";
+    media::MotionLinkReference motion_link{
+        "pool-link", root / "composition.motion", linked_output, source,
+        "video", "mp4", "libx264", "Balanced (10 Mbps)", 10.0};
+    require(controller.addOfflineMotionLinkedMedia(
+                linked_output, "Motion Render", "Footage/Generated", motion_link).changed() &&
+                session.motionLinkForPath(linked_output) == motion_link,
+            "A linked Motion output was not registered as a separate offline Media Pool item.");
+    auto published_item = itemAt(linked_output);
+    published_item.metadata.width = 64;
+    published_item.metadata.height = 36;
+    published_item.first_frame = media::VideoFrame{
+        2, 1, 8, std::vector<std::uint8_t>{1, 2, 3, 255, 4, 5, 6, 255}};
+    require(controller.refreshMotionVideoPresentation(
+                linked_output, published_item.metadata, published_item.first_frame).changed() &&
+                !controller.library().items()[1].offline &&
+                controller.library().items()[1].first_frame.rgba_pixels ==
+                    published_item.first_frame.rgba_pixels &&
+                session.motionLinkForPath(linked_output) == motion_link,
+            "Refreshing a linked Motion render restores its presentation without losing the link.");
     require(controller.commitImported(itemAt(source)).code ==
                 application::MediaCommandCode::Duplicate,
             "An online duplicate was not rejected as an expected domain result.");
@@ -917,6 +937,7 @@ void testLegacyTimelineRateMigrationAndOfflineReconnect() {
     application::ProjectController migrated_controller(migrated_session);
     migrated_controller.commitPrepared(
         std::move(prepared.media_library), std::move(prepared.image_editor_links),
+        std::move(prepared.motion_links),
         std::move(prepared.timeline),
         project_path, prepared.document);
     require(!migrated_controller.dirty(),

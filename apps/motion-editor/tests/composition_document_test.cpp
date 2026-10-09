@@ -176,6 +176,17 @@ int main()
                 media_document.layers().back().duration_frames == 72 &&
                 media_document.layers().back().maximum_timeline_duration_frames == 72,
             "video duration converts source frames to the exact composition rate");
+    require(sourceFrameForTimelineFrame(3, 12, 30.0, {24, 1}, 90) == 16 &&
+                sourceFrameForTimelineFrame(3, 12, 24.0, {30, 1}, 90) == 14 &&
+                sourceFrameForTimelineFrame(100, 12, 30.0, {24, 1}, 90) == 89 &&
+                sourceFrameForTimelineFrame(2, 0, 30.0, {30, 1}, 0) == 2 &&
+                !sourceFrameForTimelineFrame(0, 90, 30.0, {24, 1}, 90).has_value(),
+            "source-in mapping preserves the first frame across rates, accepts unknown frame counts, and clamps known EOF");
+    require(media_document.setVideoSourceRange(video_layer, 12, 30, 60) &&
+                media_document.layers().back().source_start_frame == 12 &&
+                media_document.layers().back().duration_frames == 30 &&
+                !media_document.setVideoSourceRange(video_layer, 90, 10, 60),
+            "video source ranges retain valid non-zero source-in and reject out-of-range starts");
     LayerId repeated_video_layer = 0;
     require(media_document.addMediaLayer(video_metadata, 0, &repeated_video_layer) ==
                 AddMediaLayerResult::Added && repeated_video_layer != video_layer &&

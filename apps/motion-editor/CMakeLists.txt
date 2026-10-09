@@ -83,6 +83,7 @@ add_library(creative-suite-motion-editor-core STATIC
 )
 target_include_directories(creative-suite-motion-editor-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/libs/motion-handoff/include
 )
 target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::animation

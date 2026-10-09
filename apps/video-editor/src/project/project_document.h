@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 23;
+inline constexpr int current_format_version = 24;
+inline constexpr int linked_motion_format_version = 24;
 inline constexpr int timeline_group_row_heights_format_version = 23;
 inline constexpr int node_animation_format_version = 22;
 inline constexpr int node_graph_format_version = 20;
@@ -62,6 +63,7 @@ struct ProjectClip {
     timeline::TextStyle text;
     timeline::ClipId clip_id = 0;
     std::optional<media::LinkedImageReference> image_editor_variant;
+    std::optional<media::MotionLinkReference> motion_link;
     std::int64_t source_duration_frames = 0;
     bool source_duration_migration_pending = false;
     std::int64_t source_start_time_us = 0;
@@ -101,6 +103,7 @@ struct ProjectMedia {
     bool offline = false;
     media::MediaKind kind = media::MediaKind::Video;
     std::optional<media::LinkedImageReference> image_editor_link;
+    std::optional<media::MotionLinkReference> motion_link;
 
     friend bool operator==(const ProjectMedia&, const ProjectMedia&) = default;
 };

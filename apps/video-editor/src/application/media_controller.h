@@ -42,7 +42,19 @@ public:
     [[nodiscard]] MediaCommandResult setImageEditorLink(
         const std::filesystem::path& path,
         std::optional<media::LinkedImageReference> link);
+    [[nodiscard]] MediaCommandResult setMotionLink(
+        const std::filesystem::path& path,
+        std::optional<media::MotionLinkReference> link);
+    [[nodiscard]] MediaCommandResult addOfflineMotionLinkedMedia(
+        const std::filesystem::path& output_path,
+        std::string display_name,
+        std::string bin_path,
+        media::MotionLinkReference link);
     [[nodiscard]] MediaCommandResult refreshImagePresentation(
+        const std::filesystem::path& path,
+        media::VideoMetadata metadata,
+        media::VideoFrame first_frame);
+    [[nodiscard]] MediaCommandResult refreshMotionVideoPresentation(
         const std::filesystem::path& path,
         media::VideoMetadata metadata,
         media::VideoFrame first_frame);

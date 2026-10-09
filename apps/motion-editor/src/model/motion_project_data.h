@@ -22,6 +22,7 @@ struct MotionMediaEntryData {
 // Serializable document state. Decoded frames, thumbnails, selection, and
 // timeline navigation state intentionally remain outside the native document.
 struct MotionProjectData {
+    std::int64_t document_revision = 0;
     CompositionSettings composition;
     std::vector<CompositionLayer> layers;
     std::vector<std::string> bins{std::string(creative_suite::media::default_bin)};

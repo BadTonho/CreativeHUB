@@ -479,6 +479,38 @@ int main(int argc, char* argv[])
         require(!has_non_black(*decoded.back()),
                 "hidden layers extend the export duration without rendering pixels");
 
+        auto baseline_video_snapshot = snapshot;
+        auto source_in_video_snapshot = snapshot;
+        const auto video_layer = [](MotionExportSnapshot& value) -> CompositionLayer& {
+            const auto found = std::find_if(value.layers.begin(), value.layers.end(),
+                [](const CompositionLayer& layer) { return layer.id == 4; });
+            if (found == value.layers.end())
+                throw std::runtime_error("The export fixture video layer is missing.");
+            found->transform.scale = 0.65;
+            return *found;
+        };
+        (void)video_layer(baseline_video_snapshot);
+        video_layer(source_in_video_snapshot).source_start_frame = 12;
+        const auto baseline_video_target = outputPath(
+            temporary_directory, container, "video-source-in-baseline");
+        const auto source_in_video_target = outputPath(
+            temporary_directory, container, "video-source-in-shifted");
+        std::atomic_bool baseline_not_canceled{false};
+        std::atomic_bool source_in_not_canceled{false};
+        motion::ui::MotionVideoExporter::exportVideo(
+            baseline_video_snapshot,
+            settingsFor(baseline_video_target, container, encoder),
+            baseline_not_canceled);
+        motion::ui::MotionVideoExporter::exportVideo(
+            source_in_video_snapshot,
+            settingsFor(source_in_video_target, container, encoder),
+            source_in_not_canceled);
+        const auto baseline_video_frames = decodeVideo(baseline_video_target);
+        const auto source_in_video_frames = decodeVideo(source_in_video_target);
+        require(baseline_video_frames.size() == source_in_video_frames.size() &&
+                    !videoFramesMatch(baseline_video_frames, source_in_video_frames, 0),
+                "Export uses a video layer's source-in frame instead of rendering from frame zero");
+
         QObject gpu_worker_receiver;
         std::optional<motion::ui::MotionExportResult> gpu_fallback_result;
         const auto gpu_fallback_target = outputPath(

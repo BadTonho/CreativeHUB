@@ -182,6 +182,33 @@ void testIndependentAudioTrackEditing(const std::filesystem::path& directory) {
             "An Audio Crossfade was accepted on a Video track.");
 }
 
+void testMotionLinkPreservesTimelineClipState(const std::filesystem::path& directory) {
+    const auto source = directory / u8"camera original-é.mp4";
+    auto video = makeMetadata(source, "camera original-é.mp4", 120);
+    video.audio = media::AudioMetadata{"aac", 48000, 2, 4.0};
+    timeline::TimelineModel model;
+    require(model.addClip(0, video, 42) == timeline::AddClipResult::Added,
+            "Could not add the video clip used by the Motion link test.");
+    const auto clip_id = model.tracks().front().clips.front().clip_id;
+    require(model.setClipAudio(0, 0, 0.65, true) == timeline::AudioParameterResult::Changed,
+            "Could not set original audio state before linking the clip.");
+    media::MotionLinkReference link{
+        "motion-link", directory / "composition.motion",
+        directory / u8"render-é final.mp4", source, "video", "mp4", "libx264",
+        "Balanced (10 Mbps)", 10.0};
+    require(model.setMotionLink(clip_id, link),
+            "A video clip did not accept its Motion Studio link.");
+    const auto& linked = model.tracks().front().clips.front();
+    require(linked.motion_link == link && linked.source_path == source &&
+                linked.timeline_start_frame == 42 &&
+                linked.timeline_duration_frames == 120 &&
+                linked.source_start_frame == 0 && linked.audio_gain == 0.65 &&
+                linked.audio_muted,
+            "Linking a clip preserved its source, position, duration, and original audio state.");
+    require(!model.setMotionLink(clip_id, link),
+            "An identical Motion link was reported as a new timeline change.");
+}
+
 void testVideoAudioCompanionTracks(const std::filesystem::path& directory) {
     media::VideoMetadata video;
     video.kind = media::MediaKind::Video;
@@ -602,6 +629,7 @@ int main() {
     try {
         std::filesystem::create_directories(directory / "media");
         testIndependentAudioTrackEditing(directory);
+        testMotionLinkPreservesTimelineClipState(directory);
         testVideoAudioCompanionTracks(directory);
         const auto first_source = directory / "media" / "first.mkv";
         const auto second_source = directory / "media" / "second.mkv";

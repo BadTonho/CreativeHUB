@@ -2,6 +2,7 @@
 
 #include "model/composition_document.h"
 #include "model/motion_project_data.h"
+#include <creative_suite/motion_handoff/request.h>
 #include "application/history/composition_history.h"
 #include "persistence/motion_recovery_store.h"
 #include "diagnostics/performance_metrics.h"
@@ -57,6 +58,7 @@ public:
 
     [[nodiscard]] const model::CompositionDocument* compositionDocument() const noexcept;
     [[nodiscard]] MediaPoolWidget* mediaPoolWidget() const noexcept;
+    void openHandoffRequest(const std::filesystem::path& request_path);
 
 private:
     void createNewComposition();
@@ -74,6 +76,8 @@ private:
     [[nodiscard]] bool saveCompositionAs();
     [[nodiscard]] bool saveToPath(const std::filesystem::path& path);
     void startVideoExport();
+    void startLinkedPublication();
+    void finishLinkedHandoffInitialization();
     void finishVideoExport(MotionExportResult result);
     void generateKeyframesFromAudio();
     void finishAudioKeyframeGeneration(AudioKeyframeGenerationResult result);
@@ -196,6 +200,13 @@ private:
     std::unique_ptr<QOffscreenSurface> gpu_export_surface_;
     std::unique_ptr<PreviewRenderer> preview_renderer_;
     std::optional<std::filesystem::path> document_path_;
+    std::optional<creative_suite::motion_handoff::Request> linked_handoff_;
+    bool handoff_needs_initial_layer_ = false;
+    std::optional<creative_suite::motion_handoff::Request> pending_linked_handoff_;
+    bool pending_handoff_needs_initial_layer_ = false;
+    bool startup_handoff_requested_ = false;
+    bool linked_publication_pending_ = false;
+    std::int64_t document_revision_ = 0;
     std::optional<model::MotionProjectData> saved_data_;
     std::optional<model::MotionProjectData> last_autosaved_data_;
     std::optional<std::filesystem::path> recovered_untitled_snapshot_path_;

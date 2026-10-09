@@ -20,7 +20,10 @@
 #include <QCloseEvent>
 #include <QCoreApplication>
 #include <QFileDialog>
+#include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QLockFile>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QPointer>
@@ -32,6 +35,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <iterator>
@@ -145,6 +149,12 @@ void MainWindow::createNewComposition()
                       settings->canvas_size.height,
                       settings->frame_rate);
     document_path_.reset();
+    linked_handoff_.reset();
+    handoff_needs_initial_layer_ = false;
+    pending_linked_handoff_.reset();
+    pending_handoff_needs_initial_layer_ = false;
+    linked_publication_pending_ = false;
+    document_revision_ = 0;
     saved_data_.reset();
     selected_layer_id_ = 0;
     if (viewer_ == nullptr) createWorkspace();
@@ -197,6 +207,81 @@ void MainWindow::openComposition()
         return;
     } catch (const std::exception& error) {
         reportDocumentError("open_document", path, error);
+    }
+}
+
+void MainWindow::openHandoffRequest(const std::filesystem::path& request_path)
+{
+    startup_handoff_requested_ = true;
+    QFile file(detail::pathForDisplay(request_path));
+    if (!file.open(QIODevice::ReadOnly)) {
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Error,
+            "motion_handoff", "read_request", file.errorString().toUtf8().toStdString(),
+            {{"path", pathForLog(request_path)}});
+        QMessageBox::warning(this, QStringLiteral("Motion Handoff"),
+            QStringLiteral("The Video Editor handoff request could not be read."));
+        startup_handoff_requested_ = false;
+        return;
+    }
+    QJsonParseError parse_error;
+    const auto document = QJsonDocument::fromJson(file.readAll(), &parse_error);
+    creative_suite::motion_handoff::Request request;
+    QString validation_error;
+    if (parse_error.error != QJsonParseError::NoError || !document.isObject() ||
+        !creative_suite::motion_handoff::Request::parse(
+            document.object(), &request, &validation_error) ||
+        !model::isSupportedFrameRate({request.frame_rate_numerator,
+                                      request.frame_rate_denominator})) {
+        const auto cause = parse_error.error == QJsonParseError::NoError
+            ? validation_error : parse_error.errorString();
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Error,
+            "motion_handoff", "validate_request", cause.toUtf8().toStdString(),
+            {{"path", pathForLog(request_path)}});
+        QMessageBox::warning(this, QStringLiteral("Motion Handoff"),
+            QStringLiteral("The Video Editor handoff request is invalid."));
+        startup_handoff_requested_ = false;
+        return;
+    }
+
+    const auto motion_path = detail::pathFromQString(request.document_path);
+    std::error_code exists_error;
+    const bool document_exists = std::filesystem::is_regular_file(motion_path, exists_error) &&
+        !exists_error;
+    try {
+        if (document_exists) {
+            auto project = persistence::MotionDocumentStore::load(motion_path);
+            pending_linked_handoff_ = request;
+            pending_handoff_needs_initial_layer_ = false;
+            stageOpenProject(motion_path, std::move(project));
+            return;
+        }
+        model::MotionProjectData project;
+        project.composition.canvas_size = {request.canvas_width, request.canvas_height};
+        project.composition.frame_rate = {
+            request.frame_rate_numerator, request.frame_rate_denominator};
+        model::MotionMediaEntryData source;
+        source.source_path = detail::pathFromQString(request.source_path);
+        source.kind = request.source_kind == QStringLiteral("image")
+            ? creative_suite::media::MediaKind::Image
+            : creative_suite::media::MediaKind::Video;
+        project.media.push_back(std::move(source));
+        pending_linked_handoff_ = request;
+        pending_handoff_needs_initial_layer_ = true;
+        stageOpenProject(motion_path, std::move(project));
+    } catch (const persistence::MotionDocumentError& error) {
+        pending_linked_handoff_.reset();
+        pending_handoff_needs_initial_layer_ = false;
+        startup_handoff_requested_ = false;
+        reportDocumentError("open_handoff_document", motion_path, error,
+                            static_cast<int>(error.code()),
+                            error.systemError().value_or(-1));
+    } catch (const std::exception& error) {
+        pending_linked_handoff_.reset();
+        pending_handoff_needs_initial_layer_ = false;
+        startup_handoff_requested_ = false;
+        reportDocumentError("open_handoff_document", motion_path, error);
     }
 }
 void MainWindow::stageOpenProject(
@@ -261,9 +346,10 @@ bool MainWindow::saveComposition()
 {
     finishPendingTransformEdit();
     if (!document_) return false;
-    return document_path_.has_value()
-        ? saveToPath(*document_path_)
-        : saveCompositionAs();
+    if (!document_path_.has_value()) return saveCompositionAs();
+    if (!saveToPath(*document_path_)) return false;
+    if (linked_handoff_.has_value()) startLinkedPublication();
+    return true;
 }
 bool MainWindow::saveCompositionAs()
 {
@@ -278,7 +364,17 @@ bool MainWindow::saveCompositionAs()
     if (document_path_.has_value())
         dialog.selectFile(QString::fromUtf8(pathForLog(*document_path_)));
     if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return false;
-    return saveToPath(pathFromQString(dialog.selectedFiles().front()));
+    const auto path = pathFromQString(dialog.selectedFiles().front());
+    const bool saved = saveToPath(path);
+    if (saved && linked_handoff_.has_value() &&
+        creative_suite::media::MediaLibrary::canonicalPath(path) !=
+            creative_suite::media::MediaLibrary::canonicalPath(
+                detail::pathFromQString(linked_handoff_->document_path))) {
+        linked_handoff_.reset();
+        handoff_needs_initial_layer_ = false;
+        statusBar()->showMessage(QStringLiteral("Independent composition copy saved."), 5000);
+    }
+    return saved;
 }
 bool MainWindow::saveToPath(const std::filesystem::path& path)
 {
@@ -286,8 +382,40 @@ bool MainWindow::saveToPath(const std::filesystem::path& path)
     if (!document_) return false;
     const bool was_untitled = !document_path_.has_value();
     try {
-        const auto project_snapshot = projectData();
+        auto project_snapshot = projectData();
+        const auto target_path = creative_suite::media::MediaLibrary::canonicalPath(path);
+        auto lock_path = path;
+        lock_path += ".lock";
+        QLockFile lock(detail::pathForDisplay(lock_path));
+        lock.setStaleLockTime(30000);
+        if (!lock.tryLock(0)) {
+            QMessageBox::warning(this, QStringLiteral("Document Is Being Edited"),
+                QStringLiteral("Another Motion Studio session is saving this composition. Close that session or reopen the composition before saving."));
+            return false;
+        }
+        std::error_code file_error;
+        if (std::filesystem::is_regular_file(target_path, file_error) && !file_error) {
+            const auto disk_document = persistence::MotionDocumentStore::load(target_path);
+            const bool same_document = document_path_.has_value() &&
+                creative_suite::media::MediaLibrary::canonicalPath(*document_path_) == target_path;
+            if (same_document && disk_document.document_revision != document_revision_) {
+                const auto message = QStringLiteral("The composition changed in another Motion Studio session. This copy was kept open; reopen the latest file before saving again.");
+                creative_suite::diagnostics::Logger::instance().log(
+                    creative_suite::diagnostics::Level::Error,
+                    "motion_document", "save_revision_conflict",
+                    message.toUtf8().toStdString(),
+                    {{"path", pathForLog(target_path)},
+                     {"expected_revision", std::to_string(document_revision_)},
+                     {"actual_revision", std::to_string(disk_document.document_revision)}});
+                QMessageBox::warning(this, QStringLiteral("Concurrent Composition Change"), message);
+                return false;
+            }
+            project_snapshot.document_revision = disk_document.document_revision + 1;
+        } else {
+            project_snapshot.document_revision = 1;
+        }
         persistence::MotionDocumentStore::save(path, project_snapshot);
+        document_revision_ = project_snapshot.document_revision;
         document_path_ = creative_suite::media::MediaLibrary::canonicalPath(path);
         saved_data_ = project_snapshot;
         last_autosaved_data_.reset();
@@ -330,6 +458,7 @@ model::MotionProjectData MainWindow::projectData() const
 {
     if (!document_) throw std::logic_error("There is no open Motion Studio composition");
     model::MotionProjectData snapshot;
+    snapshot.document_revision = document_revision_;
     snapshot.composition = {document_->canvasSize(), document_->frameRate()};
     snapshot.layers = document_->layers();
     if (media_pool_ != nullptr) {
@@ -426,7 +555,22 @@ void MainWindow::finishOpen(std::uint64_t generation,
     open_cancel_requested_.reset();
     new_composition_action_->setEnabled(true);
     open_composition_action_->setEnabled(true);
-    if (result.cancelled) return;
+    const auto pending_handoff_matches_path = [this, &path] {
+        return pending_linked_handoff_.has_value() && !path.empty() &&
+            creative_suite::media::MediaLibrary::canonicalPath(
+                detail::pathFromQString(pending_linked_handoff_->document_path)) ==
+            creative_suite::media::MediaLibrary::canonicalPath(path);
+    };
+    const auto clear_matching_pending_handoff = [this, &pending_handoff_matches_path] {
+        if (!pending_handoff_matches_path()) return;
+        pending_linked_handoff_.reset();
+        pending_handoff_needs_initial_layer_ = false;
+    };
+    if (result.cancelled) {
+        clear_matching_pending_handoff();
+        startup_handoff_requested_ = false;
+        return;
+    }
 
     try {
         auto staged_document = model::CompositionDocument(
@@ -492,7 +636,23 @@ void MainWindow::finishOpen(std::uint64_t generation,
             }
         }
 
-        if (!confirmReplaceDocument()) return;
+        if (!confirmReplaceDocument()) {
+            clear_matching_pending_handoff();
+            startup_handoff_requested_ = false;
+            return;
+        }
+        const bool opening_linked_handoff = pending_handoff_matches_path();
+        if (opening_linked_handoff) {
+            linked_handoff_ = std::move(pending_linked_handoff_);
+            pending_linked_handoff_.reset();
+            handoff_needs_initial_layer_ = pending_handoff_needs_initial_layer_;
+            pending_handoff_needs_initial_layer_ = false;
+        } else {
+            linked_handoff_.reset();
+            handoff_needs_initial_layer_ = false;
+            linked_publication_pending_ = false;
+        }
+        document_revision_ = project.document_revision;
         const auto current_unsaved_directory = recovery_store_.recoveryRoot() /
             "unsaved" / recovery_store_.sessionId();
         const bool recovered_from_current_session = recovered && path.empty() &&
@@ -532,6 +692,7 @@ void MainWindow::finishOpen(std::uint64_t generation,
         }
         if (recovered && !document_path_.has_value())
             recovered_untitled_snapshot_path_ = recovery_snapshot_path;
+        startup_handoff_requested_ = false;
         if (recovered) {
             last_autosaved_data_ = projectData();
         }
@@ -539,8 +700,99 @@ void MainWindow::finishOpen(std::uint64_t generation,
             ? QStringLiteral("Composition opened.")
             : QStringLiteral("Composition opened; %1 media item(s) are offline.")
                   .arg(offline_count), 7000);
+        if (handoff_needs_initial_layer_) finishLinkedHandoffInitialization();
     } catch (const std::exception& error) {
+        clear_matching_pending_handoff();
+        startup_handoff_requested_ = false;
         reportDocumentError("open_document", path, error);
+    }
+}
+
+void MainWindow::finishLinkedHandoffInitialization()
+{
+    if (!handoff_needs_initial_layer_ || !linked_handoff_.has_value() ||
+        !document_ || media_pool_ == nullptr) return;
+    const auto request = *linked_handoff_;
+    const auto source_path = detail::pathFromQString(request.source_path);
+    const auto index = media_pool_->library().indexForPath(source_path);
+    if (index >= media_pool_->library().size() ||
+        media_pool_->library().items()[index].offline) {
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Error,
+            "motion_handoff", "create_initial_layer",
+            "The source media could not be loaded for the linked composition.",
+            {{"path", pathForLog(source_path)}});
+        statusBar()->showMessage(
+            QStringLiteral("The linked source is offline. Restore it, then reopen the handoff from the Video Editor."),
+            8000);
+        return;
+    }
+    const auto metadata = media_pool_->library().items()[index].metadata;
+    auto before = captureEditState();
+    model::LayerId layer_id = 0;
+    try {
+        const auto result = document_->addMediaLayer(metadata, 0, &layer_id);
+        if (result != model::AddMediaLayerResult::Added) {
+            statusBar()->showMessage(
+                QStringLiteral("The source could not be added to the linked Motion composition."), 7000);
+            return;
+        }
+        if (request.origin_kind == QStringLiteral("timeline_clip")) {
+            const auto layer_it = std::find_if(document_->layers().begin(), document_->layers().end(),
+                [layer_id](const auto& candidate) { return candidate.id == layer_id; });
+            if (layer_it == document_->layers().end()) {
+                *document_ = std::move(before.document);
+                return;
+            }
+            const auto* layer = &*layer_it;
+            const auto source_start = request.source_start_frame;
+            const auto frame_count = layer->source_frame_count;
+            if (source_start < 0 || source_start >= frame_count ||
+                !std::isfinite(layer->source_frame_rate) || layer->source_frame_rate <= 0.0) {
+                throw std::runtime_error("The selected clip source range is outside the source video.");
+            }
+            const auto remaining_source_frames = frame_count - source_start;
+            const long double maximum_timeline = std::ceil(
+                static_cast<long double>(remaining_source_frames) *
+                static_cast<long double>(document_->frameRate().numerator) /
+                (static_cast<long double>(document_->frameRate().denominator) *
+                 static_cast<long double>(layer->source_frame_rate)));
+            if (!std::isfinite(maximum_timeline) || maximum_timeline < 1.0L ||
+                maximum_timeline >= std::ldexp(1.0L, 63)) {
+                throw std::runtime_error("The selected clip source range has invalid duration metadata.");
+            }
+            const auto maximum_frames = static_cast<std::int64_t>(maximum_timeline);
+            const auto duration = std::min(request.timeline_duration_frames, maximum_frames);
+            if (!document_->setVideoSourceRange(
+                    layer_id, source_start, duration, maximum_frames)) {
+                throw std::runtime_error("The selected clip source range could not be applied.");
+            }
+        }
+        if (!recordCompositionEdit(before)) {
+            statusBar()->showMessage(
+                QStringLiteral("The linked source could not be added to the composition."), 7000);
+            return;
+        }
+        selected_layer_id_ = layer_id;
+        handoff_needs_initial_layer_ = false;
+        updateDocumentState();
+        refreshTimeline();
+        syncTransformInspector();
+        requestPreview();
+        statusBar()->showMessage(
+            request.origin_kind == QStringLiteral("timeline_clip")
+                ? QStringLiteral("The selected video range is ready in Motion Studio.")
+                : QStringLiteral("The source is ready in Motion Studio; images start with the standard five-second duration."),
+            6000);
+    } catch (const std::exception& error) {
+        if (document_) *document_ = std::move(before.document);
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Error,
+            "motion_handoff", "create_initial_layer", error.what(),
+            {{"path", pathForLog(source_path)}, {"document_path", pathForLog(
+                detail::pathFromQString(request.document_path))}});
+        QMessageBox::warning(this, QStringLiteral("Motion Handoff"),
+            QStringLiteral("The source range could not be added. Check the Motion Studio log for details."));
     }
 }
 void MainWindow::closeEvent(QCloseEvent* event)

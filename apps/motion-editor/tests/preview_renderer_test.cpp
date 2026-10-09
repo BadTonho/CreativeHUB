@@ -276,6 +276,17 @@ int main(int argc, char* argv[])
                     actual->rgba_pixels == expected->rgba_pixels,
                 "playback forward decode returns the same exact target pixels as timestamp seeking");
     }
+    auto trimmed_source_request = videoRequest(2);
+    trimmed_source_request.frame_rate = {24, 1};
+    trimmed_source_request.layers.front().source_start_frame = 10;
+    trimmed_source_request.layers.front().source_frame_count = 60;
+    const auto trimmed_source_preview = motion::ui::CompositionFrameRenderer(false).render(
+        trimmed_source_request);
+    const auto expected_source_frame_preview = motion::ui::CompositionFrameRenderer(false).render(
+        videoRequest(13));
+    require(trimmed_source_preview != nullptr && expected_source_frame_preview != nullptr &&
+                trimmed_source_preview->rgba_pixels == expected_source_frame_preview->rgba_pixels,
+            "Preview maps a trimmed video layer's local frame across different frame rates");
     const auto playback_decode_snapshot = performance_metrics.takeSnapshotAndReset();
     require(playback_decode_snapshot.has_value() &&
                 playback_decode_snapshot->forward_decode_attempts == 2 &&

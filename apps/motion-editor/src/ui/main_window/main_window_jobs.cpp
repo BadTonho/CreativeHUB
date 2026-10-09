@@ -21,6 +21,7 @@
 #include <QPointer>
 #include <QProgressDialog>
 #include <QStatusBar>
+#include <QTimer>
 
 #include <algorithm>
 #include <atomic>
@@ -42,10 +43,24 @@ void MainWindow::startVideoExport()
     finishPendingContentEdit();
     if (!document_ || !media_pool_ || export_worker_ || audio_keyframe_worker_) return;
 
-    MotionVideoExportDialog dialog(document_->canvasSize(), document_->frameRate(), this);
-    if (dialog.exec() != QDialog::Accepted) return;
-    const auto export_settings = dialog.exportSettings();
+    std::optional<MotionExportSettings> export_settings;
+    if (linked_handoff_.has_value()) {
+        const auto& handoff = *linked_handoff_;
+        export_settings = MotionExportSettings{
+            detail::pathFromQString(handoff.published_output_path),
+            handoff.container.toUtf8().toStdString(),
+            handoff.codec.toUtf8().toStdString(),
+            document_->canvasSize().width,
+            document_->canvasSize().height,
+            document_->frameRate(),
+            handoff.bitrate_mbps};
+    } else {
+        MotionVideoExportDialog dialog(document_->canvasSize(), document_->frameRate(), this);
+        if (dialog.exec() != QDialog::Accepted) return;
+        export_settings = dialog.exportSettings();
+    }
     if (!export_settings.has_value()) return;
+    if (linked_handoff_.has_value()) linked_publication_pending_ = false;
 
     const bool gpu_composition_enabled = motion::settings::gpuCompositionEnabled();
     gpu_export_surface_.reset();
@@ -100,6 +115,15 @@ void MainWindow::startVideoExport()
     export_progress_->show();
     export_worker_->start();
 }
+
+void MainWindow::startLinkedPublication()
+{
+    if (!linked_handoff_.has_value()) return;
+    linked_publication_pending_ = true;
+    statusBar()->showMessage(
+        QStringLiteral("Publishing the saved Motion composition..."), 5000);
+    startVideoExport();
+}
 void MainWindow::finishVideoExport(MotionExportResult result)
 {
     if (export_worker_) {
@@ -113,16 +137,27 @@ void MainWindow::finishVideoExport(MotionExportResult result)
         export_progress_ = nullptr;
     }
     updateDocumentState();
+    const bool publish_again = linked_handoff_.has_value() && linked_publication_pending_;
     if (result.succeeded) {
-        statusBar()->showMessage(
-            QStringLiteral("Video exported to %1")
+        statusBar()->showMessage(linked_handoff_.has_value()
+            ? QStringLiteral("Motion render published. The Video Editor will refresh the linked item.")
+            : QStringLiteral("Video exported to %1")
                 .arg(QString::fromUtf8(pathForLog(result.output_path))), 8000);
     } else if (result.cancelled) {
-        statusBar()->showMessage(QStringLiteral("Video export canceled."), 5000);
+        statusBar()->showMessage(linked_handoff_.has_value()
+            ? QStringLiteral("Publication is pending; the previous linked render remains available.")
+            : QStringLiteral("Video export canceled."), 6000);
     } else {
+        if (linked_handoff_.has_value()) {
+            statusBar()->showMessage(
+                QStringLiteral("Publication is pending; the previous linked render remains available."), 7000);
+        }
         QMessageBox::warning(this, QStringLiteral("Video Export Failed"),
-            QStringLiteral("The video could not be exported. See the Motion Studio log for details."));
+            linked_handoff_.has_value()
+                ? QStringLiteral("The linked render could not be published. The previous render was preserved; see the Motion Studio log for details.")
+                : QStringLiteral("The video could not be exported. See the Motion Studio log for details."));
     }
+    if (publish_again) QTimer::singleShot(0, this, [this] { startLinkedPublication(); });
 }
 void MainWindow::generateKeyframesFromAudio()
 {

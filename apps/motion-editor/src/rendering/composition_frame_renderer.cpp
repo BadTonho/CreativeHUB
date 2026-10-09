@@ -183,10 +183,6 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     composition_layers.reserve(request.layers.size());
     owned_frames.reserve(request.layers.size());
     composition_layer_ids.reserve(request.layers.size());
-    const long double timeline_rate =
-        static_cast<long double>(request.frame_rate.numerator) /
-        static_cast<long double>(request.frame_rate.denominator);
-
     for (const auto& layer : request.layers) {
         if ((should_cancel && should_cancel())) return {};
         creative_suite::media::RgbaFramePtr frame;
@@ -215,13 +211,10 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                                   "Video layer has invalid source timing metadata");
                 continue;
             }
-            const long double source_position =
-                static_cast<long double>(layer.local_frame) *
-                static_cast<long double>(layer.source_frame_rate) / timeline_rate;
-            const auto exclusive_max = std::ldexp(1.0L, 63);
-            const auto rounded_source_position = std::floor(source_position + 0.5L);
-            if (!std::isfinite(source_position) || source_position < 0.0L ||
-                source_position >= exclusive_max || rounded_source_position >= exclusive_max) {
+            const auto mapped_source_frame = model::sourceFrameForTimelineFrame(
+                layer.local_frame, layer.source_start_frame, layer.source_frame_rate,
+                request.frame_rate, layer.source_frame_count);
+            if (!mapped_source_frame.has_value()) {
                 if (fail_on_media_error) {
                     throw std::runtime_error("Timeline position cannot be represented as a source frame: " +
                                              pathForLog(layer.source_path));
@@ -230,10 +223,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                                   "Timeline position cannot be represented as a source frame");
                 continue;
             }
-            auto source_frame = static_cast<std::int64_t>(rounded_source_position);
-            if (layer.source_frame_count > 0) {
-                source_frame = std::min(source_frame, layer.source_frame_count - 1);
-            }
+            const auto source_frame = *mapped_source_frame;
             try {
                 StageTimer decode_timer(
                     record_preview_metrics_, diagnostics::PreviewTimingStage::Decode);

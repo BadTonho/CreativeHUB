@@ -454,6 +454,7 @@ void MotionVideoExporter::exportVideo(
                 active.source_path = layer.source_path;
                 active.local_frame = composition_frame - layer.timeline_start_frame;
                 active.source_frame_count = layer.source_frame_count;
+                active.source_start_frame = layer.source_start_frame;
                 active.source_frame_rate = layer.source_frame_rate;
                 active.transform = layer.transform;
                 active.keyframes = layer.keyframes;

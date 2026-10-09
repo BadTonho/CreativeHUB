@@ -564,6 +564,7 @@ QJsonObject writeLayer(const CompositionLayer& layer,
     object.insert(QStringLiteral("timeline_start_frame"), encodedInt64(layer.timeline_start_frame));
     object.insert(QStringLiteral("duration_frames"), encodedInt64(layer.duration_frames));
     object.insert(QStringLiteral("source_frame_count"), encodedInt64(layer.source_frame_count));
+    object.insert(QStringLiteral("source_start_frame"), encodedInt64(layer.source_start_frame));
     object.insert(QStringLiteral("source_duration_frames"), encodedInt64(layer.source_duration_frames));
     object.insert(QStringLiteral("maximum_timeline_duration_frames"),
                    encodedInt64(layer.maximum_timeline_duration_frames));
@@ -680,6 +681,9 @@ CompositionLayer parseLayer(const QJsonValue& value,
     layer.timeline_start_frame = requiredInt64(object, "timeline_start_frame", document_path);
     layer.duration_frames = requiredInt64(object, "duration_frames", document_path);
     layer.source_frame_count = requiredInt64(object, "source_frame_count", document_path);
+    if (document_version >= 5) {
+        layer.source_start_frame = requiredInt64(object, "source_start_frame", document_path);
+    }
     layer.source_duration_frames = requiredInt64(object, "source_duration_frames", document_path);
     layer.maximum_timeline_duration_frames = requiredInt64(
         object, "maximum_timeline_duration_frames", document_path);
@@ -754,13 +758,19 @@ MotionProjectData parseDocument(const QJsonObject& root,
              QStringLiteral("The file is not a Motion Studio document."));
     }
     const int version = requiredInt(root, "version", document_path);
-    if (version != 1 && version != 2 && version != 3 &&
-        version != MotionDocumentStore::current_format_version) {
+    if (version < 1 || version > MotionDocumentStore::current_format_version) {
         fail(MotionDocumentErrorCode::UnsupportedVersion, document_path,
              QStringLiteral("Motion Studio document version %1 is not supported.").arg(version));
     }
 
     MotionProjectData result;
+    if (version >= 5) {
+        result.document_revision = requiredInt64(root, "revision", document_path);
+        if (result.document_revision < 0) {
+            fail(MotionDocumentErrorCode::InvalidValue, document_path,
+                 QStringLiteral("The Motion Studio revision must not be negative."));
+        }
+    }
     const auto composition = requiredObject(root, "composition", document_path);
     const auto canvas = requiredObject(composition, "canvas", document_path);
     result.composition.canvas_size.width = requiredInt(canvas, "width", document_path);
@@ -839,6 +849,7 @@ QJsonObject encodeDocument(const MotionProjectData& document,
     root.insert(QStringLiteral("format"),
                 QString::fromLatin1(MotionDocumentStore::format_identifier));
     root.insert(QStringLiteral("version"), MotionDocumentStore::current_format_version);
+    root.insert(QStringLiteral("revision"), encodedInt64(document.document_revision));
 
     QJsonObject composition;
     QJsonObject canvas;

@@ -125,6 +125,7 @@ struct TimelineClip {
     ClipKind kind = ClipKind::Video;
     TextStyle text;
     std::optional<media::LinkedImageReference> image_editor_variant;
+    std::optional<media::MotionLinkReference> motion_link;
     std::shared_ptr<const media::VideoFrame> still_image_override;
     std::int64_t source_duration_frames = 0;
     bool source_duration_migration_pending = false;
@@ -449,6 +450,9 @@ public:
     [[nodiscard]] bool setImageEditorVariant(
         ClipId clip_id,
         std::optional<media::LinkedImageReference> link);
+    [[nodiscard]] bool setMotionLink(
+        ClipId clip_id,
+        std::optional<media::MotionLinkReference> link);
     [[nodiscard]] bool setStillImageOverride(
         ClipId clip_id,
         std::shared_ptr<const media::VideoFrame> frame);

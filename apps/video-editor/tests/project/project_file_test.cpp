@@ -1,6 +1,7 @@
 #include "project/project_file.h"
 
 #include <creative_suite/effects/effects.h>
+#include <creative_suite/motion_handoff/request.h>
 
 #include <QCoreApplication>
 #include <QByteArray>
@@ -80,6 +81,15 @@ int main(int argc, char** argv) {
             "shared-still",
             directory / "media" / "still.png.image-editor" / "asset.cimg",
             directory / "media" / "still.png.image-editor" / "asset.png"};
+        const auto linked_pool_output = directory / "media" / u8"render-é final.mp4";
+        const auto linked_pool_document = directory / "media" / u8"composition-é.motion";
+        project::ProjectMedia linked_pool_media{
+            linked_pool_output, "Motion Render", "Footage/Generated", true,
+            media::MediaKind::Video};
+        linked_pool_media.motion_link = media::MotionLinkReference{
+            "motion-pool-link", linked_pool_document, linked_pool_output, image_source,
+            "image", "mp4", "libx264", "Balanced (10 Mbps)", 10.0};
+        original.media.insert(original.media.end() - 1, linked_pool_media);
         original.timeline_tracks = {
             {"Video 1", 0.75, true, {
                 {first_source, 0, 30, 60, 0.5, true},
@@ -87,6 +97,10 @@ int main(int argc, char** argv) {
             }},
         };
         original.timeline_tracks.front().clips[0].source_duration_frames = 60;
+        original.timeline_tracks.front().clips[0].motion_link = media::MotionLinkReference{
+            "motion-clip-link", directory / "composition.motion",
+            directory / "clip render.mp4", first_source, "video", "mp4", "libx264",
+            "Balanced (10 Mbps)", 10.0};
         original.timeline_tracks.front().clips[1].source_duration_frames = 30;
         original.timeline_tracks.front().track_id = 1;
         original.timeline_tracks.front().clips[0].clip_id = 1;
@@ -240,6 +254,10 @@ int main(int argc, char** argv) {
                     loaded.timeline_tracks.front().clips.back().image_editor_variant ==
                     original.timeline_tracks.front().clips.back().image_editor_variant,
                 "Version 10 linked media and clip variant references were not preserved.");
+        require(loaded.media[2].motion_link == original.media[2].motion_link &&
+                    loaded.timeline_tracks.front().clips.front().motion_link ==
+                        original.timeline_tracks.front().clips.front().motion_link,
+                "Media Pool and timeline Motion links round-trip through project format 24.");
 
         std::ifstream saved_file(project_path, std::ios::binary);
         const std::string saved_json{
@@ -261,7 +279,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 23") != std::string::npos &&
+        require(saved_json.find("\"version\": 24") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -282,8 +300,22 @@ int main(int argc, char** argv) {
                     saved_json.find("video.brightness") != std::string::npos &&
                     saved_json.find("\"enabled\": false") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
-                    saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline timing, group row heights, effect states, Fusion node animation, and linked image references were not written to the version 23 project.");
+                    saved_json.find("image_editor_variant") != std::string::npos &&
+                    saved_json.find("motion_link") != std::string::npos &&
+                    saved_json.find("render-é final.mp4") != std::string::npos,
+                "Timeline timing, group row heights, effect states, Fusion node animation, and linked application references were not written to the version 24 project.");
+
+        auto legacy_v23_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        legacy_v23_json.insert("version", 23);
+        const auto legacy_v23_path = directory / "legacy-v23.csp";
+        writeText(legacy_v23_path,
+                  QJsonDocument(legacy_v23_json).toJson().toStdString());
+        const auto legacy_v23 = project::load(legacy_v23_path);
+        require(!legacy_v23.media[2].motion_link.has_value() &&
+                    !legacy_v23.timeline_tracks.front().clips.front().motion_link.has_value() &&
+                    legacy_v23.media.back().image_editor_link.has_value(),
+                "version 23 projects ignore new Motion links and retain Image Editor links.");
 
         auto legacy_v22_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();

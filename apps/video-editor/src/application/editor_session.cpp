@@ -35,6 +35,15 @@ std::optional<media::LinkedImageReference> EditorSession::imageEditorLinkForPath
         : std::optional<media::LinkedImageReference>(found->second);
 }
 
+std::optional<media::MotionLinkReference> EditorSession::motionLinkForPath(
+    const std::filesystem::path& path) const {
+    const auto canonical = media::MediaLibrary::canonicalPath(path);
+    const auto found = motion_links_.find(canonical);
+    return found == motion_links_.end()
+        ? std::nullopt
+        : std::optional<media::MotionLinkReference>(found->second);
+}
+
 const EditorSelection& EditorSession::selection() const noexcept {
     return selection_;
 }

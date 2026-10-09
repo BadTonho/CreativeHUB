@@ -144,7 +144,8 @@ bool validLayer(const CompositionLayer& layer) noexcept
         layer.duration_frames < 0 ||
         layer.duration_frames > std::numeric_limits<std::int64_t>::max() -
             layer.timeline_start_frame ||
-        layer.source_frame_count < 0 || layer.source_duration_frames < 0 ||
+        layer.source_frame_count < 0 || layer.source_start_frame < 0 ||
+        layer.source_duration_frames < 0 ||
         layer.maximum_timeline_duration_frames < 0 ||
         !std::isfinite(layer.source_frame_rate) || layer.source_frame_rate < 0.0 ||
         !validTransform(layer.transform) ||
@@ -161,7 +162,8 @@ bool validLayer(const CompositionLayer& layer) noexcept
     if (layer.kind == LayerKind::Video && layer.duration_frames > 0 &&
         (layer.maximum_timeline_duration_frames <= 0 ||
          layer.duration_frames > layer.maximum_timeline_duration_frames ||
-         layer.source_frame_count <= 0 || layer.source_frame_rate <= 0.0)) {
+         layer.source_frame_count <= 0 || layer.source_frame_rate <= 0.0 ||
+         layer.source_start_frame >= layer.source_frame_count)) {
         return false;
     }
 
@@ -179,6 +181,37 @@ bool isSupportedFrameRate(FrameRate frame_rate) noexcept
 {
     return std::find(kSupportedFrameRates.begin(), kSupportedFrameRates.end(), frame_rate)
         != kSupportedFrameRates.end();
+}
+
+std::optional<std::int64_t> sourceFrameForTimelineFrame(
+    std::int64_t local_timeline_frame,
+    std::int64_t source_start_frame,
+    double source_frame_rate,
+    FrameRate timeline_frame_rate,
+    std::int64_t source_frame_count) noexcept
+{
+    if (local_timeline_frame < 0 || source_start_frame < 0 ||
+        source_frame_count < 0 ||
+        (source_frame_count > 0 && source_start_frame >= source_frame_count) ||
+        timeline_frame_rate.numerator <= 0 || timeline_frame_rate.denominator <= 0 ||
+        !std::isfinite(source_frame_rate) || source_frame_rate <= 0.0) {
+        return std::nullopt;
+    }
+    const long double offset = static_cast<long double>(local_timeline_frame) *
+        static_cast<long double>(source_frame_rate) *
+        static_cast<long double>(timeline_frame_rate.denominator) /
+        static_cast<long double>(timeline_frame_rate.numerator);
+    const long double rounded = std::floor(offset + 0.5L);
+    const long double exclusive_max = std::ldexp(1.0L, 63);
+    if (!std::isfinite(offset) || offset < 0.0L || rounded >= exclusive_max ||
+        rounded > static_cast<long double>(
+            std::numeric_limits<std::int64_t>::max() - source_start_frame)) {
+        return std::nullopt;
+    }
+    const auto mapped = source_start_frame + static_cast<std::int64_t>(rounded);
+    return source_frame_count > 0
+        ? std::min(source_frame_count - 1, mapped)
+        : mapped;
 }
 
 bool validLayerEffect(const LayerEffect& effect) noexcept
@@ -468,6 +501,24 @@ bool CompositionDocument::resizeLayerDuration(
         return false;
     }
     layer->duration_frames = duration_frames;
+    return true;
+}
+
+bool CompositionDocument::setVideoSourceRange(
+    LayerId id,
+    std::int64_t source_start_frame,
+    std::int64_t duration_frames,
+    std::int64_t maximum_timeline_duration_frames) noexcept
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || layer->kind != LayerKind::Video ||
+        source_start_frame < 0 || source_start_frame >= layer->source_frame_count ||
+        duration_frames <= 0 || maximum_timeline_duration_frames < duration_frames ||
+        duration_frames > std::numeric_limits<std::int64_t>::max() -
+            layer->timeline_start_frame) return false;
+    layer->source_start_frame = source_start_frame;
+    layer->duration_frames = duration_frames;
+    layer->maximum_timeline_duration_frames = maximum_timeline_duration_frames;
     return true;
 }
 

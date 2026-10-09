@@ -191,9 +191,10 @@ cross-platform prototype and release-readiness validation are complete.
   Linear, Ease In, Ease Out, and Ease In/Out presets. A preset or completed
   handle drag is one Undo action; graph selection and panel visibility are UI
   state. Preview, playback, and export use the same shared animation evaluator.
-  Curves were introduced in `.motion` v3; the current v4 format retains them
-  and adds per-layer effects. Read v1/v2 curves as Linear, and keep the
-  recovery wrapper at v1 while accepting nested documents through v4.
+  Curves were introduced in `.motion` v3; v4 adds per-layer effects and v5
+  adds video source-in frames plus saved revisions for linked writes. Read
+  v1/v2 curves as Linear, and keep the recovery wrapper at v1 while accepting
+  nested documents through v5.
 - [x] Make Media Pool, Inspector, Timeline, and Graph Editor movable, resizable,
   tabifiable, floatable, and hideable Qt dock panels around a central Preview.
   Timeline and Graph Editor share a bottom tab group, with Timeline selected by
@@ -318,7 +319,7 @@ readiness checks remain in this roadmap and
 | Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated coverage includes output parity and order, cancellation with submitted GPU work, prior-destination preservation, injected encoder-thread failure, missing-surface CPU fallback, staging-budget synchronous fallback, and mid-pipeline CPU recovery. The affected Windows CTest selection passed 13/13. GPU export remains opt-in pending the post-change performance result (**P1/P2 validation**). |
 | Optional audio-to-transform keyframe generation | `audio_keyframe_generation_test.cpp` (`creative-suite-motion-editor-audio-keyframes`) | Automated coverage includes per-frame RMS, whole-file peak normalization past the layer boundary, empty and silent sources, invalid audio, atomic track replacement, Undo/Redo, `.motion` round-trip, worker success and progress callbacks on the receiver thread, pre-start cancellation without an error log, and failure logging with operation, path, and layer ID. Manual generation and cancellation during an active UI analysis remain pending. |
 | Startup and application UI | `motion_editor_startup_test.cpp` (`creative-suite-motion-editor-startup`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Startup and Media Pool bin filtering have offscreen coverage; the current UI has no separate media-search control. After tightening the seek test to wait for the final still frame, the full UI suite passed 10 repeated Debug runs on 2026-10-01. Broader Windows visual and graphics-driver checks remain pending (**P2 validation**). |
-| Motion Studio to Video Editor editable handoff | No current integration test; handoff remains a later roadmap milestone | Planned, not implemented. Define producer/consumer tests when the contract is implemented; not a current regression gap. |
+| Motion Studio to Video Editor editable handoff | Motion `composition_document_test.cpp` (`creative-suite-motion-editor-document`) covers source-in mapping across frame rates; `preview_renderer_test.cpp` and `motion_video_export_test.cpp` (`creative-suite-motion-editor-preview` / `creative-suite-motion-editor-export`) cover the preview and export paths; `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`) covers `.motion` v5 source-in round-trip, v1-v4 migration, handoff request validation, and Unicode paths. Video Editor `project_file_test.cpp` (`creative-suite-main-editor-project`) covers `.csp` v24 links and v23 compatibility; `timeline_model_test.cpp` covers clip state preservation; `application_media_services_test.cpp` and `media_library_test.cpp` cover the linked Media Pool item and refreshed video presentation. | Contract, format, rendering, timeline, and Media Pool service coverage is present. End-to-end launch, multiple save/refresh cycles, reopen, stale-callback rejection, concurrent-writer recovery, and output-profile validation remain pending manual checks in both applications. |
 
 ### Windows updater coverage
 
@@ -353,8 +354,10 @@ rollback, and Hub restoration. See [`WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md)
   audio file and bakes its RMS envelope into a selected transform track.
   Regression sources have been added; execution and manual acceptance remain
   pending. Audio playback, mixing, and audio export remain outside this tool.
-- **Planned, not implemented:** editable linked composition handoff from the
-  Video Editor remains future work, not a missing test for current behavior.
+- **In progress:** linked composition handoff now has an initial implementation
+  in both applications. Complete the documented manual producer/consumer
+  validation and remaining runtime refresh/failure regressions before accepting
+  this integration.
 
 Frame rates are stored as exact rational values from the supported common-rate
 list. Creating a composition does not ask for or set its duration. The ruler
@@ -562,10 +565,10 @@ composition without losing its layer or frame-rate data.
 - [x] Add a Motion Studio-owned ordered effect stack for Gaussian Blur and
   Color Adjustment on text, vector-shape, raster-image, and video layers;
   persist it in `.motion` v4 and share evaluation across preview, playback,
-  and export.
+  and export. Version 5 adds video source-in frames and saved revisions.
 - [x] Reuse `creative-suite::effects` for fused Color Adjustment processing
   while retaining Motion's effect model, Gaussian Blur, Inspector, history,
-  and `.motion` v4 schema.
+  and `.motion` schema.
 - [x] Complete the first standalone save/reopen, preview, and rendered-video
   export workflow; Motion Studio currently exports opaque video without audio.
 - [ ] Profile representative compositions and validate export throughput,
@@ -584,10 +587,19 @@ handling.
 
 ### 4. Video Editor integration and release readiness
 
-- [ ] Validate composition handoff and updates between Motion Studio and the
-  Video Editor without unnecessary media duplication.
-- [ ] Document supported interchange behavior, project compatibility, and
-  failure recovery.
+- [x] Implement editable handoff from video Timeline clips and image/video
+  Media Pool items. Saved Motion compositions publish a new video render;
+  unsaved changes are not streamed.
+- [x] Store links in Video Editor `.csp` v24, migrate `.motion` v1-v4 with
+  zero source-in frames, and preserve linked clip position, duration, and
+  original audio.
+- [x] Document supported interchange behavior, project compatibility, and
+  publication and missing-media recovery.
+- [ ] Complete manual end-to-end checks in both applications, including several
+  saved revisions, project reopen, missing document/render recovery, and
+  publication failure/cancellation.
+- [ ] Complete automated producer-consumer coverage for asynchronous refresh,
+  playback cache invalidation, and stale callbacks after a project replacement.
 - [ ] Validate installation, project paths, fonts, graphics drivers, and
   packaging on Windows, macOS, and Linux.
 - [ ] Complete small, medium, and heavy project validation before release.

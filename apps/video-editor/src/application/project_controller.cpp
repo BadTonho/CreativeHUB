@@ -145,6 +145,7 @@ void ProjectController::reset(
     session_.history_.clear();
     session_.media_library_.clear();
     session_.image_editor_links_.clear();
+    session_.motion_links_.clear();
     session_.selection_ = {};
     session_.project_path_.reset();
     session_.canvas_width_ = canvas_width;
@@ -160,6 +161,7 @@ void ProjectController::reset(
 void ProjectController::commitPrepared(
     media::MediaLibrary library,
     std::map<std::filesystem::path, media::LinkedImageReference> image_editor_links,
+    std::map<std::filesystem::path, media::MotionLinkReference> motion_links,
     timeline::TimelineModel::Snapshot timeline,
     std::optional<std::filesystem::path> active_project_path,
     const project::ProjectDocument& loaded_document,
@@ -168,6 +170,7 @@ void ProjectController::commitPrepared(
     session_.history_.clear();
     session_.media_library_ = std::move(library);
     session_.image_editor_links_ = std::move(image_editor_links);
+    session_.motion_links_ = std::move(motion_links);
     session_.selection_ = {};
     session_.project_path_ = active_project_path.has_value()
         ? std::optional<std::filesystem::path>(canonicalProjectPath(*active_project_path))

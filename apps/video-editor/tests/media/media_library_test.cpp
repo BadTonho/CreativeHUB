@@ -70,6 +70,32 @@ int main() {
     require(library.restore(0, metadata(source), frame) == media::MediaMutationResult::Changed,
             "The media item was not restored.");
     require(!library.items()[0].offline, "Restore did not reactivate the media item.");
+    auto published_video_metadata = metadata(source);
+    published_video_metadata.width = 640;
+    published_video_metadata.height = 360;
+    published_video_metadata.frame_rate = 60.0;
+    published_video_metadata.frame_count = 240;
+    media::VideoFrame published_video_frame{
+        2, 1, 8, std::vector<std::uint8_t>{10, 20, 30, 255, 40, 50, 60, 255}};
+    require(library.refreshVideoPresentation(
+                source, published_video_metadata, published_video_frame) ==
+                media::MediaMutationResult::Changed &&
+                library.items()[0].metadata.source_path ==
+                    media::MediaLibrary::canonicalPath(source) &&
+                library.items()[0].display_name == "Renamed Intro" &&
+                library.items()[0].metadata.frame_rate == 60.0 &&
+                library.items()[0].first_frame.rgba_pixels ==
+                    published_video_frame.rgba_pixels,
+            "Refreshing a published video replaces its presentation and retains source identity and label.");
+    require(library.refreshVideoPresentation(
+                source, published_video_metadata, published_video_frame) ==
+                media::MediaMutationResult::NoChange,
+            "An unchanged published video presentation was refreshed twice.");
+    require(library.markOffline(0) == media::MediaMutationResult::Changed &&
+                library.refreshVideoPresentation(
+                    source, published_video_metadata, published_video_frame) ==
+                    media::MediaMutationResult::Changed && !library.items()[0].offline,
+            "Refreshing an offline linked render did not restore its cached presentation.");
 
     const auto image_source = std::filesystem::temp_directory_path() /
         ("creative-suite-media-library-image-" + std::to_string(

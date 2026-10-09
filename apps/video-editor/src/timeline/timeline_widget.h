@@ -116,6 +116,7 @@ signals:
     void clipSelected(timeline::TrackId track_id, timeline::ClipId clip_id);
     void openFusionClipRequested(timeline::ClipId clip_id);
     void editImageClipRequested(timeline::ClipId clip_id);
+    void openMotionClipRequested(timeline::ClipId clip_id);
     void clipSelectionCleared();
     void clipMoveRequested(
         timeline::ClipId clip_id,

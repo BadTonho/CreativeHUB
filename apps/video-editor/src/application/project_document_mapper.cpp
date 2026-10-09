@@ -29,6 +29,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             item.metadata.kind};
         project_media.image_editor_link = session.imageEditorLinkForPath(
             item.metadata.source_path);
+        project_media.motion_link = session.motionLinkForPath(item.metadata.source_path);
         document.media.push_back(std::move(project_media));
     }
 
@@ -59,6 +60,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.kind = clip.kind;
             project_clip.text = clip.text;
             project_clip.image_editor_variant = clip.image_editor_variant;
+            project_clip.motion_link = clip.motion_link;
             project_clip.source_duration_frames = clip.source_duration_frames;
             project_clip.source_duration_migration_pending =
                 clip.source_duration_migration_pending;

@@ -188,6 +188,32 @@ MediaMutationResult MediaLibrary::refreshImagePresentation(
     return MediaMutationResult::Changed;
 }
 
+MediaMutationResult MediaLibrary::refreshVideoPresentation(
+    const std::filesystem::path& path,
+    VideoMetadata metadata,
+    VideoFrame first_frame) {
+    const auto index = indexForPath(path);
+    if (index >= items_.size() || items_[index].metadata.kind != MediaKind::Video ||
+        metadata.kind != MediaKind::Video || first_frame.width <= 0 ||
+        first_frame.height <= 0 || first_frame.rgba_pixels.empty()) {
+        return MediaMutationResult::InvalidIndex;
+    }
+    auto& item = items_[index];
+    metadata.source_path = item.metadata.source_path;
+    metadata.display_name = item.metadata.display_name;
+    const bool unchanged = item.first_frame.width == first_frame.width &&
+        item.first_frame.height == first_frame.height &&
+        item.first_frame.rgba_pixels == first_frame.rgba_pixels &&
+        item.metadata.width == metadata.width && item.metadata.height == metadata.height &&
+        item.metadata.frame_count == metadata.frame_count &&
+        item.metadata.frame_rate == metadata.frame_rate;
+    if (unchanged && !item.offline) return MediaMutationResult::NoChange;
+    item.metadata = std::move(metadata);
+    item.first_frame = std::move(first_frame);
+    item.offline = false;
+    return MediaMutationResult::Changed;
+}
+
 MediaMutationResult MediaLibrary::createBin(std::string bin_path) {
     if (!validBinPath(bin_path)) return MediaMutationResult::InvalidBin;
     if (std::find(bins_.begin(), bins_.end(), bin_path) != bins_.end()) {

@@ -3,6 +3,7 @@
 #include "persistence/motion_document_store.h"
 
 #include <creative_suite/media/media_library.h>
+#include <creative_suite/motion_handoff/request.h>
 
 #include <QCoreApplication>
 #include <QFile>
@@ -128,6 +129,8 @@ motion::model::MotionProjectData populatedProject(const std::filesystem::path& r
     LayerId video_id = 0;
     require(document.addMediaLayer(video, 20, &video_id) == AddMediaLayerResult::Added,
             "video layer can be built for project serialization");
+    require(document.setVideoSourceRange(video_id, 6, 30, 53),
+            "a video source-in can be retained before serialization");
     require(document.moveLayer(video_id, 0), "layer order can be changed before saving");
     require(document.setLayerEffects(video_id, {
                 ColorAdjustmentEffect{true, -15.0, 110.0, 140.0}}),
@@ -202,9 +205,18 @@ int main(int argc, char** argv)
                 round_trip.layers[2].id == populated.layers[2].id &&
                 round_trip.layers[3].id == populated.layers[3].id,
             "layer IDs and back-to-front ordering remain stable");
+    const auto round_trip_video = std::find_if(
+        round_trip.layers.begin(), round_trip.layers.end(), [](const auto& layer) {
+            return layer.kind == motion::model::LayerKind::Video;
+        });
+    require(round_trip_video != round_trip.layers.end() &&
+                round_trip_video->source_start_frame == 6 &&
+                round_trip_video->duration_frames == 30 &&
+                round_trip_video->maximum_timeline_duration_frames == 53,
+            "video source-in, selected duration, and available source tail round-trip");
     const auto json = readBytes(document_path);
-    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 4,
-            "documents with curves and effects are written using schema version 4");
+    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 5,
+            "documents with video source-in are written using schema version 5");
     require(json.contains("assets/still-é.png") || json.contains("assets/still-Ã©.png"),
             "a source beneath the document directory is encoded as a relative path");
     require(json.contains("outside-影片.mkv") || json.contains("outside-\xE5\xBD\xB1\xE7\x89\x87.mkv"),
@@ -267,8 +279,8 @@ int main(int argc, char** argv)
             "v1 text and shape records migrate to documented default content");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v1);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 4,
-            "saving a loaded v1 project upgrades it to v4");
+                .value(QStringLiteral("version")).toInt() == 5,
+            "saving a loaded v1 project upgrades it to v5");
 
     auto legacy_v2 = valid_json;
     legacy_v2.insert(QStringLiteral("version"), 2);
@@ -306,8 +318,8 @@ int main(int argc, char** argv)
             "version 2 keys migrate with Linear interpolation");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v2);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 4,
-            "saving a loaded v2 project upgrades it to v4");
+                .value(QStringLiteral("version")).toInt() == 5,
+            "saving a loaded v2 project upgrades it to v5");
 
     auto legacy_v3 = valid_json;
     legacy_v3.insert(QStringLiteral("version"), 3);
@@ -331,8 +343,69 @@ int main(int argc, char** argv)
             "version 3 documents retain curves and migrate with empty effect stacks");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v3);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 4,
-            "saving a loaded v3 project upgrades it to v4");
+                .value(QStringLiteral("version")).toInt() == 5,
+            "saving a loaded v3 project upgrades it to v5");
+
+    auto legacy_v4 = valid_json;
+    legacy_v4.insert(QStringLiteral("version"), 4);
+    legacy_v4.remove(QStringLiteral("revision"));
+    auto legacy_v4_layers = legacy_v4.value(QStringLiteral("layers")).toArray();
+    for (qsizetype index = 0; index < legacy_v4_layers.size(); ++index) {
+        auto layer = legacy_v4_layers[index].toObject();
+        layer.remove(QStringLiteral("source_start_frame"));
+        legacy_v4_layers[index] = layer;
+    }
+    legacy_v4.insert(QStringLiteral("layers"), legacy_v4_layers);
+    writeBytes(document_path, QJsonDocument(legacy_v4).toJson());
+    const auto migrated_v4 = motion::persistence::MotionDocumentStore::load(document_path);
+    const auto migrated_v4_video = std::find_if(
+        migrated_v4.layers.begin(), migrated_v4.layers.end(), [](const auto& layer) {
+            return layer.kind == motion::model::LayerKind::Video;
+        });
+    require(migrated_v4_video != migrated_v4.layers.end() &&
+                migrated_v4_video->source_start_frame == 0,
+            "version 4 video layers migrate with a zero source-in frame");
+    motion::persistence::MotionDocumentStore::save(document_path, migrated_v4);
+    require(QJsonDocument::fromJson(readBytes(document_path)).object()
+                .value(QStringLiteral("version")).toInt() == 5,
+            "saving a loaded v4 project upgrades it to v5");
+
+    creative_suite::motion_handoff::Request request;
+    request.origin_kind = QStringLiteral("timeline_clip");
+    request.source_kind = QStringLiteral("video");
+    request.source_path = QString::fromUtf8("C:/Mídia/clipe final.mp4");
+    request.document_path = QStringLiteral("C:/Projeto/cena.motion");
+    request.published_output_path = QStringLiteral("C:/Projeto/render final.mp4");
+    request.container = QStringLiteral("mp4");
+    request.codec = QStringLiteral("libx264");
+    request.quality = QStringLiteral("Balanced (10 Mbps)");
+    request.source_start_frame = 17;
+    request.timeline_duration_frames = 45;
+    request.source_duration_frames = 56;
+    request.source_frame_count = 240;
+    creative_suite::motion_handoff::Request parsed_request;
+    require(creative_suite::motion_handoff::Request::parse(
+                request.toJson(), &parsed_request) &&
+                parsed_request.source_path == request.source_path &&
+                parsed_request.published_output_path == request.published_output_path &&
+                parsed_request.source_start_frame == 17 &&
+                parsed_request.timeline_duration_frames == 45,
+            "the versioned Motion handoff preserves Unicode paths and source timing");
+    auto unsupported_request = request.toJson();
+    unsupported_request.insert(QStringLiteral("version"), 2);
+    require(!creative_suite::motion_handoff::Request::parse(
+                unsupported_request, &parsed_request),
+            "unknown Motion handoff versions are rejected");
+    auto image_clip_request = request.toJson();
+    image_clip_request.insert(QStringLiteral("source_kind"), QStringLiteral("image"));
+    require(!creative_suite::motion_handoff::Request::parse(
+                image_clip_request, &parsed_request),
+            "timeline clip handoffs reject image sources");
+    auto out_of_range_request = request.toJson();
+    out_of_range_request.insert(QStringLiteral("source_start_frame"), 240);
+    require(!creative_suite::motion_handoff::Request::parse(
+                out_of_range_request, &parsed_request),
+            "Motion handoffs reject source-in frames beyond the source video");
 
     motion::persistence::MotionDocumentStore::save(document_path, populated);
     auto invalid_text = valid_json;

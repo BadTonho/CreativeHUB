@@ -111,12 +111,53 @@ MediaCommandResult MediaController::setImageEditorLink(
     return apply(media::MediaMutationResult::Changed, canonical);
 }
 
+MediaCommandResult MediaController::setMotionLink(
+    const std::filesystem::path& path,
+    std::optional<media::MotionLinkReference> link) {
+    const auto canonical = media::MediaLibrary::canonicalPath(path);
+    const auto index = session_.media_library_.indexForPath(canonical);
+    if (index >= session_.media_library_.size()) {
+        return apply(media::MediaMutationResult::InvalidIndex, canonical);
+    }
+    const auto found = session_.motion_links_.find(canonical);
+    const std::optional<media::MotionLinkReference> existing =
+        found == session_.motion_links_.end()
+            ? std::nullopt : std::optional<media::MotionLinkReference>(found->second);
+    if (existing == link) return apply(media::MediaMutationResult::NoChange, canonical);
+    if (link.has_value()) session_.motion_links_[canonical] = std::move(*link);
+    else if (found != session_.motion_links_.end()) session_.motion_links_.erase(found);
+    return apply(media::MediaMutationResult::Changed, canonical);
+}
+
+MediaCommandResult MediaController::addOfflineMotionLinkedMedia(
+    const std::filesystem::path& output_path,
+    std::string display_name,
+    std::string bin_path,
+    media::MotionLinkReference link) {
+    const auto canonical = media::MediaLibrary::canonicalPath(output_path);
+    const auto added = session_.media_library_.addOffline(
+        canonical, std::move(display_name), std::move(bin_path), media::MediaKind::Video);
+    if (added == media::MediaMutationResult::Changed) {
+        session_.motion_links_.insert_or_assign(canonical, std::move(link));
+    }
+    return apply(added, canonical);
+}
+
 MediaCommandResult MediaController::refreshImagePresentation(
     const std::filesystem::path& path,
     media::VideoMetadata metadata,
     media::VideoFrame first_frame) {
     const auto canonical = media::MediaLibrary::canonicalPath(path);
     return apply(session_.media_library_.refreshImagePresentation(
+        canonical, std::move(metadata), std::move(first_frame)), canonical);
+}
+
+MediaCommandResult MediaController::refreshMotionVideoPresentation(
+    const std::filesystem::path& path,
+    media::VideoMetadata metadata,
+    media::VideoFrame first_frame) {
+    const auto canonical = media::MediaLibrary::canonicalPath(path);
+    return apply(session_.media_library_.refreshVideoPresentation(
         canonical, std::move(metadata), std::move(first_frame)), canonical);
 }
 
@@ -173,11 +214,18 @@ void MediaController::replaceLibrary(media::MediaLibrary library) {
             ++link;
         }
     }
+    for (auto link = session_.motion_links_.begin();
+         link != session_.motion_links_.end();) {
+        if (!session_.media_library_.contains(link->first))
+            link = session_.motion_links_.erase(link);
+        else ++link;
+    }
 }
 
 void MediaController::clear() noexcept {
     session_.media_library_.clear();
     session_.image_editor_links_.clear();
+    session_.motion_links_.clear();
 }
 
 } // namespace application

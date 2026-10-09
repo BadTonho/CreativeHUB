@@ -189,6 +189,11 @@ void MainWindow::createWorkspace() {
         &MainWindow::editTimelineImageClip);
     connect(
         edit_workspace_->controller(),
+        &ui::EditWorkspaceController::timelineMotionClipOpenRequested,
+        this,
+        &MainWindow::editTimelineVideoClipInMotionStudio);
+    connect(
+        edit_workspace_->controller(),
         &ui::EditWorkspaceController::timelineFusionClipOpenRequested,
         this,
         [this](timeline::ClipId clip_id) {

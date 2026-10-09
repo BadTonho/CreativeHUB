@@ -9,6 +9,8 @@
 #include "ui/media_browser/media_browser_bin_tree_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
+#include <creative_suite/media/video_encoder.h>
+#include <creative_suite/motion_handoff/request.h>
 
 #include <QAction>
 #include <QCoreApplication>
@@ -26,6 +28,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QJsonDocument>
 #include <QImage>
 #include <QIcon>
 #include <QKeySequence>
@@ -188,6 +191,102 @@ QString bundledImageEditorExecutable() {
         if (info.isFile() && info.isExecutable()) return info.absoluteFilePath();
     }
     return QStandardPaths::findExecutable(QStringLiteral("creative-suite-image-editor"));
+}
+
+QString bundledMotionEditorExecutable() {
+#if defined(Q_OS_WIN)
+    const QString binary = QStringLiteral("creative-suite-motion-editor.exe");
+#else
+    const QString binary = QStringLiteral("creative-suite-motion-editor");
+#endif
+    QSettings settings;
+    const auto configured = settings.value(
+        QStringLiteral("applications/motion_editor_executable")).toString();
+    if (!configured.isEmpty() && QFileInfo(configured).isFile()) return configured;
+    const QDir app_dir(QCoreApplication::applicationDirPath());
+    const QStringList candidates{
+        app_dir.filePath(binary),
+        app_dir.filePath(QStringLiteral("../motion-editor/Release/") + binary),
+        app_dir.filePath(QStringLiteral("../motion-editor/Debug/") + binary),
+        app_dir.filePath(QStringLiteral("../../motion-editor/Release/") + binary),
+        app_dir.filePath(QStringLiteral("../../motion-editor/Debug/") + binary)};
+    for (const auto& candidate : candidates) {
+        const QFileInfo info(candidate);
+        if (info.isFile() && info.isExecutable()) return info.absoluteFilePath();
+    }
+    return QStandardPaths::findExecutable(QStringLiteral("creative-suite-motion-editor"));
+}
+
+std::filesystem::path motionSidecarDirectory(const std::filesystem::path& source_path) {
+    auto value = source_path;
+    value += ".motion-studio";
+    return value;
+}
+
+QString outputExtensionForContainer(const QString& name) {
+    if (name == QStringLiteral("matroska")) return QStringLiteral("mkv");
+    if (name == QStringLiteral("mov")) return QStringLiteral("mov");
+    if (name == QStringLiteral("webm")) return QStringLiteral("webm");
+    if (name == QStringLiteral("avi")) return QStringLiteral("avi");
+    return name;
+}
+
+bool chooseMotionProfile(QWidget* owner, media::MotionLinkReference* link) {
+    if (link == nullptr) return false;
+    const auto containers = creative_suite::media::availableVideoContainers();
+    if (containers.empty()) {
+        QMessageBox::warning(owner, QStringLiteral("Motion Studio"),
+            QStringLiteral("No supported video container is available."));
+        return false;
+    }
+    QStringList container_labels;
+    for (const auto& container : containers) {
+        container_labels.push_back(QString::fromStdString(container.display_name));
+    }
+    bool accepted = false;
+    const auto selected_container = QInputDialog::getItem(
+        owner, QStringLiteral("Motion Publication Profile"),
+        QStringLiteral("Container"), container_labels, 0, false, &accepted);
+    if (!accepted) return false;
+    const auto container_it = std::find_if(containers.begin(), containers.end(),
+        [&containers, &selected_container](const auto& value) {
+            return QString::fromStdString(value.display_name) == selected_container;
+        });
+    if (container_it == containers.end() || container_it->video_encoders.empty()) {
+        QMessageBox::warning(owner, QStringLiteral("Motion Studio"),
+            QStringLiteral("The selected container has no supported video codec."));
+        return false;
+    }
+    QStringList codec_labels;
+    for (const auto& codec : container_it->video_encoders)
+        codec_labels.push_back(QString::fromStdString(codec.display_name));
+    const auto selected_codec = QInputDialog::getItem(
+        owner, QStringLiteral("Motion Publication Profile"),
+        QStringLiteral("Video codec"), codec_labels, 0, false, &accepted);
+    if (!accepted) return false;
+    const auto codec_it = std::find_if(container_it->video_encoders.begin(),
+        container_it->video_encoders.end(), [&selected_codec](const auto& value) {
+            return QString::fromStdString(value.display_name) == selected_codec;
+        });
+    if (codec_it == container_it->video_encoders.end()) return false;
+    const QStringList qualities{
+        QStringLiteral("High quality (20 Mbps)"),
+        QStringLiteral("Balanced (10 Mbps)"),
+        QStringLiteral("Compact (5 Mbps)")};
+    const auto selected_quality = QInputDialog::getItem(
+        owner, QStringLiteral("Motion Publication Profile"),
+        QStringLiteral("Quality"), qualities, 1, false, &accepted);
+    if (!accepted) return false;
+    link->container = container_it->name;
+    link->codec = codec_it->name;
+    link->quality = selected_quality.toUtf8().toStdString();
+    link->bitrate_mbps = selected_quality.startsWith(QStringLiteral("High")) ? 20.0
+        : selected_quality.startsWith(QStringLiteral("Compact")) ? 5.0 : 10.0;
+    const auto extension = outputExtensionForContainer(
+        QString::fromStdString(container_it->name)).toStdString();
+    link->published_output_path = link->document_path.parent_path() /
+        ("render." + extension);
+    return true;
 }
 
 } // namespace
@@ -886,6 +985,12 @@ void MainWindow::initializeLinkedImageCompatibility() {
     connect(linked_image_poll_timer_, &QTimer::timeout,
             this, &MainWindow::pollLinkedImageOutputs);
     linked_image_poll_timer_->start();
+    linked_motion_poll_timer_ = new QTimer(this);
+    linked_motion_poll_timer_->setInterval(500);
+    connect(linked_motion_poll_timer_, &QTimer::timeout,
+            this, &MainWindow::pollLinkedMotionOutputs);
+    linked_motion_poll_timer_->start();
+    refreshLinkedMotionTargets();
 }
 
 void MainWindow::refreshLinkedImageTargets() {
@@ -947,6 +1052,198 @@ void MainWindow::refreshLinkedImageTargets() {
                            clip.clip_id, false);
             }
         }
+    }
+    refreshLinkedMotionTargets();
+}
+
+void MainWindow::refreshLinkedMotionTargets() {
+    const auto previous_targets = std::move(linked_motion_watch_targets_);
+    linked_motion_watch_targets_.clear();
+    const auto add_target = [this, &previous_targets](
+        const media::MotionLinkReference& link,
+        const std::filesystem::path& source,
+        std::optional<timeline::ClipId> clip_id,
+        bool media_asset) {
+        if (link.id.empty() || link.document_path.empty() ||
+            link.published_output_path.empty()) return;
+        auto target = std::find_if(linked_motion_watch_targets_.begin(),
+            linked_motion_watch_targets_.end(), [&link](const auto& current) {
+                return current.link.id == link.id &&
+                    current.link.published_output_path == link.published_output_path;
+            });
+        if (target == linked_motion_watch_targets_.end()) {
+            LinkedMotionWatchTarget value;
+            value.link = link;
+            value.source_path = media::MediaLibrary::canonicalPath(source);
+            value.media_asset = media_asset;
+            const auto previous = std::find_if(previous_targets.begin(), previous_targets.end(),
+                [&link](const auto& current) {
+                    return current.link.id == link.id &&
+                        current.link.published_output_path == link.published_output_path;
+                });
+            if (previous != previous_targets.end()) {
+                value.has_signature = previous->has_signature;
+                value.size = previous->size;
+                value.modified = previous->modified;
+                value.missing_reported = previous->missing_reported;
+            }
+            if (clip_id.has_value()) value.clip_ids.push_back(*clip_id);
+            linked_motion_watch_targets_.push_back(std::move(value));
+            return;
+        }
+        target->media_asset = target->media_asset || media_asset;
+        if (clip_id.has_value() &&
+            std::find(target->clip_ids.begin(), target->clip_ids.end(), *clip_id) ==
+                target->clip_ids.end()) target->clip_ids.push_back(*clip_id);
+    };
+    for (const auto& item : media_controller_.library().items()) {
+        const auto link = editor_session_.motionLinkForPath(item.metadata.source_path);
+        if (link.has_value()) add_target(*link, link->source_path, std::nullopt, true);
+    }
+    for (const auto& track : timeline_model_.tracks()) {
+        for (const auto& clip : track.clips) {
+            if (clip.kind == timeline::ClipKind::Video && clip.motion_link.has_value())
+                add_target(*clip.motion_link, clip.source_path, clip.clip_id, false);
+        }
+    }
+}
+
+void MainWindow::pollLinkedMotionOutputs() {
+    for (auto& target : linked_motion_watch_targets_) {
+        if (target.refresh_pending) continue;
+        std::error_code size_error;
+        const auto size = std::filesystem::file_size(
+            target.link.published_output_path, size_error);
+        if (size_error) {
+            if (!target.missing_reported) {
+                std::error_code source_error;
+                const bool source_exists = std::filesystem::is_regular_file(
+                    target.source_path, source_error) && !source_error;
+                logging::Logger::instance().log(
+                    logging::Level::Warning, "motion_compatibility",
+                    "missing_linked_render",
+                    source_exists
+                        ? "The linked Motion render is missing; the original source remains available."
+                        : "The linked Motion render and its original source are missing.",
+                    {{"render_path", pathToUtf8(target.link.published_output_path)},
+                     {"source_path", pathToUtf8(target.source_path)},
+                     {"link_id", target.link.id}});
+                statusBar()->showMessage(
+                    source_exists
+                        ? QStringLiteral("The linked Motion render is missing; the original source remains available. Reopen the clip or Media Pool item in Motion Studio to repair the link.")
+                        : QStringLiteral("The linked Motion render and its source are missing. Reopen the clip or Media Pool item in Motion Studio to repair the link."),
+                    8000);
+                target.missing_reported = true;
+            }
+            continue;
+        }
+        target.missing_reported = false;
+        std::error_code time_error;
+        const auto modified = std::filesystem::last_write_time(
+            target.link.published_output_path, time_error);
+        if (time_error || (target.has_signature && target.size == size &&
+            target.modified == modified)) continue;
+        target.has_signature = true;
+        target.size = size;
+        target.modified = modified;
+        target.refresh_pending = true;
+        const auto link = target.link;
+        const auto source_path = target.source_path;
+        const auto clip_ids = target.clip_ids;
+        const bool media_asset = target.media_asset;
+        const auto project_generation = project_generation_;
+        QPointer<MainWindow> guard(this);
+        media_task_pool_.start(QRunnable::create(
+            [guard, link, source_path, clip_ids, media_asset, project_generation,
+             size, modified]() mutable {
+                media::VideoMetadata metadata;
+                media::VideoFrame frame;
+                std::string failure;
+                try {
+                    const media::StillImageDecoder decoder;
+                    metadata = decoder.probe(link.published_output_path);
+                    if (metadata.kind != media::MediaKind::Video)
+                        throw media::MediaError("Motion Studio published a non-video output.");
+                    frame = decoder.decode_first_frame(link.published_output_path);
+                } catch (const std::exception& error) {
+                    failure = error.what();
+                }
+                if (guard == nullptr) return;
+                QMetaObject::invokeMethod(guard,
+                    [guard, link, source_path, clip_ids, media_asset,
+                     project_generation, size, modified,
+                     metadata = std::move(metadata), frame = std::move(frame),
+                     failure = std::move(failure)]() mutable {
+                        if (guard == nullptr || project_generation != guard->project_generation_) return;
+                        auto current = std::find_if(
+                            guard->linked_motion_watch_targets_.begin(),
+                            guard->linked_motion_watch_targets_.end(),
+                            [&link](const auto& value) {
+                                return value.link.id == link.id &&
+                                    value.link.published_output_path == link.published_output_path;
+                            });
+                        if (current == guard->linked_motion_watch_targets_.end()) return;
+                        current->refresh_pending = false;
+                        std::error_code current_size_error;
+                        std::error_code current_time_error;
+                        const auto current_size = std::filesystem::file_size(
+                            link.published_output_path, current_size_error);
+                        const auto current_modified = std::filesystem::last_write_time(
+                            link.published_output_path, current_time_error);
+                        if (current_size_error || current_time_error || current_size != size ||
+                            current_modified != modified || current->size != size ||
+                            current->modified != modified) {
+                            current->has_signature = false;
+                            return;
+                        }
+                        if (!failure.empty()) {
+                            logging::Logger::instance().log(
+                                logging::Level::Error, "motion_compatibility",
+                                "refresh_linked_output", failure,
+                                {{"path", pathToUtf8(link.published_output_path)},
+                                 {"link_id", link.id}});
+                            guard->statusBar()->showMessage(
+                                QStringLiteral("The Motion render could not be decoded; the previous preview remains active."), 6000);
+                            return;
+                        }
+                        bool changed = false;
+                        if (media_asset) {
+                            const auto index = guard->media_controller_.library().indexForPath(
+                                link.published_output_path);
+                            if (index < guard->media_controller_.library().size() &&
+                                guard->media_controller_.library().items()[index].offline) {
+                                const auto restored = guard->media_controller_.restore(
+                                    link.published_output_path, std::move(metadata), frame);
+                                changed = restored.status == application::MediaCommandStatus::Applied;
+                            } else {
+                                const auto refreshed = guard->media_controller_.refreshMotionVideoPresentation(
+                                    link.published_output_path, std::move(metadata), frame);
+                                changed = refreshed.status == application::MediaCommandStatus::Applied;
+                            }
+                        }
+                        if (!clip_ids.empty() && guard->playback_controller_ != nullptr) {
+                            guard->playback_controller_->refreshComposition();
+                            changed = true;
+                        }
+                        if (!changed) return;
+                        guard->updateTimelineState();
+                        if (guard->media_list_ != nullptr)
+                            guard->populateMediaBrowser(link.published_output_path);
+                        const auto shared = std::make_shared<const media::VideoFrame>(frame);
+                        if (guard->active_timeline_clip_id_.has_value() &&
+                            std::find(clip_ids.begin(), clip_ids.end(),
+                                      *guard->active_timeline_clip_id_) != clip_ids.end()) {
+                            guard->preview_widget_->setFrame(*shared);
+                        } else if (media_asset && guard->selectedMediaIndex().has_value() &&
+                            media::MediaLibrary::canonicalPath(
+                                guard->media_items_[*guard->selectedMediaIndex()].metadata.source_path) ==
+                                media::MediaLibrary::canonicalPath(link.published_output_path)) {
+                            guard->preview_widget_->setFrame(frame);
+                        }
+                        guard->statusBar()->showMessage(
+                            QStringLiteral("Motion Studio published a new linked render."), 3500);
+                    }, Qt::QueuedConnection);
+            }));
     }
 }
 
@@ -1253,6 +1550,197 @@ void MainWindow::editTimelineImageClip(timeline::ClipId clip_id) {
     statusBar()->showMessage("Image Editor opened for this timeline clip.", 3500);
 }
 
+bool MainWindow::openMotionStudio(
+    media::MotionLinkReference link,
+    const std::filesystem::path& source_path,
+    const QString& origin_kind,
+    const QString& source_kind,
+    const timeline::TimelineClip* clip) {
+    auto executable = bundledMotionEditorExecutable();
+    if (executable.isEmpty()) {
+        executable = QFileDialog::getOpenFileName(
+            this, QStringLiteral("Locate Motion Studio"),
+            QCoreApplication::applicationDirPath(),
+            QStringLiteral("Motion Studio executable (*)"));
+        if (executable.isEmpty()) return false;
+        QSettings settings;
+        settings.setValue(QStringLiteral("applications/motion_editor_executable"), executable);
+        settings.sync();
+    }
+
+    creative_suite::motion_handoff::Request request;
+    request.origin_kind = origin_kind;
+    request.source_kind = source_kind;
+    request.source_path = pathToQString(source_path);
+    request.document_path = pathToQString(link.document_path);
+    request.published_output_path = pathToQString(link.published_output_path);
+    request.container = QString::fromUtf8(link.container.data(),
+        static_cast<qsizetype>(link.container.size()));
+    request.codec = QString::fromUtf8(link.codec.data(),
+        static_cast<qsizetype>(link.codec.size()));
+    request.quality = QString::fromUtf8(link.quality.data(),
+        static_cast<qsizetype>(link.quality.size()));
+    request.bitrate_mbps = link.bitrate_mbps;
+    request.canvas_width = editor_session_.canvasWidth();
+    request.canvas_height = editor_session_.canvasHeight();
+    const auto timeline_rate = timeline_model_.frameRate();
+    request.frame_rate_numerator = timeline_rate.numerator;
+    request.frame_rate_denominator = timeline_rate.denominator;
+    if (clip != nullptr) {
+        request.timeline_start_frame = 0;
+        request.timeline_duration_frames = clip->timeline_duration_frames;
+        request.source_start_frame = clip->source_start_frame;
+        request.source_duration_frames = clip->source_duration_frames;
+        request.source_frame_count = clip->frame_count.value_or(0);
+        request.source_frame_rate = clip->frame_rate.value_or(
+            static_cast<double>(timeline_rate.numerator) / timeline_rate.denominator);
+    } else {
+        const auto index = media_controller_.library().indexForPath(source_path);
+        if (index < media_controller_.library().size()) {
+            const auto& metadata = media_controller_.library().items()[index].metadata;
+            request.source_frame_count = metadata.frame_count.value_or(0);
+            request.source_frame_rate = metadata.frame_rate.value_or(0.0);
+            if (metadata.duration_seconds.has_value() && metadata.frame_rate.has_value()) {
+                const auto frames = std::llround(*metadata.duration_seconds *
+                                                  *metadata.frame_rate);
+                request.source_duration_frames = std::max<qint64>(0, frames);
+            }
+        }
+    }
+
+    std::error_code directory_error;
+    std::filesystem::create_directories(link.document_path.parent_path(), directory_error);
+    if (directory_error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "motion_compatibility", "create_link_directory",
+            directory_error.message(),
+            {{"path", pathToUtf8(link.document_path.parent_path())}, {"link_id", link.id}});
+        QMessageBox::warning(this, QStringLiteral("Motion Studio"),
+            QStringLiteral("The linked composition folder could not be created."));
+        return false;
+    }
+    const auto request_path = link.document_path.parent_path() / "handoff.json";
+    QSaveFile request_file(pathToQString(request_path));
+    if (!request_file.open(QIODevice::WriteOnly)) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "motion_compatibility", "write_handoff_request",
+            request_file.errorString().toUtf8().toStdString(),
+            {{"path", pathToUtf8(request_path)}, {"link_id", link.id}});
+        QMessageBox::warning(this, QStringLiteral("Motion Studio"),
+            QStringLiteral("The Motion Studio handoff could not be prepared."));
+        return false;
+    }
+    const auto serialized = QJsonDocument(request.toJson()).toJson(QJsonDocument::Indented);
+    if (request_file.write(serialized) != serialized.size() || !request_file.commit()) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "motion_compatibility", "write_handoff_request",
+            request_file.errorString().toUtf8().toStdString(),
+            {{"path", pathToUtf8(request_path)}, {"link_id", link.id}});
+        QMessageBox::warning(this, QStringLiteral("Motion Studio"),
+            QStringLiteral("The Motion Studio handoff could not be saved."));
+        return false;
+    }
+
+    qint64 process_id = 0;
+    const QStringList arguments{
+        QStringLiteral("--motion-handoff-request"), pathToQString(request_path)};
+    if (QProcess::startDetached(executable, arguments,
+            QFileInfo(executable).absolutePath(), &process_id)) return true;
+
+    logging::Logger::instance().log(
+        logging::Level::Error, "motion_compatibility", "launch_motion_studio",
+        "The Motion Studio process could not be started.",
+        {{"executable", executable.toUtf8().toStdString()},
+         {"document_path", pathToUtf8(link.document_path)},
+         {"source_path", pathToUtf8(source_path)}});
+    QMessageBox::warning(this, QStringLiteral("Could not start Motion Studio"),
+        QStringLiteral("Motion Studio could not be started. Check the Video Editor log for details."));
+    return false;
+}
+
+void MainWindow::editSelectedMediaInMotionStudio() {
+    const auto index = selectedMediaIndex();
+    if (!index.has_value()) return;
+    const auto item = media_items_[*index];
+    if (item.metadata.kind != media::MediaKind::Video &&
+        item.metadata.kind != media::MediaKind::Image) return;
+    const auto source_kind = item.metadata.kind == media::MediaKind::Image
+        ? QStringLiteral("image") : QStringLiteral("video");
+    auto link = editor_session_.motionLinkForPath(item.metadata.source_path)
+        .value_or(media::MotionLinkReference{});
+    const bool new_link = link.id.empty();
+    if (new_link) {
+        if (item.offline) {
+            statusBar()->showMessage(QStringLiteral("Restore this media before linking it to Motion Studio."), 5000);
+            return;
+        }
+        link.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        const auto sidecar = motionSidecarDirectory(item.metadata.source_path) /
+            "assets" / link.id;
+        link.document_path = sidecar / "composition.motion";
+        link.source_path = item.metadata.source_path;
+        link.source_kind = source_kind.toStdString();
+        if (!chooseMotionProfile(this, &link)) return;
+    }
+    if (!openMotionStudio(link, new_link ? item.metadata.source_path : link.source_path,
+                          QStringLiteral("media_item"),
+                          QString::fromStdString(link.source_kind))) return;
+    if (new_link) {
+        const auto output_path = link.published_output_path;
+        const auto display_name = item.display_name + " Motion";
+        const auto result = media_controller_.addOfflineMotionLinkedMedia(
+            output_path, display_name, item.bin_path, link);
+        if (result.status != application::MediaCommandStatus::Applied) {
+            logging::Logger::instance().log(
+                logging::Level::Error, "motion_compatibility", "create_media_pool_link",
+                "The linked Motion output could not be added to the Media Pool.",
+                {{"path", pathToUtf8(output_path)}, {"link_id", link.id}});
+            QMessageBox::warning(this, QStringLiteral("Motion Studio"),
+                QStringLiteral("Motion Studio opened, but the linked output could not be added to the Media Pool."));
+        } else {
+            updateProjectDirtyState();
+            populateMediaBrowser(output_path);
+        }
+    }
+    refreshLinkedMotionTargets();
+    statusBar()->showMessage(QStringLiteral("Motion Studio opened for this Media Pool item."), 4000);
+}
+
+void MainWindow::editTimelineVideoClipInMotionStudio(timeline::ClipId clip_id) {
+    const auto location = timeline_model_.locateClip(clip_id);
+    if (!location.has_value()) return;
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    if (clip.kind != timeline::ClipKind::Video) return;
+    const auto index = media_controller_.library().indexForPath(clip.source_path);
+    if (index >= media_controller_.library().size()) return;
+    const auto& media_item = media_controller_.library().items()[index];
+    auto link = clip.motion_link.value_or(media::MotionLinkReference{});
+    const bool new_link = link.id.empty();
+    if (new_link) {
+        if (media_item.offline) {
+            statusBar()->showMessage(QStringLiteral("Restore the source video before linking this clip."), 5000);
+            return;
+        }
+        link.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        const auto sidecar = motionSidecarDirectory(clip.source_path) / "clips" / link.id;
+        link.document_path = sidecar / "composition.motion";
+        link.source_path = clip.source_path;
+        link.source_kind = "video";
+        if (!chooseMotionProfile(this, &link)) return;
+    }
+    if (!openMotionStudio(link, clip.source_path, QStringLiteral("timeline_clip"),
+                          QStringLiteral("video"), &clip)) return;
+    if (new_link) {
+        if (editor_session_.legacyTimelineForUi().setMotionLink(clip_id, link)) {
+            updateProjectDirtyState();
+            updateTimelineState();
+        }
+    }
+    refreshLinkedMotionTargets();
+    statusBar()->showMessage(QStringLiteral("Motion Studio opened for this timeline clip."), 4000);
+}
+
 void MainWindow::showMediaContextMenu(const QPoint& position) {
     QMenu menu(this);
     auto* new_bin = menu.addAction("New Bin");
@@ -1284,6 +1772,18 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
             auto* edit_image = menu.addAction("Edit Image in Image Editor");
             connect(edit_image, &QAction::triggered,
                     this, &MainWindow::editSelectedMediaInImageEditor);
+        }
+        if ((selected.metadata.kind == media::MediaKind::Image ||
+             selected.metadata.kind == media::MediaKind::Video) &&
+            (!selected.offline || editor_session_.motionLinkForPath(
+                selected.metadata.source_path).has_value())) {
+            menu.addSeparator();
+            auto* open_motion = menu.addAction(
+                editor_session_.motionLinkForPath(selected.metadata.source_path).has_value()
+                    ? QStringLiteral("Open Linked Composition in Motion Studio")
+                    : QStringLiteral("Create Motion Composition..."));
+            connect(open_motion, &QAction::triggered,
+                    this, &MainWindow::editSelectedMediaInMotionStudio);
         }
         menu.addSeparator();
         auto* move = menu.addAction("Move to Bin");

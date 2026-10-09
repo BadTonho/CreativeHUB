@@ -27,6 +27,7 @@ struct PreviewLayerSnapshot {
     std::filesystem::path source_path;
     std::int64_t local_frame = 0;
     std::int64_t source_frame_count = 0;
+    std::int64_t source_start_frame = 0;
     double source_frame_rate = 0.0;
     creative_suite::animation::Transform2D transform;
     creative_suite::animation::TransformKeyframes keyframes;

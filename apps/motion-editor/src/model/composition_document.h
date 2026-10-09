@@ -41,6 +41,12 @@ struct FrameRate {
 [[nodiscard]] const std::array<FrameRate, 13>& supportedFrameRates() noexcept;
 // Returns true only for an entry in supportedFrameRates().
 [[nodiscard]] bool isSupportedFrameRate(FrameRate frame_rate) noexcept;
+[[nodiscard]] std::optional<std::int64_t> sourceFrameForTimelineFrame(
+    std::int64_t local_timeline_frame,
+    std::int64_t source_start_frame,
+    double source_frame_rate,
+    FrameRate timeline_frame_rate,
+    std::int64_t source_frame_count) noexcept;
 
 struct CompositionSettings {
     CanvasSize canvas_size;
@@ -129,6 +135,7 @@ struct CompositionLayer {
     std::int64_t timeline_start_frame = 0;
     std::int64_t duration_frames = 0;
     std::int64_t source_frame_count = 0;
+    std::int64_t source_start_frame = 0;
     std::int64_t source_duration_frames = 0;
     std::int64_t maximum_timeline_duration_frames = 0;
     double source_frame_rate = 0.0;
@@ -189,6 +196,11 @@ public:
     [[nodiscard]] bool resizeLayerDuration(
         LayerId id,
         std::int64_t duration_frames) noexcept;
+    [[nodiscard]] bool setVideoSourceRange(
+        LayerId id,
+        std::int64_t source_start_frame,
+        std::int64_t duration_frames,
+        std::int64_t maximum_timeline_duration_frames) noexcept;
     [[nodiscard]] bool setLayerName(LayerId id, std::string name);
     [[nodiscard]] bool setLayerVisible(LayerId id, bool visible) noexcept;
     [[nodiscard]] bool setLayerTransform(

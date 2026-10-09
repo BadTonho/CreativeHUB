@@ -2309,6 +2309,17 @@ bool TimelineModel::setImageEditorVariant(
     return true;
 }
 
+bool TimelineModel::setMotionLink(
+    ClipId clip_id,
+    std::optional<media::MotionLinkReference> link) {
+    const auto location = locateClip(clip_id);
+    if (!location.has_value()) return false;
+    auto& clip = tracks_[location->track_index].clips[location->clip_index];
+    if (clip.kind != ClipKind::Video || clip.motion_link == link) return false;
+    clip.motion_link = std::move(link);
+    return true;
+}
+
 bool TimelineModel::setStillImageOverride(
     ClipId clip_id,
     std::shared_ptr<const media::VideoFrame> frame) {

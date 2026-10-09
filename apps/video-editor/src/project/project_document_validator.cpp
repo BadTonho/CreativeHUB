@@ -59,6 +59,21 @@ bool validLinkedImageReference(
         output_path != source;
 }
 
+bool validMotionLinkReference(const media::MotionLinkReference& link,
+                              const std::filesystem::path& source_path) {
+    if (link.id.empty() || link.document_path.empty() ||
+        link.published_output_path.empty() || link.source_path.empty() ||
+        link.container.empty() || link.codec.empty() || link.quality.empty() ||
+        !std::isfinite(link.bitrate_mbps) || link.bitrate_mbps <= 0.0) return false;
+    if (link.source_kind != "video" && link.source_kind != "image") return false;
+    const auto document = media::MediaLibrary::canonicalPath(link.document_path);
+    const auto output = media::MediaLibrary::canonicalPath(link.published_output_path);
+    const auto link_source = media::MediaLibrary::canonicalPath(link.source_path);
+    const auto associated_source = media::MediaLibrary::canonicalPath(source_path);
+    return document != output && output != link_source && document != link_source &&
+        (associated_source == output || associated_source == link_source);
+}
+
 bool validKeyframeList(
     const std::vector<timeline::Keyframe>& keyframes,
     timeline::TransformProperty property,
@@ -116,6 +131,14 @@ void validateDocument(const ProjectDocument& document,
              !validLinkedImageReference(*media.image_editor_link, media.source_path))) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid Image Editor media link.");
+        }
+        if (media.motion_link.has_value() &&
+            (!validMotionLinkReference(*media.motion_link, media.source_path) ||
+             media::MediaLibrary::canonicalPath(media.source_path) !=
+                 media::MediaLibrary::canonicalPath(
+                     media.motion_link->published_output_path))) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Media Pool Motion Studio link.");
         }
         const auto canonical = media::MediaLibrary::canonicalPath(media.source_path);
         if (std::find(media_paths.begin(), media_paths.end(), canonical) != media_paths.end()) {
@@ -195,6 +218,14 @@ void validateDocument(const ProjectDocument& document,
              !validLinkedImageReference(*clip.image_editor_variant, clip.source_path))) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid linked clip image.");
+        }
+        if (clip.motion_link.has_value() &&
+            (clip.kind != timeline::ClipKind::Video ||
+             !validMotionLinkReference(*clip.motion_link, clip.source_path) ||
+             media::MediaLibrary::canonicalPath(clip.motion_link->source_path) !=
+                 media::MediaLibrary::canonicalPath(clip.source_path))) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid timeline Motion Studio link.");
         }
         if (!timeline::validTransform(clip.transform) ||
             !validKeyframeList(clip.keyframes.position_x,

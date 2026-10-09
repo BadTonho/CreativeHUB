@@ -62,6 +62,7 @@ public:
     void commitPrepared(
         media::MediaLibrary library,
         std::map<std::filesystem::path, media::LinkedImageReference> image_editor_links,
+        std::map<std::filesystem::path, media::MotionLinkReference> motion_links,
         timeline::TimelineModel::Snapshot timeline,
         std::optional<std::filesystem::path> active_project_path,
         const project::ProjectDocument& loaded_document,

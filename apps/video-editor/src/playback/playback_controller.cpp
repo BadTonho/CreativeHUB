@@ -283,7 +283,10 @@ void PlaybackController::refreshComposition() {
                 clip.audio_gain_keyframes,
                 clip.effects,
                 std::move(node_graph),
-                fusion_preview_node_id});
+                fusion_preview_node_id,
+                clip.motion_link.has_value()
+                    ? pathToQString(clip.motion_link->published_output_path)
+                    : QString()});
         }
 
         for (const auto& transition : track.transitions) {

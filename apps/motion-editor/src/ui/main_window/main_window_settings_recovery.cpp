@@ -251,6 +251,7 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
 }
 void MainWindow::maybeOfferUnsavedRecovery()
 {
+    if (startup_handoff_requested_) return;
     auto snapshots = recovery_store_.unsavedSnapshots();
     if (snapshots.empty()) return;
     const auto selected = chooseRecoverySnapshot(

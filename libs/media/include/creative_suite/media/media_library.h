@@ -66,6 +66,10 @@ public:
         const std::filesystem::path& path,
         VideoMetadata metadata,
         VideoFrame first_frame);
+    MediaMutationResult refreshVideoPresentation(
+        const std::filesystem::path& path,
+        VideoMetadata metadata,
+        VideoFrame first_frame);
     MediaMutationResult createBin(std::string bin_path);
     MediaMutationResult renameBin(std::string old_path, std::string new_path);
     MediaMutationResult moveBin(std::string old_path, std::string new_path);

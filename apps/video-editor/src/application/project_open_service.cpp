@@ -394,6 +394,7 @@ ProjectOpenResult ProjectOpenService::prepare(
         auto normalized_document = document;
         media::MediaLibrary loaded_library;
         std::map<std::filesystem::path, media::LinkedImageReference> loaded_image_editor_links;
+        std::map<std::filesystem::path, media::MotionLinkReference> loaded_motion_links;
         for (const auto& bin : document.bins) {
             if (bin == media::default_bin) continue;
             const auto created = loaded_library.createBin(bin);
@@ -471,6 +472,10 @@ ProjectOpenResult ProjectOpenService::prepare(
                         metadata.source_path,
                         *project_media.image_editor_link);
                 }
+                if (project_media.motion_link.has_value()) {
+                    loaded_motion_links.insert_or_assign(metadata.source_path,
+                        *project_media.motion_link);
+                }
             } else {
                 MediaImportService media_importer(
                     [kind = project_media.kind](const auto& path) {
@@ -532,6 +537,11 @@ ProjectOpenResult ProjectOpenService::prepare(
                     loaded_image_editor_links.insert_or_assign(
                         media::MediaLibrary::canonicalPath(project_media.source_path),
                         *project_media.image_editor_link);
+                }
+                if (project_media.motion_link.has_value()) {
+                    loaded_motion_links.insert_or_assign(
+                        media::MediaLibrary::canonicalPath(project_media.source_path),
+                        *project_media.motion_link);
                 }
             }
             ++completed_steps;
@@ -815,6 +825,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                 clip.audio_extracted = project_clip.audio_extracted;
                 clip.audio_companion_pending = project_clip.audio_companion_pending;
                 clip.image_editor_variant = project_clip.image_editor_variant;
+                clip.motion_link = project_clip.motion_link;
                 if (clip.image_editor_variant.has_value() &&
                     clip.kind == timeline::ClipKind::Image) {
                     const auto& variant_path =
@@ -875,6 +886,7 @@ ProjectOpenResult ProjectOpenService::prepare(
         PreparedProject prepared;
         prepared.media_library = std::move(loaded_library);
         prepared.image_editor_links = std::move(loaded_image_editor_links);
+        prepared.motion_links = std::move(loaded_motion_links);
         prepared.timeline = std::move(snapshot);
         prepared.active_project_path = active_project_path.has_value()
             ? std::optional<std::filesystem::path>(

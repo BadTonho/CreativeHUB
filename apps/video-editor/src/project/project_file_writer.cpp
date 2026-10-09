@@ -176,6 +176,27 @@ QJsonObject linkedImageJson(
     return object;
 }
 
+QJsonObject motionLinkJson(
+    const std::filesystem::path& project_path,
+    const media::MotionLinkReference& link) {
+    QJsonObject object;
+    object.insert("id", QString::fromUtf8(link.id.data(),
+                                            static_cast<qsizetype>(link.id.size())));
+    object.insert("document", storedPath(project_path, link.document_path));
+    object.insert("output", storedPath(project_path, link.published_output_path));
+    object.insert("source", storedPath(project_path, link.source_path));
+    object.insert("source_kind", QString::fromUtf8(link.source_kind.data(),
+        static_cast<qsizetype>(link.source_kind.size())));
+    object.insert("container", QString::fromUtf8(link.container.data(),
+        static_cast<qsizetype>(link.container.size())));
+    object.insert("codec", QString::fromUtf8(link.codec.data(),
+        static_cast<qsizetype>(link.codec.size())));
+    object.insert("quality", QString::fromUtf8(link.quality.data(),
+        static_cast<qsizetype>(link.quality.size())));
+    object.insert("bitrate_mbps", link.bitrate_mbps);
+    return object;
+}
+
 } // namespace
 
 void save(const std::filesystem::path& project_path, const ProjectDocument& document) {
@@ -199,6 +220,9 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         if (media_source.image_editor_link.has_value()) {
             item.insert("image_editor_link",
                         linkedImageJson(project_path, *media_source.image_editor_link));
+        }
+        if (media_source.motion_link.has_value()) {
+            item.insert("motion_link", motionLinkJson(project_path, *media_source.motion_link));
         }
         media.append(item);
     }
@@ -306,6 +330,9 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             }
             if (clip.node_graph.has_value())
                 item.insert("node_graph", nodeGraphJson(project_path, *clip.node_graph));
+            if (clip.motion_link.has_value()) {
+                item.insert("motion_link", motionLinkJson(project_path, *clip.motion_link));
+            }
             QJsonObject transform;
             QJsonObject position;
             position.insert("x", clip.transform.position_x);

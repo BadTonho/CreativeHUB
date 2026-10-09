@@ -229,6 +229,7 @@ endif()
 
 target_include_directories(creative-suite-main-editor-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/libs/motion-handoff/include
     ${FFMPEG_INCLUDE_DIRS}
 )
 

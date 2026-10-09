@@ -24,4 +24,18 @@ struct LinkedImageReference {
     friend bool operator==(const LinkedImageReference&, const LinkedImageReference&) = default;
 };
 
+struct MotionLinkReference {
+    std::string id;
+    std::filesystem::path document_path;
+    std::filesystem::path published_output_path;
+    std::filesystem::path source_path;
+    std::string source_kind = "video";
+    std::string container;
+    std::string codec;
+    std::string quality;
+    double bitrate_mbps = 10.0;
+
+    friend bool operator==(const MotionLinkReference&, const MotionLinkReference&) = default;
+};
+
 } // namespace media

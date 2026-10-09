@@ -7,6 +7,7 @@
 
 #include <QApplication>
 #include <QIcon>
+#include <QFileInfo>
 
 #ifndef CREATIVE_SUITE_APP_VERSION
 #define CREATIVE_SUITE_APP_VERSION "0.1.0"
@@ -31,6 +32,12 @@ int main(int argc, char* argv[])
             QStringLiteral(CREATIVE_SUITE_APP_VERSION)));
 #endif
     window.show();
+    const auto arguments = application.arguments();
+    const auto handoff_option = arguments.indexOf(QStringLiteral("--motion-handoff-request"));
+    if (handoff_option >= 0 && handoff_option + 1 < arguments.size()) {
+        const auto request_path = QFileInfo(arguments.at(handoff_option + 1)).filesystemFilePath();
+        window.openHandoffRequest(request_path);
+    }
 #ifdef Q_OS_WIN
     creative_suite::updater::markApplicationStartupHealthy(QStringLiteral("motion-editor"));
 #endif
