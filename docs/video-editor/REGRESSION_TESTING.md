@@ -300,7 +300,9 @@ in the running Video Editor after UI or integration changes:
   application footer rather than the top toolbar;
 - Timeline construction (F1): confirm the control row, scrolling viewport,
   and fixed track headers retain their layout. Check the saved monitor
-  volume at startup, confirm the zoom slider has a white handle and no adjacent
+  volume at startup and confirm its label, slider, and percentage are grouped at
+  the far right of the control row, after zoom and separated from playback and
+  Timeline tools. Confirm the zoom slider has a white handle and no adjacent
   plus/minus buttons, and that its percentage indicator follows zoom changes;
   check the initial Snap state and Selection/Blade switching. Confirm the five
   track-management buttons are absent from the control row and the same commands

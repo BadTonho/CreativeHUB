@@ -1128,6 +1128,19 @@ public:
             require(timeline_widget != nullptr && timeline_viewport != nullptr &&
                         clicked_track_index.has_value(),
                     "The Timeline track-menu integration could not locate its fixed header.");
+            const auto volume_slider_left = workspace_ui.monitor_volume->mapTo(
+                workspace_ui.timeline_controls, QPoint(0, 0)).x();
+            const auto zoom_slider_right = workspace_ui.zoom_slider->mapTo(
+                workspace_ui.timeline_controls,
+                QPoint(workspace_ui.zoom_slider->width(), 0)).x();
+            const auto volume_indicator_right =
+                workspace_ui.monitor_volume_indicator->mapTo(
+                    workspace_ui.timeline_controls,
+                    QPoint(workspace_ui.monitor_volume_indicator->width(), 0)).x();
+            require(volume_slider_left > zoom_slider_right &&
+                        workspace_ui.timeline_controls->contentsRect().right() -
+                                volume_indicator_right <= 16,
+                    "The monitoring-volume control should sit after zoom at the right edge of the Timeline control row.");
             for (const auto* button : window.edit_workspace_->ui().timeline_controls
                      ->findChildren<QPushButton*>()) {
                 require(button->text() != QStringLiteral("Add Video Track") &&

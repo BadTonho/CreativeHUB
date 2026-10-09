@@ -415,7 +415,9 @@ The timeline controls expose a thin zoom slider with the percentage indicator
 centered above it and a white slider handle. Zoom levels range from 25% to
 51,200%, including frame-level levels after 800%. Ctrl + mouse wheel moves
 between adjacent zoom levels, and the slider selects a level; both zoom around
-the playhead. The upper time ruler adds adaptive minor guides aligned to frame
+the playhead. The playback monitor-volume label, slider, and percentage are
+right-aligned at the far end of the control row, separated from playback,
+Timeline tools, and zoom by flexible space. The upper time ruler adds adaptive minor guides aligned to frame
 boundaries, using `1, 2, 5 x 10^n` intervals and approximately eight pixels of
 visual spacing. At frame-level density, the visible timeline draws a subtle
 vertical guide for each frame inside the upper time ruler without labeling

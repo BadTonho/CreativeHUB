@@ -601,9 +601,6 @@ void EditWorkspace::createTimelineControls(
     ui_.monitor_volume_indicator->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     ui_.monitor_volume_indicator->setMinimumWidth(42);
     ui_.monitor_volume_indicator->setStyleSheet("color: #9aa4b2;");
-    controls->addWidget(monitor_volume_label);
-    controls->addWidget(ui_.monitor_volume);
-    controls->addWidget(ui_.monitor_volume_indicator);
     controls->addWidget(ui_.clear_timeline);
     controls->addWidget(ui_.selection_tool);
     controls->addWidget(ui_.razor_tool);
@@ -639,6 +636,9 @@ void EditWorkspace::createTimelineControls(
     ui_.zoom_slider = zoom_slider;
     ui_.zoom_indicator = zoom_indicator;
     controls->addStretch();
+    controls->addWidget(monitor_volume_label);
+    controls->addWidget(ui_.monitor_volume);
+    controls->addWidget(ui_.monitor_volume_indicator);
     layout->addWidget(ui_.timeline_controls);
 
     ui_.previous_frame->setToolTip("Step one frame backward");
