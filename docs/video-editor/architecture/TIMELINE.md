@@ -144,9 +144,8 @@ adaptive minor divisions aligned to frame boundaries. Minor divisions use
 guides as the scale changes, so the ruler becomes more precise without adding
 text to every division. When the scale reaches at least one pixel per frame, a
 subtle guide is drawn for each visible frame. All of these guides remain inside
-the upper ruler and never cross clip content. Ctrl + mouse wheel and the visible
-minus and plus controls zoom around the playhead, keeping that timeline instant
-in place.
+the upper ruler and never cross clip content. Ctrl + mouse wheel and the zoom
+slider zoom around the playhead, keeping that timeline instant in place.
 Zoom changes only the timeline's horizontal presentation and are saved in the
 project; they do not change clip frames, playback, preview, or Undo/Redo.
 Each pane shows as many rows as fit and scrolls independently when its group

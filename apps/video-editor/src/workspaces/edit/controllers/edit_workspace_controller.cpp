@@ -1125,12 +1125,6 @@ void EditWorkspaceController::setTimelineWidget(
                     ui_.zoom_indicator->setText(
                         QString::number(static_cast<int>(std::lround(factor * 100.0))) + "%");
                 }
-                if (ui_.zoom_out != nullptr) {
-                    ui_.zoom_out->setEnabled(timeline_widget_->canZoomOut());
-                }
-                if (ui_.zoom_in != nullptr) {
-                    ui_.zoom_in->setEnabled(timeline_widget_->canZoomIn());
-                }
                 emit projectDirtyStateUpdateRequested();
             });
     connect(timeline_widget_, &timeline::TimelineWidget::trackRowHeightsChanged,
@@ -1152,20 +1146,6 @@ void EditWorkspaceController::setUi(EditWorkspaceUi ui) {
             }
             applyTimelineZoom(
                 timeline::kTimelineZoomLevels[static_cast<std::size_t>(level)]);
-        });
-    }
-    if (ui_.zoom_out != nullptr) {
-        connect(ui_.zoom_out, &QPushButton::clicked, this, [this]() {
-            if (timeline_widget_ != nullptr) {
-                applyTimelineZoom(timeline_widget_->nextZoomFactor(-1));
-            }
-        });
-    }
-    if (ui_.zoom_in != nullptr) {
-        connect(ui_.zoom_in, &QPushButton::clicked, this, [this]() {
-            if (timeline_widget_ != nullptr) {
-                applyTimelineZoom(timeline_widget_->nextZoomFactor(1));
-            }
         });
     }
     if (ui_.apply_transition != nullptr) {

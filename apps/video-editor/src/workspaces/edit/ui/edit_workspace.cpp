@@ -623,14 +623,10 @@ void EditWorkspace::createTimelineControls(
     controls->addWidget(move_track_down_button);
     controls->addWidget(remove_track_button);
     controls->addSpacing(10);
-    auto* zoom_out_button = new QPushButton("−", container);
     auto* zoom_control = new QWidget(container);
     auto* zoom_layout = new QVBoxLayout(zoom_control);
     auto* zoom_slider = new QSlider(Qt::Horizontal, zoom_control);
     auto* zoom_indicator = new QLabel("100%", zoom_control);
-    auto* zoom_in_button = new QPushButton("+", container);
-    zoom_out_button->setFixedWidth(28);
-    zoom_in_button->setFixedWidth(28);
     zoom_layout->setContentsMargins(0, 0, 0, 0);
     zoom_layout->setSpacing(0);
     zoom_control->setFixedWidth(92);
@@ -646,21 +642,15 @@ void EditWorkspace::createTimelineControls(
         "QSlider::sub-page:horizontal { height: 2px; background: #8b98aa; }"
         "QSlider::add-page:horizontal { height: 2px; background: #252d38; }"
         "QSlider::handle:horizontal { width: 10px; height: 10px; "
-        "margin: -4px 0; border-radius: 5px; background: #d5a94b; }");
+        "margin: -4px 0; border-radius: 5px; background: #ffffff; }");
     zoom_indicator->setAlignment(Qt::AlignCenter);
     zoom_indicator->setFixedWidth(92);
-    zoom_out_button->setToolTip("Zoom out of the timeline");
-    zoom_in_button->setToolTip("Zoom in on the timeline");
     zoom_indicator->setToolTip("Current timeline zoom");
-    controls->addWidget(zoom_out_button);
     zoom_layout->addWidget(zoom_indicator);
     zoom_layout->addWidget(zoom_slider);
     controls->addWidget(zoom_control);
-    controls->addWidget(zoom_in_button);
-    ui_.zoom_out = zoom_out_button;
     ui_.zoom_slider = zoom_slider;
     ui_.zoom_indicator = zoom_indicator;
-    ui_.zoom_in = zoom_in_button;
     controls->addStretch();
     layout->addWidget(ui_.timeline_controls);
 

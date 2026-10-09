@@ -409,15 +409,15 @@ normally. The header follows vertical scrolling so its rows remain aligned;
 the transparent overlay does not intercept mouse, drag-and-drop, seek, or
 editing events.
 The timeline controls expose a thin zoom slider with the percentage indicator
-centered above it, plus a minus button and a plus button without an extra text
-label. Zoom levels range from 25% to 51,200%, including frame-level levels
-after 800%. Ctrl + mouse wheel, the slider, and the buttons change one level
-around the playhead. The upper time ruler adds adaptive minor guides aligned to
-frame boundaries, using `1, 2, 5 x 10^n` intervals and approximately eight
-pixels of visual spacing. At frame-level density, the visible timeline draws a
-subtle vertical guide for each frame inside the upper time ruler without
-labeling every frame or drawing guides across clip content. The guides are
-limited to the current paint region so long timelines remain responsive.
+centered above it and a white slider handle. Zoom levels range from 25% to
+51,200%, including frame-level levels after 800%. Ctrl + mouse wheel moves
+between adjacent zoom levels, and the slider selects a level; both zoom around
+the playhead. The upper time ruler adds adaptive minor guides aligned to frame
+boundaries, using `1, 2, 5 x 10^n` intervals and approximately eight pixels of
+visual spacing. At frame-level density, the visible timeline draws a subtle
+vertical guide for each frame inside the upper time ruler without labeling
+every frame or drawing guides across clip content. The guides are limited to
+the current paint region so long timelines remain responsive.
 Zoom affects only horizontal timeline presentation and is persisted per project
 without creating a clip-edit history entry.
 The application-wide footer keeps `No media selected.` and playback messages

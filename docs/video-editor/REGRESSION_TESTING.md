@@ -298,7 +298,9 @@ in the running Video Editor after UI or integration changes:
   application footer rather than the top toolbar;
 - Timeline construction (F1): confirm the control row, scrolling viewport,
   and fixed track headers retain their layout. Check the saved monitor
-  volume at startup, zoom slider and buttons, checked initial Snap state,
+  volume at startup, confirm the zoom slider has a white handle and no adjacent
+  plus/minus buttons, and that its percentage indicator follows zoom changes;
+  check the initial Snap state,
   Selection/Blade switching, and each add/rename/move/remove track action.
   Switch Edit/Fusion and back; check global footer status updates and playback
   buttons and shortcuts. Each action should respond once, with the same preview and
