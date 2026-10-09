@@ -925,7 +925,12 @@ void EditWorkspaceController::promptAddVideoTrack(QWidget* dialog_parent) {
 void EditWorkspaceController::promptRenameActiveTrack(QWidget* dialog_parent) {
     const auto track_id = session_.selection().active_track_id;
     if (!track_id.has_value()) return;
-    const auto track_index = session_.timeline().locateTrack(*track_id);
+    promptRenameTrack(*track_id, dialog_parent);
+}
+
+void EditWorkspaceController::promptRenameTrack(
+    timeline::TrackId track_id, QWidget* dialog_parent) {
+    const auto track_index = session_.timeline().locateTrack(track_id);
     if (!track_index.has_value()) return;
 
     bool accepted = false;
@@ -942,7 +947,7 @@ void EditWorkspaceController::promptRenameActiveTrack(QWidget* dialog_parent) {
     if (!accepted) return;
 
     try {
-        const auto result = renameTrack(*track_id, name.toUtf8().toStdString());
+        const auto result = renameTrack(track_id, name.toUtf8().toStdString());
         if (result.status == application::EditStatus::Rejected &&
             result.reason == application::EditReason::InvalidName) {
             emit statusMessageRequested(QStringLiteral("The track name is invalid."));
@@ -959,10 +964,15 @@ void EditWorkspaceController::promptRenameActiveTrack(QWidget* dialog_parent) {
 }
 
 void EditWorkspaceController::moveActiveTrack(int direction) {
-    if (direction == 0 || session_.timeline().trackCount() < 2) return;
     const auto track_id = session_.selection().active_track_id;
     if (!track_id.has_value()) return;
-    const auto source_index = session_.timeline().locateTrack(*track_id);
+    moveTrackInGroup(*track_id, direction);
+}
+
+void EditWorkspaceController::moveTrackInGroup(
+    timeline::TrackId track_id, int direction) {
+    if (direction == 0 || session_.timeline().trackCount() < 2) return;
+    const auto source_index = session_.timeline().locateTrack(track_id);
     if (!source_index.has_value()) return;
     const auto& tracks = session_.timeline().tracks();
     const auto kind = tracks[*source_index].kind;
@@ -980,7 +990,7 @@ void EditWorkspaceController::moveActiveTrack(int direction) {
     }
     if (target_index == *source_index || tracks[target_index].kind != kind) return;
     try {
-        static_cast<void>(moveTrack(*track_id, target_index));
+        static_cast<void>(moveTrack(track_id, target_index));
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error,
@@ -996,10 +1006,14 @@ void EditWorkspaceController::moveActiveTrack(int direction) {
 void EditWorkspaceController::removeActiveTrack() {
     const auto track_id = session_.selection().active_track_id;
     if (!track_id.has_value()) return;
-    const auto track_index = session_.timeline().locateTrack(*track_id);
+    removeTrackById(*track_id);
+}
+
+void EditWorkspaceController::removeTrackById(timeline::TrackId track_id) {
+    const auto track_index = session_.timeline().locateTrack(track_id);
     if (!track_index.has_value()) return;
     try {
-        const auto result = removeTrack(*track_id);
+        const auto result = removeTrack(track_id);
         if (result.reason == application::EditReason::TrackNotEmpty) {
             emit statusMessageRequested(QStringLiteral("Only empty tracks can be removed."));
         }
@@ -1010,7 +1024,7 @@ void EditWorkspaceController::removeActiveTrack() {
             "remove_track",
             error.what(),
             {{"track_index", std::to_string(*track_index)}});
-        emit statusMessageRequested(QStringLiteral("Could not remove the video track."));
+        emit statusMessageRequested(QStringLiteral("Could not remove the track."));
     }
 }
 

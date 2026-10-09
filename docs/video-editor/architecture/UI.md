@@ -343,9 +343,12 @@ the highest visual priority. Video 1 is created first; each newly created track
 is inserted above the existing tracks. It preserves absolute positions and
 gaps, and allows overlap only across different tracks. It displays a shared
 `HH:MM:SS.mmm` timecode ruler, dedicated track headers, clip counters,
-track-specific colors, and explicit drop/playhead markers. The dock
-provides Add Video Track, Rename Track, Track Up, Track Down, and Remove Track.
-Only empty tracks can be removed.
+track-specific colors, and explicit drop/playhead markers. Right-clicking the
+fixed header of a Video or Audio track opens `Add Video Track`, `Rename Track`,
+`Track Up`, `Track Down`, and `Remove Track`, in that order. Rename, reorder,
+and remove target the clicked track; reorder stays within its Video or Audio
+group, and only empty tracks can be removed. The same commands remain in the
+Edit menu.
 The upper-left corner of the ruler shows the current absolute Timeline
 playhead timecode, formatted from the project's rational frame rate. It updates
 during playback, seek, and scrub, remains fixed while the Timeline scrolls

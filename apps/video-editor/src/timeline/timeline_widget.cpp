@@ -875,6 +875,25 @@ bool TimelineWidget::eventFilter(QObject* watched, QEvent* event) {
 
     auto* watched_widget = qobject_cast<QWidget*>(watched);
     if (watched_widget != nullptr && watched != this && event != nullptr) {
+        if (event->type() == QEvent::ContextMenu) {
+            auto* context_event = static_cast<QContextMenuEvent*>(event);
+            const auto track_index = trackHeaderAtViewport(
+                watched_widget, context_event->pos());
+            if (suppress_next_context_menu_) {
+                suppress_next_context_menu_ = false;
+                if (track_index.has_value()) {
+                    context_event->accept();
+                    return true;
+                }
+            }
+            if (track_index.has_value()) {
+                emit trackContextMenuRequested(
+                    tracks_[*track_index].track_id,
+                    context_event->globalPos());
+                context_event->accept();
+                return true;
+            }
+        }
         if (event->type() == QEvent::Wheel) {
             auto* wheel_event = static_cast<QWheelEvent*>(event);
             const auto position = mapFrom(
@@ -1341,6 +1360,27 @@ double TimelineWidget::contentXForFrame(std::int64_t frame) const noexcept {
 
 std::optional<std::size_t> TimelineWidget::trackAt(double y) const noexcept {
     return TimelineHitTester::trackAt(geometry(), tracks_.size(), y);
+}
+
+std::optional<std::size_t> TimelineWidget::trackHeaderAt(
+    QPointF widget_position) const noexcept {
+    auto* viewport = parentWidget();
+    if (viewport == nullptr) return std::nullopt;
+    const auto viewport_position = mapTo(
+        viewport, widget_position.toPoint());
+    return trackHeaderAtViewport(viewport, viewport_position);
+}
+
+std::optional<std::size_t> TimelineWidget::trackHeaderAtViewport(
+    QWidget* viewport, QPointF viewport_position) const noexcept {
+    if (viewport == nullptr ||
+        viewport_position.x() < TimelineGeometry::left_margin ||
+        viewport_position.x() >= trackHeaderOverlayWidth()) {
+        return std::nullopt;
+    }
+    const auto widget_position = mapFrom(
+        viewport, viewport_position.toPoint());
+    return trackAt(widget_position.y());
 }
 
 std::optional<ClipLocation> TimelineWidget::clipAt(double x, double y) const noexcept {
@@ -2548,6 +2588,14 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
         event->accept();
         return;
     }
+    const auto header_track_index = trackHeaderAt(event->pos());
+    if (header_track_index.has_value()) {
+        emit trackContextMenuRequested(
+            tracks_[*header_track_index].track_id,
+            event->globalPos());
+        event->accept();
+        return;
+    }
     const auto indexes = transitionClipIndexesAt(
         event->pos().x(), event->pos().y());
     const auto track_index = trackAt(event->pos().y());
@@ -2599,6 +2647,15 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         return;
     }
     if (event->button() == Qt::RightButton) {
+        const auto header_track_index = trackHeaderAt(event->position());
+        if (header_track_index.has_value()) {
+            suppress_next_context_menu_ = true;
+            emit trackContextMenuRequested(
+                tracks_[*header_track_index].track_id,
+                event->globalPosition().toPoint());
+            event->accept();
+            return;
+        }
         const auto indexes = transitionClipIndexesAt(
             event->position().x(), event->position().y());
         if (indexes.has_value() && trackAt(event->position().y()).has_value()) {

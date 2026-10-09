@@ -1720,6 +1720,76 @@ int main(int argc, char* argv[]) {
                         viewport_timeline->trackGroupViewportRect(
                             timeline::TrackKind::Audio).bottom(),
                 "Scrolling Audio changed Video's offset or lost Audio row alignment.");
+
+        viewport_timeline->setActiveClip(timeline::ClipLocation{0, 0});
+        viewport_timeline->setSelectedClipIds({top_track.clips.front().clip_id});
+        const auto selected_clip_ids_before_header_menu =
+            viewport_timeline->selectedClipIds();
+        std::vector<timeline::TrackId> header_menu_track_ids;
+        QObject::connect(
+            viewport_timeline,
+            &timeline::TimelineWidget::trackContextMenuRequested,
+            [&header_menu_track_ids](timeline::TrackId track_id, QPoint) {
+                header_menu_track_ids.push_back(track_id);
+            });
+        const auto send_header_context_click = [&](std::size_t track_index) {
+            const auto y = static_cast<int>(std::lround(
+                viewport_timeline->trackBounds(track_index).center().y()));
+            const QPoint viewport_position(32, y);
+            const auto widget_position = viewport_timeline->mapFrom(
+                scroll_area.viewport(), viewport_position);
+            const auto global_position = scroll_area.viewport()->mapToGlobal(
+                viewport_position);
+            QMouseEvent right_press(
+                QEvent::MouseButtonPress,
+                QPointF(widget_position), QPointF(widget_position),
+                QPointF(global_position),
+                Qt::RightButton, Qt::RightButton, Qt::NoModifier,
+                Qt::MouseEventNotSynthesized,
+                QPointingDevice::primaryPointingDevice());
+            QApplication::sendEvent(viewport_timeline, &right_press);
+            QContextMenuEvent duplicate_context(
+                QContextMenuEvent::Mouse, widget_position, global_position);
+            QApplication::sendEvent(viewport_timeline, &duplicate_context);
+        };
+        send_header_context_click(2);
+        send_header_context_click(5);
+        require(header_menu_track_ids == std::vector<timeline::TrackId>{5, 8} &&
+                    viewport_timeline->selectedClipIds() ==
+                        selected_clip_ids_before_header_menu,
+                "Right-clicking scrolled Video and Audio headers did not request their track IDs without changing clip selection.");
+
+        const auto scrolled_audio_header_y = static_cast<int>(std::lround(
+            viewport_timeline->trackBounds(5).center().y()));
+        const QPoint viewport_context_position(32, scrolled_audio_header_y);
+        const auto global_context_position = scroll_area.viewport()->mapToGlobal(
+            viewport_context_position);
+        QContextMenuEvent viewport_context(
+            QContextMenuEvent::Mouse,
+            viewport_context_position,
+            global_context_position);
+        QApplication::sendEvent(scroll_area.viewport(), &viewport_context);
+        require(header_menu_track_ids == std::vector<timeline::TrackId>{5, 8, 8} &&
+                    viewport_timeline->selectedClipIds() ==
+                        selected_clip_ids_before_header_menu,
+                "The scroll viewport did not route a fixed Audio header context request without changing selection.");
+
+        const QPoint outside_header_position(170, scrolled_audio_header_y);
+        const auto outside_widget_position = viewport_timeline->mapFrom(
+            scroll_area.viewport(), outside_header_position);
+        const auto outside_global_position = scroll_area.viewport()->mapToGlobal(
+            outside_header_position);
+        QMouseEvent outside_header_press(
+            QEvent::MouseButtonPress,
+            QPointF(outside_widget_position), QPointF(outside_widget_position),
+            QPointF(outside_global_position),
+            Qt::RightButton, Qt::RightButton, Qt::NoModifier,
+            Qt::MouseEventNotSynthesized,
+            QPointingDevice::primaryPointingDevice());
+        QApplication::sendEvent(viewport_timeline, &outside_header_press);
+        require(header_menu_track_ids.size() == 3,
+                "A right-click outside the fixed track header opened the track menu.");
+
         int scrolled_video_selection = 0;
         QObject::connect(
             viewport_timeline,

@@ -10,6 +10,7 @@
 #include <vector>
 
 class QAction;
+class QPoint;
 class QWidget;
 class QVBoxLayout;
 
@@ -62,6 +63,7 @@ private:
     [[nodiscard]] QWidget* createTimeline(QWidget* parent);
     void createTimelineControls(QWidget* container, QVBoxLayout* layout);
     void createTimelineViewport(QWidget* container, QVBoxLayout* layout);
+    void showTrackContextMenu(timeline::TrackId track_id, QPoint global_position);
     void createWorkspaceFooter(QWidget* parent);
 
     QWidget* preview_widget_ = nullptr;

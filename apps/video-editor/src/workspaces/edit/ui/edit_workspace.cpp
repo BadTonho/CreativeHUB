@@ -26,6 +26,7 @@
 #include <QPlainTextEdit>
 #include <QPixmap>
 #include <QPushButton>
+#include <QMenu>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -609,20 +610,6 @@ void EditWorkspace::createTimelineControls(
     controls->addWidget(ui_.volume_tool);
     controls->addWidget(ui_.snap);
     controls->addSpacing(10);
-    auto* tracks_label = new QLabel("Tracks", container);
-    tracks_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
-    controls->addWidget(tracks_label);
-    auto* add_track_button = new QPushButton("Add Video Track", container);
-    auto* rename_track_button = new QPushButton("Rename Track", container);
-    auto* move_track_up_button = new QPushButton("Track Up", container);
-    auto* move_track_down_button = new QPushButton("Track Down", container);
-    auto* remove_track_button = new QPushButton("Remove Track", container);
-    controls->addWidget(add_track_button);
-    controls->addWidget(rename_track_button);
-    controls->addWidget(move_track_up_button);
-    controls->addWidget(move_track_down_button);
-    controls->addWidget(remove_track_button);
-    controls->addSpacing(10);
     auto* zoom_control = new QWidget(container);
     auto* zoom_layout = new QVBoxLayout(zoom_control);
     auto* zoom_slider = new QSlider(Qt::Horizontal, zoom_control);
@@ -673,28 +660,6 @@ void EditWorkspace::createTimelineControls(
     ui_.snap->setToolTip(
         "Toggle magnetic snapping for clips and media drops");
     ui_.snap->setAccessibleName("Magnetic Snap");
-    add_track_button->setToolTip("Create a new empty video track");
-    rename_track_button->setToolTip("Rename the active track");
-    move_track_up_button->setToolTip("Move the active track toward the top");
-    move_track_down_button->setToolTip("Move the active track toward the bottom");
-    remove_track_button->setToolTip("Remove the active track when it is empty");
-
-    auto* dialog_parent = container->window();
-    connect(add_track_button, &QPushButton::clicked, controller_,
-            [this, dialog_parent]() {
-                controller_->promptAddVideoTrack(dialog_parent);
-            });
-    connect(rename_track_button, &QPushButton::clicked, controller_,
-            [this, dialog_parent]() {
-                controller_->promptRenameActiveTrack(dialog_parent);
-            });
-    connect(move_track_up_button, &QPushButton::clicked, controller_,
-            [this]() { controller_->moveActiveTrack(-1); });
-    connect(move_track_down_button, &QPushButton::clicked, controller_,
-            [this]() { controller_->moveActiveTrack(1); });
-    connect(remove_track_button, &QPushButton::clicked, controller_,
-            &EditWorkspaceController::removeActiveTrack);
-
 }
 
 
@@ -733,7 +698,45 @@ void EditWorkspace::createTimelineViewport(QWidget* container, QVBoxLayout* layo
     ui_.track_header = new timeline::TimelineTrackHeaderOverlay(
         ui_.timeline,
         ui_.timeline_scroll->viewport());
+    connect(
+        ui_.timeline,
+        &timeline::TimelineWidget::trackContextMenuRequested,
+        this,
+        &EditWorkspace::showTrackContextMenu);
     layout->addWidget(ui_.timeline_scroll, 1);
+}
+
+void EditWorkspace::showTrackContextMenu(
+    timeline::TrackId track_id, QPoint global_position) {
+    if (ui_.timeline == nullptr) return;
+    QMenu menu(ui_.timeline);
+    menu.setObjectName(QStringLiteral("timelineTrackContextMenu"));
+    auto* add_video_track = menu.addAction(QStringLiteral("Add Video Track"));
+    auto* rename_track = menu.addAction(QStringLiteral("Rename Track"));
+    auto* move_track_up = menu.addAction(QStringLiteral("Track Up"));
+    auto* move_track_down = menu.addAction(QStringLiteral("Track Down"));
+    auto* remove_track = menu.addAction(QStringLiteral("Remove Track"));
+
+    auto* dialog_parent = command_dialog_parent_ != nullptr
+        ? command_dialog_parent_ : ui_.timeline;
+    connect(add_video_track, &QAction::triggered, this, [this, dialog_parent]() {
+        controller_->promptAddVideoTrack(dialog_parent);
+    });
+    connect(rename_track, &QAction::triggered, this,
+            [this, track_id, dialog_parent]() {
+                controller_->promptRenameTrack(
+                    track_id, dialog_parent);
+            });
+    connect(move_track_up, &QAction::triggered, this, [this, track_id]() {
+        controller_->moveTrackInGroup(track_id, -1);
+    });
+    connect(move_track_down, &QAction::triggered, this, [this, track_id]() {
+        controller_->moveTrackInGroup(track_id, 1);
+    });
+    connect(remove_track, &QAction::triggered, this, [this, track_id]() {
+        controller_->removeTrackById(track_id);
+    });
+    menu.exec(global_position);
 }
 
 void EditWorkspace::createWorkspaceFooter(QWidget* parent) {

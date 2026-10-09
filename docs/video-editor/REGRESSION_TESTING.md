@@ -159,6 +159,8 @@ and its subdirectories; shared-library tests are registered in
 | Image Editor linked media | `tests/project/project_file_test.cpp`, `tests/application/application_media_services_test.cpp`, `tests/application/main_window_integration_test.cpp`, `tests/timeline/timeline_widget_test.cpp`; producer-side checks in `apps/image-editor/tests/image_editor_ui_test.cpp`, `image_editor_mask_ui_test.cpp`, and `image_editor_raster_ui_test.cpp`; the main-window consumer generates a real PNG from a linked raster image and layer mask in `.cimg` v11 via the Image Editor core when both apps are enabled and asserts retained alpha after refresh. The `.csp` contract is unchanged. | Full two-app validation is listed in [`docs/image-editor/MANUAL_VALIDATION.md`](../image-editor/MANUAL_VALIDATION.md); acceptance of remaining linked-image scenarios is pending. |
 | Motion Studio linked compositions | `tests/project/project_file_test.cpp` covers `.csp` v24 Media Pool and Timeline links plus v23 compatibility; `tests/timeline/timeline_model_test.cpp` covers retaining source, position, duration, and original audio state when linking; `tests/application/application_media_services_test.cpp` and `tests/media/media_library_test.cpp` cover a new linked Media Pool item and refreshed video presentation. Motion producer-side `.motion` source-in mapping, preview/export, migration, and versioned handoff-request cases are in `apps/motion-editor/tests/composition_document_test.cpp`, `preview_renderer_test.cpp`, `motion_video_export_test.cpp`, and `motion_document_store_test.cpp`. | Manual two-app validation remains required: create links from a video clip and from image/video Media Pool items, save multiple Motion revisions, confirm only the linked output refreshes, reopen the `.csp`, test publication cancel/failure and missing document/render recovery, test concurrent Motion writers, and confirm Save As becomes independent. See [Motion linked-composition manual check](#motion-studio-linked-composition-manual-check). |
 
+| Timeline track header context menu | `tests/timeline/timeline_widget_test.cpp`; `tests/ui/edit_workspace_controller_test.cpp` | Fixed-header Video/Audio requests survive horizontal and independent vertical scrolling without changing selection; clicks outside the header do not request the menu. Target-ID controller checks cover rename, same-group reorder and boundaries, removing an empty track, and blocking an occupied track without history changes. Manual menu order, cancellation, Edit-menu retention, and clip/transition context menus are listed in the Timeline UI checklist below. |
+
 ### Current coverage gaps and pending validation
 
 - **P0 — critical paths mapped:** project persistence, migration, rejection of
@@ -300,14 +302,20 @@ in the running Video Editor after UI or integration changes:
   and fixed track headers retain their layout. Check the saved monitor
   volume at startup, confirm the zoom slider has a white handle and no adjacent
   plus/minus buttons, and that its percentage indicator follows zoom changes;
-  check the initial Snap state,
-  Selection/Blade switching, and each add/rename/move/remove track action.
-  Switch Edit/Fusion and back; check global footer status updates and playback
-  buttons and shortcuts. Each action should respond once, with the same preview and
-  playhead behavior; Timeline selection, project dirty state, and Undo/Redo
-  history should change only when the corresponding edit requires it. The
-  widget and workspace selector tests cover their components, and the
-  MainWindow integration test covers global footer placement and page visibility;
+  check the initial Snap state and Selection/Blade switching. Confirm the five
+  track-management buttons are absent from the control row and the same commands
+  remain in `Edit`. Right-click Video and Audio headers and verify the menu order
+  is Add Video Track, Rename Track, Track Up, Track Down, Remove Track. Cancel
+  the menu and confirm selection, project dirty state, and Undo/Redo history are
+  unchanged. On different active tracks, rename, move, and remove the track
+  whose header was clicked; verify movement stops at each group's boundaries,
+  an empty track is removed, and an occupied track remains. Repeat after
+  horizontal scrolling and after scrolling each Video/Audio group to rows
+  outside the visible area. Confirm right-click menus on clips and transitions
+  still work. Switch Edit/Fusion and back; check global footer status updates
+  and playback buttons and shortcuts. The widget and controller tests cover
+  coordinate conversion and target semantics; manual editor validation remains
+  pending;
 - independent Timeline panes: load a project with one or two Video and Audio
   tracks and confirm the default 50/50 split leaves each track row at its
   configured height, Video's last row meets the divider from above, and Audio's

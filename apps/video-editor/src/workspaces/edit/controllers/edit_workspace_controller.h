@@ -68,8 +68,11 @@ public:
     void addTextClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void promptAddVideoTrack(QWidget* dialog_parent);
     void promptRenameActiveTrack(QWidget* dialog_parent);
+    void promptRenameTrack(timeline::TrackId track_id, QWidget* dialog_parent);
     void moveActiveTrack(int direction);
+    void moveTrackInGroup(timeline::TrackId track_id, int direction);
     void removeActiveTrack();
+    void removeTrackById(timeline::TrackId track_id);
     void setUi(EditWorkspaceUi ui);
     [[nodiscard]] const EditWorkspaceUi& ui() const noexcept;
     void setTimelineWidget(timeline::TimelineWidget* timeline_widget);

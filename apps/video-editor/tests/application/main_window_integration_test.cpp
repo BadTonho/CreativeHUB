@@ -1122,6 +1122,77 @@ public:
             auto* edit_controller = window.edit_workspace_->controller();
             const auto selected_clip_id = first_track.clips.front().clip_id;
             auto* timeline_widget = window.edit_workspace_->ui().timeline;
+            auto* timeline_viewport = window.edit_workspace_->ui().timeline_scroll->viewport();
+            const auto clicked_track_index =
+                window.editor_session_.timeline().locateTrack(first_track.track_id);
+            require(timeline_widget != nullptr && timeline_viewport != nullptr &&
+                        clicked_track_index.has_value(),
+                    "The Timeline track-menu integration could not locate its fixed header.");
+            for (const auto* button : window.edit_workspace_->ui().timeline_controls
+                     ->findChildren<QPushButton*>()) {
+                require(button->text() != QStringLiteral("Add Video Track") &&
+                            button->text() != QStringLiteral("Rename Track") &&
+                            button->text() != QStringLiteral("Track Up") &&
+                            button->text() != QStringLiteral("Track Down") &&
+                            button->text() != QStringLiteral("Remove Track"),
+                        "Track-management buttons should no longer appear in the Timeline control row.");
+            }
+            const QPoint track_menu_viewport_position(
+                32, static_cast<int>(std::lround(timeline_widget->trackBounds(
+                    *clicked_track_index).center().y())));
+            const auto track_menu_widget_position = timeline_widget->mapFrom(
+                timeline_viewport, track_menu_viewport_position);
+            const auto track_menu_global_position = timeline_viewport->mapToGlobal(
+                track_menu_viewport_position);
+            const auto selection_before_track_menu = window.editor_session_.selection();
+            const auto timeline_before_track_menu =
+                window.editor_session_.timeline().snapshot();
+            const auto undo_before_track_menu =
+                window.timeline_command_service_.undoCount();
+            const auto dirty_before_track_menu = window.project_dirty_;
+            bool track_menu_labels_verified = false;
+            QTimer::singleShot(0, [&]() {
+                auto* menu = timeline_widget->findChild<QMenu*>(
+                    QStringLiteral("timelineTrackContextMenu"));
+                if (menu == nullptr) return;
+                QStringList labels;
+                for (const auto* action : menu->actions()) labels.push_back(action->text());
+                track_menu_labels_verified = labels == QStringList{
+                    QStringLiteral("Add Video Track"),
+                    QStringLiteral("Rename Track"),
+                    QStringLiteral("Track Up"),
+                    QStringLiteral("Track Down"),
+                    QStringLiteral("Remove Track")};
+                menu->close();
+            });
+            QMouseEvent track_header_right_click(
+                QEvent::MouseButtonPress,
+                QPointF(track_menu_widget_position),
+                QPointF(track_menu_widget_position),
+                QPointF(track_menu_global_position),
+                Qt::RightButton, Qt::RightButton, Qt::NoModifier,
+                Qt::MouseEventNotSynthesized,
+                QPointingDevice::primaryPointingDevice());
+            QApplication::sendEvent(timeline_widget, &track_header_right_click);
+            QContextMenuEvent duplicate_track_context(
+                QContextMenuEvent::Mouse,
+                track_menu_widget_position,
+                track_menu_global_position);
+            QApplication::sendEvent(timeline_widget, &duplicate_track_context);
+            const auto& selection_after_track_menu = window.editor_session_.selection();
+            require(track_menu_labels_verified &&
+                        selection_after_track_menu.active_track_id ==
+                            selection_before_track_menu.active_track_id &&
+                        selection_after_track_menu.active_clip_id ==
+                            selection_before_track_menu.active_clip_id &&
+                        selection_after_track_menu.selected_source_path ==
+                            selection_before_track_menu.selected_source_path &&
+                        window.editor_session_.timeline().snapshot() ==
+                            timeline_before_track_menu &&
+                        window.timeline_command_service_.undoCount() ==
+                            undo_before_track_menu &&
+                        window.project_dirty_ == dirty_before_track_menu,
+                    "Canceling the track menu changed its labels, selection, project, or history.");
             const auto fusion_target_location =
                 window.editor_session_.timeline().locateClip(selected_clip_id);
             require(timeline_widget != nullptr && fusion_target_location.has_value(),

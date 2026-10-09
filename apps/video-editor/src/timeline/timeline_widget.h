@@ -170,6 +170,7 @@ signals:
     void trackHeaderVisualsChanged();
     void trackScrollMetricsChanged();
     void trackGroupSplitRatioChanged(double ratio);
+    void trackContextMenuRequested(timeline::TrackId track_id, QPoint global_position);
     void playheadVisualChanged();
     void mediaGroupDropRequested(
         const QString& source_path,
@@ -235,6 +236,10 @@ private:
         Qt::KeyboardModifiers modifiers);
     void updateHorizontalExtent();
     [[nodiscard]] std::optional<std::size_t> trackAt(double y) const noexcept;
+    [[nodiscard]] std::optional<std::size_t> trackHeaderAt(
+        QPointF widget_position) const noexcept;
+    [[nodiscard]] std::optional<std::size_t> trackHeaderAtViewport(
+        QWidget* viewport, QPointF viewport_position) const noexcept;
     [[nodiscard]] std::optional<ClipLocation> clipAt(double x, double y) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> globalFrameAt(double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> playheadFrameAtRulerX(

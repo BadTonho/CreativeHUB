@@ -511,6 +511,72 @@ void run() {
                 grouped_track_commands.undoCount() == 2,
             "Track Down did not reorder to the next Video row only.");
 
+    grouped_track_session.selectionForUi().active_track_id = first_audio_id;
+    grouped_track_controller.moveTrackInGroup(middle_video_id, -1);
+    visual_video_ids.clear();
+    for (const auto& track : grouped_track_session.timeline().tracks()) {
+        if (track.kind == timeline::TrackKind::Video) {
+            visual_video_ids.push_back(track.track_id);
+        }
+    }
+    require(visual_video_ids == std::vector<timeline::TrackId>{
+                middle_video_id, top_video_id, bottom_video_id} &&
+                grouped_track_session.selection().active_track_id == first_audio_id &&
+                grouped_track_commands.undoCount() == 3,
+            "A track-targeted move acted on the active Audio track instead of the clicked Video track.");
+    grouped_track_controller.moveTrackInGroup(middle_video_id, -1);
+    require(grouped_track_commands.undoCount() == 3,
+            "A track-targeted move crossed the upper Video group boundary.");
+    grouped_track_controller.moveTrackInGroup(middle_video_id, 1);
+    visual_video_ids.clear();
+    for (const auto& track : grouped_track_session.timeline().tracks()) {
+        if (track.kind == timeline::TrackKind::Video) {
+            visual_video_ids.push_back(track.track_id);
+        }
+    }
+    require(visual_video_ids == std::vector<timeline::TrackId>{
+                top_video_id, middle_video_id, bottom_video_id} &&
+                grouped_track_session.selection().active_track_id == first_audio_id &&
+                grouped_track_commands.undoCount() == 4,
+            "A track-targeted Down command did not stay within the Video group.");
+
+    const auto targeted_rename = grouped_track_controller.renameTrack(
+        middle_video_id, "Targeted Video");
+    const auto renamed_track_index =
+        grouped_track_session.timeline().locateTrack(middle_video_id);
+    require(targeted_rename.changed() && renamed_track_index.has_value() &&
+                grouped_track_session.timeline().tracks()[*renamed_track_index].name ==
+                    "Targeted Video" &&
+                grouped_track_session.selection().active_track_id == first_audio_id &&
+                grouped_track_commands.undoCount() == 5,
+            "A track-targeted rename changed the active track instead of the requested Video track.");
+
+    grouped_track_controller.removeTrackById(second_audio_id);
+    require(!grouped_track_session.timeline().locateTrack(second_audio_id).has_value() &&
+                grouped_track_session.timeline().locateTrack(first_audio_id).has_value() &&
+                grouped_track_session.selection().active_track_id == first_audio_id &&
+                grouped_track_commands.undoCount() == 6,
+            "A track-targeted remove acted on the active Audio track instead of the requested empty track.");
+
+    QString blocked_remove_message;
+    QObject::connect(
+        &grouped_track_controller,
+        &ui::EditWorkspaceController::statusMessageRequested,
+        [&blocked_remove_message](const QString& message) {
+            blocked_remove_message = message;
+        });
+    const auto occupied_video = grouped_track_controller.execute(
+        application::AddTextClipCommand{bottom_video_id, 0, 60, 30.0});
+    require(occupied_video.changed(),
+            "The occupied-track removal check could not add its text fixture.");
+    const auto history_before_blocked_remove = grouped_track_commands.undoCount();
+    grouped_track_controller.removeTrackById(bottom_video_id);
+    require(grouped_track_session.timeline().locateTrack(bottom_video_id).has_value() &&
+                grouped_track_commands.undoCount() == history_before_blocked_remove &&
+                blocked_remove_message == QStringLiteral(
+                    "Only empty tracks can be removed."),
+            "A track-targeted remove did not block an occupied track without adding history.");
+
     application::EditorSession clip_session;
     application::TimelineCommandService clip_commands(clip_session);
     ui::EditWorkspaceController clip_controller(clip_session, clip_commands);
