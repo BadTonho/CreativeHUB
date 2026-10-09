@@ -5,6 +5,9 @@ It must change in the same commit as any shortcut change.
 
 | Shortcut | Action | Context |
 | --- | --- | --- |
+| Alt + 1 | Switch to Edit | All workspaces |
+| Alt + 2 | Switch to Fusion | All workspaces |
+| Alt + 3 | Switch to Render | All workspaces |
 | Space | Play or pause the selected timeline media | Edit and Fusion |
 | Shift + Space | Open or close the Functions filter picker | Edit and Fusion |
 | Left Arrow | Previous frame, crossing a clip boundary when applicable | Edit and Fusion |
@@ -34,7 +37,8 @@ requirement; in that mode, Alt + dragging moves clips and normal dragging
 seeks. Edge dragging trims, and the persistent Blade Tool changes a click into
 a split request. Playback shortcuts are available in Edit and Fusion and are
 disabled when no playable selected media is available. Render has no editing,
-playback, or undo shortcuts by default.
+playback, or undo shortcuts by default. The three workspace navigation shortcuts
+remain available in Render.
 In the Selection tool, Ctrl + click adds/removes clips for Paste Attributes;
 normal click returns to a single selected clip.
 
@@ -66,6 +70,8 @@ exclusive. Application commands conflict with every scope; Shared commands
 conflict with Edit and Fusion commands, but may reuse a Render-only sequence.
 Other conflicting combinations are rejected. Each command can be reset
 individually, or all commands can be restored with `Reset All`.
+The workspace selectors' tooltips show their current shortcut; clearing a
+shortcut removes the key binding while leaving the selector available.
 Mouse gestures remain outside the customizable shortcut list.
 
 Global menu and toolbar visibility follows the same workspace scopes. File,

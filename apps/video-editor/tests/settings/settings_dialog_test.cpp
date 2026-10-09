@@ -132,10 +132,31 @@ int main(int argc, char* argv[]) {
         app_shortcut_action.setShortcut(QKeySequence("Ctrl+N"));
         QAction edit_shortcut_action;
         edit_shortcut_action.setShortcut(QKeySequence("Ctrl+K"));
+        QAction switch_edit_action;
+        switch_edit_action.setShortcut(QKeySequence("Alt+1"));
+        QAction switch_fusion_action;
+        switch_fusion_action.setShortcut(QKeySequence("Alt+2"));
+        QAction switch_render_action;
+        switch_render_action.setShortcut(QKeySequence("Alt+3"));
         settings::ShortcutManager shortcut_manager;
         shortcut_manager.registerAction(
             QStringLiteral("settings.test.new"), QStringLiteral("New Project"),
             &app_shortcut_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
+        shortcut_manager.registerAction(
+            QStringLiteral("workspace.switch_edit"),
+            QStringLiteral("Switch to Edit workspace"),
+            &switch_edit_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
+        shortcut_manager.registerAction(
+            QStringLiteral("workspace.switch_fusion"),
+            QStringLiteral("Switch to Fusion workspace"),
+            &switch_fusion_action, settings::ShortcutScope::Application,
+            QStringLiteral("All workspaces"));
+        shortcut_manager.registerAction(
+            QStringLiteral("workspace.switch_render"),
+            QStringLiteral("Switch to Render workspace"),
+            &switch_render_action, settings::ShortcutScope::Application,
             QStringLiteral("All workspaces"));
         shortcut_manager.registerAction(
             QStringLiteral("settings.test.split"), QStringLiteral("Split Clip"),
@@ -267,10 +288,22 @@ int main(int argc, char* argv[]) {
             "shortcutReset_settings.test.new");
         auto* app_clear_button = dialog.findChild<QPushButton*>(
             "shortcutClear_settings.test.new");
+        auto* switch_edit_editor = dialog.findChild<QKeySequenceEdit*>(
+            "shortcutEditor_workspace.switch_edit");
+        auto* switch_fusion_editor = dialog.findChild<QKeySequenceEdit*>(
+            "shortcutEditor_workspace.switch_fusion");
+        auto* switch_render_editor = dialog.findChild<QKeySequenceEdit*>(
+            "shortcutEditor_workspace.switch_render");
         require(app_sequence_editor != nullptr && app_reset_button != nullptr &&
                     app_clear_button != nullptr &&
-                    app_sequence_editor->keySequence() == QKeySequence("Ctrl+P"),
-                "Settings did not show the saved configured shortcut.");
+                    app_sequence_editor->keySequence() == QKeySequence("Ctrl+P") &&
+                    switch_edit_editor != nullptr &&
+                    switch_edit_editor->keySequence() == QKeySequence("Alt+1") &&
+                    switch_fusion_editor != nullptr &&
+                    switch_fusion_editor->keySequence() == QKeySequence("Alt+2") &&
+                    switch_render_editor != nullptr &&
+                    switch_render_editor->keySequence() == QKeySequence("Alt+3"),
+                "Settings did not show the configured shortcut or the three workspace navigation defaults.");
         dialog.show();
         tabs->setCurrentWidget(tabs->widget(3));
         QApplication::processEvents();

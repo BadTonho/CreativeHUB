@@ -415,6 +415,10 @@ highlighted, and the application always opens on Edit without saving the
 selected page as project or workspace state. The top workspace toolbar keeps
 the `Media Pool` and `Effects` controls. The footer retains a compact 26 px
 status-bar height, with 22 px navigation buttons.
+The Application-scoped `Alt+1`, `Alt+2`, and `Alt+3` shortcuts switch to Edit,
+Fusion, and Render from any workspace. They can be changed, cleared, or reset
+in `Settings > Shortcuts`, and each selector tooltip reflects its current key
+binding.
 
 Edit preserves the current Preview, Inspector, and Timeline presentation. In
 Fusion, Bins and Media remain on the left, the existing Preview is labeled

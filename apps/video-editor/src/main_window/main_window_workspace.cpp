@@ -39,6 +39,7 @@
 #include <QMenuBar>
 #include <QMetaObject>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSettings>
@@ -1020,6 +1021,66 @@ void MainWindow::createMenus() {
             playback::PlaybackCommand::StepForward);
     });
     addAction(next_frame_action);
+
+    const auto register_workspace_shortcut =
+        [this, &register_shortcut](
+            const QString& id,
+            const QString& label,
+            const QString& object_name,
+            const QString& default_sequence,
+            const QString& tooltip,
+            QPushButton* button,
+            ui::WorkspacePageId page) {
+            auto* action = new QAction(label, this);
+            action->setObjectName(object_name);
+            action->setShortcut(QKeySequence(default_sequence));
+            action->setShortcutContext(Qt::WindowShortcut);
+            register_shortcut(
+                id,
+                label,
+                action,
+                settings::ShortcutScope::Application,
+                QStringLiteral("All workspaces"));
+            connect(action, &QAction::triggered, this, [this, page]() {
+                setWorkspacePage(page);
+            });
+            addAction(action);
+
+            const auto update_button_tooltip = [action, button, tooltip]() {
+                const auto shortcut_text = action->shortcut().toString(
+                    QKeySequence::NativeText);
+                button->setToolTip(shortcut_text.isEmpty()
+                    ? tooltip
+                    : QStringLiteral("%1 (%2)").arg(tooltip, shortcut_text));
+            };
+            connect(action, &QAction::changed,
+                    this, update_button_tooltip);
+            update_button_tooltip();
+        };
+    register_workspace_shortcut(
+        QStringLiteral("workspace.switch_edit"),
+        QStringLiteral("Switch to Edit workspace"),
+        QStringLiteral("workspaceSwitchEditAction"),
+        QStringLiteral("Alt+1"),
+        QStringLiteral("Switch to the Edit workspace"),
+        edit_workspace_button_,
+        ui::WorkspacePageId::Edit);
+    register_workspace_shortcut(
+        QStringLiteral("workspace.switch_fusion"),
+        QStringLiteral("Switch to Fusion workspace"),
+        QStringLiteral("workspaceSwitchFusionAction"),
+        QStringLiteral("Alt+2"),
+        QStringLiteral("Switch to the Fusion workspace"),
+        fusion_workspace_button_,
+        ui::WorkspacePageId::Fusion);
+    register_workspace_shortcut(
+        QStringLiteral("workspace.switch_render"),
+        QStringLiteral("Switch to Render workspace"),
+        QStringLiteral("workspaceSwitchRenderAction"),
+        QStringLiteral("Alt+3"),
+        QStringLiteral("Switch to the Render workspace"),
+        render_workspace_button_,
+        ui::WorkspacePageId::Render);
 
     shortcut_manager_->load();
     if (workspace_host_ != nullptr) {

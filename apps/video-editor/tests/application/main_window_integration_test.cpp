@@ -840,6 +840,114 @@ public:
                 window.setGeometry(footer_test_geometry);
             }
             QApplication::processEvents();
+            auto* edit_workspace_shortcut = window.findChild<QAction*>(
+                "workspaceSwitchEditAction");
+            auto* fusion_workspace_shortcut = window.findChild<QAction*>(
+                "workspaceSwitchFusionAction");
+            auto* render_workspace_shortcut = window.findChild<QAction*>(
+                "workspaceSwitchRenderAction");
+            require(edit_workspace_shortcut != nullptr &&
+                        fusion_workspace_shortcut != nullptr &&
+                        render_workspace_shortcut != nullptr &&
+                        edit_workspace_shortcut->shortcut() ==
+                            QKeySequence("Alt+1") &&
+                        fusion_workspace_shortcut->shortcut() ==
+                            QKeySequence("Alt+2") &&
+                        render_workspace_shortcut->shortcut() ==
+                            QKeySequence("Alt+3") &&
+                        edit_workspace_shortcut->shortcutContext() ==
+                            Qt::WindowShortcut &&
+                        window.shortcut_manager_->shortcut(
+                            QStringLiteral("workspace.switch_edit")) ==
+                            QKeySequence("Alt+1") &&
+                        window.edit_workspace_button_->toolTip().contains(
+                            QStringLiteral("Alt+1")) &&
+                        window.fusion_workspace_button_->toolTip().contains(
+                            QStringLiteral("Alt+2")) &&
+                        window.render_workspace_button_->toolTip().contains(
+                            QStringLiteral("Alt+3")),
+                    "Workspace navigation shortcuts must be global, customizable, and shown in each selector tooltip.");
+            sendShortcutKey(
+                window.workspace_host_, Qt::Key_2, Qt::AltModifier);
+            QApplication::processEvents();
+            require(window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Fusion &&
+                        window.fusion_workspace_button_->isChecked(),
+                    "Alt+2 must switch to Fusion and select its footer button.");
+            sendShortcutKey(
+                window.workspace_host_, Qt::Key_3, Qt::AltModifier);
+            QApplication::processEvents();
+            require(window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Render &&
+                        window.render_workspace_button_->isChecked() &&
+                        window.edit_workspace_->ui().timeline->isReadOnly() &&
+                        window.edit_workspace_->ui().workspace_footer->isVisible(),
+                    "Alt+3 must switch to Render while preserving its read-only Timeline and global footer.");
+            sendShortcutKey(
+                window.workspace_host_, Qt::Key_1, Qt::AltModifier);
+            QApplication::processEvents();
+            require(window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Edit &&
+                        window.edit_workspace_button_->isChecked() &&
+                        !window.edit_workspace_->ui().timeline->isReadOnly(),
+                    "Alt+1 must return from Render to editable Edit.");
+
+            QString shortcut_conflict;
+            require(!window.shortcut_manager_->setShortcut(
+                        QStringLiteral("workspace.switch_edit"),
+                        QKeySequence("Alt+2"), &shortcut_conflict) &&
+                        shortcut_conflict.contains(
+                            QStringLiteral("Switch to Fusion workspace")) &&
+                        window.shortcut_manager_->setShortcut(
+                            QStringLiteral("workspace.switch_fusion"),
+                            QKeySequence("Alt+5")) &&
+                        window.fusion_workspace_button_->toolTip().contains(
+                            QStringLiteral("Alt+5")) &&
+                        window.shortcut_manager_->load() &&
+                        window.shortcut_manager_->shortcut(
+                            QStringLiteral("workspace.switch_fusion")) ==
+                            QKeySequence("Alt+5") &&
+                        window.fusion_workspace_button_->toolTip().contains(
+                            QStringLiteral("Alt+5")),
+                    "Workspace shortcuts must reject duplicate assignments and update tooltips after customization.");
+            sendShortcutKey(
+                window.workspace_host_, Qt::Key_2, Qt::AltModifier);
+            QApplication::processEvents();
+            require(window.workspace_host_->currentPage() ==
+                        ui::WorkspacePageId::Edit,
+                    "Changing the Fusion shortcut must release its previous key sequence.");
+            sendShortcutKey(
+                window.workspace_host_, Qt::Key_5, Qt::AltModifier);
+            QApplication::processEvents();
+            require(window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Fusion &&
+                        window.shortcut_manager_->setShortcut(
+                            QStringLiteral("workspace.switch_fusion"), {}) &&
+                        window.shortcut_manager_->shortcut(
+                            QStringLiteral("workspace.switch_fusion")).isEmpty() &&
+                        window.fusion_workspace_button_->toolTip() ==
+                            QStringLiteral("Switch to the Fusion workspace"),
+                    "Clearing the Fusion shortcut must remove its key binding and its tooltip suffix.");
+            sendShortcutKey(
+                window.workspace_host_, Qt::Key_1, Qt::AltModifier);
+            QApplication::processEvents();
+            sendShortcutKey(
+                window.workspace_host_, Qt::Key_5, Qt::AltModifier);
+            QApplication::processEvents();
+            require(window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Edit &&
+                        window.shortcut_manager_->resetShortcut(
+                            QStringLiteral("workspace.switch_fusion")) &&
+                        window.fusion_workspace_button_->toolTip().contains(
+                            QStringLiteral("Alt+2")),
+                    "A cleared Fusion shortcut must stay inactive and reset to Alt+2 with its tooltip restored.");
+            sendShortcutKey(
+                window.workspace_host_, Qt::Key_1, Qt::AltModifier);
+            QApplication::processEvents();
+            require(window.workspace_host_->currentPage() ==
+                        ui::WorkspacePageId::Edit,
+                    "The Edit shortcut must remain available after another page shortcut is reset.");
+
             QEventLoop open_loop;
             QTimer timeout;
             timeout.setSingleShot(true);
