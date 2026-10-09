@@ -58,12 +58,6 @@ WorkspaceHost::WorkspaceHost(
     setMinimumSize(0, 0);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    central_placeholder_ = new QWidget(parent != nullptr ? parent : this);
-    central_placeholder_->setObjectName("emptyWorkspaceCentralPlaceholder");
-    central_placeholder_->setMinimumSize(0, 0);
-    central_placeholder_->setSizePolicy(
-        QSizePolicy::Ignored, QSizePolicy::Ignored);
-
     auto* viewer_layout = new QVBoxLayout(this);
     viewer_layout->setContentsMargins(0, 0, 0, 0);
     viewer_layout->setSpacing(0);
@@ -191,13 +185,15 @@ void WorkspaceHost::setCentralWorkspaceVisible(bool visible) {
     auto* main_window = qobject_cast<QMainWindow*>(window());
     if (main_window == nullptr) return;
 
-    QWidget* desired = visible ? this : central_placeholder_;
-    if (desired == nullptr || main_window->centralWidget() == desired) return;
+    QWidget* desired = visible ? this : nullptr;
+    if (main_window->centralWidget() == desired) return;
 
     if (auto* current = main_window->takeCentralWidget()) {
         current->setParent(main_window);
     }
-    main_window->setCentralWidget(desired);
+    if (desired != nullptr) {
+        main_window->setCentralWidget(desired);
+    }
 }
 
 WorkspacePageId WorkspaceHost::currentPage() const noexcept {

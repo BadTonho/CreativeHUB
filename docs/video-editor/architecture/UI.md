@@ -110,8 +110,11 @@ the minimum widths are 20 px for `Toolbox` and `Favorites`, and 30 px for
 restored with the workspace. `Preview` is a native dock that can be moved,
 resized, floated, closed, re-docked, and tabified like the other panels. Its
 `View > Preview` action reopens it when closed. The default layout keeps the
-Preview large in the central work area beside the Inspector. Version 8 dock
-layouts receive a one-time repair that returns a collapsed, vertically split
+Preview as a wide dock between Media Pool and Inspector. Outside Render, the
+main window has no empty central placeholder, so the dock areas use the
+available width without leaving a blank column between Media and Preview. The
+workspace host becomes the central widget only while Render is active. Version
+8 dock layouts receive a one-time repair that returns a collapsed, vertically split
 Preview to the default side-by-side arrangement while preserving hidden,
 floating, tabified, and other-area layouts. Version 7 layouts are upgraded
 with Preview beside Inspector. On first launch,

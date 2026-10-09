@@ -51,7 +51,6 @@ private:
     QWidget* edit_inspector_ = nullptr;
     QWidget* fusion_inspector_ = nullptr;
     QWidget* viewer_title_ = nullptr;
-    QWidget* central_placeholder_ = nullptr;
     QWidget* empty_central_page_ = nullptr;
     QWidget* render_page_ = nullptr;
     QStackedWidget* central_workspace_pages_ = nullptr;
