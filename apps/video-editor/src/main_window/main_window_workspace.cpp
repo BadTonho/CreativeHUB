@@ -507,7 +507,6 @@ void MainWindow::createWorkspace() {
     function_palette_->setEffectTargetAvailable(
         edit_workspace_->controller()->selectedClipSupportsEffects());
 
-    restoreWorkspaceLayout();
     setWorkspacePage(ui::WorkspacePageId::Edit);
 }
 

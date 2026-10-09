@@ -565,9 +565,11 @@ in the running Video Editor after UI or integration changes:
   `View > Restore Default Layout` to restore the Media Pool default;
 - first launch: confirm the Video Editor opens maximized with Media Pool on the
   left, Inspector on the right, Preview in the center, and Timeline across the
-  bottom; resize or rearrange the docks, close the editor, and confirm the
-  window geometry and dock arrangement are restored without changing project
-  dirty state;
+  bottom; switch repeatedly among Edit, Fusion, and Render using both
+  transition styles and confirm the top toolbar, menu bar, and dock boundaries
+  remain separate and usable after each animation; resize or rearrange the
+  docks, close the editor, and confirm the window geometry and complete dock
+  and toolbar arrangement are restored without changing project dirty state;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement; clear both the Media Browser and Timeline item selections,
   place the playhead over a valid clip, and confirm Play resolves that clip

@@ -80,6 +80,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     createWorkspace();
     createMenus();
+    restoreWorkspaceLayout();
     initializePlayback();
     initializeLinkedImageCompatibility();
     configurePreviewPerformanceMetrics(

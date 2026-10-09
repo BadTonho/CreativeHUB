@@ -111,6 +111,9 @@ restored with the workspace. On first launch, the Video Editor opens maximized
 with Media Pool on the left, Inspector on the right, Preview in the center,
 and Timeline across the bottom. The window geometry and maximized state are
 then restored globally without affecting project state.
+The saved dock and toolbar state is restored only after the workspace docks,
+menus, and top toolbar have all been created, so Qt can resolve every saved
+layout item before applying its geometry.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
