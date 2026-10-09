@@ -156,8 +156,17 @@ MotionExportSnapshot makeSnapshot(const std::filesystem::path& source_video)
     image.effects.emplace_back(motion::model::ColorAdjustmentEffect{
         true, 20.0, 100.0, 100.0});
     image.effects.emplace_back(motion::model::GaussianBlurEffect{true, 10.0});
-    snapshot.still_frames.emplace(image.source_path, solidFrame(20, 180, 30));
+    snapshot.still_frames.emplace(image.id, solidFrame(20, 180, 30));
     snapshot.layers.push_back(std::move(image));
+
+    auto linked_image = imageLayer(3, 4);
+    linked_image.id = 6;
+    linked_image.name = "Linked image revision";
+    linked_image.transform.position_x = 0.85;
+    linked_image.transform.position_y = 0.85;
+    linked_image.transform.scale = 0.18;
+    snapshot.still_frames.emplace(linked_image.id, solidFrame(190, 20, 180));
+    snapshot.layers.push_back(std::move(linked_image));
 
     CompositionLayer shape{};
     shape.id = 2;
@@ -476,6 +485,12 @@ int main(int argc, char* argv[])
                     decoded[3]->rgba_pixels[background_offset + 1] > 210 &&
                     decoded[3]->rgba_pixels[background_offset + 2] > 60,
                 "Color Adjustment is included in exported still-layer pixels");
+        const auto linked_image_offset = static_cast<std::size_t>(41) * decoded[3]->stride +
+            static_cast<std::size_t>(54) * 4U;
+        require(decoded[3]->rgba_pixels[linked_image_offset] > 130 &&
+                    decoded[3]->rgba_pixels[linked_image_offset + 1] < 70 &&
+                    decoded[3]->rgba_pixels[linked_image_offset + 2] > 120,
+                "export resolves each same-source Image layer from its own linked frame");
         require(!has_non_black(*decoded.back()),
                 "hidden layers extend the export duration without rendering pixels");
 

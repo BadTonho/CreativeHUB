@@ -1,6 +1,7 @@
 #include "composition_viewer.h"
 #include "diagnostics/performance_metrics.h"
 
+#include <QContextMenuEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QColor>
@@ -63,6 +64,44 @@ creative_suite::media::RgbaFramePtr CompositionViewer::renderedFrame() const noe
     return rendered_frame_;
 }
 
+void CompositionViewer::setLayerContextMenuHandler(
+    std::function<void(const QPoint&)> handler)
+{
+    layer_context_menu_handler_ = std::move(handler);
+}
+
+QRectF CompositionViewer::canvasRect() const
+{
+    if (canvas_size_.width <= 0 || canvas_size_.height <= 0) return {};
+
+    const QRectF available = QRectF(rect()).adjusted(24.0, 42.0, -24.0, -24.0);
+    if (available.width() <= 0.0 || available.height() <= 0.0) return {};
+
+    const double scale = std::min(
+        available.width() / static_cast<double>(canvas_size_.width),
+        available.height() / static_cast<double>(canvas_size_.height));
+    const QSizeF canvas_size(
+        static_cast<double>(canvas_size_.width) * scale,
+        static_cast<double>(canvas_size_.height) * scale);
+    return QRectF(
+        available.center().x() - canvas_size.width() / 2.0,
+        available.center().y() - canvas_size.height() / 2.0,
+        canvas_size.width(),
+        canvas_size.height());
+}
+
+void CompositionViewer::contextMenuEvent(QContextMenuEvent* event)
+{
+    if (event == nullptr || !layer_context_menu_handler_ ||
+        !canvasRect().contains(event->pos())) {
+        if (event != nullptr) event->ignore();
+        return;
+    }
+
+    layer_context_menu_handler_(event->globalPos());
+    event->accept();
+}
+
 void CompositionViewer::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
@@ -78,28 +117,11 @@ void CompositionViewer::paintEvent(QPaintEvent* event)
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(rect(), kSurroundColor);
 
-    if (canvas_size_.width <= 0 || canvas_size_.height <= 0) {
+    const QRectF canvas_rect = canvasRect();
+    if (canvas_rect.isEmpty()) {
         record_paint();
         return;
     }
-
-    const QRectF available = QRectF(rect()).adjusted(24.0, 42.0, -24.0, -24.0);
-    if (available.width() <= 0.0 || available.height() <= 0.0) {
-        record_paint();
-        return;
-    }
-
-    const double scale = std::min(
-        available.width() / static_cast<double>(canvas_size_.width),
-        available.height() / static_cast<double>(canvas_size_.height));
-    const QSizeF canvas_size(
-        static_cast<double>(canvas_size_.width) * scale,
-        static_cast<double>(canvas_size_.height) * scale);
-    const QRectF canvas_rect(
-        available.center().x() - canvas_size.width() / 2.0,
-        available.center().y() - canvas_size.height() / 2.0,
-        canvas_size.width(),
-        canvas_size.height());
 
     painter.setPen(Qt::NoPen);
     painter.setBrush(kCanvasColor);

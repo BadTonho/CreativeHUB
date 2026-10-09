@@ -12,6 +12,7 @@
 #include <QString>
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
@@ -471,6 +472,7 @@ void validateDocument(const MotionProjectData& document,
 
     std::size_t keyframe_count = 0;
     std::size_t effect_count = 0;
+    std::unordered_set<std::filesystem::path> linked_image_paths;
     for (const auto& layer : document.layers) {
         keyframe_count += layer.keyframes.position_x.size() +
             layer.keyframes.position_y.size() + layer.keyframes.scale.size() +
@@ -505,6 +507,47 @@ void validateDocument(const MotionProjectData& document,
                 found->second != expected_kind) {
                 fail(MotionDocumentErrorCode::InvalidValue, path,
                      QStringLiteral("A media layer kind does not match its Media Pool item."));
+            }
+        }
+        if (layer.linked_image.has_value()) {
+            const auto& link = *layer.linked_image;
+            const std::array canonical_link_paths{
+                MediaLibrary::canonicalPath(link.document_path),
+                MediaLibrary::canonicalPath(link.published_output_path),
+                MediaLibrary::canonicalPath(link.source_snapshot_path)};
+            if (layer.kind != LayerKind::Image || link.document_path.empty() ||
+                link.published_output_path.empty() || link.source_snapshot_path.empty() ||
+                !link.document_path.is_absolute() ||
+                !link.published_output_path.is_absolute() ||
+                !link.source_snapshot_path.is_absolute() ||
+                pathToUtf8(link.document_path).size() >
+                    static_cast<std::size_t>(kMaximumStringBytes) ||
+                pathToUtf8(link.published_output_path).size() >
+                    static_cast<std::size_t>(kMaximumStringBytes) ||
+                pathToUtf8(link.source_snapshot_path).size() >
+                    static_cast<std::size_t>(kMaximumStringBytes) ||
+                MediaLibrary::canonicalPath(link.document_path) ==
+                    MediaLibrary::canonicalPath(link.published_output_path) ||
+                MediaLibrary::canonicalPath(link.document_path) ==
+                    MediaLibrary::canonicalPath(link.source_snapshot_path) ||
+                MediaLibrary::canonicalPath(link.published_output_path) ==
+                    MediaLibrary::canonicalPath(link.source_snapshot_path) ||
+                MediaLibrary::canonicalPath(link.document_path) ==
+                    MediaLibrary::canonicalPath(layer.source_path) ||
+                MediaLibrary::canonicalPath(link.published_output_path) ==
+                    MediaLibrary::canonicalPath(layer.source_path) ||
+                MediaLibrary::canonicalPath(link.source_snapshot_path) ==
+                    MediaLibrary::canonicalPath(layer.source_path) ||
+                std::any_of(canonical_link_paths.begin(), canonical_link_paths.end(),
+                    [&media_by_path](const auto& linked_path) {
+                        return media_by_path.contains(linked_path);
+                    }) ||
+                std::any_of(canonical_link_paths.begin(), canonical_link_paths.end(),
+                    [&linked_image_paths](const auto& linked_path) {
+                        return !linked_image_paths.insert(linked_path).second;
+                    })) {
+                fail(MotionDocumentErrorCode::InvalidValue, path,
+                     QStringLiteral("A linked Image Editor layer has invalid or shared paths or kind."));
             }
         }
     }
@@ -561,6 +604,16 @@ QJsonObject writeLayer(const CompositionLayer& layer,
     object.insert(QStringLiteral("name"), stringFromUtf8(layer.name));
     object.insert(QStringLiteral("source_path"), layer.source_path.empty()
         ? QString{} : storedPath(document_path, layer.source_path));
+    if (layer.linked_image.has_value()) {
+        QJsonObject linked_image;
+        linked_image.insert(QStringLiteral("document_path"),
+            storedPath(document_path, layer.linked_image->document_path));
+        linked_image.insert(QStringLiteral("published_output_path"),
+            storedPath(document_path, layer.linked_image->published_output_path));
+        linked_image.insert(QStringLiteral("source_snapshot_path"),
+            storedPath(document_path, layer.linked_image->source_snapshot_path));
+        object.insert(QStringLiteral("linked_image"), linked_image);
+    }
     object.insert(QStringLiteral("timeline_start_frame"), encodedInt64(layer.timeline_start_frame));
     object.insert(QStringLiteral("duration_frames"), encodedInt64(layer.duration_frames));
     object.insert(QStringLiteral("source_frame_count"), encodedInt64(layer.source_frame_count));
@@ -678,6 +731,21 @@ CompositionLayer parseLayer(const QJsonValue& value,
     }
     const auto source_path = requiredString(object, "source_path", document_path);
     if (!source_path.isEmpty()) layer.source_path = resolvedPath(document_path, source_path);
+    if (document_version >= 6 && object.contains(QStringLiteral("linked_image"))) {
+        if (!object.value(QStringLiteral("linked_image")).isObject()) {
+            fail(MotionDocumentErrorCode::InvalidValue, document_path,
+                 QStringLiteral("A linked Image Editor reference must be an object."));
+        }
+        const auto linked = object.value(QStringLiteral("linked_image")).toObject();
+        model::LinkedImageDocument reference;
+        reference.document_path = resolvedPath(
+            document_path, requiredString(linked, "document_path", document_path));
+        reference.published_output_path = resolvedPath(
+            document_path, requiredString(linked, "published_output_path", document_path));
+        reference.source_snapshot_path = resolvedPath(
+            document_path, requiredString(linked, "source_snapshot_path", document_path));
+        layer.linked_image = std::move(reference);
+    }
     layer.timeline_start_frame = requiredInt64(object, "timeline_start_frame", document_path);
     layer.duration_frames = requiredInt64(object, "duration_frames", document_path);
     layer.source_frame_count = requiredInt64(object, "source_frame_count", document_path);

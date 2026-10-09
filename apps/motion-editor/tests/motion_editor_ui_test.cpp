@@ -13,11 +13,14 @@
 #include "settings/autosave_preferences.h"
 #include "diagnostics/performance_metrics.h"
 
+#include <creative_suite/media/media_library.h>
+
 #include <QAction>
 #include <QCheckBox>
 #include <QApplication>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QContextMenuEvent>
 #include <QDialogButtonBox>
 #include <QDialog>
 #include <QDockWidget>
@@ -856,6 +859,7 @@ void testMotionDocumentSaveOpen()
     require(temporary.isValid(), "temporary document directory is available");
     const auto root = pathFromQString(temporary.path());
     const auto saved_as_path = root / "first.motion";
+    const auto linked_copy_path = root / "linked copy.motion";
     const auto replacement_save_path = root / "replacement.motion";
     const auto load_path = root / "loaded.motion";
     const auto missing_media_path = root / "missing-image.png";
@@ -864,8 +868,56 @@ void testMotionDocumentSaveOpen()
 
     motion::model::MotionProjectData second_document;
     second_document.composition = {{320, 200}, {24, 1}};
-    motion::model::CompositionDocument opened_document(320, 200, {24, 1});
-    (void)opened_document.addLayer(motion::model::LayerKind::Shape, "Open history fixture");
+    motion::model::CompositionLayer history_shape;
+    history_shape.id = 1;
+    history_shape.kind = motion::model::LayerKind::Shape;
+    history_shape.name = "Open history fixture";
+    history_shape.timeline_start_frame = 120;
+    history_shape.duration_frames = 120;
+    history_shape.content = motion::model::defaultShapeLayerContent({320, 200});
+    motion::model::CompositionDocument opened_document(
+        320, 200, {24, 1}, {history_shape});
+    const auto linked_source_path = root / "linked source.png";
+    QImage linked_source_image(40, 24, QImage::Format_ARGB32);
+    linked_source_image.fill(QColor(90, 35, 170, 255));
+    require(linked_source_image.save(pathToQString(linked_source_path)),
+            "the linked-image source fixture is written");
+    const auto linked_asset_directory = root / "linked-assets" / "edition";
+    std::filesystem::create_directories(linked_asset_directory);
+    const motion::model::LinkedImageDocument original_link{
+        creative_suite::media::MediaLibrary::canonicalPath(
+            linked_asset_directory / "composition.cimg"),
+        creative_suite::media::MediaLibrary::canonicalPath(
+            linked_asset_directory / "published.png"),
+        creative_suite::media::MediaLibrary::canonicalPath(
+            linked_asset_directory / "source.png")};
+    require(linked_source_image.save(pathToQString(original_link.source_snapshot_path)) &&
+                linked_source_image.save(pathToQString(original_link.published_output_path)),
+            "the linked-image snapshot and published PNG fixtures are written");
+    {
+        QFile corrupt_publication(pathToQString(original_link.published_output_path));
+        require(corrupt_publication.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+                    corrupt_publication.write("invalid PNG") == 11,
+                "the linked-output recovery fixture is corrupt");
+    }
+    {
+        QFile cimg(pathToQString(original_link.document_path));
+        require(cimg.open(QIODevice::WriteOnly) &&
+                    cimg.write("linked Image Editor document") == 28,
+                "the editable Image Editor sidecar fixture is written");
+    }
+    creative_suite::media::VideoMetadata linked_metadata;
+    linked_metadata.kind = creative_suite::media::MediaKind::Image;
+    linked_metadata.source_path = linked_source_path;
+    linked_metadata.display_name = "Linked source";
+    motion::model::LayerId linked_layer_id = 0;
+    require(opened_document.addMediaLayer(linked_metadata, 0, &linked_layer_id) ==
+                motion::model::AddMediaLayerResult::Added &&
+                opened_document.setLayerLinkedImage(linked_layer_id, original_link),
+            "the saved fixture has an image layer with a linked sidecar");
+    second_document.media.push_back({
+        creative_suite::media::MediaLibrary::canonicalPath(linked_source_path),
+        creative_suite::media::MediaKind::Image, "Linked source", "Unsorted"});
     second_document.layers = opened_document.layers();
     motion::persistence::MotionDocumentStore::save(load_path, second_document);
     motion::model::MotionProjectData offline_document;
@@ -904,10 +956,44 @@ void testMotionDocumentSaveOpen()
     QCoreApplication::processEvents();
     QTimer::singleShot(0, [&] { chooseDocumentFile(load_path, QDialogButtonBox::Open); });
     action(window, "motion-open-composition-action")->trigger();
-    require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{320, 200} &&
+    require(waitFor([&] {
+        return window.compositionDocument() != nullptr &&
+            window.compositionDocument()->canvasSize() == motion::model::CanvasSize{320, 200};
+    }) &&
                 window.compositionDocument()->frameRate() == motion::model::FrameRate{24, 1} &&
                 !window.isWindowModified(),
             "Open applies a staged document and starts with a clean state");
+    auto* linked_viewer = static_cast<motion::ui::CompositionViewer*>(
+        findWidget<QWidget>(&window, "motion-composition-viewer"));
+    require(waitFor([&] {
+        const auto frame = linked_viewer->renderedFrame();
+        if (frame == nullptr || frame->width != 320 || frame->height != 200) return false;
+        const auto center = static_cast<std::size_t>(100 * frame->stride + 160 * 4);
+        return frame->rgba_pixels[center] == 90 && frame->rgba_pixels[center + 1] == 35 &&
+               frame->rgba_pixels[center + 2] == 170;
+    }), "Motion recovers a corrupt linked PNG from the saved source snapshot on Open");
+    const auto loaded_link = window.compositionDocument()->layers().back().linked_image;
+    require(loaded_link.has_value() &&
+                loaded_link->document_path == original_link.document_path,
+            "opening a Motion document restores its linked Image Editor paths");
+    QTimer::singleShot(0, [&] { chooseDocumentFile(linked_copy_path, QDialogButtonBox::Save); });
+    action(window, "motion-save-composition-as-action")->trigger();
+    const auto copied_link = window.compositionDocument()->layers().back().linked_image;
+    require(copied_link.has_value() && copied_link->document_path != original_link.document_path &&
+                copied_link->published_output_path != original_link.published_output_path &&
+                copied_link->source_snapshot_path != original_link.source_snapshot_path &&
+                std::filesystem::is_regular_file(copied_link->document_path) &&
+                std::filesystem::is_regular_file(copied_link->published_output_path) &&
+                std::filesystem::is_regular_file(copied_link->source_snapshot_path) &&
+                std::filesystem::is_regular_file(original_link.document_path) &&
+                std::filesystem::is_regular_file(original_link.published_output_path),
+            "Save As clones all linked sidecars while preserving the original paths");
+    QFile original_publication(pathToQString(original_link.published_output_path));
+    QFile copied_publication(pathToQString(copied_link->published_output_path));
+    require(original_publication.open(QIODevice::ReadOnly) &&
+                copied_publication.open(QIODevice::ReadOnly) &&
+                original_publication.readAll() == copied_publication.readAll(),
+            "Save As copies the current PNG bytes without changing the original publication");
     auto* open_graph_button = findWidget<QPushButton>(
         &window, "motion-timeline-graph-editor-toggle");
     require(!graph_dock->isHidden() && open_graph_button->isChecked(),
@@ -927,9 +1013,22 @@ void testMotionDocumentSaveOpen()
                     static_cast<int>(motion::ui::TimelineDisplayMode::Time),
             "Open resets navigation-only UI state");
     auto* rows = findWidget<QWidget>(&window, "motion-timeline-layer-rows");
+    const auto visibility_before = window.compositionDocument()->layers();
     sendMouseClick(rows, QPoint(15, 15));
     require(undo_action->isEnabled() && window.isWindowModified(),
             "a composition visibility edit becomes undoable and dirty");
+    const auto hidden_layer = std::find_if(
+        window.compositionDocument()->layers().begin(),
+        window.compositionDocument()->layers().end(),
+        [&visibility_before](const auto& layer) {
+            const auto before = std::find_if(
+                visibility_before.begin(), visibility_before.end(),
+                [&layer](const auto& candidate) { return candidate.id == layer.id; });
+            return before != visibility_before.end() && before->visible && !layer.visible;
+        });
+    require(hidden_layer != window.compositionDocument()->layers().end(),
+            "the clicked timeline row hides one specific layer");
+    const auto visibility_layer_id = hidden_layer->id;
 
     QTimer::singleShot(0, [] {
         auto* file_dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
@@ -937,7 +1036,12 @@ void testMotionDocumentSaveOpen()
         file_dialog->reject();
     });
     action(window, "motion-open-composition-action")->trigger();
-    require(window.compositionDocument()->layers().front().visible == false &&
+    const auto hidden_after_cancel = std::find_if(
+        window.compositionDocument()->layers().begin(),
+        window.compositionDocument()->layers().end(),
+        [visibility_layer_id](const auto& layer) { return layer.id == visibility_layer_id; });
+    require(hidden_after_cancel != window.compositionDocument()->layers().end() &&
+                !hidden_after_cancel->visible &&
                 window.isWindowModified() && undo_action->isEnabled(),
             "cancelling Open preserves both the edited composition and its history");
 
@@ -948,7 +1052,12 @@ void testMotionDocumentSaveOpen()
                 window.isWindowModified() && undo_action->isEnabled(),
             "failed Open preserves the current document and its undo history");
     undo_action->trigger();
-    require(window.compositionDocument()->layers().front().visible &&
+    const auto restored_visibility_layer = std::find_if(
+        window.compositionDocument()->layers().begin(),
+        window.compositionDocument()->layers().end(),
+        [visibility_layer_id](const auto& layer) { return layer.id == visibility_layer_id; });
+    require(restored_visibility_layer != window.compositionDocument()->layers().end() &&
+                restored_visibility_layer->visible &&
                 !window.isWindowModified() && redo_action->isEnabled(),
             "Undo restores the saved state and clears the dirty marker");
 
@@ -2128,6 +2237,39 @@ int main(int argc, char* argv[])
                 still_preview->rgba_pixels[still_center + 1] == 140 &&
                 still_preview->rgba_pixels[still_center + 2] == 210,
             "the image preview preserves imported RGBA pixels through composition");
+    const auto linked_directory = pathFromQString(temporary.path()) /
+        pathFromQString(QStringLiteral("linked assets edição")) / "poster-layer";
+    std::filesystem::create_directories(linked_directory);
+    const motion::model::LinkedImageDocument linked_image{
+        creative_suite::media::MediaLibrary::canonicalPath(linked_directory / "composition.cimg"),
+        creative_suite::media::MediaLibrary::canonicalPath(linked_directory / "published.png"),
+        creative_suite::media::MediaLibrary::canonicalPath(linked_directory / "source.png")};
+    std::filesystem::copy_file(image_path, linked_image.source_snapshot_path);
+    QImage published_revision(48, 32, QImage::Format_ARGB32);
+    published_revision.fill(QColor(220, 25, 40, 255));
+    require(published_revision.save(pathToQString(linked_image.published_output_path), "PNG"),
+            "the first linked PNG revision is written");
+    auto* mutable_document = const_cast<motion::model::CompositionDocument*>(
+        window.compositionDocument());
+    require(mutable_document->setLayerLinkedImage(inserted_image_id, linked_image),
+            "the existing still layer accepts a separate linked Image Editor sidecar");
+    require(waitFor([&] {
+        const auto frame = viewer->renderedFrame();
+        if (frame == nullptr || frame->width != 640 || frame->height != 360) return false;
+        const auto center = static_cast<std::size_t>(180 * frame->stride + 320 * 4);
+        return frame->rgba_pixels[center] > 200 && frame->rgba_pixels[center + 1] < 50 &&
+               frame->rgba_pixels[center + 2] < 60;
+    }), "the published PNG asynchronously replaces only the linked layer preview");
+    published_revision.fill(QColor(15, 220, 70, 255));
+    require(published_revision.save(pathToQString(linked_image.published_output_path), "PNG"),
+            "a later linked PNG revision is written");
+    require(waitFor([&] {
+        const auto frame = viewer->renderedFrame();
+        if (frame == nullptr || frame->width != 640 || frame->height != 360) return false;
+        const auto center = static_cast<std::size_t>(180 * frame->stride + 320 * 4);
+        return frame->rgba_pixels[center] < 40 && frame->rgba_pixels[center + 1] > 200 &&
+               frame->rgba_pixels[center + 2] > 50;
+    }), "a later saved publication invalidates the preview and replaces its cached frame");
     sendMouseDrag(layer_rows, QPoint(500, 15), QPoint(600, 15));
     require(window.compositionDocument()->layers().front().timeline_start_frame == 0 &&
                 window.compositionDocument()->layers().front().duration_frames == 120,
@@ -2136,6 +2278,38 @@ int main(int argc, char* argv[])
     sendMouseClick(layer_rows, QPoint(60, 15));
     require(timeline->currentFrame() == frame_before_selecting,
             "selecting a timeline layer leaves the playhead unchanged");
+    auto* edit_image_action = action(window, "motion-edit-image-in-image-editor-action");
+    require(edit_image_action->isEnabled(),
+            "the Image Editor action enables for a selected still-image layer");
+    QTimer::singleShot(0, [&] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        require(menu != nullptr && menu->objectName() ==
+                    QStringLiteral("motion-layer-context-menu"),
+                "right-click opens the timeline layer context menu");
+        auto* edit = menu->findChild<QAction*>(QStringLiteral("motion-context-edit-image-action"));
+        require(edit != nullptr && edit->isEnabled(),
+                "the layer context menu offers Image Editor for an image layer");
+        menu->close();
+    });
+    QContextMenuEvent context_event(QContextMenuEvent::Mouse, QPoint(60, 15),
+        layer_rows->mapToGlobal(QPoint(60, 15)));
+    QApplication::sendEvent(layer_rows, &context_event);
+    const QPoint viewer_canvas_point = viewer->rect().center() + QPoint(0, 9);
+    QTimer::singleShot(0, [&] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        require(menu != nullptr && menu->objectName() ==
+                    QStringLiteral("motion-layer-context-menu"),
+                "right-clicking the composition canvas opens the selected image layer menu");
+        auto* edit = menu->findChild<QAction*>(QStringLiteral("motion-context-edit-image-action"));
+        require(edit != nullptr && edit->isEnabled(),
+                "the composition canvas menu offers Image Editor for the selected image layer");
+        menu->close();
+    });
+    QContextMenuEvent viewer_context_event(
+        QContextMenuEvent::Mouse,
+        viewer_canvas_point,
+        viewer->mapToGlobal(viewer_canvas_point));
+    QApplication::sendEvent(viewer, &viewer_context_event);
     auto* position_x = findWidget<QDoubleSpinBox>(&window, "motion-transform-position-x");
     position_x->setValue(0.25);
     position_x->setValue(0.75);
@@ -2202,16 +2376,16 @@ int main(int argc, char* argv[])
         const auto center = static_cast<std::size_t>(
             180 * frame->stride + 320 * 4);
         return frame->rgba_pixels.size() >= center + 3 &&
-            frame->rgba_pixels[center] == 20 &&
-            frame->rgba_pixels[center + 1] == 140 &&
-            frame->rgba_pixels[center + 2] == 210;
+            frame->rgba_pixels[center] == 15 &&
+            frame->rgba_pixels[center + 1] == 220 &&
+            frame->rgba_pixels[center + 2] == 70;
     };
     require(waitFor([&] {
         return is_final_still_frame(viewer->renderedFrame());
-    }), "rapid timeline seeks settle on the newest composition preview");
+    }), "rapid timeline seeks settle on the newest linked-image composition preview");
     const auto settled_preview = viewer->renderedFrame();
     require(is_final_still_frame(settled_preview),
-            "a stale video seek cannot replace the final still-image seek result");
+            "a stale video seek cannot replace the final linked-image seek result");
     const auto frame_before_layer_operations = timeline->currentFrame();
     const auto video_layer_id = window.compositionDocument()->layers().back().id;
     sendMouseDrag(layer_rows, QPoint(60, 15), QPoint(60, 49));

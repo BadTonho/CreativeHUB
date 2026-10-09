@@ -55,6 +55,17 @@ void MainWindow::createWorkspace()
     media_pool_->setContentChangedHandler([this] { updateDocumentState(); });
     viewer_ = new CompositionViewer(this);
     viewer_->setObjectName(QStringLiteral("motion-composition-viewer"));
+    viewer_->setLayerContextMenuHandler([this](const QPoint& global_position) {
+        if (!document_ || selected_layer_id_ == 0) return;
+        const auto selected = std::find_if(
+            document_->layers().begin(), document_->layers().end(), [this](const auto& layer) {
+                return layer.id == selected_layer_id_;
+            });
+        if (selected != document_->layers().end() &&
+            selected->kind == model::LayerKind::Image) {
+            showLayerContextMenu(selected->id, global_position);
+        }
+    });
     inspector_ = new InspectorWidget(this);
     connect(inspector_, &InspectorWidget::layerContentEdited,
             this, &MainWindow::editSelectedLayerContent);
@@ -108,6 +119,10 @@ void MainWindow::createWorkspace()
         handleMediaDrop(path, frame, before);
     });
     timeline_->setLayerSelectedHandler([this](model::LayerId id) { selectLayer(id); });
+    timeline_->setLayerContextMenuHandler(
+        [this](model::LayerId id, const QPoint& global_position) {
+            showLayerContextMenu(id, global_position);
+        });
     timeline_->setKeyframeSelectedHandler(
         [this](model::LayerId id, TransformProperty property, std::int64_t local_frame) {
             if (!document_ || timeline_ == nullptr) return;

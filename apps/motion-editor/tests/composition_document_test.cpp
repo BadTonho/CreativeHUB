@@ -83,6 +83,28 @@ int main()
     require(media_document.layers().back().source_path ==
                 creative_suite::media::MediaLibrary::canonicalPath(image_metadata.source_path),
             "media layers retain the canonical source path");
+    const LinkedImageDocument linked_image{
+        std::filesystem::temp_directory_path() / "poster.cimg",
+        std::filesystem::temp_directory_path() / "poster-published.png",
+        std::filesystem::temp_directory_path() / "poster-source.png"};
+    require(media_document.setLayerLinkedImage(image_layer, linked_image) &&
+                media_document.layers().back().linked_image == linked_image &&
+                media_document.setLayerLinkedImage(image_layer, std::nullopt) &&
+                !media_document.layers().back().linked_image.has_value(),
+            "an Image layer accepts and clears its linked Image Editor document");
+    LayerId repeated_image_layer = 0;
+    require(media_document.addMediaLayer(image_metadata, 240, &repeated_image_layer) ==
+                AddMediaLayerResult::Added && repeated_image_layer != image_layer,
+            "one source image can be used by separate Motion layer instances");
+    require(media_document.setLayerLinkedImage(image_layer, linked_image) &&
+                !media_document.setLayerLinkedImage(repeated_image_layer, linked_image),
+            "separate layers using one source cannot share linked editor or publication files");
+    const LinkedImageDocument repeated_link{
+        std::filesystem::temp_directory_path() / "poster-copy.cimg",
+        std::filesystem::temp_directory_path() / "poster-copy-published.png",
+        std::filesystem::temp_directory_path() / "poster-copy-source.png"};
+    require(media_document.setLayerLinkedImage(repeated_image_layer, repeated_link),
+            "a repeated source image accepts its own isolated linked files");
 
     CompositionDocument integer_rate_document(640, 360, FrameRate{24, 1});
     LayerId integer_image_layer = 0;
@@ -171,6 +193,8 @@ int main()
     require(media_document.addMediaLayer(video_metadata, 240, &video_layer) ==
                 AddMediaLayerResult::Added,
             "a video with source timing metadata becomes a timed layer");
+    require(!media_document.setLayerLinkedImage(video_layer, linked_image),
+            "video layers reject linked Image Editor documents");
     require(video_layer != image_layer && media_document.layers().back().source_frame_count == 90 &&
                 media_document.layers().back().source_duration_frames == 90 &&
                 media_document.layers().back().duration_frames == 72 &&
@@ -190,7 +214,7 @@ int main()
     LayerId repeated_video_layer = 0;
     require(media_document.addMediaLayer(video_metadata, 0, &repeated_video_layer) ==
                 AddMediaLayerResult::Added && repeated_video_layer != video_layer &&
-                media_document.layers().size() == 3,
+                media_document.layers().size() == 4,
             "each occurrence of one media path receives a distinct layer ID");
 
     auto invalid_rate_video = video_metadata;

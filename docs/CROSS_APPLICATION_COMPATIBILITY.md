@@ -197,6 +197,34 @@ previews are outside this first integration step.
 - Unsaved changes are not transmitted. Only a successful Save followed by a
   successful export updates the linked render.
 
+### Motion Studio image-layer workflow
+
+- Select or right-click an Image layer in Motion Studio and choose **Edit Image
+  in Image Editor**. Motion Studio opens or reopens the linked `.cimg` with the
+  layer's saved source snapshot. The Image Editor's existing linked launch
+  arguments and per-document lock protect the editable document from stale
+  concurrent saves.
+- Each Motion composition and layer instance owns a sidecar under
+  `<composition>.motion-studio/image-editor/<layer-id>-<uuid>/` containing
+  `composition.cimg`, `published.png`, and `source.png`. The original media and
+  other Motion layers that use the same source remain unchanged.
+- Motion Studio `.motion` v6 stores the three paths on that Image layer. Versions
+  1 through 5 load without Image Editor links. Preview and export resolve the
+  published PNG by layer ID, preserving the layer's Motion transforms,
+  keyframes, effects, timing, and ordering.
+- Motion Studio polls the published PNG metadata and decodes changes
+  asynchronously. A successful saved publication refreshes only its layer and
+  invalidates the preview. Unsaved Image Editor changes are not streamed.
+  Decode failures retain the last valid frame; if no valid published frame is
+  available, Motion Studio falls back to `source.png`, then the original source
+  when available, and reports a missing link when neither can be read.
+- Motion Studio **Save As** copies the sidecar files to new per-layer locations
+  and updates only the copied composition's references. Image Editor changes
+  made through either composition therefore publish to separate PNG files.
+- Manual producer/consumer validation remains pending. The Image Editor
+  standalone acceptance gate remains a prerequisite for accepting this linked
+  compatibility workflow.
+
 These workflows share a handoff contract, but image documents and motion
 compositions have different semantics and should keep distinct native formats
 and adapters.
@@ -211,10 +239,11 @@ between running applications is outside this first integration step.
 
 The Motion handoff and `.motion`/`.csp` references define the first contract for
 document identity, source range, composition timing, output profile, cache
-refresh, and stale-writer rejection. The contract remains provisional while
-manual checks validate portability, missing-media recovery, and conflict
-handling. Future fields must be versioned and must preserve the Image Editor's
-separate document and publication semantics.
+refresh, and stale-writer rejection. The `.motion` v6 Image Editor reference
+adds per-layer image-document and publication paths. The contract remains
+provisional while manual checks validate portability, missing-media recovery,
+and conflict handling. Future fields must be versioned and must preserve the
+Image Editor's separate document and publication semantics.
 
 ## Costs, Risks, and Alternatives
 

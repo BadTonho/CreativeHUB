@@ -166,6 +166,13 @@ motion::model::MotionProjectData populatedProject(const std::filesystem::path& r
             "repeated effect types retain their order on shape layers");
 
     project.layers = document.layers();
+    const auto image_layer = std::find_if(project.layers.begin(), project.layers.end(),
+        [](const auto& layer) { return layer.kind == LayerKind::Image; });
+    require(image_layer != project.layers.end(), "the project contains an image layer");
+    image_layer->linked_image = LinkedImageDocument{
+        MediaLibrary::canonicalPath(root / "linked assets" / u8"edição.cimg"),
+        MediaLibrary::canonicalPath(root / "linked assets" / u8"publicado final.png"),
+        MediaLibrary::canonicalPath(root / "linked assets" / u8"origem.png")};
     return project;
 }
 
@@ -215,8 +222,20 @@ int main(int argc, char** argv)
                 round_trip_video->maximum_timeline_duration_frames == 53,
             "video source-in, selected duration, and available source tail round-trip");
     const auto json = readBytes(document_path);
-    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 5,
-            "documents with video source-in are written using schema version 5");
+    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 6,
+            "documents with linked images are written using schema version 6");
+    const auto round_trip_image = std::find_if(
+        round_trip.layers.begin(), round_trip.layers.end(), [](const auto& layer) {
+            return layer.kind == motion::model::LayerKind::Image;
+        });
+    const auto populated_image = std::find_if(
+        populated.layers.begin(), populated.layers.end(), [](const auto& layer) {
+            return layer.kind == motion::model::LayerKind::Image;
+        });
+    require(round_trip_image != round_trip.layers.end() &&
+                populated_image != populated.layers.end() &&
+                round_trip_image->linked_image == populated_image->linked_image,
+            "per-layer Image Editor paths round-trip with Unicode and spaces");
     require(json.contains("assets/still-é.png") || json.contains("assets/still-Ã©.png"),
             "a source beneath the document directory is encoded as a relative path");
     require(json.contains("outside-影片.mkv") || json.contains("outside-\xE5\xBD\xB1\xE7\x89\x87.mkv"),
@@ -248,6 +267,41 @@ int main(int argc, char** argv)
         }, message) == motion::persistence::MotionDocumentErrorCode::InvalidValue, message);
     };
 
+    auto aliased_image_link = valid_json;
+    auto aliased_layers = aliased_image_link.value(QStringLiteral("layers")).toArray();
+    for (qsizetype index = 0; index < aliased_layers.size(); ++index) {
+        auto layer = aliased_layers[index].toObject();
+        if (layer.value(QStringLiteral("kind")).toString() == QLatin1String("image")) {
+            auto link = layer.value(QStringLiteral("linked_image")).toObject();
+            link.insert(QStringLiteral("published_output_path"),
+                        layer.value(QStringLiteral("source_path")));
+            layer.insert(QStringLiteral("linked_image"), link);
+            aliased_layers[index] = layer;
+            break;
+        }
+    }
+    aliased_image_link.insert(QStringLiteral("layers"), aliased_layers);
+    requireInvalidLoad(aliased_image_link,
+        "a linked PNG cannot alias the original image source");
+
+    auto shared_image_link = valid_json;
+    auto shared_layers = shared_image_link.value(QStringLiteral("layers")).toArray();
+    QJsonObject linked_image_layer;
+    for (const auto& value : shared_layers) {
+        const auto layer = value.toObject();
+        if (layer.value(QStringLiteral("kind")).toString() == QLatin1String("image")) {
+            linked_image_layer = layer;
+            break;
+        }
+    }
+    require(!linked_image_layer.isEmpty(), "the fixture contains a linked image layer");
+    linked_image_layer.insert(QStringLiteral("id"), QStringLiteral("987654321"));
+    linked_image_layer.insert(QStringLiteral("name"), QStringLiteral("Second Poster"));
+    shared_layers.append(linked_image_layer);
+    shared_image_link.insert(QStringLiteral("layers"), shared_layers);
+    requireInvalidLoad(shared_image_link,
+        "two Motion image layers cannot share one linked Image Editor sidecar");
+
     auto legacy_v1 = valid_json;
     legacy_v1.insert(QStringLiteral("version"), 1);
     auto legacy_layers = legacy_v1.value(QStringLiteral("layers")).toArray();
@@ -278,9 +332,12 @@ int main(int argc, char** argv)
                     motion::model::defaultShapeLayerContent({1920, 1080}),
             "v1 text and shape records migrate to documented default content");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v1);
+    const auto saved_legacy_v1 = motion::persistence::MotionDocumentStore::load(document_path);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 5,
-            "saving a loaded v1 project upgrades it to v5");
+                .value(QStringLiteral("version")).toInt() == 6 &&
+                std::none_of(saved_legacy_v1.layers.begin(), saved_legacy_v1.layers.end(),
+                    [](const auto& layer) { return layer.linked_image.has_value(); }),
+            "saving v1 upgrades to v6 while legacy links remain absent");
 
     auto legacy_v2 = valid_json;
     legacy_v2.insert(QStringLiteral("version"), 2);
@@ -318,8 +375,8 @@ int main(int argc, char** argv)
             "version 2 keys migrate with Linear interpolation");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v2);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 5,
-            "saving a loaded v2 project upgrades it to v5");
+                .value(QStringLiteral("version")).toInt() == 6,
+            "saving a loaded v2 project upgrades it to v6");
 
     auto legacy_v3 = valid_json;
     legacy_v3.insert(QStringLiteral("version"), 3);
@@ -343,8 +400,8 @@ int main(int argc, char** argv)
             "version 3 documents retain curves and migrate with empty effect stacks");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v3);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 5,
-            "saving a loaded v3 project upgrades it to v5");
+                .value(QStringLiteral("version")).toInt() == 6,
+            "saving a loaded v3 project upgrades it to v6");
 
     auto legacy_v4 = valid_json;
     legacy_v4.insert(QStringLiteral("version"), 4);
@@ -367,8 +424,20 @@ int main(int argc, char** argv)
             "version 4 video layers migrate with a zero source-in frame");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v4);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 5,
-            "saving a loaded v4 project upgrades it to v5");
+                .value(QStringLiteral("version")).toInt() == 6,
+            "saving a loaded v4 project upgrades it to v6");
+
+    auto legacy_v5 = valid_json;
+    legacy_v5.insert(QStringLiteral("version"), 5);
+    writeBytes(document_path, QJsonDocument(legacy_v5).toJson());
+    const auto migrated_v5 = motion::persistence::MotionDocumentStore::load(document_path);
+    require(std::none_of(migrated_v5.layers.begin(), migrated_v5.layers.end(),
+                [](const auto& layer) { return layer.linked_image.has_value(); }),
+            "v5 documents ignore v6-only linked image metadata");
+    motion::persistence::MotionDocumentStore::save(document_path, migrated_v5);
+    require(QJsonDocument::fromJson(readBytes(document_path)).object()
+                .value(QStringLiteral("version")).toInt() == 6,
+            "saving a loaded v5 project upgrades it to v6");
 
     creative_suite::motion_handoff::Request request;
     request.origin_kind = QStringLiteral("timeline_clip");

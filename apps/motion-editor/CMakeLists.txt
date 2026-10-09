@@ -49,6 +49,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/main_window/main_window_preview.cpp
     src/ui/main_window/main_window_support.cpp
     src/ui/main_window/main_window_support.h
+    src/ui/main_window/main_window_image_links.cpp
     src/ui/dialogs/autosave_recovery_dialog.cpp
     src/ui/dialogs/autosave_recovery_dialog.h
     src/ui/dialogs/audio_keyframe_dialog.cpp

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -119,6 +120,14 @@ struct ColorAdjustmentEffect {
 
 using LayerEffect = std::variant<GaussianBlurEffect, ColorAdjustmentEffect>;
 
+struct LinkedImageDocument {
+    std::filesystem::path document_path;
+    std::filesystem::path published_output_path;
+    std::filesystem::path source_snapshot_path;
+
+    friend bool operator==(const LinkedImageDocument&, const LinkedImageDocument&) = default;
+};
+
 [[nodiscard]] bool validLayerEffect(const LayerEffect& effect) noexcept;
 [[nodiscard]] bool validLayerEffects(const std::vector<LayerEffect>& effects) noexcept;
 
@@ -132,6 +141,7 @@ struct CompositionLayer {
     LayerKind kind;
     std::string name;
     std::filesystem::path source_path;
+    std::optional<LinkedImageDocument> linked_image;
     std::int64_t timeline_start_frame = 0;
     std::int64_t duration_frames = 0;
     std::int64_t source_frame_count = 0;
@@ -202,6 +212,9 @@ public:
         std::int64_t duration_frames,
         std::int64_t maximum_timeline_duration_frames) noexcept;
     [[nodiscard]] bool setLayerName(LayerId id, std::string name);
+    [[nodiscard]] bool setLayerLinkedImage(
+        LayerId id,
+        std::optional<LinkedImageDocument> linked_image);
     [[nodiscard]] bool setLayerVisible(LayerId id, bool visible) noexcept;
     [[nodiscard]] bool setLayerTransform(
         LayerId id,

@@ -9,14 +9,17 @@
 
 #include <creative_suite/shortcuts/shortcut_manager.h>
 #include <creative_suite/system_monitor/performance_usage.h>
+#include <creative_suite/media/video_frame.h>
 
 #include <QMainWindow>
+#include <QPoint>
 
 #include <atomic>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <memory>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -123,6 +126,13 @@ private:
     void updateMediaDetails();
     void refreshTimeline();
     void selectLayer(model::LayerId id);
+    void editSelectedLayerImage();
+    void showLayerContextMenu(model::LayerId id, const QPoint& global_position);
+    void initializeLinkedImageFrames();
+    void refreshLinkedImagePublications();
+    void decodeLinkedImageFrame(model::LayerId id,
+                                const std::filesystem::path& path,
+                                bool published_output);
     void syncTransformInspector();
     void refreshCurveEditor();
     void selectCurveSegment(
@@ -170,6 +180,7 @@ private:
     QAction* new_text_layer_action_ = nullptr;
     QAction* new_rectangle_layer_action_ = nullptr;
     QAction* new_ellipse_layer_action_ = nullptr;
+    QAction* edit_image_in_image_editor_action_ = nullptr;
     QAction* settings_action_ = nullptr;
     QAction* general_settings_action_ = nullptr;
     QAction* autosave_settings_action_ = nullptr;
@@ -213,6 +224,7 @@ private:
     persistence::MotionRecoveryStore recovery_store_;
     QTimer* autosave_timer_ = nullptr;
     QTimer* performance_metrics_timer_ = nullptr;
+    QTimer* linked_image_refresh_timer_ = nullptr;
     system_monitor::PerformanceSampler performance_sampler_;
     CompositionHistory composition_history_;
     std::optional<std::pair<model::LayerId, std::size_t>> active_transform_edit_;
@@ -233,6 +245,11 @@ private:
     std::unique_ptr<AudioKeyframeGenerationWorker> audio_keyframe_worker_;
     std::shared_ptr<std::atomic_bool> open_cancel_requested_;
     std::uint64_t open_generation_ = 0;
+    std::uint64_t linked_image_generation_ = 0;
+    std::map<model::LayerId, creative_suite::media::RgbaFramePtr> linked_image_frames_;
+    std::map<model::LayerId, std::pair<std::int64_t, std::int64_t>>
+        linked_image_signatures_;
+    std::map<model::LayerId, std::uint64_t> linked_image_decode_requests_;
     creative_suite::shortcuts::ShortcutManager shortcut_manager_{
         QStringLiteral("MotionStudio/KeyboardShortcuts")};
     model::LayerId selected_layer_id_ = 0;

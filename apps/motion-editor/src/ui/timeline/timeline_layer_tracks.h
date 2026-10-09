@@ -4,6 +4,7 @@
 
 #include <QString>
 #include <QWidget>
+#include <QPoint>
 
 #include <cstddef>
 #include <cstdint>
@@ -47,6 +48,8 @@ public:
     void setMediaDropHandler(
         std::function<void(const std::filesystem::path&, std::int64_t, model::LayerId)> handler);
     void setLayerSelectedHandler(std::function<void(model::LayerId)> handler);
+    void setLayerContextMenuHandler(
+        std::function<void(model::LayerId, const QPoint&)> handler);
     void setLayerMoveHandler(std::function<void(model::LayerId, std::int64_t)> handler);
     void setLayerResizeHandler(std::function<void(model::LayerId, std::int64_t)> handler);
     void setLayerReorderHandler(std::function<void(model::LayerId, std::size_t)> handler);

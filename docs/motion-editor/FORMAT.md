@@ -1,7 +1,7 @@
 # Motion Studio Native Document Format
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 5 schema may change before a stable release. This format is separate
+version 6 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 ## File identity and versioning
@@ -11,16 +11,17 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `5`. |
+| `version` | integer | Current schema version is `6`. |
 | `revision` | decimal string | Monotonic saved revision used to reject stale linked writes. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1 through 5. Version 1 text and shape layers
+Motion Studio reads versions 1 through 6. Version 1 text and shape layers
 had no typed content, so they open with the current default text or rectangle content
 for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
-older document writes it as version 5. Motion Studio rejects malformed data, an
+older document writes it as version 6. Versions 1 through 5 load without linked
+Image Editor metadata. Motion Studio rejects malformed data, an
 unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
@@ -48,6 +49,17 @@ Each `layers` entry stores:
   `maximum_timeline_duration_frames`;
 - the source frame rate, visibility, base 2D transform, and stored transform
   keyframes for position X/Y, scale, rotation, and opacity.
+
+Version 6 adds an optional `linked_image` object to Image layers. It contains
+`document_path`, `published_output_path`, and `source_snapshot_path`, each a
+path to the per-layer `.cimg`, published PNG, and recovery copy. Paths within the
+document directory are stored relative to the `.motion` file; other paths are
+absolute. The three paths must be distinct and the reference is valid only on
+an Image layer. Linked paths cannot alias any Media Pool source or another
+layer's sidecar. Preview and export resolve the published PNG for that layer
+ID, so separate layer instances can use independent Image Editor documents
+even when they share the same original `source_path`. Older documents load
+without this reference.
 
 Version 5 adds the decimal string `source_start_frame` to video layers. It is
 the first source frame used by the layer. Versions 1 through 4 load this value
@@ -119,7 +131,9 @@ dimensions, and the exact supported frame rate before saving or loading.
 Version 3 and later validate interpolation modes and Bezier controls. Version
 4 validates effect types, stack sizes, enabled flags, and parameter ranges.
 Version 5 validates nonnegative video source-in frames, source-range bounds,
-and the decimal saved revision used by linked-writer checks.
+and the decimal saved revision used by linked-writer checks. Version 6 validates
+Image Editor document, publication, and source-snapshot paths and restricts
+those references to Image layers.
 
 ## Media paths and caches
 
@@ -149,7 +163,7 @@ UTF-8 JSON wrapper uses format identifier
 `creative-suite.motion-studio-recovery` and wrapper version `1`. Its fields are
 `format`, `version`, `target_document_path`, `session_id`, and `document`. The
 `document` value uses the same validated payload described above and may be
-version 1 through 5; preview caches and Undo/Redo history are not included. The
+version 1 through 6; preview caches and Undo/Redo history are not included. The
 wrapper remains version 1 and its nested document is written atomically with
 `QSaveFile`.
 
@@ -183,6 +197,11 @@ error context; the previous file remains intact when the atomic write fails.
 Open, Save As, and media import use the platform's native file picker when the
 Qt platform provides one.
 
+When Save As creates a different composition file, linked Image Editor
+sidecars are copied to new per-layer directories and the copy stores those new
+paths. The original composition continues to reference its original `.cimg`
+and published PNG.
+
 Motion Studio compares the current composition and persisted Media Pool fields
 against the last saved state to track unsaved changes. A dirty document offers
 Save, Discard, and Cancel before replacement or close. Open parses and stages
@@ -198,7 +217,7 @@ These are implementation safeguards, not product targets.
 ## Deferred document features
 
 Serialized Undo/Redo history, export settings, media relinking UI, and migrations
-for future schema revisions are not part of version 5. Undo/Redo exists only in
+for future schema revisions are not part of version 6. Undo/Redo exists only in
 the current editing session. Autosave and recovery metadata are stored in the
 separate wrapper described above. `.csp` stores Video Editor Motion references
 in version 24; `.cimg` is unchanged.

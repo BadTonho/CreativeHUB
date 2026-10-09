@@ -33,6 +33,7 @@
 #include <QStatusBar>
 #include <QThreadPool>
 #include <QTimer>
+#include <QUuid>
 
 #include <algorithm>
 #include <cmath>
@@ -157,6 +158,7 @@ void MainWindow::createNewComposition()
     document_revision_ = 0;
     saved_data_.reset();
     selected_layer_id_ = 0;
+    initializeLinkedImageFrames();
     if (viewer_ == nullptr) createWorkspace();
     else {
         media_pool_->clear();
@@ -365,7 +367,96 @@ bool MainWindow::saveCompositionAs()
         dialog.selectFile(QString::fromUtf8(pathForLog(*document_path_)));
     if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return false;
     const auto path = pathFromQString(dialog.selectedFiles().front());
+    const auto target_path = creative_suite::media::MediaLibrary::canonicalPath(path);
+    const bool same_document = document_path_.has_value() &&
+        creative_suite::media::MediaLibrary::canonicalPath(*document_path_) == target_path;
+    struct RebasedImageLink {
+        model::LayerId id = 0;
+        model::LinkedImageDocument old_link;
+        model::LinkedImageDocument new_link;
+    };
+    std::vector<RebasedImageLink> rebased_links;
+    if (!same_document) {
+        auto sidecar_root = target_path;
+        sidecar_root += ".motion-studio";
+        for (const auto& layer : document_->layers()) {
+            if (layer.kind != model::LayerKind::Image || !layer.linked_image.has_value()) continue;
+            const auto identity = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            const auto directory = sidecar_root / "image-editor" /
+                (std::to_string(layer.id) + "-" + identity.toUtf8().toStdString());
+            std::error_code directory_error;
+            std::filesystem::create_directories(directory, directory_error);
+            if (directory_error) {
+                creative_suite::diagnostics::Logger::instance().log(
+                    creative_suite::diagnostics::Level::Error,
+                    "image_editor_compatibility", "clone_link_directory",
+                    directory_error.message(), {{"path", pathForLog(directory)}});
+                QMessageBox::warning(this, QStringLiteral("Save As Failed"),
+                    QStringLiteral("A linked image folder could not be copied."));
+                return false;
+            }
+            model::LinkedImageDocument new_link{
+                creative_suite::media::MediaLibrary::canonicalPath(directory / "composition.cimg"),
+                creative_suite::media::MediaLibrary::canonicalPath(directory / "published.png"),
+                creative_suite::media::MediaLibrary::canonicalPath(directory / "source.png")};
+            const auto copy_file = [this](const std::filesystem::path& source,
+                                          const std::filesystem::path& destination,
+                                          bool required) {
+                std::error_code error;
+                if (!std::filesystem::is_regular_file(source, error) || error) return !required;
+                std::filesystem::copy_file(source, destination,
+                    std::filesystem::copy_options::none, error);
+                if (!error) return true;
+                creative_suite::diagnostics::Logger::instance().log(
+                    creative_suite::diagnostics::Level::Error,
+                    "image_editor_compatibility", "clone_link_file",
+                    error.message(), {{"source", pathForLog(source)},
+                                      {"destination", pathForLog(destination)}});
+                return false;
+            };
+            const auto has_file = [](const std::filesystem::path& candidate) {
+                std::error_code error;
+                return std::filesystem::is_regular_file(candidate, error) && !error;
+            };
+            const auto& old_link = *layer.linked_image;
+            bool copied_snapshot = copy_file(old_link.source_snapshot_path,
+                                             new_link.source_snapshot_path, false);
+            if (copied_snapshot && !has_file(new_link.source_snapshot_path))
+                copied_snapshot = copy_file(layer.source_path,
+                                            new_link.source_snapshot_path, false);
+            if (copied_snapshot && !has_file(new_link.source_snapshot_path))
+                copied_snapshot = copy_file(old_link.published_output_path,
+                                            new_link.source_snapshot_path, true);
+            if (!copied_snapshot ||
+                !copy_file(old_link.document_path, new_link.document_path, false) ||
+                !copy_file(old_link.published_output_path, new_link.published_output_path, false)) {
+                QMessageBox::warning(this, QStringLiteral("Save As Failed"),
+                    QStringLiteral("The linked image files could not be cloned. The original composition remains unchanged."));
+                return false;
+            }
+            rebased_links.push_back({layer.id, old_link, std::move(new_link)});
+        }
+        for (const auto& link : rebased_links) {
+            if (!document_->setLayerLinkedImage(link.id, link.new_link)) {
+                for (const auto& rollback : rebased_links)
+                    (void)document_->setLayerLinkedImage(rollback.id, rollback.old_link);
+                updateDocumentState();
+                return false;
+            }
+        }
+    }
+
     const bool saved = saveToPath(path);
+    if (!saved) {
+        for (const auto& link : rebased_links)
+            (void)document_->setLayerLinkedImage(link.id, link.old_link);
+        if (!rebased_links.empty()) {
+            updateDocumentState();
+            initializeLinkedImageFrames();
+        }
+        return false;
+    }
+    if (!rebased_links.empty()) initializeLinkedImageFrames();
     if (saved && linked_handoff_.has_value() &&
         creative_suite::media::MediaLibrary::canonicalPath(path) !=
             creative_suite::media::MediaLibrary::canonicalPath(
@@ -500,6 +591,17 @@ void MainWindow::updateDocumentState()
         new_rectangle_layer_action_->setEnabled(has_document);
     if (new_ellipse_layer_action_ != nullptr)
         new_ellipse_layer_action_->setEnabled(has_document);
+    bool selected_image_layer = false;
+    if (has_document) {
+        const auto selected = std::find_if(document_->layers().begin(),
+            document_->layers().end(), [this](const auto& layer) {
+                return layer.id == selected_layer_id_;
+            });
+        selected_image_layer = selected != document_->layers().end() &&
+            selected->kind == model::LayerKind::Image;
+    }
+    if (edit_image_in_image_editor_action_ != nullptr)
+        edit_image_in_image_editor_action_->setEnabled(selected_image_layer);
     if (generate_audio_keyframes_action_ != nullptr) {
         generate_audio_keyframes_action_->setEnabled(
             selected_layer_exists && !audio_keyframe_worker_ && !export_worker_);
@@ -671,6 +773,7 @@ void MainWindow::finishOpen(std::uint64_t generation,
         else if (preview_renderer_) preview_renderer_->resetSessions();
         resetCurveEditor();
         media_pool_->replaceLibrary(std::move(staged_library));
+        initializeLinkedImageFrames();
         timeline_->setCompositionTiming(document_->frameRate());
         timeline_->setLayers(document_->layers());
         timeline_->setSelectedLayerId(0);

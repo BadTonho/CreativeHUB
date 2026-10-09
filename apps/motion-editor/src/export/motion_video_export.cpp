@@ -461,7 +461,7 @@ void MotionVideoExporter::exportVideo(
                 active.content = layer.content;
                 active.effects = layer.effects;
                 if (layer.kind == model::LayerKind::Image) {
-                    const auto still = snapshot.still_frames.find(layer.source_path);
+                    const auto still = snapshot.still_frames.find(layer.id);
                     if (still != snapshot.still_frames.end()) active.still_frame = still->second;
                 }
                 request.layers.push_back(std::move(active));

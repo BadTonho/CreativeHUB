@@ -83,7 +83,10 @@ void MainWindow::requestPreview(bool playback_tick)
         snapshot.content = layer.content;
         snapshot.effects = layer.effects;
         if (layer.kind == model::LayerKind::Image) {
-            snapshot.still_frame = media_pool_->sharedFirstFrameForPath(layer.source_path);
+            const auto linked = linked_image_frames_.find(layer.id);
+            snapshot.still_frame = linked == linked_image_frames_.end()
+                ? media_pool_->sharedFirstFrameForPath(layer.source_path)
+                : linked->second;
         }
         request.layers.push_back(std::move(snapshot));
     }

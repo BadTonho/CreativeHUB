@@ -4,6 +4,7 @@
 #include "timeline_types.h"
 
 #include <QElapsedTimer>
+#include <QPoint>
 #include <QWidget>
 
 #include <cstddef>
@@ -58,6 +59,8 @@ public:
                            std::int64_t,
                            model::LayerId)> handler);
     void setLayerSelectedHandler(std::function<void(model::LayerId)> handler);
+    void setLayerContextMenuHandler(
+        std::function<void(model::LayerId, const QPoint&)> handler);
     void setLayerMoveHandler(
         std::function<void(model::LayerId, std::int64_t)> handler);
     void setLayerResizeHandler(

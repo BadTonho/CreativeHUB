@@ -407,6 +407,12 @@ void TimelineNavigator::setLayerSelectedHandler(
     layer_tracks_->setLayerSelectedHandler(std::move(handler));
 }
 
+void TimelineNavigator::setLayerContextMenuHandler(
+    std::function<void(model::LayerId, const QPoint&)> handler)
+{
+    layer_tracks_->setLayerContextMenuHandler(std::move(handler));
+}
+
 void TimelineNavigator::setLayerMoveHandler(
     std::function<void(model::LayerId, std::int64_t)> handler)
 {

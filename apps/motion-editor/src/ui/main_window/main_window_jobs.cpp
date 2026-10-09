@@ -75,8 +75,11 @@ void MainWindow::startVideoExport()
     snapshot.layers = document_->layers();
     for (const auto& layer : snapshot.layers) {
         if (layer.kind == model::LayerKind::Image) {
-            snapshot.still_frames.emplace(
-                layer.source_path, media_pool_->sharedFirstFrameForPath(layer.source_path));
+            const auto linked = linked_image_frames_.find(layer.id);
+            snapshot.still_frames.emplace(layer.id,
+                linked == linked_image_frames_.end()
+                    ? media_pool_->sharedFirstFrameForPath(layer.source_path)
+                    : linked->second);
         }
     }
 

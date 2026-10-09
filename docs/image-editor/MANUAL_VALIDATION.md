@@ -764,6 +764,43 @@ preview is intentionally not part of this milestone.
 This checklist records the manual acceptance work; it does not replace the
 automated document, operation, export, recovery, and UI-boundary tests.
 
+## Motion Studio linked-image compatibility
+
+Use a disposable `.motion` composition and a test image. Record both app
+versions, OS, Image Editor launch path, and the final result. This workflow is
+provisional until the Image Editor standalone acceptance gate is complete.
+
+1. In Motion Studio, select an Image layer and choose **Edit Image in Image
+   Editor** from the Layer menu. Repeat from the layer context menu on the
+   timeline and by right-clicking the composition canvas. Confirm each menu
+   offers the action for the selected image layer. Confirm a
+   per-composition, per-layer sidecar contains `source.png`,
+   `composition.cimg`, and `published.png`; confirm the original image file is
+   unchanged.
+2. Make an edit in Image Editor without saving. Confirm the Motion preview does
+   not change. Save the `.cimg`; confirm only the corresponding Motion layer
+   refreshes, including when another layer uses the same original image.
+3. Save multiple Image Editor revisions and confirm Motion refreshes each
+   saved PNG while preserving that layer's Motion transforms, keyframes,
+   effects, and timing. Export the composition and verify the exported pixels
+   use the latest published revision.
+4. Save and reopen the `.motion` file. Reopen the Image Editor action and
+   confirm it uses the same `.cimg`. Use Motion **Save As** and verify the copy
+   receives separate sidecar files; editing its linked document must not change
+   the original composition's published image.
+5. Test paths containing spaces and Unicode. With a valid published PNG,
+   remove the source file and confirm the linked output remains usable. Then
+   remove the output and confirm Motion falls back to `source.png`. Replace the
+   output with a corrupt PNG and reopen the Motion project; confirm it falls
+   back to `source.png`. Remove both recovery files and confirm Motion reports a
+   repairable missing link without crashing.
+6. Open one `.cimg` in two Image Editor instances. Save a newer revision in one,
+   then try to save stale edits in the other. Confirm the Image Editor rejects
+   the stale write and Motion retains the last valid published frame.
+
+Run on Windows, macOS, and Linux before accepting the compatibility workflow.
+The Image Editor standalone and linked-image gates remain tracked separately.
+
 ## Area Selection
 
 Use a disposable image or canvas. Record the OS, Qt version, build, image size,

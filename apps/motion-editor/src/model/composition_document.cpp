@@ -13,6 +13,8 @@
 namespace motion::model {
 namespace {
 
+using creative_suite::media::MediaLibrary;
+
 constexpr std::array<FrameRate, 13> kSupportedFrameRates{{
     {24000, 1001},
     {24, 1},
@@ -529,6 +531,54 @@ bool CompositionDocument::setLayerName(LayerId id, std::string name)
         return false;
     }
     layer->name = std::move(name);
+    return true;
+}
+
+bool CompositionDocument::setLayerLinkedImage(
+    LayerId id,
+    std::optional<LinkedImageDocument> linked_image)
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || layer->kind != LayerKind::Image ||
+        layer->source_path.empty()) return false;
+    if (linked_image.has_value() &&
+        (linked_image->document_path.empty() ||
+         linked_image->published_output_path.empty() ||
+         linked_image->source_snapshot_path.empty() ||
+         !linked_image->document_path.is_absolute() ||
+         !linked_image->published_output_path.is_absolute() ||
+         !linked_image->source_snapshot_path.is_absolute() ||
+         MediaLibrary::canonicalPath(linked_image->document_path) ==
+             MediaLibrary::canonicalPath(layer->source_path) ||
+         MediaLibrary::canonicalPath(linked_image->published_output_path) ==
+             MediaLibrary::canonicalPath(layer->source_path) ||
+         MediaLibrary::canonicalPath(linked_image->source_snapshot_path) ==
+             MediaLibrary::canonicalPath(layer->source_path))) {
+        return false;
+    }
+    if (linked_image.has_value()) {
+        const std::array candidate_paths{
+            MediaLibrary::canonicalPath(linked_image->document_path),
+            MediaLibrary::canonicalPath(linked_image->published_output_path),
+            MediaLibrary::canonicalPath(linked_image->source_snapshot_path)};
+        for (const auto& other : layers_) {
+            if (other.id == id) continue;
+            for (const auto& candidate : candidate_paths) {
+                if ((!other.source_path.empty() &&
+                     candidate == MediaLibrary::canonicalPath(other.source_path)) ||
+                    (other.linked_image.has_value() &&
+                     (candidate == MediaLibrary::canonicalPath(
+                          other.linked_image->document_path) ||
+                      candidate == MediaLibrary::canonicalPath(
+                          other.linked_image->published_output_path) ||
+                      candidate == MediaLibrary::canonicalPath(
+                          other.linked_image->source_snapshot_path)))) {
+                    return false;
+                }
+            }
+        }
+    }
+    layer->linked_image = std::move(linked_image);
     return true;
 }
 

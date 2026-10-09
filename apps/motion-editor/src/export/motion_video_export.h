@@ -34,7 +34,7 @@ struct MotionExportSnapshot {
     model::CanvasSize canvas_size{};
     model::FrameRate frame_rate{};
     std::vector<model::CompositionLayer> layers;
-    std::map<std::filesystem::path, creative_suite::media::RgbaFramePtr> still_frames;
+    std::map<model::LayerId, creative_suite::media::RgbaFramePtr> still_frames;
 };
 
 struct MotionExportPerformanceSummary {

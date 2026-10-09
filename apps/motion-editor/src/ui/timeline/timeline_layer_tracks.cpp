@@ -2,6 +2,7 @@
 #include "timeline_view_mapping.h"
 
 #include <QColor>
+#include <QContextMenuEvent>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
@@ -156,6 +157,7 @@ public:
 
     std::function<void(const std::filesystem::path&, std::int64_t, model::LayerId)> media_drop;
     std::function<void(model::LayerId)> layer_selected;
+    std::function<void(model::LayerId, const QPoint&)> layer_context_requested;
     std::function<void(model::LayerId, std::int64_t)> layer_move;
     std::function<void(model::LayerId, std::int64_t)> layer_resize;
     std::function<void(model::LayerId, std::size_t)> layer_reorder;
@@ -170,6 +172,25 @@ public:
     std::function<void(int)> viewport_width_changed;
 
 protected:
+    void contextMenuEvent(QContextMenuEvent* event) override
+    {
+        const int row_index = rowAtY(event->pos().y());
+        if (row_index < 0) {
+            QWidget::contextMenuEvent(event);
+            return;
+        }
+        const auto visual = visual_rows_[static_cast<std::size_t>(row_index)];
+        if (visual.kind != VisualTimelineRow::Kind::Layer) {
+            QWidget::contextMenuEvent(event);
+            return;
+        }
+        const auto row = rows_[visual.layer_index];
+        if (layer_selected) layer_selected(row.id);
+        if (layer_context_requested)
+            layer_context_requested(row.id, event->globalPos());
+        event->accept();
+    }
+
     void resizeEvent(QResizeEvent* event) override
     {
         QWidget::resizeEvent(event);
@@ -804,6 +825,9 @@ void TimelineLayerTracks::setMediaDropHandler(
 { impl_->canvas->media_drop = std::move(handler); }
 void TimelineLayerTracks::setLayerSelectedHandler(std::function<void(model::LayerId)> handler)
 { impl_->canvas->layer_selected = std::move(handler); }
+void TimelineLayerTracks::setLayerContextMenuHandler(
+    std::function<void(model::LayerId, const QPoint&)> handler)
+{ impl_->canvas->layer_context_requested = std::move(handler); }
 void TimelineLayerTracks::setLayerMoveHandler(
     std::function<void(model::LayerId, std::int64_t)> handler)
 { impl_->canvas->layer_move = std::move(handler); }

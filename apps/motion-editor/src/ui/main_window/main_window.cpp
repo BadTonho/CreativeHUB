@@ -38,6 +38,12 @@ MainWindow::MainWindow(QWidget* parent,
     setWindowTitle(QStringLiteral("Motion Studio"));
     setWindowState(windowState() | Qt::WindowMaximized);
 
+    linked_image_refresh_timer_ = new QTimer(this);
+    linked_image_refresh_timer_->setInterval(750);
+    connect(linked_image_refresh_timer_, &QTimer::timeout,
+            this, &MainWindow::refreshLinkedImagePublications);
+    linked_image_refresh_timer_->start();
+
     auto* empty_state_container = new QWidget(this);
     empty_state_container->setObjectName(QStringLiteral("motion-empty-state-container"));
     auto* empty_state_layout = new QVBoxLayout(empty_state_container);
@@ -164,6 +170,13 @@ MainWindow::MainWindow(QWidget* parent,
         createContentLayer(model::LayerKind::Shape, model::ShapeKind::Ellipse);
     });
     layer_menu->addSeparator();
+    edit_image_in_image_editor_action_ = layer_menu->addAction(
+        QStringLiteral("Edit Image in Image Editor"));
+    edit_image_in_image_editor_action_->setObjectName(
+        QStringLiteral("motion-edit-image-in-image-editor-action"));
+    edit_image_in_image_editor_action_->setEnabled(false);
+    connect(edit_image_in_image_editor_action_, &QAction::triggered,
+            this, &MainWindow::editSelectedLayerImage);
     generate_audio_keyframes_action_ = layer_menu->addAction(
         QStringLiteral("Generate Keyframes from Audio..."));
     generate_audio_keyframes_action_->setObjectName(
