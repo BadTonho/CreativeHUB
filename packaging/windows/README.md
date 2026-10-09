@@ -7,6 +7,10 @@ Inno Setup installer, and writes `updates.json` with each installer size and
 SHA-256 digest. The output directory contains the four `.exe` installers and
 the catalog to upload to one GitHub Release.
 
+Each setup executable embeds the matching application icon from
+`docs/assets/app-icons` using Inno Setup's `SetupIconFile`. Start Menu and
+uninstall entries continue to use the icon embedded in the installed app.
+
 CMake places each executable and runtime DLL in the staged `bin` directory and
 Qt plugins in `plugins`. The release script adjusts the staged `qt.conf` for
 the flattened layout. The setup maps runtime files into the selected app
@@ -59,8 +63,10 @@ to copy the prior files back. If the app has not confirmed a successful first
 launch, the Hub can offer that retained backup for restoration.
 
 The generated installer should be validated on Windows in a disposable user
-profile before publication, including a clean install, an update to a chosen
-directory, cancellation/failure recovery, and Hub restoration. The repository
+profile before publication, including checking that the setup executable and
+wizard display the matching app icon, a clean install, an update to a chosen
+directory, cancellation/failure recovery, and Hub restoration. Also confirm the
+Start Menu shortcut uses the installed app icon. The repository
 does not include the Inno Setup compiler, so the packaging machine must have
 Inno Setup installed and `ISCC.exe` available on `PATH` or passed with
 `-InnoCompiler`. The release script locates the Visual Studio C++ runtime,

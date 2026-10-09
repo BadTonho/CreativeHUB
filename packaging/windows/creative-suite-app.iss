@@ -10,6 +10,9 @@
 #ifndef AppExecutable
 #define AppExecutable ""
 #endif
+#ifndef AppIconFile
+#define AppIconFile ""
+#endif
 #ifndef AppOutputName
 #define AppOutputName ""
 #endif
@@ -25,6 +28,7 @@ AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=Tonho Studios
+SetupIconFile={#AppIconFile}
 DefaultDirName={localappdata}\Programs\Tonho Studios\{#AppName}
 UsePreviousAppDir=yes
 DisableDirPage=auto

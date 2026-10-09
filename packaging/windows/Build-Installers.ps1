@@ -22,6 +22,12 @@ $scriptTemplate = Join-Path $PSScriptRoot "creative-suite-app.iss"
 $versions = Get-Content -LiteralPath $versionFile -Raw | ConvertFrom-Json
 $notes = Get-Content -LiteralPath $notesFile -Raw | ConvertFrom-Json
 $appIds = @("hub", "video-editor", "image-editor", "motion-editor")
+$appIconFiles = @{
+    "hub" = "hub.ico"
+    "video-editor" = "video-editor.ico"
+    "image-editor" = "image-editor.ico"
+    "motion-editor" = "motion-studio.ico"
+}
 
 function ConvertTo-InnoString([string] $Value) {
     return '"' + $Value.Replace('"', '""') + '"'
@@ -109,6 +115,10 @@ $publishedApplications = [ordered]@{}
 foreach ($appId in $appIds) {
     $application = $versions.applications.PSObject.Properties[$appId].Value
     if (-not $application) { throw "No version metadata exists for '$appId'." }
+    $iconPath = Join-Path $repoRoot (Join-Path "docs\assets\app-icons" $appIconFiles[$appId])
+    if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
+        throw "The app icon for '$appId' is missing: $iconPath"
+    }
     $assetPath = Join-Path $resolvedOutputDirectory $application.installer_asset
     $previousApplication = if ($previousCatalog) {
         $previousCatalog.applications.PSObject.Properties[$appId].Value
@@ -197,6 +207,7 @@ foreach ($appId in $appIds) {
                 "#define AppName $(ConvertTo-InnoString ([string]$application.name))"
                 "#define AppVersion $(ConvertTo-InnoString ([string]$application.version))"
                 "#define AppExecutable $(ConvertTo-InnoString ([string]$application.executable))"
+                "#define AppIconFile $(ConvertTo-InnoString $iconPath)"
                 "#define AppOutputName $(ConvertTo-InnoString ([System.IO.Path]::GetFileNameWithoutExtension($application.installer_asset)))"
                 "#define SourceDir $(ConvertTo-InnoString $stageDirectory)"
                 "#define OutputDir $(ConvertTo-InnoString $resolvedOutputDirectory)"
