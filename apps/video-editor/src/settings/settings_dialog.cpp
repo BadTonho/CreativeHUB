@@ -422,6 +422,37 @@ QWidget* SettingsDialog::createTimelinePage() {
     waveform_description->setWordWrap(true);
     layout->addWidget(waveform_row);
     layout->addWidget(waveform_description);
+
+    auto* row_height_row = new QWidget(page);
+    auto* row_height_layout = new QHBoxLayout(row_height_row);
+    row_height_layout->setContentsMargins(0, 0, 0, 0);
+    auto* row_height_label = new QLabel(
+        "Track height adjustment:", row_height_row);
+    auto* row_height_mode = new QComboBox(row_height_row);
+    row_height_mode->setObjectName(
+        "timelineTrackHeightAdjustmentModeComboBox");
+    row_height_mode->addItem(
+        "Together", static_cast<int>(
+            timeline::TrackRowHeightAdjustmentMode::Together));
+    row_height_mode->addItem(
+        "Independently by group", static_cast<int>(
+            timeline::TrackRowHeightAdjustmentMode::IndependentlyByGroup));
+    row_height_mode->setCurrentIndex(row_height_mode->findData(static_cast<int>(
+        settings::timelineTrackRowHeightAdjustmentMode())));
+    row_height_mode->setToolTip(
+        "Choose whether Shift + mouse wheel changes both groups or only the Video or Audio group under the pointer.");
+    row_height_label->setBuddy(row_height_mode);
+    row_height_layout->addWidget(row_height_label);
+    row_height_layout->addWidget(row_height_mode);
+    row_height_layout->addStretch();
+    auto* row_height_description = new QLabel(
+        "This local preference applies immediately. In independent mode, "
+        "Shift + mouse wheel changes only the group beneath the pointer; "
+        "each project's Video and Audio row heights are saved separately. "
+        "Switching back to Together matches Audio to Video.", page);
+    row_height_description->setWordWrap(true);
+    layout->addWidget(row_height_row);
+    layout->addWidget(row_height_description);
     layout->addStretch();
     connect(waveform_mode, qOverload<int>(&QComboBox::currentIndexChanged),
         this, [this, waveform_mode](int index) {
@@ -430,6 +461,13 @@ QWidget* SettingsDialog::createTimelinePage() {
             settings::setAudioWaveformDisplayMode(mode);
             emit audioWaveformStereoModeChanged(
                 mode == AudioWaveformDisplayMode::Stereo);
+        });
+    connect(row_height_mode, qOverload<int>(&QComboBox::currentIndexChanged),
+        this, [this, row_height_mode](int index) {
+            const auto mode = static_cast<timeline::TrackRowHeightAdjustmentMode>(
+                row_height_mode->itemData(index).toInt());
+            settings::setTimelineTrackRowHeightAdjustmentMode(mode);
+            emit timelineTrackRowHeightAdjustmentModeChanged(mode);
         });
     return page;
 }

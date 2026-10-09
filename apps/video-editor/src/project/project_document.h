@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 22;
+inline constexpr int current_format_version = 23;
+inline constexpr int timeline_group_row_heights_format_version = 23;
 inline constexpr int node_animation_format_version = 22;
 inline constexpr int node_graph_format_version = 20;
 inline constexpr int effect_node_format_version = 21;
@@ -109,7 +110,8 @@ struct ProjectDocument {
     int canvas_height = 1080;
     timeline::FrameRate timeline_frame_rate;
     double timeline_zoom = 1.0;
-    double timeline_row_height = timeline::kDefaultTrackRowHeight;
+    double timeline_video_row_height = timeline::kDefaultTrackRowHeight;
+    double timeline_audio_row_height = timeline::kDefaultTrackRowHeight;
     std::vector<ProjectMedia> media;
     std::vector<std::string> bins;
     std::vector<ProjectTrack> timeline_tracks;

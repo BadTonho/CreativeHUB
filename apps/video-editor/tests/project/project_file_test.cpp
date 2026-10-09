@@ -38,6 +38,16 @@ void writeText(const std::filesystem::path& path, const std::string& text) {
     file << text;
 }
 
+void setLegacyTimelineRowHeight(QJsonObject& root, double height = 123.5) {
+    auto timeline = root.value("timeline").toObject();
+    timeline.remove("video_row_height");
+    timeline.remove("audio_row_height");
+    if (root.value("version").toInt() >= 7) {
+        timeline.insert("row_height", height);
+    }
+    root.insert("timeline", timeline);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -58,7 +68,8 @@ int main(int argc, char** argv) {
 
         project::ProjectDocument original;
         original.timeline_frame_rate = {30000, 1001};
-        require(original.timeline_row_height == 70.0,
+        require(original.timeline_video_row_height == 70.0 &&
+                    original.timeline_audio_row_height == 70.0,
                 "A new project document did not start with the 70-pixel default row height.");
         original.media = {
             {first_source, "First Video", "Footage/Scenes", false},
@@ -155,7 +166,8 @@ int main(int argc, char** argv) {
         original.canvas_width = 1920;
         original.canvas_height = 1080;
         original.timeline_zoom = 512.0;
-        original.timeline_row_height = 123.5;
+        original.timeline_video_row_height = 123.5;
+        original.timeline_audio_row_height = 87.25;
         original.timeline_tracks.front().clips.front().transform.position_x = 0.25;
         original.timeline_tracks.front().clips.front().transform.rotation_degrees = 12.0;
         original.timeline_tracks.front().clips.front().keyframes.position_x = {{0, 0.25}, {30, 0.75}};
@@ -187,7 +199,7 @@ int main(int argc, char** argv) {
         const auto portrait_project_path = directory / "portrait.csp";
         project::save(portrait_project_path, portrait_project);
         require(project::load(portrait_project_path) == portrait_project,
-                "A version 22 portrait project did not preserve its canvas and project data.");
+                "A version 23 portrait project did not preserve its canvas and project data.");
 
         auto invalid_canvas_project = portrait_project;
         invalid_canvas_project.canvas_width = 1440;
@@ -249,13 +261,14 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 22") != std::string::npos &&
+        require(saved_json.find("\"version\": 23") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
                     saved_json.find("\"source_duration_frames\": 60") != std::string::npos &&
                     saved_json.find("\"zoom\": 512") != std::string::npos &&
-                    saved_json.find("\"row_height\": 123.5") != std::string::npos &&
+                    saved_json.find("\"video_row_height\": 123.5") != std::string::npos &&
+                    saved_json.find("\"audio_row_height\": 87.25") != std::string::npos &&
                     saved_json.find("\"transitions\"") != std::string::npos &&
                     saved_json.find("cross_dissolve") != std::string::npos &&
                     saved_json.find("\"effects\"") != std::string::npos &&
@@ -270,12 +283,72 @@ int main(int argc, char** argv) {
                     saved_json.find("\"enabled\": false") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline timing, effect states, Fusion node animation, and linked image references were not written to the version 22 project.");
+                "Timeline timing, group row heights, effect states, Fusion node animation, and linked image references were not written to the version 23 project.");
+
+        auto legacy_v22_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        legacy_v22_json.insert("version", 22);
+        setLegacyTimelineRowHeight(legacy_v22_json);
+        auto legacy_v22_timeline = legacy_v22_json.value("timeline").toObject();
+        legacy_v22_timeline.remove("video_row_height");
+        legacy_v22_timeline.remove("audio_row_height");
+        legacy_v22_timeline.insert("row_height", 111.5);
+        legacy_v22_json.insert("timeline", legacy_v22_timeline);
+        const auto legacy_v22_path = directory / "legacy-v22.csp";
+        writeText(legacy_v22_path,
+                  QJsonDocument(legacy_v22_json).toJson().toStdString());
+        const auto legacy_v22 = project::load(legacy_v22_path);
+        require(legacy_v22.timeline_video_row_height == 111.5 &&
+                    legacy_v22.timeline_audio_row_height == 111.5,
+                "A version 22 shared row height did not migrate to both track groups.");
+
+        const auto current_project_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        for (const auto field_name : {
+                 QStringLiteral("video_row_height"),
+                 QStringLiteral("audio_row_height")}) {
+            for (const auto invalid_height : {29.99, 180.01}) {
+                auto invalid_project = current_project_json;
+                auto invalid_timeline = invalid_project.value("timeline").toObject();
+                invalid_timeline.insert(field_name, invalid_height);
+                invalid_project.insert("timeline", invalid_timeline);
+                writeText(
+                    project_path,
+                    QJsonDocument(invalid_project).toJson().toStdString());
+                try {
+                    static_cast<void>(project::load(project_path));
+                    throw std::runtime_error(
+                        "An out-of-range version 23 group row height was accepted.");
+                } catch (const project::ProjectError& error) {
+                    require(error.code() == project::ProjectErrorCode::InvalidValue,
+                            "Invalid version 23 row height returned the wrong error category.");
+                }
+            }
+            auto missing_project = current_project_json;
+            auto missing_timeline = missing_project.value("timeline").toObject();
+            missing_timeline.remove(field_name);
+            missing_project.insert("timeline", missing_timeline);
+            writeText(
+                project_path,
+                QJsonDocument(missing_project).toJson().toStdString());
+            try {
+                static_cast<void>(project::load(project_path));
+                throw std::runtime_error(
+                    "A version 23 project missing a required group row height was accepted.");
+            } catch (const project::ProjectError& error) {
+                require(error.code() == project::ProjectErrorCode::MissingField,
+                        "A missing version 23 row height returned the wrong error category.");
+            }
+        }
 
         auto legacy_v21_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         legacy_v21_json.insert("version", 21);
+        setLegacyTimelineRowHeight(legacy_v21_json);
         auto legacy_v21_timeline = legacy_v21_json.value("timeline").toObject();
+        legacy_v21_timeline.remove("video_row_height");
+        legacy_v21_timeline.remove("audio_row_height");
+        legacy_v21_timeline.insert("row_height", 123.5);
         auto legacy_v21_tracks = legacy_v21_timeline.value("tracks").toArray();
         auto legacy_v21_track = legacy_v21_tracks[0].toObject();
         auto legacy_v21_clips = legacy_v21_track.value("clips").toArray();
@@ -311,7 +384,11 @@ int main(int argc, char** argv) {
         auto legacy_v20_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         legacy_v20_json.insert("version", 20);
+        setLegacyTimelineRowHeight(legacy_v20_json);
         auto legacy_v20_timeline = legacy_v20_json.value("timeline").toObject();
+        legacy_v20_timeline.remove("video_row_height");
+        legacy_v20_timeline.remove("audio_row_height");
+        legacy_v20_timeline.insert("row_height", 123.5);
         auto legacy_v20_tracks = legacy_v20_timeline.value("tracks").toArray();
         auto legacy_v20_track = legacy_v20_tracks[0].toObject();
         auto legacy_v20_clips = legacy_v20_track.value("clips").toArray();
@@ -364,6 +441,12 @@ int main(int argc, char** argv) {
         auto legacy_v19_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         legacy_v19_json.insert("version", 19);
+        setLegacyTimelineRowHeight(legacy_v19_json);
+        auto legacy_v19_timeline = legacy_v19_json.value("timeline").toObject();
+        legacy_v19_timeline.remove("video_row_height");
+        legacy_v19_timeline.remove("audio_row_height");
+        legacy_v19_timeline.insert("row_height", 123.5);
+        legacy_v19_json.insert("timeline", legacy_v19_timeline);
         const auto legacy_v19_path = directory / "legacy-v19.csp";
         writeText(legacy_v19_path,
                   QJsonDocument(legacy_v19_json).toJson().toStdString());
@@ -374,6 +457,12 @@ int main(int argc, char** argv) {
         auto legacy_v18_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         legacy_v18_json.insert("version", 18);
+        setLegacyTimelineRowHeight(legacy_v18_json);
+        auto legacy_v18_timeline = legacy_v18_json.value("timeline").toObject();
+        legacy_v18_timeline.remove("video_row_height");
+        legacy_v18_timeline.remove("audio_row_height");
+        legacy_v18_timeline.insert("row_height", 123.5);
+        legacy_v18_json.insert("timeline", legacy_v18_timeline);
         const auto legacy_v18_path = directory / "legacy-v18.csp";
         writeText(legacy_v18_path,
                   QJsonDocument(legacy_v18_json).toJson().toStdString());
@@ -386,6 +475,7 @@ int main(int argc, char** argv) {
         auto legacy_portrait_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         legacy_portrait_json.insert("version", 18);
+        setLegacyTimelineRowHeight(legacy_portrait_json);
         auto legacy_portrait_canvas = legacy_portrait_json.value("canvas").toObject();
         legacy_portrait_canvas.insert("width", 1080);
         legacy_portrait_canvas.insert("height", 1920);
@@ -427,6 +517,7 @@ int main(int argc, char** argv) {
         auto version_17_effects_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         version_17_effects_json.insert("version", 17);
+        setLegacyTimelineRowHeight(version_17_effects_json);
         auto version_17_timeline = version_17_effects_json.value("timeline").toObject();
         auto version_17_tracks = version_17_timeline.value("tracks").toArray();
         for (qsizetype track_index = 0; track_index < version_17_tracks.size(); ++track_index) {
@@ -496,6 +587,7 @@ int main(int argc, char** argv) {
         auto version_16_effects_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         version_16_effects_json.insert("version", 16);
+        setLegacyTimelineRowHeight(version_16_effects_json);
         const auto version_16_effects_path = directory / "version-16-effects.csp";
         writeText(version_16_effects_path,
                   QJsonDocument(version_16_effects_json).toJson().toStdString());
@@ -574,6 +666,7 @@ int main(int argc, char** argv) {
         auto version_15_audio_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(audio_json)).object();
         version_15_audio_json.insert("version", 15);
+        setLegacyTimelineRowHeight(version_15_audio_json);
         auto version_15_timeline = version_15_audio_json.value("timeline").toObject();
         auto version_15_tracks = version_15_timeline.value("tracks").toArray();
         auto version_15_track = version_15_tracks.at(0).toObject();
@@ -594,6 +687,7 @@ int main(int argc, char** argv) {
         auto version_14_audio_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(audio_json)).object();
         version_14_audio_json.insert("version", 14);
+        setLegacyTimelineRowHeight(version_14_audio_json);
         auto version_14_timeline = version_14_audio_json.value("timeline").toObject();
         auto version_14_tracks = version_14_timeline.value("tracks").toArray();
         auto version_14_track = version_14_tracks.at(0).toObject();
@@ -611,6 +705,7 @@ int main(int argc, char** argv) {
         auto version_13_audio_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(audio_json)).object();
         version_13_audio_json.insert("version", 13);
+        setLegacyTimelineRowHeight(version_13_audio_json);
         auto version_13_timeline = version_13_audio_json.value("timeline").toObject();
         auto version_13_tracks = version_13_timeline.value("tracks").toArray();
         auto version_13_track = version_13_tracks.at(0).toObject();
@@ -720,6 +815,7 @@ int main(int argc, char** argv) {
         auto version_12_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         version_12_json.insert("version", 12);
+        setLegacyTimelineRowHeight(version_12_json);
         writeText(project_path,
                   QJsonDocument(version_12_json).toJson().toStdString());
         const auto reopened_version_12 = project::load(project_path);
@@ -736,6 +832,7 @@ int main(int argc, char** argv) {
         auto version_9_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         version_9_json.insert("version", 9);
+        setLegacyTimelineRowHeight(version_9_json);
         auto restore_legacy_transition_geometry = [](QJsonObject& json) {
             auto timeline = json.value("timeline").toObject();
             auto tracks = timeline.value("tracks").toArray();
@@ -791,6 +888,7 @@ int main(int argc, char** argv) {
         auto version_10_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         version_10_json.insert("version", 10);
+        setLegacyTimelineRowHeight(version_10_json);
         restore_legacy_transition_geometry(version_10_json);
         auto version_10_timeline = version_10_json.value("timeline").toObject();
         version_10_timeline.remove("frame_rate");
@@ -827,6 +925,7 @@ int main(int argc, char** argv) {
         auto version_11_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         version_11_json.insert("version", 11);
+        setLegacyTimelineRowHeight(version_11_json);
         restore_legacy_transition_geometry(version_11_json);
         auto version_11_timeline = version_11_json.value("timeline").toObject();
         auto version_11_tracks = version_11_timeline.value("tracks").toArray();
@@ -1165,14 +1264,16 @@ int main(int argc, char** argv) {
         const auto migrated_v5 = project::load(project_path);
         require(migrated_v5.timeline_zoom == 1.0,
                 "A version 5 project without timeline zoom did not default to 100%.");
-        require(migrated_v5.timeline_row_height == 70.0,
+        require(migrated_v5.timeline_video_row_height == 70.0 &&
+                    migrated_v5.timeline_audio_row_height == 70.0,
                 "An older project without row height did not migrate to 70-pixel Timeline rows.");
 
         writeText(
             project_path,
             R"({"format":"creative-suite.main-editor","version":6,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"zoom":1,"tracks":[{"name":"Video 1","clips":[],"transitions":[]}]}})");
         const auto migrated_v6 = project::load(project_path);
-        require(migrated_v6.timeline_row_height == 70.0,
+        require(migrated_v6.timeline_video_row_height == 70.0 &&
+                    migrated_v6.timeline_audio_row_height == 70.0,
                 "A version 6 project without row height did not migrate to 70-pixel Timeline rows.");
 
         for (const auto invalid_zoom : {

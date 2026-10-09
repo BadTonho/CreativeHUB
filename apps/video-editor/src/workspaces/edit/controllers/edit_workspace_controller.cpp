@@ -1131,8 +1131,10 @@ void EditWorkspaceController::setTimelineWidget(
                 }
                 emit projectDirtyStateUpdateRequested();
             });
-    connect(timeline_widget_, &timeline::TimelineWidget::trackRowHeightChanged,
-            this, [this](double) { emit projectDirtyStateUpdateRequested(); });
+    connect(timeline_widget_, &timeline::TimelineWidget::trackRowHeightsChanged,
+            this, [this](double, double) {
+                emit projectDirtyStateUpdateRequested();
+            });
     connect(timeline_widget_, &timeline::TimelineWidget::snapEnabledChanged,
             this, &EditWorkspaceController::timelineSnapChanged);
 }

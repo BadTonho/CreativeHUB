@@ -1095,6 +1095,185 @@ int main(int argc, char* argv[]) {
                 "An empty Audio group or row-height change detached Video from the divider.");
         compact_groups_widget.close();
 
+        timeline::TimelineWidget independent_height_widget;
+        independent_height_widget.resize(900, 500);
+        independent_height_widget.setTracks({top_track});
+        independent_height_widget.show();
+        application.processEvents();
+        independent_height_widget.setTrackRowHeights(75.0, 95.0);
+        require(independent_height_widget.trackRowHeight(
+                    timeline::TrackKind::Video) == 75.0 &&
+                    independent_height_widget.trackRowHeight(
+                        timeline::TrackKind::Audio) == 95.0,
+                "Loading per-project row heights discarded a saved group difference.");
+        const auto together_video_view = independent_height_widget
+            .trackGroupViewportRect(timeline::TrackKind::Video);
+        sendWheel(
+            independent_height_widget,
+            QPointF(400, together_video_view.center().y()),
+            120, Qt::ShiftModifier);
+        require(independent_height_widget.trackRowHeight(
+                    timeline::TrackKind::Video) == 90.0 &&
+                    independent_height_widget.trackRowHeight(
+                        timeline::TrackKind::Audio) == 110.0,
+                "Together mode did not apply the same Shift + wheel delta to both saved heights.");
+        independent_height_widget.setTrackRowHeights(70.0, 70.0);
+        independent_height_widget.setTrackRowHeightAdjustmentMode(
+            timeline::TrackRowHeightAdjustmentMode::IndependentlyByGroup);
+        const auto independent_video_view = independent_height_widget
+            .trackGroupViewportRect(timeline::TrackKind::Video);
+        const auto independent_audio_view = independent_height_widget
+            .trackGroupViewportRect(timeline::TrackKind::Audio);
+        sendWheel(
+            independent_height_widget,
+            QPointF(400, independent_video_view.center().y()),
+            120, Qt::ShiftModifier);
+        require(independent_height_widget.trackRowHeight(
+                    timeline::TrackKind::Video) == 85.0 &&
+                    independent_height_widget.trackRowHeight(
+                        timeline::TrackKind::Audio) == 70.0,
+                "Independent height mode changed Audio while the pointer was over Video.");
+        sendWheel(
+            independent_height_widget,
+            QPointF(400, independent_audio_view.center().y()),
+            120, Qt::ShiftModifier);
+        require(independent_height_widget.trackRowHeight(
+                    timeline::TrackKind::Video) == 85.0 &&
+                    independent_height_widget.trackRowHeight(
+                        timeline::TrackKind::Audio) == 85.0,
+                "Independent height mode did not target the empty Audio group under the pointer.");
+        const auto independent_splitter =
+            independent_height_widget.trackSplitterRect();
+        sendWheel(
+            independent_height_widget,
+            independent_splitter.center(), 120, Qt::ShiftModifier);
+        sendWheel(
+            independent_height_widget,
+            QPointF(400, 24), 120, Qt::ShiftModifier);
+        require(independent_height_widget.trackRowHeight(
+                    timeline::TrackKind::Video) == 85.0 &&
+                    independent_height_widget.trackRowHeight(
+                        timeline::TrackKind::Audio) == 85.0,
+                "Independent height mode changed a group over the ruler or divider.");
+        independent_height_widget.setTrackRowHeight(
+            timeline::TrackKind::Audio, 125.0);
+        auto independent_audio_clip = makeClip(
+            "independent-audio-height.wav", 0, 90, "Independent Audio");
+        independent_audio_clip.kind = timeline::ClipKind::Audio;
+        independent_audio_clip.clip_id = 9302;
+        timeline::TimelineTrack independent_audio_track{
+            9301, "Audio 1", 1.0, false, {independent_audio_clip}};
+        independent_audio_track.kind = timeline::TrackKind::Audio;
+        independent_height_widget.setTracks({top_track, independent_audio_track});
+        application.processEvents();
+        const auto independent_audio_row =
+            independent_height_widget.trackBounds(1);
+        require(independent_height_widget.trackRowHeight(
+                    timeline::TrackKind::Video) == 85.0 &&
+                    independent_height_widget.trackRowHeight(
+                        timeline::TrackKind::Audio) == 125.0 &&
+                    std::abs(independent_audio_row.height() - 125.0) < 0.001 &&
+                    std::abs(independent_audio_row.top() -
+                        independent_height_widget.trackSplitterRect().bottom()) < 0.001,
+                "Independent Audio height did not update its row geometry while preserving the Video size.");
+
+        const auto independent_audio_clip_bounds =
+            independent_height_widget.clipBounds({1, 0});
+        timeline::ClipId independent_selected_clip = 0;
+        QObject::connect(
+            &independent_height_widget,
+            &timeline::TimelineWidget::clipSelected,
+            [&independent_selected_clip](timeline::TrackId, timeline::ClipId clip_id) {
+                independent_selected_clip = clip_id;
+            });
+        sendMouse(
+            independent_height_widget, QEvent::MouseButtonPress,
+            independent_audio_clip_bounds.center(), Qt::LeftButton);
+        sendMouse(
+            independent_height_widget, QEvent::MouseButtonRelease,
+            independent_audio_clip_bounds.center(), Qt::NoButton);
+        require(independent_selected_clip == independent_audio_clip.clip_id,
+                "Hit testing did not select an Audio clip after independent row-height adjustment.");
+        std::vector<timeline::TimelineTrack> independently_sized_tracks;
+        for (int index = 0; index < 5; ++index) {
+            auto track = top_track;
+            track.track_id = static_cast<timeline::TrackId>(9400 + index);
+            track.name = "Video height scroll " + std::to_string(index + 1);
+            track.clips.clear();
+            track.transitions.clear();
+            independently_sized_tracks.push_back(std::move(track));
+        }
+        for (int index = 0; index < 5; ++index) {
+            auto track = independent_audio_track;
+            track.track_id = static_cast<timeline::TrackId>(9500 + index);
+            track.name = "Audio height scroll " + std::to_string(index + 1);
+            track.clips.clear();
+            track.transitions.clear();
+            if (index == 4) {
+                auto clip = independent_audio_clip;
+                clip.clip_id = 9601;
+                track.clips.push_back(std::move(clip));
+            }
+            independently_sized_tracks.push_back(std::move(track));
+        }
+        independent_height_widget.setTracks(independently_sized_tracks);
+        independent_height_widget.setZoomFactor(100.0);
+        const auto video_scroll_max = independent_height_widget.trackScrollMaximum(
+            timeline::TrackKind::Video);
+        const auto audio_scroll_max = independent_height_widget.trackScrollMaximum(
+            timeline::TrackKind::Audio);
+        require(audio_scroll_max > video_scroll_max,
+                "Different group heights did not produce their own scroll extents.");
+        independent_height_widget.setTrackScrollOffset(
+            timeline::TrackKind::Audio, audio_scroll_max);
+        const auto last_audio_row = independent_height_widget.trackBounds(9);
+        const auto last_audio_view = independent_height_widget.trackGroupViewportRect(
+            timeline::TrackKind::Audio);
+        const auto last_audio_clip = independent_height_widget.clipBounds({9, 0});
+        require(last_audio_row.height() == 125.0 &&
+                    last_audio_row.top() >= last_audio_view.top() - 0.001 &&
+                    last_audio_row.bottom() <= last_audio_view.bottom() + 0.001 &&
+                    last_audio_clip.height() == 125.0,
+                "Audio rows or clips did not stay aligned at the independent scroll limit.");
+        independent_selected_clip = 0;
+        sendMouse(
+            independent_height_widget, QEvent::MouseButtonPress,
+            last_audio_clip.center(), Qt::LeftButton);
+        sendMouse(
+            independent_height_widget, QEvent::MouseButtonRelease,
+            last_audio_clip.center(), Qt::NoButton);
+        require(independent_selected_clip == 9601,
+                "Audio hit testing failed at its independently sized scroll limit.");
+        independent_height_widget.setTrackRowHeightAdjustmentMode(
+            timeline::TrackRowHeightAdjustmentMode::Together);
+        require(independent_height_widget.trackRowHeight(
+                    timeline::TrackKind::Audio) ==
+                    independent_height_widget.trackRowHeight(
+                        timeline::TrackKind::Video),
+                "Switching back to Together did not match Audio to Video height.");
+        independent_height_widget.setTrackRowHeightAdjustmentMode(
+            timeline::TrackRowHeightAdjustmentMode::IndependentlyByGroup);
+        independent_height_widget.setTrackRowHeights(70.0, 70.0);
+        sendWheel(
+            independent_height_widget,
+            QPointF(400, independent_video_view.center().y()),
+            120, Qt::ShiftModifier);
+        require(independent_height_widget.trackRowHeight(
+                    timeline::TrackKind::Video) == 85.0 &&
+                    independent_height_widget.trackRowHeight(
+                        timeline::TrackKind::Audio) == 70.0,
+                "Changing the row-height mode did not preserve independent wheel routing.");
+        independent_height_widget.setTrackRowHeight(
+            timeline::TrackKind::Audio,
+            timeline::kMaximumTrackRowHeight + 10.0);
+        require(independent_height_widget.trackRowHeight(
+                    timeline::TrackKind::Audio) ==
+                        timeline::kMaximumTrackRowHeight &&
+                    independent_height_widget.trackRowHeight(
+                        timeline::TrackKind::Video) == 85.0,
+                "Independent group row heights did not clamp separately.");
+        independent_height_widget.close();
+
         std::vector<timeline::TimelineTrack> reflow_tracks;
         for (int index = 0; index < 9; ++index) {
             auto track = top_track;

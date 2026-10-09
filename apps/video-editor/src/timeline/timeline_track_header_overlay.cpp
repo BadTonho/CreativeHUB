@@ -146,7 +146,7 @@ void TimelineTrackHeaderOverlay::updateScrollBarGeometry() {
         bar->setRange(0, maximum);
         bar->setPageStep(std::max(1, height));
         bar->setSingleStep(std::max(1, static_cast<int>(std::lround(
-            timeline_->trackRowHeight() + TimelineGeometry::row_gap))));
+            timeline_->trackRowHeight(kind) + TimelineGeometry::row_gap))));
         {
             const QSignalBlocker blocker(bar);
             bar->setValue(timeline_->trackScrollOffset(kind));

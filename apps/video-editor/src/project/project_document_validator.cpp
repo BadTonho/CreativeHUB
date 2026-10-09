@@ -93,11 +93,15 @@ void validateDocument(const ProjectDocument& document,
         throwJson(ProjectErrorCode::InvalidValue, project_path,
                   "Project JSON contains an invalid timeline zoom; expected a value from 0.25 to 512.0.");
     }
-    if (!std::isfinite(document.timeline_row_height) ||
-        document.timeline_row_height < timeline::kMinimumTrackRowHeight ||
-        document.timeline_row_height > timeline::kMaximumTrackRowHeight) {
+    const auto valid_row_height = [](double height) {
+        return std::isfinite(height) &&
+            height >= timeline::kMinimumTrackRowHeight &&
+            height <= timeline::kMaximumTrackRowHeight;
+    };
+    if (!valid_row_height(document.timeline_video_row_height) ||
+        !valid_row_height(document.timeline_audio_row_height)) {
         throwJson(ProjectErrorCode::InvalidValue, project_path,
-                  "Project JSON contains an invalid timeline row height; expected a value from 30.0 to 180.0.");
+                  "Project JSON contains an invalid Timeline track-group row height; expected a value from 30.0 to 180.0.");
     }
     std::vector<std::filesystem::path> media_paths;
     for (const auto& media : document.media) {

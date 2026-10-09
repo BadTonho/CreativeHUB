@@ -8,7 +8,8 @@ namespace application {
 
 struct TimelinePresentationState {
     double zoom = 1.0;
-    double row_height = timeline::kDefaultTrackRowHeight;
+    double video_row_height = timeline::kDefaultTrackRowHeight;
+    double audio_row_height = timeline::kDefaultTrackRowHeight;
 };
 
 class ProjectDocumentMapper final {

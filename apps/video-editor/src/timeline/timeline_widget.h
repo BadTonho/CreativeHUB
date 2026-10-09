@@ -7,6 +7,7 @@
 #include "timeline_interaction_painter.h"
 #include "timeline_interaction_controller.h"
 #include "timeline_layout.h"
+#include "timeline_row_height_mode.h"
 #include "timeline_zoom.h"
 
 #include <QString>
@@ -94,7 +95,14 @@ public:
     [[nodiscard]] double zoomFactor() const noexcept;
     void setZoomFactor(double factor);
     [[nodiscard]] double trackRowHeight() const noexcept;
+    [[nodiscard]] double trackRowHeight(TrackKind kind) const noexcept;
     void setTrackRowHeight(double height);
+    void setTrackRowHeight(TrackKind kind, double height);
+    void setTrackRowHeights(double video_height, double audio_height);
+    [[nodiscard]] TrackRowHeightAdjustmentMode
+    trackRowHeightAdjustmentMode() const noexcept;
+    void setTrackRowHeightAdjustmentMode(
+        TrackRowHeightAdjustmentMode mode);
     [[nodiscard]] double nextZoomFactor(int direction) const noexcept;
     [[nodiscard]] bool canZoomIn() const noexcept;
     [[nodiscard]] bool canZoomOut() const noexcept;
@@ -156,7 +164,7 @@ signals:
     void seekRequested(qint64 frame_index);
     void zoomRequested(double factor);
     void zoomChanged(double factor);
-    void trackRowHeightChanged(double height);
+    void trackRowHeightsChanged(double video_height, double audio_height);
     void snapEnabledChanged(bool enabled);
     void trackHeaderVisualsChanged();
     void trackScrollMetricsChanged();
@@ -203,7 +211,6 @@ private:
         const std::optional<TrackScrollAnchor>& anchor) noexcept;
     void updateTrackSplitterHoverState(const QPointF& position);
     [[nodiscard]] QRectF rulerRect() const noexcept;
-    [[nodiscard]] double rowHeight() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
     [[nodiscard]] QRectF clipRect(const ClipLocation& location) const noexcept;
     [[nodiscard]] const TimelineClip& displayedClip(
@@ -287,7 +294,10 @@ private:
     bool stereo_waveform_display_enabled_ = false;
     int timeline_viewport_width_ = 0;
     double zoom_factor_ = 1.0;
-    double track_row_height_ = kDefaultTrackRowHeight;
+    double video_track_row_height_ = kDefaultTrackRowHeight;
+    double audio_track_row_height_ = kDefaultTrackRowHeight;
+    TrackRowHeightAdjustmentMode track_row_height_adjustment_mode_ =
+        TrackRowHeightAdjustmentMode::Together;
     double track_group_split_ratio_ = 0.5;
     double video_scroll_offset_ = 0.0;
     double audio_scroll_offset_ = 0.0;

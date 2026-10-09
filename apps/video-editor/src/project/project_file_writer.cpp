@@ -364,7 +364,8 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                       static_cast<qint64>(document.timeline_frame_rate.denominator));
     timeline.insert("frame_rate", frame_rate);
     timeline.insert("zoom", document.timeline_zoom);
-    timeline.insert("row_height", document.timeline_row_height);
+    timeline.insert("video_row_height", document.timeline_video_row_height);
+    timeline.insert("audio_row_height", document.timeline_audio_row_height);
     QJsonObject root;
     root.insert("format", QString::fromLatin1(format_identifier));
     root.insert("version", current_format_version);

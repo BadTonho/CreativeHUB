@@ -688,6 +688,8 @@ void EditWorkspace::createTimelineViewport(QWidget* container, QVBoxLayout* layo
     ui_.timeline->setStereoWaveformDisplayEnabled(
         settings::audioWaveformDisplayMode() ==
         settings::AudioWaveformDisplayMode::Stereo);
+    ui_.timeline->setTrackRowHeightAdjustmentMode(
+        settings::timelineTrackRowHeightAdjustmentMode());
     ui_.timeline->setTrackGroupSplitRatio(
         settings::timelineTrackGroupSplitRatio());
     connect(

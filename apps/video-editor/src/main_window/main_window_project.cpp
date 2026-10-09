@@ -227,7 +227,10 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
     const application::TimelinePresentationState presentation{
         editUi().timeline != nullptr ? editUi().timeline->zoomFactor() : 1.0,
         editUi().timeline != nullptr
-            ? editUi().timeline->trackRowHeight()
+            ? editUi().timeline->trackRowHeight(timeline::TrackKind::Video)
+            : timeline::kDefaultTrackRowHeight,
+        editUi().timeline != nullptr
+            ? editUi().timeline->trackRowHeight(timeline::TrackKind::Audio)
             : timeline::kDefaultTrackRowHeight};
     return project_controller_.document(presentation);
 }
@@ -235,8 +238,12 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
 void MainWindow::autosaveProject() {
     const application::TimelinePresentationState presentation{
         editUi().timeline != nullptr ? editUi().timeline->zoomFactor() : 1.0,
-        editUi().timeline != nullptr ? editUi().timeline->trackRowHeight()
-                                   : timeline::kDefaultTrackRowHeight};
+        editUi().timeline != nullptr
+            ? editUi().timeline->trackRowHeight(timeline::TrackKind::Video)
+            : timeline::kDefaultTrackRowHeight,
+        editUi().timeline != nullptr
+            ? editUi().timeline->trackRowHeight(timeline::TrackKind::Audio)
+            : timeline::kDefaultTrackRowHeight};
     const auto result = project_controller_.autosave(
         settings::projectAutosaveEnabled(),
         settings::projectAutosaveRetention(),
@@ -390,8 +397,12 @@ void MainWindow::openAutosaveFolder(const QString& folder_path) {
 void MainWindow::updateProjectDirtyState() {
     const application::TimelinePresentationState presentation{
         editUi().timeline != nullptr ? editUi().timeline->zoomFactor() : 1.0,
-        editUi().timeline != nullptr ? editUi().timeline->trackRowHeight()
-                                   : timeline::kDefaultTrackRowHeight};
+        editUi().timeline != nullptr
+            ? editUi().timeline->trackRowHeight(timeline::TrackKind::Video)
+            : timeline::kDefaultTrackRowHeight,
+        editUi().timeline != nullptr
+            ? editUi().timeline->trackRowHeight(timeline::TrackKind::Audio)
+            : timeline::kDefaultTrackRowHeight};
     static_cast<void>(project_controller_.updateDirtyState(presentation));
 
     setWindowTitle(project_dirty_ ? "Video Editor *" : "Video Editor");
@@ -406,8 +417,12 @@ bool MainWindow::saveProjectTo(
     const char* operation) {
     const application::TimelinePresentationState presentation{
         editUi().timeline != nullptr ? editUi().timeline->zoomFactor() : 1.0,
-        editUi().timeline != nullptr ? editUi().timeline->trackRowHeight()
-                                   : timeline::kDefaultTrackRowHeight};
+        editUi().timeline != nullptr
+            ? editUi().timeline->trackRowHeight(timeline::TrackKind::Video)
+            : timeline::kDefaultTrackRowHeight,
+        editUi().timeline != nullptr
+            ? editUi().timeline->trackRowHeight(timeline::TrackKind::Audio)
+            : timeline::kDefaultTrackRowHeight};
     const auto result = project_controller_.saveTo(project_path, presentation);
     if (!result.succeeded()) {
         logging::Context context{
@@ -892,7 +907,9 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     playback_frame_index_ = 0;
     if (editUi().timeline != nullptr) {
         editUi().timeline->setZoomFactor(loaded_document.timeline_zoom);
-        editUi().timeline->setTrackRowHeight(loaded_document.timeline_row_height);
+        editUi().timeline->setTrackRowHeights(
+            loaded_document.timeline_video_row_height,
+            loaded_document.timeline_audio_row_height);
     }
     if (editUi().timeline_scroll != nullptr) {
         editUi().timeline_scroll->horizontalScrollBar()->setValue(0);

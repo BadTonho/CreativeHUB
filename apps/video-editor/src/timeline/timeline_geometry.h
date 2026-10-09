@@ -40,6 +40,15 @@ public:
         std::optional<std::int64_t> fixed_duration = std::nullopt,
         double timeline_frame_rate = 0.0,
         std::optional<TimelineTrackViewLayout> track_view_layout = std::nullopt) noexcept;
+    TimelineGeometry(
+        const std::vector<TimelineTrack>& tracks,
+        QSizeF bounds,
+        double video_row_height,
+        double audio_row_height,
+        double zoom_factor,
+        std::optional<std::int64_t> fixed_duration = std::nullopt,
+        double timeline_frame_rate = 0.0,
+        std::optional<TimelineTrackViewLayout> track_view_layout = std::nullopt) noexcept;
 
     [[nodiscard]] double frameRate() const noexcept;
     [[nodiscard]] std::int64_t totalDuration() const noexcept;
@@ -53,6 +62,7 @@ public:
     [[nodiscard]] QRectF emptyTrackRect(TrackKind kind) const noexcept;
     [[nodiscard]] double trackGroupScrollMaximum(TrackKind kind) const noexcept;
     [[nodiscard]] std::size_t trackGroupCount(TrackKind kind) const noexcept;
+    [[nodiscard]] double trackRowHeight(TrackKind kind) const noexcept;
     [[nodiscard]] QRectF rulerRect() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
     [[nodiscard]] QRectF clipRect(
@@ -65,7 +75,8 @@ public:
 private:
     const std::vector<TimelineTrack>& tracks_;
     QSizeF bounds_;
-    double row_height_ = 70.0;
+    double video_row_height_ = 70.0;
+    double audio_row_height_ = 70.0;
     double zoom_factor_ = 1.0;
     std::optional<std::int64_t> fixed_duration_;
     double timeline_frame_rate_ = 0.0;

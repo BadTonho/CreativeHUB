@@ -138,6 +138,33 @@ void setTimelineTrackGroupSplitRatio(double ratio) {
             kMaximumTimelineTrackGroupSplitRatio));
 }
 
+timeline::TrackRowHeightAdjustmentMode
+timelineTrackRowHeightAdjustmentMode() {
+    const auto stored = QSettings().value(
+        kTimelineTrackRowHeightAdjustmentModeKey);
+    bool ok = false;
+    const auto value = stored.toInt(&ok);
+    if (!ok) return kDefaultTimelineTrackRowHeightAdjustmentMode;
+    switch (static_cast<timeline::TrackRowHeightAdjustmentMode>(value)) {
+    case timeline::TrackRowHeightAdjustmentMode::Together:
+    case timeline::TrackRowHeightAdjustmentMode::IndependentlyByGroup:
+        return static_cast<timeline::TrackRowHeightAdjustmentMode>(value);
+    }
+    return kDefaultTimelineTrackRowHeightAdjustmentMode;
+}
+
+void setTimelineTrackRowHeightAdjustmentMode(
+    timeline::TrackRowHeightAdjustmentMode mode) {
+    switch (mode) {
+    case timeline::TrackRowHeightAdjustmentMode::Together:
+    case timeline::TrackRowHeightAdjustmentMode::IndependentlyByGroup:
+        QSettings().setValue(
+            kTimelineTrackRowHeightAdjustmentModeKey,
+            static_cast<int>(mode));
+        break;
+    }
+}
+
 bool workspacePageTransitionsEnabled() {
     const auto stored = QSettings().value(
         kWorkspacePageTransitionsEnabledKey);

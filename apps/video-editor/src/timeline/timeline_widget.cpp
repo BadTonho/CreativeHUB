@@ -546,18 +546,49 @@ void TimelineWidget::setZoomFactor(double factor) {
 }
 
 double TimelineWidget::trackRowHeight() const noexcept {
-    return track_row_height_;
+    return video_track_row_height_;
+}
+
+double TimelineWidget::trackRowHeight(TrackKind kind) const noexcept {
+    return kind == TrackKind::Audio
+        ? audio_track_row_height_ : video_track_row_height_;
 }
 
 void TimelineWidget::setTrackRowHeight(double height) {
+    setTrackRowHeights(height, height);
+}
+
+void TimelineWidget::setTrackRowHeight(TrackKind kind, double height) {
     if (!std::isfinite(height)) return;
-    const auto normalized = std::clamp(
-        height, kMinimumTrackRowHeight, kMaximumTrackRowHeight);
-    if (std::abs(normalized - track_row_height_) < 0.000001) return;
+    if (track_row_height_adjustment_mode_ ==
+        TrackRowHeightAdjustmentMode::Together) {
+        setTrackRowHeights(height, height);
+        return;
+    }
+    if (kind == TrackKind::Audio) {
+        setTrackRowHeights(video_track_row_height_, height);
+    } else {
+        setTrackRowHeights(height, audio_track_row_height_);
+    }
+}
+
+void TimelineWidget::setTrackRowHeights(
+    double video_height,
+    double audio_height) {
+    if (!std::isfinite(video_height) || !std::isfinite(audio_height)) return;
+    const auto normalized_video = std::clamp(
+        video_height, kMinimumTrackRowHeight, kMaximumTrackRowHeight);
+    const auto normalized_audio = std::clamp(
+        audio_height, kMinimumTrackRowHeight, kMaximumTrackRowHeight);
+    if (std::abs(normalized_video - video_track_row_height_) < 0.000001 &&
+        std::abs(normalized_audio - audio_track_row_height_) < 0.000001) {
+        return;
+    }
 
     const auto video_anchor = captureTrackScrollAnchor(TrackKind::Video);
     const auto audio_anchor = captureTrackScrollAnchor(TrackKind::Audio);
-    track_row_height_ = normalized;
+    video_track_row_height_ = normalized_video;
+    audio_track_row_height_ = normalized_audio;
 
     // Divider adjustments can leave pixel compensation after one group's
     // independent scroll offset reaches its limit. Re-anchor each group to
@@ -570,7 +601,30 @@ void TimelineWidget::setTrackRowHeight(double height) {
     emit trackScrollMetricsChanged();
     emit trackHeaderVisualsChanged();
     update();
-    emit trackRowHeightChanged(track_row_height_);
+    emit trackRowHeightsChanged(
+        video_track_row_height_, audio_track_row_height_);
+}
+
+TrackRowHeightAdjustmentMode
+TimelineWidget::trackRowHeightAdjustmentMode() const noexcept {
+    return track_row_height_adjustment_mode_;
+}
+
+void TimelineWidget::setTrackRowHeightAdjustmentMode(
+    TrackRowHeightAdjustmentMode mode) {
+    switch (mode) {
+    case TrackRowHeightAdjustmentMode::Together:
+    case TrackRowHeightAdjustmentMode::IndependentlyByGroup:
+        break;
+    default:
+        return;
+    }
+    if (mode == track_row_height_adjustment_mode_) return;
+    track_row_height_adjustment_mode_ = mode;
+    if (mode == TrackRowHeightAdjustmentMode::Together) {
+        // Video is the canonical group when independent sizes are joined.
+        setTrackRowHeights(video_track_row_height_, video_track_row_height_);
+    }
 }
 
 double TimelineWidget::nextZoomFactor(int direction) const noexcept {
@@ -902,7 +956,8 @@ TimelineGeometry TimelineWidget::geometry() const noexcept {
         ? std::optional<std::int64_t>{interaction_controller_.trimGesture().scaleDuration()}
         : std::nullopt;
     return TimelineGeometry(
-        tracks_, QSizeF(width(), height()), track_row_height_, zoom_factor_,
+        tracks_, QSizeF(width(), height()),
+        video_track_row_height_, audio_track_row_height_, zoom_factor_,
         fixed_duration, frame_rate_.asDouble(), trackViewLayout());
 }
 
@@ -951,7 +1006,7 @@ TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
         }));
     const auto video_content_height = video_count <= 0.0
         ? 0.0
-        : video_count * track_row_height_ +
+        : video_count * video_track_row_height_ +
             (video_count - 1.0) * TimelineGeometry::row_gap;
     const auto video_alignment_offset = std::max(
         0.0, video_height - video_content_height);
@@ -1039,17 +1094,18 @@ void TimelineWidget::restoreTrackScrollAnchor(
         ? layout.audio_track_translation : layout.video_track_translation;
     const auto viewport = kind == TrackKind::Audio
         ? layout.audio_viewport : layout.video_viewport;
+    const auto row_height = trackRowHeight(kind);
     const auto row_edge_offset = anchor.has_value()
         ? std::clamp(
             anchor->row_edge_offset,
-            1.0 - track_row_height_,
+            1.0 - row_height,
             anchor->bottom_edge
                 ? 0.0 : std::max(0.0, viewport.height() - 1.0))
         : 0.0;
     const auto row_pitch_offset = static_cast<double>(group_index) *
-        (track_row_height_ + TimelineGeometry::row_gap);
+        (row_height + TimelineGeometry::row_gap);
     const auto desired_offset = anchor.has_value() && anchor->bottom_edge
-        ? row_pitch_offset + track_row_height_ + track_translation -
+        ? row_pitch_offset + row_height + track_translation -
             viewport.height() - row_edge_offset
         : row_pitch_offset + track_translation - row_edge_offset;
     scroll_offset = std::clamp(
@@ -1060,14 +1116,11 @@ QRectF TimelineWidget::rulerRect() const noexcept {
     return geometry().rulerRect();
 }
 
-double TimelineWidget::rowHeight() const noexcept {
-    return track_row_height_;
-}
-
 void TimelineWidget::updateVerticalExtent() {
     constexpr double bottom_margin = 12.0;
     const auto minimum_height = static_cast<int>(std::ceil(
-        TimelineGeometry::top_margin + 2.0 * track_row_height_ +
+        TimelineGeometry::top_margin + video_track_row_height_ +
+        audio_track_row_height_ +
         track_group_splitter_height + bottom_margin));
     setMinimumHeight(std::max(100, minimum_height));
     updateGeometry();
@@ -3140,7 +3193,16 @@ bool TimelineWidget::handleWheel(
             ? static_cast<double>(pixel_delta.y())
             : static_cast<double>(angle_delta.y()) / 8.0;
         if (std::abs(height_delta) < 0.000001) return false;
-        setTrackRowHeight(track_row_height_ + height_delta);
+        if (track_row_height_adjustment_mode_ ==
+            TrackRowHeightAdjustmentMode::Together) {
+            setTrackRowHeights(
+                video_track_row_height_ + height_delta,
+                audio_track_row_height_ + height_delta);
+        } else if (const auto group = trackGroupAt(position.y());
+                   group.has_value()) {
+            setTrackRowHeight(
+                *group, trackRowHeight(*group) + height_delta);
+        }
         return true;
     }
 
@@ -3151,7 +3213,7 @@ bool TimelineWidget::handleWheel(
         const auto steps = static_cast<double>(angle_delta.y()) / 120.0;
         if (std::abs(steps) < 0.000001) return false;
         scroll_delta = steps * 3.0 *
-            (track_row_height_ + TimelineGeometry::row_gap);
+            (trackRowHeight(*group) + TimelineGeometry::row_gap);
     }
     setTrackScrollOffset(*group, trackScrollOffset(*group) -
         static_cast<int>(std::lround(scroll_delta)));

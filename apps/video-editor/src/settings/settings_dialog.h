@@ -4,6 +4,7 @@
 #include <QString>
 
 #include "shortcut_manager.h"
+#include "timeline/timeline_row_height_mode.h"
 
 #include <vector>
 
@@ -38,6 +39,8 @@ public:
 signals:
     void gpuCompositionEnabledChanged(bool enabled);
     void audioWaveformStereoModeChanged(bool enabled);
+    void timelineTrackRowHeightAdjustmentModeChanged(
+        timeline::TrackRowHeightAdjustmentMode mode);
     void previewPerformanceMetricsEnabledChanged(bool enabled);
     void projectAutosaveSettingsChanged(
         bool enabled,

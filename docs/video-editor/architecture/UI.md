@@ -346,9 +346,11 @@ messages, including `Loading timeline clip...`, share one line in that footer;
 the separate global status-bar row is hidden. The timeline receives the
 expandable dock space, and its track rows grow within that space while additional rows remain
 available through vertical scrolling. Each track row has a maximum height of
-180 pixels, a minimum height of 30 pixels, and a default height of 70 pixels
-for new projects. Holding Shift while scrolling
-over the Timeline changes every row uniformly using smooth wheel deltas. When
+180 pixels and a minimum height of 30 pixels; new projects use 70 pixels for
+both groups. `Settings > Timeline` selects the local, cross-project Shift +
+wheel mode: Together applies the same delta to both current group heights, or
+Independently by group changes only the group beneath the pointer. The ruler
+and divider do not target a group in independent mode. When
 the rows require more space than the viewport, the existing vertical scroll
 bar exposes the remaining tracks. When Video rows fit, the last Video track
 meets the divider and Audio starts immediately below it; unused pane space is
@@ -356,8 +358,8 @@ kept above Video and below Audio. Changing row height anchors Video at the
 bottom edge of its last visible row and Audio at the top edge of its first
 visible row, subject to the available scroll range. Below 44 pixels, each
 header shows the track name and clip count on one clipped, elided line; taller
-rows keep the two-line header. The selected row height is persisted per
-project; Ctrl + scroll continues to control horizontal timeline zoom.
+rows keep the two-line header. Both group heights are persisted per project;
+Ctrl + scroll continues to control horizontal timeline zoom.
 The same toolbar includes `Volume` and a `Monitor Volume` slider from 0% to
 200%, initialized at 100%. This is a global monitoring control for audio heard
 during editor playback; it is persisted in `QSettings`, applies live without
@@ -629,7 +631,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 22 format. Linked video-audio clips can be
+the current `.csp` version 23 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Right-clicking a video or image clip offers
 **Open in Fusion** and opens the selected clip's node graph. A video with linked

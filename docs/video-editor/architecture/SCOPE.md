@@ -19,10 +19,10 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 22, including migration from
+- versioned `.csp` persistence through version 23, including migration from
   versions 1 through 13, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio media kinds, typed tracks,
-  per-project timeline zoom, track-row height, and optional shared/clip-specific
+  per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
   Image Editor links. New projects offer 1920×1080 (16:9) and 1080×1920 (9:16)
   canvases plus 24, 25, 30, 48, 50, and 60 fps, defaulting to 16:9 at 30 fps;
 - embedded video audio exposed as linked Audio-track companions, independent
@@ -83,7 +83,7 @@ effect to the Timeline stack. Merge combines its background and foreground with
 straight-alpha source-over. The graph output replaces the clip image before
 its existing Inspector effect stack and Timeline transform/keyframes.
 
-Graph data is stored in `.csp` version 22. Versions 1 through 21 retain their
+Graph data is stored in `.csp` version 22 and remains compatible with version 23. Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its
 duration. Preview and export evaluate the same graph at the clip-local frame;

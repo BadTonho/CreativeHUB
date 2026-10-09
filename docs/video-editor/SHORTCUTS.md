@@ -26,7 +26,7 @@ It must change in the same commit as any shortcut change.
 | Ctrl + S | Save the current project or open Save As | All workspaces |
 | Ctrl + Shift + S | Save the current project under a new path | All workspaces |
 | Ctrl + Mouse Wheel | Zoom the timeline around the playhead | Timeline |
-| Shift + Mouse Wheel | Adjust the height of all Timeline track rows | Timeline |
+| Shift + Mouse Wheel | Adjust both track-group heights together or only the group under the pointer, according to Settings > Timeline | Timeline |
 | Drag the time ruler | Scrub the playhead without selecting a clip | Timeline |
 
 Alt + drag is a mouse gesture, not a keyboard shortcut. Ctrl and Shift + mouse

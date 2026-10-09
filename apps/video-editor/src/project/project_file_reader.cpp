@@ -687,7 +687,27 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
         }
         document.timeline_zoom = zoom_value.toDouble();
     }
-    if (version >= timeline_row_height_format_version) {
+    if (version >= timeline_group_row_heights_format_version) {
+        const auto read_row_height = [&timeline_object, &project_path](
+                                         const char* field_name) {
+            const auto value = timeline_object.value(QLatin1String(field_name));
+            if (value.isUndefined()) {
+                throwJson(ProjectErrorCode::MissingField, project_path,
+                          "Project JSON is missing a Timeline track-group row height.");
+            }
+            if (!value.isDouble() || !std::isfinite(value.toDouble()) ||
+                value.toDouble() < timeline::kMinimumTrackRowHeight ||
+                value.toDouble() > timeline::kMaximumTrackRowHeight) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Project JSON contains an invalid Timeline track-group row height; expected a value from 30.0 to 180.0.");
+            }
+            return value.toDouble();
+        };
+        document.timeline_video_row_height =
+            read_row_height("video_row_height");
+        document.timeline_audio_row_height =
+            read_row_height("audio_row_height");
+    } else if (version >= timeline_row_height_format_version) {
         const auto row_height_value = timeline_object.value("row_height");
         if (row_height_value.isUndefined()) {
             throwJson(ProjectErrorCode::MissingField, project_path,
@@ -699,7 +719,8 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid timeline row height; expected a value from 30.0 to 180.0.");
         }
-        document.timeline_row_height = row_height_value.toDouble();
+        document.timeline_video_row_height = row_height_value.toDouble();
+        document.timeline_audio_row_height = row_height_value.toDouble();
     }
     timeline::TrackId migrated_track_id = 1;
     timeline::ClipId migrated_clip_id = 1;

@@ -104,6 +104,23 @@ int main(int argc, char* argv[]) {
         settings.setValue(settings::kTimelineTrackGroupSplitRatioKey, "invalid");
         require(settings::timelineTrackGroupSplitRatio() == 0.5,
                 "Invalid Timeline split ratio did not fall back to the default.");
+
+        require(settings::timelineTrackRowHeightAdjustmentMode() ==
+                    timeline::TrackRowHeightAdjustmentMode::Together,
+                "Track row-height adjustment must default to Together.");
+        settings::setTimelineTrackRowHeightAdjustmentMode(
+            timeline::TrackRowHeightAdjustmentMode::IndependentlyByGroup);
+        settings.sync();
+        require(settings::timelineTrackRowHeightAdjustmentMode() ==
+                    timeline::TrackRowHeightAdjustmentMode::IndependentlyByGroup,
+                "Independent track row-height adjustment was not persisted locally.");
+        settings.setValue(
+            settings::kTimelineTrackRowHeightAdjustmentModeKey, 99);
+        require(settings::timelineTrackRowHeightAdjustmentMode() ==
+                    timeline::TrackRowHeightAdjustmentMode::Together,
+                "An invalid track row-height mode did not fall back to Together.");
+        settings::setTimelineTrackRowHeightAdjustmentMode(
+            timeline::TrackRowHeightAdjustmentMode::Together);
         settings.clear();
 
         require(settings::monitorVolumePercent() ==
@@ -294,6 +311,8 @@ int main(int argc, char* argv[]) {
             "shortcutEditor_workspace.switch_fusion");
         auto* switch_render_editor = dialog.findChild<QKeySequenceEdit*>(
             "shortcutEditor_workspace.switch_render");
+        auto* row_height_mode = dialog.findChild<QComboBox*>(
+            "timelineTrackHeightAdjustmentModeComboBox");
         require(app_sequence_editor != nullptr && app_reset_button != nullptr &&
                     app_clear_button != nullptr &&
                     app_sequence_editor->keySequence() == QKeySequence("Ctrl+P") &&
@@ -302,8 +321,19 @@ int main(int argc, char* argv[]) {
                     switch_fusion_editor != nullptr &&
                     switch_fusion_editor->keySequence() == QKeySequence("Alt+2") &&
                     switch_render_editor != nullptr &&
-                    switch_render_editor->keySequence() == QKeySequence("Alt+3"),
+                    switch_render_editor->keySequence() == QKeySequence("Alt+3") &&
+                    row_height_mode != nullptr &&
+                    row_height_mode->currentData().toInt() ==
+                        static_cast<int>(timeline::TrackRowHeightAdjustmentMode::Together),
                 "Settings did not show the configured shortcut or the three workspace navigation defaults.");
+        row_height_mode->setCurrentIndex(1);
+        require(settings::timelineTrackRowHeightAdjustmentMode() ==
+                    timeline::TrackRowHeightAdjustmentMode::IndependentlyByGroup,
+                "Changing the Timeline height mode did not apply immediately.");
+        row_height_mode->setCurrentIndex(0);
+        require(settings::timelineTrackRowHeightAdjustmentMode() ==
+                    timeline::TrackRowHeightAdjustmentMode::Together,
+                "Restoring the Timeline height mode did not apply immediately.");
         dialog.show();
         tabs->setCurrentWidget(tabs->widget(3));
         QApplication::processEvents();

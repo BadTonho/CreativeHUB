@@ -98,9 +98,17 @@ Down stop at the visible first and last row of that type. The divider
 highlights on hover or while dragging and uses the vertical-resize cursor. Its
 position is stored in local
 `QSettings` under `timeline/track_group_split_ratio` for use across projects.
-Both panes keep a minimum usable height. Track row height remains shared by
-Video and Audio. When Video rows fit in their pane, the last Video track is
-aligned to the divider; Audio begins at the divider's lower edge. Unused pane
+Both panes keep a minimum usable height. Track row heights are independently
+stored per project from 30 to 180 pixels; new projects start with 70 pixels
+for each group. `Settings > Timeline` provides a local, cross-project
+`Together` or `Independently by group` preference for Shift + mouse wheel.
+Together applies the same delta to both current heights. Independent mode
+adjusts only the Video or Audio group beneath the pointer; over the ruler or
+divider, the gesture does not change either height. Returning to Together
+matches Audio to the current Video height and marks the project modified when
+that changes the saved Audio height. When Video rows fit in their pane, the
+last Video track is aligned to the divider; Audio begins at the divider's
+lower edge. Unused pane
 space stays above Video and below Audio. Changing row height anchors Video by
 the bottom edge of its last visible row and Audio by the top edge of its first
 visible row, clamping each scroll offset when the new range requires it. The
@@ -108,7 +116,8 @@ divider keeps both stacks moving by the same amount. Below 44 pixels, each
 fixed track header shows its name and clip count on one elided line; taller
 rows keep the two-line header. Header text stays clipped to its row. Vertical
 scroll positions are temporary view state and are not written to the `.csp`
-project.
+project. Group-specific row heights are presentation data persisted in the
+`.csp` project.
 Clip rectangles fill the vertical extent of their track row; the track header
 remains reserved on the left, while no top or bottom inset is applied to clips.
 The visual timeline uses a minimum one-hour range, independent of the
@@ -141,10 +150,11 @@ in place.
 Zoom changes only the timeline's horizontal presentation and are saved in the
 project; they do not change clip frames, playback, preview, or Undo/Redo.
 Each pane shows as many rows as fit and scrolls independently when its group
-has more tracks. Shift + mouse wheel changes the height of every track row
-uniformly, from 30 to 180 pixels; new projects start at 70 pixels. The gesture
-uses pixel wheel deltas when available and angle deltas as a smooth fallback.
-The selected height is a per-project view setting. Ctrl + mouse wheel remains
+has more tracks. Each group height ranges from 30 to 180 pixels; new projects
+start with 70 pixels in both groups. Shift + mouse wheel uses pixel deltas when
+available and angle deltas as a smooth fallback. Its local Settings > Timeline
+preference selects whether both current heights receive the same
+delta or only the group beneath the pointer changes. Ctrl + mouse wheel remains
 reserved for shared horizontal zoom; an unmodified vertical wheel scrolls the
 pane beneath the pointer, and horizontal scrolling remains shared.
 
@@ -421,8 +431,8 @@ FFmpeg sessions, and GPU resources are never stored.
 
 The versioned `.csp` project format stores typed tracks and clips, audio source
 timing, optional audio parameters and Audio-clip volume envelopes, linked video-audio companion IDs and
-externalized/pending state, and per-project timeline zoom and uniform track-row
-height. Versions 1 through 13 migrate online videos with audio to companions;
+externalized/pending state, and per-project timeline zoom and separate Video
+and Audio track-row heights. Versions 1 through 13 migrate online videos with audio to companions;
 offline videos receive them when restored. Version 1 sequential clips migrate
 to Video 1 when opened. Video, still-image, text, and audio media, audio
 waveforms, per-clip volume automation, and offline video/audio export are

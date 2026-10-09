@@ -606,6 +606,13 @@ void MainWindow::showSettingsDialog() {
                 editUi().timeline->setStereoWaveformDisplayEnabled(enabled);
             }
         });
+    connect(&dialog,
+        &settings::SettingsDialog::timelineTrackRowHeightAdjustmentModeChanged,
+        this, [this](timeline::TrackRowHeightAdjustmentMode mode) {
+            if (editUi().timeline != nullptr) {
+                editUi().timeline->setTrackRowHeightAdjustmentMode(mode);
+            }
+        });
     dialog.setAutosaveSnapshots(autosaveSnapshotsForSettings());
     connect(
         &dialog,

@@ -377,7 +377,8 @@ void testProjectControllerDirtyAutosaveSaveAndReset() {
 
     application::EditorSession session;
     application::ProjectController controller(session, root / "recovery", "test-session");
-    const auto presentation = application::TimelinePresentationState{1.25, 46.0};
+    const auto presentation = application::TimelinePresentationState{
+        1.25, 46.0, 52.0};
     const auto baseline = controller.document(presentation);
     const auto original_track_name = session.timeline().tracks().front().name;
     controller.establishBaseline(baseline);
@@ -394,6 +395,14 @@ void testProjectControllerDirtyAutosaveSaveAndReset() {
                 !controller.updateDirtyState(presentation) &&
                 controller.document(presentation) == baseline,
             "Returning to the canonical saved document did not clear the dirty state.");
+    const auto changed_audio_row_height = application::TimelinePresentationState{
+        presentation.zoom,
+        presentation.video_row_height,
+        presentation.audio_row_height + 1.0};
+    require(controller.updateDirtyState(changed_audio_row_height),
+            "Changing only the Audio row height did not mark the project dirty.");
+    require(!controller.updateDirtyState(presentation),
+            "Restoring the saved Audio row height did not clear the dirty state.");
     require(session.legacyTimelineForUi().renameTrack(0, "Edited Track") ==
                 timeline::TrackMutationResult::Changed &&
                 controller.updateDirtyState(presentation),
@@ -587,6 +596,9 @@ void testVideoAudioCompanionMigrationAndOfflineRestore() {
             QByteArray::fromStdString(bytes)).object();
         root_object.insert("version", 13);
         auto timeline_object = root_object.value("timeline").toObject();
+        timeline_object.remove("video_row_height");
+        timeline_object.remove("audio_row_height");
+        timeline_object.insert("row_height", timeline::kDefaultTrackRowHeight);
         auto tracks = timeline_object.value("tracks").toArray();
         for (qsizetype track_index = 0; track_index < tracks.size(); ++track_index) {
             auto track = tracks.at(track_index).toObject();
@@ -841,6 +853,9 @@ void testLegacyTimelineRateMigrationAndOfflineReconnect() {
         QByteArray::fromStdString(current_json)).object();
     root_object.insert("version", 10);
     auto timeline_object = root_object.value("timeline").toObject();
+    timeline_object.remove("video_row_height");
+    timeline_object.remove("audio_row_height");
+    timeline_object.insert("row_height", timeline::kDefaultTrackRowHeight);
     timeline_object.remove("frame_rate");
     auto tracks = timeline_object.value("tracks").toArray();
     for (qsizetype track_index = 0; track_index < tracks.size(); ++track_index) {
@@ -957,6 +972,9 @@ void testLegacyTimelineRateMigrationAndOfflineReconnect() {
         QByteArray::fromStdString(fallback_json)).object();
     fallback_root.insert("version", 10);
     auto fallback_timeline = fallback_root.value("timeline").toObject();
+    fallback_timeline.remove("video_row_height");
+    fallback_timeline.remove("audio_row_height");
+    fallback_timeline.insert("row_height", timeline::kDefaultTrackRowHeight);
     fallback_timeline.remove("frame_rate");
     auto fallback_tracks = fallback_timeline.value("tracks").toArray();
     auto fallback_track_object = fallback_tracks.at(0).toObject();

@@ -15,7 +15,8 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
     document.canvas_height = session.canvasHeight();
     document.timeline_frame_rate = session.timeline().frameRate();
     document.timeline_zoom = presentation.zoom;
-    document.timeline_row_height = presentation.row_height;
+    document.timeline_video_row_height = presentation.video_row_height;
+    document.timeline_audio_row_height = presentation.audio_row_height;
     const auto& library = session.mediaLibrary();
     document.media.reserve(library.size());
     document.bins = library.bins();

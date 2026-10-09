@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace timeline {
 namespace {
@@ -35,9 +36,24 @@ TimelineGeometry::TimelineGeometry(
     std::optional<std::int64_t> fixed_duration,
     double timeline_frame_rate,
     std::optional<TimelineTrackViewLayout> track_view_layout) noexcept
+    : TimelineGeometry(
+          tracks, bounds, row_height, row_height, zoom_factor,
+          fixed_duration, timeline_frame_rate,
+          std::move(track_view_layout)) {}
+
+TimelineGeometry::TimelineGeometry(
+    const std::vector<TimelineTrack>& tracks,
+    QSizeF bounds,
+    double video_row_height,
+    double audio_row_height,
+    double zoom_factor,
+    std::optional<std::int64_t> fixed_duration,
+    double timeline_frame_rate,
+    std::optional<TimelineTrackViewLayout> track_view_layout) noexcept
     : tracks_(tracks),
       bounds_(bounds),
-      row_height_(std::max(0.0, row_height)),
+      video_row_height_(std::max(0.0, video_row_height)),
+      audio_row_height_(std::max(0.0, audio_row_height)),
       zoom_factor_(std::isfinite(zoom_factor) && zoom_factor > 0.0 ? zoom_factor : 1.0),
       fixed_duration_(fixed_duration),
       timeline_frame_rate_(std::isfinite(timeline_frame_rate) &&
@@ -100,8 +116,16 @@ std::int64_t TimelineGeometry::displayDuration() const noexcept {
 QRectF TimelineGeometry::trackRect(std::size_t index) const noexcept {
     const double width = std::max(
         0.0, bounds_.width() - left_margin - right_margin);
-    if (track_view_layout_.has_value() && index < tracks_.size()) {
+    if (index < tracks_.size()) {
         const auto kind = tracks_[index].kind;
+        const auto row_height = trackRowHeight(kind);
+        if (!track_view_layout_.has_value()) {
+            double y = top_margin;
+            for (std::size_t previous = 0; previous < index; ++previous) {
+                y += trackRowHeight(tracks_[previous].kind) + row_gap;
+            }
+            return QRectF(left_margin, y, width, row_height);
+        }
         const auto viewport = trackGroupViewportRect(kind);
         std::size_t group_index = 0;
         for (std::size_t previous = 0; previous < index; ++previous) {
@@ -116,16 +140,16 @@ QRectF TimelineGeometry::trackRect(std::size_t index) const noexcept {
         return QRectF(
             left_margin,
             viewport.top() + static_cast<double>(group_index) *
-                (row_height_ + row_gap) - std::max(0.0, scroll_offset) +
+                (row_height + row_gap) - std::max(0.0, scroll_offset) +
                 track_translation,
             width,
-            row_height_);
+            row_height);
     }
     return QRectF(
         left_margin,
-        top_margin + static_cast<double>(index) * (row_height_ + row_gap),
+        top_margin + static_cast<double>(index) * (video_row_height_ + row_gap),
         width,
-        row_height_);
+        video_row_height_);
 }
 
 QRectF TimelineGeometry::trackGroupViewportRect(TrackKind kind) const noexcept {
@@ -153,7 +177,7 @@ QRectF TimelineGeometry::emptyTrackRect(TrackKind kind) const noexcept {
         left_margin,
         viewport.top(),
         std::max(0.0, bounds_.width() - left_margin - right_margin),
-        row_height_);
+        trackRowHeight(kind));
 }
 
 std::size_t TimelineGeometry::trackGroupCount(TrackKind kind) const noexcept {
@@ -163,11 +187,15 @@ std::size_t TimelineGeometry::trackGroupCount(TrackKind kind) const noexcept {
         }));
 }
 
+double TimelineGeometry::trackRowHeight(TrackKind kind) const noexcept {
+    return kind == TrackKind::Audio ? audio_row_height_ : video_row_height_;
+}
+
 double TimelineGeometry::trackGroupScrollMaximum(TrackKind kind) const noexcept {
     const auto count = trackGroupCount(kind);
     const auto viewport = trackGroupViewportRect(kind);
     if (count == 0 || viewport.height() <= 0.0) return 0.0;
-    const auto content_height = static_cast<double>(count) * row_height_ +
+    const auto content_height = static_cast<double>(count) * trackRowHeight(kind) +
         static_cast<double>(count - 1) * row_gap;
     return std::max(0.0, content_height - viewport.height());
 }

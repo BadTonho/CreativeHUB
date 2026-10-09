@@ -1600,7 +1600,10 @@ public:
             require(current.canvas_width == loaded.canvas_width &&
                         current.canvas_height == loaded.canvas_height &&
                         current.timeline_zoom == loaded.timeline_zoom &&
-                        current.timeline_row_height == loaded.timeline_row_height,
+                        current.timeline_video_row_height ==
+                            loaded.timeline_video_row_height &&
+                        current.timeline_audio_row_height ==
+                            loaded.timeline_audio_row_height,
                     "The current MainWindow document has different canvas or view settings.");
             require(current.media == loaded.media,
                     "The current MainWindow document has different media entries.");
