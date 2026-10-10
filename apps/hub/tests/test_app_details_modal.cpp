@@ -4,7 +4,7 @@
 #include <QTemporaryDir>
 #include <QFile>
 #include <QDir>
-#include <cassert>
+#include "../../../cmake/test_support/test_check.h"
 #include <iostream>
 
 using namespace creative_suite::hub;
@@ -14,7 +14,7 @@ namespace {
 void createTestChangelog(const QString& path, const QString& content) {
     QFile file(path);
     bool ok = file.open(QIODevice::WriteOnly | QIODevice::Text);
-    assert(ok);
+    CS_TEST_CHECK(ok);
     file.write(content.toUtf8());
     file.close();
 }
@@ -43,19 +43,19 @@ int main(int argc, char* argv[]) {
     parent.show();
 
     AppDetailsModal modal(&parent);
-    assert(!modal.isVisible());
+    CS_TEST_CHECK(!modal.isVisible());
 
     // Show app modal originating from a card rect
     QRect originRect(100, 100, 236, 264);
     modal.showApp(info, originRect);
 
-    assert(modal.isVisible());
-    assert(modal.cardGeometry().isValid());
-    assert(modal.emptyChangelogLabel() != nullptr);
+    CS_TEST_CHECK(modal.isVisible());
+    CS_TEST_CHECK(modal.cardGeometry().isValid());
+    CS_TEST_CHECK(modal.emptyChangelogLabel() != nullptr);
 
     // Test changelog integration with a mock folder containing version notes
     QTemporaryDir mockChangelogDir;
-    assert(mockChangelogDir.isValid());
+    CS_TEST_CHECK(mockChangelogDir.isValid());
     QDir().mkpath(mockChangelogDir.path() + QStringLiteral("/video-editor"));
     createTestChangelog(
         mockChangelogDir.path() + QStringLiteral("/video-editor/0.1.0.md"),
@@ -68,12 +68,12 @@ int main(int argc, char* argv[]) {
 
     modal.setChangelogBasePath(mockChangelogDir.path());
 
-    assert(modal.changelogBrowser() != nullptr);
-    assert(modal.changelogBrowser()->isVisible());
-    assert(modal.versionCombo() != nullptr);
-    assert(modal.versionCombo()->isVisible());
-    assert(modal.versionCombo()->count() == 2);
-    assert(modal.changelogBrowser()->toPlainText().contains(QStringLiteral("Novas funcionalidades")));
+    CS_TEST_CHECK(modal.changelogBrowser() != nullptr);
+    CS_TEST_CHECK(modal.changelogBrowser()->isVisible());
+    CS_TEST_CHECK(modal.versionCombo() != nullptr);
+    CS_TEST_CHECK(modal.versionCombo()->isVisible());
+    CS_TEST_CHECK(modal.versionCombo()->count() == 2);
+    CS_TEST_CHECK(modal.changelogBrowser()->toPlainText().contains(QStringLiteral("Novas funcionalidades")));
 
     bool closedSignalReceived = false;
     QObject::connect(&modal, &AppDetailsModal::closed, [&closedSignalReceived]() {
@@ -89,8 +89,8 @@ int main(int argc, char* argv[]) {
         app.processEvents(QEventLoop::AllEvents, 50);
     }
 
-    assert(closedSignalReceived);
-    assert(!modal.isVisible());
+    CS_TEST_CHECK(closedSignalReceived);
+    CS_TEST_CHECK(!modal.isVisible());
 
     std::cout << "All AppDetailsModal tests passed successfully!" << std::endl;
     return 0;

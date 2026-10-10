@@ -1,7 +1,7 @@
 #include "ui/cards/app_card_widget.h"
 #include <QApplication>
 #include <QMouseEvent>
-#include <cassert>
+#include "../../../cmake/test_support/test_check.h"
 #include <iostream>
 
 using namespace creative_suite::hub;
@@ -27,8 +27,8 @@ int main(int argc, char* argv[]) {
     card.setAppInfo(info);
 
     // Verify compact block dimensions
-    assert(card.width() == AppCardWidget::kCardWidth);
-    assert(card.height() == AppCardWidget::kCardHeight);
+    CS_TEST_CHECK(card.width() == AppCardWidget::kCardWidth);
+    CS_TEST_CHECK(card.height() == AppCardWidget::kCardHeight);
 
     bool receivedDetailsSignal = false;
     QString receivedAppId;
@@ -41,8 +41,8 @@ int main(int argc, char* argv[]) {
     QMouseEvent event(QEvent::MouseButtonRelease, QPointF(50, 50), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(&card, &event);
 
-    assert(receivedDetailsSignal);
-    assert(receivedAppId == QStringLiteral("video-editor"));
+    CS_TEST_CHECK(receivedDetailsSignal);
+    CS_TEST_CHECK(receivedAppId == QStringLiteral("video-editor"));
 
     std::cout << "All AppCardWidget tests passed successfully!" << std::endl;
     return 0;

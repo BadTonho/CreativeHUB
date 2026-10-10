@@ -1,5 +1,5 @@
 #include "../src/application/app_launcher.h"
-#include <cassert>
+#include "../../../cmake/test_support/test_check.h"
 #include <iostream>
 #include <QCoreApplication>
 #include <QTemporaryDir>
@@ -13,17 +13,18 @@ int main(int argc, char* argv[]) {
     AppLauncher launcher;
 
     // With empty executable name
-    assert(!launcher.findExecutable(QString()).has_value());
+    CS_TEST_CHECK(!launcher.findExecutable(QString()).has_value());
 
     // With temporary directory
     QTemporaryDir tempDir;
-    assert(tempDir.isValid());
+    CS_TEST_CHECK(tempDir.isValid());
 
     const QString testExeName = QStringLiteral("dummy_test_app.exe");
     const QString testExePath = tempDir.filePath(testExeName);
 
     QFile file(testExePath);
-    assert(file.open(QIODevice::WriteOnly));
+    const bool opened = file.open(QIODevice::WriteOnly);
+    CS_TEST_CHECK(opened);
     file.write("MZ_DUMMY_BINARY");
     file.close();
 
@@ -32,8 +33,8 @@ int main(int argc, char* argv[]) {
 
     launcher.addSearchPath(tempDir.path());
     auto foundPath = launcher.findExecutable(testExeName);
-    assert(foundPath.has_value());
-    assert(*foundPath == testExePath);
+    CS_TEST_CHECK(foundPath.has_value());
+    CS_TEST_CHECK(*foundPath == testExePath);
 
     std::cout << "All AppLauncher tests passed successfully.\n";
     return 0;

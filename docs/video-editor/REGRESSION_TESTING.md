@@ -35,6 +35,13 @@ The CTest suite is the required automated gate. A failed test blocks the
 change until the cause is understood and fixed or the expected behavior is
 updated intentionally.
 
+The audio playback, system memory, and performance usage executable tests use
+the always-active `CS_TEST_CHECK` helper in `cmake/test_support/test_check.h`.
+Release's `NDEBUG` does not remove their checks or skip checked operations.
+The repository's `creative-suite-test-checks` probe is compiled with `NDEBUG`
+in every configuration and verifies evaluation and deliberate failure detection
+with a source location and condition in the diagnostic.
+
 The GitHub Actions workflow runs the same build and CTest gate on Windows,
 macOS, and Linux. Local results only validate the operating system on which
 they were run; cross-platform support is validated when all matrix jobs pass.

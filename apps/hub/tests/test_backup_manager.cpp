@@ -1,5 +1,5 @@
 #include "../src/model/backup_manager.h"
-#include <cassert>
+#include "../../../cmake/test_support/test_check.h"
 #include <iostream>
 #include <QTemporaryDir>
 #include <QFile>
@@ -9,20 +9,21 @@ using namespace creative_suite::hub;
 
 int main() {
     QTemporaryDir tempDir;
-    assert(tempDir.isValid());
+    CS_TEST_CHECK(tempDir.isValid());
 
     const QString backupDir = tempDir.filePath(QStringLiteral("test_backups"));
     BackupManager manager(backupDir);
 
-    assert(manager.backupDirectory() == backupDir);
-    assert(manager.totalBackupsCount() == 0);
-    assert(manager.totalBackupsSize() == 0);
+    CS_TEST_CHECK(manager.backupDirectory() == backupDir);
+    CS_TEST_CHECK(manager.totalBackupsCount() == 0);
+    CS_TEST_CHECK(manager.totalBackupsSize() == 0);
 
     // 1. Create a dummy project file
     const QString projectFile = tempDir.filePath(QStringLiteral("trailer_2026.csp"));
     {
         QFile file(projectFile);
-        assert(file.open(QIODevice::WriteOnly));
+        const bool opened = file.open(QIODevice::WriteOnly);
+        CS_TEST_CHECK(opened);
         file.write("project dummy payload content");
         file.close();
     }
@@ -31,40 +32,40 @@ int main() {
     QString outBackupPath;
     QString outError;
     const bool ok = manager.createBackup(projectFile, &outBackupPath, &outError);
-    assert(ok);
-    assert(!outBackupPath.isEmpty());
-    assert(outError.isEmpty());
-    assert(QFile::exists(outBackupPath));
+    CS_TEST_CHECK(ok);
+    CS_TEST_CHECK(!outBackupPath.isEmpty());
+    CS_TEST_CHECK(outError.isEmpty());
+    CS_TEST_CHECK(QFile::exists(outBackupPath));
 
     // Verify backup filename format
     const QString backupFileName = QFileInfo(outBackupPath).fileName();
-    assert(backupFileName.startsWith(QStringLiteral("trailer_2026_backup_")));
-    assert(backupFileName.endsWith(QStringLiteral(".csp")));
+    CS_TEST_CHECK(backupFileName.startsWith(QStringLiteral("trailer_2026_backup_")));
+    CS_TEST_CHECK(backupFileName.endsWith(QStringLiteral(".csp")));
 
     // 3. Inspect backup list and stats
-    assert(manager.totalBackupsCount() == 1);
-    assert(manager.totalBackupsSize() > 0);
+    CS_TEST_CHECK(manager.totalBackupsCount() == 1);
+    CS_TEST_CHECK(manager.totalBackupsSize() > 0);
 
     const auto allBackups = manager.listBackups();
-    assert(allBackups.size() == 1);
-    assert(allBackups[0].projectName == QStringLiteral("trailer_2026"));
-    assert(allBackups[0].fileSizeBytes == QFileInfo(projectFile).size());
+    CS_TEST_CHECK(allBackups.size() == 1);
+    CS_TEST_CHECK(allBackups[0].projectName == QStringLiteral("trailer_2026"));
+    CS_TEST_CHECK(allBackups[0].fileSizeBytes == QFileInfo(projectFile).size());
 
     // 4. Project-specific backup filter
     const auto projectBackups = manager.backupsForProject(projectFile);
-    assert(projectBackups.size() == 1);
-    assert(projectBackups[0].backupFilePath == outBackupPath);
+    CS_TEST_CHECK(projectBackups.size() == 1);
+    CS_TEST_CHECK(projectBackups[0].backupFilePath == outBackupPath);
 
     const auto unrelatedBackups = manager.backupsForProject(QStringLiteral("other_project.csp"));
-    assert(unrelatedBackups.empty());
+    CS_TEST_CHECK(unrelatedBackups.empty());
 
     // 5. Attempt backup of non-existent project file
     QString badBackupPath;
     QString badError;
     const bool failResult = manager.createBackup(QStringLiteral("/path/does/not/exist.csp"), &badBackupPath, &badError);
-    assert(!failResult);
-    assert(!badError.isEmpty());
-    assert(badBackupPath.isEmpty());
+    CS_TEST_CHECK(!failResult);
+    CS_TEST_CHECK(!badError.isEmpty());
+    CS_TEST_CHECK(badBackupPath.isEmpty());
 
     std::cout << "All BackupManager tests passed successfully.\n";
     return 0;

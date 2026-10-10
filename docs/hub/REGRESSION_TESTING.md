@@ -7,6 +7,20 @@ Follow the repository-wide requirements in
 
 ## Coverage index
 
+All ten plain C++ Hub tests and the shared updater catalog test use
+`CS_TEST_CHECK` from `cmake/test_support/test_check.h`. Their conditions remain
+active in Debug and Release, including file setup checks. The repository's
+`creative-suite-test-checks` CTest probe verifies evaluation and a deliberate
+failure with `NDEBUG` defined. A failed check reports its expression and source
+location and returns a nonzero process exit code.
+
+**2026-10-10 local verification:** Windows/Release rebuilt all ten Hub test
+executables, the updater catalog test, three Video Editor test executables, and
+the new check probe. The 16 selected CTest entries passed; the complete
+registered suite passed 103/103 in 25.54 seconds. Direct execution of the
+deliberate failed check exited with code 1 and reported its source location
+and condition. Debug and macOS/Linux execution of this change remain pending.
+
 | Behavior | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
 | Published versions and per-app update status | `apps/hub/tests/test_app_catalog.cpp` (`hub-catalog-test`) | Hub UI refresh and version labels in a packaged Windows build: **pending**. |

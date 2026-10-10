@@ -4,7 +4,7 @@
 
 #include <QCoreApplication>
 
-#include <cassert>
+#include "../../../../cmake/test_support/test_check.h"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -67,68 +67,70 @@ void testAudioDecodeAndSeek(const std::filesystem::path& path) {
     auto session = media::AudioPlaybackSession::open(
         path,
         media::AudioPlaybackSession::OutputSpec{16000, 2});
-    assert(session->has_audio());
-    assert(session->output_spec().sample_rate == 16000);
-    assert(session->output_spec().channel_count == 2);
+    CS_TEST_CHECK(session->has_audio());
+    CS_TEST_CHECK(session->output_spec().sample_rate == 16000);
+    CS_TEST_CHECK(session->output_spec().channel_count == 2);
 
     const auto first = session->decode_samples(512);
-    assert(first.has_value());
-    assert(first->sample_rate == 16000);
-    assert(first->channel_count == 2);
-    assert(first->sampleCount() > 0);
-    assert(first->samples.size() == first->sampleCount() * 2);
+    CS_TEST_CHECK(first.has_value());
+    CS_TEST_CHECK(first->sample_rate == 16000);
+    CS_TEST_CHECK(first->channel_count == 2);
+    CS_TEST_CHECK(first->sampleCount() > 0);
+    CS_TEST_CHECK(first->samples.size() == first->sampleCount() * 2);
 
     session->seek_to_source_frame(15, 30.0);
     const auto middle = session->decode_samples(512);
-    assert(middle.has_value());
-    assert(middle->first_sample_index >= 8000);
-    assert(middle->sampleCount() > 0);
+    CS_TEST_CHECK(middle.has_value());
+    CS_TEST_CHECK(middle->first_sample_index >= 8000);
+    CS_TEST_CHECK(middle->sampleCount() > 0);
 
     std::size_t decoded_samples = middle->sampleCount();
     for (int attempt = 0; attempt < 100 && !session->at_end(); ++attempt) {
         const auto chunk = session->decode_samples(512);
         if (chunk.has_value()) decoded_samples += chunk->sampleCount();
     }
-    assert(decoded_samples > 0);
-    assert(session->at_end());
+    CS_TEST_CHECK(decoded_samples > 0);
+    CS_TEST_CHECK(session->at_end());
 
     session->reset();
     session->seek_to_sample_index(1234);
     const auto exact_sample = session->decode_samples(512);
-    assert(exact_sample.has_value());
-    assert(exact_sample->first_sample_index >= 1234);
+    CS_TEST_CHECK(exact_sample.has_value());
+    CS_TEST_CHECK(exact_sample->first_sample_index >= 1234);
 }
 
 void testMissingAudioDoesNotBecomeAnError(const std::filesystem::path& path) {
     auto session = media::AudioPlaybackSession::open(path);
-    assert(!session->has_audio());
-    assert(!session->decode_samples().has_value());
+    CS_TEST_CHECK(!session->has_audio());
+    const auto decoded = session->decode_samples();
+    CS_TEST_CHECK(!decoded.has_value());
 }
 
 void testDisabledAudioOutputFallback() {
     qputenv("CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT", "1");
     playback::AudioOutput output;
     QString error;
-    assert(!output.initialize(&error, nullptr));
-    assert(output.disabledByEnvironment());
-    assert(!output.bufferedUsecs().has_value());
+    const bool initialized = output.initialize(&error, nullptr);
+    CS_TEST_CHECK(!initialized);
+    CS_TEST_CHECK(output.disabledByEnvironment());
+    CS_TEST_CHECK(!output.bufferedUsecs().has_value());
     qunsetenv("CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT");
 }
 
 void testMonitorVolumeNormalization() {
-    assert(playback::AudioOutput::normalizeVolume(0.0) == 0.0);
-    assert(playback::AudioOutput::normalizeVolume(1.0) == 1.0);
-    assert(playback::AudioOutput::normalizeVolume(2.0) == 2.0);
-    assert(playback::AudioOutput::normalizeVolume(-0.1) == 1.0);
-    assert(playback::AudioOutput::normalizeVolume(2.1) == 1.0);
-    assert(playback::AudioOutput::normalizeVolume(std::numeric_limits<double>::quiet_NaN()) == 1.0);
-    assert(playback::AudioOutput::normalizeVolume(
+    CS_TEST_CHECK(playback::AudioOutput::normalizeVolume(0.0) == 0.0);
+    CS_TEST_CHECK(playback::AudioOutput::normalizeVolume(1.0) == 1.0);
+    CS_TEST_CHECK(playback::AudioOutput::normalizeVolume(2.0) == 2.0);
+    CS_TEST_CHECK(playback::AudioOutput::normalizeVolume(-0.1) == 1.0);
+    CS_TEST_CHECK(playback::AudioOutput::normalizeVolume(2.1) == 1.0);
+    CS_TEST_CHECK(playback::AudioOutput::normalizeVolume(std::numeric_limits<double>::quiet_NaN()) == 1.0);
+    CS_TEST_CHECK(playback::AudioOutput::normalizeVolume(
                std::numeric_limits<double>::infinity()) == 1.0);
 
-    assert(playback::AudioOutput::outputVolume(0.0) == 0.0);
-    assert(playback::AudioOutput::outputVolume(1.5) == 1.0);
-    assert(playback::AudioOutput::sampleBoost(0.5) == 1.0);
-    assert(playback::AudioOutput::sampleBoost(1.5) == 1.5);
+    CS_TEST_CHECK(playback::AudioOutput::outputVolume(0.0) == 0.0);
+    CS_TEST_CHECK(playback::AudioOutput::outputVolume(1.5) == 1.0);
+    CS_TEST_CHECK(playback::AudioOutput::sampleBoost(0.5) == 1.0);
+    CS_TEST_CHECK(playback::AudioOutput::sampleBoost(1.5) == 1.5);
 }
 
 } // namespace

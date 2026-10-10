@@ -1,5 +1,5 @@
 #include "../src/diagnostics/hub_logger.h"
-#include <cassert>
+#include "../../../cmake/test_support/test_check.h"
 #include <iostream>
 #include <QTemporaryFile>
 
@@ -10,7 +10,8 @@ int main() {
     logger.clear();
 
     QTemporaryFile tempLog;
-    assert(tempLog.open());
+    const bool opened = tempLog.open();
+    CS_TEST_CHECK(opened);
     const QString logPath = tempLog.fileName();
     tempLog.close();
 
@@ -20,11 +21,11 @@ int main() {
     logger.logError(QStringLiteral("SubsystemB"), QStringLiteral("Op2"), QStringLiteral("Error Message"), QStringLiteral("context_data"));
 
     auto entries = logger.entries();
-    assert(entries.size() == 2);
-    assert(entries[0].level == LogLevel::Info);
-    assert(entries[0].subsystem == QStringLiteral("SubsystemA"));
-    assert(entries[1].level == LogLevel::Error);
-    assert(entries[1].context == QStringLiteral("context_data"));
+    CS_TEST_CHECK(entries.size() == 2);
+    CS_TEST_CHECK(entries[0].level == LogLevel::Info);
+    CS_TEST_CHECK(entries[0].subsystem == QStringLiteral("SubsystemA"));
+    CS_TEST_CHECK(entries[1].level == LogLevel::Error);
+    CS_TEST_CHECK(entries[1].context == QStringLiteral("context_data"));
 
     std::cout << "All HubLogger tests passed successfully.\n";
     return 0;

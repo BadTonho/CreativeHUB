@@ -91,6 +91,14 @@ visible result in each.
 
 ## Test Quality and Fixtures
 
+- Checks must evaluate their conditions in every build configuration, including
+  Release with `NDEBUG`. Do not use standard C/C++ `assert` as a test verdict or
+  to perform setup. Plain C++ executable tests can use the test-only
+  `CS_TEST_CHECK` helper in `cmake/test_support/test_check.h`; it evaluates once,
+  reports the failed expression and source location, and exits with code 1.
+  Keep fixture setup outside verdict expressions. The registered
+  `creative-suite-test-checks` probe is compiled with `NDEBUG` in every
+  configuration and verifies both evaluation and deliberate failure detection.
 - Keep tests deterministic, independent, and safe to run in parallel where the
   framework permits. Use temporary directories and generated or approved test
   assets; do not depend on personal media, private paths, network services, or

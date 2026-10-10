@@ -9,6 +9,16 @@ endif()
 include(CTest)
 include("${PROJECT_SOURCE_DIR}/cmake/AddIsolatedTest.cmake")
 
+if(BUILD_TESTING)
+    add_executable(creative-suite-test-check-probe cmake/test_support/test_check_probe.cpp)
+    target_compile_features(creative-suite-test-check-probe PRIVATE cxx_std_20)
+    target_compile_definitions(creative-suite-test-check-probe PRIVATE NDEBUG)
+    add_creative_suite_test(NAME creative-suite-test-checks
+        COMMAND "${CMAKE_COMMAND}"
+            "-DPROBE_EXECUTABLE=$<TARGET_FILE:creative-suite-test-check-probe>"
+            -P "${PROJECT_SOURCE_DIR}/cmake/test_support/verify_test_checks.cmake")
+endif()
+
 if(BUILD_TESTING AND MSVC)
     add_executable(creative-suite-msvc-runtime-diagnostics-probe
         cmake/test_support/msvc_runtime_diagnostics_probe.cpp
