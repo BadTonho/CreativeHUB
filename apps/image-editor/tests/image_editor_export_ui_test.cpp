@@ -410,6 +410,20 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     const auto controller_snapshot = controller_session.exportSnapshot();
+    QFile controller_source(source_path);
+    if (!controller_source.open(QIODevice::ReadOnly)) return 1;
+    const auto original_source_bytes = controller_source.readAll();
+    controller_source.close();
+    const auto protected_source_result = image_editor::ImageExportController::run(
+        nullptr, controller_snapshot, source_path);
+    if (protected_source_result.status != image_editor::ImageExportStatus::Failed ||
+        protected_source_result.error.isEmpty() ||
+        !controller_source.open(QIODevice::ReadOnly) ||
+        controller_source.readAll() != original_source_bytes) {
+        std::cerr << "The export controller did not reject and preserve the original source.\n";
+        return 1;
+    }
+    controller_source.close();
     const QString controller_output = temporary.filePath(
         QStringLiteral("controller-export.png"));
     const auto controller_result = image_editor::ImageExportController::run(

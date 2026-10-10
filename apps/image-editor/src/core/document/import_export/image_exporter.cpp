@@ -10,6 +10,8 @@
 #include <QSaveFile>
 
 #include <algorithm>
+#include <filesystem>
+#include <system_error>
 
 namespace image_editor {
 ImageExportResult exportImageSnapshot(
@@ -26,15 +28,27 @@ ImageExportResult exportImageSnapshot(
     }
     const QString suffix = QFileInfo(output_path).suffix().toLower();
     const QString output_absolute = absoluteCleanPath(output_path);
-    for (const auto& layer : snapshot.document.layers) for (const auto& op : layer.operations)
-        if (op.kind == OperationKind::RasterImage &&
-            absoluteCleanPath(op.raster.source_path).compare(output_absolute,
+    const auto would_overwrite_source = [&output_path, &output_absolute](const QString& source_path) {
+        if (source_path.isEmpty()) return false;
+        if (absoluteCleanPath(source_path).compare(output_absolute,
 #ifdef Q_OS_WIN
                 Qt::CaseInsensitive
 #else
                 Qt::CaseSensitive
 #endif
-            ) == 0) return failed(QStringLiteral("Choose an output path that preserves the imported source image."));
+            ) == 0) return true;
+        std::error_code error;
+        return std::filesystem::equivalent(QFileInfo(source_path).filesystemFilePath(),
+            QFileInfo(output_path).filesystemFilePath(), error) && !error;
+    };
+    if (snapshot.document.base_kind == ImageBaseKind::SourceImage &&
+        would_overwrite_source(snapshot.document.source_path)) {
+        return failed(QStringLiteral("Choose an output path that preserves the original source image."));
+    }
+    for (const auto& layer : snapshot.document.layers) for (const auto& op : layer.operations)
+        if (op.kind == OperationKind::RasterImage &&
+            would_overwrite_source(op.raster.source_path))
+            return failed(QStringLiteral("Choose an output path that preserves the imported source image."));
     QByteArray format;
     if (suffix == "png") format = "png";
     else if (suffix == "jpg" || suffix == "jpeg") format = "jpeg";

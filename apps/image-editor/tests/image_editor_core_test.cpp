@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -2236,6 +2237,90 @@ void testMissingSourceAndRelink(const QString& root) {
             QStringLiteral("Relinking did not restore the source or mark the document dirty."));
 }
 
+void testExportPreservesSourceImages(const QString& root) {
+    using namespace image_editor;
+    const auto read_bytes = [](const QString& path) {
+        QFile file(path);
+        require(file.open(QIODevice::ReadOnly), file.errorString());
+        return file.readAll();
+    };
+    for (const QString& extension : {QStringLiteral("png"), QStringLiteral("jpg")}) {
+        const QString source = root + QStringLiteral("/protected-source.") + extension;
+        QImage image(16, 16, QImage::Format_ARGB32);
+        image.fill(Qt::white);
+        require(writeImage(source, image, extension == QStringLiteral("jpg") ? "jpeg" : "png"),
+                QStringLiteral("Could not create the protected source."));
+        const QByteArray original = read_bytes(source);
+        ImageDocumentSession session;
+        QString error;
+        require(session.openImage(source, &error), error);
+        require(session.applyPaintStroke({QPointF(5, 5)}, Qt::red, 5, &error), error);
+        const QString painted_layer = session.selectedLayerId();
+        const QString extra_layer = session.addLayer();
+        const QString group = session.groupLayers({painted_layer, extra_layer}, &error);
+        require(!group.isEmpty(), error);
+        auto snapshot = session.exportSnapshot();
+        snapshot.selected_layer_id = painted_layer;
+        snapshot.selected_group_id = group;
+        const auto before = session.data();
+        const QImage rendered = session.renderedImage();
+        require(rendered != image, QStringLiteral("The preservation fixture must contain edits."));
+        const auto reject = [&](const ImageExportSnapshot& candidate, const QString& destination,
+                                ImageExportScope scope = ImageExportScope::Composite) {
+            ImageExportOptions options;
+            options.scope = scope;
+            int phases = 0;
+            const auto result = exportImageSnapshot(candidate, destination, options, nullptr,
+                [&phases](ImageExportPhase) { ++phases; });
+            require(result.status == ImageExportStatus::Failed && !result.error.isEmpty() && phases == 0,
+                    QStringLiteral("Export must reject a source destination before rendering: %1")
+                        .arg(destination));
+            require(read_bytes(source) == original,
+                    QStringLiteral("Rejected export changed the original source bytes."));
+        };
+        QStringList destinations{source, root + QStringLiteral("/./protected-source.") + extension,
+                                 QDir::current().relativeFilePath(source)};
+#ifdef Q_OS_WIN
+        destinations.append(source.toUpper());
+#endif
+        for (const auto scope : {ImageExportScope::Composite, ImageExportScope::SelectedLayer,
+                                 ImageExportScope::SelectedGroup}) {
+            for (const auto& destination : destinations) reject(snapshot, destination, scope);
+        }
+        ImageDocumentSession imported;
+        require(imported.createCanvas({16, 16}, Qt::transparent, &error), error);
+        const auto batch = prepareRasterImport({source});
+        require(batch.status == RasterImportStatus::Ready &&
+                    imported.importRasterImages(batch.images, {}, &error), error);
+        const auto imported_snapshot = imported.exportSnapshot();
+        reject(imported_snapshot, source);
+        for (const bool symbolic : {false, true}) {
+            const QString alias = root + (symbolic ? QStringLiteral("/source-symlink.")
+                                                  : QStringLiteral("/source-hardlink.")) + extension;
+            std::error_code link_error;
+            if (symbolic) {
+                std::filesystem::create_symlink(QFileInfo(source).filesystemFilePath(),
+                    QFileInfo(alias).filesystemFilePath(), link_error);
+            } else {
+                std::filesystem::create_hard_link(QFileInfo(source).filesystemFilePath(),
+                    QFileInfo(alias).filesystemFilePath(), link_error);
+            }
+            if (link_error) {
+                std::cout << "Source alias case unavailable: " << link_error.message() << '\n';
+                continue;
+            }
+            reject(snapshot, alias);
+            reject(imported_snapshot, alias);
+        }
+        require(session.data() == before && session.renderedImage() == rendered && session.isDirty(),
+                QStringLiteral("Rejected source export changed document content or dirty state."));
+        const QString output = root + QStringLiteral("/protected-source-export.") + extension;
+        require(session.exportImage(output, &error) && !QImage(output).isNull(), error);
+        require(read_bytes(source) == original,
+                QStringLiteral("Export to a separate destination changed the source."));
+    }
+}
+
 void testExportAndFormatPlugins(const QString& root) {
     const QString source_path = root + QStringLiteral("/alpha.png");
     QImage transparent(32, 32, QImage::Format_ARGB32);
@@ -3296,6 +3381,7 @@ int main(int argc, char* argv[]) {
         testLayerGroups(root);
         testAreaSelectionClipPersistenceAndRendering(root);
         testMissingSourceAndRelink(root);
+        testExportPreservesSourceImages(root);
         testExportAndFormatPlugins(root);
         testSelectedLayerExport(root);
         testRecoveryAndLogging(root);

@@ -225,7 +225,13 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   groups include their visibility, opacity, and transforms. Selecting
   Background exports the base image with its document operations. Standalone
   PNG/JPEG exports render this immutable snapshot and write it on a worker
-  thread. Quick Export reuses the saved JPEG quality (0–100, default 95) and
+  thread. Before rendering, the exporter rejects a destination that names the
+  document's original base image or any imported raster source, regardless of
+  export scope or layer visibility. It compares normalized absolute paths
+  (case-insensitively on Windows) and existing filesystem identity, including
+  symbolic and hard links. Rejection preserves source bytes and document state;
+  the window logs the returned cause before displaying it. Quick Export reuses
+  the saved JPEG quality (0–100, default 95) and
   opaque matte (default white) without opening the options dialog. PNG preserves
   alpha. A modal progress dialog keeps the document stable while export runs;
   cancellation is checked during rendering and before the atomic output commit.

@@ -63,9 +63,13 @@ is included in full export, Quick Export, recovery, and linked PNG publication.
 
 Flattened PNG and JPEG export are implemented. PNG preserves transparency;
 JPEG uses a configurable quality and opaque background. Quick Export can export
-the selected layer, group, or Background. Image decoding uses Qt image I/O;
-PNG, JPEG, BMP, WebP, and TIFF are on the manual validation checklist, while
-packaged plugin validation remains open. The Video Editor linked-image code is
+the selected layer, group, or Background. All export scopes reject the original
+base image and imported raster sources as output destinations, including
+existing symbolic/hard-link aliases. Source
+files and document state remain unchanged when the destination is rejected.
+Image decoding uses Qt image I/O; PNG, JPEG, BMP, WebP, and TIFF are on the
+manual validation checklist, while packaged plugin validation remains open.
+The Video Editor linked-image code is
 present as a prototype, but acceptance is gated on the standalone checks in the
 [roadmap](ROADMAP.md).
 

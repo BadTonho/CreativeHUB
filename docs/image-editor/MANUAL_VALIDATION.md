@@ -376,6 +376,15 @@ still pending.
    options, and that Quick JPEG uses the saved quality and background. Repeat
    with Background selected and with the editable layer hidden; confirm other
    layers are excluded and the hidden layer exports transparent.
+   Open a disposable PNG or JPEG, paint an edit, and try both Export Image and
+   Quick Export to its original path. Accept the file dialog's overwrite prompt
+   if shown; the exporter must reject the destination with an actionable error.
+   Confirm the original file bytes, visible edits, dirty marker, and Undo/Redo
+   state remain unchanged and the local log records `export_image` with the
+   cause and destination. Repeat for an imported layer's source and a symbolic
+   or hard-link alias when supported. Export to a separate destination and
+   confirm it succeeds while the originals remain intact. Native results on
+   Windows, macOS, and Linux remain pending until recorded.
 6. Open PNG, JPEG, BMP, WebP, and TIFF examples. Confirm each is decoded and
    its dimensions are shown. If a format fails, check that the Qt Image Formats
    plugins are present in the deployed `imageformats` directory.
