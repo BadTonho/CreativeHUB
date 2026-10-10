@@ -276,10 +276,12 @@ void MotionVideoExportDialog::updateEncoders()
             QStringLiteral("%1 (%2)").arg(QString::fromStdString(encoder.display_name),
                                             QString::fromStdString(encoder.name)),
             QString::fromStdString(encoder.name));
+        encoder_combo_->setItemData(encoder_combo_->count() - 1, encoder.experimental, Qt::UserRole + 1);
     }
     int preferred = encoder_combo_->findData(QStringLiteral("libx264"));
     if (preferred < 0) {
         for (int option = 0; option < encoder_combo_->count(); ++option) {
+            if (encoder_combo_->itemData(option, Qt::UserRole + 1).toBool()) continue;
             const auto name = encoder_combo_->itemData(option).toString();
             if (name.contains(QStringLiteral("264"), Qt::CaseInsensitive) ||
                 name.contains(QStringLiteral("h264"), Qt::CaseInsensitive)) {
@@ -288,7 +290,10 @@ void MotionVideoExportDialog::updateEncoders()
             }
         }
     }
-    if (preferred < 0 && encoder_combo_->count() > 0) preferred = 0;
+    if (preferred < 0) {
+        for (int option = 0; option < encoder_combo_->count(); ++option)
+            if (!encoder_combo_->itemData(option, Qt::UserRole + 1).toBool()) { preferred = option; break; }
+    }
     if (preferred >= 0) encoder_combo_->setCurrentIndex(preferred);
     encoder_combo_->setEnabled(encoder_combo_->count() > 0);
     updateAcceptState();

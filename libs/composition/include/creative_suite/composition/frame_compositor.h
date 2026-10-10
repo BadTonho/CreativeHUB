@@ -13,6 +13,8 @@
 
 namespace creative_suite::composition {
 
+class OpenGlTextureFrame;
+
 struct AlphaSpan {
     int begin = 0;
     int end = 0;
@@ -106,6 +108,13 @@ struct CompositionLayer {
     // when Gaussian Blur is interleaved with Color Adjustment). The CPU
     // compositor ignores this list; callers supply a processed frame on CPU.
     std::vector<GpuCompositionEffect> gpu_effects;
+    // Unprocessed built-in clip effects. Both compositors consume this stack
+    // exactly once; GPU recovery uses the original immutable source frame.
+    std::span<const effects::EffectInstance> effect_stack;
+    // GPU-native source. The geometry frame can contain only dimensions/stride;
+    // CPU recovery must materialize pixels before submitting this layer.
+    std::shared_ptr<const OpenGlTextureFrame> texture_frame;
+    std::shared_ptr<const media::NativeVideoFrame> native_frame;
 };
 
 struct CompositionLayerTimings {

@@ -235,6 +235,9 @@ cross-platform prototype and release-readiness validation are complete.
   Editor, while the latter keeps its timeline assembly, queue, and optional
   audio export. Motion export contains no audio or alpha, and settings are not
   persisted.
+  Shared Windows FFmpeg now includes experimental NVENC capability discovery.
+  Motion Studio displays those choices but keeps experimental encoders out of
+  its initial selection; its RGBA export boundary and CPU decoding are unchanged.
 - [x] Add configurable one-second preview performance samples and per-job
   export summaries. The shared system-monitor library provides best-effort
   process CPU and memory readings; Motion Studio records render-stage timing,

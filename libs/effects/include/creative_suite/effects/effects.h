@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <span>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -72,6 +73,11 @@ enum class ProcessingResult {
 [[nodiscard]] bool applyStack(
     media::RgbaFrame& frame,
     std::span<const EffectInstance> effects) noexcept;
+
+// Each returned pass retains the built-in stack's byte rounding boundary.
+// Invalid stacks are rejected before any frame is changed.
+[[nodiscard]] std::optional<std::vector<ColorAdjustmentParameters>> colorAdjustmentPasses(
+    std::span<const EffectInstance> effects);
 
 // Applies brightness, contrast around 0.5, and Rec. 709 saturation in one
 // pixel pass, rounding RGB only after all three operations. Cancellation is

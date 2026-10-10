@@ -310,6 +310,8 @@ void PreviewPerformanceMetrics::recordGpuCompositionWork(
     gpu_composition_uploaded_bytes_.fetch_add(timings.uploaded_bytes, std::memory_order_relaxed);
     gpu_composition_readback_bytes_.fetch_add(timings.readback_bytes, std::memory_order_relaxed);
     gpu_composition_uploaded_layers_.fetch_add(timings.uploaded_layers, std::memory_order_relaxed);
+    native_video_imports_.fetch_add(timings.native_video_imports, std::memory_order_relaxed);
+    native_video_conversion_nanoseconds_.fetch_add(timings.native_video_conversion_nanoseconds, std::memory_order_relaxed);
     recordTiming(PreviewTiming::GpuCompositionUpload, std::chrono::nanoseconds(timings.upload_nanoseconds));
     recordTiming(PreviewTiming::GpuCompositionDrawSubmission, std::chrono::nanoseconds(timings.draw_submission_nanoseconds));
     if (timings.readback_bytes) recordTiming(PreviewTiming::GpuCompositionReadback, std::chrono::nanoseconds(timings.readback_nanoseconds));
@@ -898,6 +900,8 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
     snapshot.gpu_composition_uploaded_bytes = gpu_composition_uploaded_bytes_.exchange(0);
     snapshot.gpu_composition_readback_bytes = gpu_composition_readback_bytes_.exchange(0);
     snapshot.gpu_composition_uploaded_layers = gpu_composition_uploaded_layers_.exchange(0);
+    snapshot.native_video_imports = native_video_imports_.exchange(0);
+    snapshot.native_video_conversion_nanoseconds = native_video_conversion_nanoseconds_.exchange(0);
     snapshot.gpu_composition_upload = takeTimingSnapshot(gpu_composition_upload_);
     snapshot.gpu_composition_draw_submission = takeTimingSnapshot(gpu_composition_draw_submission_);
     snapshot.gpu_composition_readback = takeTimingSnapshot(gpu_composition_readback_);

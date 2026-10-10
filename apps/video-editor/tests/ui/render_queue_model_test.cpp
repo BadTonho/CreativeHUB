@@ -71,11 +71,17 @@ int main(int argc, char* argv[]) {
 
         const auto first_id = queue.addJob(first_job);
         require(!queue.jobAt(0)->settings.gpu_composition_enabled, "Export GPU must default off.");
+        require(!queue.jobAt(0)->settings.hardware_decoding_enabled, "Export hardware decoding must default off.");
         first_job.settings.gpu_composition_enabled = true;
+        first_job.settings.hardware_decoding_enabled = true;
         const auto gpu_id = queue.addJob(first_job);
         require(queue.jobAt(1)->settings.gpu_composition_enabled &&
+            queue.jobAt(1)->settings.hardware_decoding_enabled &&
             queue.data(queue.index(1, 0), Qt::ToolTipRole).toString().contains("GPU requested"),
             "GPU job choice/tooltip was not captured.");
+        first_job.settings.hardware_decoding_enabled = false;
+        require(queue.jobAt(1)->settings.hardware_decoding_enabled && !queue.jobAt(0)->settings.hardware_decoding_enabled,
+            "Queued hardware decode choices must remain independent snapshots.");
         require(queue.removeJobAt(1) && gpu_id != first_id, "GPU snapshot fixture cleanup failed.");
         first_job.project_snapshot.timeline_tracks.front().name = "Changed source";
         require(first_id != 0 && queue.jobCount() == 1 &&

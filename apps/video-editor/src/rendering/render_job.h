@@ -33,6 +33,7 @@ struct RenderJobSettings {
     double frame_rate = 30.0;
     bool export_audio = true;
     bool gpu_composition_enabled = false;
+    bool hardware_decoding_enabled = false;
     double video_bitrate_mbps = 10.0;
     int audio_bitrate_kbps = 192;
     RenderQualityPreset quality_preset = RenderQualityPreset::Standard;

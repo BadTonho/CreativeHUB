@@ -39,6 +39,7 @@ add_library(creative-suite-video-media STATIC
     src/video_playback.cpp
     include/creative_suite/media/media_error.h
     include/creative_suite/media/video_frame.h
+    include/creative_suite/media/native_video_frame.h
     include/creative_suite/media/video_playback.h
 )
 add_library(creative-suite::video-media ALIAS creative-suite-video-media)

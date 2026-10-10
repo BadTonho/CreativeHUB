@@ -1,6 +1,7 @@
 #pragma once
 
 #include <creative_suite/media/video_frame.h>
+#include <creative_suite/media/native_video_frame.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -18,6 +19,8 @@ struct VideoEncoderOption {
     std::string name;
     std::string display_name;
     int codec_id = 0;
+    bool hardware = false;
+    bool experimental = false;
 };
 
 struct VideoContainerOption {
@@ -45,6 +48,10 @@ struct VideoEncodingSettings {
     std::int64_t frame_rate_denominator = 1;
     double video_bitrate_mbps = 10.0;
     std::optional<AudioEncodingSettings> audio;
+    // Optional native BGRA pool template. Currently accepted by NVENC only.
+    NativeVideoFramePtr native_frame_template;
+    // Optional device path for VAAPI; empty uses FFmpeg device discovery.
+    std::string hardware_device_name;
 };
 
 class VideoEncodingError final : public std::runtime_error {
@@ -85,6 +92,10 @@ public:
     VideoEncoder& operator=(VideoEncoder&&) noexcept;
 
     void writeVideo(const RgbaFrame& source, std::int64_t output_frame);
+    void writeVideo(const NativeVideoFramePtr& source, std::int64_t output_frame);
+    [[nodiscard]] bool acceptsNativeFrames() const noexcept;
+    // Explicit FFmpeg uploads only; excludes opaque transfers inside drivers.
+    [[nodiscard]] std::uint64_t uploadedVideoBytes() const noexcept;
     void writeAudio(std::span<const float> interleaved_stereo, int sample_count);
     [[nodiscard]] int nextAudioInputSampleCount() const;
     [[nodiscard]] bool hasAudio() const noexcept;

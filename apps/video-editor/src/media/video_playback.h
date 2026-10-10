@@ -19,7 +19,8 @@ public:
         creative_suite::media::VideoPlaybackSession::CacheSnapshot;
 
     static std::unique_ptr<VideoPlaybackSession> open(
-        const std::filesystem::path& source_path);
+        const std::filesystem::path& source_path,
+        creative_suite::media::DecodeOptions options = {});
 
     ~VideoPlaybackSession();
 
@@ -29,6 +30,11 @@ public:
     VideoPlaybackSession& operator=(VideoPlaybackSession&&) noexcept;
 
     std::optional<VideoFramePtr> decode_next_frame();
+    std::optional<creative_suite::media::DecodedVideoFrame> decodeFrameAtNative(
+        std::int64_t frame_index, const CancellationPredicate& should_cancel = {});
+    std::optional<creative_suite::media::DecodedVideoFrame> decodeForwardToNative(
+        std::int64_t frame_index, const CancellationPredicate& should_cancel = {},
+        ForwardDecodeDiagnostics* diagnostics = nullptr);
     std::optional<VideoFramePtr> decode_forward_to(
         std::int64_t frame_index,
         const CancellationPredicate& should_cancel = {},
@@ -40,6 +46,8 @@ public:
     [[nodiscard]] std::uint64_t take_cache_hit_count() noexcept;
     [[nodiscard]] CacheSnapshot cache_snapshot() const noexcept;
     void reset();
+    void setDecodeOptions(creative_suite::media::DecodeOptions options);
+    [[nodiscard]] creative_suite::media::DecodeAccelerationDiagnostics accelerationDiagnostics() const;
 
     [[nodiscard]] std::int64_t current_frame_index() const noexcept;
     [[nodiscard]] bool at_end() const noexcept;

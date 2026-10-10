@@ -79,6 +79,16 @@ QWidget* SettingsDialog::createGeneralPage() {
     layout->addWidget(metrics_check);
     layout->addWidget(description);
 
+    auto* hardware_check = new QCheckBox("Use hardware video decoding for preview (Experimental)", page);
+    hardware_check->setObjectName("hardwareDecodingCheckBox");
+    hardware_check->setToolTip("Accelerates supported H.264 and HEVC video. Uses CPU automatically when needed. Export has its own setting.");
+    hardware_check->setChecked(settings::hardwareDecodingEnabled());
+    layout->addWidget(hardware_check);
+    connect(hardware_check, &QCheckBox::toggled, this, [this](bool enabled) {
+        settings::setHardwareDecodingEnabled(enabled);
+        emit hardwareDecodingEnabledChanged(enabled);
+    });
+
     auto* gpu_check = new QCheckBox(
         "Use GPU for timeline preview (Experimental)", page);
     gpu_check->setObjectName("gpuCompositionCheckBox");

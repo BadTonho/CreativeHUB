@@ -34,9 +34,12 @@ values; contrast scales them around 127.5; grayscale and saturation use
 Rec. 709 luma coefficients. Each stage clamps to the 8-bit range before the
 next filter runs.
 
-The Video Editor evaluates each clip's stack before compositing its layer.
-Preview and offline export call the same processor and preserve the clip's
-stack order. Disabled instances are validated but do not modify the frame;
+The Video Editor submits each clip's original stack to the shared compositor.
+Preview and offline export use `colorAdjustmentPasses()` to prepare the same
+ordered GPU operations when experimental composition is selected. That helper
+validates every instance, including disabled instances, and preserves rounding
+after each enabled pass. CPU composition applies the original stack exactly once,
+including GPU recovery. Disabled instances do not modify the frame;
 active instances retain their relative order. Filter parameters and enabled
 states are Timeline project data; caches and temporary preview state are not
 added by this library. The Video Editor persists stacks under the `.csp`

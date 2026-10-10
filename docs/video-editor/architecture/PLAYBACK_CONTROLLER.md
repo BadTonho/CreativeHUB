@@ -3,6 +3,12 @@
 Status: **provisional**. This document describes the current application-owned
 playback boundary and its regression coverage.
 
+`setHardwareDecodingEnabled` queues the global experimental decode preference.
+The worker replaces video resources, cancels stale preroll, and clears composed
+frames. The controller advances the delivery epoch and recomposes paused output;
+audio and source/timeline clocks retain existing ownership. See
+[the pipeline contract](../GPU_PIPELINE.md) for codec eligibility and recovery.
+
 ## Ownership
 
 `playback::PlaybackController` is a Qt Core application boundary with no dependency on widgets. It owns the playback thread and worker lifetime, the active generation, pending clip activation, composition snapshots, and the one-slot latest-frame mailbox. It reads the timeline, media library, stable selection, and playhead from `application::EditorSession`.

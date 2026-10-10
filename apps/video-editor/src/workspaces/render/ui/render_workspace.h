@@ -103,6 +103,7 @@ private:
     QComboBox* video_encoder_combo_ = nullptr;
     QCheckBox* export_audio_check_ = nullptr;
     QCheckBox* gpu_composition_check_ = nullptr;
+    QCheckBox* hardware_decoding_check_ = nullptr;
     QLabel* gpu_warning_ = nullptr;
     QTimer* gpu_warning_timer_ = nullptr;
     QComboBox* audio_encoder_combo_ = nullptr;

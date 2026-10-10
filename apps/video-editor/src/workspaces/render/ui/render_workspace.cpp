@@ -461,6 +461,10 @@ void RenderWorkspace::createSettingsPanel() {
     gpu_composition_check_->setAccessibleDescription(gpu_description);
     gpu_composition_check_->setToolTip(gpu_description);
     video_form->addRow(gpu_composition_check_);
+    hardware_decoding_check_ = new QCheckBox(QStringLiteral("Use hardware video decoding (Experimental)"), video_group);
+    hardware_decoding_check_->setObjectName("renderHardwareDecodingCheck");
+    hardware_decoding_check_->setToolTip(QStringLiteral("Accelerates supported video sources for this queued export. Uses CPU automatically when needed."));
+    video_form->addRow(hardware_decoding_check_);
     gpu_warning_ = new QLabel(video_group);
     gpu_warning_->setObjectName("renderGpuWarning");
     gpu_warning_->setWordWrap(true);
@@ -742,6 +746,7 @@ void RenderWorkspace::updateEncoderOptions() {
             .arg(QString::fromStdString(encoder.display_name),
                  QString::fromStdString(encoder.name));
         video_encoder_combo_->addItem(label, QString::fromStdString(encoder.name));
+        video_encoder_combo_->setItemData(video_encoder_combo_->count() - 1, encoder.experimental, Qt::UserRole + 1);
     }
     for (const auto& encoder : container->audio_encoders) {
         const auto label = QStringLiteral("%1 (%2)")
@@ -752,6 +757,11 @@ void RenderWorkspace::updateEncoderOptions() {
 
     const auto chooseEncoder = [](QComboBox* combo, const QString& preferred) {
         int chosen = combo->findData(preferred);
+        if (chosen < 0) {
+            for (int index = 0; index < combo->count(); ++index) {
+                if (!combo->itemData(index, Qt::UserRole + 1).toBool()) { chosen = index; break; }
+            }
+        }
         if (chosen < 0) chosen = 0;
         if (combo->count() > 0) combo->setCurrentIndex(chosen);
     };
@@ -760,6 +770,7 @@ void RenderWorkspace::updateEncoderOptions() {
         video_encoder_combo_->currentData().toString().contains(QStringLiteral("264")) == false) {
         int h264_index = -1;
         for (int index = 0; index < video_encoder_combo_->count(); ++index) {
+            if (video_encoder_combo_->itemData(index, Qt::UserRole + 1).toBool()) continue;
             if (video_encoder_combo_->itemData(index).toString().contains(
                     QStringLiteral("h264"), Qt::CaseInsensitive)) {
                 h264_index = index;
@@ -1117,6 +1128,7 @@ void RenderWorkspace::addCurrentJob() {
     }
     job.settings.width = resolution.width();
     job.settings.gpu_composition_enabled = gpu_composition_check_->isChecked();
+    job.settings.hardware_decoding_enabled = hardware_decoding_check_->isChecked();
     job.settings.height = resolution.height();
     job.settings.frame_rate = frame_rate_spin_->value();
     job.settings.video_bitrate_mbps = video_bitrate_spin_->value();

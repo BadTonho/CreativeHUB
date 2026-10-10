@@ -623,6 +623,10 @@ void MainWindow::refreshWorkspaceMenuVisibility() {
 
 void MainWindow::showSettingsDialog() {
     settings::SettingsDialog dialog(this, *shortcut_manager_);
+    connect(&dialog, &settings::SettingsDialog::hardwareDecodingEnabledChanged,
+        this, [this](bool enabled) {
+            if (playback_controller_) playback_controller_->setHardwareDecodingEnabled(enabled);
+        });
     connect(&dialog, &settings::SettingsDialog::gpuCompositionEnabledChanged,
         this, [this](bool enabled) {
             if (playback_controller_) playback_controller_->setGpuCompositionEnabled(enabled);

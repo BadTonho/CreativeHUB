@@ -6,6 +6,7 @@ extern "C" {
 #include <libavutil/channel_layout.h>
 #include <libavutil/error.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/hwcontext.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
@@ -66,6 +67,7 @@ struct ScalerDeleter {
         if (value != nullptr) sws_freeContext(value);
     }
 };
+struct BufferDeleter { void operator()(AVBufferRef* value) const noexcept { av_buffer_unref(&value); } };
 
 using FormatPtr = std::unique_ptr<AVFormatContext, FormatOutputDeleter>;
 using CodecPtr = std::unique_ptr<AVCodecContext, CodecDeleter>;
@@ -127,9 +129,12 @@ std::vector<VideoEncoderOption> compatibleEncoders(
             avformat_query_codec(format, codec->id, FF_COMPLIANCE_NORMAL) <= 0) {
             continue;
         }
-        result.push_back({codec->name,
-            codec->long_name != nullptr ? codec->long_name : codec->name,
-            static_cast<int>(codec->id)});
+        const std::string name(codec->name);
+        const bool hardware = name.ends_with("_nvenc") || name.ends_with("_amf") ||
+            name.ends_with("_qsv") || name.ends_with("_vaapi") || name.ends_with("_videotoolbox");
+        const auto label = std::string(codec->long_name != nullptr ? codec->long_name : codec->name) +
+            (hardware ? " (Hardware, Experimental)" : "");
+        result.push_back({name, label, static_cast<int>(codec->id), hardware, hardware});
     }
     std::sort(result.begin(), result.end(), [](const auto& left, const auto& right) {
         if (left.display_name != right.display_name) {
@@ -307,6 +312,39 @@ struct VideoEncoder::Impl {
             if (!selected) video_codec->pix_fmt = formats[0];
         }
         AVDictionary* options = nullptr;
+        if (settings.video_encoder_name.ends_with("_vaapi")) {
+            AVBufferRef* raw_device = nullptr;
+            check(av_hwdevice_ctx_create(&raw_device, AV_HWDEVICE_TYPE_VAAPI,
+                settings.hardware_device_name.empty() ? nullptr : settings.hardware_device_name.c_str(), nullptr, 0),
+                "Opening the selected VAAPI encoding device");
+            std::unique_ptr<AVBufferRef, BufferDeleter> device(raw_device);
+            std::unique_ptr<AVBufferRef, BufferDeleter> frames(av_hwframe_ctx_alloc(device.get()));
+            if (!frames) throw std::runtime_error("Allocating the VAAPI encoding pool failed.");
+            auto* pool = reinterpret_cast<AVHWFramesContext*>(frames->data);
+            pool->format = AV_PIX_FMT_VAAPI; pool->sw_format = AV_PIX_FMT_NV12;
+            pool->width = settings.width; pool->height = settings.height;
+            pool->initial_pool_size = 8;
+            if (std::uint64_t(settings.width) * settings.height * 3 / 2 * pool->initial_pool_size > 128ULL * 1024 * 1024)
+                throw std::invalid_argument("The VAAPI encoding pool exceeds its 128 MiB limit.");
+            check(av_hwframe_ctx_init(frames.get()), "Initializing VAAPI encoding frames");
+            video_codec->hw_frames_ctx = av_buffer_ref(frames.get());
+            if (!video_codec->hw_frames_ctx) throw std::runtime_error("Retaining VAAPI encoding frames failed.");
+            video_codec->pix_fmt = AV_PIX_FMT_VAAPI;
+        }
+        if (settings.native_frame_template) {
+            if (!settings.video_encoder_name.ends_with("_nvenc") ||
+                settings.native_frame_template->d3d11_view().format != NativeVideoFormat::Bgra8 ||
+                settings.native_frame_template->width() != settings.width ||
+                settings.native_frame_template->height() != settings.height)
+                throw std::invalid_argument("Native encoding requires a matching BGRA NVENC frame pool.");
+            av_dict_set(&options, "delay", "0", 0);
+            av_dict_set(&options, "rc-lookahead", "0", 0);
+            const auto* source = static_cast<const AVFrame*>(settings.native_frame_template->retained_frame());
+            video_codec->pix_fmt = AV_PIX_FMT_D3D11;
+            video_codec->hw_frames_ctx = av_buffer_ref(source->hw_frames_ctx);
+            if (!video_codec->hw_frames_ctx) throw std::runtime_error("Retaining the native encoding context failed.");
+            settings.native_frame_template.reset();
+        }
         if (settings.video_encoder_name == "libx264") {
             av_dict_set(&options, "preset", "medium", 0);
         }
@@ -327,7 +365,8 @@ struct VideoEncoder::Impl {
         video_frame->format = video_codec->pix_fmt;
         video_frame->width = video_codec->width;
         video_frame->height = video_codec->height;
-        check(av_frame_get_buffer(video_frame.get(), 32), "Allocating output video pixels");
+        if (!video_codec->hw_frames_ctx)
+            check(av_frame_get_buffer(video_frame.get(), 32), "Allocating output video pixels");
     }
 
     void createAudioStream() {
@@ -444,6 +483,7 @@ struct VideoEncoder::Impl {
     bool io_open = false;
     bool header_written = false;
     bool finished = false;
+    std::uint64_t uploaded_video_bytes = 0;
 };
 
 VideoEncoder::VideoEncoder(VideoEncodingSettings settings)
@@ -466,9 +506,22 @@ void VideoEncoder::writeVideo(const RgbaFrame& source, std::int64_t output_frame
             static_cast<std::size_t>(source.height) || output_frame < 0) {
         throw std::invalid_argument("The source frame does not match the output settings.");
     }
+    const bool native = impl_->video_codec->hw_frames_ctx != nullptr;
+    const auto software_format = native ? reinterpret_cast<const AVHWFramesContext*>(
+        impl_->video_codec->hw_frames_ctx->data)->sw_format : impl_->video_codec->pix_fmt;
+    FramePtr software;
+    FramePtr hardware;
+    AVFrame* converted = impl_->video_frame.get();
+    if (native) {
+        software.reset(av_frame_alloc()); hardware.reset(av_frame_alloc());
+        if (!software || !hardware) throw std::runtime_error("Allocating native fallback frames failed.");
+        software->format = software_format; software->width = impl_->settings.width; software->height = impl_->settings.height;
+        check(av_frame_get_buffer(software.get(), 32), "Allocating native fallback pixels");
+        converted = software.get();
+    }
     if (impl_->source_width != source.width || impl_->source_height != source.height) {
         impl_->scaler.reset(sws_getContext(source.width, source.height, AV_PIX_FMT_RGBA,
-            impl_->settings.width, impl_->settings.height, impl_->video_codec->pix_fmt,
+            impl_->settings.width, impl_->settings.height, software_format,
             SWS_BICUBIC, nullptr, nullptr, nullptr));
         if (impl_->scaler == nullptr) {
             throw std::runtime_error("Creating the video pixel converter failed.");
@@ -476,16 +529,42 @@ void VideoEncoder::writeVideo(const RgbaFrame& source, std::int64_t output_frame
         impl_->source_width = source.width;
         impl_->source_height = source.height;
     }
-    check(av_frame_make_writable(impl_->video_frame.get()), "Preparing an output video frame");
+    check(av_frame_make_writable(converted), "Preparing an output video frame");
     const std::uint8_t* source_data[4]{source.rgba_pixels.data(), nullptr, nullptr, nullptr};
     const int source_lines[4]{source.stride, 0, 0, 0};
     const int rows = sws_scale(impl_->scaler.get(), source_data, source_lines, 0,
-        source.height, impl_->video_frame->data, impl_->video_frame->linesize);
+        source.height, converted->data, converted->linesize);
     if (rows != impl_->settings.height) {
         throw std::runtime_error("Converting an output video frame failed.");
     }
-    impl_->video_frame->pts = output_frame;
-    impl_->encode(impl_->video_codec.get(), impl_->video_stream, impl_->video_frame.get());
+    if (native) {
+        check(av_hwframe_get_buffer(impl_->video_codec->hw_frames_ctx, hardware.get(), 0), "Allocating native fallback storage");
+        check(av_hwframe_transfer_data(hardware.get(), converted, 0), "Uploading native fallback pixels");
+        impl_->uploaded_video_bytes += static_cast<std::uint64_t>(av_image_get_buffer_size(
+            software_format, impl_->settings.width, impl_->settings.height, 1));
+        converted = hardware.get();
+    }
+    converted->pts = output_frame;
+    impl_->encode(impl_->video_codec.get(), impl_->video_stream, converted);
+}
+
+bool VideoEncoder::acceptsNativeFrames() const noexcept {
+    return impl_ && impl_->video_codec && impl_->video_codec->pix_fmt == AV_PIX_FMT_D3D11;
+}
+std::uint64_t VideoEncoder::uploadedVideoBytes() const noexcept { return impl_ ? impl_->uploaded_video_bytes : 0; }
+void VideoEncoder::writeVideo(const NativeVideoFramePtr& source, std::int64_t output_frame) {
+    if (!acceptsNativeFrames() || impl_->finished || !source || output_frame < 0 ||
+        source->width() != impl_->settings.width || source->height() != impl_->settings.height)
+        throw std::invalid_argument("The native video frame does not match the selected encoder.");
+    const auto* source_frame = static_cast<const AVFrame*>(source->retained_frame());
+    const auto* source_context = reinterpret_cast<const AVHWFramesContext*>(source_frame->hw_frames_ctx->data);
+    const auto* output_context = reinterpret_cast<const AVHWFramesContext*>(impl_->video_codec->hw_frames_ctx->data);
+    if (source_context->device_ctx != output_context->device_ctx || source_context->sw_format != AV_PIX_FMT_BGRA)
+        throw std::invalid_argument("The native frame belongs to a different encoder device or format.");
+    FramePtr frame(av_frame_clone(source_frame));
+    if (!frame) throw std::runtime_error("Retaining the native encoding frame failed.");
+    frame->pts = output_frame;
+    impl_->encode(impl_->video_codec.get(), impl_->video_stream, frame.get());
 }
 
 void VideoEncoder::writeAudio(

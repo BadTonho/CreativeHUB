@@ -155,6 +155,8 @@ void appendPerformanceContext(
     context.emplace_back("gpu_composition_uploaded_bytes", std::to_string(snapshot.gpu_composition_uploaded_bytes));
     context.emplace_back("gpu_composition_readback_bytes", std::to_string(snapshot.gpu_composition_readback_bytes));
     context.emplace_back("gpu_composition_uploaded_layers", std::to_string(snapshot.gpu_composition_uploaded_layers));
+    context.emplace_back("native_video_imports", std::to_string(snapshot.native_video_imports));
+    context.emplace_back("native_video_conversion_ns", std::to_string(snapshot.native_video_conversion_nanoseconds));
     appendTimingContext(context, "gpu_composition_upload", snapshot.gpu_composition_upload);
     appendTimingContext(context, "gpu_composition_draw_submission", snapshot.gpu_composition_draw_submission);
     appendTimingContext(context, "gpu_composition_readback", snapshot.gpu_composition_readback);
@@ -1027,6 +1029,7 @@ void MainWindow::initializePlayback() {
             if (playback_controller_) playback_controller_->setGpuTextureDeliveryAvailable(available);
         });
     playback_controller_->setGpuCompositionEnabled(settings::gpuCompositionEnabled());
+    playback_controller_->setHardwareDecodingEnabled(settings::hardwareDecodingEnabled());
     if (editUi().monitor_volume != nullptr) {
         applyMonitorVolumePercent(editUi().monitor_volume->value());
     }

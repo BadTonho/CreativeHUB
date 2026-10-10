@@ -2,6 +2,11 @@
 
 Status: **provisional**.
 
+The [experimental pipeline](../GPU_PIPELINE.md) extends composition to ordered
+built-in clip effects and transparent Fusion intermediates. Preview/export submit
+unprocessed `effect_stack` sources through the shared boundary; CPU recovery
+applies them once. Native decoding and NVENC have separate opt-ins and gates.
+
 The preview container is implemented in
 `apps/video-editor/src/ui/preview/`; its OpenGL surface and compositor remain
 under `apps/video-editor/src/rendering/`. The Video Editor currently uses Qt
@@ -609,7 +614,8 @@ for that frame and the remainder of the item; retry creates a fresh backend.
 Fallback reuses prepared layers, logs detailed context before one brief nonmodal
 warning per item, and never drops output frames. Cancellation retains its existing
 transactional behavior. [GPU_EXPORT.md](../GPU_EXPORT.md) documents this contract
-and the independent export diagnostics schema 1; preview schemas remain 9/3.
+and the independent export diagnostics schema 2; preview schemas remain 9/3
+with additive native video import/conversion counters.
 
 This is the CPU/default and experimental GPU composition FFmpeg export implementation. Codec
 compatibility, quality, performance, platform-specific hardware paths, and

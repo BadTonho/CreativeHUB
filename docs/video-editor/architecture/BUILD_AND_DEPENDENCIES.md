@@ -3,7 +3,11 @@
 Status: **provisional**.
 
 The root `vcpkg.json` tracks Qt 6 through `qtbase` and `qtmultimedia`, and
-FFmpeg through `ffmpeg`. The Image Editor also uses the `qtimageformats`
+FFmpeg through `ffmpeg`, with conditional Windows x64 `nvcodec` in both root
+and prototype manifests. It adds pinned MIT-licensed `ffnvcodec` headers without
+the CUDA toolkit or NVIDIA driver. FFmpeg's LGPL switches remain unchanged;
+runtime acceptance is separate. See [the pipeline contract](../GPU_PIPELINE.md).
+The Image Editor also uses the `qtimageformats`
 add-on so its WebP and TIFF image I/O plugins can be deployed. The Video Editor
 uses the FFmpeg `AVFORMAT`, `AVCODEC`,
 `AVUTIL`, `SWSCALE`, and `SWRESAMPLE` components. Qt Multimedia is optional in
@@ -46,7 +50,7 @@ Gui/OpenGL modules and public OpenGL 3.2 Core APIs, adding no third-party packag
 or license. `creative-suite::composition` remains usable without Qt. Native
 composition tests deploy the same Qt runtime and report unavailable contexts as
 skipped; a headless skip is not driver acceptance. Video Editor is the first
-consumer; Motion Studio's renderer continues to use CPU composition.
+consumer; Motion Studio also has experimental shared GPU composition/effects.
 
 The internal `creative-suite::effects` library provides CPU RGBA visual
 filters to the Video Editor and depends only on the shared frame type and the

@@ -150,6 +150,7 @@ public slots:
     virtual void setPreviewQuality(PreviewQuality quality);
     virtual void setCompositionCanvasSize(int width, int height);
     virtual void setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface);
+    virtual void setHardwareDecodingEnabled(bool enabled);
     virtual void setGpuTextureDelivery(bool enabled, quint64 epoch, QOpenGLContext* share_context);
     virtual void recoverPreviewFrame(rendering::PreviewFramePayload frame, qint64 local_frame,
         quint64 generation, quint64 epoch);
@@ -205,6 +206,8 @@ private:
         std::uint64_t decode_nanoseconds = 0;
         media::ForwardDecodeDiagnostics forward_decode;
         std::size_t composition_session_index = 0;
+        creative_suite::media::NativeVideoFramePtr native_frame;
+        creative_suite::composition::OpenGlTextureFramePtr texture_frame;
     };
 
     bool ensureSessionAtCurrentFrame();
@@ -214,6 +217,7 @@ private:
     void publishPreviewFrame(rendering::PreviewFramePayload frame, qint64 index,
         quint64 generation, quint64 trace);
     void retireGpuCompositor();
+    creative_suite::composition::OpenGlFrameCompositor* graphGpuBackend();
     void ensureGpuMaintenance();
     void collectGpuResources();
     void emitComposedFrame();
@@ -305,8 +309,10 @@ private:
     int composition_canvas_height_ = 1080;
     GpuCompose gpu_compose_;
     std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor> gpu_compositor_;
+    std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor> gpu_graph_compositor_;
     QOffscreenSurface* gpu_surface_ = nullptr;
     bool gpu_composition_enabled_ = false;
+    bool hardware_decoding_enabled_ = false;
     bool gpu_composition_failed_ = false;
     bool gpu_warning_reported_ = false;
     bool last_composition_gpu_ = false;

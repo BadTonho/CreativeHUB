@@ -580,6 +580,27 @@ int main(int argc, char** argv) {
                         "native initialization failed: " + initial.operation + ": " + initial.cause);
                     parity(gpu);
                     colorAdjustmentParity(gpu);
+                    {
+                        auto source = fixture(93, 57, true);
+                        auto brightness = effects::makeDefaultInstance("video.brightness");
+                        auto contrast = effects::makeDefaultInstance("video.contrast");
+                        auto saturation = effects::makeDefaultInstance("video.saturation");
+                        auto gray = effects::makeDefaultInstance("video.grayscale");
+                        require(effects::setParameterValue(brightness, "amount", 19) &&
+                            effects::setParameterValue(contrast, "amount", 132) &&
+                            effects::setParameterValue(saturation, "amount", 143) &&
+                            effects::setParameterValue(gray, "amount", 37), "clip effect parameters");
+                        auto disabled = brightness; disabled.enabled = false;
+                        std::vector<effects::EffectInstance> stack{brightness, contrast, disabled, saturation, gray};
+                        CompositionLayer clip{&source}; clip.effect_stack = stack;
+                        compare(gpu, 93, 57, {clip}, "ordered built-in clip effects and alpha");
+                        auto reference = source;
+                        require(effects::applyStack(reference, stack), "CPU effect reference");
+                        const auto prepared = FrameCompositor::compose(93, 57, {{&reference}});
+                        const auto fallback = FrameCompositor::compose(93, 57, {clip});
+                        require(prepared && fallback && prepared->rgba_pixels == fallback->rgba_pixels,
+                            "CPU recovery must apply the original effect stack once");
+                    }
                     orderedEffectParity(gpu);
                     if (activation == 0) highResolution(gpu);
                     cancellationAndLimits(gpu);

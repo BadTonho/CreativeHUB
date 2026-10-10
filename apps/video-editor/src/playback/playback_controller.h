@@ -136,6 +136,8 @@ public:
     void setGpuTextureDeliveryAvailable(bool available);
     void recoverPreviewFrame(rendering::PreviewFramePayload frame);
     [[nodiscard]] bool gpuCompositionEnabled() const noexcept { return gpu_composition_enabled_; }
+    void setHardwareDecodingEnabled(bool enabled);
+    [[nodiscard]] bool hardwareDecodingEnabled() const noexcept { return hardware_decoding_enabled_; }
     void setMonitorVolume(double gain);
     void setAudioParametersForActiveClip();
     void invalidate(bool stop_worker);
@@ -226,6 +228,7 @@ private:
     bool composition_ready_ = false;
     PreviewQuality preview_quality_ = PreviewQuality::Full;
     bool gpu_composition_enabled_ = false;
+    bool hardware_decoding_enabled_ = false;
     bool gpu_texture_delivery_available_ = false;
     std::atomic<quint64> delivery_epoch_{0};
     std::unique_ptr<QOffscreenSurface> gpu_surface_;

@@ -2,14 +2,40 @@
 
 #include <creative_suite/media/media_error.h>
 #include <creative_suite/media/video_frame.h>
+#include <creative_suite/media/native_video_frame.h>
 
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace creative_suite::media {
+
+enum class DecodeAcceleration : std::uint8_t { Software, PreferHardware };
+enum class DecodeBackend : std::uint8_t { Software, D3D11 };
+
+// Hardware decoding is opt-in. Existing consumers retain their CPU behavior.
+struct DecodeOptions {
+    DecodeAcceleration acceleration = DecodeAcceleration::Software;
+    // Adapter health check, called only for a native frame. A MediaError
+    // requests software recovery at the same requested frame index.
+    std::function<void(std::int64_t)> hardware_frame_guard;
+};
+
+struct DecodeAccelerationDiagnostics {
+    bool hardware_requested = false;
+    DecodeBackend backend = DecodeBackend::Software;
+    std::uint64_t hardware_frames = 0;
+    std::uint64_t software_frames = 0;
+    std::uint64_t downloaded_frames = 0;
+    std::uint64_t downloaded_bytes = 0;
+    std::uint64_t recovery_count = 0;
+    // Known decoder texture-array reservation; excludes driver-private storage.
+    std::uint64_t peak_reserved_gpu_bytes = 0;
+    std::string fallback_reason;
+};
 
 struct ForwardDecodeDiagnostics {
     bool collected = false;
@@ -57,6 +83,10 @@ public:
         (void)result;
         (void)nanoseconds;
     }
+    virtual void record_acceleration(
+        const DecodeAccelerationDiagnostics& diagnostics) noexcept {
+        (void)diagnostics;
+    }
 };
 
 class VideoPlaybackSession final {
@@ -74,6 +104,10 @@ public:
     static std::unique_ptr<VideoPlaybackSession> open(
         const std::filesystem::path& source_path,
         DecodeObserver* observer = nullptr);
+    static std::unique_ptr<VideoPlaybackSession> open(
+        const std::filesystem::path& source_path,
+        DecodeOptions options,
+        DecodeObserver* observer = nullptr);
 
     ~VideoPlaybackSession();
 
@@ -83,6 +117,12 @@ public:
     VideoPlaybackSession& operator=(VideoPlaybackSession&&) noexcept;
 
     std::optional<VideoFramePtr> decode_next_frame();
+    // Hardware frames remain on the device. Unsupported streams and recovered
+    // sessions return an ordinary owned RGBA frame through the same result.
+    std::optional<DecodedVideoFrame> decode_frame_at_native(std::int64_t frame_index,
+        const CancellationPredicate& should_cancel = {});
+    std::optional<DecodedVideoFrame> decode_forward_to_native(std::int64_t frame_index,
+        const CancellationPredicate& should_cancel = {}, ForwardDecodeDiagnostics* diagnostics = nullptr);
     std::optional<VideoFramePtr> decode_forward_to(
         std::int64_t frame_index,
         const CancellationPredicate& should_cancel = {},
@@ -93,7 +133,10 @@ public:
         const CancellationPredicate& should_cancel);
     [[nodiscard]] std::uint64_t take_cache_hit_count() noexcept;
     [[nodiscard]] CacheSnapshot cache_snapshot() const noexcept;
+    [[nodiscard]] DecodeAccelerationDiagnostics acceleration_diagnostics() const;
     void reset();
+    // Recreates only the video decoder/cache; caller owns scheduling and audio.
+    void set_decode_options(DecodeOptions options);
 
     [[nodiscard]] std::int64_t current_frame_index() const noexcept;
     [[nodiscard]] bool at_end() const noexcept;
@@ -105,7 +148,10 @@ private:
 
     static std::unique_ptr<Impl> openImpl(
         const std::filesystem::path& source_path,
-        DecodeObserver* observer);
+        DecodeObserver* observer,
+        DecodeOptions options = {});
+    static VideoFramePtr convertFrame(Impl& impl);
+    bool recoverInSoftware(const MediaError& error);
     static bool decodeRawNextFrame(
         Impl& impl,
         ForwardDecodeDiagnostics* diagnostics = nullptr);
@@ -119,7 +165,7 @@ private:
     static void cacheFrame(
         Impl& impl,
         std::int64_t frame_index,
-        const VideoFramePtr& frame);
+        const VideoFramePtr& frame, const NativeVideoFramePtr& native = {});
     static VideoFramePtr takeCachedFrame(
         Impl& impl,
         std::int64_t frame_index);

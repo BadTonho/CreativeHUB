@@ -30,6 +30,8 @@ struct OpenGlCompositionTimings {
     std::uint64_t color_adjustment_count = 0;
     std::uint64_t gaussian_blur_submission_nanoseconds = 0;
     std::uint64_t gaussian_blur_count = 0;
+    std::uint64_t native_video_imports = 0;
+    std::uint64_t native_video_conversion_nanoseconds = 0;
 };
 
 struct OpenGlCompositionResult {
@@ -56,7 +58,8 @@ class OpenGlTexturePoolBudget final {
 public:
     static constexpr std::uint64_t maximum_bytes = 64ULL * 1024 * 1024;
     static constexpr unsigned maximum_targets = 3;
-    OpenGlTexturePoolBudget();
+    explicit OpenGlTexturePoolBudget(std::uint64_t byte_limit = maximum_bytes,
+        unsigned target_limit = maximum_targets);
     ~OpenGlTexturePoolBudget();
     [[nodiscard]] std::uint64_t bytes() const noexcept;
     [[nodiscard]] unsigned targets() const noexcept;
@@ -94,6 +97,22 @@ struct OpenGlTextureCompositionResult {
     std::string operation;
     std::string cause;
     std::int64_t error_code = 0;
+};
+
+struct OpenGlImageInput {
+    const media::RgbaFrame* rgba = nullptr;
+    OpenGlTextureFramePtr texture;
+    std::shared_ptr<const media::NativeVideoFrame> native;
+    [[nodiscard]] int width() const noexcept;
+    [[nodiscard]] int height() const noexcept;
+};
+enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge };
+struct OpenGlImageOperation {
+    OpenGlImageOperationKind kind = OpenGlImageOperationKind::Copy;
+    OpenGlImageInput background;
+    OpenGlImageInput foreground;
+    animation::Transform2D transform;
+    std::vector<effects::ColorAdjustmentParameters> colors;
 };
 
 // Opaque identity for a submitted asynchronous RGBA readback. Tickets are
@@ -169,6 +188,19 @@ public:
     [[nodiscard]] OpenGlTextureCompositionResult composeTexture(
         int width, int height, const std::vector<CompositionLayer>& layers,
         const CancellationPredicate& cancel = {}, OpenGlCompositionTimings* timings = nullptr);
+    // Transparent RGBA8 intermediates for graph evaluation. Input leases are
+    // synchronized, source alpha is retained, and Merge uses straight alpha.
+    [[nodiscard]] OpenGlTextureCompositionResult processImage(
+        const OpenGlImageOperation&, const CancellationPredicate& cancel = {},
+        OpenGlCompositionTimings* timings = nullptr);
+    [[nodiscard]] OpenGlTextureCompositionResult importFrame(
+        const std::shared_ptr<const media::NativeVideoFrame>&,
+        const CancellationPredicate& cancel = {}, OpenGlCompositionTimings* timings = nullptr);
+    // Copies to a retained BGRA encoder surface entirely on the GPU. The
+    // caller submits that surface only after Complete; no readback is made.
+    [[nodiscard]] OpenGlCompositionResult copyToNative(const OpenGlTextureFramePtr&,
+        const std::shared_ptr<const media::NativeVideoFrame>&,
+        const CancellationPredicate& cancel = {});
     // Worker-only recovery of a retained lease from this compositor session.
     [[nodiscard]] OpenGlCompositionResult readback(const OpenGlTextureFramePtr&,
         const CancellationPredicate& cancel = {}, OpenGlCompositionTimings* timings = nullptr);

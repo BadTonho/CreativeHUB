@@ -1,4 +1,5 @@
 #include "playback_worker.h"
+#include <QOpenGLContext>
 
 #include <creative_suite/effects/effects.h>
 #include "playback_transition_plan.h"
@@ -79,12 +80,14 @@ void appendTimelinePositionContext(
 }
 
 std::unique_ptr<media::VideoPlaybackSession> openVideoPlaybackSession(
-    const std::filesystem::path& source_path) {
+    const std::filesystem::path& source_path, bool hardware = false) {
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     rendering::PreviewPerformanceScope timing(
         metrics,
         rendering::PreviewTiming::MediaOpen);
-    return media::VideoPlaybackSession::open(source_path);
+    return media::VideoPlaybackSession::open(source_path, {hardware
+        ? creative_suite::media::DecodeAcceleration::PreferHardware
+        : creative_suite::media::DecodeAcceleration::Software});
 }
 
 void recordPacingCatchup(
@@ -252,7 +255,7 @@ void PlaybackWorker::setMedia(
                             source_path_ && entry.session != nullptr;
                 });
         if (!has_prepared_composition_source) {
-            session_ = openVideoPlaybackSession(source_path_);
+            session_ = openVideoPlaybackSession(source_path_, hardware_decoding_enabled_);
         }
         {
             rendering::PreviewPerformanceScope timing(
@@ -281,7 +284,7 @@ void PlaybackWorker::play() {
             configureCompositionAudio();
         }
         if (!composition_enabled_) {
-            if (!session_) session_ = openVideoPlaybackSession(source_path_);
+            if (!session_) session_ = openVideoPlaybackSession(source_path_, hardware_decoding_enabled_);
             if (session_->at_end()) {
                 session_->reset();
                 current_frame_index_ = 0;
@@ -491,9 +494,42 @@ void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* s
     gpu_surface_ = surface;
     gpu_composition_enabled_ = enabled;
     gpu_composition_failed_ = false;
+    gpu_graph_compositor_.reset();
     gpu_warning_reported_ = false;
     gpu_texture_delivery_failed_ = false;
     gpu_texture_warning_reported_ = false;
+}
+
+creative_suite::composition::OpenGlFrameCompositor* PlaybackWorker::graphGpuBackend() {
+    if (!gpu_composition_enabled_ || gpu_composition_failed_ || !gpu_surface_ || gpu_compose_) return nullptr;
+    if (!gpu_graph_compositor_)
+        gpu_graph_compositor_ = std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(gpu_surface_,
+            creative_suite::composition::OpenGlPrecisionPolicy::Automatic,
+            gpu_share_context_ ? gpu_share_context_ : QOpenGLContext::globalShareContext(),
+            std::make_shared<creative_suite::composition::OpenGlTexturePoolBudget>(256ULL * 1024 * 1024, 8));
+    return gpu_graph_compositor_.get();
+}
+
+void PlaybackWorker::setHardwareDecodingEnabled(bool enabled) {
+    if (enabled == hardware_decoding_enabled_) return;
+    hardware_decoding_enabled_ = enabled;
+    cancelTransitionPreroll();
+    clearCompositionCache();
+    const creative_suite::media::DecodeOptions options{enabled
+        ? creative_suite::media::DecodeAcceleration::PreferHardware
+        : creative_suite::media::DecodeAcceleration::Software};
+    try {
+        if (session_) session_->setDecodeOptions(options);
+        for (auto& composition : composition_sessions_) {
+            if (composition.session) composition.session->setDecodeOptions(options);
+            for (auto& input : composition.graph_inputs)
+                if (input.video_session) input.video_session->setDecodeOptions(options);
+        }
+    } catch (const media::MediaError& error) {
+        reportFailure(error, "change_decode_backend");
+    } catch (const std::exception& error) {
+        reportFailure(error, "change_decode_backend");
+    }
 }
 
 void PlaybackWorker::setGpuTextureDelivery(bool enabled, quint64 epoch,
@@ -762,10 +798,10 @@ void PlaybackWorker::setComposition(
                     decode_path_error) {
                     composition_session.spec.linked_render_path.clear();
                     composition_session.session = openVideoPlaybackSession(
-                        QFileInfo(spec.source_path).filesystemFilePath());
+                        QFileInfo(spec.source_path).filesystemFilePath(), hardware_decoding_enabled_);
                 } else {
                     try {
-                        composition_session.session = openVideoPlaybackSession(decode_file);
+                        composition_session.session = openVideoPlaybackSession(decode_file, hardware_decoding_enabled_);
                     } catch (const std::exception& error) {
                         if (spec.linked_render_path.isEmpty()) throw;
                         logging::Logger::instance().log(
@@ -777,7 +813,7 @@ void PlaybackWorker::setComposition(
                                  QFileInfo(spec.source_path).filesystemFilePath())}});
                         composition_session.spec.linked_render_path.clear();
                         composition_session.session = openVideoPlaybackSession(
-                            QFileInfo(spec.source_path).filesystemFilePath());
+                            QFileInfo(spec.source_path).filesystemFilePath(), hardware_decoding_enabled_);
                     }
                 }
             } else if (spec.kind == timeline::ClipKind::Image) {
@@ -804,7 +840,7 @@ void PlaybackWorker::setComposition(
                         graph_input.still_frame = std::make_shared<const media::VideoFrame>(
                             media::StillImageDecoder{}.decode_first_frame(node.source_path));
                     } else {
-                        graph_input.video_session = openVideoPlaybackSession(node.source_path);
+                        graph_input.video_session = openVideoPlaybackSession(node.source_path, hardware_decoding_enabled_);
                     }
                     composition_session.graph_inputs.push_back(std::move(graph_input));
                 }
@@ -1360,7 +1396,7 @@ void PlaybackWorker::stepForward() {
     }
 
     try {
-        if (!session_) session_ = openVideoPlaybackSession(source_path_);
+        if (!session_) session_ = openVideoPlaybackSession(source_path_, hardware_decoding_enabled_);
         if (segment_frame_count_ > 0 &&
             current_frame_index_ >= segment_frame_count_ - 1) {
             finishPlayback();
@@ -1411,7 +1447,7 @@ void PlaybackWorker::stepBackward() {
     }
 
     try {
-        if (!session_) session_ = openVideoPlaybackSession(source_path_);
+        if (!session_) session_ = openVideoPlaybackSession(source_path_, hardware_decoding_enabled_);
         const auto target_frame = std::max<std::int64_t>(0, current_frame_index_ - 1);
         const auto source_frame = sourceFrameForLocal(target_frame);
         if (!source_frame.has_value()) {
@@ -1483,7 +1519,7 @@ void PlaybackWorker::processPendingSeek() {
                 emitComposedFrame();
             } else if (!source_path_.empty()) {
                 if (!session_) {
-                    session_ = openVideoPlaybackSession(source_path_);
+                    session_ = openVideoPlaybackSession(source_path_, hardware_decoding_enabled_);
                 }
 
                 const auto source_frame = sourceFrameForLocal(frame_index);
@@ -2465,10 +2501,10 @@ void PlaybackWorker::updateTransitionPreroll() {
     last_transition_preroll_start_frame_ = target->transition_start_frame;
     try {
         transition_preroll_thread_ = std::thread(
-            [state, request = std::move(request)]() mutable {
+            [state, hardware = hardware_decoding_enabled_, request = std::move(request)]() mutable {
                 auto result = std::move(request);
                 try {
-                    result.session = openVideoPlaybackSession(result.source_path);
+                    result.session = openVideoPlaybackSession(result.source_path, hardware);
                     const auto should_cancel = [state]() {
                         return state->cancel_requested.load(
                             std::memory_order_acquire);
@@ -2664,7 +2700,7 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeFusionNodePreview(
     if (should_cancel()) return std::nullopt;
     return fusion::nodes::evaluate(
         graph, inputs, target_node,
-        fusion::nodes::EvaluationContext{local_frame});
+        fusion::nodes::EvaluationContext{local_frame, graphGpuBackend(), nullptr, should_cancel});
 }
 
 std::optional<std::vector<PlaybackWorker::DecodedCompositionLayer>>
@@ -2752,6 +2788,8 @@ PlaybackWorker::decodeCompositionLayers(
             ? spec.source_start_frame + *source_offset
             : request.local_frame;
         std::shared_ptr<const media::VideoFrame> frame;
+        creative_suite::media::NativeVideoFramePtr native_frame;
+        creative_suite::composition::OpenGlTextureFramePtr graph_texture;
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
         const bool collect_layer_timing = playing_ && metrics.isEnabled();
         const auto layer_started = collect_layer_timing
@@ -2792,6 +2830,14 @@ PlaybackWorker::decodeCompositionLayers(
             decode_path = rendering::SlowFrameDecodePath::StaticFrame;
         } else if (composition.session != nullptr) {
             std::optional<media::VideoFramePtr> decoded;
+            const bool native_delivery = hardware_decoding_enabled_ && gpu_composition_enabled_ && !gpu_composition_failed_;
+            const auto acceptNative = [&](const std::optional<creative_suite::media::DecodedVideoFrame>& result) {
+                if (!result) return;
+                native_frame = result->native;
+                if (result->rgba) decoded = result->rgba;
+                else if (native_frame) decoded = std::make_shared<const media::VideoFrame>(
+                    media::VideoFrame{native_frame->width(), native_frame->height(), native_frame->width() * 4, {}});
+            };
             bool tried_forward_decode = false;
             bool tried_frame_at_decode = false;
             const auto current_source_frame =
@@ -2799,17 +2845,16 @@ PlaybackWorker::decodeCompositionLayers(
             if (playing_ && request.allow_forward_decode &&
                 detail::shouldUseSequentialDecode(current_source_frame, source_frame)) {
                 tried_forward_decode = true;
-                decoded = composition.session->decode_forward_to(
-                    source_frame,
-                    should_cancel,
-                    collect_layer_timing ? &forward_decode_diagnostics : nullptr);
+                if (native_delivery) acceptNative(composition.session->decodeForwardToNative(source_frame,
+                    should_cancel, collect_layer_timing ? &forward_decode_diagnostics : nullptr));
+                else decoded = composition.session->decode_forward_to(source_frame,
+                    should_cancel, collect_layer_timing ? &forward_decode_diagnostics : nullptr);
             }
             if (!decoded.has_value() && !composition.session->at_end() &&
                 !(should_cancel && should_cancel())) {
                 tried_frame_at_decode = true;
-                decoded = composition.session->decode_frame_at(
-                    source_frame,
-                    should_cancel);
+                if (native_delivery) acceptNative(composition.session->decodeFrameAtNative(source_frame, should_cancel));
+                else decoded = composition.session->decode_frame_at(source_frame, should_cancel);
             }
             if (tried_forward_decode && tried_frame_at_decode) {
                 decode_path = rendering::SlowFrameDecodePath::ForwardFallbackFrameAt;
@@ -2828,10 +2873,12 @@ PlaybackWorker::decodeCompositionLayers(
         if (frame == nullptr) continue;
         if (spec.node_graph.has_value()) {
             fusion::nodes::InputFrames inputs;
+            fusion::nodes::NativeInputFrames native_inputs;
             for (const auto& node : spec.node_graph->nodes) {
                 if (node.type != fusion::nodes::NodeType::Input) continue;
                 if (node.source_path.empty()) {
                     inputs.emplace(node.id, frame);
+                    if (native_frame) native_inputs.emplace(node.id, native_frame);
                     continue;
                 }
                 const auto graph_input = std::find_if(composition.graph_inputs.begin(),
@@ -2850,26 +2897,33 @@ PlaybackWorker::decodeCompositionLayers(
                          source_index < static_cast<long double>(node.source_frame_count)) &&
                         source_index <= static_cast<long double>(
                             std::numeric_limits<std::int64_t>::max())) {
-                        const auto decoded = graph_input->video_session->decode_frame_at(
-                            static_cast<std::int64_t>(source_index), should_cancel);
-                        if (decoded.has_value() && *decoded != nullptr)
-                            inputs.emplace(node.id, *decoded);
+                        if (hardware_decoding_enabled_ && graphGpuBackend()) {
+                            const auto decoded = graph_input->video_session->decodeFrameAtNative(
+                                static_cast<std::int64_t>(source_index), should_cancel);
+                            if (decoded && decoded->native) native_inputs.emplace(node.id, decoded->native);
+                            else if (decoded && decoded->rgba) inputs.emplace(node.id, decoded->rgba);
+                        } else {
+                            const auto decoded = graph_input->video_session->decode_frame_at(
+                                static_cast<std::int64_t>(source_index), should_cancel);
+                            if (decoded && *decoded) inputs.emplace(node.id, *decoded);
+                        }
                     }
                 }
             }
-            const auto evaluated = fusion::nodes::evaluate(
+            creative_suite::composition::OpenGlCompositionTimings graph_timings;
+            const auto evaluated = fusion::nodes::evaluateFrame(
                 *spec.node_graph, inputs,
-                fusion::nodes::EvaluationContext{request.local_frame});
+                fusion::nodes::EvaluationContext{request.local_frame, graphGpuBackend(), nullptr, should_cancel, &native_inputs, &graph_timings});
+            rendering::PreviewPerformanceMetrics::instance().recordGpuCompositionWork(graph_timings);
             if (!evaluated.has_value())
                 throw media::MediaError("The Fusion node graph did not produce a frame.");
-            frame = std::make_shared<const media::VideoFrame>(*evaluated);
-        }
-        if (!spec.effects.empty()) {
-            auto processed = std::make_shared<media::VideoFrame>(*frame);
-            if (!creative_suite::effects::applyStack(*processed, spec.effects)) {
-                throw media::MediaError("A clip effect stack could not be processed.");
+            if (evaluated->rgba) frame = std::make_shared<const media::VideoFrame>(*evaluated->rgba);
+            else {
+                graph_texture = evaluated->texture;
+                frame = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+                    graph_texture->width(), graph_texture->height(), graph_texture->width() * 4, {}});
             }
-            frame = std::move(processed);
+            native_frame.reset();
         }
         auto transform = timeline::evaluateTransform(
             spec.transform,
@@ -2897,7 +2951,7 @@ PlaybackWorker::decodeCompositionLayers(
                 ? 0U
                 : static_cast<std::uint64_t>(layer_decode_nanoseconds),
             forward_decode_diagnostics,
-            request.session_index});
+            request.session_index, std::move(native_frame), std::move(graph_texture)});
     }
     return layers;
 }
@@ -2936,6 +2990,9 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
             decoded.frame.get(),
             decoded.transform,
             decoded.alpha_coverage};
+        layer.effect_stack = composition_sessions_[decoded.composition_session_index].spec.effects;
+        layer.native_frame = decoded.native_frame;
+        layer.texture_frame = decoded.texture_frame;
         layers.push_back(std::move(layer));
     }
     if (gpu_composition_enabled_ && !gpu_composition_failed_) {
@@ -2947,7 +3004,8 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
             } else {
                 if (!gpu_compositor_)
                     gpu_compositor_ = std::make_unique<OpenGlFrameCompositor>(gpu_surface_,
-                        OpenGlPrecisionPolicy::Automatic, gpu_share_context_, gpu_texture_budget_);
+                        OpenGlPrecisionPolicy::Automatic,
+                        gpu_share_context_ ? gpu_share_context_ : QOpenGLContext::globalShareContext(), gpu_texture_budget_);
                 if (gpu_texture_delivery_enabled_ && !gpu_texture_delivery_failed_) {
                     auto direct = gpu_compositor_->composeTexture(width, height, layers, should_cancel, &gpu_timings);
                     metrics.setTexturePoolState(gpu_texture_budget_->bytes(), gpu_compositor_->texturePoolOccupancy());
@@ -3040,9 +3098,19 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     if (should_cancel()) return {};
     if (gpu_composition_enabled_ && timings) adapter_started = Clock::now();
     // Only the CPU path prepares and reports CPU text raster fast paths.
+    std::vector<media::VideoFramePtr> recovered_sources;
+    recovered_sources.reserve(decoded_layers.size());
     for (std::size_t index = 0; index < decoded_layers.size(); ++index) {
         const auto& decoded = decoded_layers[index];
         auto& layer = layers[index];
+        if (decoded.native_frame) recovered_sources.push_back(decoded.native_frame->download_rgba());
+        else if (decoded.texture_frame) {
+            auto recovered = gpu_graph_compositor_->readback(decoded.texture_frame, should_cancel);
+            if (!recovered.frame) throw media::MediaError("Recovering a Fusion GPU source failed.", recovered.error_code);
+            recovered_sources.push_back(std::make_shared<const media::VideoFrame>(std::move(*recovered.frame)));
+        } else recovered_sources.push_back(decoded.frame);
+        layer.frame = recovered_sources.back().get();
+        layer.native_frame.reset(); layer.texture_frame.reset();
         if (decoded.kind == timeline::ClipKind::Text &&
             decoded.composition_session_index < composition_sessions_.size()) {
             auto& composition =

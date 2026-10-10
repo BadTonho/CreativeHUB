@@ -1,5 +1,20 @@
 # Regression Testing
 
+The [Windows/NVIDIA pipeline](GPU_PIPELINE.md) adds native codec verification
+(`creative-suite-hardware-video-pipeline-tests --require-hardware`), ordered clip
+effect parity in the shared OpenGL test, and transparent Fusion graph parity in
+`creative-suite-main-editor-gpu-timeline`. Acceptance requires actual native
+backend execution; skipped runtime/context tests never qualify a device. The
+pipeline contract records integration and manual acceptance gates.
+
+On the NVIDIA reference device also run
+`build/apps/video-editor/tests/rendering/Release/creative-suite-main-editor-gpu-video-pipeline-tests.exe`
+with `QT_QPA_PLATFORM=windows`. This explicit target fails for missing hardware;
+it verifies native conversion/retention, NVENC D3D11 input, application preview,
+effects/Fusion, three-track export, audio stream publication, cancellation,
+destination preservation, and fresh retry. Its pre-encoding parity readbacks are
+verification operations; production transfer counters are asserted separately.
+
 This document defines detailed regression coverage for the Video Editor.
 The required policy for every current and future application is in
 [`../REGRESSION_POLICY.md`](../REGRESSION_POLICY.md). Every implemented rule
@@ -1126,7 +1141,8 @@ work when a context is available; a skip is not driver acceptance.
 Follow [GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md#manual-acceptance-checklist)
 for session/snapshot/accessibility, output/audio, PNG producer/consumer, fallback,
 shutdown and platform checks. It records measured results separately from pending
-human acceptance. Export metrics use schema 1; preview schemas remain 9/3.
+human acceptance. Export metrics use schema 2; preview schemas remain 9/3
+with additive native video import/conversion counters.
 
 ## Motion Studio linked-composition manual check
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rendering/offline_export_renderer.h"
+#include <creative_suite/media/native_video_frame.h>
 #include <chrono>
 
 namespace rendering::detail {
@@ -32,14 +33,20 @@ private:
 class ExportComposition {
 public:
     ExportComposition(const RenderJob&, const OfflineExportOptions&, OfflineExportMetrics&);
+    composition::OpenGlFrameCompositor* graphBackend();
+    bool nativeDelivery() const noexcept;
     std::optional<creative_suite::media::RgbaFrame> compose(const std::vector<composition::CompositionLayer>&,
-        std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled);
+        std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,
+        creative_suite::media::NativeVideoFramePool* = nullptr,
+        creative_suite::media::NativeVideoFramePtr* native_output = nullptr);
 private:
     void fallback(const composition::OpenGlCompositionResult&, std::int64_t, std::int64_t);
     const RenderJob& job_;
     const OfflineExportOptions& options_;
     OfflineExportMetrics& metrics_;
     std::unique_ptr<ExportGpuCompositor> gpu_;
+    std::unique_ptr<composition::OpenGlFrameCompositor> graph_gpu_;
+    std::unique_ptr<composition::OpenGlFrameCompositor> native_gpu_;
     bool failed_ = false, warned_ = false;
 };
 

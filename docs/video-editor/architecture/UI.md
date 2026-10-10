@@ -36,6 +36,13 @@ See [the delivery contract](../GPU_TEXTURE_DELIVERY.md). This preview preference
 does not change export settings or project data. See
 [the composition boundary](RENDERING.md#timeline-composition).
 
+**Use hardware video decoding for preview (Experimental)** is a separate global
+preference, off by default. It requests compatible hardware decoding and preserves
+software recovery. Render has an independent **Use hardware video decoding
+(Experimental)** checkbox captured in each item. Hardware encoders display
+**Hardware, Experimental** in the export selector and are never chosen implicitly
+as the initial encoder. See [the pipeline contract](../GPU_PIPELINE.md).
+
 Render > Video independently offers **Use GPU for export (Experimental)** with
 an accessible description of composition acceleration and automatic CPU fallback.
 It starts unchecked on launch and retains its current choice for subsequent items

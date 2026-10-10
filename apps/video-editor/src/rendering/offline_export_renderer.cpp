@@ -103,6 +103,26 @@ struct RenderTransition {
     timeline::TransitionKind kind = timeline::TransitionKind::CrossDissolve;
 };
 
+struct DecodeMetricsScope {
+    const std::vector<RenderClip>& clips;
+    OfflineExportMetrics& metrics;
+    ~DecodeMetricsScope() {
+        const auto record = [&](const auto& session) {
+            if (!session) return;
+            const auto diagnostic = session->accelerationDiagnostics();
+            metrics.decoded_hardware_frames += diagnostic.hardware_frames;
+            metrics.decoded_software_frames += diagnostic.software_frames;
+            metrics.decoded_downloaded_frames += diagnostic.downloaded_frames;
+            metrics.decoded_downloaded_bytes += diagnostic.downloaded_bytes;
+            metrics.decoder_reserved_gpu_bytes += diagnostic.peak_reserved_gpu_bytes;
+        };
+        for (const auto& clip : clips) {
+            record(clip.video);
+            for (const auto& source : clip.graph_sources) record(source.video);
+        }
+    }
+};
+
 std::filesystem::path clipPath(const project::ProjectClip& clip) {
     if (clip.image_editor_variant.has_value() &&
         !clip.image_editor_variant->published_output_path.empty()) {
@@ -225,15 +245,15 @@ std::optional<media::VideoFrame> composeFrame(
     detail::ExportComposition& compositor,
     std::int64_t output_frame,
     OfflineExportMetrics& metrics,
-    const std::atomic_bool& canceled) {
+    const std::atomic_bool& canceled,
+    creative_suite::media::NativeVideoFramePool* native_pool,
+    creative_suite::media::NativeVideoFramePtr& native_output) {
     std::vector<rendering::CompositionLayer> layers;
     std::vector<media::VideoFramePtr> decoded_frames;
-    std::vector<media::VideoFrame> effected_frames;
     {
         detail::ExportTimedScope preparation(metrics.preparation_nanoseconds);
         const auto requests = activeClipRequests(clips, transitions, timeline_frame);
         decoded_frames.reserve(requests.size());
-        effected_frames.reserve(requests.size());
         layers.reserve(requests.size());
         for (const auto& request : requests) {
             checkCanceled(canceled);
@@ -249,6 +269,8 @@ std::optional<media::VideoFrame> composeFrame(
             setFrameOpacity(transform, request.opacity);
 
             media::VideoFramePtr source_frame;
+            creative_suite::media::NativeVideoFramePtr native_frame;
+            creative_suite::composition::OpenGlTextureFramePtr graph_texture;
             if (clip.kind == timeline::ClipKind::Text) {
                 if (!render_clip.text.has_value()) {
                     auto text = rendering::renderText(
@@ -276,22 +298,33 @@ std::optional<media::VideoFrame> composeFrame(
                     throw std::runtime_error("A source frame index exceeded the supported range.");
                 }
                 const auto source_frame_index = clip.source_start_frame + *source_offset;
-                auto decoded = render_clip.video->decode_frame_at(
-                    source_frame_index,
-                    [&canceled] { return canceled.load(std::memory_order_acquire); });
-                if (!decoded.has_value() || *decoded == nullptr) {
+                if (compositor.nativeDelivery()) {
+                    const auto decoded = render_clip.video->decodeFrameAtNative(source_frame_index,
+                        [&canceled] { return canceled.load(std::memory_order_acquire); });
+                    if (decoded) {
+                        native_frame = decoded->native; source_frame = decoded->rgba;
+                        if (native_frame) source_frame = std::make_shared<const media::VideoFrame>(
+                            media::VideoFrame{decoded->width(), decoded->height(), decoded->width() * 4});
+                    }
+                } else {
+                    const auto decoded = render_clip.video->decode_frame_at(source_frame_index,
+                        [&canceled] { return canceled.load(std::memory_order_acquire); });
+                    if (decoded) source_frame = *decoded;
+                }
+                if (!source_frame) {
                     checkCanceled(canceled);
                     throw std::runtime_error(
                         "A video frame could not be decoded from " + pathUtf8(clipPath(clip)));
                 }
-                source_frame = *decoded;
             }
             if (clip.node_graph.has_value()) {
                 fusion::nodes::InputFrames inputs;
+                fusion::nodes::NativeInputFrames native_inputs;
                 for (const auto& node : clip.node_graph->nodes) {
                     if (node.type != fusion::nodes::NodeType::Input) continue;
                     if (node.source_path.empty()) {
-                        inputs.emplace(node.id, source_frame);
+                        if (native_frame) native_inputs.emplace(node.id, native_frame);
+                        else inputs.emplace(node.id, source_frame);
                         continue;
                     }
                     const auto source = std::find_if(render_clip.graph_sources.begin(),
@@ -310,43 +343,55 @@ std::optional<media::VideoFrame> composeFrame(
                              frame_value < static_cast<long double>(node.source_frame_count)) &&
                             frame_value <= static_cast<long double>(
                                 std::numeric_limits<std::int64_t>::max())) {
-                            const auto decoded = source->video->decode_frame_at(
-                                static_cast<std::int64_t>(frame_value),
-                                [&canceled] { return canceled.load(std::memory_order_acquire); });
-                            if (decoded.has_value() && *decoded != nullptr)
-                                inputs.emplace(node.id, *decoded);
+                            if (compositor.nativeDelivery()) {
+                                const auto decoded = source->video->decodeFrameAtNative(
+                                    static_cast<std::int64_t>(frame_value), [&canceled] { return canceled.load(); });
+                                if (decoded && decoded->native) native_inputs.emplace(node.id, decoded->native);
+                                else if (decoded && decoded->rgba) inputs.emplace(node.id, decoded->rgba);
+                            } else {
+                                const auto decoded = source->video->decode_frame_at(
+                                    static_cast<std::int64_t>(frame_value), [&canceled] { return canceled.load(); });
+                                if (decoded && *decoded) inputs.emplace(node.id, *decoded);
+                            }
                         }
                     }
                 }
-                const auto evaluated = fusion::nodes::evaluate(
+                creative_suite::composition::OpenGlCompositionTimings graph_timings;
+                const auto evaluated = fusion::nodes::evaluateFrame(
                     *clip.node_graph, inputs,
-                    fusion::nodes::EvaluationContext{local_frame});
+                    fusion::nodes::EvaluationContext{local_frame, compositor.graphBackend(), nullptr,
+                        [&canceled] { return canceled.load(std::memory_order_acquire); }, &native_inputs, &graph_timings});
+                metrics.native_video_imports += graph_timings.native_video_imports;
+                metrics.native_conversion_nanoseconds += graph_timings.native_video_conversion_nanoseconds;
+                metrics.uploaded_bytes += graph_timings.uploaded_bytes;
+                metrics.upload_nanoseconds += graph_timings.upload_nanoseconds;
+                metrics.draw_submission_nanoseconds += graph_timings.draw_submission_nanoseconds;
+                if (auto* graph_backend = compositor.graphBackend())
+                    metrics.graph_peak_gpu_bytes = std::max(metrics.graph_peak_gpu_bytes, graph_backend->resourceUsage().peak_known_bytes);
                 if (!evaluated.has_value())
                     throw std::runtime_error("The Fusion node graph did not produce a frame.");
-                source_frame = std::make_shared<const media::VideoFrame>(*evaluated);
+                graph_texture = evaluated->texture; native_frame.reset();
+                if (graph_texture) source_frame = std::make_shared<const media::VideoFrame>(
+                    media::VideoFrame{graph_texture->width(), graph_texture->height(), graph_texture->width() * 4});
+                else if (evaluated->rgba) source_frame = std::make_shared<const media::VideoFrame>(std::move(*evaluated->rgba));
             }
             // CompositionLayer stores a raw frame pointer. Keep the shared frame alive
             // until after the compositor consumes all layers for this output frame.
             decoded_frames.push_back(source_frame);
-            if (!clip.effects.empty()) {
-                effected_frames.push_back(*source_frame);
-                if (!creative_suite::effects::applyStack(effected_frames.back(), clip.effects))
-                    throw std::runtime_error("A clip effect stack could not be processed.");
-                layers.push_back({&effected_frames.back(), transform, {}});
-            } else {
-                layers.push_back({source_frame.get(), transform, {}});
-            }
+            layers.push_back({source_frame.get(), transform, {}});
+            layers.back().effect_stack = clip.effects;
+            layers.back().native_frame = std::move(native_frame);
+            layers.back().texture_frame = std::move(graph_texture);
         }
         std::uint64_t resident = 0;
         for (const auto& decoded : decoded_frames) resident += decoded->rgba_pixels.size();
-        for (const auto& effected : effected_frames) resident += effected.rgba_pixels.size();
         for (const auto& clip : clips) {
             if (clip.still) resident += clip.still->rgba_pixels.size();
             if (clip.text) resident += clip.text->rgba_pixels.size();
         }
         metrics.peak_prepared_source_bytes = std::max(metrics.peak_prepared_source_bytes, resident);
     }
-    return compositor.compose(layers, output_frame, timeline_frame, canceled);
+    return compositor.compose(layers, output_frame, timeline_frame, canceled, native_pool, &native_output);
 }
 
 std::filesystem::path makeTemporaryPath(const std::filesystem::path& target, std::uint64_t id) {
@@ -372,30 +417,50 @@ public:
     OutputEncoder(const RenderJob& job,
                   const std::filesystem::path& output_path,
                   double frame_rate,
-                  bool with_audio)
-        : encoder_(makeSettings(job, output_path, frame_rate, with_audio)) {}
+                  bool with_audio, bool native_delivery)
+        : native_pool_(makeNativePool(job, native_delivery)),
+          encoder_(std::make_unique<creative_suite::media::VideoEncoder>(makeSettings(job, output_path,
+              frame_rate, with_audio, native_pool_ ? native_pool_->acquire() : nullptr))) {}
+
+    creative_suite::media::NativeVideoFramePool* nativePool() { return native_pool_.get(); }
+    std::uint64_t uploadedVideoBytes() const { return encoder_->uploadedVideoBytes(); }
+    void writeVideo(const creative_suite::media::NativeVideoFramePtr& frame, std::int64_t index) { encoder_->writeVideo(frame, index); }
 
     void writeVideo(const media::VideoFrame& source, std::int64_t output_frame) {
-        encoder_.writeVideo(source, output_frame);
+        encoder_->writeVideo(source, output_frame);
     }
 
     void writeAudio(const std::vector<float>& stereo_samples, int sample_count) {
-        encoder_.writeAudio(
+        encoder_->writeAudio(
             std::span<const float>(stereo_samples.data(), stereo_samples.size()), sample_count);
     }
 
     [[nodiscard]] int nextAudioInputSampleCount() const {
-        return encoder_.nextAudioInputSampleCount();
+        return encoder_->nextAudioInputSampleCount();
     }
 
-    void finish() { encoder_.finish(); }
+    void finish() { encoder_->finish(); }
 
 private:
+    static std::unique_ptr<creative_suite::media::NativeVideoFramePool> makeNativePool(const RenderJob& job, bool enabled) {
+#ifdef _WIN32
+        if (enabled && job.settings.video_encoder_name.endsWith("_nvenc")) {
+            try { return std::make_unique<creative_suite::media::NativeVideoFramePool>(job.settings.width, job.settings.height); }
+            catch (const std::exception& error) {
+                logging::Logger::instance().log(logging::Level::Warning, "export-gpu", "create-native-output-pool", error.what(),
+                    {{"job_id", std::to_string(job.id)}, {"fallback", "rgba-encoder-input"}});
+            }
+        }
+#else
+        (void)job; (void)enabled;
+#endif
+        return {};
+    }
     static creative_suite::media::VideoEncodingSettings makeSettings(
         const RenderJob& job,
         const std::filesystem::path& output_path,
         double frame_rate,
-        bool with_audio) {
+        bool with_audio, creative_suite::media::NativeVideoFramePtr native_template) {
         const auto rate = frameRateRational(frame_rate);
         creative_suite::media::VideoEncodingSettings settings;
         settings.output_path = output_path;
@@ -406,6 +471,7 @@ private:
         settings.frame_rate_numerator = rate.num;
         settings.frame_rate_denominator = rate.den;
         settings.video_bitrate_mbps = job.settings.video_bitrate_mbps;
+        settings.native_frame_template = std::move(native_template);
         if (with_audio) {
             settings.audio = creative_suite::media::AudioEncodingSettings{
                 job.settings.audio_encoder_name.toStdString(),
@@ -416,7 +482,8 @@ private:
         return settings;
     }
 
-    creative_suite::media::VideoEncoder encoder_;
+    std::unique_ptr<creative_suite::media::NativeVideoFramePool> native_pool_;
+    std::unique_ptr<creative_suite::media::VideoEncoder> encoder_;
 };
 
 std::vector<RenderClip> prepareClips(
@@ -463,7 +530,8 @@ std::vector<RenderClip> prepareClips(
             } else {
                 const auto metadata = media::VideoProbe{}.probe(path);
                 entry.source_fps = validFrameRate(metadata.frame_rate, timeline_fps);
-                entry.video = media::VideoPlaybackSession::open(path);
+                entry.video = media::VideoPlaybackSession::open(path, {job.settings.hardware_decoding_enabled
+                    ? creative_suite::media::DecodeAcceleration::PreferHardware : creative_suite::media::DecodeAcceleration::Software});
                 if (job.settings.export_audio) {
                     entry.audio = media::AudioPlaybackSession::open(path, {48000, 2});
                 }
@@ -483,7 +551,8 @@ std::vector<RenderClip> prepareClips(
                     if (node.source_is_still) {
                         graph_source.still = media::StillImageDecoder{}.decode_first_frame(node.source_path);
                     } else {
-                        graph_source.video = media::VideoPlaybackSession::open(node.source_path);
+                        graph_source.video = media::VideoPlaybackSession::open(node.source_path, {job.settings.hardware_decoding_enabled
+                            ? creative_suite::media::DecodeAcceleration::PreferHardware : creative_suite::media::DecodeAcceleration::Software});
                     }
                     entry.graph_sources.push_back(std::move(graph_source));
                 }
@@ -678,6 +747,7 @@ void OfflineExportRenderer::render(
             detail::ExportTimedScope preparation(metrics.preparation_nanoseconds);
             return prepareClips(job.project_snapshot, timeline_fps, job, cancel_requested);
         }();
+        DecodeMetricsScope decode_metrics{clips, metrics};
         detail::ExportComposition compositor(job, options, metrics);
         const auto transitions = collectTransitions(job.project_snapshot);
         const auto audio_clips = audioMixClips(clips);
@@ -692,26 +762,32 @@ void OfflineExportRenderer::render(
         }
         auto encoder = [&] {
             detail::ExportTimedScope encoding(metrics.encoding_nanoseconds);
-            return OutputEncoder(job, temporary, job.settings.frame_rate, job.settings.export_audio);
+            return OutputEncoder(job, temporary, job.settings.frame_rate, job.settings.export_audio, compositor.nativeDelivery());
         }();
+        if (auto* pool = encoder.nativePool()) metrics.encoder_reserved_gpu_bytes = pool->reserved_bytes();
         for (std::int64_t frame_index = 0; frame_index < output_frame_count; ++frame_index) {
             checkCanceled(cancel_requested);
             const auto timeline_frame = static_cast<std::int64_t>(std::floor(
                 static_cast<long double>(frame_index) * timeline_fps /
                 job.settings.frame_rate + 1.0e-9L));
+            creative_suite::media::NativeVideoFramePtr native_frame;
             auto frame = composeFrame(
                 clips, transitions, timeline_frame,
                 job.project_snapshot.timeline_frame_rate,
                 job.project_snapshot.canvas_width,
                 job.project_snapshot.canvas_height,
-                compositor, frame_index, metrics, cancel_requested);
+                compositor, frame_index, metrics, cancel_requested, encoder.nativePool(), native_frame);
             if (!frame.has_value()) throw std::runtime_error("Composing an output frame failed.");
             checkCanceled(cancel_requested);
             metrics.peak_cpu_frame_bytes = std::max(metrics.peak_cpu_frame_bytes,
                 static_cast<std::uint64_t>(frame->rgba_pixels.size()));
             {
                 detail::ExportTimedScope encoding(metrics.encoding_nanoseconds);
-                encoder.writeVideo(*frame, frame_index);
+                if (native_frame) { encoder.writeVideo(native_frame, frame_index); ++metrics.native_encoded_frames; }
+                else {
+                    encoder.writeVideo(*frame, frame_index);
+                    metrics.encoding_uploaded_bytes = encoder.uploadedVideoBytes();
+                }
             }
             ++metrics.encoded_frames;
             reportProgress(static_cast<int>(
@@ -770,12 +846,28 @@ void OfflineExportRenderer::render(
         }
         throw;
     } catch (const creative_suite::media::VideoEncodingError& error) {
+        logging::Logger::instance().log(logging::Level::Error, "export", "encode-video", error.what(),
+            {{"job_id", std::to_string(job.id)}, {"output_path", pathUtf8(target)},
+             {"video_encoder", job.settings.video_encoder_name.toStdString()}, {"error_code", std::to_string(error.errorCode())}});
         if (!published) {
             std::error_code cleanup_error;
             std::filesystem::remove(temporary, cleanup_error);
         }
         throw ExportError(error.what(), error.errorCode());
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(logging::Level::Error, "export", "render-item", error.what(),
+            {{"job_id", std::to_string(job.id)}, {"output_path", pathUtf8(target)},
+             {"video_encoder", job.settings.video_encoder_name.toStdString()}});
+        if (!published) {
+            std::error_code cleanup_error;
+            std::filesystem::remove(temporary, cleanup_error);
+        }
+        throw;
     } catch (...) {
+        logging::Logger::instance().log(logging::Level::Error, "export", "render-item",
+            "An unknown exception interrupted the export.",
+            {{"job_id", std::to_string(job.id)}, {"output_path", pathUtf8(target)},
+             {"video_encoder", job.settings.video_encoder_name.toStdString()}});
         if (!published) {
             std::error_code cleanup_error;
             std::filesystem::remove(temporary, cleanup_error);

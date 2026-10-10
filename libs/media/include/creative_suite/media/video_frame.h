@@ -6,6 +6,8 @@
 
 namespace creative_suite::media {
 
+class NativeVideoFrame;
+
 // Owned, tightly or explicitly-strided, 8-bit RGBA pixels. stride is the
 // number of bytes per row; storage must contain at least stride * height
 // bytes. The channels use straight alpha; this type does not impose a color

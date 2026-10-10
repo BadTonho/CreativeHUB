@@ -1,20 +1,36 @@
 #include <creative_suite/media/video_playback.h>
 #include <creative_suite/diagnostics/logger.h>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <d3d11.h>
+#endif
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/error.h>
+#include <libavutil/hwcontext.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/pixdesc.h>
+#ifdef _WIN32
+#include <libavutil/hwcontext_d3d11va.h>
+#endif
 #include <libswscale/swscale.h>
 }
 
 #include <cstddef>
+#include <atomic>
+#include <cstring>
 #include <cmath>
 #include <chrono>
 #include <deque>
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -57,6 +73,9 @@ using CodecContextPtr = std::unique_ptr<AVCodecContext, CodecContextDeleter>;
 using PacketPtr = std::unique_ptr<AVPacket, PacketDeleter>;
 using FramePtr = std::unique_ptr<AVFrame, FrameDeleter>;
 using SwsContextPtr = std::unique_ptr<SwsContext, SwsContextDeleter>;
+struct NativeTransferCounters {
+    std::atomic<std::uint64_t> frames{0}, bytes{0};
+};
 
 class OptionalDurationAccumulator final {
 public:
@@ -280,6 +299,42 @@ void logFailure(const std::filesystem::path& source_path,
     }
 }
 
+void logHardwareRecovery(const std::filesystem::path& path, const std::string& cause,
+                         std::optional<int> code = {}) noexcept {
+    try {
+        diagnostics::Context context{{"path", safePathForLog(path)}, {"backend", "d3d11va"}};
+        if (code) context.emplace_back("error_code", std::to_string(*code));
+        diagnostics::Logger::instance().log(diagnostics::Level::Warning, "media",
+            "hardware_decode_recovery", cause, context);
+    } catch (...) {}
+}
+
+AVPixelFormat selectD3D11Format(AVCodecContext*, const AVPixelFormat* formats) {
+    for (; *formats != AV_PIX_FMT_NONE; ++formats) {
+        if (*formats == AV_PIX_FMT_D3D11) return *formats;
+    }
+    // Do not silently label FFmpeg's software decoder as a hardware path.
+    return AV_PIX_FMT_NONE;
+}
+
+bool supportsEightBitHardware(const AVCodecParameters& parameters) {
+    if (parameters.codec_id != AV_CODEC_ID_H264 && parameters.codec_id != AV_CODEC_ID_HEVC)
+        return false;
+    if (parameters.codec_id == AV_CODEC_ID_HEVC && parameters.profile != FF_PROFILE_UNKNOWN &&
+        parameters.profile != FF_PROFILE_HEVC_MAIN) return false;
+    if (parameters.codec_id == AV_CODEC_ID_H264 && parameters.profile != FF_PROFILE_UNKNOWN &&
+        parameters.profile != FF_PROFILE_H264_BASELINE &&
+        parameters.profile != FF_PROFILE_H264_CONSTRAINED_BASELINE &&
+        parameters.profile != FF_PROFILE_H264_MAIN && parameters.profile != FF_PROFILE_H264_HIGH)
+        return false;
+    const auto* descriptor = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(parameters.format));
+    if (descriptor != nullptr) {
+        for (int index = 0; index < descriptor->nb_components; ++index)
+            if (descriptor->comp[index].depth != 8) return false;
+    }
+    return true;
+}
+
 void logFailure(const std::filesystem::path& source_path,
                 const char* operation,
                 const std::exception& error) noexcept {
@@ -295,16 +350,159 @@ void logFailure(const std::filesystem::path& source_path,
     }
 }
 
+VideoFramePtr downloadD3D11Frame(const AVFrame& frame, SwsContextPtr& scaler, DecodeObserver* observer) {
+    FramePtr transferred(av_frame_alloc());
+    if (!transferred) throw MediaError("Could not allocate the hardware transfer frame.");
+    const int result = av_hwframe_transfer_data(transferred.get(), &frame, 0);
+    if (result < 0) throwFfmpegError(result, "Downloading a D3D11 video frame");
+    if (transferred->format == AV_PIX_FMT_NV12) {
+        // swscale's NV12 fast converter does not use the same chroma sampling
+        // as the established YUV420P reference. Repack losslessly before that
+        // conversion so the hardware RGBA delivery retains its pixel contract.
+        FramePtr planar(av_frame_alloc());
+        if (!planar) throw MediaError("Could not allocate the planar transfer frame.");
+        planar->format = frame.color_range == AVCOL_RANGE_JPEG ? AV_PIX_FMT_YUVJ420P : AV_PIX_FMT_YUV420P;
+        planar->width = transferred->width; planar->height = transferred->height;
+        const int allocation = av_frame_get_buffer(planar.get(), 32);
+        if (allocation < 0) throwFfmpegError(allocation, "Allocating planar transfer pixels");
+        for (int y = 0; y < planar->height; ++y)
+            std::memcpy(planar->data[0] + y * planar->linesize[0],
+                transferred->data[0] + y * transferred->linesize[0], planar->width);
+        for (int y = 0; y < (planar->height + 1) / 2; ++y) {
+            const auto* uv = transferred->data[1] + y * transferred->linesize[1];
+            for (int x = 0; x < (planar->width + 1) / 2; ++x) {
+                planar->data[1][y * planar->linesize[1] + x] = uv[x * 2];
+                planar->data[2][y * planar->linesize[2] + x] = uv[x * 2 + 1];
+            }
+        }
+        return copyRgbaFrame(*planar, scaler, observer);
+    }
+    return copyRgbaFrame(*transferred, scaler, observer);
+}
+
 } // namespace
+
+struct NativeVideoFrame::Impl {
+    FramePtr frame;
+    std::filesystem::path source_path;
+    std::shared_ptr<NativeTransferCounters> transfers;
+};
+NativeVideoFrame::NativeVideoFrame(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+NativeVideoFrame::~NativeVideoFrame() = default;
+void* NativeVideoFrame::retained_frame() const noexcept { return impl_->frame.get(); }
+int NativeVideoFrame::width() const noexcept { return impl_->frame->width; }
+int NativeVideoFrame::height() const noexcept { return impl_->frame->height; }
+D3D11VideoFrameView NativeVideoFrame::d3d11_view() const {
+#ifdef _WIN32
+    const auto* frames = reinterpret_cast<const AVHWFramesContext*>(impl_->frame->hw_frames_ctx->data);
+    const auto* device = static_cast<const AVD3D11VADeviceContext*>(frames->device_ctx->hwctx);
+    return {device->device, impl_->frame->data[0],
+        static_cast<unsigned>(reinterpret_cast<std::uintptr_t>(impl_->frame->data[1])),
+        width(), height(), frames->sw_format == AV_PIX_FMT_BGRA ? NativeVideoFormat::Bgra8 : NativeVideoFormat::Nv12,
+        impl_->frame->color_range == AVCOL_RANGE_JPEG};
+#else
+    throw MediaError("A D3D11 frame cannot be accessed on this platform.");
+#endif
+}
+void NativeVideoFrame::with_device_lock(const std::function<void()>& operation) const {
+#ifdef _WIN32
+    const auto* frames = reinterpret_cast<const AVHWFramesContext*>(impl_->frame->hw_frames_ctx->data);
+    auto* device = static_cast<AVD3D11VADeviceContext*>(frames->device_ctx->hwctx);
+    device->lock(device->lock_ctx);
+    struct Unlock { AVD3D11VADeviceContext* device; ~Unlock() { device->unlock(device->lock_ctx); } } unlock{device};
+    operation();
+#else
+    (void)operation;
+    throw MediaError("A D3D11 device cannot be used on this platform.");
+#endif
+}
+RgbaFramePtr NativeVideoFrame::download_rgba() const {
+    try {
+        SwsContextPtr scaler;
+        auto result = downloadD3D11Frame(*impl_->frame, scaler, nullptr);
+        if (impl_->transfers) {
+            ++impl_->transfers->frames;
+            impl_->transfers->bytes += static_cast<std::uint64_t>(width()) * height() * 3 / 2;
+        }
+        return result;
+    } catch (const MediaError& error) {
+        logFailure(impl_->source_path, "native_frame_download", error); throw;
+    } catch (const std::exception& error) {
+        logFailure(impl_->source_path, "native_frame_download", error); throw;
+    }
+}
+
+struct NativeVideoFramePool::Impl {
+    AVBufferRef* device = nullptr;
+    AVBufferRef* frames = nullptr;
+    int width = 0, height = 0;
+    unsigned maximum_frames = 0;
+    std::vector<NativeVideoFramePtr> retained;
+    ~Impl() { av_buffer_unref(&frames); av_buffer_unref(&device); }
+};
+NativeVideoFramePool::NativeVideoFramePool(int width, int height, unsigned maximum_frames)
+    : impl_(std::make_unique<Impl>()) {
+    if (width <= 0 || height <= 0 || !maximum_frames || maximum_frames > 4 ||
+        std::uint64_t(width) * height * 4 * maximum_frames > 128ULL * 1024 * 1024)
+        throw MediaError("Native encoding storage exceeds four frames or 128 MiB.");
+#ifdef _WIN32
+    auto& p = *impl_; p.width = width; p.height = height; p.maximum_frames = maximum_frames;
+    int result = av_hwdevice_ctx_create(&p.device, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0);
+    if (result < 0) throwFfmpegError(result, "Creating the native encoding device");
+    p.frames = av_hwframe_ctx_alloc(p.device);
+    if (!p.frames) throw MediaError("Allocating the native encoding pool failed.");
+    auto* frames = reinterpret_cast<AVHWFramesContext*>(p.frames->data);
+    frames->format = AV_PIX_FMT_D3D11; frames->sw_format = AV_PIX_FMT_BGRA;
+    frames->width = width; frames->height = height;
+    // Individual textures permit interop registration without array slicing.
+    frames->initial_pool_size = 0;
+    auto* native = static_cast<AVD3D11VAFramesContext*>(frames->hwctx);
+    native->BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    result = av_hwframe_ctx_init(p.frames);
+    if (result < 0) throwFfmpegError(result, "Initializing the native encoding pool");
+    p.retained.reserve(maximum_frames);
+#else
+    throw MediaError("Native D3D11 encoding is available only on Windows.");
+#endif
+}
+NativeVideoFramePool::~NativeVideoFramePool() = default;
+NativeVideoFramePtr NativeVideoFramePool::acquire() {
+    auto& p = *impl_;
+    for (const auto& frame : p.retained) {
+        const auto* native = static_cast<const AVFrame*>(frame->retained_frame());
+        if (frame.use_count() == 1 && native->buf[0] && av_buffer_get_ref_count(native->buf[0]) == 1)
+            return frame;
+    }
+    if (p.retained.size() >= p.maximum_frames) return {};
+    auto retained = std::make_unique<NativeVideoFrame::Impl>();
+    retained->frame.reset(av_frame_alloc());
+    if (!retained->frame) throw MediaError("Allocating a native encoding frame failed.");
+    const int result = av_hwframe_get_buffer(p.frames, retained->frame.get(), 0);
+    if (result < 0) throwFfmpegError(result, "Acquiring native encoding storage");
+    NativeVideoFramePtr frame(new NativeVideoFrame(std::move(retained)));
+    p.retained.push_back(frame);
+    return frame;
+}
+std::uint64_t NativeVideoFramePool::reserved_bytes() const noexcept {
+    return std::uint64_t(impl_->width) * impl_->height * 4 * impl_->maximum_frames;
+}
 
 struct VideoPlaybackSession::Impl {
     struct CachedFrame {
         std::int64_t frame_index = -1;
         VideoFramePtr frame;
+        NativeVideoFramePtr native;
+        std::uint64_t bytes = 0;
     };
 
     std::filesystem::path source_path;
     DecodeObserver* observer = nullptr;
+    DecodeOptions options;
+    DecodeAccelerationDiagnostics acceleration;
+    bool hardware_initialized = false;
+    bool native_delivery = false;
+    NativeVideoFramePtr last_native_frame;
+    std::shared_ptr<NativeTransferCounters> native_transfers = std::make_shared<NativeTransferCounters>();
     FormatContextPtr format;
     CodecContextPtr decoder;
     PacketPtr packet;
@@ -323,6 +521,20 @@ struct VideoPlaybackSession::Impl {
     SwsContextPtr scaler;
     std::size_t cached_bytes = 0;
     std::uint64_t cache_hit_count = 0;
+    ~Impl() {
+        if (!acceleration.hardware_requested) return;
+        try {
+            diagnostics::Logger::instance().log(diagnostics::Level::Info, "media", "decode_acceleration_summary",
+                "Experimental decoding session summary.",
+                {{"path", safePathForLog(source_path)}, {"backend", acceleration.backend == DecodeBackend::D3D11 ? "d3d11va" : "cpu"},
+                 {"hardware_frames", std::to_string(acceleration.hardware_frames)}, {"software_frames", std::to_string(acceleration.software_frames)},
+                 {"downloaded_frames", std::to_string(acceleration.downloaded_frames + native_transfers->frames.load())},
+                 {"downloaded_bytes", std::to_string(acceleration.downloaded_bytes + native_transfers->bytes.load())},
+                 {"cached_equivalent_bytes", std::to_string(cached_bytes)}, {"recoveries", std::to_string(acceleration.recovery_count)},
+                 {"peak_reserved_gpu_bytes", std::to_string(acceleration.peak_reserved_gpu_bytes)},
+                 {"fallback_reason", acceleration.fallback_reason}});
+        } catch (...) {}
+    }
 };
 
 constexpr std::size_t max_cached_frames = 8;
@@ -331,23 +543,25 @@ constexpr std::size_t max_cached_bytes = 64U * 1024U * 1024U;
 void VideoPlaybackSession::cacheFrame(
     VideoPlaybackSession::Impl& impl,
     std::int64_t frame_index,
-    const VideoFramePtr& frame) {
-    if (frame == nullptr) return;
+    const VideoFramePtr& frame, const NativeVideoFramePtr& native) {
+    if (frame == nullptr && native == nullptr) return;
 
     for (auto iterator = impl.frame_cache.begin(); iterator != impl.frame_cache.end(); ++iterator) {
         if (iterator->frame_index != frame_index) continue;
-        impl.cached_bytes -= iterator->frame != nullptr ? iterator->frame->rgba_pixels.size() : 0;
+        impl.cached_bytes -= iterator->bytes;
         impl.frame_cache.erase(iterator);
         break;
     }
 
-    impl.cached_bytes += frame->rgba_pixels.size();
-    impl.frame_cache.push_back({frame_index, frame});
+    const auto bytes = frame ? frame->rgba_pixels.size() :
+        static_cast<std::uint64_t>(native->width()) * native->height() * 4;
+    impl.cached_bytes += bytes;
+    impl.frame_cache.push_back({frame_index, frame, native, bytes});
 
     while (impl.frame_cache.size() > 1 &&
            (impl.frame_cache.size() > max_cached_frames || impl.cached_bytes > max_cached_bytes)) {
         const auto& oldest = impl.frame_cache.front();
-        if (oldest.frame != nullptr) impl.cached_bytes -= oldest.frame->rgba_pixels.size();
+        impl.cached_bytes -= oldest.bytes;
         impl.frame_cache.pop_front();
     }
 }
@@ -357,6 +571,7 @@ VideoFramePtr VideoPlaybackSession::takeCachedFrame(
     std::int64_t frame_index) {
     for (auto iterator = impl.frame_cache.begin(); iterator != impl.frame_cache.end(); ++iterator) {
         if (iterator->frame_index != frame_index) continue;
+        if (!iterator->frame) continue;
         ++impl.cache_hit_count;
         auto frame = iterator->frame;
         auto entry = std::move(*iterator);
@@ -427,9 +642,15 @@ VideoPlaybackSession& VideoPlaybackSession::operator=(VideoPlaybackSession&&) no
 std::unique_ptr<VideoPlaybackSession> VideoPlaybackSession::open(
     const std::filesystem::path& source_path,
     DecodeObserver* observer) {
+    return open(source_path, DecodeOptions{}, observer);
+}
+
+std::unique_ptr<VideoPlaybackSession> VideoPlaybackSession::open(
+    const std::filesystem::path& source_path, DecodeOptions options,
+    DecodeObserver* observer) {
     try {
         return std::unique_ptr<VideoPlaybackSession>(
-            new VideoPlaybackSession(openImpl(source_path, observer)));
+            new VideoPlaybackSession(openImpl(source_path, observer, options)));
     } catch (const MediaError& error) {
         logFailure(source_path, "playback_open", error);
         throw;
@@ -441,12 +662,14 @@ std::unique_ptr<VideoPlaybackSession> VideoPlaybackSession::open(
 
 std::unique_ptr<VideoPlaybackSession::Impl> VideoPlaybackSession::openImpl(
     const std::filesystem::path& source_path,
-    DecodeObserver* observer) {
+    DecodeObserver* observer, DecodeOptions options) {
     validateInputFile(source_path);
 
     auto impl = std::make_unique<Impl>();
     impl->source_path = source_path;
     impl->observer = observer;
+    impl->options = options;
+    impl->acceleration.hardware_requested = options.acceleration == DecodeAcceleration::PreferHardware;
 
     AVFormatContext* raw_format = nullptr;
     const std::string input_path = toUtf8(source_path);
@@ -487,7 +710,48 @@ std::unique_ptr<VideoPlaybackSession::Impl> VideoPlaybackSession::openImpl(
         throwFfmpegError(parameters_result, "Reading video codec parameters for playback");
     }
 
-    const int decoder_result = avcodec_open2(impl->decoder.get(), codec, nullptr);
+    if (impl->acceleration.hardware_requested) {
+#ifdef _WIN32
+        bool has_configuration = false;
+        for (int index = 0; const auto* config = avcodec_get_hw_config(codec, index); ++index) {
+            if (config->device_type == AV_HWDEVICE_TYPE_D3D11VA &&
+                config->pix_fmt == AV_PIX_FMT_D3D11 &&
+                (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX)) {
+                has_configuration = true;
+                break;
+            }
+        }
+        if (!has_configuration || !supportsEightBitHardware(*stream->codecpar)) {
+            impl->acceleration.fallback_reason = "The stream is outside the H.264/HEVC 8-bit D3D11 decode contract.";
+        } else {
+            const int device_result = av_hwdevice_ctx_create(&impl->decoder->hw_device_ctx,
+                AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0);
+            if (device_result < 0) {
+                impl->acceleration.fallback_reason = "Creating D3D11 decode device: " + ffmpegError(device_result);
+                logHardwareRecovery(source_path, impl->acceleration.fallback_reason, device_result);
+            } else {
+                impl->hardware_initialized = true;
+                impl->decoder->get_format = selectD3D11Format;
+                impl->decoder->thread_count = 1;
+                impl->decoder->extra_hw_frames = static_cast<int>(max_cached_frames);
+                impl->acceleration.backend = DecodeBackend::D3D11;
+            }
+        }
+#else
+        impl->acceleration.fallback_reason = "D3D11 decoding is available only on Windows; this platform uses software decoding.";
+#endif
+    }
+    int decoder_result = avcodec_open2(impl->decoder.get(), codec, nullptr);
+    if (decoder_result < 0 && impl->hardware_initialized) {
+        const auto reason = "Opening D3D11 decoder: " + ffmpegError(decoder_result);
+        logHardwareRecovery(source_path, reason, decoder_result);
+        auto fallback = openImpl(source_path, observer, DecodeOptions{});
+        fallback->options = options;
+        fallback->acceleration.hardware_requested = true;
+        fallback->acceleration.fallback_reason = reason;
+        fallback->acceleration.recovery_count = 1;
+        return fallback;
+    }
     if (decoder_result < 0) throwFfmpegError(decoder_result, "Opening video decoder for playback");
 
     impl->packet.reset(av_packet_alloc());
@@ -556,6 +820,16 @@ bool VideoPlaybackSession::decodeRawNextFrame(
         if (receive_result == 0) {
             ++impl.current_frame_index;
             impl.last_decoded_timestamp = impl.frame->best_effort_timestamp;
+            if (impl.frame->format == AV_PIX_FMT_D3D11) {
+                ++impl.acceleration.hardware_frames;
+                if (impl.frame->hw_frames_ctx) {
+                    const auto* pool = reinterpret_cast<const AVHWFramesContext*>(impl.frame->hw_frames_ctx->data);
+                    impl.acceleration.peak_reserved_gpu_bytes = std::max(impl.acceleration.peak_reserved_gpu_bytes,
+                        std::uint64_t(pool->width) * pool->height * 3 / 2 * std::max(1, pool->initial_pool_size));
+                }
+            }
+            else ++impl.acceleration.software_frames;
+            if (impl.observer != nullptr) impl.observer->record_acceleration(impl.acceleration);
             return true;
         }
         if (receive_result == AVERROR(EAGAIN)) {
@@ -590,7 +864,7 @@ bool VideoPlaybackSession::decodeNextFrame(
             diagnostics != nullptr
                 ? &diagnostics->target_pixel_conversion_nanoseconds
                 : nullptr);
-        decoded_frame = copyRgbaFrame(*impl.frame, impl.scaler, impl.observer);
+        decoded_frame = convertFrame(impl);
     }
     if (impl.cache_decoded_frames) {
         VideoPlaybackSession::cacheFrame(
@@ -609,6 +883,7 @@ bool VideoPlaybackSession::discardNextFrame(
 }
 
 std::optional<VideoFramePtr> VideoPlaybackSession::decode_next_frame() {
+    const auto requested_frame = impl_->current_frame_index + 1;
     try {
         if (impl_->decoder_position_invalid && impl_->current_frame_index >= 0) {
             return decode_frame_at(impl_->current_frame_index + 1);
@@ -617,12 +892,48 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_next_frame() {
         if (!decodeNextFrame(*impl_, &frame)) return std::nullopt;
         return frame;
     } catch (const MediaError& error) {
+        if (recoverInSoftware(error)) return decode_frame_at(requested_frame);
         logFailure(impl_->source_path, "playback_decode", error);
         throw;
     } catch (const std::exception& error) {
         logFailure(impl_->source_path, "playback_decode", error);
         throw;
     }
+}
+
+std::optional<DecodedVideoFrame> VideoPlaybackSession::decode_frame_at_native(
+    std::int64_t frame_index, const CancellationPredicate& cancel) {
+    if (cancel && cancel()) return std::nullopt;
+    for (auto iterator = impl_->frame_cache.begin(); iterator != impl_->frame_cache.end(); ++iterator) {
+        if (iterator->frame_index != frame_index || !iterator->native) continue;
+        ++impl_->cache_hit_count;
+        const bool positioned = !impl_->decoder_position_invalid && impl_->current_frame_index == frame_index;
+        impl_->current_frame_index = frame_index; impl_->end_reached = false;
+        impl_->decoder_position_invalid = !positioned;
+        auto entry = std::move(*iterator); impl_->frame_cache.erase(iterator);
+        auto native = entry.native; impl_->frame_cache.push_back(std::move(entry));
+        return DecodedVideoFrame{{}, std::move(native)};
+    }
+    impl_->native_delivery = true;
+    impl_->last_native_frame.reset();
+    struct Guard { VideoPlaybackSession& session; ~Guard() { session.impl_->native_delivery = false; session.impl_->last_native_frame.reset(); } } guard{*this};
+    const auto decoded = decode_frame_at(frame_index, cancel);
+    if (!decoded) return std::nullopt;
+    auto native = impl_->last_native_frame;
+    if (native) cacheFrame(*impl_, frame_index, {}, native);
+    return DecodedVideoFrame{*decoded, std::move(native)};
+}
+
+std::optional<DecodedVideoFrame> VideoPlaybackSession::decode_forward_to_native(
+    std::int64_t frame_index, const CancellationPredicate& cancel, ForwardDecodeDiagnostics* diagnostics) {
+    impl_->native_delivery = true;
+    impl_->last_native_frame.reset();
+    struct Guard { VideoPlaybackSession& session; ~Guard() { session.impl_->native_delivery = false; session.impl_->last_native_frame.reset(); } } guard{*this};
+    const auto decoded = decode_forward_to(frame_index, cancel, diagnostics);
+    if (!decoded) return std::nullopt;
+    auto native = impl_->last_native_frame;
+    if (native) cacheFrame(*impl_, frame_index, {}, native);
+    return DecodedVideoFrame{*decoded, std::move(native)};
 }
 
 std::optional<VideoFramePtr> VideoPlaybackSession::decode_forward_to(
@@ -684,6 +995,11 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_forward_to(
         }
         return frame;
     } catch (const MediaError& error) {
+        if (recoverInSoftware(error)) {
+            auto frame = decode_frame_at(frame_index, should_cancel);
+            if (diagnostics != nullptr) diagnostics->completed = frame.has_value();
+            return frame;
+        }
         logFailure(impl_->source_path, "playback_forward_decode", error);
         throw;
     } catch (const std::exception& error) {
@@ -779,8 +1095,7 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
 
             impl_->current_frame_index = *decoded_index;
             if (*decoded_index == frame_index) {
-                auto frame = copyRgbaFrame(
-                    *impl_->frame, impl_->scaler, impl_->observer);
+                auto frame = convertFrame(*impl_);
                 cacheFrame(*impl_, *decoded_index, frame);
                 impl_->cache_decoded_frames = true;
                 impl_->decoder_position_invalid = false;
@@ -792,6 +1107,7 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
         }
     } catch (const MediaError& error) {
         impl_->cache_decoded_frames = true;
+        if (recoverInSoftware(error)) return decode_frame_at(frame_index, should_cancel);
         logFailure(impl_->source_path, "playback_seek", error);
         throw;
     } catch (const std::exception& error) {
@@ -818,7 +1134,73 @@ VideoPlaybackSession::cache_snapshot() const noexcept {
 void VideoPlaybackSession::reset() {
     const auto source_path = impl_->source_path;
     auto* observer = impl_ != nullptr ? impl_->observer : nullptr;
-    impl_ = openImpl(source_path, observer);
+    // Once a session has recovered, do not retry the same failing device on seek.
+    const auto previous = impl_->acceleration;
+    const bool native_delivery = impl_->native_delivery;
+    auto transfers = impl_->native_transfers;
+    auto options = impl_->options;
+    if (previous.recovery_count != 0) options.acceleration = DecodeAcceleration::Software;
+    impl_ = openImpl(source_path, observer, options);
+    impl_->native_delivery = native_delivery;
+    impl_->native_transfers = std::move(transfers);
+    impl_->acceleration.hardware_requested = previous.hardware_requested;
+    // Native leases may outlive a decoder reset; preserve their transfer counters.
+    impl_->acceleration.hardware_frames = previous.hardware_frames;
+    impl_->acceleration.software_frames = previous.software_frames;
+    impl_->acceleration.downloaded_frames = previous.downloaded_frames;
+    impl_->acceleration.downloaded_bytes = previous.downloaded_bytes;
+    impl_->acceleration.recovery_count = previous.recovery_count;
+    impl_->acceleration.peak_reserved_gpu_bytes = previous.peak_reserved_gpu_bytes;
+    if (!previous.fallback_reason.empty()) impl_->acceleration.fallback_reason = previous.fallback_reason;
+}
+
+VideoFramePtr VideoPlaybackSession::convertFrame(Impl& impl) {
+    if (impl.frame->format != AV_PIX_FMT_D3D11)
+        return copyRgbaFrame(*impl.frame, impl.scaler, impl.observer);
+    if (impl.options.hardware_frame_guard) impl.options.hardware_frame_guard(impl.current_frame_index);
+    if (impl.native_delivery) {
+        auto retained = std::make_unique<NativeVideoFrame::Impl>();
+        retained->frame.reset(av_frame_clone(impl.frame.get()));
+        retained->source_path = impl.source_path;
+        retained->transfers = impl.native_transfers;
+        if (!retained->frame) throw MediaError("Retaining the native decoded frame failed.");
+        impl.last_native_frame = NativeVideoFramePtr(new NativeVideoFrame(std::move(retained)));
+        return {};
+    }
+    auto frame = downloadD3D11Frame(*impl.frame, impl.scaler, impl.observer);
+    ++impl.acceleration.downloaded_frames;
+    impl.acceleration.downloaded_bytes += static_cast<std::uint64_t>(impl.frame->width) * impl.frame->height * 3 / 2;
+    if (impl.observer) impl.observer->record_acceleration(impl.acceleration);
+    return frame;
+}
+
+bool VideoPlaybackSession::recoverInSoftware(const MediaError& error) {
+    if (!impl_->hardware_initialized) return false;
+    const auto source = impl_->source_path;
+    auto* observer = impl_->observer;
+    auto diagnostics = impl_->acceleration;
+    diagnostics.backend = DecodeBackend::Software;
+    diagnostics.fallback_reason = error.what();
+    ++diagnostics.recovery_count;
+    logHardwareRecovery(source, diagnostics.fallback_reason, error.error_code());
+    auto fallback = openImpl(source, observer, DecodeOptions{});
+    fallback->native_transfers = impl_->native_transfers;
+    fallback->acceleration = std::move(diagnostics);
+    impl_ = std::move(fallback);
+    if (observer != nullptr) observer->record_acceleration(impl_->acceleration);
+    return true;
+}
+
+DecodeAccelerationDiagnostics VideoPlaybackSession::acceleration_diagnostics() const {
+    auto result = impl_->acceleration;
+    result.downloaded_frames += impl_->native_transfers->frames.load();
+    result.downloaded_bytes += impl_->native_transfers->bytes.load();
+    return result;
+}
+
+void VideoPlaybackSession::set_decode_options(DecodeOptions options) {
+    if (options.acceleration == impl_->options.acceleration) return;
+    impl_ = openImpl(impl_->source_path, impl_->observer, options);
 }
 
 std::int64_t VideoPlaybackSession::current_frame_index() const noexcept {

@@ -405,6 +405,20 @@ void PlaybackController::setGpuCompositionEnabled(bool enabled) {
     renderCompositionFrame(global_frame, global_frame - clip.timeline_start_frame);
 }
 
+void PlaybackController::setHardwareDecodingEnabled(bool enabled) {
+    if (!available() || enabled == hardware_decoding_enabled_) return;
+    hardware_decoding_enabled_ = enabled;
+    queueWorker([enabled](PlaybackWorker& worker) { worker.setHardwareDecodingEnabled(enabled); });
+    advanceDeliveryEpoch(true);
+    if (!playing_ && !pending_activation_) {
+        const auto frame = timelineFrame();
+        if (auto location = session_.timeline().topClipAt(frame)) {
+            const auto& clip = session_.timeline().tracks()[location->track_index].clips[location->clip_index];
+            renderCompositionFrame(frame, frame - clip.timeline_start_frame);
+        }
+    }
+}
+
 void PlaybackController::advanceDeliveryEpoch(bool retry_texture_delivery) {
     const auto epoch = delivery_epoch_.fetch_add(1, std::memory_order_acq_rel) + 1;
     emitEvent(PlaybackDeliveryEpochEvent{epoch, retry_texture_delivery});

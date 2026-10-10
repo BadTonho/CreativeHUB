@@ -236,6 +236,7 @@ struct PreviewPerformanceSnapshot {
     std::uint64_t gpu_composition_uploaded_bytes = 0;
     std::uint64_t gpu_composition_readback_bytes = 0;
     std::uint64_t gpu_composition_uploaded_layers = 0;
+    std::uint64_t native_video_imports = 0, native_video_conversion_nanoseconds = 0;
     PreviewTimingSnapshot gpu_composition_upload;
     PreviewTimingSnapshot gpu_composition_draw_submission;
     PreviewTimingSnapshot gpu_composition_readback;
@@ -449,6 +450,7 @@ private:
     std::atomic<std::uint64_t> gpu_composition_uploaded_bytes_{0};
     std::atomic<std::uint64_t> gpu_composition_readback_bytes_{0};
     std::atomic<std::uint64_t> gpu_composition_uploaded_layers_{0};
+    std::atomic<std::uint64_t> native_video_imports_{0}, native_video_conversion_nanoseconds_{0};
     TimingStorage gpu_composition_upload_;
     TimingStorage gpu_composition_draw_submission_;
     TimingStorage gpu_composition_readback_;

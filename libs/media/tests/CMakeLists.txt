@@ -48,3 +48,12 @@ creative_suite_deploy_media_runtime(creative-suite-video-encoder-tests)
 add_creative_suite_test(
     NAME creative-suite-video-encoder
     COMMAND creative-suite-video-encoder-tests)
+
+add_executable(creative-suite-hardware-video-pipeline-tests hardware_video_pipeline_test.cpp)
+target_link_libraries(creative-suite-hardware-video-pipeline-tests PRIVATE
+    creative-suite::video-encoding creative-suite::video-media)
+target_compile_features(creative-suite-hardware-video-pipeline-tests PRIVATE cxx_std_20)
+creative_suite_deploy_media_runtime(creative-suite-hardware-video-pipeline-tests)
+add_creative_suite_test(NAME creative-suite-hardware-video-pipeline
+    COMMAND creative-suite-hardware-video-pipeline-tests)
+set_tests_properties(creative-suite-hardware-video-pipeline PROPERTIES SKIP_RETURN_CODE 77 LABELS "native-gpu")

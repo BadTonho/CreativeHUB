@@ -620,6 +620,21 @@ std::optional<media::RgbaFrame> FrameCompositor::compose(
     int height,
     const std::vector<CompositionLayer>& layers,
     FrameCompositionTimings* timings) {
+    if (std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
+            return !layer.effect_stack.empty(); })) {
+        auto prepared_layers = layers;
+        std::vector<media::RgbaFrame> prepared_frames;
+        prepared_frames.reserve(layers.size());
+        for (auto& layer : prepared_layers) {
+            if (layer.effect_stack.empty()) continue;
+            if (!layer.frame) return std::nullopt;
+            prepared_frames.push_back(*layer.frame);
+            if (!effects::applyStack(prepared_frames.back(), layer.effect_stack)) return std::nullopt;
+            layer.frame = &prepared_frames.back();
+            layer.effect_stack = {};
+        }
+        return compose(width, height, prepared_layers, timings);
+    }
     if (width <= 0 || height <= 0) return std::nullopt;
     const auto max_size_t_value = std::numeric_limits<std::size_t>::max();
     if (width > std::numeric_limits<int>::max() / 4 ||

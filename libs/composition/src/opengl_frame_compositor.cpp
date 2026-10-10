@@ -1,4 +1,5 @@
 #include <creative_suite/composition/opengl_frame_compositor.h>
+#include "windows_video_interop.h"
 
 #include <QGuiApplication>
 #include <QOffscreenSurface>
@@ -39,6 +40,9 @@ OpenGlCompositionResult result(OpenGlCompositionStatus status,
 bool usable(const CompositionLayer& layer) {
     if (!layer.frame || !animation::validTransform(layer.transform)) return false;
     const auto& f = *layer.frame;
+    if (layer.native_frame) return f.width == layer.native_frame->width() && f.height == layer.native_frame->height();
+    if (layer.texture_frame) return layer.texture_frame->valid() &&
+        f.width == layer.texture_frame->width() && f.height == layer.texture_frame->height();
     return f.width > 0 && f.height > 0 &&
         static_cast<std::int64_t>(f.stride) >= static_cast<std::int64_t>(f.width) * 4 &&
         static_cast<std::uint64_t>(f.stride) * f.height <= f.rgba_pixels.size();
@@ -55,6 +59,7 @@ void main() {
 )GLSL";
 constexpr char fragment_shader[] = R"GLSL(
 uniform sampler2D source_image;
+uniform bool source_bottom_left;
 uniform float canvas_height;
 uniform int color_adjustment_count;
 uniform GEOMETRY_VEC2 center;
@@ -91,10 +96,72 @@ void main() {
         pixel = clamp(ivec2(floor(sample_position)),
                        ivec2(0), size - ivec2(1));
     }
+    if (source_bottom_left) pixel.y = size.y - 1 - pixel.y;
     vec4 source = texelFetch(source_image, pixel, 0);
     for (int i = 0; i < color_adjustment_count; ++i)
         source.rgb = adjustColor(source.rgb, color_adjustments[i]);
     color = vec4(source.rgb, source.a * opacity);
+}
+)GLSL";
+constexpr char image_fragment_shader[] = R"GLSL(
+uniform sampler2D background_image;
+uniform sampler2D foreground_image;
+uniform bool background_bottom_left;
+uniform bool foreground_bottom_left;
+uniform int operation;
+uniform int canvas_height;
+uniform GEOMETRY_VEC2 center;
+uniform GEOMETRY_VEC2 rotation_cs;
+uniform GEOMETRY_VEC2 scale_opacity;
+uniform GEOMETRY_VEC2 merge_scale;
+uniform ivec2 merge_origin;
+uniform ivec2 merge_size;
+uniform int color_count;
+layout(std140) uniform ColorAdjustments { vec4 color_adjustments[256]; };
+out vec4 color;
+vec4 background(ivec2 pixel) {
+    if (background_bottom_left) pixel.y = textureSize(background_image, 0).y - 1 - pixel.y;
+    return texelFetch(background_image, pixel, 0);
+}
+vec4 foreground(ivec2 pixel) {
+    if (foreground_bottom_left) pixel.y = textureSize(foreground_image, 0).y - 1 - pixel.y;
+    return texelFetch(foreground_image, pixel, 0);
+}
+void main() {
+    ivec2 pixel = ivec2(int(gl_FragCoord.x), canvas_height - 1 - int(gl_FragCoord.y));
+    ivec2 size = textureSize(background_image, 0);
+    if (operation == 1) {
+        PRECISE GEOMETRY_VEC2 d = GEOMETRY_VEC2(pixel) + 0.5 - center;
+        PRECISE GEOMETRY_VEC2 local = GEOMETRY_VEC2(rotation_cs.x * d.x + rotation_cs.y * d.y,
+            -rotation_cs.y * d.x + rotation_cs.x * d.y);
+        pixel = ivec2(floor(local / scale_opacity.x + GEOMETRY_VEC2(size) * 0.5));
+        if (any(lessThan(pixel, ivec2(0))) || any(greaterThanEqual(pixel, size))) { color = vec4(0); return; }
+        color = background(pixel);
+        color.a = float(floor(GEOMETRY_VEC2(floor(color.a * 255.0 + 0.5), 0).x * scale_opacity.y + 0.5)) / 255.0;
+        return;
+    }
+    color = background(pixel);
+    if (operation == 2) {
+        for (int i = 0; i < color_count; ++i) {
+            vec4 p = color_adjustments[i];
+            vec3 rgb = (color.rgb + p.x - vec3(0.5)) * p.y + vec3(0.5);
+            float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+            color.rgb = floor(clamp(vec3(luma) + (rgb - vec3(luma)) * p.z, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+        }
+        return;
+    }
+    if (operation == 3) {
+        ivec2 local = pixel - merge_origin;
+        if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, merge_size))) return;
+        ivec2 position = clamp(ivec2(GEOMETRY_VEC2(local) / merge_scale.x), ivec2(0),
+            textureSize(foreground_image, 0) - ivec2(1));
+        ivec4 bg = ivec4(floor(color * 255.0 + 0.5));
+        ivec4 fg = ivec4(floor(foreground(position) * 255.0 + 0.5));
+        int alpha = fg.a * 255 + bg.a * (255 - fg.a);
+        ivec3 numerator = fg.rgb * fg.a * 255 + bg.rgb * bg.a * (255 - fg.a);
+        ivec3 rgb = alpha == 0 ? ivec3(0) : (numerator + ivec3(alpha / 2)) / alpha;
+        color = vec4(vec3(rgb), float((alpha + 127) / 255)) / 255.0;
+    }
 }
 )GLSL";
 constexpr char effect_fragment_shader[] = R"GLSL(#version 150 core
@@ -156,8 +223,16 @@ struct OpenGlTexturePoolBudget::Impl {
     mutable std::mutex mutex;
     std::uint64_t bytes = 0;
     unsigned targets = 0;
+    std::uint64_t byte_limit = maximum_bytes;
+    unsigned target_limit = maximum_targets;
 };
-OpenGlTexturePoolBudget::OpenGlTexturePoolBudget() : impl_(std::make_unique<Impl>()) {}
+OpenGlTexturePoolBudget::OpenGlTexturePoolBudget(std::uint64_t byte_limit, unsigned target_limit)
+    : impl_(std::make_unique<Impl>()) {
+    if (!byte_limit || byte_limit > 256ULL * 1024 * 1024 || !target_limit || target_limit > 8)
+        throw std::invalid_argument("The texture pool limit must be within 256 MiB and eight targets.");
+    impl_->byte_limit = byte_limit;
+    impl_->target_limit = target_limit;
+}
 OpenGlTexturePoolBudget::~OpenGlTexturePoolBudget() = default;
 std::uint64_t OpenGlTexturePoolBudget::bytes() const noexcept {
     std::lock_guard lock(impl_->mutex); return impl_->bytes;
@@ -236,6 +311,11 @@ struct OpenGlFrameCompositor::Impl {
     QOpenGLFunctions_3_2_Core* gl = nullptr;
     std::unique_ptr<QOpenGLShaderProgram> program;
     std::unique_ptr<QOpenGLShaderProgram> effect_program;
+    std::unique_ptr<QOpenGLShaderProgram> image_program;
+    const OpenGlImageOperation* image_operation = nullptr;
+    GLuint image_textures[2]{};
+    std::uint64_t image_texture_bytes[2]{};
+    std::unique_ptr<detail::WindowsVideoInterop> video_interop;
     std::unique_ptr<QOpenGLFramebufferObject> output;
     std::unique_ptr<QOpenGLFramebufferObject> effect_scratch;
     GLuint texture = 0;
@@ -282,6 +362,7 @@ struct OpenGlFrameCompositor::Impl {
     }
     ~Impl() {
         if (context && context->makeCurrent(surface)) {
+            video_interop.reset();
             for (auto& target : targets) {
                 if (target.state) {
                     std::lock_guard lock(target.state->mutex);
@@ -303,6 +384,8 @@ struct OpenGlFrameCompositor::Impl {
             effect_scratch.reset();
             program.reset();
             effect_program.reset();
+            image_program.reset();
+            gl->glDeleteTextures(2, image_textures);
             if (effect_source_fbo) gl->glDeleteFramebuffers(1, &effect_source_fbo);
             if (texture) gl->glDeleteTextures(1, &texture);
             if (vao) gl->glDeleteVertexArrays(1, &vao);
@@ -370,6 +453,12 @@ struct OpenGlFrameCompositor::Impl {
                 effect_fragment_shader) || !effect_program->link())
             return result(OpenGlCompositionStatus::Failed, "compile-effect-shaders",
                 effect_program->log().toStdString());
+        image_program = std::make_unique<QOpenGLShaderProgram>();
+        const auto image_fragment = fragment.left(fragment.indexOf("uniform sampler2D")) + image_fragment_shader;
+        if (!image_program->addShaderFromSourceCode(QOpenGLShader::Vertex, vertex_shader) ||
+            !image_program->addShaderFromSourceCode(QOpenGLShader::Fragment, image_fragment) || !image_program->link())
+            return result(OpenGlCompositionStatus::Failed, "compile-image-shaders", image_program->log().toStdString());
+        gl->glGenTextures(2, image_textures);
         gl->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &texture_limit);
         gl->glGenTextures(1, &texture);
         gl->glGenFramebuffers(1, &effect_source_fbo);
@@ -410,6 +499,142 @@ struct OpenGlFrameCompositor::Impl {
                 "Cannot reactivate the worker OpenGL context.");
         return result(OpenGlCompositionStatus::Complete);
     }
+    OpenGlCompositionResult renderImage(const OpenGlImageOperation& operation,
+        const OpenGlFrameCompositor::CancellationPredicate& cancel, OpenGlCompositionTimings& measured) {
+        if (!selected_output || !selected_output->bind() || !image_program->bind())
+            return result(OpenGlCompositionStatus::Failed, "bind-image-output", "Cannot bind the image operation target.");
+        const auto width = operation.background.width(), height = operation.background.height();
+        if (!bounded(width, height, texture_limit) || operation.colors.size() > 256 ||
+            !animation::validTransform(operation.transform))
+            return result(OpenGlCompositionStatus::Unsupported, "check-image-operation", "Image geometry or effects exceed the supported contract.");
+        if (operation.kind == OpenGlImageOperationKind::Transform &&
+            operation.transform.rotation_degrees != 0 && !precise_geometry)
+            return result(OpenGlCompositionStatus::Unsupported, "check-precision", "Rotated intermediates require precise GPU geometry.");
+        struct Uses {
+            QOpenGLContext* context;
+            std::vector<OpenGlTextureFramePtr> frames;
+            ~Uses() {
+                for (const auto& frame : frames) {
+                    std::string cause; std::int64_t code = 0;
+                    (void)frame->endUse(context, cause, code);
+                }
+            }
+        } uses{context.get()};
+        const auto bind = [&](const OpenGlImageInput& input, unsigned slot) -> OpenGlCompositionResult {
+            gl->glActiveTexture(GL_TEXTURE0 + slot);
+            if (input.native) {
+                if (slot != 0) return result(OpenGlCompositionStatus::Unsupported, "native-image-input",
+                    "Import native sources before merging them.");
+                if (!video_interop) video_interop = std::make_unique<detail::WindowsVideoInterop>(context.get(), gl);
+                const auto started = Clock::now();
+                auto imported = video_interop->begin(input.native);
+                if (imported.status != OpenGlCompositionStatus::Complete) return imported;
+                gl->glBindTexture(GL_TEXTURE_2D, video_interop->texture());
+                ++measured.native_video_imports;
+                measured.native_video_conversion_nanoseconds += elapsed(started);
+                rememberResourcePeak();
+            } else if (input.texture) {
+                std::string cause; std::int64_t code = 0;
+                if (!input.texture->beginUse(context.get(), cause, code))
+                    return result(OpenGlCompositionStatus::Failed, "consume-image-texture", cause, code);
+                uses.frames.push_back(input.texture);
+                gl->glBindTexture(GL_TEXTURE_2D, input.texture->texture());
+            } else {
+                if (!input.rgba || !usable(CompositionLayer{input.rgba}) ||
+                    !bounded(input.width(), input.height(), texture_limit))
+                    return result(OpenGlCompositionStatus::Unsupported, "check-image-input", "Image operation requires a valid source.");
+                const auto started = Clock::now();
+                gl->glBindTexture(GL_TEXTURE_2D, image_textures[slot]);
+                gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, input.width(), input.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                gl->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                for (int y = 0; y < input.height(); ++y)
+                    gl->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y, input.width(), 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                        input.rgba->rgba_pixels.data() + static_cast<std::size_t>(y) * input.rgba->stride);
+                image_texture_bytes[slot] = static_cast<std::uint64_t>(input.width()) * input.height() * 4;
+                measured.uploaded_bytes += image_texture_bytes[slot];
+                ++measured.uploaded_layers;
+                measured.upload_nanoseconds += elapsed(started);
+                rememberResourcePeak();
+            }
+            return result(OpenGlCompositionStatus::Complete);
+        };
+        auto bound = bind(operation.background, 0);
+        struct InteropGuard {
+            detail::WindowsVideoInterop* adapter;
+            ~InteropGuard() { if (adapter) (void)adapter->end(); }
+        } interop_guard{operation.background.native ? video_interop.get() : nullptr};
+        if (bound.status != OpenGlCompositionStatus::Complete) return bound;
+        if (operation.kind == OpenGlImageOperationKind::Merge) {
+            bound = bind(operation.foreground, 1);
+            if (bound.status != OpenGlCompositionStatus::Complete) return bound;
+        }
+        const auto started = Clock::now();
+        gl->glViewport(0, 0, width, height);
+        gl->glDisable(GL_BLEND); gl->glDisable(GL_DEPTH_TEST); gl->glDisable(GL_STENCIL_TEST);
+        gl->glDisable(GL_SCISSOR_TEST); gl->glDisable(GL_CULL_FACE); gl->glDisable(GL_DITHER);
+        gl->glDisable(GL_FRAMEBUFFER_SRGB); gl->glDisable(GL_MULTISAMPLE);
+        gl->glBindVertexArray(vao);
+        image_program->setUniformValue("background_image", 0);
+        image_program->setUniformValue("foreground_image", 1);
+        image_program->setUniformValue("background_bottom_left", bool(operation.background.texture));
+        image_program->setUniformValue("foreground_bottom_left", bool(operation.foreground.texture));
+        image_program->setUniformValue("operation", static_cast<int>(operation.kind));
+        image_program->setUniformValue("canvas_height", height);
+        image_program->setUniformValue("color_count", static_cast<int>(operation.colors.size()));
+        const auto geometry = [&](const char* name, double x, double y) {
+            if (precise_geometry) {
+                const GLdouble values[]{x, y}; uniform2dv(image_program->uniformLocation(name), 1, values);
+            } else image_program->setUniformValue(name, QVector2D(float(x), float(y)));
+        };
+        const auto& transform = operation.transform;
+        const double angle = transform.rotation_degrees * std::numbers::pi / 180.0;
+        geometry("center", transform.position_x * width, transform.position_y * height);
+        geometry("rotation_cs", std::cos(angle), std::sin(angle));
+        geometry("scale_opacity", transform.scale, std::clamp(transform.opacity, 0.0, 1.0));
+        if (operation.kind == OpenGlImageOperationKind::Merge) {
+            const double scale = std::min(double(width) / operation.foreground.width(),
+                double(height) / operation.foreground.height());
+            const int fitted_width = std::max(1, int(std::lround(operation.foreground.width() * scale)));
+            const int fitted_height = std::max(1, int(std::lround(operation.foreground.height() * scale)));
+            geometry("merge_scale", scale, 0);
+            gl->glUniform2i(image_program->uniformLocation("merge_origin"), (width - fitted_width) / 2, (height - fitted_height) / 2);
+            gl->glUniform2i(image_program->uniformLocation("merge_size"), fitted_width, fitted_height);
+        }
+        std::array<std::array<float, 4>, 256> colors{};
+        for (std::size_t i = 0; i < operation.colors.size(); ++i) {
+            const auto& value = operation.colors[i];
+            if (!std::isfinite(value.brightness) || value.brightness < -100 || value.brightness > 100 ||
+                !std::isfinite(value.contrast_percent) || value.contrast_percent < 0 || value.contrast_percent > 200 ||
+                !std::isfinite(value.saturation_percent) || value.saturation_percent < 0 || value.saturation_percent > 200)
+                return result(OpenGlCompositionStatus::Unsupported, "check-image-color", "Invalid image color parameters.");
+            colors[i] = {float(value.brightness / 100), float(value.contrast_percent / 100),
+                float(value.saturation_percent / 100), 0};
+        }
+        gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[2]);
+        gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, operation.colors.size() * sizeof(colors[0]), colors.data());
+        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 2, lookup_buffers[2]);
+        gl->glUniformBlockBinding(image_program->programId(), gl->glGetUniformBlockIndex(image_program->programId(), "ColorAdjustments"), 2);
+        measured.color_adjustment_count += operation.colors.size();
+        gl->glDrawArrays(GL_TRIANGLES, 0, 3);
+        measured.draw_submission_nanoseconds += elapsed(started);
+        if (const auto code = gl->glGetError(); code != GL_NO_ERROR)
+            return result(OpenGlCompositionStatus::Failed, "draw-image-operation", "Image operation failed.", code);
+        for (const auto& frame : uses.frames) {
+            std::string cause; std::int64_t code = 0;
+            if (!frame->endUse(context.get(), cause, code))
+                return result(OpenGlCompositionStatus::Failed, "protect-image-texture", cause, code);
+        }
+        uses.frames.clear();
+        if (interop_guard.adapter) {
+            auto released = interop_guard.adapter->end(); interop_guard.adapter = nullptr;
+            if (released.status != OpenGlCompositionStatus::Complete) return released;
+        }
+        if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
+        return result(OpenGlCompositionStatus::Complete);
+    }
     OpenGlCompositionResult collect() {
         for (auto& target : targets) {
             if (!target.state) continue;
@@ -417,6 +642,18 @@ struct OpenGlFrameCompositor::Impl {
             std::lock_guard lock(state.mutex);
             if (state.unsafe) return result(OpenGlCompositionStatus::Failed, "consumer-fence",
                 "A consumer could not protect its texture draw.");
+            if (image_operation && target.state.use_count() == 1) {
+                // Internal graph evaluation may reuse a released intermediate
+                // immediately. Synchronize on the GPU before overwriting it.
+                if (state.producer) {
+                    gl->glWaitSync(state.producer, 0, GL_TIMEOUT_IGNORED);
+                    gl->glDeleteSync(state.producer); state.producer = nullptr;
+                }
+                for (const auto fence : state.consumers) {
+                    gl->glWaitSync(fence, 0, GL_TIMEOUT_IGNORED); gl->glDeleteSync(fence);
+                }
+                state.consumers.clear();
+            }
             for (auto it = state.consumers.begin(); it != state.consumers.end();) {
                 const auto status = gl->glClientWaitSync(*it, 0, 0);
                 if (status == GL_WAIT_FAILED) return result(OpenGlCompositionStatus::Failed,
@@ -444,6 +681,8 @@ struct OpenGlFrameCompositor::Impl {
     }
     OpenGlResourceUsage resources() const noexcept {
         std::uint64_t bytes = static_cast<std::uint64_t>(source_width) * source_height * 4;
+        bytes += image_texture_bytes[0] + image_texture_bytes[1];
+        if (video_interop) bytes += video_interop->reservedBytes();
         if (output && output->isValid()) bytes += static_cast<std::uint64_t>(output->width()) * output->height() * 4;
         for (const auto& target : targets) if (target.output && target.output->isValid()) bytes += target.bytes;
         if (effect_scratch && effect_scratch->isValid())
@@ -478,6 +717,44 @@ OpenGlFrameCompositor::OpenGlFrameCompositor(QOffscreenSurface* surface, OpenGlP
     QOpenGLContext* share_context, std::shared_ptr<OpenGlTexturePoolBudget> budget)
     : impl_(std::make_unique<Impl>(surface, precision, share_context, std::move(budget))) {}
 OpenGlFrameCompositor::~OpenGlFrameCompositor() = default;
+
+int OpenGlImageInput::width() const noexcept { return native ? native->width() : texture ? texture->width() : rgba ? rgba->width : 0; }
+int OpenGlImageInput::height() const noexcept { return native ? native->height() : texture ? texture->height() : rgba ? rgba->height : 0; }
+
+OpenGlTextureCompositionResult OpenGlFrameCompositor::importFrame(
+    const media::NativeVideoFramePtr& frame, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    OpenGlImageOperation operation;
+    operation.background.native = frame;
+    return processImage(operation, cancel, timings);
+}
+
+OpenGlCompositionResult OpenGlFrameCompositor::copyToNative(const OpenGlTextureFramePtr& source,
+    const std::shared_ptr<const media::NativeVideoFrame>& destination, const CancellationPredicate& cancel) {
+    auto& p = *impl_;
+    struct Guard { Impl& p; ~Guard() { if (p.context) p.context->doneCurrent(); } } guard{p};
+    try {
+        if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
+        if (!source || !destination || source->width() != destination->width() || source->height() != destination->height())
+            return {OpenGlCompositionStatus::Unsupported, {}, "check-native-output", "Source and encoding surface dimensions must match."};
+        auto active = p.activate(); if (active.status != OpenGlCompositionStatus::Complete) return active;
+        std::string cause; std::int64_t code = 0;
+        if (!source->beginUse(p.context.get(), cause, code)) return {OpenGlCompositionStatus::Failed, {}, "wait-native-output", cause, code};
+        if (!p.video_interop) p.video_interop = std::make_unique<detail::WindowsVideoInterop>(p.context.get(), p.gl);
+        auto result = p.video_interop->write(source->texture(), destination);
+        if (!source->endUse(p.context.get(), cause, code)) return {OpenGlCompositionStatus::Failed, {}, "release-native-output", cause, code};
+        p.rememberResourcePeak();
+        if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
+        return result;
+    } catch (const std::exception& error) { return {OpenGlCompositionStatus::Failed, {}, "copy-native-output", error.what()}; }
+}
+
+OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
+    const OpenGlImageOperation& operation, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    auto& p = *impl_;
+    struct Guard { Impl& p; ~Guard() { p.image_operation = nullptr; } } guard{p};
+    p.image_operation = &operation;
+    return composeTexture(operation.background.width(), operation.background.height(), {}, cancel, timings);
+}
 
 OpenGlCompositionResult OpenGlFrameCompositor::compose(int width, int height,
     const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
@@ -738,11 +1015,11 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, 
             "This compositor session no longer publishes textures."};
         auto active = p.activate();
         if (active.status != OpenGlCompositionStatus::Complete) return converted(std::move(active));
-        if (!p.share_context || !QOpenGLContext::areSharing(p.context.get(), p.share_context))
+        if (!p.image_operation && (!p.share_context || !QOpenGLContext::areSharing(p.context.get(), p.share_context)))
             return {OpenGlCompositionStatus::Unsupported, {}, "check-sharing",
                 "The producer has no verified shared context."};
         if (!bounded(width, height, p.texture_limit) ||
-            static_cast<std::uint64_t>(width) * height * 4 > OpenGlTexturePoolBudget::maximum_bytes)
+            static_cast<std::uint64_t>(width) * height * 4 > p.budget->impl_->byte_limit)
             return {OpenGlCompositionStatus::Unsupported, {}, "check-pool-limits",
                 "Canvas exceeds the shared texture pool budget or device limits."};
         auto collected = p.collect();
@@ -758,11 +1035,11 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, 
         const auto bytes = static_cast<std::uint64_t>(width) * height * 4;
         const bool adding = index == p.targets.size();
         const auto old_bytes = adding ? 0 : p.targets[index].bytes;
-        p.targets.reserve(OpenGlTexturePoolBudget::maximum_targets);
+        p.targets.reserve(p.budget->impl_->target_limit);
         {
             std::lock_guard lock(p.budget->impl_->mutex);
-            if ((adding && p.budget->impl_->targets == OpenGlTexturePoolBudget::maximum_targets) ||
-                p.budget->impl_->bytes - old_bytes + bytes > OpenGlTexturePoolBudget::maximum_bytes)
+            if ((adding && p.budget->impl_->targets >= p.budget->impl_->target_limit) ||
+                p.budget->impl_->bytes - old_bytes + bytes > p.budget->impl_->byte_limit)
                 return {OpenGlCompositionStatus::Busy};
             if (adding) { p.targets.emplace_back(); ++p.budget->impl_->targets; }
             p.budget->impl_->bytes = p.budget->impl_->bytes - old_bytes + bytes;
@@ -887,6 +1164,22 @@ OpenGlResourceUsage OpenGlFrameCompositor::resourceUsage() const noexcept { retu
 OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
     const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
     OpenGlCompositionTimings* timings, bool read_output) {
+    if (std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
+            return !layer.effect_stack.empty(); })) {
+        auto prepared_layers = layers;
+        for (auto& layer : prepared_layers) {
+            if (layer.effect_stack.empty()) continue;
+            if (!layer.gpu_color_adjustments.empty() || !layer.gpu_effects.empty())
+                return result(OpenGlCompositionStatus::Unsupported, "prepare-clip-effects",
+                    "A source cannot combine processed and unprocessed effect stacks.");
+            auto passes = effects::colorAdjustmentPasses(layer.effect_stack);
+            if (!passes) return result(OpenGlCompositionStatus::Unsupported, "prepare-clip-effects",
+                "The clip effect stack is outside the shared GPU effect contract.");
+            layer.gpu_color_adjustments = std::move(*passes);
+            layer.effect_stack = {};
+        }
+        return render(width, height, prepared_layers, cancel, timings, read_output);
+    }
     OpenGlCompositionTimings measured;
     struct TimingsGuard {
         OpenGlCompositionTimings* output;
@@ -909,8 +1202,12 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         if (!bounded(width, height, p.texture_limit))
             return result(OpenGlCompositionStatus::Unsupported, "check-limits",
                 "Canvas exceeds the device texture limit or 256 MiB texture budget.");
+        if (p.image_operation) return p.renderImage(*p.image_operation, cancel, measured);
         for (std::size_t layer_index = 0; layer_index < layers.size(); ++layer_index) {
             const auto& layer = layers[layer_index];
+            if ((layer.texture_frame || layer.native_frame) && !layer.gpu_effects.empty())
+                return result(OpenGlCompositionStatus::Unsupported, "check-texture-effects",
+                    "Ordered blur effects on a borrowed texture require a separate image operation.");
             if (!layer.gpu_color_adjustments.empty() && !layer.gpu_effects.empty())
                 return result(OpenGlCompositionStatus::Unsupported, "check-effects",
                     "A layer cannot combine legacy and ordered GPU effect lists.", 0,
@@ -1031,6 +1328,34 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
             if (!usable(layer) || layer.transform.opacity == 0) continue;
             const auto& f = *layer.frame;
+            struct NativeUse {
+                detail::WindowsVideoInterop* adapter = nullptr;
+                ~NativeUse() { if (adapter) (void)adapter->end(); }
+            } native_use;
+            if (layer.native_frame) {
+                if (!p.video_interop) p.video_interop = std::make_unique<detail::WindowsVideoInterop>(p.context.get(), gl);
+                const auto started = Clock::now();
+                auto imported = p.video_interop->begin(layer.native_frame);
+                if (imported.status != OpenGlCompositionStatus::Complete) return imported;
+                native_use.adapter = p.video_interop.get();
+                ++measured.native_video_imports;
+                measured.native_video_conversion_nanoseconds += elapsed(started);
+                p.rememberResourcePeak();
+            }
+            struct TextureUse {
+                OpenGlTextureFramePtr frame; QOpenGLContext* context;
+                ~TextureUse() {
+                    if (frame) { std::string cause; std::int64_t code = 0; (void)frame->endUse(context, cause, code); }
+                }
+            } texture_use{layer.texture_frame, p.context.get()};
+            if (layer.texture_frame) {
+                std::string cause; std::int64_t code = 0;
+                if (!layer.texture_frame->beginUse(p.context.get(), cause, code)) {
+                    texture_use.frame.reset();
+                    return result(OpenGlCompositionStatus::Failed, "consume-layer-texture", cause, code);
+                }
+            }
+            p.program->setUniformValue("source_bottom_left", bool(layer.texture_frame));
             p.program->setUniformValue("color_adjustment_count",
                 layer.gpu_effects.empty()
                     ? static_cast<int>(layer.gpu_color_adjustments.size()) : 0);
@@ -1054,6 +1379,8 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                 measured.color_adjustment_count += layer.gpu_color_adjustments.size();
             }
             const auto upload_started = Clock::now();
+            if (!layer.texture_frame && !layer.native_frame) {
+            gl->glBindTexture(GL_TEXTURE_2D, p.texture);
             if (p.source_width != f.width || p.source_height != f.height) {
                 gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, f.width, f.height, 0, GL_RGBA,
                     GL_UNSIGNED_BYTE, nullptr);
@@ -1080,8 +1407,10 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             measured.upload_nanoseconds += elapsed(upload_started);
             measured.uploaded_bytes += static_cast<std::uint64_t>(f.width) * f.height * 4;
             ++measured.uploaded_layers;
+            }
             if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
-            GLuint layer_texture = p.texture;
+            GLuint layer_texture = layer.native_frame ? p.video_interop->texture() :
+                layer.texture_frame ? layer.texture_frame->texture() : p.texture;
             const bool has_gpu_effect_work = std::any_of(layer.gpu_effects.begin(),
                 layer.gpu_effects.end(), [](const auto& effect) {
                     if (std::holds_alternative<effects::ColorAdjustmentParameters>(effect))
@@ -1277,6 +1606,16 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             gl->glActiveTexture(GL_TEXTURE0);
             gl->glBindTexture(GL_TEXTURE_2D, layer_texture);
             gl->glDrawArrays(GL_TRIANGLES, 0, 3);
+            if (native_use.adapter) {
+                auto released = native_use.adapter->end(); native_use.adapter = nullptr;
+                if (released.status != OpenGlCompositionStatus::Complete) return released;
+            }
+            if (texture_use.frame) {
+                std::string cause; std::int64_t code = 0;
+                if (!texture_use.frame->endUse(p.context.get(), cause, code))
+                    return result(OpenGlCompositionStatus::Failed, "protect-layer-texture", cause, code);
+                texture_use.frame.reset();
+            }
             if (!layer.gpu_color_adjustments.empty())
                 measured.color_adjustment_submission_nanoseconds +=
                     elapsed(color_adjustment_started);

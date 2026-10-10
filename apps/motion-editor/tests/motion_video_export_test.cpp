@@ -382,6 +382,8 @@ void testSettingsDialog()
     auto* quality = findWidget<QComboBox>(&dialog, "motion-export-quality");
     require(!container->currentData().toString().isEmpty(),
             "the export settings choose an available container");
+    require(!encoder->currentData(Qt::UserRole + 1).toBool(),
+            "experimental hardware encoders require an explicit selection");
     require(resolution->currentIndex() == 0 && resolution->currentData().toSize() == QSize(640, 360),
             "the composition dimensions are the initial output resolution");
     require(std::abs(rate->value() - 30000.0 / 1001.0) < 0.001,

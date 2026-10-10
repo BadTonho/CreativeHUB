@@ -45,6 +45,11 @@ int main(int argc, char* argv[]) {
         settings.clear();
         settings.sync();
 
+        require(!settings::hardwareDecodingEnabled(), "Hardware decoding must default to disabled.");
+        settings::setHardwareDecodingEnabled(true);
+        require(settings::hardwareDecodingEnabled(), "Hardware decode preference must persist.");
+        settings::setHardwareDecodingEnabled(false);
+
         require(settings::workspacePageTransitionsEnabled() &&
                     settings::workspacePageTransitionStyle() ==
                         settings::WorkspacePageTransitionStyle::WorkspaceContent &&

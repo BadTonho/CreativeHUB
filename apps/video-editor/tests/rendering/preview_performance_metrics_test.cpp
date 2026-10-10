@@ -21,6 +21,7 @@ int main() {
 
         metrics.setEnabled(true);
         creative_suite::composition::OpenGlCompositionTimings gpu_timings{100, 200, 300, 400, 500, 2};
+        gpu_timings.native_video_imports = 3; gpu_timings.native_video_conversion_nanoseconds = 700;
         metrics.recordCompositionBackend(true, gpu_timings);
         metrics.recordCompositionBackend(false, {}, true);
         metrics.recordGpuCompositionFailure();
@@ -32,7 +33,8 @@ int main() {
                 gpu_snapshot.gpu_composition_draw_submission.total_nanoseconds == 200 &&
                 gpu_snapshot.gpu_composition_readback.total_nanoseconds == 300 &&
                 gpu_snapshot.gpu_upload.count == 0 && gpu_snapshot.gpu_paint.count == 0 &&
-                gpu_snapshot.blend_lookup_composition_frames == 0,
+                gpu_snapshot.blend_lookup_composition_frames == 0 && gpu_snapshot.native_video_imports == 3 &&
+                gpu_snapshot.native_video_conversion_nanoseconds == 700,
                 "GPU composition metrics mixed presentation or CPU paths.");
         require(metrics.takeSnapshotAndReset().gpu_composition_uploaded_bytes == 0, "GPU metrics did not reset.");
         metrics.recordPreviewDelivery(true);

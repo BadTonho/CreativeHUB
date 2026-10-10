@@ -2,8 +2,10 @@
 
 Status: **Stages 1–3 implemented as opt-in experiments on 2026-10-02;
 cross-platform acceptance and later stages pending**.
-Video Editor is the first consumer of the shared compositor. Motion Studio and
-Image Editor adoption follow their separate plans.
+The Windows/NVIDIA decode/effects/Fusion/encode extension is tracked in
+[the visual pipeline contract](GPU_PIPELINE.md), including implementation,
+native evidence, and remaining gates. Video Editor and Motion Studio reuse the
+shared compositor; Image Editor adoption follows its separate plan.
 
 ## Current implementation and shared direction
 
@@ -55,7 +57,8 @@ are logged before a nonmodal status warning. Preference/project data are preserv
 Cancellation returns no frame. Aggregate metrics schema 9 distinguishes actual
 CPU/GPU composition, uploads, draw submission, readback, bytes and fallback from
 the existing presentation metrics. Stage 2 adds automatic direct delivery and
-Stage 3 adds independent offline export. GPU effects/decode/encode remain deferred.
+Stage 3 adds independent offline export. GPU effects/decode/encode are being
+extended under [the Windows/NVIDIA pipeline work](GPU_PIPELINE.md).
 
 Exact rotated nearest sampling additionally requires the optional
 `ARB_gpu_shader_fp64` and `ARB_gpu_shader5` extensions. Without them, rotated
@@ -111,7 +114,7 @@ RGBA/direct composition now uses two 16 KiB geometry lookup buffers, each with
 `OfflineExportOptions` supplies the borrowed surface, warning/summary callbacks
 and a test adapter factory. Unsupported requests fall back on the same prepared
 layers; technical failure latches CPU for the item, with a fresh backend on retry.
-Export diagnostics schema 1 is independent of preview 9/3 and includes every
+Export diagnostics schema 2 is independent of preview 9/3 and includes every
 outcome, transfers, encoding and known allocation peaks. The
 [implementation contract](GPU_EXPORT.md) defines ownership, cancellation and
 logging; [dated results](GPU_EXPORT_RESULTS.md) record native tests and measurements.
@@ -121,8 +124,9 @@ logging; [dated results](GPU_EXPORT_RESULTS.md) record native tests and measurem
 - Preserve output-size/rate conversion, every-frame rendering, layer transforms,
   text, still images, transitions, blank frames, duration, and audio output.
   Offline export must not use playback frame skipping or preview-only effects.
-- Read back at the current shared RGBA encoder boundary. Keep composition,
-  decoding, and hardware encoding as separately measured capabilities.
+- Keep the RGBA encoder boundary for ordinary encoders and recovery; the
+  [Windows/NVIDIA extension](GPU_PIPELINE.md) adds native D3D11 NVENC input.
+  Measure composition, decoding, transfers, and encoding separately.
 - Retain codec discovery, presets, bitrate/color settings, progress, queue states,
   retry/cancel behavior, temporary-file verification, and atomic publication.
 - Preserve prior output on failure/cancellation and log job/source/encoder
@@ -141,7 +145,8 @@ regressions pass, and transfer/encode costs are included in performance results.
 - Preserve current transitions and viewing effects independently of future
   color grading, masks, or additional Fusion processing. The initial CPU Fusion
   graph remains evaluated before the existing clip effects and transforms;
-  GPU acceleration for Fusion is outside this plan.
+  GPU acceleration for the existing graph is covered by the subsequent pipeline
+  extension; new Fusion features remain separate work.
 - Cover transparent PNG consumption from Image Editor, including masked and
   transformed imported-image output, shared links, clip variants, and refresh
   after publication. Invalidate dependent CPU/GPU caches on media replacement

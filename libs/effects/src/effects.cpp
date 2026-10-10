@@ -131,6 +131,25 @@ bool setParameterValue(
     return true;
 }
 
+std::optional<std::vector<ColorAdjustmentParameters>> colorAdjustmentPasses(
+    std::span<const EffectInstance> effects) {
+    if (!isValidStack(effects)) return std::nullopt;
+    std::vector<ColorAdjustmentParameters> result;
+    result.reserve(effects.size());
+    for (const auto& effect : effects) {
+        if (!effect.enabled) continue;
+        ColorAdjustmentParameters pass;
+        const auto amount = parameterValue(effect, "amount");
+        if (effect.id == "video.brightness") pass.brightness = amount;
+        else if (effect.id == "video.contrast") pass.contrast_percent = amount;
+        else if (effect.id == "video.saturation") pass.saturation_percent = amount;
+        else if (effect.id == "video.grayscale") pass.saturation_percent = 100.0 - amount;
+        else return std::nullopt;
+        result.push_back(pass);
+    }
+    return result;
+}
+
 bool applyStack(
     media::RgbaFrame& frame,
     std::span<const EffectInstance> effects) noexcept {

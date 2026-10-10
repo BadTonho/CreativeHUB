@@ -37,6 +37,7 @@ public:
         const std::vector<AutosaveSnapshotItem>& snapshots);
 
 signals:
+    void hardwareDecodingEnabledChanged(bool enabled);
     void gpuCompositionEnabledChanged(bool enabled);
     void audioWaveformStereoModeChanged(bool enabled);
     void timelineTrackRowHeightAdjustmentModeChanged(

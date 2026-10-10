@@ -1,6 +1,7 @@
 #include "playback/playback_worker.h"
 #include "rendering/preview_performance_metrics.h"
 #include "logging/logger.h"
+#include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
 #include "image_document_session.h"
 #endif
@@ -23,6 +24,42 @@
 
 using namespace creative_suite::composition;
 namespace {
+void fusionParity(OpenGlFrameCompositor& gpu) {
+    using namespace fusion::nodes;
+    auto source = std::make_shared<media::VideoFrame>(media::VideoFrame{37, 23, 148, std::vector<std::uint8_t>(148 * 23)});
+    for (std::size_t i = 0; i < source->rgba_pixels.size(); ++i)
+        source->rgba_pixels[i] = static_cast<std::uint8_t>(i * 31 + i / 7);
+    auto foreground = std::make_shared<media::VideoFrame>(media::VideoFrame{13, 17, 52, std::vector<std::uint8_t>(52 * 17)});
+    for (std::size_t i = 0; i < foreground->rgba_pixels.size(); ++i)
+        foreground->rgba_pixels[i] = static_cast<std::uint8_t>(i * 11 + i / 3);
+    NodeGraph graph;
+    graph.nodes = {{1, NodeType::Input}, {2, NodeType::Input}, {3, NodeType::Transform},
+        {4, NodeType::Color}, {5, NodeType::Effect}, {6, NodeType::Merge}, {7, NodeType::Output}};
+    graph.next_id = 8;
+    graph.nodes[2].transform.position_x = 0.47;
+    graph.nodes[2].transform.position_y = 0.63;
+    graph.nodes[2].transform.scale = 0.79;
+    graph.nodes[2].transform.opacity = 0.37;
+    graph.nodes[3].color = {12, 131, 83};
+    graph.nodes[4].effect = creative_suite::effects::makeDefaultInstance("video.grayscale");
+    graph.connections = {{1, 3, 0}, {3, 4, 0}, {4, 5, 0}, {5, 6, 0}, {2, 6, 1}, {6, 7, 0}};
+    const InputFrames inputs{{1, source}, {2, foreground}};
+    for (const double rotation : {0.0, 17.0, -43.0}) {
+        graph.nodes[2].transform.rotation_degrees = rotation;
+        bool used = false;
+        const auto cpu = evaluate(graph, inputs, EvaluationContext{9});
+        const auto output = evaluate(graph, inputs, EvaluationContext{9, &gpu, &used});
+        if (!cpu || !output || !used) throw std::runtime_error("Fusion parity did not execute the native GPU graph.");
+        if (cpu->width != output->width || cpu->height != output->height)
+            throw std::runtime_error("Fusion GPU geometry changed.");
+        for (std::size_t i = 0; i < cpu->rgba_pixels.size(); ++i)
+            if (std::abs(int(cpu->rgba_pixels[i]) - int(output->rgba_pixels[i])) > (i % 4 == 3 ? 0 : 2))
+                throw std::runtime_error("Fusion GPU intermediate alpha or RGB parity failed at byte " + std::to_string(i));
+    }
+    bool used = false;
+    const auto cancelled = evaluate(graph, inputs, EvaluationContext{0, &gpu, &used, [] { return true; }});
+    if (cancelled || used) throw std::runtime_error("A cancelled Fusion GPU graph published a frame.");
+}
 void require(bool value, const std::string& message) {
     if (!value) throw std::runtime_error(message);
 }
@@ -255,6 +292,8 @@ int main(int argc, char** argv) {
                 require(toggled_off && toggled_on && failures == 0 && warnings == 0,
                     "Native toggle interrupted playback.");
                 directWorker(surface.get(), image, incoming, text, published, refreshed);
+                OpenGlFrameCompositor graph_gpu(surface.get());
+                fusionParity(graph_gpu);
                 metrics.setEnabled(false);
             } catch (...) { failure = std::current_exception(); }
         }));

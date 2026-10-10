@@ -4,6 +4,16 @@
   "builtin-baseline": "3af1d1e60af2b2abf55760538cd607829029b07a",
   "dependencies": [
     "ffmpeg",
+    {
+      "name": "ffmpeg",
+      "features": ["nvcodec", "amf", "qsv"],
+      "platform": "windows & x64 & !uwp"
+    },
+    {
+      "name": "ffmpeg",
+      "features": ["nvcodec", "vaapi", "qsv"],
+      "platform": "linux & (x64 | x86)"
+    },
     "sdl3"
   ]
 }

@@ -1,5 +1,6 @@
 #include <creative_suite/media/video_encoder.h>
 #include <creative_suite/media/video_playback.h>
+#include <creative_suite/media/video_probe.h>
 
 #include <algorithm>
 #include <chrono>
@@ -66,9 +67,54 @@ std::pair<creative_suite::media::VideoContainerOption,
 
 } // namespace
 
-int main()
+int main(int argc, char** argv)
 {
     try {
+        if (argc > 2 && std::string(argv[1]) == "--hardware-encoder") {
+            TemporaryDirectory temporary;
+            creative_suite::media::VideoEncodingSettings settings;
+            settings.output_path = temporary.path() / "native-encoder.mkv";
+            settings.container_name = "matroska"; settings.video_encoder_name = argv[2];
+            settings.width = 320; settings.height = 180; settings.frame_rate_numerator = 30;
+            if (argc > 3) settings.hardware_device_name = argv[3];
+            settings.audio = creative_suite::media::AudioEncodingSettings{"aac"};
+            creative_suite::media::RgbaFrame frame{320, 180, 1280, std::vector<std::uint8_t>(1280 * 180, 255)};
+            std::vector<float> silent_audio(3200, 0);
+            const auto path = settings.output_path;
+            { creative_suite::media::VideoEncoder writer(settings);
+              for (int i = 0; i < 12; ++i) {
+                  for (std::size_t pixel = 0; pixel < frame.rgba_pixels.size(); pixel += 4) {
+                      frame.rgba_pixels[pixel] = i % 2 ? 20 : 220;
+                      frame.rgba_pixels[pixel + 1] = i % 2 ? 210 : 30;
+                      frame.rgba_pixels[pixel + 2] = 25;
+                  }
+                  writer.writeVideo(frame, i);
+              }
+              std::int64_t samples = 0;
+              while (samples < 19200) {
+                  const auto count = writer.nextAudioInputSampleCount();
+                  silent_audio.resize(std::size_t(count) * 2);
+                  writer.writeAudio(silent_audio, count); samples += count;
+              }
+              writer.finish(); }
+            auto decoder = creative_suite::media::VideoPlaybackSession::open(path);
+            for (int i = 0; i < 12; ++i) {
+                const auto decoded = decoder->decode_next_frame();
+                require(decoded && *decoded && (*decoded)->width == 320 && (*decoded)->height == 180,
+                    "Hardware output lost a frame or changed its geometry.");
+                const auto center = 90 * (*decoded)->stride + 160 * 4;
+                require(((*decoded)->rgba_pixels[center + 1] > (*decoded)->rgba_pixels[center]) == bool(i % 2),
+                    "Hardware output changed frame order or encoded color.");
+            }
+            require(!decoder->decode_next_frame(), "Hardware output added an unexpected video frame.");
+            const auto metadata = creative_suite::media::VideoProbe{}.probe(path);
+            require(metadata.frame_rate && std::abs(*metadata.frame_rate - 30) < .001 &&
+                metadata.audio && metadata.audio->codec == "aac" && metadata.audio->sample_rate == 48000 &&
+                metadata.duration_seconds && std::abs(*metadata.duration_seconds - .4) < .08,
+                "Hardware export did not preserve frame rate, duration, and configured audio.");
+            std::cout << "Hardware encoder " << settings.video_encoder_name << " passed 12 ordered RGBA frames with AAC.\n";
+            return EXIT_SUCCESS;
+        }
         const creative_suite::media::VideoEncodingError encoding_error(
             "controlled encoder failure", -734);
         require(std::string(encoding_error.what()) == "controlled encoder failure" &&
@@ -80,6 +126,12 @@ int main()
         for (const auto& container : containers) {
             require(!container.video_encoders.empty(), "each discovered container has a video encoder");
             for (const auto& encoder : container.video_encoders) {
+                if (encoder.name.ends_with("_nvenc") || encoder.name.ends_with("_amf") ||
+                    encoder.name.ends_with("_qsv") || encoder.name.ends_with("_vaapi") ||
+                    encoder.name.ends_with("_videotoolbox"))
+                    require(encoder.hardware && encoder.experimental &&
+                        encoder.display_name.find("Hardware, Experimental") != std::string::npos,
+                        "hardware encoding capabilities retain their experimental label");
                 require(creative_suite::media::supportsVideoEncoder(container, encoder.name),
                         "discovered video encoders pass the shared compatibility check");
             }
@@ -130,6 +182,7 @@ int main()
                 encoder.writeVideo(source, frame_index);
             }
             encoder.finish();
+            require(encoder.uploadedVideoBytes() == 0, "Software encoding must not report a hardware upload.");
         }
 
         require(std::filesystem::is_regular_file(output), "the shared encoder writes a file");

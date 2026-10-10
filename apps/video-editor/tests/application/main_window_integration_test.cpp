@@ -862,15 +862,31 @@ public:
 
         QByteArray version_eight_layout;
         {
+            // Build a v8 migration fixture from the default placement, rather
+            // than retabulating the preceding close/reopen fixture's saved tabs.
+            QSettings().remove("workspace/dock_layout_state");
+            QSettings().sync();
+            QEventLoop dock_settle;
+            const auto settle_docks = [&dock_settle]() {
+                QTimer::singleShot(250, &dock_settle, &QEventLoop::quit);
+                dock_settle.exec();
+            };
+            settle_docks();
             MainWindow legacy_layout_window;
-            legacy_layout_window.show();
-            QApplication::processEvents();
+            // This fixture serializes a legacy placement, not a dock animation.
+            // Relocating Preview during Qt's pending native animation can abort
+            // inside the dock layout before the migration assertion runs.
+            legacy_layout_window.setDockOptions(
+                legacy_layout_window.dockOptions() & ~QMainWindow::AnimatedDocks);
+            // The fixture needs saved placement only. Keeping it hidden avoids
+            // Qt's native dock animation lifecycle while serializing v8 state.
             legacy_layout_window.addDockWidget(
                 Qt::RightDockWidgetArea, legacy_layout_window.preview_dock_);
+            settle_docks();
             legacy_layout_window.splitDockWidget(
                 legacy_layout_window.inspector_dock_,
                 legacy_layout_window.preview_dock_, Qt::Vertical);
-            QApplication::processEvents();
+            settle_docks();
             version_eight_layout = legacy_layout_window.saveState(8);
             require(!version_eight_layout.isEmpty(),
                     "The Preview layout migration fixture could not be saved.");
@@ -1150,9 +1166,16 @@ public:
                             button->text() != QStringLiteral("Remove Track"),
                         "Track-management buttons should no longer appear in the Timeline control row.");
             }
+            // A restored compact Timeline can intentionally clip entire rows.
+            // Expand it before testing a visible track-header interaction.
+            window.resizeDocks({window.timeline_dock_}, {360}, Qt::Vertical);
+            window.edit_workspace_->ui().timeline_scroll->ensureVisible(0,
+                static_cast<int>(std::lround(timeline_widget->trackBounds(*clicked_track_index).center().y())), 0, 0);
+            QApplication::processEvents();
             const QPoint track_menu_viewport_position(
-                32, static_cast<int>(std::lround(timeline_widget->trackBounds(
-                    *clicked_track_index).center().y())));
+                32, timeline_widget->mapTo(timeline_viewport, QPoint(0,
+                    static_cast<int>(std::lround(timeline_widget->trackBounds(
+                        *clicked_track_index).center().y())))).y());
             const auto track_menu_widget_position = timeline_widget->mapFrom(
                 timeline_viewport, track_menu_viewport_position);
             const auto track_menu_global_position = timeline_viewport->mapToGlobal(
@@ -1193,6 +1216,7 @@ public:
                 track_menu_global_position);
             QApplication::sendEvent(timeline_widget, &duplicate_track_context);
             const auto& selection_after_track_menu = window.editor_session_.selection();
+            require(track_menu_labels_verified, "The visible track header did not open the expected track menu.");
             require(track_menu_labels_verified &&
                         selection_after_track_menu.active_track_id ==
                             selection_before_track_menu.active_track_id &&

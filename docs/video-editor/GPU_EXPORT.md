@@ -17,14 +17,15 @@ fallback. A fallback warning appears briefly in the panel, without a modal dialo
 
 This choice is independent of Settings > General's preview preference. Preview
 quality, Grayscale Preview and `CREATIVE_SUITE_DISABLE_GPU_PREVIEW` do not affect
-export composition or output dimensions. No new preference, shortcut, application
-version or persisted format is introduced.
+export composition or output dimensions. Export decoding has a separate
+experimental checkbox captured per job. No shortcut, application version, or
+persisted project format changes.
 
 ## Frame preparation and encoding
 
 `OfflineExportRenderer` prepares ordered layers once per output position, retaining
 references to decoded frames rather than copying their pixels into temporary
-operations. The CPU and GPU adapters receive the same borrowed RGBA frames,
+operations. The CPU and GPU adapters preserve the same source/effect contract,
 evaluated transforms and opacities. Their source owners survive composition and
 any fallback. Still images and rasterized text remain cached for the item.
 
@@ -32,9 +33,12 @@ Output dimensions and frame rate determine rendering. Timeline/source rate
 mapping, trims, keyframes, Cross Dissolve, Fade to Black, layer priority, nearest
 sampling, aspect fit, clipping and opaque black gaps retain the existing contract.
 Each position submits exactly one complete frame to the selected FFmpeg encoder.
-There is no playback deadline or frame skipping. GPU output is read back as
-top-down RGBA; decoding, text rasterization, audio mixing and codec selection remain
-on their existing paths. GPU composition does not imply hardware encoding.
+There is no playback deadline or frame skipping. Ordinary encoders receive
+top-down RGBA. Compatible Windows/NVIDIA jobs may retain D3D11 decode surfaces,
+Fusion intermediates, and composition output through D3D11 NVENC input, avoiding
+video readback. Unsupported operations recover explicitly through RGBA. Text
+rasterization and audio mixing retain their existing paths. GPU composition and
+encoder selection remain independent; see [the pipeline contract](GPU_PIPELINE.md).
 
 Audio stays at the existing 48 kHz stereo mix boundary. Queue progress, continuation
 after item failure, temporary-file verification and atomic publication are retained.
@@ -91,7 +95,7 @@ are warnings; technical faults are errors and latch the item. At most one brief
 warning is delivered per item. Subsequent technical faults still receive error
 entries. Cancellation is not an error.
 
-## Export diagnostics: schema 1
+## Export diagnostics: schema 2
 
 Every render attempt emits `export/performance_metrics`, including failure and
 cancellation. This is separate from preview aggregate/slow schema 9 and delivery
@@ -108,6 +112,8 @@ schema 3. The callback receives `OfflineExportMetrics`.
 | `uploaded_bytes`, `readback_bytes` | Source and geometry uploads, and final RGBA reads actually performed. |
 | `peak_known_gpu_bytes` | Peak requested storage for source/output textures and geometry buffers via `OpenGlResourceUsage`. This excludes driver overhead and is not measured VRAM. |
 | `peak_cpu_frame_bytes`, `peak_prepared_source_bytes` | Largest final RGBA buffer and known retained source buffers. These exclude hidden decoder/encoder allocations and are not total process memory. |
+| `native_encoded_frames`, `native_video_imports`, `native_conversion_ns` | Actual D3D11 NVENC submissions, native surfaces imported by composition/Fusion, and GPU conversion submission/synchronization wall time. |
+| `decoded_hardware_frames`, `decoded_software_frames`, `decoded_downloaded_frames` | Decoder-received frames, including discarded intermediates, and actual video-frame downloads. Encoder choice alone does not prove native decoding. |
 
 Nested timing categories must not be summed as disjoint costs. Source transfer
 counts include repeated uploads; composition fallback does not duplicate source
@@ -130,3 +136,10 @@ Image Editor producer, without changing `.cimg` or `.csp`.
 macOS/Linux, additional drivers, long projects, packaged codec combinations and
 human visual/audio/accessible-layout checks remain pending. Follow the dated
 [results and manual checklist](GPU_EXPORT_RESULTS.md) before wider acceptance.
+
+Native export diagnostic schema 2 additionally records `decoded_downloaded_bytes`,
+`encoding_uploaded_bytes`, `decoder_reserved_gpu_bytes`, `graph_peak_gpu_bytes`,
+and `encoder_reserved_gpu_bytes`. Reservations describe known decoder texture
+arrays, graph allocations, and the bounded output pool, not driver-private VRAM.
+`peak_known_gpu_bytes` continues to describe the timeline compositor. Decode
+downloads and fallback encoder uploads are independent of composition transfers.

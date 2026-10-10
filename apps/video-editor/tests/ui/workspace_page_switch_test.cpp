@@ -9,6 +9,7 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QDockWidget>
 #include <QElapsedTimer>
@@ -454,6 +455,11 @@ int main(int argc, char* argv[]) {
                 "Render must initialize project-derived FPS and discover encoders at runtime.");
         require(!add_to_queue->isEnabled(),
                 "Render must require an output path before adding a job.");
+        auto* hardware_decode = render_workspace->findChild<QCheckBox*>("renderHardwareDecodingCheckBox");
+        require(hardware_decode && !hardware_decode->isChecked() &&
+            !video_encoder_combo->currentData(Qt::UserRole + 1).toBool(),
+            "Experimental decoding and encoders must remain off by default.");
+        hardware_decode->setChecked(true);
         quality_preset->setCurrentIndex(2);
         require(std::abs(video_bitrate->value() - 16.0) < 0.11 &&
                     audio_bitrate->value() == 320,
@@ -482,6 +488,7 @@ int main(int argc, char* argv[]) {
                     prepared_job != nullptr && prepared_job->settings.width == 1920 &&
                     prepared_job->settings.height == 1080 &&
                     prepared_job->settings.frame_rate == 23.976 &&
+                    prepared_job->settings.hardware_decoding_enabled &&
                     prepared_job->project_snapshot.timeline_tracks.front().name ==
                         "Video 1" &&
                     render_workspace->queueModel()->data(
@@ -490,6 +497,9 @@ int main(int argc, char* argv[]) {
                     start_queue->isEnabled() && !cancel_queue->isEnabled(),
                 "Adding a Render job must capture its settings and project state.");
         frame_rate_spin->setValue(48.0);
+        hardware_decode->setChecked(false);
+        require(prepared_job->settings.hardware_decoding_enabled,
+            "Changing the decode checkbox must not change an existing queue item.");
         window.resize(520, 420);
         application.processEvents();
         require(render_splitter->orientation() == Qt::Vertical &&

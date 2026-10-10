@@ -2,6 +2,7 @@
 #include "logging/logger.h"
 
 #include <algorithm>
+#include <QOpenGLContext>
 
 namespace rendering::detail {
 namespace {
@@ -9,7 +10,8 @@ namespace composition = creative_suite::composition;
 
 class NativeExportGpu final : public ExportGpuCompositor {
 public:
-    explicit NativeExportGpu(QOffscreenSurface* surface) : backend_(surface) {}
+    explicit NativeExportGpu(QOffscreenSurface* surface) : backend_(surface,
+        composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext()) {}
     composition::OpenGlCompositionResult compose(int width, int height,
         const std::vector<composition::CompositionLayer>& layers,
         const composition::OpenGlFrameCompositor::CancellationPredicate& cancel,
@@ -52,7 +54,7 @@ ExportMetricsScope::~ExportMetricsScope() {
         std::chrono::steady_clock::now() - start_).count());
     try {
         auto context = jobContext(job_);
-        context.emplace_back("diagnostic_schema_version", "1");
+        context.emplace_back("diagnostic_schema_version", "2");
         context.emplace_back("requested_backend", metrics.gpu_requested ? "opengl" : "cpu");
         context.emplace_back("effective_backend", metrics.gpu_frames ? (metrics.cpu_frames ? "mixed" : "opengl")
                                                                   : (metrics.cpu_frames ? "cpu" : "none"));
@@ -70,6 +72,13 @@ ExportMetricsScope::~ExportMetricsScope() {
         add("total_ns", metrics.total_nanoseconds); add("uploaded_bytes", metrics.uploaded_bytes);
         add("readback_bytes", metrics.readback_bytes); add("peak_known_gpu_bytes", metrics.peak_known_gpu_bytes);
         add("peak_cpu_frame_bytes", metrics.peak_cpu_frame_bytes); add("peak_prepared_source_bytes", metrics.peak_prepared_source_bytes);
+        add("native_encoded_frames", metrics.native_encoded_frames); add("native_video_imports", metrics.native_video_imports);
+        add("native_conversion_ns", metrics.native_conversion_nanoseconds);
+        add("decoded_hardware_frames", metrics.decoded_hardware_frames); add("decoded_software_frames", metrics.decoded_software_frames);
+        add("decoded_downloaded_frames", metrics.decoded_downloaded_frames);
+        add("decoded_downloaded_bytes", metrics.decoded_downloaded_bytes); add("encoding_uploaded_bytes", metrics.encoding_uploaded_bytes);
+        add("decoder_reserved_gpu_bytes", metrics.decoder_reserved_gpu_bytes); add("graph_peak_gpu_bytes", metrics.graph_peak_gpu_bytes);
+        add("encoder_reserved_gpu_bytes", metrics.encoder_reserved_gpu_bytes);
         logging::Logger::instance().log(logging::Level::Info, "export", "performance_metrics", "Offline export summary.", context);
         if (options_.metrics_callback) options_.metrics_callback(metrics);
     } catch (...) {
@@ -81,6 +90,18 @@ ExportMetricsScope::~ExportMetricsScope() {
 
 ExportComposition::ExportComposition(const RenderJob& job, const OfflineExportOptions& options, OfflineExportMetrics& metrics)
     : job_(job), options_(options), metrics_(metrics) {}
+
+bool ExportComposition::nativeDelivery() const noexcept {
+    return job_.settings.gpu_composition_enabled && !failed_ && options_.gpu_surface && !options_.gpu_factory;
+}
+
+composition::OpenGlFrameCompositor* ExportComposition::graphBackend() {
+    if (!job_.settings.gpu_composition_enabled || failed_ || !options_.gpu_surface || options_.gpu_factory) return nullptr;
+    if (!graph_gpu_) graph_gpu_ = std::make_unique<composition::OpenGlFrameCompositor>(options_.gpu_surface,
+        composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext(),
+        std::make_shared<composition::OpenGlTexturePoolBudget>(256ULL * 1024 * 1024, 8));
+    return graph_gpu_.get();
+}
 
 void ExportComposition::fallback(const composition::OpenGlCompositionResult& result,
     std::int64_t output_frame, std::int64_t timeline_frame) {
@@ -105,9 +126,37 @@ void ExportComposition::fallback(const composition::OpenGlCompositionResult& res
 }
 
 std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const std::vector<composition::CompositionLayer>& layers,
-    std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled) {
+    std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,
+    creative_suite::media::NativeVideoFramePool* native_pool,
+    creative_suite::media::NativeVideoFramePtr* native_output) {
     if (canceled.load()) throw ExportCanceled{};
     ExportTimedScope total(metrics_.composition_nanoseconds);
+    if (native_output) native_output->reset();
+    if (native_pool && native_output && nativeDelivery()) {
+        if (!native_gpu_) native_gpu_ = std::make_unique<composition::OpenGlFrameCompositor>(options_.gpu_surface,
+            composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext());
+        composition::OpenGlCompositionTimings timings;
+        auto texture = native_gpu_->composeTexture(job_.settings.width, job_.settings.height, layers,
+            [&] { return canceled.load(); }, &timings);
+        metrics_.upload_nanoseconds += timings.upload_nanoseconds;
+        metrics_.uploaded_bytes += timings.uploaded_bytes;
+        metrics_.native_video_imports += timings.native_video_imports;
+        metrics_.native_conversion_nanoseconds += timings.native_video_conversion_nanoseconds;
+        metrics_.draw_submission_nanoseconds += timings.draw_submission_nanoseconds;
+        metrics_.peak_known_gpu_bytes = std::max(metrics_.peak_known_gpu_bytes, native_gpu_->resourceUsage().peak_known_bytes);
+        composition::OpenGlCompositionResult copied{texture.status, {}, texture.operation, texture.cause, texture.error_code};
+        if (texture.status == composition::OpenGlCompositionStatus::Complete && texture.frame) {
+            auto destination = native_pool->acquire();
+            if (destination) copied = native_gpu_->copyToNative(texture.frame, destination, [&] { return canceled.load(); });
+            else copied = {composition::OpenGlCompositionStatus::Busy, {}, "native-output-pool", "All native encoding frames are retained."};
+            if (copied.status == composition::OpenGlCompositionStatus::Complete) {
+                *native_output = std::move(destination); ++metrics_.gpu_frames;
+                return creative_suite::media::RgbaFrame{job_.settings.width, job_.settings.height, job_.settings.width * 4};
+            }
+        }
+        if (copied.status == composition::OpenGlCompositionStatus::Cancelled || canceled.load()) throw ExportCanceled{};
+        fallback(copied, output_frame, timeline_frame);
+    }
     if (job_.settings.gpu_composition_enabled && !failed_) {
         composition::OpenGlCompositionTimings timings;
         composition::OpenGlCompositionResult result;
@@ -127,6 +176,8 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
         metrics_.draw_submission_nanoseconds += timings.draw_submission_nanoseconds;
         metrics_.readback_nanoseconds += timings.readback_nanoseconds;
         metrics_.uploaded_bytes += timings.uploaded_bytes; metrics_.readback_bytes += timings.readback_bytes;
+        metrics_.native_video_imports += timings.native_video_imports;
+        metrics_.native_conversion_nanoseconds += timings.native_video_conversion_nanoseconds;
         if (gpu_) metrics_.peak_known_gpu_bytes = std::max(metrics_.peak_known_gpu_bytes, gpu_->resourceUsage().peak_known_bytes);
         if (result.status == composition::OpenGlCompositionStatus::Cancelled || canceled.load()) throw ExportCanceled{};
         if (result.status == composition::OpenGlCompositionStatus::Complete && result.frame &&
@@ -143,7 +194,24 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
     std::optional<creative_suite::media::RgbaFrame> result;
     {
         ExportTimedScope cpu_time(metrics_.cpu_composition_nanoseconds);
-        result = composition::FrameCompositor::compose(job_.settings.width, job_.settings.height, layers);
+        auto cpu_layers = layers;
+        std::vector<creative_suite::media::RgbaFramePtr> recovered;
+        recovered.reserve(layers.size());
+        for (auto& layer : cpu_layers) {
+            if (layer.native_frame) recovered.push_back(layer.native_frame->download_rgba());
+            else if (layer.texture_frame && graph_gpu_) {
+                auto recovery = graph_gpu_->readback(layer.texture_frame, [&] { return canceled.load(); });
+                if (!recovery.frame) {
+                    fallback(recovery, output_frame, timeline_frame);
+                    if (canceled.load()) throw ExportCanceled{};
+                    throw std::runtime_error("Recovering a Fusion texture for CPU composition failed.");
+                }
+                metrics_.readback_bytes += recovery.frame->rgba_pixels.size();
+                recovered.push_back(std::make_shared<const creative_suite::media::RgbaFrame>(std::move(*recovery.frame)));
+            } else continue;
+            layer.frame = recovered.back().get(); layer.native_frame.reset(); layer.texture_frame.reset();
+        }
+        result = composition::FrameCompositor::compose(job_.settings.width, job_.settings.height, cpu_layers);
     }
     if (canceled.load()) throw ExportCanceled{};
     if (result) { ++metrics_.cpu_frames; if (job_.settings.gpu_composition_enabled) ++metrics_.fallback_frames; }

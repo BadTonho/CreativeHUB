@@ -52,10 +52,22 @@ error and disables GPU for the remainder of the item. Retry has a new backend.
 Cancellation remains ordinary control flow. Callback failures are logged under
 `export/warning_callback` or `export/metrics_callback`.
 
-Every render attempt logs `export/performance_metrics` schema 1, including failure
+Every render attempt logs `export/performance_metrics` schema 2, including failure
 and cancellation. It distinguishes requested/effective backend, CPU/GPU/encoded
 frames, fallback, source preparation, upload, draw submission, readback, encoding,
 audio, finalization, total wall time and transfer bytes. Allocation peaks describe
 known source/output buffers and textures, not process memory or actual driver VRAM.
-See [the field definitions](../GPU_EXPORT.md#export-diagnostics-schema-1).
-Preview aggregate/slow schema 9 and delivery schema 3 retain their meanings.
+Schema 2 additionally distinguishes native encoded frames, native video imports,
+conversion wall time, hardware/software decoded frames, and decoded-frame
+downloads. See [the field definitions](../GPU_EXPORT.md#export-diagnostics-schema-2).
+Preview aggregate/slow schema 9 gains additive native import/conversion counters;
+delivery schema 3 retains its meaning. `media/decode_acceleration_summary` records
+each requested hardware session's effective backend, transfer/cache bytes, and
+recovery reason. `fusion-gpu` identifies whole-graph recovery with node/frame/cause.
+
+Native export diagnostic schema 2 additionally records `decoded_downloaded_bytes`,
+`encoding_uploaded_bytes`, `decoder_reserved_gpu_bytes`, `graph_peak_gpu_bytes`,
+and `encoder_reserved_gpu_bytes`. Reservations describe known decoder texture
+arrays, graph allocations, and the bounded output pool, not driver-private VRAM.
+`peak_known_gpu_bytes` continues to describe the timeline compositor. Decode
+downloads and fallback encoder uploads are independent of composition transfers.

@@ -64,13 +64,22 @@ VideoPlaybackSession::VideoPlaybackSession(VideoPlaybackSession&&) noexcept = de
 VideoPlaybackSession& VideoPlaybackSession::operator=(VideoPlaybackSession&&) noexcept = default;
 
 std::unique_ptr<VideoPlaybackSession> VideoPlaybackSession::open(
-    const std::filesystem::path& source_path) {
+    const std::filesystem::path& source_path, creative_suite::media::DecodeOptions options) {
     return std::unique_ptr<VideoPlaybackSession>(new VideoPlaybackSession(
-        SharedSession::open(source_path, &videoEditorDecodeObserver())));
+        SharedSession::open(source_path, options, &videoEditorDecodeObserver())));
 }
 
 std::optional<VideoFramePtr> VideoPlaybackSession::decode_next_frame() {
     return session_->decode_next_frame();
+}
+
+std::optional<creative_suite::media::DecodedVideoFrame> VideoPlaybackSession::decodeFrameAtNative(
+    std::int64_t frame_index, const CancellationPredicate& cancel) {
+    return session_->decode_frame_at_native(frame_index, cancel);
+}
+std::optional<creative_suite::media::DecodedVideoFrame> VideoPlaybackSession::decodeForwardToNative(
+    std::int64_t frame_index, const CancellationPredicate& cancel, ForwardDecodeDiagnostics* diagnostics) {
+    return session_->decode_forward_to_native(frame_index, cancel, diagnostics);
 }
 
 std::optional<VideoFramePtr> VideoPlaybackSession::decode_forward_to(
@@ -107,6 +116,14 @@ VideoPlaybackSession::CacheSnapshot VideoPlaybackSession::cache_snapshot() const
 
 void VideoPlaybackSession::reset() {
     session_->reset();
+}
+
+void VideoPlaybackSession::setDecodeOptions(creative_suite::media::DecodeOptions options) {
+    session_->set_decode_options(options);
+}
+
+creative_suite::media::DecodeAccelerationDiagnostics VideoPlaybackSession::accelerationDiagnostics() const {
+    return session_->acceleration_diagnostics();
 }
 
 std::int64_t VideoPlaybackSession::current_frame_index() const noexcept {

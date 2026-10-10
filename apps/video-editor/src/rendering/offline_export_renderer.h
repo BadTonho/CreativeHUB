@@ -27,6 +27,10 @@ struct OfflineExportMetrics {
     std::uint64_t encoding_nanoseconds = 0, audio_nanoseconds = 0;
     std::uint64_t finalization_nanoseconds = 0, total_nanoseconds = 0;
     std::uint64_t peak_known_gpu_bytes = 0, peak_cpu_frame_bytes = 0, peak_prepared_source_bytes = 0;
+    std::uint64_t native_encoded_frames = 0, native_video_imports = 0, native_conversion_nanoseconds = 0;
+    std::uint64_t decoded_hardware_frames = 0, decoded_software_frames = 0, decoded_downloaded_frames = 0;
+    std::uint64_t decoded_downloaded_bytes = 0, encoding_uploaded_bytes = 0;
+    std::uint64_t decoder_reserved_gpu_bytes = 0, graph_peak_gpu_bytes = 0, encoder_reserved_gpu_bytes = 0;
 };
 
 // Small adapter seam for deterministic export fault tests. Production delegates

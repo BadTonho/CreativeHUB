@@ -232,5 +232,31 @@ int main() {
     require(applyColorAdjustment(incomplete_frame, {}) == ProcessingResult::InvalidInput &&
                 incomplete_frame.rgba_pixels == incomplete_before,
             "incomplete frame storage is rejected without mutation");
+    {
+    auto brightness = makeDefaultInstance("video.brightness");
+    auto grayscale = makeDefaultInstance("video.grayscale");
+    auto contrast = makeDefaultInstance("video.contrast");
+    auto saturation = makeDefaultInstance("video.saturation");
+    require(setParameterValue(brightness, "amount", 17.0) &&
+        setParameterValue(grayscale, "amount", 37.0) &&
+        setParameterValue(contrast, "amount", 123.0) &&
+        setParameterValue(saturation, "amount", 141.0), "pass fixture parameters");
+    auto disabled = brightness;
+    disabled.enabled = false;
+    const std::vector<EffectInstance> ordered{brightness, grayscale, disabled, contrast, saturation};
+    const auto passes = colorAdjustmentPasses(ordered);
+    require(passes && passes->size() == 4, "pass preparation preserves order and skips disabled effects");
+    auto direct_stack = fused_original;
+    auto pass_stack = fused_original;
+    require(applyStack(direct_stack, ordered), "ordered reference stack");
+    for (const auto& pass : *passes)
+        require(applyColorAdjustment(pass_stack, pass) == ProcessingResult::Completed, "prepared pass");
+    for (std::size_t i = 0; i < direct_stack.rgba_pixels.size(); ++i)
+        require(std::abs(int(direct_stack.rgba_pixels[i]) - int(pass_stack.rgba_pixels[i])) <=
+            (i % 4 == 3 ? 0 : 2), "prepared passes retain byte rounding and alpha");
+    const std::vector<EffectInstance> invalid_passes{EffectInstance{"invalid-effect", {}, true}};
+    require(!colorAdjustmentPasses(invalid_passes),
+        "invalid stacks cannot be prepared");
+    }
     return 0;
 }
