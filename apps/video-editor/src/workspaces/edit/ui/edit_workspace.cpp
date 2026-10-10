@@ -688,6 +688,11 @@ void EditWorkspace::createTimelineViewport(QWidget* container, QVBoxLayout* layo
     ui_.timeline_scroll->setAcceptDrops(true);
     ui_.timeline_scroll->viewport()->setAcceptDrops(true);
     ui_.timeline_scroll->setFrameShape(QFrame::NoFrame);
+    // Reserve both compact track viewports even when the horizontal scrollbar
+    // appears, instead of clipping the Timeline's vertically hidden overflow.
+    ui_.timeline_scroll->setMinimumHeight(
+        ui_.timeline->minimumHeight() +
+        ui_.timeline_scroll->style()->pixelMetric(QStyle::PM_ScrollBarExtent));
     ui_.timeline_scroll->setStyleSheet(
         "QScrollArea { background: transparent; border: none; }"
         "QScrollArea > QWidget > QWidget { background: transparent; }");

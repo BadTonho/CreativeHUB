@@ -174,16 +174,19 @@ int main(int argc, char* argv[]) {
         window.setCentralWidget(workspace_host);
 
         auto* inspector_dock = new QDockWidget("Inspector", &window);
+        inspector_dock->setObjectName("inspectorDock");
         inspector_dock->setWidget(workspace_host->inspectorPanel());
         window.addDockWidget(Qt::RightDockWidgetArea, inspector_dock);
         window.splitDockWidget(preview_dock, inspector_dock, Qt::Horizontal);
 
         auto* lower_dock = new QDockWidget("Timeline", &window);
+        lower_dock->setObjectName("timelineDock");
         lower_dock->setWidget(workspace_host->lowerWorkspacePanel());
         window.addDockWidget(Qt::BottomDockWidgetArea, lower_dock);
 
         const auto create_dock = [&window](const QString& title) {
             auto* dock = new QDockWidget(title, &window);
+            dock->setObjectName(title + "Dock");
             dock->setWidget(new QWidget);
             window.addDockWidget(Qt::LeftDockWidgetArea, dock);
             return dock;

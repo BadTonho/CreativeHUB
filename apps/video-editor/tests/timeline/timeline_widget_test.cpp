@@ -1999,6 +1999,9 @@ int main(int argc, char* argv[]) {
             video_overflow_tracks.push_back(std::move(track));
         }
         video_overflow_tracks.push_back(audio_first);
+        // Explicitly give the single Audio row enough viewport space. Compact
+        // dock minima no longer enlarge the widget to fit preferred row heights.
+        scroll_area.resize(900, 500);
         viewport_timeline->setTracks(std::move(video_overflow_tracks));
         application.processEvents();
         require(video_scroll->maximum() > 0 && audio_scroll->maximum() == 0,
@@ -3628,7 +3631,10 @@ int main(int argc, char* argv[]) {
                 image_edit_requested = clip_id == 919;
             });
         const QPoint image_context_position(
-            static_cast<int>(image_context_widget.contentXForFrame(15)), 100);
+            static_cast<int>(image_context_widget.contentXForFrame(15)),
+            static_cast<int>(image_context_widget.clipBounds({0, 0}).intersected(
+                image_context_widget.trackGroupViewportRect(
+                    timeline::TrackKind::Video)).center().y()));
         bool image_fusion_action_found = false;
         QTimer::singleShot(0, [&image_context_widget, &image_fusion_action_found]() {
             auto* menu = image_context_widget.findChild<QMenu*>();
@@ -3704,7 +3710,10 @@ int main(int argc, char* argv[]) {
                 video_fusion_requested = clip_id == 923;
             });
         const QPoint video_context_position(
-            static_cast<int>(video_context_widget.contentXForFrame(15)), 100);
+            static_cast<int>(video_context_widget.contentXForFrame(15)),
+            static_cast<int>(video_context_widget.clipBounds({0, 0}).intersected(
+                video_context_widget.trackGroupViewportRect(
+                    timeline::TrackKind::Video)).center().y()));
         QTimer::singleShot(0, [&video_context_widget, &video_fusion_action_found]() {
             auto* menu = video_context_widget.findChild<QMenu*>();
             if (menu == nullptr) return;

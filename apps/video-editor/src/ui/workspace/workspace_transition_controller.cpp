@@ -41,6 +41,24 @@ WorkspaceTransitionController::WorkspaceTransitionController(
             setPage(WorkspacePageId::Render);
         });
     }
+    for (auto* dock : dockWidgets()) {
+        if (dock == nullptr) continue;
+        connect(dock, &QDockWidget::visibilityChanged, this, [this](bool) {
+            if (workspace_host_ != nullptr) {
+                workspace_host_->refreshCentralWorkspaceVisibility();
+            }
+        }, Qt::QueuedConnection);
+        connect(dock, &QDockWidget::topLevelChanged, this, [this](bool) {
+            if (workspace_host_ != nullptr) {
+                workspace_host_->refreshCentralWorkspaceVisibility();
+            }
+        }, Qt::QueuedConnection);
+        connect(dock, &QDockWidget::dockLocationChanged, this, [this](Qt::DockWidgetArea) {
+            if (workspace_host_ != nullptr) {
+                workspace_host_->refreshCentralWorkspaceVisibility();
+            }
+        }, Qt::QueuedConnection);
+    }
 }
 
 void WorkspaceTransitionController::setPage(WorkspacePageId page) {
@@ -139,6 +157,7 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
                 }
             }
         }
+        workspace_host_->refreshCentralWorkspaceVisibility();
         dock_layout_before_render_.clear();
         has_render_dock_visibility_snapshot_ = false;
     }

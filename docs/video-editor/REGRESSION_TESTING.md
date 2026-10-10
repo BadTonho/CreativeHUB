@@ -155,6 +155,7 @@ and its subdirectories; shared-library tests are registered in
 | Experimental GPU offline export | `tests/ui/render_export_test.cpp` (`creative-suite-main-editor-render-export`, `creative-suite-main-editor-gpu-export`); `render_queue_model_test.cpp`; `tests/application/main_window_integration_test.cpp`; `libs/tests/opengl_composition_test.cpp` | Per-job default/snapshots/tooltips/nonmodal warning, CPU/GPU mixed queue, retry, injected limits/failures/malformed results/callback faults, cancellation/close and previous-output preservation; native pre-encoding CPU/GPU parity at 1080p/1440p/UHD/portrait 4K with exact alpha/geometry and RGB tolerance 2; RGBA/direct lookup coverage; decoded lossless output, text/keyframes/transitions/rates/trims/audio and masked linked PNG republication. Available native contexts must compose on GPU; unavailable-context skips do not approve drivers. [GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md) records builds, tests, repeated measurements and pending human/platform acceptance. |
 | GPU effects/decoding/encoding | No implementation in this stage | Planned, not implemented. [GPU_ACCELERATION_PLAN.md](GPU_ACCELERATION_PLAN.md) records follow-up gates. |
 | Effects, workspace, settings, shortcuts, and main-window flows | `libs/tests/effects_test.cpp`; `tests/effects/effects_panel_test.cpp`; `tests/settings/settings_dialog_test.cpp`, `shortcut_manager_test.cpp`; `tests/timeline/timeline_widget_test.cpp`, `timeline_command_service_test.cpp`; `tests/playback/playback_worker_test.cpp`; `tests/ui/render_export_test.cpp`; `tests/ui/workspace_page_switch_test.cpp`, `edit_workspace_controller_test.cpp`; `tests/application/main_window_integration_test.cpp`; `tests/project/project_file_test.cpp` | `EditWorkspaceActions` owns Edit-only Timeline commands, handlers, shortcut registration, and availability; the integration test checks action ownership, menu scopes, existing Delete/Ripple/Split/Copy/Paste and nudge assignments, text-field routing, Timeline preference persistence, and command disable/restore during project loading. `MainWindow` mounts these actions and forwards global loading/playback state. The [manual UI checklist](#manual-ui-validation) documents the Release-build interaction checks; cross-platform release checks remain open in the [roadmap](ROADMAP.md). |
+| Timeline dock minimum sizing | `tests/ui/timeline_dock_resize_test.cpp` (`creative-suite-main-editor-timeline-dock-resize`), registered in `tests/ui/CMakeLists.txt`, exercises the real MainWindow dock and separator mouse events. | Automated coverage checks compact resizing with side docks and with only Timeline docked, maximum-height rows with both groups scrollable, a visible minimum viewport even with horizontal scrolling, no empty center column, side-dock show/float/redock transitions, Edit/Fusion/Render switches, and compact layout restoration after reopening. Manual Release check: drag the separator above the entire Timeline downward below its previous limit; confirm both groups and controls remain available, taller rows/additional tracks scroll, and row-height preferences/project state stay unchanged. Hide or float the other docks and repeat; restore them and confirm no blank central column remains. **Automated coverage present; manual check documented, pending (P2).** |
 | Render queue and export | `tests/ui/render_queue_model_test.cpp`, `render_export_test.cpp`, `workspace_page_switch_test.cpp`; `tests/application/main_window_integration_test.cpp`; `libs/media/tests/video_encoder_test.cpp` | `RenderWorkspace` owns queue commands and continues rendering immutable job snapshots when the active workspace changes; the integration test waits for queued jobs to finish after switching Render → Edit → Fusion. Accepted application close routes cancellation through the workspace and verifies the canceled destination is not published. Existing queue/export coverage checks cancel, worker completion, output preservation, cleanup, retry, and project independence. See the manual UI checklist for switching workspaces, returning to Cancel, and closing during a queue. Manual encoder/profile, audio, rendered-appearance, and Explorer-style acceptance remains pending. |
 | Image Editor linked media | `tests/project/project_file_test.cpp`, `tests/application/application_media_services_test.cpp`, `tests/application/main_window_integration_test.cpp`, `tests/timeline/timeline_widget_test.cpp`; producer-side checks in `apps/image-editor/tests/image_editor_ui_test.cpp`, `image_editor_mask_ui_test.cpp`, and `image_editor_raster_ui_test.cpp`; the main-window consumer generates a real PNG from a linked raster image and layer mask in `.cimg` v11 via the Image Editor core when both apps are enabled and asserts retained alpha after refresh. The `.csp` contract is unchanged. | Full two-app validation is listed in [`docs/image-editor/MANUAL_VALIDATION.md`](../image-editor/MANUAL_VALIDATION.md); acceptance of remaining linked-image scenarios is pending. |
 | Motion Studio linked compositions | `tests/project/project_file_test.cpp` covers `.csp` v24 Media Pool and Timeline links plus v23 compatibility; `tests/timeline/timeline_model_test.cpp` covers retaining source, position, duration, and original audio state when linking; `tests/application/application_media_services_test.cpp` and `tests/media/media_library_test.cpp` cover a new linked Media Pool item and refreshed video presentation. Motion producer-side `.motion` source-in mapping, preview/export, migration, and versioned handoff-request cases are in `apps/motion-editor/tests/composition_document_test.cpp`, `preview_renderer_test.cpp`, `motion_video_export_test.cpp`, and `motion_document_store_test.cpp`. | Manual two-app validation remains required: create links from a video clip and from image/video Media Pool items, save multiple Motion revisions, confirm only the linked output refreshes, reopen the `.csp`, test publication cancel/failure and missing document/render recovery, test concurrent Motion writers, and confirm Save As becomes independent. See [Motion linked-composition manual check](#motion-studio-linked-composition-manual-check). |
@@ -180,7 +181,9 @@ and its subdirectories; shared-library tests are registered in
   Windows Explorer file-drop acceptance passed on 2026-10-07. Image Editor
   linked handoff remains behind its standalone and cross-application
   acceptance gates.
-- **P2 — pending validation:** record Windows release checks and complete
+- **P2 — pending validation:** confirm compact Timeline dock resizing by hand
+  in the owner's running Release build (native Windows automated resize and
+  visual inspection passed on 2026-10-09); record Windows release checks and complete
   macOS/Linux, graphics-driver, audio-device, and reference-PC performance
   results as access to those environments allows.
 - **Planned, not implemented:** the approved YouTube export preset and later
@@ -198,6 +201,25 @@ the result in the task or release validation record. This check is pending until
 the installer can be generated with Inno Setup.
 
 ## Manual UI validation
+
+Timeline dock evidence (2026-10-09, Windows 11, Video Editor 0.1.0 Release):
+`creative-suite-main-editor-timeline-dock-resize` passed with the native Windows
+platform as well as the offscreen platform. Synthetic separator mouse events
+reduced the full dock from 460 to 254 logical pixels on Windows; the viewport
+retained 150 pixels. Rendered-window inspection confirmed the toolbar, ruler,
+and both track groups remained visible without an empty central column.
+The test also checks scrolling, dock relocation, workspace switching, and
+compact layout restoration after reopening. Human pointer-drag acceptance and
+macOS/Linux native validation remain pending.
+
+The five focused Timeline/widget/workspace/controller tests passed. The broader
+`creative-suite-main-editor-main-window` test remains pending: it intermittently
+exits with `0xc0000409` while constructing the legacy Preview-layout fixture,
+also reproduced with the previous central-dock arrangement. It must be resolved
+before release acceptance. The full repository attempt passed 61/100 tests;
+35 failures were missing test executables, three were unchanged Image Editor
+test failures, and one was this main-window failure. Unrelated applications
+were not rebuilt for this application-local fix.
 
 Automated tests do not replace visual validation. The following must be checked
 in the running Video Editor after UI or integration changes:
@@ -285,9 +307,21 @@ in the running Video Editor after UI or integration changes:
   floating arrangement and confirm it restores. Enter Render with Preview
   visible and hidden, then return to Edit or Fusion and confirm the same Preview
   widget returns to its prior dock location, floating state, and visibility;
-- Timeline: confirm the dock shows only its official Timeline title, without
+- Timeline: drag the upper dock separator downward and confirm the entire
+  dock can shrink well below its former minimum (approximately 240-260 logical
+  pixels with the default Windows font/style; DPI and platform metrics may
+  vary); confirm playback controls, ruler, and both track groups remain visible,
+  including while the horizontal scrollbar is shown; expand it again;
+  close/reopen the editor and confirm the compact dock height is restored;
+  confirm the dock shows only its official Timeline title, without
   a duplicate internal title or the former Click to select interaction hint,
   while the playback controls, ruler, and clips remain available; confirm the
+  dock remains resizable when it is the only non-floating dock and a central
+  resize area appears above it; confirm the dock can be resized below the
+  preferred Video and Audio row heights while
+  retaining one minimum-height viewport per group, and confirm vertical scrolling
+  still reaches taller rows and additional tracks; confirm changing the dock
+  height does not change saved row-height preferences or project state; confirm the
   application footer keeps playback status at the left, workspace selectors
   centered, and memory usage at the right in Edit, Fusion, and Render;
   confirm Previous Frame, Play/Pause, and Next Frame show only media icons,

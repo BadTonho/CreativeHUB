@@ -4,11 +4,14 @@
 #include "workspaces/render/ui/render_workspace.h"
 
 #include <QLayout>
+#include <QDockWidget>
 #include <QMainWindow>
 #include <QStackedWidget>
 #include <QSizePolicy>
 #include <QVBoxLayout>
 #include <QWidget>
+
+#include <algorithm>
 
 namespace ui {
 
@@ -107,7 +110,7 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
         if (viewer_title_ != nullptr) {
             viewer_title_->setVisible(page == WorkspacePageId::Fusion);
         }
-        setCentralWorkspaceVisible(page == WorkspacePageId::Render);
+        refreshCentralWorkspaceVisibility();
         return;
     }
 
@@ -144,7 +147,7 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
         if (timeline_panel_ != nullptr) {
             lower_workspace_panel_->setCurrentWidget(timeline_panel_);
         }
-        setCentralWorkspaceVisible(true);
+        refreshCentralWorkspaceVisibility();
         return;
     }
 
@@ -177,8 +180,39 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
         lower_workspace_panel_->setCurrentWidget(timeline_panel_);
         inspector_panel_->setCurrentWidget(edit_inspector_);
     }
-    setCentralWorkspaceVisible(false);
     current_page_ = page;
+    refreshCentralWorkspaceVisibility();
+}
+
+void WorkspaceHost::refreshCentralWorkspaceVisibility() {
+    auto* main_window = qobject_cast<QMainWindow*>(window());
+    if (main_window == nullptr) return;
+    if (current_page_ == WorkspacePageId::Render) {
+        setMaximumWidth(QWIDGETSIZE_MAX);
+        setCentralWorkspaceVisible(true);
+        return;
+    }
+
+    const auto* timeline_dock = qobject_cast<QDockWidget*>(
+        lower_workspace_panel_ != nullptr
+            ? lower_workspace_panel_->parentWidget() : nullptr);
+    const auto docks = main_window->findChildren<QDockWidget*>();
+    const auto has_side_docked_workspace = std::any_of(
+        docks.cbegin(), docks.cend(),
+        [main_window, timeline_dock](QDockWidget* dock) {
+            if (dock == nullptr || dock == timeline_dock ||
+                dock->isHidden() || dock->isFloating()) {
+                return false;
+            }
+            const auto area = main_window->dockWidgetArea(dock);
+            return area == Qt::LeftDockWidgetArea ||
+                area == Qt::RightDockWidgetArea;
+        });
+    // Qt needs a central layout item for the bottom dock's outer separator.
+    // Collapse its width while side docks occupy the upper workspace.
+    // Retain a nonempty central rectangle for Qt's dock-layout calculations.
+    setMaximumWidth(has_side_docked_workspace ? 1 : QWIDGETSIZE_MAX);
+    setCentralWorkspaceVisible(true);
 }
 
 void WorkspaceHost::setCentralWorkspaceVisible(bool visible) {

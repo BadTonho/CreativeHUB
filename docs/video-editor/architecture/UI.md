@@ -111,18 +111,25 @@ restored with the workspace. `Preview` is a native dock that can be moved,
 resized, floated, closed, re-docked, and tabified like the other panels. Its
 `View > Preview` action reopens it when closed. The default layout keeps the
 Preview as a wide dock between Media Pool and Inspector. Outside Render, the
-main window has no empty central placeholder, so the dock areas use the
-available width without leaving a blank column between Media and Preview. The
-workspace host becomes the central widget only while Render is active. Version
-8 dock layouts receive a one-time repair that returns a collapsed, vertically split
-Preview to the default side-by-side arrangement while preserving hidden,
-floating, tabified, and other-area layouts. Version 7 layouts are upgraded
-with Preview beside Inspector. On first launch,
+workspace host remains the central widget so Qt retains the draggable outer
+separator above the bottom Timeline dock. Its maximum width is one logical pixel while
+visible, non-floating side docks occupy the editing workspace, avoiding a blank
+column between Media and Preview. Hiding, floating, or moving the last side
+dock to another area restores an empty central resize area. Render restores
+the host's unrestricted width for its settings and queue page. Version 8 dock layouts
+receive a one-time repair that returns a collapsed, vertically split Preview
+to the default side-by-side arrangement while preserving hidden, floating,
+tabified, and other-area layouts. Version 7 layouts are upgraded with Preview
+beside Inspector. On first launch,
 the Video Editor opens maximized with Media Pool on the left, Preview in the
 center, Inspector on the right, and Timeline across the bottom. Version 7 dock
 layouts are restored and upgraded with Preview in its default area. The window
 geometry and maximized state are then restored globally without affecting
 project state.
+Dock visibility, floating, and location notifications refresh the central
+width after Qt finishes the current layout operation, avoiding reentrant
+changes during native docking or saved-layout restoration. Returning from
+Render restores both the native dock layout and its saved visibility snapshot.
 The saved dock and toolbar state is restored only after the workspace docks,
 menus, and top toolbar have all been created, so Qt can resolve every saved
 layout item before applying its geometry.
@@ -324,6 +331,13 @@ The dock uses its native Timeline title as the only heading. It does not
 render a duplicate internal title or the former click-to-select interaction
 hint row; the controls and timeline content remain directly below the dock
 title.
+The dock can be resized below the preferred Video and Audio row heights. At its
+minimum size, each group retains a minimum-height viewport; taller rows and
+additional tracks remain accessible through the group's vertical scrolling.
+The outer scroll area reserves the Timeline's compact minimum height plus room
+for the horizontal scrollbar, so shrinking the entire dock does not clip the
+Audio group. Resizing the dock preserves row-height preferences and project
+state; the compact dock height persists in the global workspace layout.
 The Previous Frame, Play/Pause, and Next Frame controls use standard Qt media
 icons without visible text; their tooltips and accessible names retain the
 full action descriptions.

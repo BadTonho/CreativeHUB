@@ -10,46 +10,34 @@ This is an open-source project for a professional, lightweight, cross-platform c
 
 The current project name is temporary. Do not rename the project or create a definitive identity without an explicit decision.
 
-The main repository is a single repository. Separation should be handled through modules and folders, not independent repositories, unless a future decision based on a real need justifies it.
+Keep a single repository organized by applications under `apps/`, shared
+libraries under `libs/`, documentation under `docs/`, and experiments under
+`prototypes/`. Separate repositories require an explicit decision based on a
+concrete need.
 
 ## 2. Product Vision
 
-The suite should run on Windows, macOS, and Linux.
+The suite targets Windows, macOS, and Linux. All four applications have active
+implementations; implemented behavior and release acceptance are separate
+statuses. Consult the application documents for scope, progress, and evidence:
 
-### Video Editor
+| Application | ID | Responsibility | Scope and validation |
+| --- | --- | --- | --- |
+| Hub | `hub` | Application launching, project management, backups, storage, and per-app updates. | [Distribution plan](docs/PRODUCT_DISTRIBUTION.md), [regression guide](docs/hub/REGRESSION_TESTING.md) |
+| Video Editor | `video-editor` | Timeline editing, media organization, color, audio, text, basic motion, and export. | [Roadmap](docs/video-editor/ROADMAP.md), [architecture](docs/video-editor/ARCHITECTURE.md) |
+| Image Editor | `image-editor` | Layered raster editing, selections, masks, text, and image export. | [Scope](docs/image-editor/SCOPE.md), [roadmap](docs/image-editor/ROADMAP.md) |
+| Motion Studio | `motion-editor` | Motion design, animation curves, and advanced compositing. | [Scope and readiness](docs/motion-editor/SCOPE_AND_READINESS.md), [roadmap](docs/motion-editor/ROADMAP.md) |
 
-An audiovisual editing application focused on:
+The editor tracks may be developed in parallel. Preserve Video Editor stability
+and revisit scope if work would compromise it. Within the Image Editor track,
+validate and accept the standalone minimum before accepting linked-image
+compatibility and the first editing release. Existing handoff implementations
+remain subject to that acceptance gate. Cross-application integration requires
+validated contracts and producer/consumer regression coverage. These gates
+order acceptance of specific workflows, not development of the editor tracks.
 
-- timeline editing;
-- media organization;
-- cutting and assembly;
-- color correction and grading;
-- audio editing and mixing;
-- text, captions, and effects;
-- basic motion inside the timeline itself;
-- export to common formats.
-
-### Motion Studio
-
-A separate application for motion design and advanced compositing:
-
-- complex animations;
-- keyframes and curves;
-- animated masks;
-- nested compositions;
-- advanced text and shapes;
-- chained effects;
-- particles and 3D features in future phases, if they make sense.
-
-### Image Editor
-
-The Image Editor is part of the product vision. The Video Editor, Image Editor,
-and Motion Studio may be developed in parallel on independent tracks. Keep Video
-Editor stability as a priority and revisit scope if work would compromise it.
-Within the Image Editor track, build and validate the standalone minimum before
-accepting the linked-image compatibility workflow and first editing release.
-Gate cross-application integration on validated contracts and producer/consumer
-regression coverage.
+Keep detailed feature lists, milestones, and release status in the linked
+documents rather than duplicating them in these working rules.
 
 ## 3. Mandatory Principles
 
@@ -66,58 +54,49 @@ regression coverage.
 
 ## 4. Architecture
 
-The project must have a shared core, but the core is not a separate user-facing application. It is a set of libraries reused by the applications.
+The shared core consists of focused reusable libraries under `libs/`; it is not
+a separate user-facing application. Reuse media, animation, composition,
+effects, diagnostics, update, and other capabilities where their semantics and
+contracts are common.
 
-Expected core responsibilities:
+Keep project/document schemas, timeline models, editing workflows, UI, and
+application lifecycle orchestration owned by their applications. Undo/redo,
+autosave, recovery, and cache orchestration may remain application-specific;
+extract common services only when a real consumer need and a stable boundary
+justify it. Do not centralize these systems merely because their names match.
 
-- project and document model;
-- media import and management;
-- layers, masks, and transformations;
-- timeline and animatable properties;
-- keyframes;
-- compositing and effects;
-- rendering and GPU usage;
-- audio;
-- cache and temporary files;
-- undo, redo, autosave, and recovery;
-- export;
-- plugin system.
+Shared libraries must not depend on application UI code. Document ownership,
+resource lifetime, threading, data formats, and errors at public boundaries.
+Do not duplicate media, rendering, or animation engines without a clear
+technical justification. Share or reference frames, buffers, and GPU resources
+efficiently rather than repeatedly copying heavy data across modules.
 
-The Video Editor and Motion Studio must share the core without losing their specific responsibilities.
-
-Do not duplicate media, rendering, or animation engines without a clear technical justification.
-
-Avoid repeatedly crossing module boundaries with heavy data. Video frames, buffers, and GPU resources should be shared or referenced efficiently whenever possible.
+See [cross-application compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md)
+for reuse and handoff boundaries; code reuse does not require shared documents
+or identical application workflows.
 
 ## 5. Languages and Technologies
 
-Rust and C++ are primary candidates. There is no final decision yet.
+The current development baseline is C++20, Qt 6, CMake, and FFmpeg where media
+processing requires it. Continue within that baseline for ordinary application
+work. This records the current working direction, not a final project-wide
+language decision or a validated minimum Qt/OS version.
 
-Do not choose a language based only on personal preference or on the claim that it is always faster. The decision must consider:
+The Rust prototype is archived, and the full Rust/C++ comparison is paused.
+Rust may be reconsidered for an isolated module when a concrete benefit
+justifies its integration and maintenance costs. Each module must have a
+primary language and a well-defined API; mixed-language boundaries require an
+explicit division and compatibility coverage.
 
-- real-world performance;
-- memory usage;
-- startup time;
-- maturity of video, audio, and GPU libraries;
-- memory safety;
-- support for Windows, macOS, and Linux;
-- ease of debugging and maintenance;
-- contributor availability;
-- dependency licenses;
-- build and distribution complexity.
+Technology changes must consider measured performance, memory, startup time,
+library maturity, safety, portability, maintenance, contributors, licenses,
+and build/distribution complexity. Use representative prototypes to validate
+the affected workload before making an important decision. Do not record a
+provisional choice as final or reopen the full comparison for routine work.
 
-Using Rust and C++ together is allowed, but a mixed custom core must not be created without a clear division. Each module must have a primary language and a well-defined API.
-
-Before making a final decision, compare real prototypes that can:
-
-1. open and decode a video;
-2. navigate a timeline;
-3. display a GPU-accelerated preview;
-4. apply a simple effect;
-5. measure memory and performance;
-6. compile and run on all three operating systems.
-
-Do not record a provisional choice as a final decision.
+Consult [build and dependencies](docs/video-editor/architecture/BUILD_AND_DEPENDENCIES.md)
+and the [archived comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md)
+for current constraints and the historical validation protocol.
 
 ## 6. Interface and Performance
 
@@ -133,7 +112,16 @@ Do not record a provisional choice as a final decision.
 
 The code should avoid unnecessary dependencies on a specific operating system.
 
-When a platform-specific API is necessary, isolate it behind an abstraction or adapter. Test Windows, macOS, and Linux from the first relevant versions instead of leaving portability until the end.
+When a platform-specific API is necessary, isolate it behind an abstraction or
+adapter. Consider portability from the first relevant change and keep the CI
+build-and-test matrix for Windows, macOS, and Linux.
+
+Track portable design, successful platform builds/tests, and native runtime or
+distribution acceptance separately. A CI build does not establish acceptance
+of UI, devices, codecs, graphics drivers, signing, or packaged installations.
+Record missing validation as pending with its scope and environment; do not
+claim an unvalidated platform or feature is supported for release. Pending
+acceptance does not remove the cross-platform product requirement.
 
 Pay special attention to:
 
@@ -165,10 +153,15 @@ regression coverage from every still-supported version.
 - Do not hide important data copies or allocations.
 - Document public APIs and project formats.
 - Create tests for the core and for boundaries between modules.
-- Every new or modified function and user-facing behavior must have regression
-  coverage in the same change. Use automated tests whenever the behavior is
-  deterministic; for visual or full-application interactions, add a
-  documented manual validation step and keep the automated boundary tests.
+- Every new or changed behavior and contract must have regression coverage in
+  the same change. Existing tests may satisfy this requirement when they
+  directly exercise the affected behavior; extend them when coverage is
+  insufficient. Test observable behavior and contracts rather than requiring
+  a separate test for each internal function.
+- For a bug fix, add a regression test reproducing the failure when practical.
+  Use automated tests for deterministic behavior. For visual or
+  full-application interactions that cannot be automated reliably, document a
+  reproducible manual check and retain automated model and boundary coverage.
 - Apply the repository-wide requirements in
   [`docs/REGRESSION_POLICY.md`](docs/REGRESSION_POLICY.md) to every existing
   application, shared module, and future application. Keep each app's
@@ -183,6 +176,10 @@ regression coverage from every still-supported version.
   Changes isolated to one application do not require rebuilding unrelated apps.
 - A feature is not considered complete until its tests pass and its relevant
   regression coverage is updated.
+- Scope local builds and tests to the affected application, libraries, and
+  consumers. Full repository validation belongs in CI and release acceptance,
+  or local work when the change's impact requires it. Follow the detailed
+  gates and documentation-only checks in `docs/REGRESSION_POLICY.md`.
 - Use static analysis, sanitizers, fuzzing, and profiling when appropriate for the chosen technology.
 - Handle media errors, corrupted files, and resource shortages without unexpectedly terminating the application.
 - Every application and failure-prone module must maintain an actionable error log so problems can be diagnosed and corrected.
@@ -218,7 +215,8 @@ Important decisions must be recorded in the documentation, indicating whether th
 - Inspect the current structure and state before assuming how something should work.
 - Preserve existing user changes.
 - Make small, coherent changes.
-- Keep the project organized into clear categories and subcategories. Avoid introducing an unnecessary monorepo structure; prefer a single coherent repository organized by modules and folders unless a concrete technical or organizational need justifies otherwise.
+- Follow the application and library layout in section 1. Introduce additional
+  repository tooling or structure only when a concrete need justifies it.
 - Do not add dependencies without justifying the need and license.
 - Do not delete, reset, or overwrite existing work without explicit authorization.
 - Do not generate application installers or release packages unless the user
@@ -259,9 +257,12 @@ Important decisions must be recorded in the documentation, indicating whether th
   removals. If a version change contains no user-visible changes, state that
   and summarize the relevant maintenance or distribution changes. Write
   changelog entries in English, like other project documentation.
-- Document every user-facing keyboard shortcut in `docs/video-editor/SHORTCUTS.md` and
-  update that file in the same change whenever a shortcut is added, removed, or
-  changed.
+- Document user-facing keyboard shortcuts in the corresponding application's
+  guide, such as `docs/video-editor/SHORTCUTS.md` or
+  `docs/image-editor/SHORTCUTS.md`. Create `docs/<application-id>/SHORTCUTS.md`
+  when an application needs its first guide. Update the affected guides in the
+  same change whenever shortcuts are added, removed, or changed, including
+  every affected application for shared shortcut behavior.
 - Do not turn a conversation or hypothesis into code unless requested.
 - Use temporary names while the product identity has not been defined.
 
@@ -278,19 +279,3 @@ Before staging files for publication, creating a commit, opening a pull request,
 - If there is any suspicious file or uncertainty about publishing it, stop and ask for guidance before continuing.
 
 Do not commit or push automatically. These actions require explicit user authorization.
-
-## 11. Current State
-
-- The product vision is still being defined.
-- The project does not yet have a final decision between Rust and C++.
-- The target platforms are Windows, macOS, and Linux.
-- The planned applications are the Video Editor, Image Editor, and Motion
-  Studio.
-- The Video Editor, Image Editor, and Motion Studio may be developed in
-  parallel on independent tracks. Preserve Video Editor stability as a
-  priority. Within the Image Editor track, its standalone minimum precedes
-  linked-image compatibility acceptance and the first editing release.
-- The architecture must remain in a single repository.
-- Cross-application features depend on validated interfaces and producer/
-  consumer regression coverage; they do not impose a single development order
-  on the three application tracks.

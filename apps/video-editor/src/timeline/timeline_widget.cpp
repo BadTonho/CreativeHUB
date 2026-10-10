@@ -113,11 +113,11 @@ std::optional<std::size_t> indexForTrack(
 
 TimelineWidget::TimelineWidget(QWidget* parent)
     : QWidget(parent) {
-    setMinimumHeight(100);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setAcceptDrops(true);
     setMouseTracking(true);
     setContextMenuPolicy(Qt::DefaultContextMenu);
+    updateVerticalExtent();
 }
 
 void TimelineWidget::setFrameRate(FrameRate frame_rate) noexcept {
@@ -1138,9 +1138,10 @@ QRectF TimelineWidget::rulerRect() const noexcept {
 void TimelineWidget::updateVerticalExtent() {
     constexpr double bottom_margin = 12.0;
     const auto minimum_height = static_cast<int>(std::ceil(
-        TimelineGeometry::top_margin + video_track_row_height_ +
-        audio_track_row_height_ +
+        TimelineGeometry::top_margin + 2.0 * kMinimumTrackRowHeight +
         track_group_splitter_height + bottom_margin));
+    // Keep the dock resizable independently from the preferred row heights.
+    // Larger rows remain available through each group's vertical scrolling.
     setMinimumHeight(std::max(100, minimum_height));
     updateGeometry();
     const auto current_geometry = geometry();

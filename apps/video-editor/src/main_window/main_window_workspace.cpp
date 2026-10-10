@@ -1133,6 +1133,9 @@ void MainWindow::restoreWorkspaceLayout() {
     const auto saved_state = settings.value(
         "workspace/dock_layout_state").toByteArray();
     if (!saved_state.isEmpty() && restoreState(saved_state, 9)) {
+        if (workspace_host_ != nullptr) {
+            workspace_host_->refreshCentralWorkspaceVisibility();
+        }
         initial_window_layout_pending_ = false;
         return;
     }
@@ -1163,6 +1166,9 @@ void MainWindow::restoreWorkspaceLayout() {
         }
         initial_window_layout_pending_ = false;
         saveWorkspaceLayout();
+        if (workspace_host_ != nullptr) {
+            workspace_host_->refreshCentralWorkspaceVisibility();
+        }
         return;
     }
     if (!saved_state.isEmpty() && restoreState(saved_state, 7)) {
@@ -1172,10 +1178,16 @@ void MainWindow::restoreWorkspaceLayout() {
         preview_dock_->show();
         initial_window_layout_pending_ = false;
         saveWorkspaceLayout();
+        if (workspace_host_ != nullptr) {
+            workspace_host_->refreshCentralWorkspaceVisibility();
+        }
         return;
     }
 
     restoreDefaultLayout();
+    if (workspace_host_ != nullptr) {
+        workspace_host_->refreshCentralWorkspaceVisibility();
+    }
 }
 
 void MainWindow::saveWorkspaceLayout() {

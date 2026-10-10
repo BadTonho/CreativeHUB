@@ -12,9 +12,13 @@ codec installation.
 
 ## Required Coverage for Every Change
 
-- Add regression coverage in the same change as every new or modified function
-  and user-facing behavior. Tests should assert behavior and contracts rather
-  than implementation details.
+- Ensure regression coverage in the same change for every new or changed
+  behavior and contract, including user-facing behavior and shared interfaces.
+  Existing tests may satisfy the requirement when they directly exercise the
+  affected behavior and relevant cases; add or extend coverage where they do
+  not. Tests should assert observable behavior and contracts rather than
+  implementation details or one test per internal function. Refactoring with
+  unchanged behavior still requires running the relevant regression tests.
 - Use automated tests whenever behavior is deterministic. Cover normal use,
   relevant boundary cases, failure handling, and state changes such as undo,
   redo, save, reopen, and recovery when applicable.
@@ -103,16 +107,36 @@ visible result in each.
 
 ## Local and Continuous-Integration Gates
 
-Before considering an application change complete:
+For local implementation work, identify the affected behavior, libraries, and
+consumers before choosing build targets and tests:
 
-1. Build the affected application and run its focused tests.
-2. Run the repository's complete CTest suite to catch regressions in shared
-   libraries and other applications.
-3. Complete the linked manual checks for visual, hardware-dependent, or
+1. For an application-local change, build that application and its required
+   test targets, then run its relevant unit, integration, and application tests.
+   Unrelated applications do not need to be rebuilt or retested.
+2. For a shared-library, format, protocol, or handoff change, build and test the
+   affected library and every affected consumer or producer application.
+   Include supported-version compatibility tests where applicable.
+3. Broaden the local gate to the full repository when the impact requires it,
+   such as changes to common build infrastructure or dependencies used across
+   the suite. Choose scope from the dependency and contract impact, not merely
+   from which source file changed.
+4. Complete the linked manual checks for visual, hardware-dependent, or
    otherwise non-automatable behavior.
-4. Run `git diff --check` and review the changed behavior and its test coverage.
+5. Run `git diff --check` and review the changed behavior and its test coverage.
 
-The current local CMake gate is:
+Use explicit CMake `--target` selections for the application and required test
+targets, and CTest `-R` or `-L` filters for the relevant registered tests.
+Verify that the selection actually includes the intended tests and their
+dependencies; a passing filter that selects no tests is not validation. See
+the application guides below for test names and subsystem coverage.
+
+Documentation-only changes require reviewing statements and documented commands
+against their implementation or configuration, checking referenced links and
+paths, and running `git diff --check`. They do not require application builds
+or runtime tests unless code or build configuration also changes.
+
+The full repository gate is required in CI and release acceptance. Its CMake
+commands are:
 
 ```powershell
 cmake --build build --config Release --parallel 4
@@ -120,12 +144,15 @@ ctest --test-dir build -C Release --output-on-failure
 git diff --check
 ```
 
-The GitHub Actions workflow must build and test the repository on Windows,
-macOS, and Linux. Changes that affect interoperability must build and test all
-affected producer and consumer applications. A change is not ready for release
-while a relevant automated gate fails or a required manual check is unrecorded.
-Resolve failures or update expected behavior and its tests deliberately; do not
-silently bypass a failing regression check.
+The GitHub Actions workflow must build and run the complete registered test
+suite on Windows, macOS, and Linux. Record automated platform results separately
+from native UI, hardware, codec, and packaged-runtime acceptance; a successful
+CI build does not establish those manual results. Missing platform or manual
+acceptance must remain explicitly pending in the relevant application guide.
+A change is not ready for release while a relevant automated gate fails or a
+required manual check is unrecorded. Resolve failures or update expected
+behavior and its tests deliberately; do not silently bypass a failing
+regression check.
 
 Every new application must register its automated suite with CTest or the
 repository's equivalent test runner, add its feature-to-verification index,

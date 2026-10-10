@@ -30,6 +30,7 @@ public:
         QWidget* parent = nullptr);
 
     void setPage(WorkspacePageId page);
+    void refreshCentralWorkspaceVisibility();
     [[nodiscard]] WorkspacePageId currentPage() const noexcept;
 
     [[nodiscard]] QWidget* previewWidget() const noexcept;
