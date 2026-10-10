@@ -14,6 +14,7 @@
 #include <creative_suite/media/media_importer.h>
 #include <creative_suite/media/media_library.h>
 #include "settings/gpu_composition_preferences.h"
+#include <QOpenGLContext>
 
 #include <QAction>
 #include <QApplication>
@@ -314,26 +315,32 @@ void MainWindow::createWorkspace()
                 {{"setting", "CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1"}});
         }
     }
+    auto* share = gpu_composition_enabled ? QOpenGLContext::globalShareContext() : nullptr;
+    if (share) {
+        viewer_->enableTexturePresentation([this](bool use_cpu) {
+            if (!preview_renderer_) return;
+            preview_renderer_->recoverPresentation(use_cpu);
+            requestPreview();
+        });
+    }
+    viewer_->setFrameValidator([this](const PreviewFrame& frame) {
+        return preview_renderer_ && preview_renderer_->canPresentResult(frame.generation,
+            frame.playback ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive,
+            frame.cancellation_generation);
+    });
     preview_renderer_ = std::make_unique<PreviewRenderer>(this,
-        [this](std::uint64_t generation,
-               PreviewRequestMode mode,
-               std::uint64_t cancellation_generation,
-               creative_suite::media::RgbaFramePtr frame) {
-            const bool may_present = preview_renderer_ &&
-                preview_renderer_->canPresentResult(
-                    generation, mode, cancellation_generation) &&
-                (mode != PreviewRequestMode::Playback ||
-                 (timeline_ != nullptr && timeline_->isPlaying()));
-            if (may_present && viewer_ != nullptr) {
-                if (frame != nullptr) {
-                    viewer_->setRenderedFrame(std::move(frame), generation);
-                } else {
-                    diagnostics::PerformanceMetrics::instance().discardRequest(generation);
-                }
-            } else {
-                diagnostics::PerformanceMetrics::instance().recordStaleResult(generation);
-            }
-        }, nullptr, nullptr, gpu_composition_enabled, gpu_composition_surface_.get());
+        PreviewRenderer::ResultHandler{}, PreviewRenderer::RenderFunction{}, nullptr,
+        gpu_composition_enabled, gpu_composition_surface_.get(),
+        [this](PreviewFrame frame) {
+            const auto mode = frame.playback ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive;
+            const bool may_present = preview_renderer_ && preview_renderer_->canPresentResult(
+                frame.generation, mode, frame.cancellation_generation) &&
+                (!frame.playback || (timeline_ && timeline_->isPlaying()));
+            if (may_present && viewer_) {
+                if (frame.valid()) viewer_->setPreviewFrame(std::move(frame));
+                else diagnostics::PerformanceMetrics::instance().discardRequest(frame.generation);
+            } else diagnostics::PerformanceMetrics::instance().recordStaleResult(frame.generation);
+        }, share);
     if (!was_maximized && !was_full_screen) setGeometry(previous_geometry);
 }
 void MainWindow::restoreWorkspaceLayout()

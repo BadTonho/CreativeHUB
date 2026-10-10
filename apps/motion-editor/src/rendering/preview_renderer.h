@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/composition_document.h"
+#include "preview_frame.h"
 #include "../diagnostics/performance_metrics.h"
 
 #include <creative_suite/media/video_frame.h>
@@ -18,6 +19,7 @@
 #include <vector>
 
 class QOffscreenSurface;
+class QOpenGLContext;
 
 namespace motion::ui {
 
@@ -81,6 +83,7 @@ public:
         PreviewRequestMode,
         std::uint64_t,
         creative_suite::media::RgbaFramePtr)>;
+    using FrameResultHandler = std::function<void(PreviewFrame)>;
     using CancellationPredicate = std::function<bool()>;
     using RenderFunction = std::function<creative_suite::media::RgbaFramePtr(
         const PreviewRequest&,
@@ -91,7 +94,9 @@ public:
                     RenderFunction render_function = {},
                     diagnostics::PerformanceMetrics* metrics = nullptr,
                     bool gpu_composition_enabled = false,
-                    QOffscreenSurface* gpu_surface = nullptr);
+                    QOffscreenSurface* gpu_surface = nullptr,
+                    FrameResultHandler frame_handler = {},
+                    QOpenGLContext* texture_share_context = nullptr);
     ~PreviewRenderer() override;
 
     [[nodiscard]] std::uint64_t submit(
@@ -104,17 +109,29 @@ public:
         PreviewRequestMode mode,
         std::uint64_t cancellation_generation) const noexcept;
     void stopAndWait();
+    // GUI thread: invalidate outstanding deliveries; the next request is
+    // recomposed on the worker through RGBA (or CPU after context failure).
+    void recoverPresentation(bool use_cpu);
+    [[nodiscard]] unsigned pendingDeliveryCount() const;
 
 protected:
     void run() override;
 
 private:
-    [[nodiscard]] creative_suite::media::RgbaFramePtr render(
+    [[nodiscard]] PreviewFrame render(
         const PreviewRequest& request,
         std::uint64_t cancellation_generation,
-        PreviewRequestMode mode);
+        PreviewRequestMode mode, bool& texture_busy);
     QObject* result_receiver_ = nullptr;
-    ResultHandler result_handler_;
+    struct Mailbox {
+        std::mutex mutex;
+        std::optional<PreviewFrame> frame;
+        bool drain_queued = false;
+    };
+    std::shared_ptr<Mailbox> mailbox_ = std::make_shared<Mailbox>();
+    void publish(PreviewFrame frame);
+    void clearDelivery();
+    FrameResultHandler frame_handler_;
     RenderFunction render_function_;
     struct PendingRequest {
         std::uint64_t generation = 0;
@@ -129,6 +146,9 @@ private:
     std::uint64_t in_flight_generation_ = 0;
     bool reset_sessions_pending_ = false;
     bool stopping_ = false;
+    bool disable_texture_pending_ = false;
+    bool disable_gpu_pending_ = false;
+    QOpenGLContext* texture_share_context_ = nullptr;
     std::atomic<std::uint64_t> generation_{0};
     std::atomic<std::uint64_t> cancellation_generation_{0};
     std::unique_ptr<CompositionFrameRenderer> frame_renderer_;

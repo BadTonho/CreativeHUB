@@ -69,7 +69,15 @@ public:
         bool fail_on_media_error = false,
         PreviewRequestMode mode = PreviewRequestMode::Interactive,
         std::optional<creative_suite::composition::OpenGlReadbackTicket>* async_ticket = nullptr,
-        bool* async_failure = nullptr);
+        bool* async_failure = nullptr,
+        creative_suite::composition::OpenGlTextureFramePtr* texture = nullptr,
+        bool* texture_busy = nullptr);
+    // Worker-only. The share context is borrowed, never operated on this thread.
+    void configureTextureDelivery(QOpenGLContext* share_context);
+    void disableTextureDelivery(bool use_cpu);
+    void collectTextureFrames();
+    [[nodiscard]] std::uint64_t texturePoolBytes() const noexcept;
+    [[nodiscard]] unsigned texturePoolOccupancy() const;
     // Drop outstanding PBO tickets and disable GPU composition after a failed
     // asynchronous export transfer. Call on the renderer worker thread.
     void recoverAsyncReadbackFailure();
@@ -101,6 +109,9 @@ private:
     QOffscreenSurface* gpu_surface_ = nullptr; // borrowed from the GUI thread owner
     CompositionGpuMetrics* gpu_metrics_ = nullptr; // borrowed for one render job
     std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor> gpu_compositor_;
+    QOpenGLContext* texture_share_context_ = nullptr;
+    bool texture_delivery_disabled_ = false;
+    std::shared_ptr<creative_suite::composition::OpenGlTexturePoolBudget> texture_budget_;
     bool async_readback_prepared_ = false;
     unsigned async_readback_slots_ = 0;
     std::uint64_t async_readback_staging_budget_bytes_ = 128ULL * 1024 * 1024;

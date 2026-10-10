@@ -861,9 +861,9 @@ int main(int argc, char* argv[])
             "playback coalesces queued frames and eventually renders the newest frame");
     require(!playback_was_cancelled.load() && playback_applied_frame != nullptr &&
                 playback_applied_frame->rgba_pixels[0] == 10 &&
-                std::find(playback_presented_colors.begin(), playback_presented_colors.end(), 240) !=
-                    playback_presented_colors.end(),
-            "a completed playback frame can display while newer ticks coalesce to the latest frame");
+                playback_renderer.canPresentResult(first_playback_generation,
+                    motion::ui::PreviewRequestMode::Playback, 0),
+            "completed playback remains eligible while the bounded mailbox presents the latest frame");
 
     const auto slow_playback_generation = playback_renderer.submit(
         imageRequest(solidFrame(200, 0, 0)), motion::ui::PreviewRequestMode::Playback);

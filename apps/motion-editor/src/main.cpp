@@ -8,6 +8,8 @@
 #include <QApplication>
 #include <QIcon>
 #include <QFileInfo>
+#include <QSurfaceFormat>
+#include "settings/gpu_composition_preferences.h"
 
 #ifndef CREATIVE_SUITE_APP_VERSION
 #define CREATIVE_SUITE_APP_VERSION "0.1.0"
@@ -17,6 +19,14 @@ int main(int argc, char* argv[])
 {
     static_cast<void>(creative_suite::diagnostics::Logger::instance()
                          .initialize_default("motion-studio"));
+    if (motion::settings::gpuCompositionEnabled()) {
+        QSurfaceFormat format;
+        format.setRenderableType(QSurfaceFormat::OpenGL);
+        format.setVersion(3, 2);
+        format.setProfile(QSurfaceFormat::CoreProfile);
+        QSurfaceFormat::setDefaultFormat(format);
+        QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+    }
     QApplication application(argc, argv);
     application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));

@@ -25,6 +25,10 @@ enum class PreviewTimingStage : std::size_t {
     GpuCompositionReadback,
     GpuColorAdjustment,
     GpuGaussianBlur,
+    GpuProducerFenceSubmission,
+    GpuViewerWaitSubmission,
+    GpuViewerDrawSubmission,
+    GpuViewerFenceSubmission,
     FrameRender,
     RequestToViewerPaint,
     Count
@@ -44,7 +48,22 @@ struct TimingSummary {
     std::uint64_t p99_nanoseconds = 0;
 };
 
+struct PreviewDeliveryMetrics {
+    std::uint64_t texture_deliveries = 0;
+    std::uint64_t rgba_deliveries = 0;
+    std::uint64_t texture_presented = 0;
+    std::uint64_t rgba_presented = 0;
+    std::uint64_t presentation_recoveries = 0;
+    std::uint64_t pool_bytes = 0;
+    std::uint64_t pool_peak_bytes = 0;
+    std::uint64_t pool_occupancy = 0;
+    std::uint64_t pool_peak_occupancy = 0;
+    std::uint64_t busy_drops = 0;
+    std::uint64_t busy_retries = 0;
+};
+
 struct PreviewMetricsSnapshot {
+    PreviewDeliveryMetrics delivery;
     std::uint64_t requests = 0;
     std::uint64_t rendered_frames = 0;
     std::uint64_t coalesced_requests = 0;
@@ -130,6 +149,11 @@ public:
     void recordEffectTiming(PreviewEffectKind effect,
                             std::uint64_t duration_nanoseconds) noexcept;
     void recordViewerPaint(std::uint64_t generation) noexcept;
+    void recordDelivery(bool texture) noexcept;
+    void recordPresentation(bool texture) noexcept;
+    void recordPresentationRecovery() noexcept;
+    void recordTexturePool(std::uint64_t bytes, unsigned occupancy,
+                           bool busy = false, bool playback = false) noexcept;
 
     [[nodiscard]] std::optional<PreviewMetricsSnapshot>
     takeSnapshotAndReset() noexcept;
@@ -147,6 +171,7 @@ private:
                             std::uint64_t duration_nanoseconds) noexcept;
     mutable std::mutex mutex_;
     bool enabled_ = false;
+    PreviewDeliveryMetrics delivery_;
     std::uint64_t requests_ = 0;
     std::uint64_t rendered_frames_ = 0;
     std::uint64_t coalesced_requests_ = 0;

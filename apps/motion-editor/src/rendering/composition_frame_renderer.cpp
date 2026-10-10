@@ -99,6 +99,33 @@ void CompositionGpuMetrics::record(
     gaussian_blur_count += timings.gaussian_blur_count;
 }
 
+void CompositionFrameRenderer::configureTextureDelivery(QOpenGLContext* share_context) {
+    texture_share_context_ = share_context;
+    texture_budget_ = std::make_shared<creative_suite::composition::OpenGlTexturePoolBudget>();
+}
+void CompositionFrameRenderer::disableTextureDelivery(bool use_cpu) {
+    texture_delivery_disabled_ = true;
+    if (use_cpu) gpu_composition_disabled_after_failure_ = true;
+}
+std::uint64_t CompositionFrameRenderer::texturePoolBytes() const noexcept {
+    return texture_budget_ ? texture_budget_->bytes() : 0;
+}
+unsigned CompositionFrameRenderer::texturePoolOccupancy() const {
+    return gpu_compositor_ ? gpu_compositor_->texturePoolOccupancy() : 0;
+}
+void CompositionFrameRenderer::collectTextureFrames() {
+    if (!gpu_compositor_ || !texture_budget_) return;
+    const auto result = gpu_compositor_->collectReleasedTextureFrames();
+    if (result.status == creative_suite::composition::OpenGlCompositionStatus::Failed &&
+        !texture_delivery_disabled_) {
+        disableTextureDelivery(true);
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Error,
+            "motion_preview", "collect_texture_frames", result.cause,
+            {{"operation", result.operation}, {"error_code", std::to_string(result.error_code)}});
+    }
+}
+
 void CompositionFrameRenderer::reset()
 {
     video_sessions_.clear();
@@ -142,10 +169,14 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     bool fail_on_media_error,
     PreviewRequestMode mode,
     std::optional<creative_suite::composition::OpenGlReadbackTicket>* async_ticket,
-    bool* async_failure)
+    bool* async_failure,
+    creative_suite::composition::OpenGlTextureFramePtr* texture,
+    bool* texture_busy)
 {
     using creative_suite::composition::CompositionLayer;
     using creative_suite::media::VideoPlaybackSession;
+    if (texture) texture->reset();
+    if (texture_busy) *texture_busy = false;
     if (async_ticket) async_ticket->reset();
     if (async_failure) *async_failure = false;
 
@@ -486,6 +517,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         using creative_suite::composition::OpenGlCompositionStatus;
         creative_suite::composition::OpenGlCompositionTimings gpu_timings;
         creative_suite::composition::OpenGlCompositionResult gpu_result;
+        creative_suite::composition::OpenGlTextureFramePtr gpu_texture;
         if (gpu_metrics_ != nullptr) ++gpu_metrics_->composition_attempts;
         if (gpu_surface_ == nullptr) {
             gpu_result.status = OpenGlCompositionStatus::Failed;
@@ -495,9 +527,42 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             try {
                 if (!gpu_compositor_) {
                     gpu_compositor_ = std::make_unique<
-                        creative_suite::composition::OpenGlFrameCompositor>(gpu_surface_);
+                        creative_suite::composition::OpenGlFrameCompositor>(
+                            gpu_surface_, creative_suite::composition::OpenGlPrecisionPolicy::Automatic,
+                            texture_share_context_, texture_budget_);
                 }
                 bool use_synchronous_gpu = true;
+                if (texture && texture_share_context_ && !texture_delivery_disabled_) {
+                    const auto direct = gpu_compositor_->composeTexture(
+                        request.canvas_size.width, request.canvas_size.height,
+                        composition_layers, should_cancel, &gpu_timings);
+                    if (record_preview_metrics_) {
+                        diagnostics::PerformanceMetrics::instance().recordTexturePool(
+                            texturePoolBytes(), texturePoolOccupancy());
+                    }
+                    if (direct.status == OpenGlCompositionStatus::Busy) {
+                        if (texture_busy) *texture_busy = true;
+                        return {};
+                    }
+                    if (direct.status == OpenGlCompositionStatus::Complete && direct.frame) {
+                        gpu_texture = direct.frame;
+                        gpu_result.status = direct.status;
+                        use_synchronous_gpu = false;
+                    } else if (direct.status == OpenGlCompositionStatus::Unsupported) {
+                        // A target beyond the bounded pool uses the legacy RGBA route.
+                        texture_delivery_disabled_ = true;
+                        creative_suite::diagnostics::Logger::instance().log(
+                            creative_suite::diagnostics::Level::Warning,
+                            "motion_preview", "texture_delivery_unavailable", direct.cause,
+                            {{"operation", direct.operation}, {"error_code", std::to_string(direct.error_code)}});
+                    } else {
+                        gpu_result.status = direct.status;
+                        gpu_result.operation = direct.operation;
+                        gpu_result.cause = direct.cause;
+                        gpu_result.error_code = direct.error_code;
+                        use_synchronous_gpu = false;
+                    }
+                }
                 if (async_ticket != nullptr) {
                     if (!async_readback_prepared_) {
                         async_readback_prepared_ = true;
@@ -581,7 +646,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             return {};
         }
         if (gpu_result.status == OpenGlCompositionStatus::Complete &&
-            gpu_result.frame.has_value()) {
+            (gpu_result.frame.has_value() || gpu_texture)) {
             if (gpu_metrics_ != nullptr) ++gpu_metrics_->composition_frames;
             if (record_preview_metrics_ &&
                 (gpu_timings.color_adjustment_count != 0 ||
@@ -605,6 +670,15 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                     true, false, gpu_timings.uploaded_bytes, gpu_timings.readback_bytes,
                     gpu_timings.upload_nanoseconds, gpu_timings.draw_submission_nanoseconds,
                     gpu_timings.readback_nanoseconds);
+            }
+            if (gpu_texture && texture) {
+                if (record_preview_metrics_) {
+                    diagnostics::PerformanceMetrics::instance().recordTiming(
+                        diagnostics::PreviewTimingStage::GpuProducerFenceSubmission,
+                        gpu_timings.producer_fence_submission_nanoseconds);
+                }
+                *texture = std::move(gpu_texture);
+                return {};
             }
             return std::make_shared<const creative_suite::media::RgbaFrame>(
                 std::move(*gpu_result.frame));

@@ -2,6 +2,8 @@
 
 Status: **experimental preview composition, effects, and opt-in offline export
 implemented on 2026-10-07; native driver and performance acceptance pending**.
+Direct texture preview is implemented experimentally on 2026-10-10; see
+[GPU_TEXTURE_PREVIEW.md](GPU_TEXTURE_PREVIEW.md) for delivery, recovery and tests.
 The first consumer of the shared GPU compositor is Video Editor. Each stage has a separate delivery and
 acceptance gate; completing one stage does not imply that the whole renderer
 has moved to the GPU.
@@ -33,15 +35,15 @@ applied in the shared OpenGL composition shader. Stacks with Gaussian Blur use
 an ordered shared effect sequence before layer blending; one reusable RGBA8
 scratch texture is bounded to 64 MiB per worker. Blur matches Motion's three
 horizontal/vertical box-filter pairs, premultiplied-alpha processing, clamped
-edges, and per-pass RGBA8 rounding. The GPU compositor reads the completed
-frame back to RGBA for the existing viewer or encoder input.
+edges, and per-pass RGBA8 rounding. The GPU compositor can deliver a shared texture directly to the Motion viewer;
+RGBA recovery and export still read back the completed frame.
 Unsupported contexts and GPU failures fall back to CPU; after the first GPU
 failure, the worker keeps using CPU for effects and composition for the rest of
 its lifetime to avoid repeated errors. The same opt-in controls preview and
 offline export; both remain CPU-only by default. Each export creates a separate
 GUI-owned offscreen surface and keeps it alive until its worker has destroyed
 the worker-owned context and compositor.
-Diagnostics schema 7 reports GPU composition, Color Adjustment, and Gaussian
+Diagnostics schema 8 reports GPU composition, Color Adjustment, and Gaussian
 Blur counts, fallbacks, failures, upload/readback bytes, and stage timings.
 Export summary schema 3 records the requested/used backend, rendered GPU and
 CPU-fallback frame counts, failures, uploaded/readback bytes, and average
@@ -70,7 +72,7 @@ delivered about 11 fps; with no effects applied, it delivered about 59 fps.
 The completed 60 fps export ran at 33.79 fps (0.563× realtime). The full
 measurements and limits are in
 [PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md](PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md).
-The preview log uses schema 4 while the current source emits schema 7, so it
+The preview log uses schema 4 while the current source emits schema 8, so it
 does not contain GPU counters and cannot establish GPU-path performance.
 
 ## Stage 1 — Layer composition
@@ -94,10 +96,10 @@ does not contain GPU counters and cannot establish GPU-path performance.
   same request on the CPU. Hardware limits must also allow a CPU fallback.
 - Reuse bounded GPU allocations. Document source uploads and output readback
   explicitly rather than claiming a path without CPU/GPU transfers. Preview
-  retains synchronous readback; export can use two PBO slots within a 128 MiB
-  staging budget.
+  can consume shared textures directly, with RGBA recovery; export can use two
+  PBO slots within a 128 MiB staging budget.
 - GPU frame/resource timing and byte totals are included in Motion preview
-  diagnostics schema 7. Export-specific totals are collected per job in
+  diagnostics schema 8. Export-specific totals are collected per job in
   `export_summary` schema 3; asynchronous submission, fence wait, copy,
   encoder queue, and staging metrics do not share the preview interval collector.
 - Keep `.motion` v4, recovery v1, `.cimg` v11, and `.csp` unchanged.
@@ -142,7 +144,7 @@ must stay experimental until these results are recorded.
 - The shared composition layer accepts up to the Motion document limit of 256
   adjustments in a stack. Stage 2B extends this contract with ordered mixed
   Color Adjustment and Gaussian Blur stacks. The existing opt-in setting
-  controls the GPU path; CPU remains the default and export backend.
+  controls the GPU path; CPU remains the default and export can opt into GPU.
 - Automated parity covers varied and repeated adjustments, transparent source
   pixels, unchanged alpha, cancellation, mixed-stack CPU fallback, and GPU
   initialization fallback. RGB tolerance is one channel level; alpha is exact.
@@ -170,9 +172,9 @@ in preview, playback, or document behavior.
 
 ## Stage 3 — Preview presentation and export (async export readback implemented)
 
-- Share or reference completed textures across worker and viewer contexts;
+- [x] Share or reference completed textures across worker and viewer contexts;
   define ownership, synchronization, cancellation, and release rules.
-- Replace full-frame readback for preview when the GPU viewer can consume the
+- [x] Replace full-frame readback for preview when the GPU viewer can consume the
   texture directly; retain CPU presentation when unavailable.
 - [x] Integrate the GPU backend into offline export with the same effects and
   geometry contract. Read back at the current CPU encoder boundary; hardware
@@ -194,12 +196,17 @@ in preview, playback, or document behavior.
   median must be 52.21 s or lower (5% improvement) without visual or
   cancellation regressions. Native macOS/Linux driver and performance checks
   remain pending.
-- [ ] Share GPU textures with the preview viewer and remove full-frame readback
-  only if measurements justify the added ownership and synchronization rules.
+- [x] Implement bounded shared-texture preview using the existing compositor,
+  single-result mailbox, generation validation and worker-side RGBA/CPU recovery.
+- [x] Record three paired preview trials per route on the Windows reference
+  fixture, including 30 fps and 60 fps stress; see [results](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md).
+- [ ] Complete broader manual/native platform acceptance before enabling GPU
+  by default. See [direct preview](GPU_TEXTURE_PREVIEW.md).
 
 **Stage 3 exit:** export uses the covered renderer contract. The stage remains
-open until paired performance results and native platform checks are recorded;
-preview texture delivery remains a separate planned item.
+open until the original-project export performance results and native platform
+checks are recorded;
+direct preview implementation is separate from performance and platform acceptance.
 
 ## Stage 4 — Other applications and backend choice (planned)
 
@@ -262,13 +269,20 @@ while worker contexts can render to framebuffer objects. See the
   pending; the prior 54.96 s GPU run is the baseline, with a 52.21 s median
   target.
 
+- 2026-10-10: implemented direct Motion preview texture delivery, bounded mailbox,
+  generation checks, output pool backpressure, native viewer parity and context
+  recovery. Preview schema 8 distinguishes delivery and presentation. Native
+  Windows tests pass; [reference measurements](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
+  sustain 30 and 60 fps with zero readback and lower median latency than GPU RGBA.
+  Broader interactive and macOS/Linux acceptance remain pending; GPU stays opt-in.
+
 ## Resuming implementation
 
 1. Read `AGENTS.md`, this plan, `REUSE_PLAN.md`, `SCOPE_AND_READINESS.md`, and
    the current renderer/compositor contracts; inspect the working tree.
-2. For the remaining Stage 3 work, inspect texture ownership and viewer-context
-   sharing before changing the RGBA readback boundary. Keep worker resource
-   ownership and CPU fallback intact.
+2. Complete the remaining Stage 3 interactive/platform checks and historical
+   export benchmark. Preserve texture ownership, worker resources and CPU
+   fallback when extending the implemented direct preview boundary.
 3. Add deterministic boundary tests and native manual checks with each stage.
    Record acceptance before enabling the backend by default or claiming
    performance improvements.
@@ -311,6 +325,5 @@ coverage does not establish platform acceptance by itself.
 Video Editor remains the first consumer. Its experimental backend now supports
 [direct texture delivery](../video-editor/GPU_TEXTURE_DELIVERY.md), public Qt
 global sharing, a three-target/64 MiB reservation budget including retired targets,
-producer/consumer fences and asynchronous RGBA recovery. This application remains
-on its current CPU renderer; adoption requires its own rendering, alpha, lifecycle,
-export and regression contracts. See [native evidence and remaining platform gates](../video-editor/GPU_COMPOSITION_RESULTS.md).
+producer/consumer fences and asynchronous RGBA recovery. Motion adoption is now implemented experimentally through its own viewer and
+worker contracts; native platform and performance acceptance remain separate. See [native evidence and remaining platform gates](../video-editor/GPU_COMPOSITION_RESULTS.md).

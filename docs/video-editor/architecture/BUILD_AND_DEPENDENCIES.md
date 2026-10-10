@@ -15,6 +15,9 @@ uses the FFmpeg `AVFORMAT`, `AVCODEC`,
 the local CMake configuration so a developer environment without the module
 still builds the video-clock fallback; a complete vcpkg installation provides
 `Qt6::Multimedia` and enables `QAudioSink`.
+Motion Studio also links Qt OpenGLWidgets from the existing qtbase dependency
+for its experimental [direct texture preview](../../motion-editor/GPU_TEXTURE_PREVIEW.md),
+under the same Qt license obligations; it adds no new external package.
 CMake discovers these dependencies through the selected toolchain or an
 externally supplied `CMAKE_PREFIX_PATH`; source files must not contain an
 absolute developer-machine path.

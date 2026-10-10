@@ -171,7 +171,23 @@ set_tests_properties(creative-suite-motion-editor-audio-keyframes PROPERTIES
     TIMEOUT 90
 )
 
+# Measurement tool is explicitly invoked; it is not a timing-sensitive CTest.
+add_executable(creative-suite-motion-editor-gpu-preview-benchmark gpu_preview_benchmark.cpp)
+target_link_libraries(creative-suite-motion-editor-gpu-preview-benchmark PRIVATE creative-suite-motion-editor-core)
+target_compile_features(creative-suite-motion-editor-gpu-preview-benchmark PRIVATE cxx_std_20)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-gpu-preview-benchmark)
+
+add_executable(creative-suite-motion-editor-gpu-texture-tests gpu_texture_preview_test.cpp)
+target_link_libraries(creative-suite-motion-editor-gpu-texture-tests PRIVATE creative-suite-motion-editor-core)
+target_compile_features(creative-suite-motion-editor-gpu-texture-tests PRIVATE cxx_std_20)
+add_creative_suite_test(NAME creative-suite-motion-editor-gpu-texture
+    COMMAND creative-suite-motion-editor-gpu-texture-tests)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-gpu-texture-tests)
+set_tests_properties(creative-suite-motion-editor-gpu-texture PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
+
 if(MSVC)
+    target_compile_options(creative-suite-motion-editor-gpu-texture-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-document-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-history-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-persistence-tests PRIVATE /W4 /permissive-)
@@ -184,6 +200,7 @@ if(MSVC)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-audio-keyframes-tests PRIVATE /W4 /permissive-)
 else()
+    target_compile_options(creative-suite-motion-editor-gpu-texture-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-document-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-history-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-persistence-tests PRIVATE -Wall -Wextra -Wpedantic)
@@ -206,6 +223,8 @@ if(WIN32)
     find_program(QT_MOTION_TEST_DEPLOY_TOOL windeployqt HINTS "${QT_MOTION_TEST_BIN_DIR}" REQUIRED)
 
     foreach(TEST_TARGET IN ITEMS
+            creative-suite-motion-editor-gpu-preview-benchmark
+            creative-suite-motion-editor-gpu-texture-tests
             creative-suite-motion-editor-preview-tests
             creative-suite-motion-editor-gpu-composition-tests
             creative-suite-motion-editor-performance-tests
@@ -215,6 +234,7 @@ if(WIN32)
             creative-suite-motion-editor-ui-tests)
         add_custom_command(TARGET ${TEST_TARGET} POST_BUILD
             COMMAND "${QT_MOTION_TEST_DEPLOY_TOOL}"
+                --qtpaths "${QT_MOTION_TEST_BIN_DIR}/qtpaths.exe"
                 --no-translations
                 --no-compiler-runtime
                 --include-plugins qoffscreen

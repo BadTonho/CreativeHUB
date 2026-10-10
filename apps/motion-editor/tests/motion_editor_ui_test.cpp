@@ -2675,10 +2675,12 @@ int main(int argc, char* argv[])
     require(document->layers().front().keyframes.position_x == position_keys_before_collision,
             "dragging a key onto another key of the same property is rejected safely");
 
+    const auto before_playback_seek = viewer->renderedFrame();
     timeline->setCurrentFrame(animation_start);
     require(waitFor([&] {
         const auto frame = viewer->renderedFrame();
-        return frame != nullptr && frame->width == 640 && frame->height == 360;
+        return frame != nullptr && frame != before_playback_seek &&
+               frame->width == 640 && frame->height == 360;
     }), "the first animated frame is available before playback");
     const auto playback_start_frame = viewer->renderedFrame();
     const auto layers_before_animated_playback = document->layers();

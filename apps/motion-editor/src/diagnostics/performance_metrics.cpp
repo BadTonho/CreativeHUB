@@ -21,6 +21,9 @@ std::uint64_t percentile(std::deque<std::uint64_t> values, double fraction)
 
 bool PreviewMetricsSnapshot::hasActivity() const noexcept
 {
+    if (delivery.texture_deliveries || delivery.rgba_deliveries ||
+        delivery.texture_presented || delivery.rgba_presented ||
+        delivery.presentation_recoveries || delivery.busy_drops || delivery.busy_retries) return true;
     if (requests != 0 || rendered_frames != 0 || coalesced_requests != 0 ||
         stale_results != 0 || timestamp_seek_attempts != 0 ||
         forward_decode_attempts != 0 || discarded_intermediate_frames != 0 ||
@@ -58,6 +61,7 @@ void PerformanceMetrics::setEnabled(bool enabled) noexcept
             gpu_color_adjustment_failures_ = 0;
         gpu_gaussian_blur_effects_ = gpu_gaussian_blur_fallbacks_ =
             gpu_gaussian_blur_failures_ = 0;
+        delivery_ = {};
         timings_ = {};
         effect_timings_ = {};
         request_started_.clear();
@@ -73,6 +77,7 @@ bool PerformanceMetrics::enabled() const noexcept
 void PerformanceMetrics::reset() noexcept
 {
     std::lock_guard lock(mutex_);
+    delivery_ = {};
     requests_ = rendered_frames_ = coalesced_requests_ = stale_results_ = 0;
     timestamp_seek_attempts_ = timestamp_seek_successes_ = timestamp_seek_failures_ = 0;
     forward_decode_attempts_ = forward_decode_completions_ = 0;
@@ -277,11 +282,36 @@ void PerformanceMetrics::recordViewerPaint(std::uint64_t generation) noexcept
                  static_cast<std::uint64_t>(elapsed));
 }
 
+void PerformanceMetrics::recordDelivery(bool texture) noexcept {
+    std::lock_guard lock(mutex_);
+    if (enabled_) ++(texture ? delivery_.texture_deliveries : delivery_.rgba_deliveries);
+}
+void PerformanceMetrics::recordPresentation(bool texture) noexcept {
+    std::lock_guard lock(mutex_);
+    if (enabled_) ++(texture ? delivery_.texture_presented : delivery_.rgba_presented);
+}
+void PerformanceMetrics::recordPresentationRecovery() noexcept {
+    std::lock_guard lock(mutex_);
+    if (enabled_) ++delivery_.presentation_recoveries;
+}
+void PerformanceMetrics::recordTexturePool(std::uint64_t bytes, unsigned occupancy,
+                                         bool busy, bool playback) noexcept {
+    std::lock_guard lock(mutex_);
+    if (!enabled_) return;
+    delivery_.pool_bytes = bytes;
+    delivery_.pool_occupancy = occupancy;
+    delivery_.pool_peak_bytes = std::max(delivery_.pool_peak_bytes, bytes);
+    delivery_.pool_peak_occupancy = std::max(delivery_.pool_peak_occupancy, std::uint64_t(occupancy));
+    if (busy) ++(playback ? delivery_.busy_drops : delivery_.busy_retries);
+}
+
 std::optional<PreviewMetricsSnapshot> PerformanceMetrics::takeSnapshotAndReset() noexcept
 {
     std::lock_guard lock(mutex_);
     if (!enabled_) return std::nullopt;
     PreviewMetricsSnapshot result;
+    result.delivery = delivery_;
+    delivery_ = {};
     result.requests = std::exchange(requests_, 0);
     result.rendered_frames = std::exchange(rendered_frames_, 0);
     result.coalesced_requests = std::exchange(coalesced_requests_, 0);
@@ -348,6 +378,10 @@ const char* previewTimingStageName(PreviewTimingStage stage) noexcept
     case PreviewTimingStage::GpuCompositionReadback: return "gpu_composition_readback";
     case PreviewTimingStage::GpuColorAdjustment: return "gpu_color_adjustment";
     case PreviewTimingStage::GpuGaussianBlur: return "gpu_gaussian_blur";
+    case PreviewTimingStage::GpuProducerFenceSubmission: return "gpu_producer_fence_submission";
+    case PreviewTimingStage::GpuViewerWaitSubmission: return "gpu_viewer_wait_submission";
+    case PreviewTimingStage::GpuViewerDrawSubmission: return "gpu_viewer_draw_submission";
+    case PreviewTimingStage::GpuViewerFenceSubmission: return "gpu_viewer_fence_submission";
     case PreviewTimingStage::FrameRender: return "frame_render";
     case PreviewTimingStage::RequestToViewerPaint: return "request_to_viewer_paint";
     case PreviewTimingStage::Count: break;
@@ -374,8 +408,20 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         return value.has_value() ? std::to_string(*value) : std::string("N/A");
     };
     creative_suite::diagnostics::Context context{
-        {"schema_version", "7"},
+        {"schema_version", "8"},
         {"interval_ms", "1000"},
+        {"gpu_preview_texture_deliveries", std::to_string(metrics.delivery.texture_deliveries)},
+        {"gpu_preview_rgba_deliveries", std::to_string(metrics.delivery.rgba_deliveries)},
+        {"gpu_preview_texture_presented", std::to_string(metrics.delivery.texture_presented)},
+        {"gpu_preview_rgba_presented", std::to_string(metrics.delivery.rgba_presented)},
+        {"gpu_preview_presentation_recoveries", std::to_string(metrics.delivery.presentation_recoveries)},
+        {"gpu_preview_pool_bytes", std::to_string(metrics.delivery.pool_bytes)},
+        {"gpu_preview_pool_peak_bytes", std::to_string(metrics.delivery.pool_peak_bytes)},
+        {"gpu_preview_pool_occupancy", std::to_string(metrics.delivery.pool_occupancy)},
+        {"gpu_preview_pool_peak_occupancy", std::to_string(metrics.delivery.pool_peak_occupancy)},
+        {"gpu_preview_busy_drops", std::to_string(metrics.delivery.busy_drops)},
+        {"gpu_preview_busy_retries", std::to_string(metrics.delivery.busy_retries)},
+        {"gpu_preview_texture_viewer_uploaded_bytes", "0"},
         {"process_cpu_percent", optionalNumber(resources.process_cpu_percent)},
         {"process_working_set_bytes", optionalNumber(resources.process_working_set_bytes)},
         {"process_private_usage_bytes", optionalNumber(resources.process_private_usage_bytes)},

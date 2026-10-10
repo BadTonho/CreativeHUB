@@ -3,7 +3,7 @@ include(GNUInstallDirs)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL Widgets)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL OpenGLWidgets Widgets)
 
 add_library(creative-suite-motion-editor-core STATIC
     src/audio/audio_envelope_analyzer.cpp
@@ -99,6 +99,7 @@ target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::video-encoding
     Qt6::Widgets
     Qt6::OpenGL
+    Qt6::OpenGLWidgets
 )
 target_compile_features(creative-suite-motion-editor-core PUBLIC cxx_std_20)
 
@@ -169,6 +170,7 @@ if(WIN32)
 
     add_custom_command(TARGET creative-suite-motion-editor POST_BUILD
         COMMAND "${QT_MOTION_DEPLOY_TOOL}"
+            --qtpaths "${QT_MOTION_BIN_DIR}/qtpaths.exe"
             --no-translations
             --no-compiler-runtime
             "$<TARGET_FILE:creative-suite-motion-editor>"

@@ -16,7 +16,11 @@ with the shared CPU compositor by default or the experimental OpenGL adapter
 when `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`; failures fall back to CPU. The GPU
 composition shader applies Color Adjustment-only stacks before blending;
 stacks containing enabled Gaussian Blur use the shared ordered GPU effect path
-when supported, with bounded scratch storage and CPU fallback. Offline export
+when supported, with bounded scratch storage and CPU fallback. [Controlled Windows preview results](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
+record the reference workload separately from broader manual/platform acceptance.
+Experimental preview now delivers shared GPU textures directly to the
+Motion-owned viewer, with a bounded mailbox and RGBA/CPU recovery; see
+[GPU_TEXTURE_PREVIEW.md](GPU_TEXTURE_PREVIEW.md). Offline export
 uses the same opt-in path and reads back RGBA for the existing CPU encoder.
 Manual Save, Save As, and Open use a
 versioned `.motion`
@@ -268,7 +272,7 @@ counters; and count, average, maximum, p95, and p99 durations for video decode,
 text/shape rasterization, effects, CPU composition, total frame render, and
 request-to-viewer-paint latency. Schema v5 reports actual application counts
 and separate timing summaries for Gaussian Blur and Color Adjustment, plus the
-effective effect-worker count. Schema v7 also reports opt-in GPU composition,
+effective effect-worker count. Schema v7 introduced opt-in GPU composition,
 Color Adjustment, and Gaussian Blur effect counts, fallbacks, failures,
 uploaded/readback bytes, and upload/draw/effect/readback timings,
 as well as actual timestamp-seek outcomes
@@ -277,7 +281,10 @@ discarded intermediate frames. Seek and forward-decode durations are
 submeasurements of total decode time and should not be added to it. The
 configured effect count remains distinct
 from per-interval application counts. A bounded sample window is used for
-percentile estimates.
+percentile estimates. Current schema v8 additionally distinguishes texture/RGBA
+mailbox delivery and successful presentation, recovery, bounded pool peaks and
+backpressure, and producer/viewer fence submission timing. Direct preview records
+zero readback and viewer-upload bytes; see [its contract](GPU_TEXTURE_PREVIEW.md).
 
 The cross-platform CPU and memory sampler is owned by the shared
 `creative-suite::system-monitor` library and is consumed by both editors. The

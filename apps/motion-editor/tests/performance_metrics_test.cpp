@@ -84,6 +84,15 @@ int main(int argc, char* argv[])
         motion::diagnostics::PreviewEffectKind::GaussianBlur, 30'000'000);
     metrics.recordEffectTiming(
         motion::diagnostics::PreviewEffectKind::ColorAdjustment, 2'000'000);
+    metrics.recordDelivery(true);
+    metrics.recordDelivery(false);
+    metrics.recordPresentation(true);
+    metrics.recordPresentation(false);
+    metrics.recordPresentationRecovery();
+    metrics.recordTexturePool(8192, 2);
+    metrics.recordTexturePool(4096, 1, true, true);
+    metrics.recordTexturePool(4096, 1, true, false);
+    metrics.recordTiming(motion::diagnostics::PreviewTimingStage::GpuViewerWaitSubmission, 1000);
     metrics.recordViewerPaint(10);
     const auto snapshot = metrics.takeSnapshotAndReset();
     require(snapshot.has_value() && snapshot->requests == 1 &&
@@ -107,6 +116,13 @@ int main(int argc, char* argv[])
                 snapshot->gpu_gaussian_blur_fallbacks == 1 &&
                 snapshot->gpu_gaussian_blur_failures == 1,
             "preview counters aggregate requests, rendered frames, coalescing, and stale work");
+    require(snapshot->delivery.texture_deliveries == 1 && snapshot->delivery.rgba_deliveries == 1 &&
+        snapshot->delivery.texture_presented == 1 && snapshot->delivery.rgba_presented == 1 &&
+        snapshot->delivery.presentation_recoveries == 1 && snapshot->delivery.pool_bytes == 4096 &&
+        snapshot->delivery.pool_peak_bytes == 8192 && snapshot->delivery.pool_occupancy == 1 &&
+        snapshot->delivery.pool_peak_occupancy == 2 && snapshot->delivery.busy_drops == 1 &&
+        snapshot->delivery.busy_retries == 1,
+        "delivery metrics distinguish actual presentation, recovery and bounded pool backpressure");
     const auto& decode = snapshot->timings[
         static_cast<std::size_t>(motion::diagnostics::PreviewTimingStage::Decode)];
     require(decode.count == 5 && decode.total_nanoseconds == 15'000'000 &&
@@ -139,7 +155,10 @@ int main(int argc, char* argv[])
         serialized_context << key << '=' << value << '\n';
     const auto context_text = serialized_context.str();
     require(context_text.find("process_cpu_percent=27.500000") != std::string::npos &&
-                context_text.find("schema_version=7") != std::string::npos &&
+                context_text.find("schema_version=8") != std::string::npos &&
+                context_text.find("gpu_preview_texture_presented=1") != std::string::npos &&
+                context_text.find("gpu_preview_texture_viewer_uploaded_bytes=0") != std::string::npos &&
+                context_text.find("gpu_preview_pool_peak_bytes=8192") != std::string::npos &&
                 context_text.find("decode_p95_ms=") != std::string::npos &&
                 context_text.find("timestamp_seek_attempts=2") != std::string::npos &&
                 context_text.find("timestamp_seek_successes=1") != std::string::npos &&

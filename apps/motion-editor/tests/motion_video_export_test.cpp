@@ -69,12 +69,22 @@ bool softwareEncoder(const std::string& name)
 }
 
 std::pair<creative_suite::media::VideoContainerOption,
-          creative_suite::media::VideoEncoderOption> chooseOutput()
+          creative_suite::media::VideoEncoderOption> chooseOutput(bool lossless_reference = false)
 {
     auto containers = creative_suite::media::availableVideoContainers();
     std::stable_sort(containers.begin(), containers.end(), [](const auto& left, const auto& right) {
         return left.name == "matroska" && right.name != "matroska";
     });
+    // Native pixel parity uses lossless FFV1: lossy encoders can amplify a
+    // tolerated compositor rounding difference beyond the encoded tolerance.
+    if (lossless_reference) {
+        for (const auto& container : containers) if (container.name == "matroska") {
+            for (const auto& encoder : container.video_encoders) if (encoder.name == "ffv1" &&
+                    creative_suite::media::supportsVideoEncoder(container, encoder.name))
+                return {container, encoder};
+        }
+        throw std::runtime_error("Native GPU export parity requires Matroska/FFV1.");
+    }
     for (const auto& container : containers) {
         for (const auto& encoder : container.video_encoders) {
             if (softwareEncoder(encoder.name) &&
@@ -418,6 +428,7 @@ void testSettingsDialog()
 
 int main(int argc, char* argv[])
 {
+    const bool require_gpu = argc > 1 && std::string(argv[1]) == "--require-gpu";
     QApplication application(argc, argv);
     try {
         qputenv("CREATIVE_SUITE_MOTION_GPU_COMPOSITION", "1");
@@ -430,7 +441,7 @@ int main(int argc, char* argv[])
 
         testSettingsDialog();
 
-        const auto [container, encoder] = chooseOutput();
+        const auto [container, encoder] = chooseOutput(require_gpu);
         QTemporaryDir temporary_directory;
         require(temporary_directory.isValid(), "a temporary export folder is available");
         const auto log_directory = pathFromQString(temporary_directory.path()) / "diagnostics";
@@ -580,6 +591,7 @@ int main(int argc, char* argv[])
                 "canceling a GPU-requested export preserves an existing destination");
 
         auto gpu_surface = creative_suite::composition::OpenGlFrameCompositor::createSurface();
+        require(!require_gpu || bool(gpu_surface), "native GPU export requires an OpenGL surface");
         std::optional<motion::ui::MotionExportResult> gpu_surface_result;
         std::filesystem::path gpu_surface_target;
         motion::ui::MotionExportPerformanceSummary gpu_surface_performance;
@@ -615,6 +627,13 @@ int main(int argc, char* argv[])
                          gpu_surface_performance.readback_mode == "gpu_sync" ||
                          gpu_surface_performance.readback_mode == "cpu_fallback"),
                     "GPU export metrics identify async, synchronous, or CPU fallback mode");
+            require(!require_gpu || (gpu_surface_performance.readback_mode == "pbo_async" &&
+                        gpu_surface_performance.gpu.composition_frames == 9 &&
+                        gpu_surface_performance.gpu.fallback_frames == 0),
+                    "native GPU export must encode every GPU frame through asynchronous RGBA readback");
+            if (require_gpu) std::cout << "native_gpu_export_frames="
+                << gpu_surface_performance.gpu.composition_frames << " readback_mode="
+                << gpu_surface_performance.readback_mode << '\n';
             if (gpu_surface_performance.readback_mode == "pbo_async") {
                 require(gpu_surface_performance.gpu.readback_frames_submitted == 9 &&
                             gpu_surface_performance.gpu.readback_frames_collected == 9 &&
@@ -889,12 +908,18 @@ int main(int argc, char* argv[])
                 const auto pending_frames = summaryNumber(summary, "readback_peak_pending_frames");
                 const auto pending_bytes = summaryNumber(summary, "readback_peak_pending_bytes");
                 const auto encoder_frames = summaryNumber(summary, "encoder_queue_peak_frames");
-                require(submitted == 9 && collected == submitted && slot_count.has_value() &&
+                require(submitted.has_value() && collected.has_value() && *collected <= *submitted &&
+                            slot_count.has_value() &&
                             *slot_count >= 1 && *slot_count <= 2 && pending_frames.has_value() &&
                             *pending_frames <= 3 && pending_bytes.has_value() &&
-                            *pending_bytes <= 128ULL * 1024 * 1024 &&
-                            encoder_frames == 1,
-                        "PBO export metrics preserve frame order and stay within bounded staging");
+                            *pending_bytes <= 128ULL * 1024 * 1024 && encoder_frames.has_value() &&
+                            *encoder_frames <= 1,
+                        "PBO export metrics stay bounded, including interrupted jobs");
+                if (summary.find("outcome=\"completed\"") != std::string::npos)
+                    require(submitted == summaryNumber(summary, "frames_rendered") &&
+                            submitted == summaryNumber(summary, "write_count") &&
+                            *submitted > 0 && collected == submitted && encoder_frames == 1,
+                        "completed PBO exports collect and encode every frame in order");
             }
         }
         require(saw_completed && saw_cancelled && saw_failed,

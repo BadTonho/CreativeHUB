@@ -4,6 +4,7 @@
 #include "ui/workers/audio_keyframe_generation.h"
 #include "export/motion_video_export.h"
 #include "rendering/preview_renderer.h"
+#include "ui/viewer/composition_viewer.h"
 
 #include <creative_suite/diagnostics/logger.h>
 
@@ -353,6 +354,7 @@ MainWindow::~MainWindow()
         export_worker_.reset();
     }
     gpu_export_surface_.reset();
+    if (viewer_) viewer_->clearPreviewFrame();
     if (preview_renderer_) preview_renderer_->stopAndWait();
     preview_renderer_.reset();
     gpu_composition_surface_.reset();

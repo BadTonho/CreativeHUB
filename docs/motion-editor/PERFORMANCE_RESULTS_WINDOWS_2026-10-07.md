@@ -167,6 +167,14 @@ repeatable median of 52.21 s or lower is required to accept the async path as a
 performance improvement. Native macOS and Linux driver/performance checks
 remain pending.
 
+## Subsequent direct-preview measurements
+
+[2026-10-10 controlled Windows results](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
+compare CPU, GPU RGBA and direct texture delivery using generated media in the
+approved 1080p/30 fps, 10-second, five-layer reference shape, plus 60 fps stress.
+Those repeatable preview measurements do not complete this report's separate
+3,405-frame export acceptance gate.
+
 ## Recommended performance focus
 
 Profile and improve Gaussian Blur first. Compare the existing worker settings
