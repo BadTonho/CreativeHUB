@@ -76,14 +76,19 @@ int main(int argc, char** argv) {
         window.resizeDocks({dock}, {460}, Qt::Vertical);
         settleLayout();
         std::cout << "Expanded dock=" << dock->height() << '\n';
-        dragDockTop(window, *dock, 240);
+        dragDockTop(window, *dock, 127);
         std::cout << "Compact dock=" << dock->height()
                   << " viewport=" << scroll->viewport()->height()
                   << " timeline=" << timeline->height() << '\n';
-        require(dock->height() <= 270,
-                "The entire Timeline dock cannot shrink to a compact height.");
-        require(scroll->viewport()->height() >= timeline->minimumHeight(),
-                "Shrinking the dock clipped the Timeline below its minimum viewport.");
+        require(dock->height() <= 140,
+                "The entire Timeline dock cannot shrink to half its former compact minimum.");
+        require(scroll->viewport()->height() < timeline->minimumHeight(),
+                "The compact dock still reserves space to keep both track groups visible.");
+        auto* controls = window.findChild<QWidget*>("timelineControlsContainer");
+        require(controls != nullptr && controls->isVisible() &&
+                    dock->rect().contains(controls->mapTo(dock, QPoint(0, 0))) &&
+                    dock->rect().contains(controls->mapTo(dock, controls->rect().bottomRight())),
+                "Shrinking the Timeline dock clipped its playback controls.");
         require(host->width() <= 1,
                 "Side docks left an empty central column in the editing workspace.");
 
@@ -95,19 +100,22 @@ int main(int argc, char** argv) {
         window.resizeDocks({dock}, {460}, Qt::Vertical);
         settleLayout();
         dragDockTop(window, *dock, 1);
-        require(dock->height() <= 270 &&
-                    timeline->minimumHeight() == minimum_timeline_height &&
-                    scroll->viewport()->height() >= minimum_timeline_height,
-                "Large row preferences prevented compact dock resizing or clipped its viewports.");
+        require(dock->height() <= 140 &&
+                    timeline->minimumHeight() == minimum_timeline_height,
+                "Large row preferences prevented compact dock resizing.");
+        window.resizeDocks({dock}, {460}, Qt::Vertical);
+        settleLayout();
+        require(scroll->viewport()->height() >= minimum_timeline_height,
+                "Expanding the Timeline dock did not reveal its track viewports again.");
         for (auto kind : {timeline::TrackKind::Video, timeline::TrackKind::Audio}) {
             require(timeline->trackRowHeight(kind) == timeline::kMaximumTrackRowHeight &&
                         timeline->trackGroupViewportRect(kind).height() >=
                             timeline::kMinimumTrackRowHeight &&
                         timeline->trackScrollMaximum(kind) > 0,
-                    "Compact resizing changed row heights or removed a group's scrollable viewport.");
+                    "Resizing changed row heights or removed a group's scrollable viewport.");
             timeline->setTrackScrollOffset(kind, timeline->trackScrollMaximum(kind));
             require(timeline->trackScrollOffset(kind) == timeline->trackScrollMaximum(kind),
-                    "A compact track group cannot scroll to the end of a tall row.");
+                    "An expanded track group cannot scroll to the end of a tall row.");
         }
         timeline->setTrackRowHeights(original_video_height, original_audio_height);
         settleLayout();
@@ -115,9 +123,8 @@ int main(int argc, char** argv) {
         timeline->setZoomFactor(4.0);
         settleLayout();
         dragDockTop(window, *dock, 1);
-        require(scroll->horizontalScrollBar()->isVisible() &&
-                    scroll->viewport()->height() >= minimum_timeline_height,
-                "The horizontal scrollbar clipped the compact Timeline viewports.");
+        require(scroll->horizontalScrollBar()->isVisible() && dock->height() <= 140,
+                "The horizontal scrollbar prevented compact Timeline resizing.");
         timeline->setZoomFactor(original_zoom);
         settleLayout();
         const auto saved_layout = window.saveState(9);
@@ -133,8 +140,8 @@ int main(int argc, char** argv) {
                 "A lone Timeline dock did not retain a central resize area.");
         window.resizeDocks({dock}, {460}, Qt::Vertical);
         settleLayout();
-        dragDockTop(window, *dock, 240);
-        require(dock->height() <= 270,
+        dragDockTop(window, *dock, 127);
+        require(dock->height() <= 140,
                 "The lone Timeline dock cannot be shortened using its separator.");
         auto* side_dock = window.findChild<QDockWidget*>("binsDock");
         require(side_dock != nullptr, "The resize test cannot find the Bins dock.");
@@ -175,8 +182,8 @@ int main(int argc, char** argv) {
         window.resizeDocks({dock}, {460}, Qt::Vertical);
         settleLayout();
         dragDockTop(window, *dock, 1);
-        require(dock->height() <= 270 &&
-                    scroll->viewport()->height() >= minimum_timeline_height,
+        require(dock->height() <= 140 &&
+                    scroll->viewport()->height() < minimum_timeline_height,
                 "Workspace switching lost compact Timeline resizing.");
         std::cout << "Minimum dock=" << dock->height()
                   << " viewport=" << scroll->viewport()->height() << '\n';
@@ -189,7 +196,7 @@ int main(int argc, char** argv) {
         reopened.showNormal();
         settleLayout();
         auto* restored_dock = reopened.findChild<QDockWidget*>("timelineDock");
-        require(restored_dock != nullptr && restored_dock->height() <= 270,
+        require(restored_dock != nullptr && restored_dock->height() <= 140,
                 "Reopening the editor did not preserve the compact Timeline layout.");
         require(reopened.close(), "The reopened compact editor did not close cleanly.");
         return 0;

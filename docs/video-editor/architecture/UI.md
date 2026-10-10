@@ -331,13 +331,15 @@ The dock uses its native Timeline title as the only heading. It does not
 render a duplicate internal title or the former click-to-select interaction
 hint row; the controls and timeline content remain directly below the dock
 title.
-The dock can be resized below the preferred Video and Audio row heights. At its
-minimum size, each group retains a minimum-height viewport; taller rows and
-additional tracks remain accessible through the group's vertical scrolling.
-The outer scroll area reserves the Timeline's compact minimum height plus room
-for the horizontal scrollbar, so shrinking the entire dock does not clip the
-Audio group. Resizing the dock preserves row-height preferences and project
-state; the compact dock height persists in the global workspace layout.
+The dock can be resized below the preferred Video and Audio row heights. The
+outer scroll area ignores its vertical size hint and reserves only 24 logical
+pixels, allowing the complete dock to shrink to approximately 128 logical pixels
+with the default Windows font/style. Playback controls remain visible; the ruler
+and track groups may be clipped or hidden at this size. Expanding the dock
+reveals the content again, including each group's independent scrolling for
+taller rows and additional tracks. Resizing preserves row-height preferences
+and project state; the compact dock height persists in the global workspace
+layout. Font, DPI, and platform metrics can change the complete dock's minimum.
 The Previous Frame, Play/Pause, and Next Frame controls use standard Qt media
 icons without visible text; their tooltips and accessible names retain the
 full action descriptions.

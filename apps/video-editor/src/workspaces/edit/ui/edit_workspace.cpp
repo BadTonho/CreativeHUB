@@ -682,17 +682,15 @@ void EditWorkspace::createTimelineViewport(QWidget* container, QVBoxLayout* layo
     ui_.timeline_scroll = new QScrollArea(container);
     ui_.timeline_scroll->setWidgetResizable(true);
     ui_.timeline_scroll->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
-    ui_.timeline_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    ui_.timeline_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     ui_.timeline_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     ui_.timeline_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     ui_.timeline_scroll->setAcceptDrops(true);
     ui_.timeline_scroll->viewport()->setAcceptDrops(true);
     ui_.timeline_scroll->setFrameShape(QFrame::NoFrame);
-    // Reserve both compact track viewports even when the horizontal scrollbar
-    // appears, instead of clipping the Timeline's vertically hidden overflow.
-    ui_.timeline_scroll->setMinimumHeight(
-        ui_.timeline->minimumHeight() +
-        ui_.timeline_scroll->style()->pixelMetric(QStyle::PM_ScrollBarExtent));
+    // The dock may hide track content until expanded again. Keep a small
+    // viewport without imposing the Timeline's internal track-pane minimum.
+    ui_.timeline_scroll->setMinimumHeight(24);
     ui_.timeline_scroll->setStyleSheet(
         "QScrollArea { background: transparent; border: none; }"
         "QScrollArea > QWidget > QWidget { background: transparent; }");
