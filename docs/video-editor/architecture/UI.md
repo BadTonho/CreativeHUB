@@ -862,3 +862,9 @@ or reports a gap or Timeline limit. It reads Timeline metadata only. The Edit
 controller determines playback-control eligibility and presents Timeline
 status; `MainWindow` coordinates media activation, application status messages,
 menu actions, and worker communication.
+
+The existing GPU-composition preference also covers compatible built-in visual
+effects and Fusion graphs. Both its tooltip and the independent export GPU
+checkbox explain this scope. Hardware video decoding has a separate global
+preview checkbox and a separate, default-off per-export checkbox. New hardware
+encoders remain labeled experimental and are never selected implicitly.

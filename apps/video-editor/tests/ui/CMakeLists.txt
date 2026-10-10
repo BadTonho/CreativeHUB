@@ -30,8 +30,10 @@ target_include_directories(creative-suite-main-editor-media-browser-list-widget-
 )
 
 target_link_libraries(creative-suite-main-editor-media-browser-list-widget-tests PRIVATE
+    creative-suite::video-media
     Qt6::Widgets
 )
+copy_ffmpeg_test_runtime(creative-suite-main-editor-media-browser-list-widget-tests)
 
 target_compile_features(creative-suite-main-editor-media-browser-list-widget-tests PRIVATE cxx_std_20)
 

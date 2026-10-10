@@ -3,9 +3,10 @@
 Status: **provisional**.
 
 The root `vcpkg.json` tracks Qt 6 through `qtbase` and `qtmultimedia`, and
-FFmpeg through `ffmpeg`, with conditional Windows x64 `nvcodec` in both root
-and prototype manifests. It adds pinned MIT-licensed `ffnvcodec` headers without
-the CUDA toolkit or NVIDIA driver. FFmpeg's LGPL switches remain unchanged;
+FFmpeg through `ffmpeg`, with conditional Windows x64 `nvcodec`, `amf`, and `qsv`
+and Linux x86/x64 `nvcodec`, `vaapi`, and `qsv` in both manifests. These add
+pinned open-source hardware integration dependencies without the CUDA toolkit
+or vendor driver. FFmpeg's LGPL switches remain unchanged;
 runtime acceptance is separate. See [the pipeline contract](../GPU_PIPELINE.md).
 The Image Editor also uses the `qtimageformats`
 add-on so its WebP and TIFF image I/O plugins can be deployed. The Video Editor
@@ -75,3 +76,13 @@ is omitted from Video Editor-only builds while existing linked PNG checks stay.
 The native `creative-suite-main-editor-gpu-timeline` test also links that producer
 fixture to compare masked PNG consumption and refresh through the real worker
 GPU backend. This adds no Image Editor dependency to the Video Editor executable.
+
+The pinned hardware expansion requests `nvcodec`, `amf`, and `qsv` on Windows
+x64, and `nvcodec`, `vaapi`, and `qsv` on Linux x86/x64. The baseline port enables
+VideoToolbox on macOS without an additional feature. Dependencies are
+ffnvcodec 12.2.72.0 (MIT), AMD AMF headers 1.4.36 (MIT), mfx-dispatch 1.35.1
+(BSD-3-Clause), and Linux libva 2.20.0 (MIT). Vendor drivers remain external;
+no proprietary driver or CUDA toolkit is bundled. These features retain the
+LGPL shared FFmpeg build and require notices/source obligations for distribution.
+Registry discovery does not establish runtime acceptance. Repeat the explicit
+hardware encoder test on each target device and OS.

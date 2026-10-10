@@ -3276,10 +3276,13 @@ bool testMagicWandTool() {
     const bool pixel_mapping = edge_seed == QPoint(3, 2) &&
         !image_editor::MagicWandTool::seedAt(QPointF(4.0, 1.0), QSize(4, 3));
 
-    QImage tall_region(2, 20'001, QImage::Format_ARGB32);
+    QImage tall_region(2, image_editor::ImageDocumentStore::kMaximumStrokeClipPathElements / 5 + 1,
+        QImage::Format_ARGB32);
     tall_region.fill(Qt::white);
-    for (int y = 0; y < tall_region.height(); ++y)
+    for (int y = 0; y < tall_region.height(); ++y) {
         tall_region.setPixelColor(0, y, Qt::black);
+        if (y % 2 == 0) tall_region.setPixelColor(1, y, Qt::black);
+    }
     const auto oversized = wand.select(tall_region, QPoint(0, 0), 0);
     const bool geometry_rejected =
         oversized.status == image_editor::MagicWandTool::Status::Rejected &&
@@ -4510,7 +4513,7 @@ int main(int argc, char* argv[]) {
         tool_options_toolbar == nullptr || paint_options_action == nullptr ||
         paint_size_options == nullptr ||
         brush_size_slider == nullptr || brush_size == nullptr || redo_action == nullptr ||
-        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 11 ||
+        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 13 ||
         paint_button->isChecked() || paint_options_action->isVisible() ||
         paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible() || tool_options_toolbar->height() < 40 ||
@@ -4534,6 +4537,12 @@ int main(int argc, char* argv[]) {
         brush_size_slider->minimum() != 1 ||
         brush_size_slider->maximum() != image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter) {
         std::cerr << "The paint controls did not start in the expected compact layout.\n";
+        if (tool_sidebar && tool_options_toolbar && color_button && brush_size && brush_size_slider)
+            std::cerr << "Paint layout details: tools=" << tool_sidebar->findChildren<QToolButton*>().size()
+                << " sidebar_width=" << tool_sidebar->width() << " toolbar_height=" << tool_options_toolbar->height()
+                << " color_bottom=" << color_button->geometry().bottom() << " sidebar_height=" << tool_sidebar->height()
+                << " brush=" << brush_size->value() << " slider=" << brush_size_slider->value()
+                << " brush_max=" << brush_size->maximum() << " slider_max=" << brush_size_slider->maximum() << '\n';
         return 1;
     }
 
@@ -5642,13 +5651,13 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    if (shape_document_json.value("version").toInt() != 13 ||
+    if (shape_document_json.value("version").toInt() != image_editor::ImageDocumentStore::kCurrentDocumentVersion ||
         persisted_shape_layer.isEmpty() ||
         !persisted_shape_layer.value("name").toString().startsWith("Shape ") ||
         persisted_shape_layer.value("operations").toArray().size() != 1 ||
         persisted_shape.value("kind").toString() != "shape" ||
         persisted_shape.value("fill_enabled").toBool()) {
-        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v13: version="
+        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in the current document version: version="
                   << shape_document_json.value("version").toInt()
                   << " operations=" << persisted_shape_layer.value("operations").toArray().size()
                   << " layer=" << persisted_shape_layer.value("name").toString().toStdString()

@@ -1363,3 +1363,42 @@ modified 2026-10-08 13:48:33 (2,441,216 bytes). Manual menu and shortcut checks,
 Edit command/focus checks, Fusion preview/restoration, and Render queue
 switching/cancel/shutdown checks remain pending; automated coverage does not
 mark those manual checks as complete.
+
+The native video-pipeline executable also accepts `--native-hevc`, `--benchmark`
+(30 full-resolution frames, three tracks, 1080p/1440p/4K, same NVENC codec for
+CPU/native comparisons), and `--stress 900` (15-minute paced offscreen preview).
+All require actual hardware, native transfers, and no fallback. See
+[the pipeline acceptance record](GPU_PIPELINE.md) for the additional explicit
+hardware-encoder probe and pending native platform/physical timing gates.
+
+Hardware-decode controls are covered by `settings_dialog_test.cpp` (default,
+live signal after persistence, reopen, disable), `main_window_integration_test.cpp`
+(startup application), `workspace_page_switch_test.cpp` (Render default and
+checkbox-to-job snapshot), and `render_queue_model_test.cpp` (independent job
+choices). Native integration covers unknown progress-callback exception cleanup
+and absent-context recovery through RGBA while preserving the selected NVENC codec.
+It also injects final composition failure after a completed GPU Fusion graph.
+Preview invalidates the graph lease before recovery and compares the same frame
+with CPU. Export reevaluates original sources without graph readback, compares
+all encoded frames with the CPU reference, and verifies that technical failure
+latches CPU for the remaining item.
+The same native preview fixture compares Full/Half/Quarter output through live
+quality changes, including rerendering a cached timeline position.
+An injected lost native transfer during Fusion CPU recovery requires the original
+input session to reopen software decoding at the same index, with one diagnosed
+recovery and a graph result matching the software reference.
+The Media Browser list-widget target links the shared media library and deploys
+its FFmpeg runtime because `main_window_support.cpp` checks decoder availability
+for still-image import patterns. This keeps its standalone compile/runtime gate
+consistent with the application dependency boundary.
+The legacy MainWindow layout fixture serializes fresh named docks in a plain
+QMainWindow, then tests migration in the real editor. This avoids moving the real
+Preview through Qt's pending dock animation while retaining the v8 state contract.
+The Timeline constructor with separate video/audio row heights requires all
+eight arguments, preserving the original five-argument fixed-duration overload.
+The existing geometry round-trip test protects that overload from treating a
+fixed duration as a zoom factor.
+The native export comparison uses the global share context and copies a foreign
+Fusion lease into its own compositor session before an explicit oracle readback.
+Those verification transfers do not qualify the no-readback native pipeline;
+the separate hardware video-pipeline target enforces that contract directly.

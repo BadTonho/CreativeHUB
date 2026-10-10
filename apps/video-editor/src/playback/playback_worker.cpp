@@ -23,6 +23,7 @@
 #include <string>
 #include <stdexcept>
 #include <system_error>
+#include <unordered_map>
 #include <utility>
 
 namespace playback {
@@ -501,7 +502,7 @@ void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* s
 }
 
 creative_suite::composition::OpenGlFrameCompositor* PlaybackWorker::graphGpuBackend() {
-    if (!gpu_composition_enabled_ || gpu_composition_failed_ || !gpu_surface_ || gpu_compose_) return nullptr;
+    if (!gpu_composition_enabled_ || gpu_composition_failed_ || !gpu_surface_) return nullptr;
     if (!gpu_graph_compositor_)
         gpu_graph_compositor_ = std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(gpu_surface_,
             creative_suite::composition::OpenGlPrecisionPolicy::Automatic,
@@ -2874,11 +2875,15 @@ PlaybackWorker::decodeCompositionLayers(
         if (spec.node_graph.has_value()) {
             fusion::nodes::InputFrames inputs;
             fusion::nodes::NativeInputFrames native_inputs;
+            std::unordered_map<fusion::nodes::NodeId, std::pair<media::VideoPlaybackSession*, std::int64_t>> recovery_inputs;
             for (const auto& node : spec.node_graph->nodes) {
                 if (node.type != fusion::nodes::NodeType::Input) continue;
                 if (node.source_path.empty()) {
                     inputs.emplace(node.id, frame);
-                    if (native_frame) native_inputs.emplace(node.id, native_frame);
+                    if (native_frame) {
+                        native_inputs.emplace(node.id, native_frame);
+                        recovery_inputs.emplace(node.id, std::pair{composition.session.get(), source_frame});
+                    }
                     continue;
                 }
                 const auto graph_input = std::find_if(composition.graph_inputs.begin(),
@@ -2900,7 +2905,11 @@ PlaybackWorker::decodeCompositionLayers(
                         if (hardware_decoding_enabled_ && graphGpuBackend()) {
                             const auto decoded = graph_input->video_session->decodeFrameAtNative(
                                 static_cast<std::int64_t>(source_index), should_cancel);
-                            if (decoded && decoded->native) native_inputs.emplace(node.id, decoded->native);
+                            if (decoded && decoded->native) {
+                                native_inputs.emplace(node.id, decoded->native);
+                                recovery_inputs.emplace(node.id, std::pair{graph_input->video_session.get(),
+                                    static_cast<std::int64_t>(source_index)});
+                            }
                             else if (decoded && decoded->rgba) inputs.emplace(node.id, decoded->rgba);
                         } else {
                             const auto decoded = graph_input->video_session->decode_frame_at(
@@ -2913,7 +2922,13 @@ PlaybackWorker::decodeCompositionLayers(
             creative_suite::composition::OpenGlCompositionTimings graph_timings;
             const auto evaluated = fusion::nodes::evaluateFrame(
                 *spec.node_graph, inputs,
-                fusion::nodes::EvaluationContext{request.local_frame, graphGpuBackend(), nullptr, should_cancel, &native_inputs, &graph_timings});
+                fusion::nodes::EvaluationContext{request.local_frame, graphGpuBackend(), nullptr, should_cancel, &native_inputs, &graph_timings,
+                    [&](fusion::nodes::NodeId id) -> media::VideoFramePtr {
+                        const auto found = recovery_inputs.find(id);
+                        if (found == recovery_inputs.end() || !found->second.first) return {};
+                        const auto recovered = found->second.first->decode_frame_at(found->second.second, should_cancel);
+                        return recovered ? *recovered : media::VideoFramePtr{};
+                    }});
             rendering::PreviewPerformanceMetrics::instance().recordGpuCompositionWork(graph_timings);
             if (!evaluated.has_value())
                 throw media::MediaError("The Fusion node graph did not produce a frame.");
@@ -3044,7 +3059,8 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
                         if (direct.status == OpenGlCompositionStatus::Failed) {
                             retireGpuCompositor();
                             gpu_compositor_ = std::make_unique<OpenGlFrameCompositor>(gpu_surface_,
-                                OpenGlPrecisionPolicy::Automatic, gpu_share_context_, gpu_texture_budget_);
+                                OpenGlPrecisionPolicy::Automatic,
+                                gpu_share_context_ ? gpu_share_context_ : QOpenGLContext::globalShareContext(), gpu_texture_budget_);
                         }
                     }
                 }
@@ -3096,21 +3112,28 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
         }
     }
     if (should_cancel()) return {};
+    if (std::any_of(decoded_layers.begin(), decoded_layers.end(), [](const auto& layer) {
+            return layer.native_frame || layer.texture_frame;
+        })) {
+        // Rebuild from the sessions and whole graph: a failed context may no
+        // longer own usable textures. Session RGBA delivery also recovers a
+        // lost decode device at the same requested index.
+        const bool previous_failure = gpu_composition_failed_;
+        gpu_composition_failed_ = true;
+        struct RestoreFailure {
+            bool& flag;
+            bool previous;
+            ~RestoreFailure() { flag = previous; }
+        } restore{gpu_composition_failed_, previous_failure};
+        auto recovered = decodeCompositionLayers(current_timeline_frame_, should_cancel);
+        if (!recovered) return {};
+        return composeCompositionLayers(*recovered, should_cancel, timings);
+    }
     if (gpu_composition_enabled_ && timings) adapter_started = Clock::now();
     // Only the CPU path prepares and reports CPU text raster fast paths.
-    std::vector<media::VideoFramePtr> recovered_sources;
-    recovered_sources.reserve(decoded_layers.size());
     for (std::size_t index = 0; index < decoded_layers.size(); ++index) {
         const auto& decoded = decoded_layers[index];
         auto& layer = layers[index];
-        if (decoded.native_frame) recovered_sources.push_back(decoded.native_frame->download_rgba());
-        else if (decoded.texture_frame) {
-            auto recovered = gpu_graph_compositor_->readback(decoded.texture_frame, should_cancel);
-            if (!recovered.frame) throw media::MediaError("Recovering a Fusion GPU source failed.", recovered.error_code);
-            recovered_sources.push_back(std::make_shared<const media::VideoFrame>(std::move(*recovered.frame)));
-        } else recovered_sources.push_back(decoded.frame);
-        layer.frame = recovered_sources.back().get();
-        layer.native_frame.reset(); layer.texture_frame.reset();
         if (decoded.kind == timeline::ClipKind::Text &&
             decoded.composition_session_index < composition_sessions_.size()) {
             auto& composition =

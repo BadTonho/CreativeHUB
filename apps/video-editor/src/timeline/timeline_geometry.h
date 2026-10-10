@@ -46,9 +46,9 @@ public:
         double video_row_height,
         double audio_row_height,
         double zoom_factor,
-        std::optional<std::int64_t> fixed_duration = std::nullopt,
-        double timeline_frame_rate = 0.0,
-        std::optional<TimelineTrackViewLayout> track_view_layout = std::nullopt) noexcept;
+        std::optional<std::int64_t> fixed_duration,
+        double timeline_frame_rate,
+        std::optional<TimelineTrackViewLayout> track_view_layout) noexcept;
 
     [[nodiscard]] double frameRate() const noexcept;
     [[nodiscard]] std::int64_t totalDuration() const noexcept;

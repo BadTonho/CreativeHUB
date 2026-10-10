@@ -35,12 +35,13 @@ public:
     ExportComposition(const RenderJob&, const OfflineExportOptions&, OfflineExportMetrics&);
     composition::OpenGlFrameCompositor* graphBackend();
     bool nativeDelivery() const noexcept;
+    void setCpuSourceRecovery(bool enabled) noexcept { cpu_source_recovery_ = enabled; }
     std::optional<creative_suite::media::RgbaFrame> compose(const std::vector<composition::CompositionLayer>&,
         std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,
         creative_suite::media::NativeVideoFramePool* = nullptr,
         creative_suite::media::NativeVideoFramePtr* native_output = nullptr);
 private:
-    void fallback(const composition::OpenGlCompositionResult&, std::int64_t, std::int64_t);
+    void fallback(const composition::OpenGlCompositionResult&, std::int64_t, std::int64_t, bool rgba_recovery = false);
     const RenderJob& job_;
     const OfflineExportOptions& options_;
     OfflineExportMetrics& metrics_;
@@ -48,6 +49,11 @@ private:
     std::unique_ptr<composition::OpenGlFrameCompositor> graph_gpu_;
     std::unique_ptr<composition::OpenGlFrameCompositor> native_gpu_;
     bool failed_ = false, warned_ = false;
+    bool cpu_source_recovery_ = false;
 };
+
+// Internal control flow: the renderer must reevaluate original sources when
+// GPU composition cannot consume a native frame or a completed Fusion lease.
+struct CpuCompositionSourcesRequired {};
 
 } // namespace rendering::detail

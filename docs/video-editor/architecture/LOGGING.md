@@ -71,3 +71,15 @@ and `encoder_reserved_gpu_bytes`. Reservations describe known decoder texture
 arrays, graph allocations, and the bounded output pool, not driver-private VRAM.
 `peak_known_gpu_bytes` continues to describe the timeline compositor. Decode
 downloads and fallback encoder uploads are independent of composition transfers.
+
+Schema 2 includes `decode_packet_ns`, `decode_receive_ns`,
+`decode_conversion_ns`, and `graph_ns`. Decode instrumentation is per export
+worker and does not add its samples to preview diagnostics. These wall-time
+stages may nest inside preparation/graph time; do not sum them as independent
+GPU execution times.
+
+Native-output recovery uses `fallback=rgba` when composition may continue on
+GPU through the RGBA boundary; technical compositor failure uses `fallback=cpu`.
+Frame counters remain the evidence of the effective final composition path.
+`decode_packet_ns` includes packet reading and decoder submission;
+`decode_receive_ns` covers receiving the decoded frame.

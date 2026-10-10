@@ -26,6 +26,7 @@ extern "C" {
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QOffscreenSurface>
+#include <QOpenGLContext>
 #include <QSurfaceFormat>
 
 #include <algorithm>
@@ -38,6 +39,7 @@ extern "C" {
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -59,18 +61,52 @@ rendering::OfflineExportMetrics last_metrics;
 
 class CheckedNativeGpu final : public rendering::ExportGpuCompositor {
 public:
-    explicit CheckedNativeGpu(QOffscreenSurface* surface) : gpu_(surface) {}
+    explicit CheckedNativeGpu(QOffscreenSurface* surface) : gpu_(surface,
+        creative_suite::composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext()) {}
     creative_suite::composition::OpenGlCompositionResult compose(int width, int height,
         const std::vector<creative_suite::composition::CompositionLayer>& layers,
         const creative_suite::composition::OpenGlFrameCompositor::CancellationPredicate& cancel,
         creative_suite::composition::OpenGlCompositionTimings* timings) override {
         auto result = gpu_.compose(width, height, layers, cancel, timings);
+        if (result.status != creative_suite::composition::OpenGlCompositionStatus::Complete)
+            std::cerr << "Native export adapter: " << result.operation << ": " << result.cause << '\n';
         if (result.frame && compare_before_encoding) {
-            auto cpu = creative_suite::composition::FrameCompositor::compose(width, height, layers);
+            auto cpu_layers = layers;
+            std::vector<media::VideoFramePtr> recovered_sources;
+            recovered_sources.reserve(layers.size());
+            // Explicit test-oracle reads are separate from production transfer
+            // counters. Fusion graph parity has its own original-input checks.
+            for (auto& layer : cpu_layers) {
+                if (layer.texture_frame) {
+                    creative_suite::composition::OpenGlImageOperation copy;
+                    copy.kind = creative_suite::composition::OpenGlImageOperationKind::Copy;
+                    copy.background.texture = layer.texture_frame;
+                    auto owned = gpu_.processImage(copy, cancel);
+                    require(owned.frame != nullptr, "Cannot copy the shared Fusion source for composition parity.");
+                    auto recovered = gpu_.readback(owned.frame, cancel);
+                    require(recovered.frame.has_value(), "Cannot read the Fusion source for composition parity.");
+                    recovered_sources.push_back(std::make_shared<const media::VideoFrame>(std::move(*recovered.frame)));
+                } else if (layer.native_frame) recovered_sources.push_back(layer.native_frame->download_rgba());
+                else continue;
+                layer.frame = recovered_sources.back().get();
+                layer.texture_frame.reset(); layer.native_frame.reset();
+            }
+            auto cpu = creative_suite::composition::FrameCompositor::compose(width, height, cpu_layers);
+            if (!cpu || cpu->rgba_pixels.size() != result.frame->rgba_pixels.size()) {
+                std::cerr << "CPU reference geometry: requested=" << width << 'x' << height << " valid=" << bool(cpu)
+                    << " gpu_bytes=" << result.frame->rgba_pixels.size() << " layers=" << cpu_layers.size() << '\n';
+                for (const auto& layer : cpu_layers) if (layer.frame)
+                    std::cerr << "Source geometry: " << layer.frame->width << 'x' << layer.frame->height
+                        << " stride=" << layer.frame->stride << " bytes=" << layer.frame->rgba_pixels.size() << '\n';
+            }
             require(cpu && cpu->rgba_pixels.size() == result.frame->rgba_pixels.size(), "Pre-encoding GPU geometry differs.");
-            for (std::size_t i = 0; i < cpu->rgba_pixels.size(); ++i)
+            for (std::size_t i = 0; i < cpu->rgba_pixels.size(); ++i) {
+                if (std::abs(int(cpu->rgba_pixels[i]) - int(result.frame->rgba_pixels[i])) > (i % 4 == 3 ? 0 : 2))
+                    std::cerr << "Pre-encoding parity: byte=" << i << " cpu=" << int(cpu->rgba_pixels[i])
+                        << " gpu=" << int(result.frame->rgba_pixels[i]) << '\n';
                 require(std::abs(int(cpu->rgba_pixels[i]) - int(result.frame->rgba_pixels[i])) <= (i % 4 == 3 ? 0 : 2),
                     "Pre-encoding CPU/GPU parity failed.");
+            }
         }
         return result;
     }
@@ -91,9 +127,20 @@ void renderJob(const rendering::RenderJob& job, const std::atomic_bool& canceled
     if (native_gpu_mode) { std::thread worker(run); worker.join(); } else run();
     if (failure) std::rethrow_exception(failure);
     if (native_gpu_mode && job.settings.gpu_composition_enabled)
+    {
+        if (last_metrics.cpu_frames || !last_metrics.readback_bytes)
+        {
+            std::cerr << "Native export metrics: gpu=" << last_metrics.gpu_frames << " cpu=" << last_metrics.cpu_frames
+                << " encoded=" << last_metrics.encoded_frames << " readback=" << last_metrics.readback_bytes << '\n';
+            std::ifstream diagnostic(logging::Logger::instance().log_path());
+            std::string line;
+            while (std::getline(diagnostic, line)) if (line.find("subsystem=\"export-gpu\"") != std::string::npos)
+                std::cerr << line << '\n';
+        }
         require(last_metrics.gpu_frames == last_metrics.encoded_frames && last_metrics.cpu_frames == 0 &&
             last_metrics.gpu_frames > 0 && last_metrics.readback_bytes > 0,
             "Native export silently used CPU fallback.");
+    }
 }
 
 std::filesystem::path pathFromQString(const QString& value) {
@@ -1420,6 +1467,7 @@ void benchmarkExport(const OutputChoice& output, const std::filesystem::path& im
 }  // namespace
 
 int main(int argc, char* argv[]) {
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     native_gpu_mode = argc > 1 && (std::string(argv[1]) == "--native-gpu" || std::string(argv[1]) == "--benchmark");
     QSurfaceFormat format; format.setVersion(3, 2); format.setProfile(QSurfaceFormat::CoreProfile);
     QSurfaceFormat::setDefaultFormat(format);

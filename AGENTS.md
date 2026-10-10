@@ -249,14 +249,20 @@ Important decisions must be recorded in the documentation, indicating whether th
   app is updated unless the output matches the executable they launch.
 - Treat documentation as part of the implementation. Keep it aligned with the current code, architecture, behavior, and decisions, and update every affected document in the same change whenever code, UI, behavior, an API, a data format, build configuration, dependency, or project status changes. Verify the updated documentation against the implementation before considering the work complete.
 - Update the documentation whenever an architectural decision is made.
-- Whenever an application's version changes, create a version-specific changelog
-  file in the same change at `Changelog/<application-id>/<version>.md`. Use the
-  release catalog IDs: `hub`, `video-editor`, `image-editor`, and
-  `motion-editor`. Record the changes delivered since that application's
-  previous version, including applicable new features, improvements, fixes, and
-  removals. If a version change contains no user-visible changes, state that
-  and summarize the relevant maintenance or distribution changes. Write
-  changelog entries in English, like other project documentation.
+- Create a version-specific changelog at
+  `Changelog/<application-id>/<version>.md` whenever an application's release
+  is prepared or documented, even if its version metadata has not changed in
+  the repository. This includes prereleases and releases already published
+  externally. Add the changelog in the same change when preparing a release. If
+  an already published release lacks a changelog, create it retroactively using
+  the available release information; do not change version metadata solely to
+  add retrospective documentation. Use the release catalog IDs: `hub`,
+  `video-editor`, `image-editor`, and `motion-editor`. Record the changes
+  delivered since that application's previous version, including applicable
+  new features, improvements, fixes, and removals. If a version contains no
+  user-visible changes, state that and summarize the relevant maintenance or
+  distribution changes. Write changelog entries in English, like other project
+  documentation.
 - Document user-facing keyboard shortcuts in the corresponding application's
   guide, such as `docs/video-editor/SHORTCUTS.md` or
   `docs/image-editor/SHORTCUTS.md`. Create `docs/<application-id>/SHORTCUTS.md`

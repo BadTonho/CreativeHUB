@@ -6,7 +6,7 @@ Status: **current development-build snapshot; final distribution packages remain
 
 This inventory describes the directly runnable Windows Release build at
 `build/apps/video-editor/Release/creative-suite-video-editor.exe`, last modified
-on 2026-10-07 at 16:56:21 (America/Sao_Paulo). It is a snapshot of the current x64
+on 2026-10-10 (America/Sao_Paulo). It is a snapshot of the current x64
 development output, not a promise that every listed format works with every
 file, profile, device, or export combination.
 
@@ -23,11 +23,11 @@ files.
 | Area | Runtime entries | Examples observed |
 | --- | ---: | --- |
 | Input demuxers | 354 | QuickTime/MOV/MP4, Matroska/WebM, AVI, MPEG-TS, MXF, WAV, MP3, FLAC, image sequences, and many raw or specialized formats |
-| Video decoders | 244 | H.264, HEVC, AV1, VP8/VP9, ProRes, DNxHD, MPEG-2, MJPEG, and still-image codecs |
+| Video decoders | 263 | H.264, HEVC, AV1, VP8/VP9, CUVID/QSV entries, ProRes, DNxHD, MPEG-2, MJPEG, and still-image codecs |
 | Audio decoders | 208 | AAC, AC-3/E-AC-3, FLAC, MP2/MP3, Opus, PCM, Vorbis, and WavPack |
 | Subtitle decoders | 22 | ASS/SSA, SubRip, WebVTT, DVB subtitles, and others |
 | Output muxers | 180 | MP4, MOV, Matroska, WebM, AVI, MPEG-TS, MXF, WAV, and image sequences |
-| Video encoders | 87 | Media Foundation H.264/HEVC, D3D12 HEVC, ProRes, MPEG-2, MPEG-4, FFV1, and image codecs |
+| Video encoders | 98 | H.264/HEVC NVENC, AMF and QSV, Media Foundation H.264/HEVC, D3D12 HEVC, ProRes, MPEG-2, MPEG-4, FFV1, and image codecs |
 | Audio encoders | 79 | Native AAC, AC-3/E-AC-3, FLAC, MP2, MP3 through Media Foundation, Opus, and PCM |
 | Subtitle encoders | 11 | ASS/SSA, SubRip, WebVTT, and other text or bitmap subtitle formats |
 
@@ -39,13 +39,19 @@ and quality gate remains open. Hardware and Media Foundation encoders also
 depend on the Windows installation, drivers, and hardware.
 
 The FFmpeg configure record enables shared libraries, Media Foundation,
-D3D11VA, D3D12VA, DXVA2, and Schannel. It disables FFmpeg command-line tools
+D3D11VA, D3D12VA, DXVA2, NVENC/NVDEC, CUVID, CUDA, AMF, libmfx/QSV, and
+Schannel. CUDA here enables FFmpeg's dynamically loaded driver interface; no
+CUDA toolkit or vendor driver is bundled. It disables FFmpeg command-line tools
 (`ffmpeg`, `ffplay`, and `ffprobe`), `libx264`, `libx265`, `libvpx`, `libaom`,
-`libfdk-aac`, `libopus`, `libwebp`, NVENC/NVDEC, AMF, CUDA, and several other
+`libfdk-aac`, `libopus`, `libwebp`, VAAPI on Windows, and several other
 external integrations. The enabled Media Foundation and native FFmpeg encoders
 are distinct from those disabled external libraries. This configuration is
 not an application-level format allow-list; the editor continues to discover
 available export choices and filter them for stream compatibility.
+Hardware choices are labeled experimental and are excluded from automatic
+default encoder selection. H.264/HEVC NVENC and D3D11 decode/native transfers
+have explicit reference-device tests; AMF/QSV registry entries remain pending
+native validation. See [the pipeline evidence](GPU_PIPELINE.md).
 
 ## Qt image reading
 

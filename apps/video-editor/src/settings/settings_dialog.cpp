@@ -92,7 +92,7 @@ QWidget* SettingsDialog::createGeneralPage() {
     auto* gpu_check = new QCheckBox(
         "Use GPU for timeline preview (Experimental)", page);
     gpu_check->setObjectName("gpuCompositionCheckBox");
-    gpu_check->setToolTip("Applies immediately. Falls back to CPU when needed. Export is unchanged.");
+    gpu_check->setToolTip("Accelerates supported effects, Fusion graphs, and timeline composition. Applies immediately and uses CPU when needed. Export has its own setting.");
     gpu_check->setAccessibleDescription(gpu_check->toolTip());
     gpu_check->setChecked(settings::gpuCompositionEnabled());
     layout->addWidget(gpu_check);

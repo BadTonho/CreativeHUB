@@ -171,6 +171,8 @@ int main(int argc, char* argv[])
                 log_contents.find("canvas_width=\"32\"") != std::string::npos,
             "GPU fallback logs the operation and canvas context");
     auto surface = creative_suite::composition::OpenGlFrameCompositor::createSurface();
+    if (argc > 1 && std::string(argv[1]) == "--require-gpu")
+        require(surface && surface->isValid(), "Native Motion Studio acceptance requires a valid OpenGL surface.");
     if (surface) {
         QObject gpu_receiver;
         std::uint64_t gpu_generation = 0;
@@ -210,6 +212,8 @@ int main(int argc, char* argv[])
                   << gpu_snapshot->gpu_composition_fallbacks << '\n';
 
         const bool gpu_backend_available = gpu_snapshot->gpu_composition_frames == 1;
+        if (argc > 1 && std::string(argv[1]) == "--require-gpu")
+            require(gpu_backend_available, "Native Motion Studio acceptance requires an actual GPU composition frame.");
         motion::ui::PreviewLayerSnapshot color_layer;
         color_layer.id = 10;
         color_layer.kind = motion::model::LayerKind::Image;

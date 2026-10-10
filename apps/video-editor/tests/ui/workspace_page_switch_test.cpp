@@ -455,7 +455,7 @@ int main(int argc, char* argv[]) {
                 "Render must initialize project-derived FPS and discover encoders at runtime.");
         require(!add_to_queue->isEnabled(),
                 "Render must require an output path before adding a job.");
-        auto* hardware_decode = render_workspace->findChild<QCheckBox*>("renderHardwareDecodingCheckBox");
+        auto* hardware_decode = render_workspace->centralPage()->findChild<QCheckBox*>("renderHardwareDecodingCheck");
         require(hardware_decode && !hardware_decode->isChecked() &&
             !video_encoder_combo->currentData(Qt::UserRole + 1).toBool(),
             "Experimental decoding and encoders must remain off by default.");

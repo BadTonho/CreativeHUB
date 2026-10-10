@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -75,6 +76,9 @@ int main(int argc, char** argv)
             creative_suite::media::VideoEncodingSettings settings;
             settings.output_path = temporary.path() / "native-encoder.mkv";
             settings.container_name = "matroska"; settings.video_encoder_name = argv[2];
+            require(settings.video_encoder_name.ends_with("_nvenc") || settings.video_encoder_name.ends_with("_amf") ||
+                settings.video_encoder_name.ends_with("_qsv") || settings.video_encoder_name.ends_with("_vaapi") ||
+                settings.video_encoder_name.ends_with("_videotoolbox"), "A hardware encoder must be selected explicitly.");
             settings.width = 320; settings.height = 180; settings.frame_rate_numerator = 30;
             if (argc > 3) settings.hardware_device_name = argv[3];
             settings.audio = creative_suite::media::AudioEncodingSettings{"aac"};
@@ -109,7 +113,7 @@ int main(int argc, char** argv)
             require(!decoder->decode_next_frame(), "Hardware output added an unexpected video frame.");
             const auto metadata = creative_suite::media::VideoProbe{}.probe(path);
             require(metadata.frame_rate && std::abs(*metadata.frame_rate - 30) < .001 &&
-                metadata.audio && metadata.audio->codec == "aac" && metadata.audio->sample_rate == 48000 &&
+                metadata.audio && metadata.audio->codec == "AAC (Advanced Audio Coding)" && metadata.audio->sample_rate == 48000 &&
                 metadata.duration_seconds && std::abs(*metadata.duration_seconds - .4) < .08,
                 "Hardware export did not preserve frame rate, duration, and configured audio.");
             std::cout << "Hardware encoder " << settings.video_encoder_name << " passed 12 ordered RGBA frames with AAC.\n";

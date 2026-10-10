@@ -64,9 +64,10 @@ VideoPlaybackSession::VideoPlaybackSession(VideoPlaybackSession&&) noexcept = de
 VideoPlaybackSession& VideoPlaybackSession::operator=(VideoPlaybackSession&&) noexcept = default;
 
 std::unique_ptr<VideoPlaybackSession> VideoPlaybackSession::open(
-    const std::filesystem::path& source_path, creative_suite::media::DecodeOptions options) {
+    const std::filesystem::path& source_path, creative_suite::media::DecodeOptions options,
+    creative_suite::media::DecodeObserver* observer) {
     return std::unique_ptr<VideoPlaybackSession>(new VideoPlaybackSession(
-        SharedSession::open(source_path, options, &videoEditorDecodeObserver())));
+        SharedSession::open(source_path, options, observer ? observer : &videoEditorDecodeObserver())));
 }
 
 std::optional<VideoFramePtr> VideoPlaybackSession::decode_next_frame() {

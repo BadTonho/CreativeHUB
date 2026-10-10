@@ -37,6 +37,7 @@ add_executable(creative-suite-video-encoder-tests
 target_link_libraries(creative-suite-video-encoder-tests PRIVATE
     creative-suite::video-encoding
     creative-suite::video-media
+    creative-suite::media-assets
 )
 target_compile_features(creative-suite-video-encoder-tests PRIVATE cxx_std_20)
 if(MSVC)

@@ -35,6 +35,15 @@ Saturation. Both preview and export submit an original immutable source through
 `CompositionLayer::effect_stack`. GPU preparation preserves enabled-effect order,
 byte rounding per pass, and alpha. CPU composition applies the original stack
 exactly once, including after GPU recovery.
+If final composition fails after Fusion or native decoding completed, preview
+and export rebuild the requested frame from the original sessions and reevaluate
+the complete graph on CPU. Recovery does not require a readable old GPU texture;
+the RGBA session boundary can reopen software decoding if the decode device was
+lost. A technical compositor failure remains latched for the current session/job.
+Fusion CPU fallback uses a borrowed per-input recovery callback supplied by the
+application. It fetches each original frame index through its session, so a lost
+native transfer resource during graph evaluation also recovers software decoding.
+Standalone graph consumers can retain explicit native-frame download behavior.
 
 Fusion retains application-owned graph validation, source selection, scheduling,
 and keyframe evaluation. Shared `processImage` operations execute Input, Transform,
@@ -71,11 +80,11 @@ an absent extension or unsupported request retains explicit RGBA recovery.
 
 ## Remaining integration and acceptance
 
-- Aggregate actual stage backends, transfer counts/bytes, reserved memory, and
-  recovery reasons in application diagnostics.
+Actual decode/composition/encoding paths, stage wall times, transfers, reserved
+memory, and recovery reasons are present in application diagnostics.
 - Validate integrated faults, cancellation, queue/file preservation, and affected
   shared consumers; measure sustained playback, export, and physical audio sync.
-- Add and natively validate AMF, QSV, VideoToolbox, and Linux VAAPI/NVENC separately.
+- Natively validate AMF, QSV, VideoToolbox, and Linux VAAPI/NVENC separately.
   Windows evidence cannot qualify unavailable native environments.
 
 ## Evidence on 2026-10-10
@@ -98,6 +107,18 @@ and three-track NVENC export with AAC, zero decode downloads and final readbacks
 cancellation and encoder failure preserving every byte of the previous destination,
 and a successful retry with fresh resources. This is short integration evidence;
 sustained playback and physical audio synchronization remain separate gates.
+The final H.264 and HEVC integration runs also passed live Full/Half/Quarter
+preview parity, invalidation of a completed Fusion lease before CPU recovery,
+whole-source/graph reevaluation after export composition failure, and an injected
+lost native transfer that reopened the original input session in software at the
+same index. Encoded recovery output was compared with all eight CPU reference
+frames; technical composition failure was attempted once and remained latched.
+Explicit RGBA encoder probes passed twelve ordered frames, 30 fps, duration,
+and AAC at 48 kHz for both `h264_nvenc` and `hevc_nvenc`. Motion Studio's
+`--require-gpu` consumer check reported one GPU frame and zero CPU recoveries.
+AMF/QSV availability probes failed on this NVIDIA-only machine: the AMF runtime
+DLL was absent and the MFX implementation was unsupported. These are unavailable
+hardware results, not passing acceptance for AMD or Intel.
 
 The shared effects, native OpenGL compositor, native Video Editor GPU timeline,
 Settings, and CPU node-graph CTest entries passed (5/5). Native Fusion comparison
@@ -124,8 +145,69 @@ destination preservation. Record stage times, CPU/RAM, reserved and measured VRA
 Both root/prototype manifests use the same pinned backend features. NVIDIA
 `ffnvcodec` headers 12.2.72.0 use MIT; AMD AMF headers 1.4.36 use MIT; Intel
 `mfx-dispatch` 1.35.1 uses BSD-3-Clause; Linux libva 2.20.0 uses MIT.
-These enable available hardware encoders without changing the default selection. Their package includes MIT notices. No CUDA toolkit
+These enable available hardware encoders without changing the default selection. Matching package notices are retained. No CUDA toolkit
 or proprietary NVIDIA driver/runtime is bundled. FFmpeg retains its dynamically
 linked LGPL configuration without `--enable-gpl` or `--enable-nonfree`. A future
 distribution must include matching source/build obligations and dependency notices.
 This work creates no installer or release package.
+
+## Additional encoding backends
+
+AMF, QSV, VideoToolbox, and Linux NVENC use the existing RGBA encoder boundary
+and their discovered software input formats. VAAPI creates an explicit FFmpeg
+VAAPI device and eight-surface NV12 pool (128 MiB maximum), converts RGBA in
+software, and uploads through `av_hwframe_transfer_data`. The optional shared
+`hardware_device_name` selects a VAAPI render device; empty uses FFmpeg discovery.
+These paths do not claim the Windows/NVIDIA transfer elimination. Device creation,
+codec initialization, upload, or encoding failure terminates the selected item;
+there is no implicit encoder replacement. Resources are recreated for retry.
+VAAPI uploads are included in `encoding_uploaded_bytes`. Native decoding on
+other operating systems remains outside the implemented D3D11 adapter.
+
+The native encoder probe is an explicit acceptance command (missing hardware is
+failure, never a pass or skip):
+
+```powershell
+build/libs/media/tests/Release/creative-suite-video-encoder-tests.exe --hardware-encoder h264_nvenc
+build/libs/media/tests/Release/creative-suite-video-encoder-tests.exe --hardware-encoder hevc_nvenc
+build/libs/media/tests/Release/creative-suite-video-encoder-tests.exe --hardware-encoder h264_amf
+build/libs/media/tests/Release/creative-suite-video-encoder-tests.exe --hardware-encoder h264_qsv
+```
+
+Use `h264_videotoolbox` on macOS or `h264_vaapi /dev/dri/renderD128` on Linux,
+with that platform's test executable path. It checks ordered encoded frames,
+geometry, frame rate, duration, and AAC. Record native transfer/performance and
+long-duration evidence separately before qualifying another combination.
+
+The prolonged offscreen Windows test generates a 15-minute 1080p H.264 source,
+then consumes all 27,000 timeline frames at a paced 30 fps through three video
+tracks with effects/Fusion and a shared OpenGL consumer. It requires native GPU
+leases, no fallback, and zero readback for every frame:
+
+```powershell
+build/apps/video-editor/tests/rendering/Release/creative-suite-main-editor-gpu-video-pipeline-tests.exe --stress 900
+```
+
+Shorter `--stress 30` runs verify the fixture; they do not qualify 15-minute
+stability. Offscreen consumption does not establish physical display/audio sync.
+
+## Short pipeline profiling before the expanded codec build
+
+One paired synthetic run used 30 full-resolution frames, three tracks, Color
+Fusion plus Grayscale/Brightness, and the same H.264 NVENC output encoder at
+20 Mbps for both paths. Source generation, explicit pixel parity checks, and
+physical audio/display timing are outside these export times.
+
+| Resolution | CPU decode/effects/composition + NVENC RGBA | Native D3D11/OpenGL/NVENC | Native conversion | Native encoding |
+| --- | ---: | ---: | ---: | ---: |
+| 1920x1080 | 15339.4 ms | 1571.71 ms | 95.965 ms | 162.425 ms |
+| 2560x1440 | 23814.0 ms | 1670.34 ms | 76.391 ms | 230.559 ms |
+| 3840x2160 | 56041.0 ms | 2804.95 ms | 86.312 ms | 358.496 ms |
+
+Every native run counted 90 hardware-decoded and 30 native-encoded frames,
+zero software-decoded frames, zero decoded downloads, and zero final readback.
+Geometry uploads remain (1082880/1442880/2162880 bytes). This is not a general
+30 fps guarantee or a quality comparison between different encoders. Before
+reusing bridges across tracks, native conversion measured 809.131/802.525/
+817.294 ms for the same workloads. CPU totals varied between runs; infer the
+specific conversion improvement, not a stable whole-system speedup.

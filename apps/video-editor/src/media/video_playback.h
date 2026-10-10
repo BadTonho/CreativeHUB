@@ -18,9 +18,12 @@ public:
     using CacheSnapshot =
         creative_suite::media::VideoPlaybackSession::CacheSnapshot;
 
+    // An explicit observer is borrowed and must outlive the session. Preview
+    // callers use the default observer; export owns separate stage counters.
     static std::unique_ptr<VideoPlaybackSession> open(
         const std::filesystem::path& source_path,
-        creative_suite::media::DecodeOptions options = {});
+        creative_suite::media::DecodeOptions options = {},
+        creative_suite::media::DecodeObserver* observer = nullptr);
 
     ~VideoPlaybackSession();
 

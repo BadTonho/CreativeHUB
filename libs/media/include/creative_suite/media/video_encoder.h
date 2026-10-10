@@ -81,6 +81,9 @@ private:
 
 // Encodes RGBA video frames and optional interleaved float stereo audio into a
 // selected FFmpeg container. The caller owns output-path staging and publish.
+// Hardware availability is checked at construction, never by registry presence.
+// The caller must log encoding exceptions before presenting them to the user;
+// a selected hardware encoder is never silently replaced with another codec.
 class VideoEncoder final {
 public:
     explicit VideoEncoder(VideoEncodingSettings settings);

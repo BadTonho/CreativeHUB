@@ -30,7 +30,8 @@ Update it when implementation, scope, or a decision changes.
   backend is available for timeline preview through Settings > General, with
   CPU fallback and automatic shared-texture delivery, retaining worker readback
   when required. Offline export independently offers per-job experimental GPU
-  composition through 4K, with RGBA readback and CPU fallback. Qt OpenGL presents
+  composition through 4K. The opt-in Windows/NVIDIA extension retains decode,
+  effects/Fusion, composition, and NVENC input on the GPU, with RGBA/CPU recovery. Qt OpenGL presents
   the final preview frame. See the
   [rendering boundary](architecture/RENDERING.md).
 - The Image Editor's standalone acceptance gate comes before acceptance of
@@ -44,12 +45,16 @@ Update it when implementation, scope, or a decision changes.
 
 The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records the implemented
 optional timeline composition, direct delivery and offline export stages, followed
-by effects and platform acceptance. Video Editor is the first consumer of the
-shared backend; Motion Studio and Image Editor adoption remain planned.
+by the [native visual pipeline](GPU_PIPELINE.md) and platform acceptance.
+Video Editor and Motion Studio consume the shared compositor; Image Editor
+uses shared deterministic composition and image handoff contracts.
 
 **Status: Stages 1–3 implemented, experimental, disabled by default.** Direct
 texture presentation has RGBA and CPU fallbacks. Export has its own per-job choice
-in Render > Video, with readback and CPU fallback. See the
+in Render > Video, with explicit recovery when native operations are unavailable.
+Experimental D3D11 decoding, built-in effects/Fusion, native NVENC, and additional
+hardware encoder discovery extend these stages; their device acceptance is
+recorded separately in [GPU_PIPELINE.md](GPU_PIPELINE.md). See the
 [delivery contract](GPU_TEXTURE_DELIVERY.md) and [export contract](GPU_EXPORT.md).
 Native parity/benchmark and build/test evidence is recorded in
 [GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md) and

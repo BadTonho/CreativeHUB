@@ -259,7 +259,11 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
     }
     if (context.native_inputs && !context.native_inputs->empty()) {
         auto recovered = inputs;
-        for (const auto& [id, native] : *context.native_inputs) if (native) recovered[id] = native->download_rgba();
+        for (const auto& [id, native] : *context.native_inputs) {
+            if (context.should_cancel && context.should_cancel()) return std::nullopt;
+            if (native) recovered[id] = context.recover_native_input
+                ? context.recover_native_input(id) : native->download_rgba();
+        }
         context.gpu = nullptr; context.native_inputs = nullptr;
         return evaluate(graph, recovered, target_node, context);
     }

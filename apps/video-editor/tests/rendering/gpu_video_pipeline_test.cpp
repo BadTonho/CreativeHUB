@@ -3,6 +3,7 @@
 #include <creative_suite/media/video_playback.h>
 #include "rendering/offline_export_renderer.h"
 #include "playback/playback_worker.h"
+#include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
 #include "rendering/preview_performance_metrics.h"
 #include "logging/logger.h"
 #include <QGuiApplication>
@@ -15,7 +16,9 @@
 #include <QThread>
 #include <QFileInfo>
 #include <fstream>
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <thread>
 #include <iostream>
 #include <exception>
@@ -41,6 +44,22 @@ void compare(const csmedia::RgbaFrame& a, const csmedia::RgbaFrame& b) {
         std::to_string(low[0]) + "," + std::to_string(high[0]) + " G=" + std::to_string(low[1]) + "," +
         std::to_string(high[1]) + " B=" + std::to_string(low[2]) + "," + std::to_string(high[2]));
 }
+class FailAfterFusion final : public rendering::ExportGpuCompositor {
+public:
+    explicit FailAfterFusion(int& calls) : calls_(calls) {}
+    composition::OpenGlCompositionResult compose(int, int,
+        const std::vector<composition::CompositionLayer>& layers,
+        const composition::OpenGlFrameCompositor::CancellationPredicate&,
+        composition::OpenGlCompositionTimings*) override {
+        ++calls_;
+        require(std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
+            return layer.texture_frame && layer.texture_frame->valid();
+        }), "Export fault did not occur after a completed GPU Fusion graph.");
+        return {composition::OpenGlCompositionStatus::Failed, {}, "injected-after-fusion", "Injected composition failure."};
+    }
+private:
+    int& calls_;
+};
 void pipeline(const std::filesystem::path& path, QOffscreenSurface* surface, const std::string& codec = "h264_nvenc") {
     csmedia::VideoEncodingSettings encoding;
     encoding.output_path = path; encoding.container_name = "matroska";
@@ -76,6 +95,7 @@ void pipeline(const std::filesystem::path& path, QOffscreenSurface* surface, con
     native_encoding.native_frame_template.reset(); first.reset();
     require(native_writer.acceptsNativeFrames(), "NVENC did not open with D3D11 input.");
     int output_index = 0;
+    std::vector<csmedia::RgbaFrame> encoded_references;
     for (const auto index : {0, 7, 2, 3}) {
         const auto decoded = native->decode_frame_at_native(index);
         require(decoded && decoded->native, "D3D11 surface missing.");
@@ -102,6 +122,7 @@ void pipeline(const std::filesystem::path& path, QOffscreenSurface* surface, con
         require(copied.status == composition::OpenGlCompositionStatus::Complete,
             "Native encoding copy failed: " + copied.operation + ": " + copied.cause);
         compare(*recovered.frame, *destination->download_rgba());
+        encoded_references.push_back(*recovered.frame);
         native_writer.writeVideo(destination, output_index++);
         require(native_writer.uploadedVideoBytes() == 0, "Native NVENC uploaded CPU pixels.");
     }
@@ -111,6 +132,11 @@ void pipeline(const std::filesystem::path& path, QOffscreenSurface* surface, con
         const auto frame = encoded->decode_frame_at(i);
         require(frame && *frame && (*frame)->width == 320 && (*frame)->height == 180,
             "The native NVENC output lost a submitted frame or changed dimensions.");
+        double error = 0;
+        for (std::size_t pixel = 0; pixel < (*frame)->rgba_pixels.size(); ++pixel)
+            if (pixel % 4 != 3) error += std::abs(int((*frame)->rgba_pixels[pixel]) - int(encoded_references[i].rgba_pixels[pixel]));
+        require(error / (320 * 180 * 3) < 12,
+            "Native NVENC changed frame order or exceeded the separate lossy-encoding tolerance.");
     }
     require(native->acceleration_diagnostics().hardware_frames > 0 &&
         native->acceleration_diagnostics().downloaded_frames == 0,
@@ -128,6 +154,30 @@ void pipeline(const std::filesystem::path& path, QOffscreenSurface* surface, con
     graph.nodes[1].color = {7, 110, 90}; graph.next_id = 4;
     graph.connections = {{1, 2, 0}, {2, 3, 0}};
     clip.node_graph = graph;
+    bool lose_decode_resource = false;
+    csmedia::DecodeOptions graph_decode_options{csmedia::DecodeAcceleration::PreferHardware};
+    graph_decode_options.hardware_frame_guard = [&](std::int64_t) {
+        if (lose_decode_resource) throw csmedia::MediaError("Injected lost Fusion input transfer resource.", -1);
+    };
+    auto graph_session = csmedia::VideoPlaybackSession::open(path, graph_decode_options);
+    const auto graph_native = graph_session->decode_frame_at_native(7);
+    require(graph_native && graph_native->native, "Fusion recovery fixture did not decode a native input.");
+    lose_decode_resource = true;
+    fusion::nodes::NativeInputFrames graph_native_inputs{{1, graph_native->native}};
+    fusion::nodes::EvaluationContext graph_recovery_context{7, nullptr, nullptr, {}, &graph_native_inputs};
+    int graph_recoveries = 0;
+    graph_recovery_context.recover_native_input = [&](fusion::nodes::NodeId id) -> csmedia::RgbaFramePtr {
+        require(id == 1, "Fusion recovery requested a different source."); ++graph_recoveries;
+        const auto result = graph_session->decode_frame_at(7);
+        return result ? *result : csmedia::RgbaFramePtr{};
+    };
+    const auto recovered_graph = fusion::nodes::evaluateFrame(graph, {}, graph_recovery_context);
+    const auto reference_graph = fusion::nodes::evaluateFrame(graph, {{1, *cpu->decode_frame_at(7)}}, {});
+    require(recovered_graph && recovered_graph->rgba && reference_graph && reference_graph->rgba && graph_recoveries == 1 &&
+        graph_session->acceleration_diagnostics().backend == csmedia::DecodeBackend::Software &&
+        graph_session->acceleration_diagnostics().recovery_count == 1,
+        "Fusion input recovery did not reopen software decoding at the requested frame.");
+    compare(*reference_graph->rgba, *recovered_graph->rgba);
     playback::PlaybackWorker preview_cpu, preview_gpu;
     auto& preview_metrics = rendering::PreviewPerformanceMetrics::instance();
     preview_metrics.setEnabled(true); preview_metrics.reset();
@@ -147,6 +197,43 @@ void pipeline(const std::filesystem::path& path, QOffscreenSurface* surface, con
     const auto preview_diagnostic = preview_metrics.takeSnapshotAndReset();
     require(preview_diagnostic.gpu_composition_frames == 4 && preview_diagnostic.gpu_composition_fallbacks == 0 &&
         preview_diagnostic.native_video_imports >= 4, "Preview/Fusion did not retain native GPU execution.");
+    for (const auto quality : {playback::PreviewQuality::Half, playback::PreviewQuality::Quarter}) {
+        preview_cpu.setPreviewQuality(quality); preview_gpu.setPreviewQuality(quality);
+        expected.reset(); actual.reset();
+        preview_cpu.renderCompositionFrame(3, 3, 81); preview_gpu.renderCompositionFrame(3, 3, 81);
+        require(expected && actual && errors == 0 && actual->width ==
+            (quality == playback::PreviewQuality::Half ? 960 : 480), "Native preview quality did not resize the same frame.");
+        compare(*expected, *actual);
+    }
+    preview_cpu.setPreviewQuality(playback::PreviewQuality::Full);
+    preview_gpu.setPreviewQuality(playback::PreviewQuality::Full);
+    int composition_failures = 0;
+    playback::PlaybackWorker* failing_preview_ptr = nullptr;
+    playback::PlaybackWorker failing_preview(nullptr, [&](int, int, const auto& layers, const auto&, auto*) {
+        ++composition_failures;
+        require(layers.size() == 1 && layers[0].texture_frame && layers[0].texture_frame->valid(),
+            "Preview fault did not occur after GPU Fusion.");
+        auto retired = layers[0].texture_frame;
+        failing_preview_ptr->setGpuCompositionEnabled(true, nullptr);
+        require(!retired->valid(), "Injected preview failure did not invalidate the graph lease.");
+        return composition::OpenGlCompositionResult{composition::OpenGlCompositionStatus::Failed, {},
+            "injected-after-fusion", "Injected loss of the graph context."};
+    });
+    failing_preview_ptr = &failing_preview;
+    QObject::connect(&failing_preview, &playback::PlaybackWorker::frameReady,
+        [&](auto frame, auto, auto, auto) { actual = std::move(frame); });
+    QObject::connect(&failing_preview, &playback::PlaybackWorker::playbackError, [&](auto, auto, auto) { ++errors; });
+    failing_preview.setHardwareDecodingEnabled(true);
+    failing_preview.setGpuCompositionEnabled(true, surface);
+    failing_preview.setComposition({clip}, {}, 81);
+    for (const auto index : {7, 2}) {
+        expected.reset(); actual.reset();
+        preview_cpu.renderCompositionFrame(index, index, 81);
+        failing_preview.renderCompositionFrame(index, index, 81);
+        require(expected && actual && errors == 0, "CPU recovery depended on a lost Fusion texture.");
+        compare(*expected, *actual);
+    }
+    require(composition_failures == 1, "Failed preview composition was retried without recovery.");
     rendering::RenderJob job; job.id = 91;
     job.settings.output_path = QString::fromStdWString((path.parent_path() / L"application-export.mkv").wstring());
     job.settings.container_name = "matroska"; job.settings.video_encoder_name = QString::fromStdString(codec);
@@ -195,6 +282,27 @@ void pipeline(const std::filesystem::path& path, QOffscreenSurface* surface, con
     try { rendering::OfflineExportRenderer::render(invalid, cancel, {}, options); }
     catch (const std::exception&) { failed = true; }
     require(failed && contents() == preserved, "Encoder failure changed the existing destination or silently changed encoder.");
+    auto missing_context = options; missing_context.gpu_surface = nullptr;
+    rendering::OfflineExportRenderer::render(job, cancel, {}, missing_context);
+    require(metrics.cpu_frames == 8 && metrics.native_encoded_frames == 0 && metrics.gpu_frames == 0 &&
+        metrics.decoded_hardware_frames > 0 && metrics.decoded_downloaded_frames > 0,
+        "Missing interoperability did not expose RGBA/CPU recovery with the selected hardware encoder.");
+    auto reference_job = job;
+    reference_job.settings.output_path = QString::fromStdWString((path.parent_path() / L"cpu-reference.mkv").wstring());
+    reference_job.settings.hardware_decoding_enabled = reference_job.settings.gpu_composition_enabled = false;
+    rendering::OfflineExportRenderer::render(reference_job, cancel);
+    int export_failures = 0;
+    auto fail_after_graph = options;
+    fail_after_graph.gpu_factory = [&](auto*) { return std::make_unique<FailAfterFusion>(export_failures); };
+    rendering::OfflineExportRenderer::render(job, cancel, {}, fail_after_graph);
+    require(export_failures == 1 && metrics.cpu_frames == 8 && metrics.fallback_frames == 8 &&
+        metrics.gpu_frames == 0 && metrics.readback_bytes == 0 && metrics.graph_peak_gpu_bytes > 0,
+        "Export did not reevaluate the whole Fusion graph through CPU after composition failure.");
+    {
+        auto reference_output = csmedia::VideoPlaybackSession::open(std::filesystem::path(reference_job.settings.output_path.toStdWString()));
+        auto recovered_output = csmedia::VideoPlaybackSession::open(destination_path);
+        for (int i = 0; i < 8; ++i) compare(**reference_output->decode_frame_at(i), **recovered_output->decode_frame_at(i));
+    }
     rendering::OfflineExportRenderer::render(job, cancel, {}, options);
     require(metrics.native_encoded_frames == 8 && metrics.readback_bytes == 0,
         "Retry after encoder failure did not create fresh native export resources.");
@@ -217,6 +325,17 @@ void benchmark(const std::filesystem::path& root, QOffscreenSurface* surface) {
         }
         { csmedia::VideoEncoder writer(settings); for (int i = 0; i < 30; ++i) writer.writeVideo(source, i); writer.finish(); }
         source.rgba_pixels.clear(); source.rgba_pixels.shrink_to_fit();
+        { auto reference = csmedia::VideoPlaybackSession::open(source_path);
+          auto decoder = csmedia::VideoPlaybackSession::open(source_path, csmedia::DecodeOptions{csmedia::DecodeAcceleration::PreferHardware});
+          const auto native_frame = decoder->decode_frame_at_native(17);
+          require(native_frame && native_frame->native, "Resolution parity requires a native decoded frame.");
+          composition::OpenGlFrameCompositor converter(surface, composition::OpenGlPrecisionPolicy::Automatic,
+              QOpenGLContext::globalShareContext());
+          csmedia::RgbaFrame geometry{width, height, width * 4};
+          composition::CompositionLayer layer{&geometry}; layer.native_frame = native_frame->native;
+          const auto result = converter.compose(width, height, {layer});
+          require(result.frame.has_value(), "Resolution conversion parity failed.");
+          compare(**reference->decode_frame_at(17), *result.frame); }
         rendering::RenderJob job; job.id = width;
         job.settings.container_name = "matroska"; job.settings.video_encoder_name = "h264_nvenc";
         job.settings.width = width; job.settings.height = height; job.settings.export_audio = false;
@@ -247,6 +366,8 @@ void benchmark(const std::filesystem::path& root, QOffscreenSurface* surface) {
                 << " frames=" << metrics.encoded_frames << " total_ms=" << metrics.total_nanoseconds / 1e6
                 << " preparation_ms=" << metrics.preparation_nanoseconds / 1e6 << " composition_ms=" << metrics.composition_nanoseconds / 1e6
                 << " conversion_ms=" << metrics.native_conversion_nanoseconds / 1e6 << " encode_ms=" << metrics.encoding_nanoseconds / 1e6
+                << " decode_packet_ms=" << metrics.decode_packet_nanoseconds / 1e6 << " decode_receive_ms=" << metrics.decode_receive_nanoseconds / 1e6
+                << " decode_conversion_ms=" << metrics.decode_conversion_nanoseconds / 1e6 << " graph_ms=" << metrics.graph_nanoseconds / 1e6
                 << " upload_bytes=" << metrics.uploaded_bytes << " readback_bytes=" << metrics.readback_bytes
                 << " hardware_frames=" << metrics.decoded_hardware_frames << " software_frames=" << metrics.decoded_software_frames
                 << " native_encoded_frames=" << metrics.native_encoded_frames << '\n';
@@ -310,6 +431,7 @@ void stress(const std::filesystem::path& root, QOffscreenSurface* surface, int s
     consumer.doneCurrent();
     const auto started = std::chrono::steady_clock::now();
     std::uint64_t late_frames = 0; double maximum_ms = 0;
+    std::vector<double> frame_latencies; frame_latencies.reserve(frame_count);
     for (int i = 0; i < frame_count; ++i) {
         const auto frame_started = std::chrono::steady_clock::now();
         delivered = {};
@@ -328,6 +450,7 @@ void stress(const std::filesystem::path& root, QOffscreenSurface* surface, int s
         consumer.doneCurrent(); delivered = {};
         const auto elapsed_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame_started).count();
         maximum_ms = std::max(maximum_ms, elapsed_ms);
+        frame_latencies.push_back(elapsed_ms);
         if (elapsed_ms > 1000.0 / 30) ++late_frames;
         std::this_thread::sleep_until(started + std::chrono::nanoseconds(std::int64_t(i + 1) * 1000000000LL / 30));
         if ((i + 1) % 900 == 0) std::cout << "stress_progress frames=" << i + 1 << " late_frames=" << late_frames
@@ -336,11 +459,17 @@ void stress(const std::filesystem::path& root, QOffscreenSurface* surface, int s
     require(consumer.makeCurrent(surface), "Cannot release preview consumer resources.");
     gl->glDeleteFramebuffers(2, buffers); gl->glDeleteTextures(1, &target); consumer.doneCurrent();
     const auto result = metrics.takeSnapshotAndReset();
+    const double elapsed_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    std::sort(frame_latencies.begin(), frame_latencies.end());
     require(result.gpu_composition_frames == std::uint64_t(frame_count) && result.gpu_composition_fallbacks == 0 &&
         result.gpu_composition_readback_bytes == 0 && result.native_video_imports >= std::uint64_t(frame_count) * 3,
         "The prolonged preview did not retain the native pipeline for all three tracks.");
+    require(elapsed_seconds < seconds * 1.01 + 2, "Prolonged offscreen preview could not sustain the paced 30 fps workload.");
     std::cout << "stress_result frames=" << frame_count << " seconds=" << seconds << " late_frames=" << late_frames
-        << " max_frame_ms=" << maximum_ms << " native_imports=" << result.native_video_imports << " readback_bytes=0" << std::endl;
+        << " elapsed_seconds=" << elapsed_seconds << " max_frame_ms=" << maximum_ms
+        << " p95_frame_ms=" << frame_latencies[std::min(frame_latencies.size()-1, std::size_t(frame_count * .95))]
+        << " p99_frame_ms=" << frame_latencies[std::min(frame_latencies.size()-1, std::size_t(frame_count * .99))]
+        << " native_imports=" << result.native_video_imports << " readback_bytes=0" << std::endl;
 }
 }
 int main(int argc, char** argv) {

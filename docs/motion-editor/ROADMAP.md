@@ -636,3 +636,8 @@ gate.
 Do not add target dates until capacity, platform support, and scope are
 validated. Update this roadmap when a milestone, dependency, or decision
 changes.
+
+Native shared-compositor regression can require actual hardware by running
+`creative-suite-motion-editor-gpu-composition-tests --require-gpu` with the native
+Qt platform plugin. It rejects an absent context or CPU recovery instead of
+qualifying that run. The default portable test retains its CPU recovery coverage.

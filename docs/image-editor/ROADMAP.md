@@ -20,6 +20,15 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Principles
 
+The shared GPU/dependency regression gate on 2026-10-10 corrected unqualified
+`ImageDocumentStore` references in the core test's persistence assertions. This
+is a test compilation fix; raster save/recovery assertions also use the current
+document-version constant while retaining older migration fixtures. The Magic
+Wand UI geometry-limit fixture uses alternating connected spans that exceed the
+path limit after adjacent equal spans are merged. Document versions and application behavior retain
+their existing contracts. Its execution result is tracked with the shared
+[Windows/NVIDIA pipeline evidence](../video-editor/GPU_PIPELINE.md).
+
 - Keep the Video Editor's stability work on track while developing the Image
   Editor as a separate executable.
 - Preserve linked source images; store editable document operations in a

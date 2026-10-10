@@ -1,6 +1,7 @@
 # Experimental GPU Export
 
-Status: **implemented on 2026-10-02; broader platform and human acceptance pending**.
+Status: **composition implemented on 2026-10-02, native pipeline extended on
+2026-10-10; broader platform and human acceptance pending**.
 Video Editor is the first export consumer of `creative-suite::composition-opengl`.
 See [native evidence and measurements](GPU_EXPORT_RESULTS.md).
 
@@ -23,11 +24,15 @@ persisted project format changes.
 
 ## Frame preparation and encoding
 
-`OfflineExportRenderer` prepares ordered layers once per output position, retaining
+`OfflineExportRenderer` prepares ordered layers per output position, retaining
 references to decoded frames rather than copying their pixels into temporary
 operations. The CPU and GPU adapters preserve the same source/effect contract,
 evaluated transforms and opacities. Their source owners survive composition and
 any fallback. Still images and rasterized text remain cached for the item.
+When final composition fails after a GPU Fusion result, recovery prepares the
+same position again from the original decoder sessions and evaluates the entire
+graph on CPU. It does not read back a potentially invalid graph texture. Effects
+remain applied once to the recovered source and only one frame is encoded.
 
 Output dimensions and frame rate determine rendering. Timeline/source rate
 mapping, trims, keyframes, Cross Dissolve, Fade to Black, layer priority, nearest
@@ -116,8 +121,9 @@ schema 3. The callback receives `OfflineExportMetrics`.
 | `decoded_hardware_frames`, `decoded_software_frames`, `decoded_downloaded_frames` | Decoder-received frames, including discarded intermediates, and actual video-frame downloads. Encoder choice alone does not prove native decoding. |
 
 Nested timing categories must not be summed as disjoint costs. Source transfer
-counts include repeated uploads; composition fallback does not duplicate source
-decoding. Results on short synthetic fixtures do not establish gains on every
+counts include repeated uploads. CPU recovery may reprepare sources or reopen
+decoding after device loss, but submits only one encoded frame for the requested
+position. Results on short synthetic fixtures do not establish gains on every
 project, codec, GPU or operating system.
 
 ## Regression and remaining validation
@@ -143,3 +149,9 @@ and `encoder_reserved_gpu_bytes`. Reservations describe known decoder texture
 arrays, graph allocations, and the bounded output pool, not driver-private VRAM.
 `peak_known_gpu_bytes` continues to describe the timeline compositor. Decode
 downloads and fallback encoder uploads are independent of composition transfers.
+
+Schema 2 includes `decode_packet_ns`, `decode_receive_ns`,
+`decode_conversion_ns`, and `graph_ns`. Decode instrumentation is per export
+worker and does not add its samples to preview diagnostics. These wall-time
+stages may nest inside preparation/graph time; do not sum them as independent
+GPU execution times.

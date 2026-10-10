@@ -79,6 +79,8 @@ ExportMetricsScope::~ExportMetricsScope() {
         add("decoded_downloaded_bytes", metrics.decoded_downloaded_bytes); add("encoding_uploaded_bytes", metrics.encoding_uploaded_bytes);
         add("decoder_reserved_gpu_bytes", metrics.decoder_reserved_gpu_bytes); add("graph_peak_gpu_bytes", metrics.graph_peak_gpu_bytes);
         add("encoder_reserved_gpu_bytes", metrics.encoder_reserved_gpu_bytes);
+        add("decode_packet_ns", metrics.decode_packet_nanoseconds); add("decode_receive_ns", metrics.decode_receive_nanoseconds);
+        add("decode_conversion_ns", metrics.decode_conversion_nanoseconds); add("graph_ns", metrics.graph_nanoseconds);
         logging::Logger::instance().log(logging::Level::Info, "export", "performance_metrics", "Offline export summary.", context);
         if (options_.metrics_callback) options_.metrics_callback(metrics);
     } catch (...) {
@@ -92,11 +94,11 @@ ExportComposition::ExportComposition(const RenderJob& job, const OfflineExportOp
     : job_(job), options_(options), metrics_(metrics) {}
 
 bool ExportComposition::nativeDelivery() const noexcept {
-    return job_.settings.gpu_composition_enabled && !failed_ && options_.gpu_surface && !options_.gpu_factory;
+    return job_.settings.gpu_composition_enabled && !failed_ && !cpu_source_recovery_ && options_.gpu_surface && !options_.gpu_factory;
 }
 
 composition::OpenGlFrameCompositor* ExportComposition::graphBackend() {
-    if (!job_.settings.gpu_composition_enabled || failed_ || !options_.gpu_surface || options_.gpu_factory) return nullptr;
+    if (!job_.settings.gpu_composition_enabled || failed_ || cpu_source_recovery_ || !options_.gpu_surface) return nullptr;
     if (!graph_gpu_) graph_gpu_ = std::make_unique<composition::OpenGlFrameCompositor>(options_.gpu_surface,
         composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext(),
         std::make_shared<composition::OpenGlTexturePoolBudget>(256ULL * 1024 * 1024, 8));
@@ -104,21 +106,22 @@ composition::OpenGlFrameCompositor* ExportComposition::graphBackend() {
 }
 
 void ExportComposition::fallback(const composition::OpenGlCompositionResult& result,
-    std::int64_t output_frame, std::int64_t timeline_frame) {
+    std::int64_t output_frame, std::int64_t timeline_frame, bool rgba_recovery) {
     const bool technical = result.status == composition::OpenGlCompositionStatus::Failed;
     if (technical || !warned_) {
         auto context = jobContext(job_);
         context.emplace_back("output_frame", std::to_string(output_frame));
         context.emplace_back("timeline_frame", std::to_string(timeline_frame));
         context.emplace_back("error_code", std::to_string(result.error_code));
-        context.emplace_back("fallback", "cpu");
+        context.emplace_back("fallback", rgba_recovery && !technical ? "rgba" : "cpu");
         logging::Logger::instance().log(technical ? logging::Level::Error : logging::Level::Warning,
             "export-gpu", result.operation, result.cause, context);
     }
     if (!warned_) {
         warned_ = true;
         if (options_.warning_callback) {
-            try { options_.warning_callback("Export is continuing with CPU fallback.", result.error_code); }
+            try { options_.warning_callback(rgba_recovery && !technical ?
+                "Export is continuing with a compatible processing path." : "Export is continuing with CPU fallback.", result.error_code); }
             catch (...) { logging::Logger::instance().log(logging::Level::Error, "export", "warning_callback", "The export warning callback failed."); }
         }
     }
@@ -133,6 +136,7 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
     ExportTimedScope total(metrics_.composition_nanoseconds);
     if (native_output) native_output->reset();
     if (native_pool && native_output && nativeDelivery()) {
+        ExportTimedScope gpu_time(metrics_.gpu_composition_nanoseconds);
         if (!native_gpu_) native_gpu_ = std::make_unique<composition::OpenGlFrameCompositor>(options_.gpu_surface,
             composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext());
         composition::OpenGlCompositionTimings timings;
@@ -155,9 +159,9 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
             }
         }
         if (copied.status == composition::OpenGlCompositionStatus::Cancelled || canceled.load()) throw ExportCanceled{};
-        fallback(copied, output_frame, timeline_frame);
+        fallback(copied, output_frame, timeline_frame, true);
     }
-    if (job_.settings.gpu_composition_enabled && !failed_) {
+    if (job_.settings.gpu_composition_enabled && !failed_ && !cpu_source_recovery_) {
         composition::OpenGlCompositionTimings timings;
         composition::OpenGlCompositionResult result;
         {
@@ -191,27 +195,13 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
         fallback(result, output_frame, timeline_frame);
     }
     if (canceled.load()) throw ExportCanceled{};
+    if (std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
+            return layer.native_frame || layer.texture_frame;
+        })) throw CpuCompositionSourcesRequired{};
     std::optional<creative_suite::media::RgbaFrame> result;
     {
         ExportTimedScope cpu_time(metrics_.cpu_composition_nanoseconds);
-        auto cpu_layers = layers;
-        std::vector<creative_suite::media::RgbaFramePtr> recovered;
-        recovered.reserve(layers.size());
-        for (auto& layer : cpu_layers) {
-            if (layer.native_frame) recovered.push_back(layer.native_frame->download_rgba());
-            else if (layer.texture_frame && graph_gpu_) {
-                auto recovery = graph_gpu_->readback(layer.texture_frame, [&] { return canceled.load(); });
-                if (!recovery.frame) {
-                    fallback(recovery, output_frame, timeline_frame);
-                    if (canceled.load()) throw ExportCanceled{};
-                    throw std::runtime_error("Recovering a Fusion texture for CPU composition failed.");
-                }
-                metrics_.readback_bytes += recovery.frame->rgba_pixels.size();
-                recovered.push_back(std::make_shared<const creative_suite::media::RgbaFrame>(std::move(*recovery.frame)));
-            } else continue;
-            layer.frame = recovered.back().get(); layer.native_frame.reset(); layer.texture_frame.reset();
-        }
-        result = composition::FrameCompositor::compose(job_.settings.width, job_.settings.height, cpu_layers);
+        result = composition::FrameCompositor::compose(job_.settings.width, job_.settings.height, layers);
     }
     if (canceled.load()) throw ExportCanceled{};
     if (result) { ++metrics_.cpu_frames; if (job_.settings.gpu_composition_enabled) ++metrics_.fallback_frames; }

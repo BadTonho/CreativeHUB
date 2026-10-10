@@ -31,6 +31,8 @@ struct OfflineExportMetrics {
     std::uint64_t decoded_hardware_frames = 0, decoded_software_frames = 0, decoded_downloaded_frames = 0;
     std::uint64_t decoded_downloaded_bytes = 0, encoding_uploaded_bytes = 0;
     std::uint64_t decoder_reserved_gpu_bytes = 0, graph_peak_gpu_bytes = 0, encoder_reserved_gpu_bytes = 0;
+    std::uint64_t decode_packet_nanoseconds = 0, decode_receive_nanoseconds = 0, decode_conversion_nanoseconds = 0;
+    std::uint64_t graph_nanoseconds = 0;
 };
 
 // Small adapter seam for deterministic export fault tests. Production delegates

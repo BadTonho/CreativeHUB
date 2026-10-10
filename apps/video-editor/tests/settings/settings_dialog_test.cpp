@@ -472,6 +472,21 @@ int main(int argc, char* argv[]) {
         gpu_check->setChecked(false);
         require(gpu_changes == 2 && !settings::gpuCompositionEnabled(), "GPU preference did not disable.");
 
+        auto* hardware_check = dialog.findChild<QCheckBox*>("hardwareDecodingCheckBox");
+        require(hardware_check && !hardware_check->isChecked(), "Hardware decoding checkbox must default off.");
+        int hardware_changes = 0;
+        QObject::connect(&dialog, &settings::SettingsDialog::hardwareDecodingEnabledChanged, [&](bool enabled) {
+            ++hardware_changes;
+            require(settings::hardwareDecodingEnabled() == enabled, "Hardware decode signal preceded persistence.");
+        });
+        hardware_check->setChecked(true); settings.sync();
+        require(hardware_changes == 1 && settings::hardwareDecodingEnabled(), "Hardware decode preference did not apply.");
+        { settings::SettingsDialog reopened(nullptr, shortcut_manager);
+          require(reopened.findChild<QCheckBox*>("hardwareDecodingCheckBox")->isChecked(),
+              "Reopened Settings lost the hardware decode preference."); }
+        hardware_check->setChecked(false);
+        require(hardware_changes == 2 && !settings::hardwareDecodingEnabled(), "Hardware decoding did not disable.");
+
         auto* autosave_check = dialog.findChild<QCheckBox*>(
             "projectAutosaveCheckBox");
         require(autosave_check != nullptr,

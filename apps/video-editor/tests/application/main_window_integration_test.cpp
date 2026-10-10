@@ -815,6 +815,7 @@ public:
             }
             require(render_window.close(),
                     "Closing the editor from Render must be accepted.");
+            settings::setHardwareDecodingEnabled(true);
             require(render_window.tabifiedDockWidgets(
                         render_window.preview_dock_).contains(
                             render_window.inspector_dock_),
@@ -849,6 +850,10 @@ public:
             reopened_full_quality->trigger();
             require(reopened_window.playback_controller_->gpuCompositionEnabled(),
                     "Persisted GPU preference was not applied at startup.");
+            require(reopened_window.playback_controller_->hardwareDecodingEnabled(),
+                    "Persisted hardware decode preference was not applied at startup.");
+            settings::setHardwareDecodingEnabled(false);
+            reopened_window.playback_controller_->setHardwareDecodingEnabled(false);
             settings::setGpuCompositionEnabled(false);
             reopened_window.playback_controller_->setGpuCompositionEnabled(false);
             QApplication::processEvents();
@@ -862,31 +867,25 @@ public:
 
         QByteArray version_eight_layout;
         {
-            // Build a v8 migration fixture from the default placement, rather
-            // than retabulating the preceding close/reopen fixture's saved tabs.
+            // Serialize a legacy layout with fresh docks. Moving the real
+            // Preview out of a live tab/split arrangement can fail inside Qt's
+            // pending dock animation, independently of state migration.
             QSettings().remove("workspace/dock_layout_state");
             QSettings().sync();
-            QEventLoop dock_settle;
-            const auto settle_docks = [&dock_settle]() {
-                QTimer::singleShot(250, &dock_settle, &QEventLoop::quit);
-                dock_settle.exec();
+            QMainWindow legacy_layout_window;
+            legacy_layout_window.resize(1200, 800);
+            legacy_layout_window.setDockOptions(QMainWindow::AllowTabbedDocks);
+            const auto add_legacy_dock = [&](const char* name, Qt::DockWidgetArea area) {
+                auto* dock = new QDockWidget(QString::fromLatin1(name), &legacy_layout_window);
+                dock->setObjectName(QString::fromLatin1(name));
+                dock->setWidget(new QWidget(dock));
+                legacy_layout_window.addDockWidget(area, dock, Qt::Vertical);
             };
-            settle_docks();
-            MainWindow legacy_layout_window;
-            // This fixture serializes a legacy placement, not a dock animation.
-            // Relocating Preview during Qt's pending native animation can abort
-            // inside the dock layout before the migration assertion runs.
-            legacy_layout_window.setDockOptions(
-                legacy_layout_window.dockOptions() & ~QMainWindow::AnimatedDocks);
-            // The fixture needs saved placement only. Keeping it hidden avoids
-            // Qt's native dock animation lifecycle while serializing v8 state.
-            legacy_layout_window.addDockWidget(
-                Qt::RightDockWidgetArea, legacy_layout_window.preview_dock_);
-            settle_docks();
-            legacy_layout_window.splitDockWidget(
-                legacy_layout_window.inspector_dock_,
-                legacy_layout_window.preview_dock_, Qt::Vertical);
-            settle_docks();
+            for (const auto* name : {"binsDock", "mediaDock", "toolboxDock", "favoritesDock", "effectsDock"})
+                add_legacy_dock(name, Qt::LeftDockWidgetArea);
+            add_legacy_dock("inspectorDock", Qt::RightDockWidgetArea);
+            add_legacy_dock("previewDock", Qt::RightDockWidgetArea);
+            add_legacy_dock("timelineDock", Qt::BottomDockWidgetArea);
             version_eight_layout = legacy_layout_window.saveState(8);
             require(!version_eight_layout.isEmpty(),
                     "The Preview layout migration fixture could not be saved.");

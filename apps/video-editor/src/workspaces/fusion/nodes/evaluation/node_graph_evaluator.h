@@ -22,6 +22,9 @@ struct EvaluationContext {
     std::function<bool()> should_cancel;
     const NativeInputFrames* native_inputs = nullptr;
     creative_suite::composition::OpenGlCompositionTimings* gpu_timings = nullptr;
+    // Borrowed for this evaluation. Applications recover the same input index
+    // through their decoder session, including software reopen on device loss.
+    std::function<media::VideoFramePtr(NodeId)> recover_native_input;
 };
 
 struct EvaluatedGraphFrame {

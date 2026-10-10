@@ -456,7 +456,7 @@ void RenderWorkspace::createSettingsPanel() {
     gpu_composition_check_->setObjectName("renderGpuCompositionCheck");
     gpu_composition_check_->setAccessibleName(QStringLiteral("Use GPU for export (Experimental)"));
     const auto gpu_description = QStringLiteral(
-        "Accelerates layer composition for this queued export. Uses CPU automatically when needed. "
+        "Accelerates supported effects, Fusion graphs, and layer composition for this queued export. Uses CPU automatically when needed. "
         "The selected video encoder is unchanged.");
     gpu_composition_check_->setAccessibleDescription(gpu_description);
     gpu_composition_check_->setToolTip(gpu_description);

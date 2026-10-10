@@ -6,6 +6,11 @@ The [experimental pipeline](../GPU_PIPELINE.md) extends composition to ordered
 built-in clip effects and transparent Fusion intermediates. Preview/export submit
 unprocessed `effect_stack` sources through the shared boundary; CPU recovery
 applies them once. Native decoding and NVENC have separate opt-ins and gates.
+Fusion's evaluation context borrows a per-input CPU recovery callback for the
+duration of evaluation. Preview and export use it to fetch the original frame
+index through the owning decoder session, allowing software reopen after a
+lost native transfer resource. Final composition failure similarly prepares the
+whole frame again through those sessions, without relying on retired textures.
 
 The preview container is implemented in
 `apps/video-editor/src/ui/preview/`; its OpenGL surface and compositor remain
