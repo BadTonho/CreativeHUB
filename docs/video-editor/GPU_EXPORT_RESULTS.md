@@ -5,6 +5,11 @@ Video Editor is the first export consumer of the shared adapter. The
 [export contract](GPU_EXPORT.md) documents selection, resources, fallback and metrics.
 Versions, formats, shortcuts and preview schemas 9/3 are unchanged.
 
+The later 2026-10-10 Windows/NVIDIA decode/effects/Fusion/NVENC extension,
+101-test regression gate, full-resolution export measurements, and prolonged
+preview evidence are recorded in [GPU_PIPELINE.md](GPU_PIPELINE.md). The dated
+measurements below retain their original driver and RGBA-input/readback scope.
+
 ## Platform and native evidence
 
 Windows 11 Pro **10.0.26300**, NVIDIA GeForce GTX 1660 SUPER, NVIDIA driver

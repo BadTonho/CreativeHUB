@@ -3,6 +3,11 @@
 Date: 2026-10-02. Video Editor is the first consumer. The opt-in remains disabled
 by default. No project/application version or keyboard shortcut changes.
 
+The later 2026-10-10 Windows/NVIDIA native decode, effects/Fusion, export, and
+15-minute offscreen preview results are recorded in
+[GPU_PIPELINE.md](GPU_PIPELINE.md), including latency spikes and remaining
+physical acceptance. The measurements below keep their original stage/driver scope.
+
 ## Stage 1 historical evidence: GPU composition with RGBA readback
 
 The following stage 1 measurements were recorded before direct delivery was

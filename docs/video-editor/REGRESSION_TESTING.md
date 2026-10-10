@@ -1402,3 +1402,10 @@ The native export comparison uses the global share context and copies a foreign
 Fusion lease into its own compositor session before an explicit oracle readback.
 Those verification transfers do not qualify the no-readback native pipeline;
 the separate hardware video-pipeline target enforces that contract directly.
+
+On 2026-10-10, the final canonical Windows Release build passed all 101
+registered CTest entries in 118.19 seconds, including the shared libraries and
+their Video Editor, Image Editor, Motion Studio, and Hub consumers. Explicit
+H.264 and HEVC native pipeline checks also passed after the final relink.
+Native encoder, performance, prolonged preview, and pending physical/platform
+acceptance are recorded separately in [GPU_PIPELINE.md](GPU_PIPELINE.md).

@@ -1,7 +1,8 @@
 # Video Editor GPU Acceleration Plan
 
 Status: **Stages 1–3 implemented as opt-in experiments on 2026-10-02;
-cross-platform acceptance and later stages pending**.
+Windows/NVIDIA native pipeline implemented and integration verified on
+2026-10-10; human and cross-platform acceptance pending**.
 The Windows/NVIDIA decode/effects/Fusion/encode extension is tracked in
 [the visual pipeline contract](GPU_PIPELINE.md), including implementation,
 native evidence, and remaining gates. Video Editor and Motion Studio reuse the
@@ -57,8 +58,8 @@ are logged before a nonmodal status warning. Preference/project data are preserv
 Cancellation returns no frame. Aggregate metrics schema 9 distinguishes actual
 CPU/GPU composition, uploads, draw submission, readback, bytes and fallback from
 the existing presentation metrics. Stage 2 adds automatic direct delivery and
-Stage 3 adds independent offline export. GPU effects/decode/encode are being
-extended under [the Windows/NVIDIA pipeline work](GPU_PIPELINE.md).
+Stage 3 adds independent offline export. GPU effects/decode/encode extend these
+stages under [the Windows/NVIDIA pipeline work](GPU_PIPELINE.md).
 
 Exact rotated nearest sampling additionally requires the optional
 `ARB_gpu_shader_fp64` and `ARB_gpu_shader5` extensions. Without them, rotated
@@ -112,8 +113,10 @@ RGBA/direct composition now uses two 16 KiB geometry lookup buffers, each with
 4096 indices, covering UHD and portrait 4K without changing the preview pool budget.
 
 `OfflineExportOptions` supplies the borrowed surface, warning/summary callbacks
-and a test adapter factory. Unsupported requests fall back on the same prepared
-layers; technical failure latches CPU for the item, with a fresh backend on retry.
+and a test adapter factory. Unsupported requests recover for that frame;
+technical failure latches CPU for the item, with a fresh backend on retry.
+The native extension rebuilds original sources and graphs when GPU leases cannot
+be used for CPU recovery.
 Export diagnostics schema 2 is independent of preview 9/3 and includes every
 outcome, transfers, encoding and known allocation peaks. The
 [implementation contract](GPU_EXPORT.md) defines ownership, cancellation and

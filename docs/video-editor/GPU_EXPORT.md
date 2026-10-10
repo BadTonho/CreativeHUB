@@ -85,8 +85,8 @@ without replacing the shared native composition engine.
 | GPU outcome | Export behavior |
 | --- | --- |
 | Complete, valid RGBA frame | Encode the complete frame once. |
-| Unsupported | Compose the same prepared layers on CPU for this frame; allow GPU on later frames. |
-| Failed, unexpected Busy or incomplete result | Compose the same layers on CPU; disable GPU for the rest of this item. Retry constructs a fresh backend. |
+| Unsupported | Recover through RGBA or CPU for this frame; rebuild original sources/graphs when necessary. Allow GPU on later frames. |
+| Failed, unexpected Busy or incomplete result | Rebuild original sources/graphs for CPU composition; disable GPU for the rest of this item. Retry constructs a fresh backend. |
 | Cancelled | Translate to `ExportCanceled`; discard the result and preserve the previous output. |
 
 Cancellation is checked during source preparation, within shared GPU composition,

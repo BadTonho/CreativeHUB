@@ -56,6 +56,12 @@ Experimental D3D11 decoding, built-in effects/Fusion, native NVENC, and addition
 hardware encoder discovery extend these stages; their device acceptance is
 recorded separately in [GPU_PIPELINE.md](GPU_PIPELINE.md). See the
 [delivery contract](GPU_TEXTURE_DELIVERY.md) and [export contract](GPU_EXPORT.md).
+The Windows/NVIDIA implementation passed explicit H.264/HEVC native integration
+and the final 101-test Windows regression gate on 2026-10-10. Hardware options
+remain disabled by default; human timing and other native platforms are pending.
+The 15-minute offscreen run completed 27,000 native GPU frames without fallback
+or readback. Its recorded latency spikes keep smooth physical 30 fps playback
+acceptance pending; see the pipeline's prolonged-run statistics.
 Native parity/benchmark and build/test evidence is recorded in
 [GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md) and
 [GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md). Further OS/driver and

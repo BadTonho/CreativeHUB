@@ -1,6 +1,7 @@
 # Experimental visual GPU pipeline
 
-Status: **implementation in progress; Windows/NVIDIA first; other native platforms pending**.
+Status: **Windows/NVIDIA implemented and native integration verified;
+human acceptance and other native platforms pending**.
 This extends the original composition, texture-delivery, and export experiments.
 Implementation and hardware acceptance are separate gates. Experimental options
 remain disabled by default; project formats, history, audio, and handoffs retain
@@ -78,12 +79,16 @@ each bounded to 64 MiB (256 MiB in total). This avoids recreating shaders and
 registrations when switching tracks. Both NV12 and BGRA storage are bounded;
 an absent extension or unsupported request retains explicit RGBA recovery.
 
-## Remaining integration and acceptance
+## Remaining acceptance
 
 Actual decode/composition/encoding paths, stage wall times, transfers, reserved
 memory, and recovery reasons are present in application diagnostics.
-- Validate integrated faults, cancellation, queue/file preservation, and affected
-  shared consumers; measure sustained playback, export, and physical audio sync.
+- Complete physical display/audio synchronization and the representative human
+  editing/visual checks. Offscreen and encoded-stream checks do not establish
+  device timing or packaged-installation acceptance.
+- Investigate tail latency under controlled system load before accepting smooth
+  30 fps presentation. The prolonged run preserved every GPU frame and its total
+  schedule, but recorded individual stalls; its statistics are retained below.
 - Natively validate AMF, QSV, VideoToolbox, and Linux VAAPI/NVENC separately.
   Windows evidence cannot qualify unavailable native environments.
 
@@ -106,7 +111,8 @@ encoding; output decoding verifies every submitted frame. The integrated Video E
 and three-track NVENC export with AAC, zero decode downloads and final readbacks,
 cancellation and encoder failure preserving every byte of the previous destination,
 and a successful retry with fresh resources. This is short integration evidence;
-sustained playback and physical audio synchronization remain separate gates.
+the prolonged offscreen result is recorded below. Physical audio synchronization
+remains a separate gate.
 The final H.264 and HEVC integration runs also passed live Full/Half/Quarter
 preview parity, invalidation of a completed Fusion lease before CPU recovery,
 whole-source/graph reevaluation after export composition failure, and an injected
@@ -119,6 +125,15 @@ and AAC at 48 kHz for both `h264_nvenc` and `hevc_nvenc`. Motion Studio's
 AMF/QSV availability probes failed on this NVIDIA-only machine: the AMF runtime
 DLL was absent and the MFX implementation was unsupported. These are unavailable
 hardware results, not passing acceptance for AMD or Intel.
+
+The final canonical Release build and all 101 registered CTest entries passed
+on this machine (118.19 seconds). This includes shared media/effects/composition,
+Video Editor application and export/queue checks, Image Editor producer and
+consumer checks, Motion Studio, and Hub regressions. The known MainWindow
+fixture failure was resolved without changing application animation behavior:
+the older v8 layout is serialized from fresh named placeholder docks and loaded
+by the real editor. H.264 and HEVC native pipeline checks passed again after
+the final relink. These local results do not substitute for the CI platform matrix.
 
 The shared effects, native OpenGL compositor, native Video Editor GPU timeline,
 Settings, and CPU node-graph CTest entries passed (5/5). Native Fusion comparison
@@ -191,7 +206,91 @@ build/apps/video-editor/tests/rendering/Release/creative-suite-main-editor-gpu-v
 Shorter `--stress 30` runs verify the fixture; they do not qualify 15-minute
 stability. Offscreen consumption does not establish physical display/audio sync.
 
-## Short pipeline profiling before the expanded codec build
+## Prolonged native preview result
+
+On 2026-10-10, `--stress 900` completed successfully with 27,000 frames in
+900.003 seconds: 27,000 GPU compositions, 81,000 native video imports, zero
+CPU fallback, zero final readback, and no playback errors or stale timeline
+positions. The offscreen consumer acquired, drew, and released each shared
+texture. Source generation preceded this interval and is excluded from it.
+
+Frame work latency was 22.085 ms at p95 and 61.732 ms at p99, with a maximum
+of 1862.350 ms. 719 frames (2.66%) exceeded the 33.333 ms frame budget.
+The fixture renders every frame and catches up to its paced schedule; it does
+not use the application's ordinary latest-frame skipping policy. Therefore
+completion proves prolonged native execution and bounded scheduling over the
+whole interval, not stall-free real-time presentation. The spikes require
+controlled-load profiling and physical playback checks before that acceptance.
+The preliminary 30-second run recorded p95/p99 11.715/15.553 ms, two late
+frames, and a 190.229 ms maximum, illustrating why short results alone are
+insufficient.
+
+The resource sampler collected 36 samples at approximately 30-second intervals,
+including fixture generation. The 29 samples identified as preview reported:
+
+| Measurement | Observed preview range / result |
+| --- | --- |
+| Process CPU, normalized over 12 logical processors | 2.03–4.29%, mean 2.71% |
+| Process working set | 20.36–248.88 MiB, peak 248.88 MiB |
+| Process private committed memory | 452.29–476.79 MiB, mean 465.50 MiB |
+| Whole-device used GPU memory | 2794–3500 MiB of 6144 MiB |
+| Whole-device GPU / decode utilization | 11–41% / 17–52% |
+
+GPU sampling includes the desktop and other processes; the pre-run device
+baseline was 2594 MiB. These are not per-process GPU-memory or execution-time
+measurements, and the working-set changes do not establish their cause.
+Known per-stage reservations remain available through the application counters.
+Private committed memory did not grow proportionally to timeline duration.
+
+Local ignored evidence is retained in `build/gpu-stress-900.log`,
+`build/gpu-stress-900-errors.log`, and `build/gpu-stress-900-resources.csv`;
+the process exited with code 0 and the error stream was empty. Related final
+logs are `build/gpu-final-accepted-ctest.log`, `build/gpu-final-benchmark.log`,
+and `build/gpu-final-relinked-native-{h264,hevc}.log`. Fixtures are defined in
+`apps/video-editor/tests/rendering/gpu_video_pipeline_test.cpp`, independent
+of those local artifacts.
+
+The directly runnable canonical output is
+`build/apps/video-editor/Release/creative-suite-video-editor.exe`, modified
+2026-10-10 10:05:49 (America/Sao_Paulo), 2,722,304 bytes. The deployed
+`avcodec-61.dll` in Video Editor and Motion Studio matches the expanded installed
+FFmpeg package byte-for-byte (SHA-256
+`95D07C74E5128055736CE4953C40AC964751A1D1004459EB43F4E07A6E63F61F`).
+No executable was copied from an auxiliary build tree.
+
+## Final short pipeline profiling
+
+The final expanded FFmpeg Release build ran the paired synthetic benchmark on
+2026-10-10. Each export contains 30 full-resolution frames and three tracks,
+Color Fusion plus Grayscale/Brightness, and H.264 NVENC at 20 Mbps on both paths.
+The CPU row uses software decode/effects/composition and RGBA encoder input.
+The native row uses D3D11 decode, shared GPU operations, and D3D11 encoder input.
+Source generation and explicit full-resolution conversion parity checks are
+outside the measured exports; parity passed at all three resolutions.
+
+| Resolution | CPU total | Native total | Native source preparation | Native composition | Native encoding |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1920x1080 | 31604.5 ms | 1233.44 ms | 843.10 ms | 65.604 ms | 158.561 ms |
+| 2560x1440 | 24437.5 ms | 1760.57 ms | 1145.12 ms | 147.639 ms | 228.267 ms |
+| 3840x2160 | 57058.7 ms | 2447.15 ms | 1780.40 ms | 69.131 ms | 339.409 ms |
+
+| Resolution | Native decode packet/send | Native decode receive | Native conversion | Native graph evaluation | Geometry uploads |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1920x1080 | 131.407 ms | 0.214 ms | 69.763 ms | 302.981 ms | 1082880 bytes |
+| 2560x1440 | 146.918 ms | 0.479 ms | 81.736 ms | 517.017 ms | 1442880 bytes |
+| 3840x2160 | 168.473 ms | 0.229 ms | 70.435 ms | 675.171 ms | 2162880 bytes |
+
+Every native export required 90 hardware-decoded frames, zero software-decoded
+frames, 30 native-encoded frames, zero decoded downloads, and zero final
+readback. Decode conversion to CPU RGBA was zero. Packet/send timings include
+decoder work; receive timings alone do not measure hardware decoding cost.
+Graph/conversion timings nest inside preparation, so do not sum these columns
+as disjoint stage costs. Initialization, synchronization, encoder flushing, and
+publication are included in their enclosing totals. The small synthetic fixture,
+variable CPU totals, and single reference device do not establish a general
+speedup or real-time 4K playback guarantee.
+
+## Earlier short profiling before the expanded codec build
 
 One paired synthetic run used 30 full-resolution frames, three tracks, Color
 Fusion plus Grayscale/Brightness, and the same H.264 NVENC output encoder at
