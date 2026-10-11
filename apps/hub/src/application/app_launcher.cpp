@@ -9,20 +9,49 @@
 
 namespace creative_suite::hub {
 
-AppLauncher::AppLauncher() {
-    const QString appDir = QCoreApplication::applicationDirPath();
+AppLauncher::AppLauncher()
+    : AppLauncher(QCoreApplication::applicationDirPath()) {}
+
+AppLauncher::AppLauncher(const QString& appDir) {
     m_searchPaths.append(appDir);
 
-    // Common sibling build directories
-    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../video-editor")));
-    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../image-editor")));
-    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../motion-editor")));
-    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../video-editor/Release")));
-    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../image-editor/Release")));
-    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../motion-editor/Release")));
-    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../video-editor/Debug")));
-    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../image-editor/Debug")));
-    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../motion-editor/Debug")));
+    // CMake places app bundles inside the same app/configuration directories.
+    QDir hubDirectory(QDir::cleanPath(appDir));
+    if (hubDirectory.dirName() == QStringLiteral("MacOS")
+        && QDir(QDir::cleanPath(hubDirectory.filePath(QStringLiteral("..")))).dirName() == QStringLiteral("Contents")
+        && QDir(QDir::cleanPath(hubDirectory.filePath(QStringLiteral("../..")))).dirName().endsWith(QStringLiteral(".app"))) {
+        hubDirectory = QDir(QDir::cleanPath(hubDirectory.filePath(QStringLiteral("../../.."))));
+    }
+
+    QStringList configurations{QStringLiteral("Release"), QStringLiteral("Debug"),
+                               QStringLiteral("RelWithDebInfo"), QStringLiteral("MinSizeRel")};
+    const QDir parentDirectory(QDir::cleanPath(hubDirectory.filePath(QStringLiteral(".."))));
+    if (configurations.contains(hubDirectory.dirName())
+        || parentDirectory.dirName() == QStringLiteral("hub")) {
+        const QString configuration = hubDirectory.dirName();
+        configurations.removeAll(configuration);
+        configurations.prepend(configuration);
+        hubDirectory = parentDirectory;
+    } else {
+        configurations.prepend(QString()); // Single-configuration build.
+    }
+
+    // Reach build/apps from hub, rather than searching inside hub/Release.
+    const QDir appsDirectory(QDir::cleanPath(hubDirectory.filePath(QStringLiteral(".."))));
+    const QStringList editorIds{QStringLiteral("video-editor"), QStringLiteral("image-editor"),
+                               QStringLiteral("motion-editor")};
+    for (const auto& configuration : configurations) {
+        for (const auto& editorId : editorIds) {
+            const QString relative = configuration.isEmpty() ? editorId : editorId + '/' + configuration;
+            m_searchPaths.append(QDir::cleanPath(appsDirectory.filePath(relative)));
+        }
+    }
+    // Also discover single-configuration sibling outputs from a configured Hub.
+    if (!configurations.contains(QString())) {
+        for (const auto& editorId : editorIds) {
+            m_searchPaths.append(QDir::cleanPath(appsDirectory.filePath(editorId)));
+        }
+    }
 
     // Standard user apps directory
     const QString localAppData = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
@@ -50,6 +79,9 @@ std::optional<QString> AppLauncher::findExecutable(const QString& executableName
     } else {
         candidates.append(executableName + QStringLiteral(".exe"));
     }
+    const QString bundleExecutable = executableName.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)
+        ? executableName.left(executableName.size() - 4) : executableName;
+    candidates.append(bundleExecutable + QStringLiteral(".app/Contents/MacOS/") + bundleExecutable);
 
     for (const auto& searchDir : m_searchPaths) {
         QDir dir(searchDir);

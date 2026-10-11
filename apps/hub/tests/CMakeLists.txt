@@ -8,6 +8,27 @@ target_link_libraries(hub-launcher-test PRIVATE creative-suite-hub-core Qt6::Cor
 target_compile_features(hub-launcher-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-launcher-test COMMAND hub-launcher-test)
 
+# Verify discovery against the enabled producers' actual executable outputs.
+set(HUB_LAUNCHER_BUILD_ARGUMENTS)
+foreach(EDITOR_TARGET IN ITEMS creative-suite-main-editor creative-suite-image-editor creative-suite-motion-editor)
+    if(TARGET ${EDITOR_TARGET})
+        if(EDITOR_TARGET STREQUAL "creative-suite-main-editor")
+            set(EDITOR_ID video-editor)
+        elseif(EDITOR_TARGET STREQUAL "creative-suite-image-editor")
+            set(EDITOR_ID image-editor)
+        else()
+            set(EDITOR_ID motion-editor)
+        endif()
+        list(APPEND HUB_LAUNCHER_BUILD_ARGUMENTS "${EDITOR_ID}" "$<TARGET_FILE:${EDITOR_TARGET}>")
+        add_dependencies(hub-launcher-test ${EDITOR_TARGET})
+    endif()
+endforeach()
+if(HUB_LAUNCHER_BUILD_ARGUMENTS)
+    add_dependencies(hub-launcher-test creative-suite-hub)
+    add_creative_suite_test(NAME hub-launcher-build-layout-test COMMAND hub-launcher-test
+        --built-apps "$<TARGET_FILE_DIR:creative-suite-hub>" ${HUB_LAUNCHER_BUILD_ARGUMENTS})
+endif()
+
 add_executable(hub-logger-test test_hub_logger.cpp)
 target_link_libraries(hub-logger-test PRIVATE creative-suite-hub-core Qt6::Core)
 target_compile_features(hub-logger-test PRIVATE cxx_std_20)

@@ -35,7 +35,7 @@ and condition. Debug and macOS/Linux execution of this change remain pending.
 | Activity and notification center, event logging, read state tracking, and popup dropdown | `apps/hub/tests/test_activity_manager.cpp` (`hub-activity-manager-test`) | Click notification bell in Hub header bar; verify unread badge, categorized event list, "Marcar lidas", and "Limpar": **covered**. |
 | Project backup vault, timestamped snapshot creation, storage configuration, and folder inspection | `apps/hub/tests/test_backup_manager.cpp` (`hub-backup-manager-test`) | Select dedicated "Backups" tab in sidebar; verify list of saved snapshots, folder changer, and "Abrir Pasta"; click "Backup" on project card in Projects tab: **covered**. |
 | Snapshot relative references, supported document versions, and relocation for restoration | `apps/hub/tests/test_backup_manager.cpp` and `test_backup_formats.cpp` (`hub-backup-manager-test`, `hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; real Image/Video/Motion persistence producers and consumers | Automated coverage present. Native UI restoration checks and macOS/Linux execution remain **pending**; see [BACKUPS.md](BACKUPS.md) for the contract and manual steps. |
-| Cross-platform application discovery, build directory resolution, and native process launching | `apps/hub/tests/test_app_launcher.cpp` (`hub-launcher-test`) | Verify Hub discovers compiled binaries in sibling build folders across platforms (with or without `.exe`), launches applications, and logs execution: **covered**. |
+| Application discovery, sibling configuration directories, bundle paths, fallbacks, and installation-path priority | `apps/hub/tests/test_app_launcher.cpp` (`hub-launcher-test`, `hub-launcher-build-layout-test`), registered in `apps/hub/tests/CMakeLists.txt`; the integration test uses the enabled editors' actual CMake outputs | Automated coverage present. Native launch and project-open checks for each editor are documented below and remain **pending**, as do Debug and macOS/Linux execution. |
 
 ## Backup verification on 2026-10-10
 
@@ -57,6 +57,75 @@ editor waits, managed-ID and file-based schema-1 recovery, removed and failed
 items, explicit retry, launch-lock contention, package tampering, and self-update
 deferral. Actual installer execution, Debug, and macOS/Linux validation remain
 pending. Follow the multi-app steps in [WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md).
+
+## Discovery verification on 2026-10-11
+
+The canonical Release fixture failed before the discovery fix. After the fix,
+the Hub and all three editor producer targets built in their canonical Release
+directories, and all 12 Hub CTest entries passed on Windows in 5.08 seconds.
+The integration check found the exact CMake target outputs for Video Editor,
+Image Editor, and Motion Studio from the Hub's actual Release directory.
+The tests ran outside the tool environment's filesystem restriction; no
+installers or release packages were generated. Native GUI, Debug, and
+macOS/Linux validation remain pending.
+
+## Development executable discovery
+
+The default `AppLauncher` resolves paths relative to the running Hub executable.
+The explicit-directory constructor provides the same resolution for tests.
+Search priority is:
+
+1. Paths prepended by `addSearchPath`, including registered installation paths
+   supplied by the Hub; the most recently added path takes precedence.
+2. The Hub executable's own directory.
+3. Sibling editor directories under `build/apps`, using the Hub's configuration
+   first. For a single-configuration Hub under `build/apps/hub`, flat editor
+   directories come first. Remaining configurations are checked in the order
+   Release, Debug, RelWithDebInfo, MinSizeRel; duplicate configurations are
+   removed. A custom configuration directly beneath `hub` is also recognized.
+4. Flat sibling editor directories when the Hub has a configuration directory.
+5. The standard per-user application-data `apps` directory.
+
+Executable lookup accepts catalog names with or without `.exe`, and checks
+`<name>.app/Contents/MacOS/<name>` in each search directory. A Hub inside a
+macOS bundle resolves its sibling app root from the directory containing the
+bundle. Candidates must be existing executable files. `setSearchPaths` replaces
+the list entirely. Launching retains project arguments and uses the executable
+directory as the process working directory.
+
+The producer/consumer test builds the Hub and each enabled editor, then compares
+the discovered path against CMake's actual target output. It runs without GUI
+process launches or local installation registration. The fixture test covers
+all three catalog apps, standard and custom configurations, flat outputs,
+bundle layouts, fallback selection, wrong-depth binaries, explicit-path
+priority, missing files, and directories masquerading as executables.
+Windows fixtures use `.exe` files and exercise Hub bundle-root resolution with
+native executable fixtures. Extensionless files and editor bundle executable
+lookup are exercised by the fixture test on Unix platforms; their native
+macOS/Linux execution remains pending.
+
+### Manual development launch checklist
+
+Use a disposable profile without registered editor installations, so discovery
+uses the development outputs. Record configuration, OS, full executable paths,
+and results. Do not remove registrations from the regular user profile.
+
+1. Run `build/apps/hub/Release/creative-suite-hub.exe` directly. Confirm all three
+   editors built under their sibling Release directories appear available.
+2. Launch Video Editor, Image Editor, and Motion Studio separately from the Hub.
+   Confirm each starts from its corresponding Release directory. Close them.
+3. Open a saved `.csp`, `.cimg`, and `.motion` project through the Hub. Confirm
+   the intended editor receives the project path and opens the expected data,
+   including when the path contains spaces.
+4. With both Debug and Release outputs present, repeat from the Debug Hub and
+   confirm that each Debug editor takes precedence. If that editor's matching
+   binary is absent, verify the documented fallback is selected.
+5. Repeat native launch/project-open checks for Linux single-configuration
+   outputs and macOS app bundles, recording their actual process paths.
+
+**Current result:** Native UI launch/project-open checks, Debug execution, and
+macOS/Linux execution remain pending. Synthetic bundle layouts do not establish
+native macOS launch acceptance.
 
 ## Manual Windows checklist
 

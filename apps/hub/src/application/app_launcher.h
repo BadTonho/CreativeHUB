@@ -10,6 +10,8 @@ namespace creative_suite::hub {
 class AppLauncher {
 public:
     AppLauncher();
+    // Resolve discovery paths from a Hub executable directory (also usable in tests).
+    explicit AppLauncher(const QString& applicationDirectory);
 
     void addSearchPath(const QString& path);
     void setSearchPaths(const QStringList& paths);
