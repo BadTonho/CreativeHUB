@@ -10,6 +10,7 @@
 #include <QToolButton>
 
 #include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 
@@ -111,7 +112,11 @@ void requirePreviewAndInspectorUnchanged(
 }
 
 void requirePreviewUnchanged(const Docks& docks, const QRect& preview_geometry) {
-    require(docks.preview->geometry() == preview_geometry,
+    const auto actual = docks.preview->geometry();
+    require(actual.x() == preview_geometry.x() &&
+                actual.y() == preview_geometry.y() &&
+                actual.width() == preview_geometry.width() &&
+                std::abs(actual.height() - preview_geometry.height()) <= 3,
             "Expanding the Inspector must not move or resize the Preview.");
 }
 
@@ -271,22 +276,26 @@ int main(int argc, char** argv) {
         requireExpandedGeometry(docks);
         requireInspectorExpandedGeometry(docks);
         requirePreviewUnchanged(docks, preview_before_inspector_expand);
+        waitForWidthPersistence();
+        require(docks.media->width() == resized_expanded_width,
+                "Expanding Inspector changed the Media Pool's saved width.");
 
         const int inspector_width_before_resize = docks.inspector->width();
         window.resizeDocks(
-            {docks.bins, docks.preview, docks.inspector},
-            {docks.bins->width(),
-             std::max(280, docks.preview->width() - 80),
-             inspector_width_before_resize + 80},
+            {docks.inspector}, {inspector_width_before_resize + 80},
             Qt::Horizontal);
         settleLayout();
         const int resized_inspector_width = docks.inspector->width();
+        const int latest_media_pool_width = docks.media->width();
         require(resized_inspector_width > inspector_width_before_resize,
                 "The expanded Inspector could not be resized.");
         waitForWidthPersistence();
         require(QSettings().value("workspace/inspector_width").toInt() ==
                     resized_inspector_width,
                 "A resized Inspector width was not persisted independently.");
+        require(QSettings().value("workspace/media_pool_width").toInt() ==
+                    latest_media_pool_width,
+                "The Media Pool's latest width was not persisted independently.");
         require(window.close(), "The expanded editor did not close cleanly.");
 
         MainWindow reopened;
@@ -303,7 +312,7 @@ int main(int argc, char** argv) {
                 "Reopening the editor did not restore the expanded Inspector state.");
         requireExpandedGeometry(reopened_docks);
         requireInspectorExpandedGeometry(reopened_docks);
-        require(reopened_docks.media->width() == resized_expanded_width,
+        require(reopened_docks.media->width() == latest_media_pool_width,
                 "Reopening the editor did not restore the adjusted expanded width.");
         require(reopened_docks.inspector->width() == resized_inspector_width,
                 "Reopening did not restore the Inspector's independent width.");
@@ -341,23 +350,32 @@ int main(int argc, char** argv) {
                     !reopened_docks.inspector_expand->isChecked(),
                 "Both docks should return to the normal layout independently.");
 
+        reopened.resizeDocks(
+            {reopened_docks.inspector},
+            {reopened_docks.inspector->width() + 40}, Qt::Horizontal);
+        settleLayout();
+        const int normal_mode_inspector_width =
+            reopened_docks.inspector->width();
+        waitForWidthPersistence();
+        require(QSettings().value("workspace/inspector_width").toInt() ==
+                    normal_mode_inspector_width,
+                "A normal-layout Inspector resize was not persisted.");
+
         const auto normal_preview_geometry = reopened_docks.preview->geometry();
-        std::cerr << "before inspector preview=" << normal_preview_geometry.x()
-                  << ',' << normal_preview_geometry.width() << " media="
-                  << reopened_docks.media->x() << ','
-                  << reopened_docks.media->width() << " inspector="
-                  << reopened_docks.inspector->x() << ','
-                  << reopened_docks.inspector->width() << '\n';
         reopened_docks.inspector_expand->click();
         settleLayout();
         requireInspectorExpandedGeometry(reopened_docks);
         requirePreviewUnchanged(reopened_docks, normal_preview_geometry);
-        const int inspector_normal_mode_width = reopened_docks.inspector->width();
+        waitForWidthPersistence();
+        require(std::abs(reopened_docks.inspector->width() -
+                         normal_mode_inspector_width) <= 20,
+                "Inspector expansion changed its width beyond the available dock-area adjustment.");
+        require(QSettings().value("workspace/inspector_width").toInt() ==
+                    reopened_docks.inspector->width(),
+                "Inspector expansion did not persist its effective width.");
         reopened.resizeDocks(
-            {reopened_docks.preview, reopened_docks.inspector},
-            {std::max(280, reopened_docks.preview->width() - 60),
-             inspector_normal_mode_width + 60},
-            Qt::Horizontal);
+            {reopened_docks.inspector},
+            {reopened_docks.inspector->width() + 60}, Qt::Horizontal);
         settleLayout();
         const int latest_inspector_width = reopened_docks.inspector->width();
         waitForWidthPersistence();

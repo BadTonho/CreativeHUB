@@ -93,12 +93,13 @@ left column. The `Inspector` dock has its own checked title-bar button to expand
 to a full-height right column. These modes can be combined in either click
 order; no dock is hidden. Expanding either dock keeps Preview in its current
 position and size. The Timeline moves below Preview into the central area
-between the expanded columns. The Media Pool and Inspector remain independently
-resizable in both normal and expanded modes. Their latest widths are persisted
-independently in `workspace/media_pool_width` and `workspace/inspector_width`,
-and are applied after each toggle and when the editor reopens. The baseline
-native dock arrangement is retained until both expansions are collapsed, so
-collapsing one does not cancel the other. Expansion state is stored in
+between the expanded columns. Dragging the Inspector divider can resize Preview
+as the central area gives or takes space. Both side docks remain resizable after
+the expansion layout settles. Their latest widths are persisted separately in
+`workspace/media_pool_width` and `workspace/inspector_width`, and are applied
+after each toggle and when the editor reopens. The baseline native dock
+arrangement is retained until both expansions are collapsed, so collapsing one
+does not cancel the other. Expansion state is stored in
 `workspace/media_pool_expanded` and `workspace/inspector_expanded`; the baseline
 layout is stored in `workspace/dock_expansion_restore_layout_state`, alongside
 the current native dock state. Older `workspace/media_pool_expanded_width`,

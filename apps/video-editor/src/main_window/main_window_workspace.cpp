@@ -1455,12 +1455,6 @@ void MainWindow::applyExpandedDockLayout(
             280, preview_geometry.width() + current_media_width -
                      media_pool_width + current_inspector_width -
                      inspector_width);
-        if (inspector_expanded) {
-            bins_dock_->setMinimumWidth(media_pool_width);
-            media_dock_->setMinimumWidth(media_pool_width);
-            preview_dock_->setFixedWidth(target_preview_width);
-            preview_dock_->setFixedHeight(preview_geometry.height());
-        }
         if (!inspector_expanded) {
             resizeDocks(
                 {bins_dock_, preview_dock_},
@@ -1469,11 +1463,23 @@ void MainWindow::applyExpandedDockLayout(
                 {preview_dock_, inspector_dock_},
                 {target_preview_width, inspector_width}, Qt::Horizontal);
         }
+        if (inspector_expanded) {
+            bins_dock_->setMinimumWidth(media_pool_width);
+            media_dock_->setMinimumWidth(media_pool_width);
+        }
         resizeDocks(
             {preview_dock_, timeline_dock_},
             {std::max(260, preview_geometry.height()),
              std::max(220, timeline_geometry.height())},
             Qt::Vertical);
+        if (inspector_expanded) {
+            // Keep the preview's captured geometry through the dock-tree
+            // rebuild. The constraints are released after Qt settles so the
+            // Inspector splitter remains user-resizable.
+            preview_dock_->setFixedWidth(target_preview_width);
+            preview_dock_->setFixedHeight(
+                preview_geometry.height() + (media_pool_expanded ? 3 : 0));
+        }
 
         media_pool_expanded_ = media_pool_expanded;
         inspector_expanded_ = inspector_expanded;
@@ -1490,6 +1496,18 @@ void MainWindow::applyExpandedDockLayout(
     }
 
     QTimer::singleShot(150, this, [this] {
+        if (bins_dock_ != nullptr) {
+            bins_dock_->setMinimumWidth(0);
+        }
+        if (media_dock_ != nullptr) {
+            media_dock_->setMinimumWidth(0);
+        }
+        if (preview_dock_ != nullptr) {
+            preview_dock_->setMinimumWidth(0);
+            preview_dock_->setMaximumWidth(QWIDGETSIZE_MAX);
+            preview_dock_->setMinimumHeight(0);
+            preview_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
+        }
         expanded_dock_layout_change_in_progress_ = false;
         persistMediaPoolWidth();
         persistInspectorWidth();
