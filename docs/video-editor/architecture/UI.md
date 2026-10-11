@@ -94,7 +94,9 @@ to a full-height right column. The two toggles are independent and can be
 combined in either click order; no dock is hidden. With only Inspector expanded,
 Bins and Media retain their normal geometry while Inspector fills the right
 column and Timeline sits below Preview in the area between Media Pool and
-Inspector. With only Media Pool expanded, Bins and Media fill the left column;
+Inspector. The normal Bins and Media geometry is captured before rebuilding
+the dock tree and reapplied after Qt's layout settles. With only Media Pool
+expanded, Bins and Media fill the left column;
 with both expanded, both side columns fill the workspace height. Expanding or
 collapsing either dock preserves Preview geometry. Dragging the Inspector divider
 can resize Preview as the central area gives or takes space. Both side docks

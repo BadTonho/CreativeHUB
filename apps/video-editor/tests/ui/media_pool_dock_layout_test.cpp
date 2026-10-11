@@ -189,7 +189,10 @@ int main(int argc, char** argv) {
         const auto inspector_geometry = docks.inspector->geometry();
 
         docks.inspector_expand->click();
+        requireMediaPoolGeometryUnchanged(
+            docks, normal_bins_geometry, normal_media_geometry);
         settleLayout();
+        waitForWidthPersistence();
         require(!docks.expand->isChecked() &&
                     docks.inspector_expand->isChecked(),
                 "Expanding Inspector alone changed the Media Pool toggle state.");
@@ -430,6 +433,7 @@ int main(int argc, char** argv) {
 
         reopened.resize(960, 640);
         settleLayout();
+        waitForWidthPersistence();
         requireInspectorExpandedGeometry(reopened_docks);
         requireMediaPoolNotExpanded(reopened_docks);
         reopened.resize(1920, 1080);
