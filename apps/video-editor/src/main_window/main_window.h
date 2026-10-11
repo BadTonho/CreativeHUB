@@ -122,7 +122,9 @@ private:
     void saveWorkspaceLayout();
     void restoreExpandedMediaPoolWidth();
     void persistExpandedMediaPoolWidth();
-    void setMediaPoolExpanded(bool expanded);
+    void setMediaPoolExpanded(
+        bool expanded,
+        std::optional<int> expanded_width_override = std::nullopt);
     void updateMediaPoolExpandButton();
     void applyInitialWindowLayout();
     void saveWindowGeometry();

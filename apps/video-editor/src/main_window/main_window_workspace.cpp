@@ -1260,6 +1260,10 @@ void MainWindow::restoreExpandedMediaPoolWidth() {
     }
 
     const auto normal_layout = media_pool_restore_layout_state_;
+    QSettings settings;
+    const int saved_expanded_width = settings.value(
+        "workspace/media_pool_expanded_width",
+        media_dock_ != nullptr ? media_dock_->width() : 280).toInt();
     media_pool_expanded_ = false;
     if (!restoreState(normal_layout, 9)) {
         media_pool_expanded_ = true;
@@ -1268,10 +1272,12 @@ void MainWindow::restoreExpandedMediaPoolWidth() {
     if (workspace_host_ != nullptr) {
         workspace_host_->refreshCentralWorkspaceVisibility();
     }
-    setMediaPoolExpanded(true);
+    setMediaPoolExpanded(true, saved_expanded_width);
 }
 
-void MainWindow::setMediaPoolExpanded(bool expanded) {
+void MainWindow::setMediaPoolExpanded(
+    bool expanded,
+    std::optional<int> expanded_width_override) {
     if (media_pool_expanded_ == expanded ||
         bins_dock_ == nullptr || media_dock_ == nullptr ||
         preview_dock_ == nullptr || inspector_dock_ == nullptr ||
@@ -1285,12 +1291,11 @@ void MainWindow::setMediaPoolExpanded(bool expanded) {
         const QRect preview_geometry = preview_dock_->geometry();
         const QRect inspector_geometry = inspector_dock_->geometry();
         const QRect timeline_geometry = timeline_dock_->geometry();
-        const int normal_media_pool_width = bins_dock_->width();
-        const int saved_media_pool_width = settings.value(
-            "workspace/media_pool_expanded_width",
-            normal_media_pool_width).toInt();
+        const int normal_media_pool_width = media_dock_->width();
+        const int requested_media_pool_width = expanded_width_override.value_or(
+            normal_media_pool_width);
         const int media_pool_width = std::clamp(
-            saved_media_pool_width,
+            requested_media_pool_width,
             280,
             std::max(280, width() / 2));
         media_pool_restore_layout_state_ = saveState(9);

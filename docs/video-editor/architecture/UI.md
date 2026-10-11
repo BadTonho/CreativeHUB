@@ -93,12 +93,14 @@ left column. Preview and Inspector stay above the Timeline on the right; no dock
 is hidden. On first expansion, Preview and Inspector retain their positions and
 sizes; only the Timeline moves into the remaining area to the right of Media
 Pool and below those panels. The expanded Media Pool column remains resizable.
-Its latest settled width is saved independently from the normal layout after
-resizing and restored on subsequent expansions and application restarts; when
-a changed width is reapplied, Preview uses the remaining horizontal space.
-Clicking the button again restores the normal layout captured before expansion.
-The expanded state, expanded width, and normal restore layout are saved globally
-in `workspace/media_pool_expanded` and
+Manual expansion starts from the Media dock's current width, so a width adjusted
+in the normal layout is honored instead of being replaced by a stale expanded
+width. Resizing while expanded saves the latest settled width for restoring an
+editor that reopens in the expanded state. When a saved expanded width is
+reapplied, Preview uses the remaining horizontal space. Clicking the button
+again restores the normal layout captured before expansion. The expanded state,
+expanded width, and normal restore layout are saved globally in
+`workspace/media_pool_expanded` and
 `workspace/media_pool_expanded_width` and
 `workspace/media_pool_restore_layout_state`, alongside the current native dock
 state. This is workspace presentation only and does not affect project state.
