@@ -120,8 +120,8 @@ private:
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
-    void restoreExpandedMediaPoolWidth();
-    void persistExpandedMediaPoolWidth();
+    void restoreMediaPoolWidth();
+    void persistMediaPoolWidth();
     void setMediaPoolExpanded(
         bool expanded,
         std::optional<int> expanded_width_override = std::nullopt);
@@ -332,7 +332,8 @@ private:
     QToolButton* media_pool_expand_button_ = nullptr;
     QByteArray media_pool_restore_layout_state_;
     bool media_pool_expanded_ = false;
-    bool media_pool_expanded_width_restore_pending_ = false;
+    bool media_pool_width_restore_pending_ = false;
+    bool media_pool_width_layout_change_in_progress_ = false;
     QTimer* media_pool_width_save_timer_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     ui::FunctionPalette* function_palette_ = nullptr;

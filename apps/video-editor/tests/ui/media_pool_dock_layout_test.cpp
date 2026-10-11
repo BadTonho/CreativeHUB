@@ -131,7 +131,6 @@ int main(int argc, char** argv) {
                 "The normal Media Pool dock could not be widened before expansion.");
         QSettings().setValue(
             "workspace/media_pool_expanded_width", original_normal_width);
-        const auto normal_state = window.saveState(9);
         const auto preview_geometry = docks.preview->geometry();
         const auto inspector_geometry = docks.inspector->geometry();
 
@@ -144,6 +143,9 @@ int main(int argc, char** argv) {
             docks, preview_geometry, inspector_geometry);
         require(docks.media->width() == normal_width_before_expand,
                 "Expansion reapplied a stale expanded width instead of the current dock width.");
+        require(QSettings().value("workspace/media_pool_width").toInt() ==
+                    normal_width_before_expand,
+                "Expansion did not update the shared Media Pool width.");
 
         const int initial_expanded_width = docks.media->width();
         window.resizeDocks(
@@ -174,20 +176,50 @@ int main(int argc, char** argv) {
         requireAllPanelsVisible(docks);
         require(docks.timeline->x() < docks.media->x() + docks.media->width(),
                 "Restoring the normal layout did not return the Timeline below the side docks.");
-        require(window.saveState(9) == normal_state,
-                "Toggling the Media Pool off did not restore the previous dock layout.");
+        waitForWidthPersistence();
         require(QSettings().value(
-                    "workspace/media_pool_expanded_width").toInt() ==
+                    "workspace/media_pool_width").toInt() ==
                     resized_expanded_width,
-                "Collapsing the Media Pool did not preserve its expanded width.");
+                "Collapsing the Media Pool did not preserve its latest width.");
+        require(docks.media->width() == resized_expanded_width,
+                "Collapsing the Media Pool restored an older width.");
 
         docks.expand->click();
         settleLayout();
         requireExpandedGeometry(docks);
-        require(docks.media->width() == normal_width_before_expand,
-                "A manual expansion did not use the current normal dock width.");
+        require(docks.media->width() == resized_expanded_width,
+                "Re-expanding did not restore the previous expanded width.");
 
-        const int next_target_expanded_width = normal_width_before_expand + 70;
+        docks.expand->click();
+        settleLayout();
+        require(!docks.expand->isChecked(),
+                "The Media Pool did not collapse after restoring its expanded width.");
+        const int changed_normal_width_target = normal_width_before_expand + 60;
+        window.resizeDocks(
+            {docks.media, docks.preview},
+            {changed_normal_width_target,
+             std::max(280, docks.preview->width() - 60)},
+            Qt::Horizontal);
+        settleLayout();
+        const int changed_normal_width = docks.media->width();
+        require(changed_normal_width != resized_expanded_width,
+                "The normal Media Pool width did not change after collapse.");
+        waitForWidthPersistence();
+        require(QSettings().value("workspace/media_pool_width").toInt() ==
+                    changed_normal_width,
+                "A normal-layout resize did not update the shared Media Pool width.");
+        const auto changed_preview_geometry = docks.preview->geometry();
+        const auto changed_inspector_geometry = docks.inspector->geometry();
+
+        docks.expand->click();
+        settleLayout();
+        requireExpandedGeometry(docks);
+        requirePreviewAndInspectorUnchanged(
+            docks, changed_preview_geometry, changed_inspector_geometry);
+        require(docks.media->width() == changed_normal_width,
+                "Expansion did not preserve the latest normal-layout width.");
+
+        const int next_target_expanded_width = changed_normal_width + 70;
         window.resizeDocks(
             {docks.media, docks.preview},
             {next_target_expanded_width,
@@ -199,9 +231,9 @@ int main(int argc, char** argv) {
                 "The expanded Media Pool could not accept a later width adjustment.");
         waitForWidthPersistence();
         require(QSettings().value(
-                    "workspace/media_pool_expanded_width").toInt() ==
+                    "workspace/media_pool_width").toInt() ==
                     resized_expanded_width,
-                "A later expanded-width adjustment was not persisted after the dock settled.");
+                "A later expanded-width adjustment did not update the shared width after the dock settled.");
         require(window.close(), "The expanded editor did not close cleanly.");
 
         MainWindow reopened;
@@ -216,6 +248,16 @@ int main(int argc, char** argv) {
         requireExpandedGeometry(reopened_docks);
         require(reopened_docks.media->width() == resized_expanded_width,
                 "Reopening the editor did not restore the adjusted expanded width.");
+        reopened_docks.expand->click();
+        settleLayout();
+        require(!reopened_docks.expand->isChecked(),
+                "The reopened Media Pool did not collapse to its normal layout.");
+        require(reopened_docks.media->width() == resized_expanded_width,
+                "Collapsing after restart did not retain the latest Media Pool width.");
+        reopened_docks.expand->click();
+        settleLayout();
+        require(reopened_docks.media->width() == resized_expanded_width,
+                "Re-expanding after restart did not restore the saved expanded width.");
         reopened.resize(960, 640);
         settleLayout();
         requireExpandedGeometry(reopened_docks);
