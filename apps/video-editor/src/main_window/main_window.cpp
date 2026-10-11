@@ -81,10 +81,11 @@ MainWindow::MainWindow(QWidget* parent)
     createWorkspace();
     createMenus();
     restoreWorkspaceLayout();
-    media_pool_width_restore_pending_ =
+    expanded_dock_layout_restore_pending_ =
         settings.contains("workspace/media_pool_width") ||
         settings.contains("workspace/media_pool_expanded_width") ||
-        settings.contains("workspace/media_pool_normal_width");
+        settings.contains("workspace/media_pool_normal_width") ||
+        settings.contains("workspace/inspector_width");
     initializePlayback();
     initializeLinkedImageCompatibility();
     configurePreviewPerformanceMetrics(
@@ -152,11 +153,11 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 
 void MainWindow::showEvent(QShowEvent* event) {
     QMainWindow::showEvent(event);
-    if (!media_pool_width_restore_pending_) return;
-    media_pool_width_restore_pending_ = false;
+    if (!expanded_dock_layout_restore_pending_) return;
+    expanded_dock_layout_restore_pending_ = false;
     QTimer::singleShot(0, this, [this] {
         QTimer::singleShot(0, this, [this] {
-            restoreMediaPoolWidth();
+            restoreExpandedDockLayout();
         });
     });
 }

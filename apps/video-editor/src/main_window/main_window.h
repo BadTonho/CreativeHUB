@@ -120,12 +120,21 @@ private:
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
-    void restoreMediaPoolWidth();
+    void restoreExpandedDockLayout();
     void persistMediaPoolWidth();
+    void persistInspectorWidth();
     void setMediaPoolExpanded(
         bool expanded,
         std::optional<int> expanded_width_override = std::nullopt);
+    void setInspectorExpanded(bool expanded);
+    void applyExpandedDockLayout(
+        bool media_pool_expanded,
+        bool inspector_expanded,
+        std::optional<int> media_pool_width_override = std::nullopt,
+        std::optional<int> inspector_width_override = std::nullopt,
+        bool force_rebuild = false);
     void updateMediaPoolExpandButton();
+    void updateInspectorExpandButton();
     void applyInitialWindowLayout();
     void saveWindowGeometry();
     void activateMediaPoolGroup();
@@ -330,11 +339,14 @@ private:
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     QToolButton* media_pool_expand_button_ = nullptr;
-    QByteArray media_pool_restore_layout_state_;
+    QToolButton* inspector_expand_button_ = nullptr;
+    QByteArray workspace_expansion_restore_layout_state_;
     bool media_pool_expanded_ = false;
-    bool media_pool_width_restore_pending_ = false;
-    bool media_pool_width_layout_change_in_progress_ = false;
+    bool inspector_expanded_ = false;
+    bool expanded_dock_layout_restore_pending_ = false;
+    bool expanded_dock_layout_change_in_progress_ = false;
     QTimer* media_pool_width_save_timer_ = nullptr;
+    QTimer* inspector_width_save_timer_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     ui::FunctionPalette* function_palette_ = nullptr;
     ui::EditWorkspace* edit_workspace_ = nullptr;

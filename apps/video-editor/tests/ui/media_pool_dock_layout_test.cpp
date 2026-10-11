@@ -39,6 +39,7 @@ struct Docks {
     QDockWidget* inspector = nullptr;
     QDockWidget* timeline = nullptr;
     QToolButton* expand = nullptr;
+    QToolButton* inspector_expand = nullptr;
 };
 
 Docks findDocks(QWidget& window) {
@@ -48,7 +49,8 @@ Docks findDocks(QWidget& window) {
         window.findChild<QDockWidget*>("previewDock"),
         window.findChild<QDockWidget*>("inspectorDock"),
         window.findChild<QDockWidget*>("timelineDock"),
-        window.findChild<QToolButton*>("mediaPoolExpandButton")};
+        window.findChild<QToolButton*>("mediaPoolExpandButton"),
+        window.findChild<QToolButton*>("inspectorExpandButton")};
 }
 
 void requireAllPanelsVisible(const Docks& docks) {
@@ -60,6 +62,20 @@ void requireAllPanelsVisible(const Docks& docks) {
                 docks.preview->isVisible() && docks.inspector->isVisible() &&
                 docks.timeline->isVisible(),
             "Expanding the Media Pool must not hide any editor dock.");
+}
+
+void requireInspectorExpandedGeometry(const Docks& docks) {
+    requireAllPanelsVisible(docks);
+    require(docks.inspector->y() <= docks.preview->y() + 2 &&
+                docks.inspector->geometry().bottom() >=
+                    docks.timeline->geometry().bottom() - 24,
+            "The expanded Inspector must span the full dock workspace height.");
+    require(docks.timeline->y() > docks.preview->y(),
+            "The Timeline must remain below Preview when Inspector is expanded.");
+    require(docks.timeline->x() >=
+                docks.media->x() + docks.media->width() - 1 &&
+                docks.timeline->geometry().right() <= docks.inspector->x() + 2,
+            "The Timeline must remain in the central area between Media Pool and Inspector.");
 }
 
 void requireExpandedGeometry(const Docks& docks) {
@@ -75,9 +91,13 @@ void requireExpandedGeometry(const Docks& docks) {
     require(docks.preview->x() >= docks.media->x() + docks.media->width() - 1 &&
                 docks.inspector->x() >= docks.preview->x(),
             "Preview and Inspector must remain arranged to the right of Media Pool.");
-    require(docks.timeline->y() > docks.preview->y() &&
-                docks.timeline->y() > docks.inspector->y(),
-            "The Timeline must remain below Preview and Inspector in the expanded layout.");
+    require(docks.timeline->y() > docks.preview->y(),
+            "The Timeline must remain below Preview in the expanded layout.");
+    if (docks.inspector_expand == nullptr ||
+        !docks.inspector_expand->isChecked()) {
+        require(docks.timeline->y() > docks.inspector->y(),
+                "The Timeline must remain below Inspector unless it is expanded.");
+    }
 }
 
 void requirePreviewAndInspectorUnchanged(
@@ -88,6 +108,11 @@ void requirePreviewAndInspectorUnchanged(
             "Expanding the Media Pool must not move or resize the Preview.");
     require(docks.inspector->geometry() == inspector_geometry,
             "Expanding the Media Pool must not move or resize the Inspector.");
+}
+
+void requirePreviewUnchanged(const Docks& docks, const QRect& preview_geometry) {
+    require(docks.preview->geometry() == preview_geometry,
+            "Expanding the Inspector must not move or resize the Preview.");
 }
 
 } // namespace
@@ -106,7 +131,7 @@ int main(int argc, char** argv) {
         MainWindow window;
         window.setDockOptions(window.dockOptions() & ~QMainWindow::AnimatedDocks);
         window.showNormal();
-        window.resize(1600, 900);
+        window.resize(1920, 1080);
         settleLayout();
 
         auto docks = findDocks(window);
@@ -114,6 +139,9 @@ int main(int argc, char** argv) {
                 "The reusable dock title bar is missing the Media Pool expansion button.");
         require(docks.expand->isCheckable(),
                 "The Media Pool expansion action must expose its toggle state.");
+        require(docks.inspector_expand != nullptr &&
+                    docks.inspector_expand->isCheckable(),
+                "The Inspector title bar is missing its expansion toggle.");
         require(docks.bins != nullptr && docks.media != nullptr &&
                     docks.preview != nullptr && docks.inspector != nullptr &&
                     docks.timeline != nullptr,
@@ -234,39 +262,123 @@ int main(int argc, char** argv) {
                     "workspace/media_pool_width").toInt() ==
                     resized_expanded_width,
                 "A later expanded-width adjustment did not update the shared width after the dock settled.");
+
+        const auto preview_before_inspector_expand = docks.preview->geometry();
+        docks.inspector_expand->click();
+        settleLayout();
+        require(docks.expand->isChecked() && docks.inspector_expand->isChecked(),
+                "Expanding the Inspector must keep the Media Pool expanded.");
+        requireExpandedGeometry(docks);
+        requireInspectorExpandedGeometry(docks);
+        requirePreviewUnchanged(docks, preview_before_inspector_expand);
+
+        const int inspector_width_before_resize = docks.inspector->width();
+        window.resizeDocks(
+            {docks.bins, docks.preview, docks.inspector},
+            {docks.bins->width(),
+             std::max(280, docks.preview->width() - 80),
+             inspector_width_before_resize + 80},
+            Qt::Horizontal);
+        settleLayout();
+        const int resized_inspector_width = docks.inspector->width();
+        require(resized_inspector_width > inspector_width_before_resize,
+                "The expanded Inspector could not be resized.");
+        waitForWidthPersistence();
+        require(QSettings().value("workspace/inspector_width").toInt() ==
+                    resized_inspector_width,
+                "A resized Inspector width was not persisted independently.");
         require(window.close(), "The expanded editor did not close cleanly.");
 
         MainWindow reopened;
         reopened.setDockOptions(reopened.dockOptions() & ~QMainWindow::AnimatedDocks);
-        reopened.resize(1600, 900);
+        reopened.resize(1920, 1080);
         reopened.showNormal();
         settleLayout();
         const auto reopened_docks = findDocks(reopened);
         require(reopened_docks.expand != nullptr &&
                     reopened_docks.expand->isChecked(),
                 "Reopening the editor did not restore the expanded Media Pool state.");
+        require(reopened_docks.inspector_expand != nullptr &&
+                    reopened_docks.inspector_expand->isChecked(),
+                "Reopening the editor did not restore the expanded Inspector state.");
         requireExpandedGeometry(reopened_docks);
+        requireInspectorExpandedGeometry(reopened_docks);
         require(reopened_docks.media->width() == resized_expanded_width,
                 "Reopening the editor did not restore the adjusted expanded width.");
+        require(reopened_docks.inspector->width() == resized_inspector_width,
+                "Reopening did not restore the Inspector's independent width.");
+
+        reopened_docks.inspector_expand->click();
+        settleLayout();
+        require(reopened_docks.expand->isChecked() &&
+                    !reopened_docks.inspector_expand->isChecked(),
+                "Collapsing Inspector must preserve the expanded Media Pool.");
+        requireExpandedGeometry(reopened_docks);
+        reopened_docks.inspector_expand->click();
+        settleLayout();
+        require(reopened_docks.expand->isChecked() &&
+                    reopened_docks.inspector_expand->isChecked(),
+                "The combined expanded layout was not restored.");
         reopened_docks.expand->click();
         settleLayout();
-        require(!reopened_docks.expand->isChecked(),
-                "The reopened Media Pool did not collapse to its normal layout.");
-        require(reopened_docks.media->width() == resized_expanded_width,
-                "Collapsing after restart did not retain the latest Media Pool width.");
+        require(!reopened_docks.expand->isChecked() &&
+                    reopened_docks.inspector_expand->isChecked(),
+                "Collapsing Media Pool must preserve the expanded Inspector.");
+        requireInspectorExpandedGeometry(reopened_docks);
         reopened_docks.expand->click();
         settleLayout();
-        require(reopened_docks.media->width() == resized_expanded_width,
-                "Re-expanding after restart did not restore the saved expanded width.");
+        require(reopened_docks.expand->isChecked() &&
+                    reopened_docks.inspector_expand->isChecked(),
+                "Re-expanding Media Pool must preserve the expanded Inspector.");
+        reopened_docks.inspector_expand->click();
+        settleLayout();
+        require(reopened_docks.expand->isChecked() &&
+                    !reopened_docks.inspector_expand->isChecked(),
+                "Collapsing Inspector must leave Media Pool expanded.");
+        reopened_docks.expand->click();
+        settleLayout();
+        require(!reopened_docks.expand->isChecked() &&
+                    !reopened_docks.inspector_expand->isChecked(),
+                "Both docks should return to the normal layout independently.");
+
+        const auto normal_preview_geometry = reopened_docks.preview->geometry();
+        std::cerr << "before inspector preview=" << normal_preview_geometry.x()
+                  << ',' << normal_preview_geometry.width() << " media="
+                  << reopened_docks.media->x() << ','
+                  << reopened_docks.media->width() << " inspector="
+                  << reopened_docks.inspector->x() << ','
+                  << reopened_docks.inspector->width() << '\n';
+        reopened_docks.inspector_expand->click();
+        settleLayout();
+        requireInspectorExpandedGeometry(reopened_docks);
+        requirePreviewUnchanged(reopened_docks, normal_preview_geometry);
+        const int inspector_normal_mode_width = reopened_docks.inspector->width();
+        reopened.resizeDocks(
+            {reopened_docks.preview, reopened_docks.inspector},
+            {std::max(280, reopened_docks.preview->width() - 60),
+             inspector_normal_mode_width + 60},
+            Qt::Horizontal);
+        settleLayout();
+        const int latest_inspector_width = reopened_docks.inspector->width();
+        waitForWidthPersistence();
+        require(QSettings().value("workspace/inspector_width").toInt() ==
+                    latest_inspector_width,
+                "A later Inspector resize did not replace its saved width.");
+        reopened_docks.inspector_expand->click();
+        settleLayout();
+        require(!reopened_docks.inspector_expand->isChecked() &&
+                    reopened_docks.inspector->width() == latest_inspector_width,
+                "Collapsing Inspector did not retain its latest width.");
+        reopened_docks.inspector_expand->click();
+        settleLayout();
+        require(reopened_docks.inspector->width() == latest_inspector_width,
+                "Re-expanding Inspector did not restore its latest width.");
+
         reopened.resize(960, 640);
         settleLayout();
         requireExpandedGeometry(reopened_docks);
-        reopened_docks.expand->click();
-        settleLayout();
-        reopened_docks.expand->click();
-        settleLayout();
-        requireExpandedGeometry(reopened_docks);
-        reopened.resize(1600, 900);
+        requireInspectorExpandedGeometry(reopened_docks);
+        reopened.resize(1920, 1080);
         settleLayout();
 
         auto* float_button = reopened_docks.media->findChild<QToolButton*>(

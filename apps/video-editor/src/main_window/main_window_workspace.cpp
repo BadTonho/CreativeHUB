@@ -524,6 +524,22 @@ void MainWindow::createWorkspace() {
         "Inspector",
         "inspectorDock",
         workspace_host_->inspectorPanel());
+    inspector_dock_->installEventFilter(this);
+    inspector_width_save_timer_ = new QTimer(this);
+    inspector_width_save_timer_->setSingleShot(true);
+    inspector_width_save_timer_->setInterval(120);
+    connect(
+        inspector_width_save_timer_, &QTimer::timeout,
+        this, &MainWindow::persistInspectorWidth);
+    inspector_expand_button_ = addDockTitleBarAction(
+        inspector_dock_,
+        DockTitleBarAction{
+            "inspectorExpandButton",
+            "Expand Inspector to full window height",
+            "Expand Inspector to full window height",
+            style()->standardIcon(QStyle::SP_TitleBarMaxButton),
+            true,
+            [this](bool expanded) { setInspectorExpanded(expanded); }});
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
     splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
 
@@ -1158,9 +1174,14 @@ void MainWindow::restoreWorkspaceLayout() {
     const auto restoreMediaPoolExpansion = [this, &settings] {
         media_pool_expanded_ = settings.value(
             "workspace/media_pool_expanded", false).toBool();
-        media_pool_restore_layout_state_ = settings.value(
-            "workspace/media_pool_restore_layout_state").toByteArray();
+        inspector_expanded_ = settings.value(
+            "workspace/inspector_expanded", false).toBool();
+        workspace_expansion_restore_layout_state_ = settings.value(
+            "workspace/dock_expansion_restore_layout_state",
+            settings.value(
+                "workspace/media_pool_restore_layout_state")).toByteArray();
         updateMediaPoolExpandButton();
+        updateInspectorExpandButton();
     };
     if (!saved_state.isEmpty() && restoreState(saved_state, 9)) {
         restoreMediaPoolExpansion();
@@ -1227,20 +1248,28 @@ void MainWindow::saveWorkspaceLayout() {
     QSettings settings;
     settings.setValue("workspace/dock_layout_state", saveState(9));
     settings.setValue("workspace/media_pool_expanded", media_pool_expanded_);
-    if (media_pool_expanded_ && !media_pool_restore_layout_state_.isEmpty()) {
+    settings.setValue("workspace/inspector_expanded", inspector_expanded_);
+    if ((media_pool_expanded_ || inspector_expanded_) &&
+        !workspace_expansion_restore_layout_state_.isEmpty()) {
         settings.setValue(
-            "workspace/media_pool_restore_layout_state",
-            media_pool_restore_layout_state_);
+            "workspace/dock_expansion_restore_layout_state",
+            workspace_expansion_restore_layout_state_);
+    } else if (!media_pool_expanded_ && !inspector_expanded_) {
+        settings.remove("workspace/dock_expansion_restore_layout_state");
+        settings.remove("workspace/media_pool_restore_layout_state");
     }
     settings.sync();
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == media_dock_ && event != nullptr &&
-        event->type() == QEvent::Resize &&
-        !media_pool_width_layout_change_in_progress_ &&
-        media_pool_width_save_timer_ != nullptr) {
-        media_pool_width_save_timer_->start();
+    if (event != nullptr && event->type() == QEvent::Resize &&
+        !expanded_dock_layout_change_in_progress_) {
+        if (watched == media_dock_ && media_pool_width_save_timer_ != nullptr) {
+            media_pool_width_save_timer_->start();
+        } else if (watched == inspector_dock_ &&
+                   inspector_width_save_timer_ != nullptr) {
+            inspector_width_save_timer_->start();
+        }
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -1254,167 +1283,253 @@ void MainWindow::persistMediaPoolWidth() {
     settings.sync();
 }
 
-void MainWindow::restoreMediaPoolWidth() {
-    if (media_dock_ == nullptr) {
+void MainWindow::persistInspectorWidth() {
+    if (inspector_dock_ == nullptr || inspector_dock_->width() <= 0) {
         return;
     }
+    QSettings settings;
+    settings.setValue("workspace/inspector_width", inspector_dock_->width());
+    settings.sync();
+}
+
+void MainWindow::restoreExpandedDockLayout() {
+    if (media_dock_ == nullptr || inspector_dock_ == nullptr) return;
 
     QSettings settings;
-    const int saved_width = settings.value(
+    const int saved_media_width = settings.value(
         "workspace/media_pool_width",
         settings.value(
             "workspace/media_pool_expanded_width",
             settings.value("workspace/media_pool_normal_width", 280)))
         .toInt();
-    const int media_pool_width = std::clamp(
-        saved_width, 280, std::max(280, width() / 2));
-
-    if (media_pool_expanded_ && !media_pool_restore_layout_state_.isEmpty()) {
-        const auto normal_layout = media_pool_restore_layout_state_;
-        media_pool_expanded_ = false;
-        if (!restoreState(normal_layout, 9)) {
-            media_pool_expanded_ = true;
-            return;
-        }
-        if (workspace_host_ != nullptr) {
-            workspace_host_->refreshCentralWorkspaceVisibility();
-        }
-        setMediaPoolExpanded(true, media_pool_width);
-        return;
-    }
-
-    media_pool_width_layout_change_in_progress_ = true;
-    const int current_media_width = media_dock_->width();
-    const int current_preview_width =
-        preview_dock_ != nullptr ? preview_dock_->width() : 640;
-    resizeDocks(
-        {media_dock_, preview_dock_, inspector_dock_},
-        {media_pool_width,
-         std::max(
-             280,
-             current_preview_width + current_media_width - media_pool_width),
-         std::max(
-             280,
-             inspector_dock_ != nullptr ? inspector_dock_->width() : 280)},
-        Qt::Horizontal);
-    QTimer::singleShot(150, this, [this] {
-        media_pool_width_layout_change_in_progress_ = false;
-        persistMediaPoolWidth();
-    });
-    persistMediaPoolWidth();
-    saveWorkspaceLayout();
+    const int saved_inspector_width = settings.value(
+        "workspace/inspector_width", inspector_dock_->width()).toInt();
+    applyExpandedDockLayout(
+        media_pool_expanded_, inspector_expanded_,
+        saved_media_width, saved_inspector_width, true);
 }
 
 void MainWindow::setMediaPoolExpanded(
     bool expanded,
     std::optional<int> expanded_width_override) {
-    if (media_pool_expanded_ == expanded ||
+    applyExpandedDockLayout(
+        expanded, inspector_expanded_, expanded_width_override,
+        inspector_expanded_
+            ? std::optional<int>(inspector_dock_->width())
+            : std::nullopt);
+}
+
+void MainWindow::setInspectorExpanded(bool expanded) {
+    applyExpandedDockLayout(
+        media_pool_expanded_, expanded,
+        media_pool_expanded_
+            ? std::optional<int>(media_dock_->width())
+            : std::nullopt,
+        expanded ? std::optional<int>(inspector_dock_->width())
+                 : std::nullopt);
+}
+
+void MainWindow::applyExpandedDockLayout(
+    bool media_pool_expanded,
+    bool inspector_expanded,
+    std::optional<int> media_pool_width_override,
+    std::optional<int> inspector_width_override,
+    bool force_rebuild) {
+    if (!force_rebuild &&
+            media_pool_expanded_ == media_pool_expanded &&
+            inspector_expanded_ == inspector_expanded ||
         bins_dock_ == nullptr || media_dock_ == nullptr ||
         preview_dock_ == nullptr || inspector_dock_ == nullptr ||
         timeline_dock_ == nullptr) {
         updateMediaPoolExpandButton();
+        updateInspectorExpandButton();
         return;
     }
 
     QSettings settings;
-    if (expanded) {
-        const QRect preview_geometry = preview_dock_->geometry();
-        const QRect inspector_geometry = inspector_dock_->geometry();
-        const QRect timeline_geometry = timeline_dock_->geometry();
-        const int normal_media_pool_width = media_dock_->width();
-        const int requested_media_pool_width = expanded_width_override.value_or(
-            normal_media_pool_width);
-        const int media_pool_width = std::clamp(
-            requested_media_pool_width,
-            280,
-            std::max(280, width() / 2));
-        media_pool_restore_layout_state_ = saveState(9);
-        settings.setValue(
-            "workspace/media_pool_restore_layout_state",
-            media_pool_restore_layout_state_);
+    const bool was_expanded = media_pool_expanded_ || inspector_expanded_;
+    const bool will_be_expanded = media_pool_expanded || inspector_expanded;
+    const QRect preview_geometry = preview_dock_->geometry();
+    const QRect timeline_geometry = timeline_dock_->geometry();
+    const int current_media_width = media_dock_->width();
+    const int current_inspector_width = inspector_dock_->width();
+    const int current_bins_height = bins_dock_->height();
 
+    if (!was_expanded && will_be_expanded) {
+        workspace_expansion_restore_layout_state_ = saveState(9);
+    }
+
+    const int media_pool_width = std::clamp(
+        media_pool_width_override.value_or(current_media_width),
+        280, std::max(280, width() / 2));
+    const int inspector_width = std::clamp(
+        inspector_width_override.value_or(current_inspector_width),
+        280, std::max(280, width() / 2));
+
+    if (media_pool_width_save_timer_ != nullptr) {
+        media_pool_width_save_timer_->stop();
+    }
+    if (inspector_width_save_timer_ != nullptr) {
+        inspector_width_save_timer_->stop();
+    }
+    bins_dock_->setMinimumWidth(0);
+    media_dock_->setMinimumWidth(0);
+    preview_dock_->setMinimumWidth(0);
+    preview_dock_->setMaximumWidth(QWIDGETSIZE_MAX);
+    preview_dock_->setMinimumHeight(0);
+    preview_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
+    inspector_dock_->setMinimumWidth(0);
+    expanded_dock_layout_change_in_progress_ = true;
+
+    const bool restored_base_layout =
+        workspace_expansion_restore_layout_state_.isEmpty() ||
+        restoreState(workspace_expansion_restore_layout_state_, 9);
+    if (!restored_base_layout) {
+        restoreDefaultLayout();
+    }
+
+    media_pool_expanded_ = false;
+    inspector_expanded_ = false;
+    if (workspace_host_ != nullptr) {
+        workspace_host_->refreshCentralWorkspaceVisibility();
+    }
+
+    if (!will_be_expanded) {
+        const int restored_preview_width = preview_dock_->width();
+        resizeDocks(
+            {bins_dock_, preview_dock_},
+            {media_pool_width,
+             std::max(280, restored_preview_width + current_media_width -
+                               media_pool_width + current_inspector_width -
+                               inspector_width)},
+            Qt::Horizontal);
+        resizeDocks(
+            {preview_dock_, inspector_dock_},
+            {std::max(280, restored_preview_width + current_media_width -
+                               media_pool_width + current_inspector_width -
+                               inspector_width),
+             inspector_width},
+            Qt::Horizontal);
+        workspace_expansion_restore_layout_state_.clear();
+        settings.remove("workspace/dock_expansion_restore_layout_state");
+    } else {
         bins_dock_->setFloating(false);
         media_dock_->setFloating(false);
         preview_dock_->setFloating(false);
         inspector_dock_->setFloating(false);
         timeline_dock_->setFloating(false);
-
         addDockWidget(Qt::LeftDockWidgetArea, bins_dock_);
         addDockWidget(Qt::LeftDockWidgetArea, media_dock_);
         splitDockWidget(bins_dock_, media_dock_, Qt::Vertical);
-
         addDockWidget(Qt::RightDockWidgetArea, preview_dock_);
-        addDockWidget(Qt::RightDockWidgetArea, timeline_dock_);
-        splitDockWidget(preview_dock_, timeline_dock_, Qt::Vertical);
-        addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
-        splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
 
-        resizeDocks(
-            {bins_dock_, media_dock_},
-            {std::max(140, bins_dock_->height()),
-             std::max(260, height() - bins_dock_->height())},
-            Qt::Vertical);
-        resizeDocks(
-            {media_dock_, preview_dock_, inspector_dock_},
-            {media_pool_width,
-             std::max(
-                 280,
-                 preview_geometry.width() +
-                     normal_media_pool_width - media_pool_width),
-             std::max(280, inspector_geometry.width())},
-            Qt::Horizontal);
+        if (media_pool_expanded && !inspector_expanded) {
+            addDockWidget(Qt::RightDockWidgetArea, timeline_dock_);
+            splitDockWidget(preview_dock_, timeline_dock_, Qt::Vertical);
+            addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+            splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
+        } else if (inspector_expanded) {
+            addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+            addDockWidget(Qt::RightDockWidgetArea, preview_dock_);
+            splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
+            resizeDocks(
+                {preview_dock_, inspector_dock_},
+                {std::max(280, preview_geometry.width()), inspector_width},
+                Qt::Horizontal);
+            addDockWidget(Qt::RightDockWidgetArea, timeline_dock_);
+            splitDockWidget(preview_dock_, timeline_dock_, Qt::Vertical);
+        } else {
+            addDockWidget(Qt::RightDockWidgetArea, timeline_dock_);
+            splitDockWidget(preview_dock_, timeline_dock_, Qt::Vertical);
+            addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+            splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
+        }
+        if (media_pool_expanded) {
+            resizeDocks(
+                {bins_dock_, media_dock_},
+                {std::max(140, current_bins_height),
+                 std::max(260, height() - current_bins_height)},
+                Qt::Vertical);
+        }
+        const int target_preview_width = std::max(
+            280, preview_geometry.width() + current_media_width -
+                     media_pool_width + current_inspector_width -
+                     inspector_width);
+        if (inspector_expanded) {
+            bins_dock_->setMinimumWidth(media_pool_width);
+            media_dock_->setMinimumWidth(media_pool_width);
+            preview_dock_->setFixedWidth(target_preview_width);
+            preview_dock_->setFixedHeight(preview_geometry.height());
+        }
+        if (!inspector_expanded) {
+            resizeDocks(
+                {bins_dock_, preview_dock_},
+                {media_pool_width, target_preview_width}, Qt::Horizontal);
+            resizeDocks(
+                {preview_dock_, inspector_dock_},
+                {target_preview_width, inspector_width}, Qt::Horizontal);
+        }
         resizeDocks(
             {preview_dock_, timeline_dock_},
             {std::max(260, preview_geometry.height()),
              std::max(220, timeline_geometry.height())},
             Qt::Vertical);
-        media_pool_expanded_ = true;
-        if (media_pool_width_save_timer_ != nullptr) {
-            media_pool_width_save_timer_->start();
-        }
-        settings.setValue("workspace/media_pool_width", media_dock_->width());
-    } else {
-        if (media_pool_width_save_timer_ != nullptr) {
-            media_pool_width_save_timer_->stop();
-        }
-        persistMediaPoolWidth();
-        const int media_pool_width = std::clamp(
-            settings.value(
-                "workspace/media_pool_width", media_dock_->width()).toInt(),
-            280,
-            std::max(280, width() / 2));
-        media_pool_width_layout_change_in_progress_ = true;
-        if (!media_pool_restore_layout_state_.isEmpty() &&
-            restoreState(media_pool_restore_layout_state_, 9)) {
-            if (workspace_host_ != nullptr) {
-                workspace_host_->refreshCentralWorkspaceVisibility();
-            }
-        } else {
-            restoreDefaultLayout();
-        }
-        media_pool_expanded_ = false;
-        media_pool_restore_layout_state_.clear();
-        settings.remove("workspace/media_pool_restore_layout_state");
-        const int restored_media_width = media_dock_->width();
-        const int restored_preview_width = preview_dock_->width();
-        resizeDocks(
-            {media_dock_, preview_dock_, inspector_dock_},
-            {media_pool_width,
-             std::max(
-                 280,
-                 restored_preview_width + restored_media_width -
-                     media_pool_width),
-             std::max(280, inspector_dock_->width())},
-            Qt::Horizontal);
-        QTimer::singleShot(150, this, [this] {
-            media_pool_width_layout_change_in_progress_ = false;
-            persistMediaPoolWidth();
-        });
-        settings.setValue("workspace/media_pool_width", media_dock_->width());
+
+        media_pool_expanded_ = media_pool_expanded;
+        inspector_expanded_ = inspector_expanded;
     }
 
+    settings.setValue("workspace/media_pool_width", media_dock_->width());
+    settings.setValue("workspace/inspector_width", inspector_dock_->width());
+    settings.setValue("workspace/media_pool_expanded", media_pool_expanded_);
+    settings.setValue("workspace/inspector_expanded", inspector_expanded_);
+    if (will_be_expanded) {
+        settings.setValue(
+            "workspace/dock_expansion_restore_layout_state",
+            workspace_expansion_restore_layout_state_);
+    }
+
+    QTimer::singleShot(150, this, [this] {
+        expanded_dock_layout_change_in_progress_ = false;
+        persistMediaPoolWidth();
+        persistInspectorWidth();
+    });
+
     updateMediaPoolExpandButton();
+    updateInspectorExpandButton();
     saveWorkspaceLayout();
+    if (!will_be_expanded) {
+        QTimer::singleShot(0, this, [this, media_pool_width, inspector_width] {
+            if (media_pool_expanded_ || inspector_expanded_ ||
+                media_dock_ == nullptr || preview_dock_ == nullptr ||
+                inspector_dock_ == nullptr) {
+                return;
+            }
+            const int available_width = std::max(840, width() - 16);
+            const int preview_width = std::max(
+                280, available_width - media_pool_width - inspector_width);
+            resizeDocks(
+                {bins_dock_, preview_dock_, inspector_dock_},
+                {media_pool_width, preview_width, inspector_width},
+                Qt::Horizontal);
+            saveWorkspaceLayout();
+        });
+    }
+}
+
+void MainWindow::updateInspectorExpandButton() {
+    if (inspector_expand_button_ == nullptr) return;
+    const QSignalBlocker blocker(inspector_expand_button_);
+    inspector_expand_button_->setChecked(inspector_expanded_);
+    inspector_expand_button_->setIcon(style()->standardIcon(
+        inspector_expanded_ ? QStyle::SP_TitleBarNormalButton
+                            : QStyle::SP_TitleBarMaxButton));
+    inspector_expand_button_->setToolTip(
+        inspector_expanded_
+            ? QStringLiteral("Restore Inspector layout")
+            : QStringLiteral("Expand Inspector to full window height"));
+    inspector_expand_button_->setAccessibleName(
+        inspector_expand_button_->toolTip());
 }
 
 void MainWindow::updateMediaPoolExpandButton() {
@@ -1465,6 +1580,9 @@ void MainWindow::saveWindowGeometry() {
     settings.setValue("workspace/window_maximized", isMaximized());
     if (media_dock_ != nullptr) {
         persistMediaPoolWidth();
+    }
+    if (inspector_dock_ != nullptr) {
+        persistInspectorWidth();
     }
     settings.sync();
 }
@@ -1519,8 +1637,13 @@ void MainWindow::updateEffectsActionState() {
 
 void MainWindow::restoreDefaultLayout() {
     media_pool_expanded_ = false;
-    media_pool_restore_layout_state_.clear();
-    QSettings().remove("workspace/media_pool_restore_layout_state");
+    inspector_expanded_ = false;
+    workspace_expansion_restore_layout_state_.clear();
+    QSettings settings;
+    settings.remove("workspace/dock_expansion_restore_layout_state");
+    settings.remove("workspace/media_pool_restore_layout_state");
+    updateMediaPoolExpandButton();
+    updateInspectorExpandButton();
 
     bins_dock_->setFloating(false);
     media_dock_->setFloating(false);

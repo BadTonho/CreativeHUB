@@ -89,23 +89,23 @@ are visible while the Effects pair is hidden, and it does not affect project
 state. A reusable action area in dock title bars supports additional panel
 commands while retaining close and float controls. The `Media` dock's checked
 title-bar button expands the `Bins` and `Media` docks together into a full-height
-left column. Preview and Inspector stay above the Timeline on the right; no dock
-is hidden. On first expansion, Preview and Inspector retain their positions and
-sizes; only the Timeline moves into the remaining area to the right of Media
-Pool and below those panels. The expanded Media Pool column remains resizable.
-One shared width is updated after settled Media dock resizes in either layout.
-Expansion, collapse, and reopening the editor use that latest width, so
-restoring an older dock-state snapshot cannot replace a newer adjustment. The
-normal restore layout still retains the other dock positions and visibility;
-the Media Pool width is applied to it after collapse. When a saved width is
-reapplied on startup, Preview and Inspector use the remaining horizontal space.
-The expanded state, shared width, and normal restore layout are saved in the
-global `QSettings` keys `workspace/media_pool_expanded`,
-`workspace/media_pool_width`, and `workspace/media_pool_restore_layout_state`,
-alongside the current native dock state. Older
-`workspace/media_pool_expanded_width` and `workspace/media_pool_normal_width`
-preferences are read as migration fallbacks. This is workspace presentation
-only and does not affect project state.
+left column. The `Inspector` dock has its own checked title-bar button to expand
+to a full-height right column. These modes can be combined in either click
+order; no dock is hidden. Expanding either dock keeps Preview in its current
+position and size. The Timeline moves below Preview into the central area
+between the expanded columns. The Media Pool and Inspector remain independently
+resizable in both normal and expanded modes. Their latest widths are persisted
+independently in `workspace/media_pool_width` and `workspace/inspector_width`,
+and are applied after each toggle and when the editor reopens. The baseline
+native dock arrangement is retained until both expansions are collapsed, so
+collapsing one does not cancel the other. Expansion state is stored in
+`workspace/media_pool_expanded` and `workspace/inspector_expanded`; the baseline
+layout is stored in `workspace/dock_expansion_restore_layout_state`, alongside
+the current native dock state. Older `workspace/media_pool_expanded_width`,
+`workspace/media_pool_normal_width`, and
+`workspace/media_pool_restore_layout_state` preferences are migration
+fallbacks. This is workspace presentation only and does not affect project
+state.
 
 The Effects workspace contains three additional native docks: `Toolbox`,
 `Favorites`, and `Effects`. `Toolbox` and `Favorites` form a vertical column,
