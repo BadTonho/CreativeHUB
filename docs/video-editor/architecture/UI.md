@@ -93,12 +93,23 @@ left column. The `Inspector` dock has its own checked title-bar button to expand
 to a full-height right column. The two toggles are independent and can be
 combined in either click order; no dock is hidden. With only Inspector expanded,
 Bins and Media retain their normal geometry while Inspector fills the right
-column and Timeline sits below Preview in the area between Media Pool and
-Inspector. The normal Bins and Media geometry is captured before rebuilding
-the dock tree and reapplied after Qt's layout settles. With only Media Pool
+column and Timeline spans the area below both Media Pool and Preview. Bins/Media
+and Preview form the upper row of a nested left-area dock tree, with Timeline
+below that row; Inspector occupies the separate right area. This avoids reserving
+an empty full-height left column below Media. Maximum-height constraints on
+Bins/Media cannot correct that dock-tree reservation and are not used to simulate
+independent expansion. The baseline dock layout is restored and applied synchronously before
+measuring the normal Bins and Media heights, including when collapsing Media
+Pool from the combined expanded layout or reopening an Inspector-only layout.
+Dock animations are suspended during this programmatic rebuild and the original
+dock options are restored afterward. The normal heights are reapplied after
+Qt's layout settles. With only Media Pool
 expanded, Bins and Media fill the left column;
-with both expanded, both side columns fill the workspace height. Expanding or
-collapsing either dock preserves Preview geometry. Dragging the Inspector divider
+with both expanded, both side columns fill the workspace height and Timeline
+sits between them. Expansion preserves Preview size within divider rounding;
+in Inspector-only mode, merging its upper row removes one outer separator and
+the one-pixel central spacer, allowing a horizontal adjustment of at most six
+logical pixels. Dragging the Inspector divider
 can resize Preview as the central area gives or takes space. Both side docks
 remain resizable after the expansion layout settles. Their latest widths are
 persisted separately in

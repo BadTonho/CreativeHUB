@@ -1,8 +1,11 @@
 #include "main_window/main_window.h"
 
 #include <QRect>
+#include <QAction>
 #include <QApplication>
 #include <QDockWidget>
+#include <QDir>
+#include <QDebug>
 #include <QEventLoop>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -26,11 +29,20 @@ void settleLayout() {
     }
 }
 
-void waitForWidthPersistence() {
+void waitForWidthPersistence(int delay_ms = 180) {
     QEventLoop loop;
-    QTimer::singleShot(180, &loop, &QEventLoop::quit);
+    QTimer::singleShot(delay_ms, &loop, &QEventLoop::quit);
     loop.exec();
     settleLayout();
+}
+
+void captureLayout(MainWindow& window, const QString& name) {
+    const auto path = qEnvironmentVariable("CREATIVE_SUITE_LAYOUT_TEST_CAPTURE_DIR");
+    if (path.isEmpty()) return;
+    QDir directory(path);
+    require(directory.mkpath(QStringLiteral(".")), "Cannot create layout capture directory.");
+    require(window.grab().save(directory.filePath(name + QStringLiteral(".png"))),
+            "Cannot save layout capture.");
 }
 
 struct Docks {
@@ -73,10 +85,29 @@ void requireInspectorExpandedGeometry(const Docks& docks) {
             "The expanded Inspector must span the full dock workspace height.");
     require(docks.timeline->y() > docks.preview->y(),
             "The Timeline must remain below Preview when Inspector is expanded.");
-    require(docks.timeline->x() >=
-                docks.media->x() + docks.media->width() - 1 &&
+    const bool media_expanded = docks.expand->isChecked();
+    if ((!media_expanded && docks.timeline->x() > docks.media->x() + 2) ||
+        docks.timeline->geometry().right() > docks.inspector->x() + 2) {
+        QString geometries;
+        QDebug(&geometries) << "Timeline/Media/Inspector:" << docks.timeline->geometry()
+                           << docks.media->geometry() << docks.inspector->geometry()
+                           << "Minimum Timeline/Inspector/window:" << docks.timeline->minimumSize()
+                           << docks.timeline->minimumSizeHint() << docks.inspector->minimumSize()
+                           << docks.inspector->minimumSizeHint() << docks.inspector->window()->minimumSize();
+        std::cerr << geometries.toStdString() << '\n';
+    }
+    require((media_expanded
+                 ? docks.timeline->x() >= docks.media->geometry().right()
+                 : docks.timeline->x() <= docks.media->x() + 2) &&
                 docks.timeline->geometry().right() <= docks.inspector->x() + 2,
-            "The Timeline must remain in the central area between Media Pool and Inspector.");
+            "Inspector-only expansion must keep Timeline below Media Pool and Preview without an empty left column.");
+    if (!media_expanded) {
+        require(std::abs(docks.media->geometry().bottom() -
+                         docks.preview->geometry().bottom()) <= 3 &&
+                    docks.timeline->y() > docks.media->geometry().bottom() &&
+                    docks.timeline->y() <= docks.media->geometry().bottom() + 12,
+                "Inspector-only expansion must not leave unused space below Media Pool.");
+    }
 }
 
 void requireExpandedGeometry(const Docks& docks) {
@@ -113,9 +144,12 @@ void requirePreviewAndInspectorUnchanged(
 
 void requirePreviewUnchanged(const Docks& docks, const QRect& preview_geometry) {
     const auto actual = docks.preview->geometry();
-    require(actual.x() == preview_geometry.x() &&
+    // Merging Preview into the upper-left dock tree removes the central
+    // widget's one-pixel area and one five-pixel outer separator.
+    const int horizontal_tolerance = docks.expand->isChecked() ? 0 : 6;
+    require(std::abs(actual.x() - preview_geometry.x()) <= horizontal_tolerance &&
                 actual.y() == preview_geometry.y() &&
-                actual.width() == preview_geometry.width() &&
+                std::abs(actual.width() - preview_geometry.width()) <= horizontal_tolerance &&
                 std::abs(actual.height() - preview_geometry.height()) <= 3,
             "Expanding the Inspector must not move or resize the Preview.");
 }
@@ -126,6 +160,13 @@ void requireMediaPoolGeometryUnchanged(
     const QRect& media_geometry) {
     require(docks.expand != nullptr && !docks.expand->isChecked(),
             "The Media Pool expansion action changed while only Inspector was toggled.");
+    if (docks.bins->geometry() != bins_geometry ||
+        docks.media->geometry() != media_geometry) {
+        QString geometries;
+        QDebug(&geometries) << "Bins expected/actual:" << bins_geometry << docks.bins->geometry()
+                           << "Media expected/actual:" << media_geometry << docks.media->geometry();
+        std::cerr << geometries.toStdString() << '\n';
+    }
     require(docks.bins->geometry() == bins_geometry &&
                 docks.media->geometry() == media_geometry,
             "Expanding Inspector changed the Media Pool dock geometry.");
@@ -137,6 +178,77 @@ void requireMediaPoolNotExpanded(const Docks& docks) {
     require(docks.media->geometry().bottom() <
                 docks.timeline->geometry().bottom() - 24,
             "Inspector-only expansion stretched the Media Pool to full height.");
+}
+
+void verifyAnimatedInspectorExpansion() {
+    QSettings().clear();
+    MainWindow window;
+    window.showNormal();
+    window.resize(1920, 1080);
+    waitForWidthPersistence();
+    const auto docks = findDocks(window);
+    const auto bins_geometry = docks.bins->geometry();
+    const auto media_geometry = docks.media->geometry();
+    captureLayout(window, QStringLiteral("normal"));
+    docks.inspector_expand->click();
+    captureLayout(window, QStringLiteral("inspector-immediate"));
+    requireMediaPoolGeometryUnchanged(docks, bins_geometry, media_geometry);
+    waitForWidthPersistence(300);
+    captureLayout(window, QStringLiteral("inspector-only"));
+    requireInspectorExpandedGeometry(docks);
+    requireMediaPoolGeometryUnchanged(docks, bins_geometry, media_geometry);
+    docks.inspector_expand->click();
+    waitForWidthPersistence(300);
+    docks.expand->click();
+    waitForWidthPersistence(300);
+    docks.inspector_expand->click();
+    waitForWidthPersistence(300);
+    docks.expand->click();
+    waitForWidthPersistence(300);
+    requireInspectorExpandedGeometry(docks);
+    requireMediaPoolGeometryUnchanged(docks, bins_geometry, media_geometry);
+    require(window.close(), "The animated editor did not close cleanly.");
+
+    MainWindow reopened;
+    reopened.showNormal();
+    waitForWidthPersistence(300);
+    captureLayout(reopened, QStringLiteral("inspector-reopened"));
+    const auto reopened_docks = findDocks(reopened);
+    requireInspectorExpandedGeometry(reopened_docks);
+    requireMediaPoolNotExpanded(reopened_docks);
+
+    // Simulate a saved v9 Inspector-only layout from before this fix, whose
+    // right-area Timeline reserves a full-height, mostly empty left column.
+    reopened.addDockWidget(Qt::RightDockWidgetArea, reopened_docks.preview);
+    reopened.addDockWidget(Qt::RightDockWidgetArea, reopened_docks.inspector);
+    reopened.splitDockWidget(reopened_docks.preview, reopened_docks.inspector, Qt::Horizontal);
+    reopened.addDockWidget(Qt::RightDockWidgetArea, reopened_docks.timeline);
+    reopened.splitDockWidget(reopened_docks.preview, reopened_docks.timeline, Qt::Vertical);
+    require(reopened.close(), "The restored animated editor did not close cleanly.");
+
+    MainWindow migrated;
+    migrated.showNormal();
+    waitForWidthPersistence(300);
+    const auto migrated_docks = findDocks(migrated);
+    requireInspectorExpandedGeometry(migrated_docks);
+    requireMediaPoolNotExpanded(migrated_docks);
+    captureLayout(migrated, QStringLiteral("inspector-migrated"));
+    const auto actions = migrated.findChildren<QAction*>();
+    const auto restore = std::find_if(actions.begin(), actions.end(), [](QAction* action) {
+        return action->text() == QStringLiteral("Restore &Default Layout");
+    });
+    require(restore != actions.end(), "The default-layout action is missing.");
+    (*restore)->trigger();
+    waitForWidthPersistence(300);
+    requireAllPanelsVisible(migrated_docks);
+    require(!migrated_docks.expand->isChecked() &&
+                !migrated_docks.inspector_expand->isChecked() &&
+                migrated_docks.timeline->x() <= migrated_docks.media->x() + 2 &&
+                migrated_docks.timeline->geometry().right() >=
+                    migrated_docks.inspector->geometry().right() - 2,
+            "Restoring the default layout must put Timeline below both side columns.");
+    require(migrated.close(), "The migrated editor did not close cleanly.");
+    QSettings().clear();
 }
 
 } // namespace
@@ -152,6 +264,7 @@ int main(int argc, char** argv) {
         QSettings::IniFormat, QSettings::UserScope, settings_directory.path());
 
     try {
+        verifyAnimatedInspectorExpansion();
         MainWindow window;
         window.setDockOptions(window.dockOptions() & ~QMainWindow::AnimatedDocks);
         window.showNormal();

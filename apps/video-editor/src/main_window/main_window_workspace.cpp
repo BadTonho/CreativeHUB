@@ -43,6 +43,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSizePolicy>
 #include <QStackedWidget>
@@ -1354,17 +1355,17 @@ void MainWindow::applyExpandedDockLayout(
     const int current_media_width = media_dock_->width();
     const int current_inspector_width = inspector_dock_->width();
     const int current_bins_height = bins_dock_->height();
-    // Capture the normal left-column geometry before restoring the baseline
-    // dock state. Qt can defer applying that state until the next layout pass,
-    // so reading the heights after restoreState() may observe the expanded
-    // geometry and allow the Media Pool to fill the Inspector's full-height
-    // column.
-    const int normal_bins_height = bins_dock_->height();
-    const int normal_media_height = media_dock_->height();
-
     if (!was_expanded && will_be_expanded) {
         workspace_expansion_restore_layout_state_ = saveState(9);
     }
+
+    // Apply the baseline synchronously before measuring its normal heights.
+    // The current geometry can belong to a previously expanded Media Pool.
+    const auto original_dock_options = dockOptions();
+    setDockOptions(original_dock_options & ~QMainWindow::AnimatedDocks);
+    const auto restore_dock_options = qScopeGuard([this, original_dock_options] {
+        setDockOptions(original_dock_options);
+    });
 
     const int media_pool_width = std::clamp(
         media_pool_width_override.value_or(current_media_width),
@@ -1396,14 +1397,9 @@ void MainWindow::applyExpandedDockLayout(
     if (!restored_base_layout) {
         restoreDefaultLayout();
     }
-
-    if (inspector_expanded && !media_pool_expanded) {
-        // A full-height Inspector changes the height of the side-dock area.
-        // Keep the Media Pool at its restored normal height unless its own
-        // expansion action is active.
-        bins_dock_->setMaximumHeight(std::max(1, normal_bins_height));
-        media_dock_->setMaximumHeight(std::max(1, normal_media_height));
-    }
+    layout()->activate();
+    const int normal_bins_height = bins_dock_->height();
+    const int normal_media_height = media_dock_->height();
 
     media_pool_expanded_ = false;
     inspector_expanded_ = false;
@@ -1445,6 +1441,34 @@ void MainWindow::applyExpandedDockLayout(
             splitDockWidget(preview_dock_, timeline_dock_, Qt::Vertical);
             addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
             splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
+        } else if (inspector_expanded && !media_pool_expanded) {
+            // Build an upper Bins/Media + Preview row above Timeline in the
+            // left dock area, with Inspector alone on the right. Keeping
+            // Timeline under Preview in the right area reserves an empty
+            // full-height column below Media regardless of height constraints.
+            removeDockWidget(bins_dock_);
+            removeDockWidget(media_dock_);
+            removeDockWidget(preview_dock_);
+            removeDockWidget(inspector_dock_);
+            removeDockWidget(timeline_dock_);
+            addDockWidget(Qt::LeftDockWidgetArea, bins_dock_);
+            addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+            addDockWidget(Qt::LeftDockWidgetArea, timeline_dock_);
+            splitDockWidget(bins_dock_, timeline_dock_, Qt::Vertical);
+            addDockWidget(Qt::LeftDockWidgetArea, preview_dock_);
+            splitDockWidget(bins_dock_, preview_dock_, Qt::Horizontal);
+            addDockWidget(Qt::LeftDockWidgetArea, media_dock_);
+            splitDockWidget(bins_dock_, media_dock_, Qt::Vertical);
+            bins_dock_->show();
+            media_dock_->show();
+            preview_dock_->show();
+            inspector_dock_->show();
+            timeline_dock_->show();
+            resizeDocks({bins_dock_, media_dock_},
+                        {normal_bins_height, normal_media_height}, Qt::Vertical);
+            resizeDocks({bins_dock_, preview_dock_, inspector_dock_},
+                        {media_pool_width, std::max(280, preview_geometry.width()),
+                         inspector_width}, Qt::Horizontal);
         } else if (inspector_expanded) {
             addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
             addDockWidget(Qt::RightDockWidgetArea, preview_dock_);
@@ -1502,6 +1526,7 @@ void MainWindow::applyExpandedDockLayout(
         inspector_expanded_ = inspector_expanded;
     }
 
+    layout()->activate();
     settings.setValue("workspace/media_pool_width", media_dock_->width());
     settings.setValue("workspace/inspector_width", inspector_dock_->width());
     settings.setValue("workspace/media_pool_expanded", media_pool_expanded_);
@@ -1516,15 +1541,11 @@ void MainWindow::applyExpandedDockLayout(
         150, this, [this, normal_bins_height, normal_media_height] {
             if (bins_dock_ != nullptr) {
                 bins_dock_->setMinimumWidth(0);
-                if (!(inspector_expanded_ && !media_pool_expanded_)) {
-                    bins_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
-                }
+                bins_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
             }
             if (media_dock_ != nullptr) {
                 media_dock_->setMinimumWidth(0);
-                if (!(inspector_expanded_ && !media_pool_expanded_)) {
-                    media_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
-                }
+                media_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
             }
             if (preview_dock_ != nullptr) {
                 preview_dock_->setMinimumWidth(0);
@@ -1534,8 +1555,6 @@ void MainWindow::applyExpandedDockLayout(
             }
             if (inspector_expanded_ && !media_pool_expanded_ &&
                 bins_dock_ != nullptr && media_dock_ != nullptr) {
-                bins_dock_->setMaximumHeight(std::max(1, normal_bins_height));
-                media_dock_->setMaximumHeight(std::max(1, normal_media_height));
                 resizeDocks(
                     {bins_dock_, media_dock_},
                     {normal_bins_height, normal_media_height}, Qt::Vertical);
