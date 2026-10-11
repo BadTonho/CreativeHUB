@@ -81,6 +81,9 @@ MainWindow::MainWindow(QWidget* parent)
     createWorkspace();
     createMenus();
     restoreWorkspaceLayout();
+    media_pool_expanded_width_restore_pending_ = media_pool_expanded_ &&
+        settings.contains("workspace/media_pool_expanded_width") &&
+        !media_pool_restore_layout_state_.isEmpty();
     initializePlayback();
     initializeLinkedImageCompatibility();
     configurePreviewPerformanceMetrics(
@@ -144,6 +147,17 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     saveWorkspaceLayout();
     saveWindowGeometry();
     event->accept();
+}
+
+void MainWindow::showEvent(QShowEvent* event) {
+    QMainWindow::showEvent(event);
+    if (!media_pool_expanded_width_restore_pending_) return;
+    media_pool_expanded_width_restore_pending_ = false;
+    QTimer::singleShot(0, this, [this] {
+        QTimer::singleShot(0, this, [this] {
+            restoreExpandedMediaPoolWidth();
+        });
+    });
 }
 
 void MainWindow::configureProjectAutosave(bool enabled, int interval_seconds) {

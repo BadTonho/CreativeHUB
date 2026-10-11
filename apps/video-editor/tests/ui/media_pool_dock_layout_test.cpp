@@ -1,13 +1,14 @@
 #include "main_window/main_window.h"
 
+#include <QRect>
 #include <QApplication>
 #include <QDockWidget>
 #include <QEventLoop>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QToolButton>
-#include <QRect>
 
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
@@ -121,6 +122,28 @@ int main(int argc, char** argv) {
         requirePreviewAndInspectorUnchanged(
             docks, preview_geometry, inspector_geometry);
 
+        const int initial_expanded_width = docks.media->width();
+        window.resizeDocks(
+            {docks.media, docks.preview},
+            {initial_expanded_width + 120,
+             std::max(280, docks.preview->width() - 120)},
+            Qt::Horizontal);
+        settleLayout();
+        const int widened_expanded_width = docks.media->width();
+        require(widened_expanded_width > initial_expanded_width,
+                "The expanded Media Pool column could not be widened.");
+        const int target_expanded_width = widened_expanded_width - 40;
+        window.resizeDocks(
+            {docks.media, docks.preview},
+            {target_expanded_width,
+             docks.preview->width() +
+                 (widened_expanded_width - target_expanded_width)},
+            Qt::Horizontal);
+        settleLayout();
+        const int resized_expanded_width = docks.media->width();
+        require(resized_expanded_width < widened_expanded_width,
+                "The expanded Media Pool column could not be narrowed.");
+
         docks.expand->click();
         settleLayout();
         require(!docks.expand->isChecked(),
@@ -130,14 +153,21 @@ int main(int argc, char** argv) {
                 "Restoring the normal layout did not return the Timeline below the side docks.");
         require(window.saveState(9) == normal_state,
                 "Toggling the Media Pool off did not restore the previous dock layout.");
+        require(QSettings().value(
+                    "workspace/media_pool_expanded_width").toInt() ==
+                    resized_expanded_width,
+                "Collapsing the Media Pool did not preserve its expanded width.");
 
         docks.expand->click();
         settleLayout();
         requireExpandedGeometry(docks);
+        require(docks.media->width() == resized_expanded_width,
+                "Re-expanding the Media Pool did not restore its adjusted width.");
         require(window.close(), "The expanded editor did not close cleanly.");
 
         MainWindow reopened;
         reopened.setDockOptions(reopened.dockOptions() & ~QMainWindow::AnimatedDocks);
+        reopened.resize(1600, 900);
         reopened.showNormal();
         settleLayout();
         const auto reopened_docks = findDocks(reopened);
@@ -145,20 +175,16 @@ int main(int argc, char** argv) {
                     reopened_docks.expand->isChecked(),
                 "Reopening the editor did not restore the expanded Media Pool state.");
         requireExpandedGeometry(reopened_docks);
+        require(reopened_docks.media->width() == resized_expanded_width,
+                "Reopening the editor did not restore the adjusted expanded width.");
         reopened.resize(960, 640);
         settleLayout();
         requireExpandedGeometry(reopened_docks);
         reopened_docks.expand->click();
         settleLayout();
-        const auto small_preview_geometry = reopened_docks.preview->geometry();
-        const auto small_inspector_geometry = reopened_docks.inspector->geometry();
         reopened_docks.expand->click();
         settleLayout();
         requireExpandedGeometry(reopened_docks);
-        requirePreviewAndInspectorUnchanged(
-            reopened_docks,
-            small_preview_geometry,
-            small_inspector_geometry);
         reopened.resize(1600, 900);
         settleLayout();
 

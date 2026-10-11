@@ -90,11 +90,16 @@ state. A reusable action area in dock title bars supports additional panel
 commands while retaining close and float controls. The `Media` dock's checked
 title-bar button expands the `Bins` and `Media` docks together into a full-height
 left column. Preview and Inspector stay above the Timeline on the right; no dock
-is hidden. Expanding preserves Preview and Inspector positions and sizes; only
-the Timeline moves into the remaining area to the right of Media Pool and below
-those panels. Clicking the button again restores the layout captured before
-expansion. The expanded state and its restore layout are saved globally in
+is hidden. On first expansion, Preview and Inspector retain their positions and
+sizes; only the Timeline moves into the remaining area to the right of Media
+Pool and below those panels. The expanded Media Pool column remains resizable.
+Its width is remembered independently from the normal layout and restored on
+subsequent expansions and application restarts; when a changed width is
+reapplied, Preview uses the remaining horizontal space. Clicking the button
+again restores the normal layout captured before expansion. The expanded state,
+expanded width, and normal restore layout are saved globally in
 `workspace/media_pool_expanded` and
+`workspace/media_pool_expanded_width` and
 `workspace/media_pool_restore_layout_state`, alongside the current native dock
 state. This is workspace presentation only and does not affect project state.
 

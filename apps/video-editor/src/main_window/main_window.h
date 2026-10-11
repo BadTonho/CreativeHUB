@@ -85,6 +85,7 @@ struct AutosaveSnapshotItem;
 }
 
 class MainWindowIntegrationTest;
+class QShowEvent;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -93,6 +94,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
     friend class MainWindowIntegrationTest;
@@ -117,6 +119,7 @@ private:
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
+    void restoreExpandedMediaPoolWidth();
     void setMediaPoolExpanded(bool expanded);
     void updateMediaPoolExpandButton();
     void applyInitialWindowLayout();
@@ -325,6 +328,7 @@ private:
     QToolButton* media_pool_expand_button_ = nullptr;
     QByteArray media_pool_restore_layout_state_;
     bool media_pool_expanded_ = false;
+    bool media_pool_expanded_width_restore_pending_ = false;
     PreviewWidget* preview_widget_ = nullptr;
     ui::FunctionPalette* function_palette_ = nullptr;
     ui::EditWorkspace* edit_workspace_ = nullptr;

@@ -1227,6 +1227,23 @@ void MainWindow::saveWorkspaceLayout() {
     settings.sync();
 }
 
+void MainWindow::restoreExpandedMediaPoolWidth() {
+    if (!media_pool_expanded_ || media_pool_restore_layout_state_.isEmpty()) {
+        return;
+    }
+
+    const auto normal_layout = media_pool_restore_layout_state_;
+    media_pool_expanded_ = false;
+    if (!restoreState(normal_layout, 9)) {
+        media_pool_expanded_ = true;
+        return;
+    }
+    if (workspace_host_ != nullptr) {
+        workspace_host_->refreshCentralWorkspaceVisibility();
+    }
+    setMediaPoolExpanded(true);
+}
+
 void MainWindow::setMediaPoolExpanded(bool expanded) {
     if (media_pool_expanded_ == expanded ||
         bins_dock_ == nullptr || media_dock_ == nullptr ||
@@ -1241,6 +1258,14 @@ void MainWindow::setMediaPoolExpanded(bool expanded) {
         const QRect preview_geometry = preview_dock_->geometry();
         const QRect inspector_geometry = inspector_dock_->geometry();
         const QRect timeline_geometry = timeline_dock_->geometry();
+        const int normal_media_pool_width = bins_dock_->width();
+        const int saved_media_pool_width = settings.value(
+            "workspace/media_pool_expanded_width",
+            normal_media_pool_width).toInt();
+        const int media_pool_width = std::clamp(
+            saved_media_pool_width,
+            280,
+            std::max(280, width() / 2));
         media_pool_restore_layout_state_ = saveState(9);
         settings.setValue(
             "workspace/media_pool_restore_layout_state",
@@ -1268,8 +1293,12 @@ void MainWindow::setMediaPoolExpanded(bool expanded) {
              std::max(260, height() - bins_dock_->height())},
             Qt::Vertical);
         resizeDocks(
-            {preview_dock_, inspector_dock_},
-            {std::max(280, preview_geometry.width()),
+            {media_dock_, preview_dock_, inspector_dock_},
+            {media_pool_width,
+             std::max(
+                 280,
+                 preview_geometry.width() +
+                     normal_media_pool_width - media_pool_width),
              std::max(280, inspector_geometry.width())},
             Qt::Horizontal);
         resizeDocks(
@@ -1279,6 +1308,8 @@ void MainWindow::setMediaPoolExpanded(bool expanded) {
             Qt::Vertical);
         media_pool_expanded_ = true;
     } else {
+        settings.setValue(
+            "workspace/media_pool_expanded_width", media_dock_->width());
         if (!media_pool_restore_layout_state_.isEmpty() &&
             restoreState(media_pool_restore_layout_state_, 9)) {
             if (workspace_host_ != nullptr) {
@@ -1342,6 +1373,10 @@ void MainWindow::saveWindowGeometry() {
     QSettings settings;
     settings.setValue("workspace/window_geometry", saveGeometry());
     settings.setValue("workspace/window_maximized", isMaximized());
+    if (media_pool_expanded_ && media_dock_ != nullptr) {
+        settings.setValue(
+            "workspace/media_pool_expanded_width", media_dock_->width());
+    }
     settings.sync();
 }
 
