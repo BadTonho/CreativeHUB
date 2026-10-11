@@ -73,6 +73,11 @@ class UpdateRuntime final : public QObject {
 
 public:
     explicit UpdateRuntime(QString application_id, QObject* parent = nullptr);
+    // Isolated storage and process-launch boundary for deterministic integration
+    // tests. Validation and pending schema are identical to the default runtime.
+    using InstallerLauncher = std::function<bool(const QString&, const QStringList&, const QString&)>;
+    UpdateRuntime(QString application_id, QString update_directory,
+                  InstallerLauncher installer_launcher, QObject* parent = nullptr);
     ~UpdateRuntime() override;
 
     [[nodiscard]] bool isApplicationRunning(
@@ -107,15 +112,20 @@ private:
     [[nodiscard]] QString pendingPath(const QString& app_id) const;
     [[nodiscard]] bool writePending(const PendingInstall& pending) const;
     [[nodiscard]] std::optional<PendingInstall> readPending(
-        const QString& app_id) const;
-    [[nodiscard]] bool launchInstaller(const PendingInstall& pending) const;
+        const QString& app_id, bool verify_installer = true) const;
+    enum class LaunchResult { Started, Deferred, NotPending, Failed };
+    [[nodiscard]] LaunchResult launchInstaller(const PendingInstall& pending) const;
     void onApplicationAboutToQuit();
+    void watchPendingInstall(const QString& app_id);
+    void stopWatchingPendingInstall(const QString& app_id);
     void pollPendingInstall(const QString& app_id);
 
     QString m_application_id;
+    QString m_update_directory;
+    InstallerLauncher m_installer_launcher;
     std::unique_ptr<QLockFile> m_application_lock;
     QPointer<QTimer> m_pending_timer;
-    QString m_polling_app_id;
+    QStringList m_polling_app_ids;
 };
 
 class UpdateService final : public QObject {

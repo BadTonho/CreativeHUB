@@ -61,14 +61,14 @@ QString safeAppId(const QString& app_id) {
     return safe_pattern.match(app_id).hasMatch() ? app_id : QString{};
 }
 
-QString appLockPath(const QString& app_id) {
+QString appLockPath(const QString& app_id, const QString& directory = sharedUpdateDirectory()) {
     if (safeAppId(app_id).isEmpty()) return {};
-    return QDir(sharedUpdateDirectory()).filePath(app_id + QStringLiteral(".running.lock"));
+    return QDir(directory).filePath(app_id + QStringLiteral(".running.lock"));
 }
 
-QString appPendingPath(const QString& app_id) {
+QString appPendingPath(const QString& app_id, const QString& directory = sharedUpdateDirectory()) {
     if (safeAppId(app_id).isEmpty()) return {};
-    const auto pending_dir = QDir(sharedUpdateDirectory()).filePath(QStringLiteral("pending"));
+    const auto pending_dir = QDir(directory).filePath(QStringLiteral("pending"));
     return QDir(pending_dir).filePath(app_id + QStringLiteral(".json"));
 }
 
@@ -259,10 +259,21 @@ bool restorePreviousVersion(const QString& app_id, QString* error) {
 }
 
 UpdateRuntime::UpdateRuntime(QString application_id, QObject* parent)
+    : UpdateRuntime(std::move(application_id), sharedUpdateDirectory(), {}, parent) {}
+
+UpdateRuntime::UpdateRuntime(QString application_id, QString update_directory,
+                             InstallerLauncher installer_launcher, QObject* parent)
     : QObject(parent)
-    , m_application_id(std::move(application_id)) {
-    QDir().mkpath(sharedUpdateDirectory());
-    const auto path = appLockPath(m_application_id);
+    , m_application_id(std::move(application_id))
+    , m_update_directory(QDir(update_directory.isEmpty() ? sharedUpdateDirectory() : update_directory).absolutePath())
+    , m_installer_launcher(std::move(installer_launcher)) {
+    if (!m_installer_launcher) {
+        m_installer_launcher = [](const QString& program, const QStringList& arguments, const QString& directory) {
+            return QProcess::startDetached(program, arguments, directory);
+        };
+    }
+    QDir().mkpath(m_update_directory);
+    const auto path = lockPath(m_application_id);
     if (!path.isEmpty()) {
         m_application_lock = std::make_unique<QLockFile>(path);
         if (!m_application_lock->tryLock(0)) {
@@ -281,11 +292,11 @@ UpdateRuntime::UpdateRuntime(QString application_id, QObject* parent)
 UpdateRuntime::~UpdateRuntime() = default;
 
 QString UpdateRuntime::lockPath(const QString& app_id) const {
-    return appLockPath(app_id);
+    return appLockPath(app_id, m_update_directory);
 }
 
 QString UpdateRuntime::pendingPath(const QString& app_id) const {
-    return appPendingPath(app_id);
+    return appPendingPath(app_id, m_update_directory);
 }
 
 bool UpdateRuntime::isApplicationRunning(
@@ -309,7 +320,7 @@ bool UpdateRuntime::isApplicationRunning(
 
 bool UpdateRuntime::writePending(const PendingInstall& pending) const {
     const auto path = pendingPath(pending.app_id);
-    if (path.isEmpty() || !isWithinDirectory(pending.installer_path, sharedUpdateDirectory())) {
+    if (path.isEmpty() || !isWithinDirectory(pending.installer_path, m_update_directory)) {
         return false;
     }
     QDir().mkpath(QFileInfo(path).absolutePath());
@@ -328,7 +339,7 @@ bool UpdateRuntime::writePending(const PendingInstall& pending) const {
 }
 
 std::optional<UpdateRuntime::PendingInstall> UpdateRuntime::readPending(
-    const QString& app_id) const {
+    const QString& app_id, bool verify_installer) const {
     const auto path = pendingPath(app_id);
     if (path.isEmpty()) return std::nullopt;
     QFile file(path);
@@ -349,9 +360,9 @@ std::optional<UpdateRuntime::PendingInstall> UpdateRuntime::readPending(
     pending.sha256_hex = object.value(QStringLiteral("sha256")).toString().toLatin1().toLower();
     pending.installed = object.value(QStringLiteral("installed")).toBool();
     if (safeAppId(app_id).isEmpty() || pending.installer_path.isEmpty() ||
-        !isWithinDirectory(pending.installer_path, sharedUpdateDirectory()) ||
+        !isWithinDirectory(pending.installer_path, m_update_directory) ||
         pending.sha256_hex.size() != 64 ||
-        hashFile(pending.installer_path) != pending.sha256_hex ||
+        (verify_installer && hashFile(pending.installer_path) != pending.sha256_hex) ||
         (pending.installed && pending.install_path.isEmpty())) {
         logMessage(creative_suite::diagnostics::Level::Error,
                    QStringLiteral("read_pending_install"),
@@ -361,16 +372,16 @@ std::optional<UpdateRuntime::PendingInstall> UpdateRuntime::readPending(
     return pending;
 }
 
-bool UpdateRuntime::launchInstaller(const PendingInstall& pending) const {
+UpdateRuntime::LaunchResult UpdateRuntime::launchInstaller(const PendingInstall& pending) const {
     const auto pending_path = pendingPath(pending.app_id);
-    if (pending_path.isEmpty() || !QFileInfo::exists(pending_path)) return true;
+    if (pending_path.isEmpty() || !QFileInfo::exists(pending_path)) return LaunchResult::NotPending;
 
-    QLockFile launch_lock(QDir(sharedUpdateDirectory()).filePath(
+    QLockFile launch_lock(QDir(m_update_directory).filePath(
         pending.app_id + QStringLiteral(".installer-launch.lock")));
-    if (!launch_lock.tryLock(0)) return true;
+    if (!launch_lock.tryLock(0)) return LaunchResult::Deferred;
 
     const auto persisted = readPending(pending.app_id);
-    if (!persisted) return false;
+    if (!persisted) return QFileInfo::exists(pending_path) ? LaunchResult::Failed : LaunchResult::NotPending;
     if (persisted->installer_path != pending.installer_path ||
         persisted->sha256_hex != pending.sha256_hex ||
         persisted->install_path != pending.install_path) {
@@ -378,16 +389,16 @@ bool UpdateRuntime::launchInstaller(const PendingInstall& pending) const {
                    QStringLiteral("launch_installer"),
                    QStringLiteral("The pending installer changed before it could be started."),
                    pending.app_id);
-        return false;
+        return LaunchResult::Failed;
     }
     if (!QFileInfo(persisted->installer_path).isFile() ||
-        !isWithinDirectory(persisted->installer_path, sharedUpdateDirectory()) ||
+        !isWithinDirectory(persisted->installer_path, m_update_directory) ||
         hashFile(persisted->installer_path) != persisted->sha256_hex) {
         logMessage(creative_suite::diagnostics::Level::Error,
                    QStringLiteral("launch_installer"),
                    QStringLiteral("The staged installer failed validation before launch."),
                    pending.app_id);
-        return false;
+        return LaunchResult::Failed;
     }
     QStringList arguments;
     if (persisted->installed) {
@@ -395,8 +406,8 @@ bool UpdateRuntime::launchInstaller(const PendingInstall& pending) const {
                   << QStringLiteral("/NORESTART")
                   << QStringLiteral("/DIR=\"%1\"").arg(QDir::toNativeSeparators(persisted->install_path));
     }
-    const bool started = QProcess::startDetached(
-        persisted->installer_path, arguments, sharedUpdateDirectory());
+    const bool started = m_installer_launcher(
+        persisted->installer_path, arguments, m_update_directory);
     if (started) {
         QFile::remove(pending_path);
         logMessage(creative_suite::diagnostics::Level::Info,
@@ -404,7 +415,7 @@ bool UpdateRuntime::launchInstaller(const PendingInstall& pending) const {
                    QStringLiteral("Started the full application installer."),
                    pending.app_id);
     }
-    return started;
+    return started ? LaunchResult::Started : LaunchResult::Failed;
 }
 
 bool UpdateRuntime::installOrWait(
@@ -417,7 +428,7 @@ bool UpdateRuntime::installOrWait(
     PendingInstall pending{target_app_id, install_path, executable_name,
                            installer_path, expected_sha256.toLower(), installed};
     if (safeAppId(target_app_id).isEmpty() ||
-        !isWithinDirectory(installer_path, sharedUpdateDirectory()) ||
+        !isWithinDirectory(installer_path, m_update_directory) ||
         hashFile(installer_path) != pending.sha256_hex) {
         emit installationFailed(target_app_id,
                                 QStringLiteral("The downloaded installer failed validation."));
@@ -434,20 +445,18 @@ bool UpdateRuntime::installOrWait(
         return true;
     }
     if (installed && isApplicationRunning(target_app_id, install_path, executable_name)) {
+        watchPendingInstall(target_app_id);
         emit installationStateChanged(target_app_id, UpdateState::WaitingForApplicationToClose);
-        m_polling_app_id = target_app_id;
-        if (!m_pending_timer) {
-            m_pending_timer = new QTimer(this);
-            m_pending_timer->setInterval(750);
-            connect(m_pending_timer, &QTimer::timeout, this, [this] {
-                if (!m_polling_app_id.isEmpty()) pollPendingInstall(m_polling_app_id);
-            });
-        }
-        m_pending_timer->start();
         return true;
     }
 
-    if (!launchInstaller(pending)) {
+    const auto result = launchInstaller(pending);
+    if (result == LaunchResult::Deferred) {
+        watchPendingInstall(target_app_id);
+        return true;
+    }
+    stopWatchingPendingInstall(target_app_id);
+    if (result == LaunchResult::Failed) {
         logMessage(creative_suite::diagnostics::Level::Error,
                    QStringLiteral("launch_installer"),
                    QStringLiteral("Could not start the downloaded installer."), target_app_id);
@@ -455,38 +464,42 @@ bool UpdateRuntime::installOrWait(
                                 QStringLiteral("Could not start the installer. Try again or run it from the download folder."));
         return false;
     }
-    emit installationStateChanged(target_app_id, UpdateState::InstallerStarted);
+    if (result == LaunchResult::Started)
+        emit installationStateChanged(target_app_id, UpdateState::InstallerStarted);
     return true;
 }
 
 void UpdateRuntime::resumePendingInstalls(const QStringList& managed_app_ids) {
-    QDir directory(QDir(sharedUpdateDirectory()).filePath(QStringLiteral("pending")));
+    QDir directory(QDir(m_update_directory).filePath(QStringLiteral("pending")));
     if (!directory.exists()) return;
     auto entries = managed_app_ids;
     if (entries.isEmpty()) {
         const auto files = directory.entryList({QStringLiteral("*.json")}, QDir::Files);
         for (const auto& file : files) entries.push_back(file.left(file.size() - 5));
     }
+    entries.removeDuplicates();
     for (const auto& app_id : entries) {
         const auto pending = readPending(app_id);
         if (!pending) continue;
         if (app_id == m_application_id) continue;
         if (pending->installed && isApplicationRunning(
                 app_id, pending->install_path, pending->executable_name)) {
-            m_polling_app_id = app_id;
-            if (!m_pending_timer) {
-                m_pending_timer = new QTimer(this);
-                m_pending_timer->setInterval(750);
-                connect(m_pending_timer, &QTimer::timeout, this, [this] {
-                    if (!m_polling_app_id.isEmpty()) pollPendingInstall(m_polling_app_id);
-                });
-            }
-            m_pending_timer->start();
-            break;
+            const bool already_watching = m_polling_app_ids.contains(app_id);
+            watchPendingInstall(app_id);
+            if (!already_watching)
+                emit installationStateChanged(app_id, UpdateState::WaitingForApplicationToClose);
+            continue;
         }
-        if (launchInstaller(*pending)) {
-            emit installationStateChanged(app_id, UpdateState::InstallerStarted);
-            break;
+        const auto result = launchInstaller(*pending);
+        if (result == LaunchResult::Deferred) {
+            watchPendingInstall(app_id);
+            continue;
+        }
+        stopWatchingPendingInstall(app_id);
+        if (result != LaunchResult::Failed) {
+            if (result == LaunchResult::Started)
+                emit installationStateChanged(app_id, UpdateState::InstallerStarted);
+            continue;
         }
         logMessage(creative_suite::diagnostics::Level::Error,
                    QStringLiteral("resume_pending_install"),
@@ -499,7 +512,8 @@ void UpdateRuntime::resumePendingInstalls(const QStringList& managed_app_ids) {
 void UpdateRuntime::onApplicationAboutToQuit() {
     const auto pending = readPending(m_application_id);
     if (!pending) return;
-    if (!launchInstaller(*pending)) {
+    const auto result = launchInstaller(*pending);
+    if (result == LaunchResult::Failed) {
         logMessage(creative_suite::diagnostics::Level::Error,
                    QStringLiteral("launch_self_update"),
                    QStringLiteral("Could not start the installer during application shutdown."),
@@ -508,31 +522,54 @@ void UpdateRuntime::onApplicationAboutToQuit() {
                                 QStringLiteral("The installer could not be started. The current application remains installed."));
         return;
     }
-    emit installationStateChanged(m_application_id, UpdateState::InstallerStarted);
+    if (result == LaunchResult::Started)
+        emit installationStateChanged(m_application_id, UpdateState::InstallerStarted);
+}
+
+void UpdateRuntime::watchPendingInstall(const QString& app_id) {
+    if (!m_polling_app_ids.contains(app_id)) m_polling_app_ids.push_back(app_id);
+    if (!m_pending_timer) {
+        m_pending_timer = new QTimer(this);
+        m_pending_timer->setInterval(750);
+        connect(m_pending_timer, &QTimer::timeout, this, [this] {
+            // Signal handlers may schedule/resume work; iterate a stable copy.
+            const auto entries = m_polling_app_ids;
+            for (const auto& app : entries)
+                if (m_polling_app_ids.contains(app)) pollPendingInstall(app);
+        });
+    }
+    if (!m_pending_timer->isActive()) m_pending_timer->start();
+}
+
+void UpdateRuntime::stopWatchingPendingInstall(const QString& app_id) {
+    m_polling_app_ids.removeAll(app_id);
+    if (m_polling_app_ids.isEmpty() && m_pending_timer) m_pending_timer->stop();
 }
 
 void UpdateRuntime::pollPendingInstall(const QString& app_id) {
-    const auto pending = readPending(app_id);
+    // Poll metadata while editors remain open; hash the full package at launch.
+    const auto pending = readPending(app_id, false);
     if (!pending) {
-        if (m_pending_timer) m_pending_timer->stop();
-        m_polling_app_id.clear();
+        stopWatchingPendingInstall(app_id);
         return;
     }
     if (pending->installed && isApplicationRunning(
             app_id, pending->install_path, pending->executable_name)) {
         return;
     }
-    if (!launchInstaller(*pending)) {
+    const auto result = launchInstaller(*pending);
+    if (result == LaunchResult::Deferred) return;
+    stopWatchingPendingInstall(app_id);
+    if (result == LaunchResult::Failed) {
         logMessage(creative_suite::diagnostics::Level::Error,
                    QStringLiteral("launch_queued_installer"),
                    QStringLiteral("Could not start the installer after the application closed."), app_id);
         emit installationFailed(app_id,
                                 QStringLiteral("The installer could not be started. You can retry from the Hub."));
-        if (m_pending_timer) m_pending_timer->stop();
-        m_polling_app_id.clear();
         return;
     }
-    emit installationStateChanged(app_id, UpdateState::InstallerStarted);
+    if (result == LaunchResult::Started)
+        emit installationStateChanged(app_id, UpdateState::InstallerStarted);
 }
 
 UpdateService::UpdateService(UpdateServiceConfig config, QObject* parent)

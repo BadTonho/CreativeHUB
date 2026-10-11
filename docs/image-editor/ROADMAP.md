@@ -533,6 +533,8 @@ results.
 The shared updater tests in `libs/updater/tests/` cover catalog validation,
 version comparison, download resume/cancellation, network failure, and hash
 rejection (`updater-catalog-test`, `updater-service-test`). The Image Editor
+also shares `updater-runtime-test` coverage for pending schema-1 persistence,
+independent editor waits, self-update shutdown, and per-app launch failures. It
 must update only its own installation. The packaged Windows checklist is in
 [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md); install-path reuse, user-data
 preservation, rollback, and Hub restore remain **pending** packaged-installer

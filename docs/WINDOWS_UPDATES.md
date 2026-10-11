@@ -69,6 +69,28 @@ Hub starts an update for a closed editor, the installer can run immediately.
 Every application continues to use the same full installer for first
 installation and update; there is no second updater installer.
 
+The shared runtime monitors pending editor IDs independently with one timer.
+Scheduling another editor does not replace an existing wait. Startup recovery
+enumerates every managed pending installation, so an open editor does not block
+another editor whose installer is ready. Repeated scheduling/resume calls do
+not duplicate monitored IDs. Success, disappearance of a pending record, or
+failure removes only that ID; monitoring stops when none remain. A failed
+launch is logged before its failure signal and its pending record remains for
+an explicit retry. An occupied per-app installer launch lock defers that app
+without reporting a launch or stopping the others. Each eligible app starts
+independently; this does not add a suite-wide installation lock or bulk action.
+
+Polling reads pending metadata while an editor is open, rather than hashing
+every waiting full installer every 750 ms. The package is validated when staged
+and revalidated under its launch lock before it is started. Persisted pending
+records retain schema version 1, including the previous updater's records;
+self-updates still wait for the owner's shutdown. `UpdateRuntime` and its
+timer belong to their QObject thread. Its optional constructor accepts an
+isolated update directory and a synchronous process launcher for integration
+tests; the normal application constructor retains shared per-user storage and
+native process launching. Tests replace only this process boundary, while
+exercising real pending persistence, hashes, leases, and signals.
+
 ## Windows installation and recovery
 
 The per-user Inno Setup installer asks for a destination on a first install.
@@ -118,6 +140,14 @@ advanced when its installer contents change.
 
 ## Verification record
 
+**2026-10-11 pending-install fix:** the new runtime regression failed before
+the queue correction. Windows/Release built all four applications and the
+affected consumer test executables. All 18 selected CTest entries passed in
+26.97 seconds: three updater tests, eleven Hub tests, Video main-window
+integration, Image UI, and Motion startup/UI. The runtime regression uses
+synthetic packages and simulated launches. Packaged Inno Setup lifecycle,
+Debug, and macOS/Linux execution of this change remain pending.
+
 Automated coverage is registered in `libs/updater/tests/CMakeLists.txt`:
 
 - `updater-catalog-test` covers strict version comparison, catalog validation,
@@ -125,6 +155,13 @@ Automated coverage is registered in `libs/updater/tests/CMakeLists.txt`:
 - `updater-service-test` covers network failure, resumable downloads,
   cancellation and resume, rejection of incomplete or incorrectly hashed
   packages, unchanged app versions, and the one-download-at-a-time lock.
+- `updater-runtime-test` covers multiple open editors closing in either order,
+  resuming all schema-1 pending records with managed IDs or file enumeration,
+  mixed open/closed targets, deduplication, self-update deferral, per-app launch
+  lock contention, removed records, failed launches and explicit retry,
+  tampered packages, and normal first-install arguments. It uses isolated
+  storage, real application leases, and simulated launches; it does not run
+  installers or modify registered installations.
 - `hub-catalog-test` covers the Hub's per-app published-version state.
 
 Required manual Windows checks are indexed in the [Hub](hub/REGRESSION_TESTING.md),
@@ -136,6 +173,16 @@ an interrupted or failed installer, rollback, Hub restoration, and verifying
 that each editor updates only itself. These checks remain **pending** until
 they are run against generated installers in a disposable Windows user
 profile.
+
+For the multi-app pending-install regression, keep two installed editors open
+and download their updates sequentially from the Hub. Close the first
+scheduled editor and confirm its setup starts while the other editor remains
+usable. Close the second and confirm its setup also starts without restarting
+the Hub. Repeat in reverse closure order; then restart the Hub with both
+schema-1 pending records present and repeat. In a disposable profile, make one
+setup launch fail and verify that the other app proceeds, the failed pending
+record remains available for retry, and its log identifies the affected app.
+These packaged lifecycle checks remain **pending**.
 
 The current Release build passed **79/79 CTest tests**. Inno Setup 6.7.3
 compiled the four installers and the script generated `updates.json` with the

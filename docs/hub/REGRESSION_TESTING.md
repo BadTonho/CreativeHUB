@@ -27,7 +27,7 @@ and condition. Debug and macOS/Linux execution of this change remain pending.
 | Catalog parsing, semantic version comparison, malformed assets and sizes, and URL resolution | `libs/updater/tests/release_catalog_test.cpp` (`updater-catalog-test`) | Covered by the shared updater test suite; actual GitHub Release availability remains a release operation. |
 | Download, resume, cancellation, network failure, incomplete/hash rejection, and one-download lock | `libs/updater/tests/update_service_test.cpp` (`updater-service-test`) | Network interruption and resume through the visible Hub dialog: **pending**. |
 | Individual editor updates from the Hub | No packaged installer integration test yet | Update each installed editor separately; verify there is no “Update all” action and that the other editors' versions do not change: **pending**. |
-| Install scheduling and restore after failed startup | Runtime state is covered indirectly; no real Inno Setup integration test | Close an editor to complete an update, then test installer failure and Hub restoration in a disposable Windows profile: **pending**. |
+| Multiple pending editor installs and recovery on restart | `libs/updater/tests/update_runtime_test.cpp` (`updater-runtime-test`), registered in `libs/updater/tests/CMakeLists.txt`; real pending records and leases with simulated launches | Automated coverage present for closure order, resume, per-app failure, hash validation, launch contention, and deduplication. Follow the multi-app checklist in [WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md); real Inno Setup lifecycle and Hub restoration remain **pending**. |
 | Hub's own update | Shared updater component and Hub startup integration | Install and update the Hub itself without changing editor installations: **pending**. |
 | Changelog discovery, semantic version sorting, and modal markdown display | `apps/hub/tests/test_changelog_reader.cpp` (`hub-changelog-reader-test`), `apps/hub/tests/test_app_details_modal.cpp` (`hub-details-modal-test`) | In Hub UI, open app details modal; verify changelog section renders notes or empty state gracefully: **covered**. |
 | Recent projects tracking, file-to-app detection, recency reordering, JSON persistence, and launch delegation | `apps/hub/tests/test_recent_projects.cpp` (`hub-recent-projects-test`) | Open Projects tab in Hub; open project file via dialog or quick cards; verify list updates with recency order, app badges, and removal: **covered**. |
@@ -47,6 +47,16 @@ Motion persistence tests. The new format integration test opens snapshots in
 the vault and after relocation across all 46 supported schema versions, using
 the editors' actual producers and consumers. Native UI, Debug, and macOS/Linux
 validation remain pending; follow [BACKUPS.md](BACKUPS.md).
+
+## Pending-install verification on 2026-10-11
+
+The new `updater-runtime-test` failed before the queue fix. The shared updater,
+all four Release applications, and affected consumer tests built on Windows.
+The 18 selected CTest entries passed in 26.97 seconds, including multiple
+editor waits, managed-ID and file-based schema-1 recovery, removed and failed
+items, explicit retry, launch-lock contention, package tampering, and self-update
+deferral. Actual installer execution, Debug, and macOS/Linux validation remain
+pending. Follow the multi-app steps in [WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md).
 
 ## Manual Windows checklist
 

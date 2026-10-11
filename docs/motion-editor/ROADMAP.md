@@ -335,7 +335,9 @@ readiness checks remain in this roadmap and
 
 The shared updater tests in `libs/updater/tests/` cover catalog validation,
 version comparison, download resume/cancellation, network failure, and hash
-rejection (`updater-catalog-test`, `updater-service-test`). Motion Studio must
+rejection (`updater-catalog-test`, `updater-service-test`). The additional
+`updater-runtime-test` covers schema-1 pending persistence, independent editor
+waits, self-update shutdown, and per-app launch failures. Motion Studio must
 update only its own installation. Packaged Windows validation is pending for
 install-path reuse, preserving compositions and preferences, installer
 rollback, and Hub restoration. See [`WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md).
