@@ -24,6 +24,8 @@ add_library(creative-suite-hub-core STATIC
     src/model/activity_manager.cpp
     src/model/backup_manager.h
     src/model/backup_manager.cpp
+    src/model/project_backup_paths.h
+    src/model/project_backup_paths.cpp
     src/diagnostics/hub_logger.h
     src/diagnostics/hub_logger.cpp
     src/application/app_launcher.h

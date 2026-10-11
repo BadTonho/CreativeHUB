@@ -1,5 +1,6 @@
 #include "backup_manager.h"
 #include "activity_manager.h"
+#include "project_backup_paths.h"
 #include "../diagnostics/hub_logger.h"
 
 #include <QFile>
@@ -11,6 +12,7 @@
 #include <QJsonObject>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QTemporaryFile>
 #include <algorithm>
 
 namespace creative_suite::hub {
@@ -83,6 +85,8 @@ void BackupManager::setBackupDirectory(const QString& dir) {
 }
 
 bool BackupManager::createBackup(const QString& projectFilePath, QString* outBackupPath, QString* outError) {
+    if (outBackupPath) outBackupPath->clear();
+    if (outError) outError->clear();
     if (projectFilePath.isEmpty() || !QFile::exists(projectFilePath)) {
         const QString err = QStringLiteral("O arquivo do projeto não existe ou o caminho é inválido: %1").arg(projectFilePath);
         if (outError) *outError = err;
@@ -94,6 +98,28 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
         );
         return false;
     }
+
+    const auto fail = [outError, &projectFilePath](const QString& cause, const QString& context) {
+        if (outError) *outError = cause;
+        HubLogger::instance().logError(QStringLiteral("BackupManager"),
+            QStringLiteral("createBackup"), cause, projectFilePath + QStringLiteral(" -> ") + context);
+        return false;
+    };
+    QFile source(projectFilePath);
+    if (!QFileInfo(projectFilePath).isFile())
+        return fail(QStringLiteral("O caminho do projeto não é um arquivo regular."), projectFilePath);
+    if (!source.open(QIODevice::ReadOnly))
+        return fail(QStringLiteral("Não foi possível ler o projeto (código %1): %2")
+            .arg(static_cast<int>(source.error())).arg(source.errorString()), projectFilePath);
+    const auto original = source.readAll();
+    if (source.error() != QFileDevice::NoError)
+        return fail(QStringLiteral("Falha na leitura do projeto (código %1): %2")
+            .arg(static_cast<int>(source.error())).arg(source.errorString()), projectFilePath);
+    source.close();
+    QByteArray prepared;
+    QString referenceError;
+    if (!prepareProjectBackup(original, projectFilePath, &prepared, &referenceError))
+        return fail(referenceError, projectFilePath);
 
     if (!QDir().mkpath(m_backupDirectory)) {
         const QString err = QStringLiteral("Não foi possível criar o diretório de backups: %1").arg(m_backupDirectory);
@@ -118,17 +144,16 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
 
     const QString targetPath = QDir(m_backupDirectory).filePath(targetFileName);
 
-    if (!QFile::copy(projectFilePath, targetPath)) {
-        const QString err = QStringLiteral("Falha ao copiar o arquivo para o destino de backup.");
-        if (outError) *outError = err;
-        HubLogger::instance().logError(
-            QStringLiteral("BackupManager"),
-            QStringLiteral("createBackup"),
-            err,
-            targetPath
-        );
-        return false;
-    }
+    // Prepare completely in the vault, then rename without replacing snapshots.
+    QTemporaryFile pending(QDir(m_backupDirectory).filePath(QStringLiteral(".snapshot-XXXXXX")));
+    if (!pending.open() || pending.write(prepared) != prepared.size() || !pending.flush())
+        return fail(QStringLiteral("Falha ao gravar o backup (código %1): %2")
+            .arg(static_cast<int>(pending.error())).arg(pending.errorString()), targetPath);
+    pending.close();
+    if (!pending.rename(targetPath))
+        return fail(QStringLiteral("Falha ao publicar o backup (código %1): %2")
+            .arg(static_cast<int>(pending.error())).arg(pending.errorString()), targetPath);
+    pending.setAutoRemove(false);
 
     BackupRecord record;
     record.originalFilePath = projectFilePath;

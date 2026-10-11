@@ -28,6 +28,9 @@ public:
     [[nodiscard]] QString backupDirectory() const;
     void setBackupDirectory(const QString& dir);
 
+    // Snapshot supported project formats with relative references resolved from
+    // the source document directory. Media is referenced, not bundled. Returns
+    // no output path on failure and never replaces an existing backup.
     bool createBackup(const QString& projectFilePath, QString* outBackupPath = nullptr, QString* outError = nullptr);
     [[nodiscard]] std::vector<BackupRecord> listBackups() const;
     [[nodiscard]] std::vector<BackupRecord> backupsForProject(const QString& projectFilePath) const;

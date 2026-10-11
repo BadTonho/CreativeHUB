@@ -26,6 +26,12 @@ unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
 
+Hub snapshots preserve versions 1–6 and rebase relative media and linked-image
+references to their original absolute locations. Relative-directory escape
+restrictions are retained. Native save behavior is unchanged and media are not
+bundled. See [Hub backups](../hub/BACKUPS.md) and the producer/consumer
+`hub-backup-format-test` for relocation coverage.
+
 ## Serialized values
 
 `composition.canvas` contains positive integer `width` and `height` values in

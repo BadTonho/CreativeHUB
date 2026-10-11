@@ -48,6 +48,36 @@ target_link_libraries(hub-backup-manager-test PRIVATE creative-suite-hub-core Qt
 target_compile_features(hub-backup-manager-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-backup-manager-test COMMAND hub-backup-manager-test)
 
+if(BUILD_IMAGE_EDITOR OR BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
+    add_executable(hub-backup-format-test test_backup_formats.cpp)
+    target_link_libraries(hub-backup-format-test PRIVATE creative-suite-hub-core)
+    target_compile_features(hub-backup-format-test PRIVATE cxx_std_20)
+    if(BUILD_IMAGE_EDITOR)
+        target_link_libraries(hub-backup-format-test PRIVATE creative-suite-image-editor-core)
+        target_compile_definitions(hub-backup-format-test PRIVATE HUB_BACKUP_IMAGE_CONTRACT)
+    endif()
+    if(BUILD_MOTION_EDITOR)
+        target_link_libraries(hub-backup-format-test PRIVATE creative-suite-motion-editor-core)
+        target_compile_definitions(hub-backup-format-test PRIVATE HUB_BACKUP_MOTION_CONTRACT)
+    endif()
+    if(BUILD_VIDEO_EDITOR)
+        set(HUB_VIDEO_SOURCE_DIR "${PROJECT_SOURCE_DIR}/apps/video-editor/src")
+        target_include_directories(hub-backup-format-test PRIVATE "${HUB_VIDEO_SOURCE_DIR}"
+            "${PROJECT_SOURCE_DIR}/libs/motion-handoff/include")
+        target_link_libraries(hub-backup-format-test PRIVATE creative-suite::media-assets)
+        target_compile_definitions(hub-backup-format-test PRIVATE HUB_BACKUP_VIDEO_CONTRACT)
+        target_sources(hub-backup-format-test PRIVATE
+            ${HUB_VIDEO_SOURCE_DIR}/project/project_file.cpp
+            ${HUB_VIDEO_SOURCE_DIR}/project/project_file_reader.cpp
+            ${HUB_VIDEO_SOURCE_DIR}/project/project_file_writer.cpp
+            ${HUB_VIDEO_SOURCE_DIR}/project/project_document_validator.cpp
+            ${HUB_VIDEO_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.cpp
+            ${HUB_VIDEO_SOURCE_DIR}/timeline/timeline_transform.cpp)
+    endif()
+    creative_suite_deploy_media_runtime(hub-backup-format-test)
+    add_creative_suite_test(NAME hub-backup-format-test COMMAND hub-backup-format-test)
+endif()
+
 if(WIN32)
     get_target_property(QT_HUB_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
     if(NOT QT_HUB_CORE_DLL)
@@ -75,4 +105,10 @@ if(WIN32)
             VERBATIM
         )
     endforeach()
+    if(TARGET hub-backup-format-test)
+        add_custom_command(TARGET hub-backup-format-test POST_BUILD
+            COMMAND "${QT_HUB_DEPLOY_TOOL}" --no-translations --no-compiler-runtime
+                "$<TARGET_FILE:hub-backup-format-test>"
+            VERBATIM)
+    endif()
 endif()

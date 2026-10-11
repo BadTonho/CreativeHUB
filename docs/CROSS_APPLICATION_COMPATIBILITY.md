@@ -35,6 +35,17 @@ parallel with remaining standalone Motion Studio acceptance work; it is not
 accepted until producer/consumer regression coverage and the manual checks
 below pass in both applications.
 
+## Hub document snapshots
+
+The Hub rewrites documented relative references in Image, Video, and Motion
+backups to the original absolute locations while preserving the document
+version and editing data. Media remain external. This adapter is owned by the
+Hub; editor schemas and readers remain application-owned. The test-only
+`hub-backup-format-test` uses all enabled editors' persistence producers and
+consumers to verify supported older versions and relocated snapshots. See
+[Hub backups](hub/BACKUPS.md) for supported fields, failure handling, limits,
+and the pending native cross-application checklist.
+
 ## Recommended Boundaries
 
 Applications should depend on reusable libraries through documented APIs.

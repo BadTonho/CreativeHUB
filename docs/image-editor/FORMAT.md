@@ -12,6 +12,11 @@ bucket-fill operations; version 15 adds editable linear-gradient operations;
 version 16 adds editable blur strokes. Versions 1 through 15 remain readable
 and save as v16.
 
+Hub snapshots preserve versions 1–16 and rebase relative source/import paths
+to their original absolute locations. The native save contract remains the
+same; media are not bundled. See [Hub backups](../hub/BACKUPS.md) and the
+producer/consumer `hub-backup-format-test` for relocation coverage.
+
 ## Document contents
 
 A `.cimg` file is UTF-8 JSON with these top-level fields:

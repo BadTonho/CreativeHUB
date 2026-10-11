@@ -7,7 +7,7 @@ Follow the repository-wide requirements in
 
 ## Coverage index
 
-All ten plain C++ Hub tests and the shared updater catalog test use
+All plain C++ Hub tests and the shared updater catalog test use
 `CS_TEST_CHECK` from `cmake/test_support/test_check.h`. Their conditions remain
 active in Debug and Release, including file setup checks. The repository's
 `creative-suite-test-checks` CTest probe verifies evaluation and a deliberate
@@ -34,7 +34,19 @@ and condition. Debug and macOS/Linux execution of this change remain pending.
 | Suite storage calculation, multi-directory cache discovery, byte formatting, and cache cleanup | `apps/hub/tests/test_storage_manager.cpp` (`hub-storage-manager-test`) | Select dedicated "Armazenamento" tab in sidebar; verify total cache size displays formatted bytes; inspect per-directory breakdown; trigger "Limpar Cache Seguro" and verify feedback and size update: **covered**. |
 | Activity and notification center, event logging, read state tracking, and popup dropdown | `apps/hub/tests/test_activity_manager.cpp` (`hub-activity-manager-test`) | Click notification bell in Hub header bar; verify unread badge, categorized event list, "Marcar lidas", and "Limpar": **covered**. |
 | Project backup vault, timestamped snapshot creation, storage configuration, and folder inspection | `apps/hub/tests/test_backup_manager.cpp` (`hub-backup-manager-test`) | Select dedicated "Backups" tab in sidebar; verify list of saved snapshots, folder changer, and "Abrir Pasta"; click "Backup" on project card in Projects tab: **covered**. |
+| Snapshot relative references, supported document versions, and relocation for restoration | `apps/hub/tests/test_backup_manager.cpp` and `test_backup_formats.cpp` (`hub-backup-manager-test`, `hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; real Image/Video/Motion persistence producers and consumers | Automated coverage present. Native UI restoration checks and macOS/Linux execution remain **pending**; see [BACKUPS.md](BACKUPS.md) for the contract and manual steps. |
 | Cross-platform application discovery, build directory resolution, and native process launching | `apps/hub/tests/test_app_launcher.cpp` (`hub-launcher-test`) | Verify Hub discovers compiled binaries in sibling build folders across platforms (with or without `.exe`), launches applications, and logs execution: **covered**. |
+
+## Backup verification on 2026-10-10
+
+The relative-image regression failed against the previous backup implementation
+and passed after reference rebasing. Windows/Release built the Hub, all three
+editor applications, and the affected test targets. All 14 selected CTest
+entries passed: the eleven Hub tests and the Video project, Image core, and
+Motion persistence tests. The new format integration test opens snapshots in
+the vault and after relocation across all 46 supported schema versions, using
+the editors' actual producers and consumers. Native UI, Debug, and macOS/Linux
+validation remain pending; follow [BACKUPS.md](BACKUPS.md).
 
 ## Manual Windows checklist
 
