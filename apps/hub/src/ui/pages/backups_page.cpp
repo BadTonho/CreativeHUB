@@ -188,7 +188,13 @@ void BackupsPage::refreshBackupsList() {
             title->setStyleSheet(QStringLiteral("color: #ffffff; font-size: 13px; font-weight: 700; background: transparent; border: none;"));
             col->addWidget(title);
 
-            auto* fileLabel = new QLabel(QFileInfo(b.backupFilePath).fileName(), row);
+            const QString origin = b.originalFilePath.isEmpty()
+                ? QStringLiteral("%1 — origem desconhecida").arg(QFileInfo(b.backupFilePath).fileName())
+                : b.originalFilePath;
+            auto* fileLabel = new QLabel(origin, row);
+            fileLabel->setTextFormat(Qt::PlainText);
+            fileLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+            fileLabel->setToolTip(QStringLiteral("%1\nBackup: %2").arg(origin, b.backupFilePath));
             fileLabel->setStyleSheet(QStringLiteral("color: #777777; font-size: 11px; background: transparent; border: none;"));
             col->addWidget(fileLabel);
 

@@ -12,6 +12,8 @@
 #include <QTemporaryDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSet>
+#include <algorithm>
 
 using namespace creative_suite::hub;
 
@@ -30,6 +32,165 @@ void writeBytes(const QString& path, const QByteArray& bytes) {
     CS_TEST_CHECK(opened);
     const auto written = file.write(bytes);
     CS_TEST_CHECK(written == bytes.size());
+}
+
+void testBackupIdentity(const QString& root) {
+    const QString firstDirectory = QDir(root).filePath("first owner");
+    const QString secondDirectory = QDir(root).filePath("second owner");
+    const bool firstCreated = QDir().mkpath(firstDirectory);
+    const bool secondCreated = QDir().mkpath(secondDirectory);
+    CS_TEST_CHECK(firstCreated && secondCreated);
+    const QString first = QDir(firstDirectory).filePath("same.data");
+    const QString second = QDir(secondDirectory).filePath("same.data");
+    writeBytes(first, "first project");
+    writeBytes(second, "second project");
+    const QString vault = QDir(root).filePath("identity vault");
+    BackupManager manager(vault);
+    QString firstBackup;
+    QString error;
+    const bool copied = manager.createBackup(first, &firstBackup, &error);
+    CS_TEST_CHECK(copied);
+    // Same names in different directories must not share backup history.
+    CS_TEST_CHECK(manager.backupsForProject(second).empty());
+    BackupManager reopened(vault);
+    const auto records = reopened.backupsForProject(first);
+    CS_TEST_CHECK(records.size() == 1);
+    CS_TEST_CHECK(records.front().originalFilePath == QFileInfo(first).canonicalFilePath());
+    CS_TEST_CHECK(records.front().projectName == "same");
+    CS_TEST_CHECK(records.front().backupFilePath == firstBackup);
+    CS_TEST_CHECK(reopened.backupsForProject(QDir(firstDirectory).filePath("./same.data")).size() == 1);
+    CS_TEST_CHECK(reopened.backupsForProject(QDir::current().relativeFilePath(first)).size() == 1);
+    const QString otherExtension = QDir(firstDirectory).filePath("same.other");
+    writeBytes(otherExtension, "other format");
+    CS_TEST_CHECK(reopened.backupsForProject(otherExtension).empty());
+#ifdef Q_OS_WIN
+    CS_TEST_CHECK(reopened.backupsForProject(first.toUpper()).size() == 1);
+#endif
+
+    const QString relocatedVault = QDir(root).filePath("relocated vault");
+    const QString relocatedDirectory = QDir(relocatedVault).filePath("backup-relocated");
+    const bool relocatedCreated = QDir().mkpath(relocatedDirectory);
+    CS_TEST_CHECK(relocatedCreated);
+    for (const auto& entry : QFileInfo(firstBackup).absoluteDir().entryInfoList(QDir::Files)) {
+        const bool relocatedCopy = QFile::copy(entry.absoluteFilePath(), QDir(relocatedDirectory).filePath(entry.fileName()));
+        CS_TEST_CHECK(relocatedCopy);
+    }
+    const auto relocated = BackupManager(relocatedVault).backupsForProject(first);
+    CS_TEST_CHECK(relocated.size() == 1);
+    CS_TEST_CHECK(relocated.front().originalFilePath == records.front().originalFilePath);
+    CS_TEST_CHECK(QFileInfo(relocated.front().backupFilePath).absolutePath() == relocatedDirectory);
+    CS_TEST_CHECK(readBytes(relocated.front().backupFilePath) == "first project");
+
+    QSet<QString> paths{firstBackup};
+    qint64 expectedSize = readBytes(firstBackup).size();
+    // No sleeps: multiple instances share a vault, without replacing snapshots.
+    for (int index = 0; index < 12; ++index) {
+        const QString source = index % 2 == 0 ? first : second;
+        writeBytes(source, QByteArray::number(index));
+        QString output;
+        const bool created = (index % 2 == 0 ? manager : reopened).createBackup(source, &output, &error);
+        CS_TEST_CHECK(created);
+        CS_TEST_CHECK(error.isEmpty());
+        CS_TEST_CHECK(!paths.contains(output));
+        paths.insert(output);
+        CS_TEST_CHECK(readBytes(output) == QByteArray::number(index));
+        expectedSize += readBytes(output).size();
+    }
+    CS_TEST_CHECK(paths.size() == 13);
+    CS_TEST_CHECK(readBytes(firstBackup) == "first project");
+    BackupManager restarted(vault);
+    CS_TEST_CHECK(restarted.totalBackupsCount() == 13);
+    CS_TEST_CHECK(restarted.totalBackupsSize() == expectedSize);
+    CS_TEST_CHECK(restarted.backupsForProject(first).size() == 7);
+    CS_TEST_CHECK(restarted.backupsForProject(second).size() == 6);
+    const QString markerName = QDir(firstDirectory).filePath("name_backup_middle_backup_end.data");
+    writeBytes(markerName, "marker in project name");
+    QString markerBackup;
+    const bool markerCreated = restarted.createBackup(markerName, &markerBackup, &error);
+    CS_TEST_CHECK(markerCreated);
+    const auto markerRecords = BackupManager(vault).backupsForProject(markerName);
+    CS_TEST_CHECK(markerRecords.size() == 1);
+    CS_TEST_CHECK(markerRecords.front().projectName == "name_backup_middle_backup_end");
+    // Path identity survives the original document becoming unavailable.
+    const bool removed = QFile::remove(first);
+    CS_TEST_CHECK(removed);
+    CS_TEST_CHECK(restarted.backupsForProject(first).size() == 7);
+}
+
+void testLegacyAndInvalidRecords(const QString& root) {
+    const QString vault = QDir(root).filePath("metadata vault");
+    BackupManager manager(vault);
+    const QString source = QDir(root).filePath("metadata source.data");
+    writeBytes(source, "snapshot payload");
+    QString output;
+    QString error;
+    BackupRecord notification;
+    QObject::connect(&manager, &BackupManager::backupCreated,
+        [&notification](const BackupRecord& record) { notification = record; });
+    const bool copied = manager.createBackup(source, &output, &error);
+    CS_TEST_CHECK(copied);
+    const QString metadataPath = QFileInfo(output).absoluteDir().filePath("record.json");
+    const auto metadataBytes = readBytes(metadataPath);
+    const auto valid = QJsonDocument::fromJson(metadataBytes).object();
+    const auto persisted = manager.listBackups();
+    CS_TEST_CHECK(persisted.size() == 1);
+    CS_TEST_CHECK(notification.originalFilePath == persisted.front().originalFilePath);
+    CS_TEST_CHECK(notification.backupFilePath == persisted.front().backupFilePath);
+    CS_TEST_CHECK(notification.timestamp == persisted.front().timestamp);
+    CS_TEST_CHECK(notification.fileSizeBytes == persisted.front().fileSizeBytes);
+
+    std::vector<QByteArray> invalid{"not JSON", "[]", QByteArray(256 * 1024 + 1, ' ')};
+    const std::vector<std::pair<QString, QJsonValue>> invalidFields{
+        {"format", "unknown"}, {"version", 2}, {"version", 1.5},
+        {"original_path", "relative/path.data"}, {"original_path", QJsonValue()},
+        {"project_name", ""}, {"created_at", "bad timestamp"},
+        {"snapshot_file", "../outside.data"}, {"snapshot_file", "..\\outside.data"},
+        {"snapshot_file", source}, {"snapshot_file", "record.json"}, {"snapshot_file", "RECORD.JSON"},
+        {"snapshot_file", "missing.data"}};
+    for (const auto& [field, value] : invalidFields) {
+        auto mutated = valid;
+        mutated.insert(field, value);
+        invalid.push_back(QJsonDocument(mutated).toJson());
+    }
+    for (const auto& bytes : invalid) {
+        writeBytes(metadataPath, bytes);
+        HubLogger::instance().clear();
+        CS_TEST_CHECK(manager.listBackups().empty());
+        const auto logs = HubLogger::instance().entries();
+        CS_TEST_CHECK(!logs.empty());
+        CS_TEST_CHECK(logs.back().level == LogLevel::Error);
+        CS_TEST_CHECK(logs.back().subsystem == "BackupManager");
+        CS_TEST_CHECK(logs.back().operation == "listBackups");
+        CS_TEST_CHECK(logs.back().context == metadataPath);
+        CS_TEST_CHECK(logs.back().timestamp.isValid());
+        CS_TEST_CHECK(!logs.back().message.isEmpty());
+        CS_TEST_CHECK(readBytes(output) == "snapshot payload");
+    }
+    writeBytes(metadataPath, metadataBytes);
+    const QString unfinished = QDir(vault).filePath("backup-unfinished");
+    const bool directoryCreated = QDir().mkpath(unfinished);
+    CS_TEST_CHECK(directoryCreated);
+    writeBytes(QDir(unfinished).filePath("partial.data"), "unpublished");
+    HubLogger::instance().clear();
+    CS_TEST_CHECK(manager.listBackups().size() == 1);
+    CS_TEST_CHECK(HubLogger::instance().entries().empty());
+
+    const QString legacy = QDir(vault).filePath("legacy_backup_middle_backup_20250101_120000.data");
+    writeBytes(legacy, "old snapshot");
+    const QString legacySource = QDir(root).filePath("legacy_backup_middle.data");
+    writeBytes(legacySource, "another project");
+    CS_TEST_CHECK(manager.backupsForProject(legacySource).empty());
+    const auto listed = manager.listBackups();
+    CS_TEST_CHECK(listed.size() == 2);
+    const auto old = std::find_if(listed.begin(), listed.end(), [&legacy](const BackupRecord& record) {
+        return record.backupFilePath == legacy;
+    });
+    CS_TEST_CHECK(old != listed.end());
+    CS_TEST_CHECK(old->originalFilePath.isEmpty());
+    CS_TEST_CHECK(old->projectName == "legacy_backup_middle");
+    CS_TEST_CHECK(manager.totalBackupsSize() == QByteArray("snapshot payload").size() + QByteArray("old snapshot").size());
+    // Corrupt metadata and legacy snapshots are never deleted or migrated implicitly.
+    CS_TEST_CHECK(readBytes(legacy) == "old snapshot");
 }
 
 void testImageRelativeMediaBackup(const QString& root) {
@@ -152,6 +313,9 @@ int main(int argc, char* argv[]) {
     CS_TEST_CHECK(tempDir.isValid());
     ActivityManager::instance().setStoragePath(tempDir.filePath("activities.json"));
     HubLogger::instance().setLogFilePath(tempDir.filePath("hub.log"));
+
+    testBackupIdentity(tempDir.path());
+    testLegacyAndInvalidRecords(tempDir.path());
 
     const QString backupDir = tempDir.filePath(QStringLiteral("test_backups"));
     BackupManager manager(backupDir);

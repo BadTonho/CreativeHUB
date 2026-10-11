@@ -69,6 +69,11 @@ target_link_libraries(hub-backup-manager-test PRIVATE creative-suite-hub-core Qt
 target_compile_features(hub-backup-manager-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-backup-manager-test COMMAND hub-backup-manager-test)
 
+add_executable(hub-backups-page-test test_backups_page.cpp)
+target_link_libraries(hub-backups-page-test PRIVATE creative-suite-hub-core Qt6::Widgets)
+target_compile_features(hub-backups-page-test PRIVATE cxx_std_20)
+add_creative_suite_test(NAME hub-backups-page-test COMMAND hub-backups-page-test)
+
 if(BUILD_IMAGE_EDITOR OR BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
     add_executable(hub-backup-format-test test_backup_formats.cpp)
     target_link_libraries(hub-backup-format-test PRIVATE creative-suite-hub-core)
@@ -117,7 +122,8 @@ if(WIN32)
             hub-recent-projects-test
             hub-storage-manager-test
             hub-activity-manager-test
-            hub-backup-manager-test)
+            hub-backup-manager-test
+            hub-backups-page-test)
         add_custom_command(TARGET ${TEST_TARGET} POST_BUILD
             COMMAND "${QT_HUB_DEPLOY_TOOL}"
                 --no-translations

@@ -45,6 +45,10 @@ Hub; editor schemas and readers remain application-owned. The test-only
 consumers to verify supported older versions and relocated snapshots. See
 [Hub backups](hub/BACKUPS.md) for supported fields, failure handling, limits,
 and the pending native cross-application checklist.
+New snapshots have a unique per-backup directory and a Hub-owned version-1
+`record.json` that persists the original path. Editors read only the project
+file; no editor schema or reader change is required. Older flat snapshots
+remain available with unknown ownership, and are not attributed by basename.
 
 ## Recommended Boundaries
 

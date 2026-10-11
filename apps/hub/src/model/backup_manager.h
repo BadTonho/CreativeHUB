@@ -8,6 +8,7 @@
 namespace creative_suite::hub {
 
 struct BackupRecord {
+    // Canonical absolute source path; empty only for legacy flat snapshots.
     QString originalFilePath;
     QString backupFilePath;
     QString projectName;
@@ -31,8 +32,10 @@ public:
     // Snapshot supported project formats with relative references resolved from
     // the source document directory. Media is referenced, not bundled. Returns
     // no output path on failure and never replaces an existing backup.
+    // Each new snapshot owns a unique vault directory and a versioned identity record.
     bool createBackup(const QString& projectFilePath, QString* outBackupPath = nullptr, QString* outError = nullptr);
     [[nodiscard]] std::vector<BackupRecord> listBackups() const;
+    // Matches persisted source paths, not names; legacy snapshots cannot be attributed.
     [[nodiscard]] std::vector<BackupRecord> backupsForProject(const QString& projectFilePath) const;
     [[nodiscard]] int totalBackupsCount() const;
     [[nodiscard]] qint64 totalBackupsSize() const;

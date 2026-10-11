@@ -33,7 +33,7 @@ and condition. Debug and macOS/Linux execution of this change remain pending.
 | Recent projects tracking, file-to-app detection, recency reordering, JSON persistence, and launch delegation | `apps/hub/tests/test_recent_projects.cpp` (`hub-recent-projects-test`) | Open Projects tab in Hub; open project file via dialog or quick cards; verify list updates with recency order, app badges, and removal: **covered**. |
 | Suite storage calculation, multi-directory cache discovery, byte formatting, and cache cleanup | `apps/hub/tests/test_storage_manager.cpp` (`hub-storage-manager-test`) | Select dedicated "Armazenamento" tab in sidebar; verify total cache size displays formatted bytes; inspect per-directory breakdown; trigger "Limpar Cache Seguro" and verify feedback and size update: **covered**. |
 | Activity and notification center, event logging, read state tracking, and popup dropdown | `apps/hub/tests/test_activity_manager.cpp` (`hub-activity-manager-test`) | Click notification bell in Hub header bar; verify unread badge, categorized event list, "Marcar lidas", and "Limpar": **covered**. |
-| Project backup vault, timestamped snapshot creation, storage configuration, and folder inspection | `apps/hub/tests/test_backup_manager.cpp` (`hub-backup-manager-test`) | Select dedicated "Backups" tab in sidebar; verify list of saved snapshots, folder changer, and "Abrir Pasta"; click "Backup" on project card in Projects tab: **covered**. |
+| Backup identity, unique creation, persisted source paths, legacy compatibility, and origin labels | `apps/hub/tests/test_backup_manager.cpp`, `test_backups_page.cpp` (`hub-backup-manager-test`, `hub-backups-page-test`), registered in `apps/hub/tests/CMakeLists.txt` | Automated coverage present for same-named projects, repeated creation, restart, malformed records, source labels, and unknown legacy origins. Native folder-opening and new label presentation remain **pending**; follow [BACKUPS.md](BACKUPS.md). |
 | Snapshot relative references, supported document versions, and relocation for restoration | `apps/hub/tests/test_backup_manager.cpp` and `test_backup_formats.cpp` (`hub-backup-manager-test`, `hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; real Image/Video/Motion persistence producers and consumers | Automated coverage present. Native UI restoration checks and macOS/Linux execution remain **pending**; see [BACKUPS.md](BACKUPS.md) for the contract and manual steps. |
 | Application discovery, sibling configuration directories, bundle paths, fallbacks, and installation-path priority | `apps/hub/tests/test_app_launcher.cpp` (`hub-launcher-test`, `hub-launcher-build-layout-test`), registered in `apps/hub/tests/CMakeLists.txt`; the integration test uses the enabled editors' actual CMake outputs | Automated coverage present. Native launch and project-open checks for each editor are documented below and remain **pending**, as do Debug and macOS/Linux execution. |
 
@@ -47,6 +47,25 @@ Motion persistence tests. The new format integration test opens snapshots in
 the vault and after relocation across all 46 supported schema versions, using
 the editors' actual producers and consumers. Native UI, Debug, and macOS/Linux
 validation remain pending; follow [BACKUPS.md](BACKUPS.md).
+
+## Backup identity verification on 2026-10-11
+
+The same-name regression failed before the fix: querying another project's
+path returned the first project's snapshot. After the fix, the Hub Release
+executable and all affected tests built. All 16 selected CTest entries passed
+on Windows/Release in 12.11 seconds: the 13 Hub tests plus Video project,
+Image core, and Motion persistence. The tests ran outside the tool filesystem
+restriction. The actual three-editor persistence integration still passes all
+46 supported schemas with the new per-backup directories.
+
+Coverage includes persisted source/timestamp after reopening, distinct source
+directories/extensions, repeated creation across manager instances, names
+containing `_backup_`, relative/Windows case aliases, missing originals, complete
+record relocation to another vault, legacy visibility without false ownership,
+malformed/unsafe records with logs, ignored unfinished records, size accounting,
+and source/unknown-origin labels in widgets. Native visual checks, folder
+opening, Debug, and macOS/Linux execution remain pending; follow
+[BACKUPS.md](BACKUPS.md).
 
 ## Pending-install verification on 2026-10-11
 

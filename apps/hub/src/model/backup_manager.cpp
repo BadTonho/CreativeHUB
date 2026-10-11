@@ -6,16 +6,86 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
-#include <QDirIterator>
 #include <QStandardPaths>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QDesktopServices>
 #include <QUrl>
-#include <QTemporaryFile>
+#include <QTemporaryDir>
+#include <QSaveFile>
+#include <QRegularExpression>
+#include <optional>
 #include <algorithm>
 
 namespace creative_suite::hub {
+namespace {
+
+QString projectIdentity(const QString& path) {
+    const QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    return QDir::cleanPath(QDir::fromNativeSeparators(
+        canonical.isEmpty() ? info.absoluteFilePath() : canonical));
+}
+
+bool sameProject(const QString& storedPath, const QString& identity) {
+#ifdef Q_OS_WIN
+    return storedPath.compare(identity, Qt::CaseInsensitive) == 0;
+#else
+    return storedPath == identity;
+#endif
+}
+
+std::optional<BackupRecord> readBackupRecord(const QFileInfo& directory) {
+    const QString metadataPath = QDir(directory.absoluteFilePath()).filePath(QStringLiteral("record.json"));
+    const QFileInfo metadataInfo(metadataPath);
+    // No committed record means an unfinished snapshot, not a published backup.
+    if (!metadataInfo.exists()) return std::nullopt;
+    const auto fail = [&metadataPath](const QString& cause) -> std::optional<BackupRecord> {
+        HubLogger::instance().logError(QStringLiteral("BackupManager"),
+            QStringLiteral("listBackups"), cause, metadataPath);
+        return std::nullopt;
+    };
+    if (!metadataInfo.isFile() || metadataInfo.isSymLink() || metadataInfo.size() > 256 * 1024)
+        return fail(QStringLiteral("Metadados de backup inválidos: arquivo irregular ou tamanho excessivo."));
+    QFile metadata(metadataPath);
+    if (!metadata.open(QIODevice::ReadOnly))
+        return fail(QStringLiteral("Não foi possível ler os metadados (código %1): %2")
+            .arg(static_cast<int>(metadata.error())).arg(metadata.errorString()));
+    const QByteArray bytes = metadata.readAll();
+    if (metadata.error() != QFileDevice::NoError)
+        return fail(QStringLiteral("Falha na leitura dos metadados (código %1): %2")
+            .arg(static_cast<int>(metadata.error())).arg(metadata.errorString()));
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(bytes, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+        return fail(QStringLiteral("Metadados de backup não são um objeto JSON válido (código %1): %2")
+            .arg(static_cast<int>(parseError.error)).arg(parseError.errorString()));
+    const auto object = document.object();
+    if (object.value(QStringLiteral("format")).toString() != QStringLiteral("creative-suite.hub-backup")
+        || object.value(QStringLiteral("version")).toDouble(-1) != 1)
+        return fail(QStringLiteral("Formato ou versão dos metadados de backup não suportados."));
+    BackupRecord record;
+    record.originalFilePath = object.value(QStringLiteral("original_path")).toString();
+    record.projectName = object.value(QStringLiteral("project_name")).toString();
+    record.timestamp = QDateTime::fromString(object.value(QStringLiteral("created_at")).toString(),
+                                             Qt::ISODateWithMs).toLocalTime();
+    const QString fileName = object.value(QStringLiteral("snapshot_file")).toString();
+    if (!QDir::isAbsolutePath(record.originalFilePath) || record.projectName.isEmpty()
+        || !record.timestamp.isValid() || fileName.isEmpty()
+        || fileName.compare(QStringLiteral("record.json"), Qt::CaseInsensitive) == 0
+        || fileName.contains('/') || fileName.contains('\\') || fileName == QStringLiteral(".")
+        || fileName == QStringLiteral("..") || QDir::isAbsolutePath(fileName))
+        return fail(QStringLiteral("Origem, nome, data ou referência do snapshot são inválidos."));
+    const QFileInfo snapshot(QDir(directory.absoluteFilePath()).filePath(fileName));
+    if (!snapshot.isFile() || snapshot.isSymLink())
+        return fail(QStringLiteral("O snapshot registrado está ausente ou não é um arquivo regular: %1")
+            .arg(snapshot.absoluteFilePath()));
+    record.backupFilePath = snapshot.absoluteFilePath();
+    record.fileSizeBytes = snapshot.size();
+    return record;
+}
+
+} // namespace
 
 BackupManager& BackupManager::instance() {
     static BackupManager s_instance;
@@ -134,33 +204,51 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
     }
 
     const QFileInfo srcInfo(projectFilePath);
-    const QString baseName = srcInfo.completeBaseName();
+    const QString baseName = srcInfo.completeBaseName().isEmpty() ? srcInfo.fileName() : srcInfo.completeBaseName();
     const QString suffix = srcInfo.suffix();
-    const QString timestampStr = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"));
+    const QDateTime timestamp = QDateTime::currentDateTime();
+    const QString timestampStr = timestamp.toString(QStringLiteral("yyyyMMdd_HHmmss"));
 
     const QString targetFileName = suffix.isEmpty()
         ? QStringLiteral("%1_backup_%2").arg(baseName, timestampStr)
         : QStringLiteral("%1_backup_%2.%3").arg(baseName, timestampStr, suffix);
 
-    const QString targetPath = QDir(m_backupDirectory).filePath(targetFileName);
-
-    // Prepare completely in the vault, then rename without replacing snapshots.
-    QTemporaryFile pending(QDir(m_backupDirectory).filePath(QStringLiteral(".snapshot-XXXXXX")));
-    if (!pending.open() || pending.write(prepared) != prepared.size() || !pending.flush())
+    // An exclusively created directory gives every snapshot its own namespace.
+    // Committing record.json is the publication point; readers ignore it before then.
+    QTemporaryDir pending(QDir(m_backupDirectory).filePath(QStringLiteral("backup-XXXXXX")));
+    if (!pending.isValid())
+        return fail(QStringLiteral("Não foi possível reservar a pasta do backup: %1")
+            .arg(pending.errorString()), m_backupDirectory);
+    const QString targetPath = QDir(pending.path()).filePath(targetFileName);
+    QFile snapshot(targetPath);
+    if (!snapshot.open(QIODevice::WriteOnly | QIODevice::NewOnly)
+        || snapshot.write(prepared) != prepared.size() || !snapshot.flush())
         return fail(QStringLiteral("Falha ao gravar o backup (código %1): %2")
-            .arg(static_cast<int>(pending.error())).arg(pending.errorString()), targetPath);
-    pending.close();
-    if (!pending.rename(targetPath))
-        return fail(QStringLiteral("Falha ao publicar o backup (código %1): %2")
-            .arg(static_cast<int>(pending.error())).arg(pending.errorString()), targetPath);
-    pending.setAutoRemove(false);
+            .arg(static_cast<int>(snapshot.error())).arg(snapshot.errorString()), targetPath);
+    snapshot.close();
 
     BackupRecord record;
-    record.originalFilePath = projectFilePath;
+    record.originalFilePath = projectIdentity(projectFilePath);
     record.backupFilePath = targetPath;
     record.projectName = baseName;
-    record.timestamp = QDateTime::currentDateTime();
+    record.timestamp = timestamp;
     record.fileSizeBytes = QFileInfo(targetPath).size();
+
+    const QJsonObject metadata{
+        {QStringLiteral("format"), QStringLiteral("creative-suite.hub-backup")},
+        {QStringLiteral("version"), 1},
+        {QStringLiteral("original_path"), record.originalFilePath},
+        {QStringLiteral("project_name"), record.projectName},
+        {QStringLiteral("created_at"), timestamp.toUTC().toString(Qt::ISODateWithMs)},
+        {QStringLiteral("snapshot_file"), targetFileName}};
+    const QByteArray metadataBytes = QJsonDocument(metadata).toJson(QJsonDocument::Indented);
+    const QString metadataPath = QDir(pending.path()).filePath(QStringLiteral("record.json"));
+    QSaveFile metadataFile(metadataPath);
+    if (!metadataFile.open(QIODevice::WriteOnly)
+        || metadataFile.write(metadataBytes) != metadataBytes.size() || !metadataFile.commit())
+        return fail(QStringLiteral("Falha ao publicar os metadados (código %1): %2")
+            .arg(static_cast<int>(metadataFile.error())).arg(metadataFile.errorString()), metadataPath);
+    pending.setAutoRemove(false);
 
     if (outBackupPath) {
         *outBackupPath = targetPath;
@@ -190,28 +278,43 @@ std::vector<BackupRecord> BackupManager::listBackups() const {
     }
 
     QDir dir(m_backupDirectory);
-    const QFileInfoList entries = dir.entryInfoList(QStringList() << QStringLiteral("*_backup_*"), QDir::Files, QDir::Time);
+    const auto directories = dir.entryInfoList({QStringLiteral("backup-*")},
+        QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks);
+    for (const auto& directory : directories) {
+        if (const auto record = readBackupRecord(directory)) list.push_back(*record);
+    }
+
+    // Older flat snapshots have no recoverable source identity. Keep them visible
+    // in the vault, but never guess which same-named original they belong to.
+    const QFileInfoList entries = dir.entryInfoList({QStringLiteral("*_backup_*")},
+        QDir::Files | QDir::NoSymLinks, QDir::Time);
+    const QRegularExpression legacyName(QStringLiteral("^(.*)_backup_[0-9]{8}_[0-9]{6}$"));
 
     for (const auto& info : entries) {
         BackupRecord record;
         record.backupFilePath = info.absoluteFilePath();
-        const QString fileName = info.fileName();
-        const int idx = fileName.indexOf(QStringLiteral("_backup_"));
-        record.projectName = idx > 0 ? fileName.left(idx) : info.completeBaseName();
+        const auto match = legacyName.match(info.completeBaseName());
+        if (!match.hasMatch()) continue;
+        record.projectName = match.captured(1);
         record.timestamp = info.lastModified();
         record.fileSizeBytes = info.size();
         list.push_back(record);
     }
 
+    std::sort(list.begin(), list.end(), [](const BackupRecord& left, const BackupRecord& right) {
+        if (left.timestamp != right.timestamp) return left.timestamp > right.timestamp;
+        return left.backupFilePath < right.backupFilePath;
+    });
     return list;
 }
 
 std::vector<BackupRecord> BackupManager::backupsForProject(const QString& projectFilePath) const {
-    const QString baseName = QFileInfo(projectFilePath).completeBaseName();
+    if (projectFilePath.isEmpty()) return {};
+    const QString identity = projectIdentity(projectFilePath);
     std::vector<BackupRecord> all = listBackups();
     std::vector<BackupRecord> filtered;
     for (const auto& b : all) {
-        if (b.projectName.compare(baseName, Qt::CaseInsensitive) == 0) {
+        if (!b.originalFilePath.isEmpty() && sameProject(b.originalFilePath, identity)) {
             filtered.push_back(b);
         }
     }
