@@ -1238,6 +1238,9 @@ void MainWindow::setMediaPoolExpanded(bool expanded) {
 
     QSettings settings;
     if (expanded) {
+        const QRect preview_geometry = preview_dock_->geometry();
+        const QRect inspector_geometry = inspector_dock_->geometry();
+        const QRect timeline_geometry = timeline_dock_->geometry();
         media_pool_restore_layout_state_ = saveState(9);
         settings.setValue(
             "workspace/media_pool_restore_layout_state",
@@ -1259,16 +1262,20 @@ void MainWindow::setMediaPoolExpanded(bool expanded) {
         addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
         splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
 
-        const int available_height = std::max(1, height());
         resizeDocks(
             {bins_dock_, media_dock_},
-            {std::max(140, available_height / 4),
-             std::max(260, available_height * 3 / 4)},
+            {std::max(140, bins_dock_->height()),
+             std::max(260, height() - bins_dock_->height())},
             Qt::Vertical);
         resizeDocks(
+            {preview_dock_, inspector_dock_},
+            {std::max(280, preview_geometry.width()),
+             std::max(280, inspector_geometry.width())},
+            Qt::Horizontal);
+        resizeDocks(
             {preview_dock_, timeline_dock_},
-            {std::max(260, available_height * 2 / 3),
-             std::max(220, available_height / 3)},
+            {std::max(260, preview_geometry.height()),
+             std::max(220, timeline_geometry.height())},
             Qt::Vertical);
         media_pool_expanded_ = true;
     } else {

@@ -6,6 +6,7 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QToolButton>
+#include <QRect>
 
 #include <iostream>
 #include <stdexcept>
@@ -70,6 +71,16 @@ void requireExpandedGeometry(const Docks& docks) {
             "The Timeline must remain below Preview and Inspector in the expanded layout.");
 }
 
+void requirePreviewAndInspectorUnchanged(
+    const Docks& docks,
+    const QRect& preview_geometry,
+    const QRect& inspector_geometry) {
+    require(docks.preview->geometry() == preview_geometry,
+            "Expanding the Media Pool must not move or resize the Preview.");
+    require(docks.inspector->geometry() == inspector_geometry,
+            "Expanding the Media Pool must not move or resize the Inspector.");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -99,12 +110,16 @@ int main(int argc, char** argv) {
                     docks.timeline != nullptr,
                 "The test could not locate the editor dock set.");
         const auto normal_state = window.saveState(9);
+        const auto preview_geometry = docks.preview->geometry();
+        const auto inspector_geometry = docks.inspector->geometry();
 
         docks.expand->click();
         settleLayout();
         require(docks.expand->isChecked(),
                 "The expansion button did not enter its checked state.");
         requireExpandedGeometry(docks);
+        requirePreviewAndInspectorUnchanged(
+            docks, preview_geometry, inspector_geometry);
 
         docks.expand->click();
         settleLayout();
@@ -133,6 +148,17 @@ int main(int argc, char** argv) {
         reopened.resize(960, 640);
         settleLayout();
         requireExpandedGeometry(reopened_docks);
+        reopened_docks.expand->click();
+        settleLayout();
+        const auto small_preview_geometry = reopened_docks.preview->geometry();
+        const auto small_inspector_geometry = reopened_docks.inspector->geometry();
+        reopened_docks.expand->click();
+        settleLayout();
+        requireExpandedGeometry(reopened_docks);
+        requirePreviewAndInspectorUnchanged(
+            reopened_docks,
+            small_preview_geometry,
+            small_inspector_geometry);
         reopened.resize(1600, 900);
         settleLayout();
 
