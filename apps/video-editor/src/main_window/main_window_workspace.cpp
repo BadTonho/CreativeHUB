@@ -1373,7 +1373,9 @@ void MainWindow::applyExpandedDockLayout(
         inspector_width_save_timer_->stop();
     }
     bins_dock_->setMinimumWidth(0);
+    bins_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
     media_dock_->setMinimumWidth(0);
+    media_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
     preview_dock_->setMinimumWidth(0);
     preview_dock_->setMaximumWidth(QWIDGETSIZE_MAX);
     preview_dock_->setMinimumHeight(0);
@@ -1386,6 +1388,16 @@ void MainWindow::applyExpandedDockLayout(
         restoreState(workspace_expansion_restore_layout_state_, 9);
     if (!restored_base_layout) {
         restoreDefaultLayout();
+    }
+
+    const int normal_bins_height = bins_dock_->height();
+    const int normal_media_height = media_dock_->height();
+    if (inspector_expanded && !media_pool_expanded) {
+        // A full-height Inspector changes the height of the side-dock area.
+        // Keep the Media Pool at its restored normal height unless its own
+        // expansion action is active.
+        bins_dock_->setMaximumHeight(std::max(1, normal_bins_height));
+        media_dock_->setMaximumHeight(std::max(1, normal_media_height));
     }
 
     media_pool_expanded_ = false;
@@ -1498,9 +1510,15 @@ void MainWindow::applyExpandedDockLayout(
     QTimer::singleShot(150, this, [this] {
         if (bins_dock_ != nullptr) {
             bins_dock_->setMinimumWidth(0);
+            if (!(inspector_expanded_ && !media_pool_expanded_)) {
+                bins_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
+            }
         }
         if (media_dock_ != nullptr) {
             media_dock_->setMinimumWidth(0);
+            if (!(inspector_expanded_ && !media_pool_expanded_)) {
+                media_dock_->setMaximumHeight(QWIDGETSIZE_MAX);
+            }
         }
         if (preview_dock_ != nullptr) {
             preview_dock_->setMinimumWidth(0);

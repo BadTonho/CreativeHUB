@@ -62,7 +62,7 @@ void requireAllPanelsVisible(const Docks& docks) {
     require(docks.bins->isVisible() && docks.media->isVisible() &&
                 docks.preview->isVisible() && docks.inspector->isVisible() &&
                 docks.timeline->isVisible(),
-            "Expanding the Media Pool must not hide any editor dock.");
+            "Changing dock expansion must not hide any editor dock.");
 }
 
 void requireInspectorExpandedGeometry(const Docks& docks) {
@@ -120,6 +120,25 @@ void requirePreviewUnchanged(const Docks& docks, const QRect& preview_geometry) 
             "Expanding the Inspector must not move or resize the Preview.");
 }
 
+void requireMediaPoolGeometryUnchanged(
+    const Docks& docks,
+    const QRect& bins_geometry,
+    const QRect& media_geometry) {
+    require(docks.expand != nullptr && !docks.expand->isChecked(),
+            "The Media Pool expansion action changed while only Inspector was toggled.");
+    require(docks.bins->geometry() == bins_geometry &&
+                docks.media->geometry() == media_geometry,
+            "Expanding Inspector changed the Media Pool dock geometry.");
+}
+
+void requireMediaPoolNotExpanded(const Docks& docks) {
+    require(docks.expand != nullptr && !docks.expand->isChecked(),
+            "The Media Pool expansion action changed while only Inspector was toggled.");
+    require(docks.media->geometry().bottom() <
+                docks.timeline->geometry().bottom() - 24,
+            "Inspector-only expansion stretched the Media Pool to full height.");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -162,10 +181,27 @@ int main(int argc, char** argv) {
         const int normal_width_before_expand = docks.media->width();
         require(normal_width_before_expand > original_normal_width,
                 "The normal Media Pool dock could not be widened before expansion.");
+        const auto normal_bins_geometry = docks.bins->geometry();
+        const auto normal_media_geometry = docks.media->geometry();
         QSettings().setValue(
             "workspace/media_pool_expanded_width", original_normal_width);
         const auto preview_geometry = docks.preview->geometry();
         const auto inspector_geometry = docks.inspector->geometry();
+
+        docks.inspector_expand->click();
+        settleLayout();
+        require(!docks.expand->isChecked() &&
+                    docks.inspector_expand->isChecked(),
+                "Expanding Inspector alone changed the Media Pool toggle state.");
+        requireInspectorExpandedGeometry(docks);
+        requireMediaPoolGeometryUnchanged(
+            docks, normal_bins_geometry, normal_media_geometry);
+        requirePreviewUnchanged(docks, preview_geometry);
+        docks.inspector_expand->click();
+        settleLayout();
+        require(!docks.expand->isChecked() &&
+                    !docks.inspector_expand->isChecked(),
+                "Collapsing Inspector alone changed the Media Pool toggle state.");
 
         docks.expand->click();
         settleLayout();
@@ -394,8 +430,8 @@ int main(int argc, char** argv) {
 
         reopened.resize(960, 640);
         settleLayout();
-        requireExpandedGeometry(reopened_docks);
         requireInspectorExpandedGeometry(reopened_docks);
+        requireMediaPoolNotExpanded(reopened_docks);
         reopened.resize(1920, 1080);
         settleLayout();
 

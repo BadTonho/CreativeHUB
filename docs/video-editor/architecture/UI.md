@@ -90,12 +90,16 @@ state. A reusable action area in dock title bars supports additional panel
 commands while retaining close and float controls. The `Media` dock's checked
 title-bar button expands the `Bins` and `Media` docks together into a full-height
 left column. The `Inspector` dock has its own checked title-bar button to expand
-to a full-height right column. These modes can be combined in either click
-order; no dock is hidden. Expanding either dock keeps Preview in its current
-position and size. The Timeline moves below Preview into the central area
-between the expanded columns. Dragging the Inspector divider can resize Preview
-as the central area gives or takes space. Both side docks remain resizable after
-the expansion layout settles. Their latest widths are persisted separately in
+to a full-height right column. The two toggles are independent and can be
+combined in either click order; no dock is hidden. With only Inspector expanded,
+Bins and Media retain their normal geometry while Inspector fills the right
+column and Timeline sits below Preview in the area between Media Pool and
+Inspector. With only Media Pool expanded, Bins and Media fill the left column;
+with both expanded, both side columns fill the workspace height. Expanding or
+collapsing either dock preserves Preview geometry. Dragging the Inspector divider
+can resize Preview as the central area gives or takes space. Both side docks
+remain resizable after the expansion layout settles. Their latest widths are
+persisted separately in
 `workspace/media_pool_width` and `workspace/inspector_width`, and are applied
 after each toggle and when the editor reopens. The baseline native dock
 arrangement is retained until both expansions are collapsed, so collapsing one
