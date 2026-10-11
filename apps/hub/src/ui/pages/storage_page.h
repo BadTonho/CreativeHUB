@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QStringList>
 
 namespace creative_suite::hub {
 
@@ -12,6 +13,8 @@ class StoragePage : public QWidget {
 
 public:
     explicit StoragePage(QWidget* parent = nullptr);
+    // Explicit cache roots keep UI regression checks isolated from user caches.
+    explicit StoragePage(QStringList cachePaths, QWidget* parent = nullptr);
 
     void refreshStorageInfo();
 
@@ -21,6 +24,7 @@ private slots:
 
 private:
     void setupUi();
+    QStringList m_cachePaths;
 
     QLabel* m_totalSizeLabel{nullptr};
     QLabel* m_statusNote{nullptr};

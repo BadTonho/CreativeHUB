@@ -28,7 +28,12 @@ QString friendlyDirName(const QString& path) {
 } // namespace
 
 StoragePage::StoragePage(QWidget* parent)
+    : StoragePage(StorageManager::suiteCachePaths(), parent)
+{}
+
+StoragePage::StoragePage(QStringList cachePaths, QWidget* parent)
     : QWidget(parent)
+    , m_cachePaths(std::move(cachePaths))
 {
     setupUi();
 }
@@ -177,7 +182,7 @@ void StoragePage::setupUi() {
 }
 
 void StoragePage::refreshStorageInfo() {
-    const qint64 totalBytes = StorageManager::calculateTotalCacheSize();
+    const auto totalBytes = StorageManager::calculateCacheSize(m_cachePaths);
     if (m_totalSizeLabel) {
         m_totalSizeLabel->setText(StorageManager::formatBytes(totalBytes));
     }
@@ -190,7 +195,7 @@ void StoragePage::refreshStorageInfo() {
         delete item;
     }
 
-    const auto paths = StorageManager::suiteCachePaths();
+    const auto& paths = m_cachePaths;
     for (const auto& path : paths) {
         auto* row = new QFrame();
         row->setStyleSheet(QStringLiteral(
@@ -235,24 +240,41 @@ void StoragePage::onClearCache() {
         return;
     }
 
-    const qint64 beforeBytes = StorageManager::calculateTotalCacheSize();
-    StorageManager::clearSuiteCache();
+    const auto result = StorageManager::clearCachePaths(m_cachePaths);
     refreshStorageInfo();
 
+    const QString removed = StorageManager::formatBytes(result.removed_bytes);
+    const QString remaining = StorageManager::formatBytes(result.remaining_bytes);
+    QString title;
+    QString message;
+    if (result.succeeded()) {
+        title = result.removed_entries > 0 ? QStringLiteral("Cache Liberado") : QStringLiteral("Cache já vazio");
+        message = result.removed_entries > 0
+            ? QStringLiteral("Cache limpo com sucesso. Foram liberados %1.").arg(removed)
+            : QStringLiteral("O cache já estava vazio. Nenhum arquivo foi removido.");
+    } else {
+        title = result.removed_entries > 0 ? QStringLiteral("Limpeza parcial do cache") : QStringLiteral("Falha na limpeza do cache");
+        const QString residue = result.remaining_size_known
+            ? QStringLiteral("%1 permanecem em cache.").arg(remaining)
+            : QStringLiteral("Pelo menos %1 permanecem em cache; não foi possível medir todos os arquivos.").arg(remaining);
+        message = QStringLiteral("%1. Foram liberados %2. %3 Algumas entradas não puderam ser limpas. Feche os editores e tente novamente. Consulte o log para os detalhes.")
+            .arg(title, removed, residue);
+    }
     if (m_statusNote) {
-        m_statusNote->setText(QStringLiteral("✓ Cache da suíte liberado com sucesso!"));
+        m_statusNote->setText(message);
+        m_statusNote->setWordWrap(true);
+        m_statusNote->setTextFormat(Qt::PlainText);
+        m_statusNote->setStyleSheet(result.succeeded()
+            ? QStringLiteral("color: #ffffff; font-size: 12px; font-weight: 600; background: transparent;")
+            : QStringLiteral("color: #f2b86a; font-size: 12px; font-weight: 600; background: transparent;"));
         m_statusNote->setVisible(true);
     }
 
-    ActivityManager::instance().addActivity(
-        QStringLiteral("Cache Liberado"),
-        QStringLiteral("Foram liberados %1 de arquivos temporários da suíte.").arg(StorageManager::formatBytes(beforeBytes)),
-        QStringLiteral("cache")
-    );
+    ActivityManager::instance().addActivity(title, message, QStringLiteral("cache"));
 }
 
 void StoragePage::onOpenCacheFolder() {
-    const QString cachePath = StorageManager::defaultCachePath();
+    const QString cachePath = m_cachePaths.isEmpty() ? StorageManager::defaultCachePath() : m_cachePaths.front();
     QDir().mkpath(cachePath);
     QDesktopServices::openUrl(QUrl::fromLocalFile(cachePath));
 }

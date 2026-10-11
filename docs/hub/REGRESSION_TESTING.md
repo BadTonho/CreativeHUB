@@ -32,11 +32,26 @@ and condition. Debug and macOS/Linux execution of this change remain pending.
 | Hub's own update | Shared updater component and Hub startup integration | Install and update the Hub itself without changing editor installations: **pending**. |
 | Changelog discovery, semantic version sorting, and modal markdown display | `apps/hub/tests/test_changelog_reader.cpp` (`hub-changelog-reader-test`), `apps/hub/tests/test_app_details_modal.cpp` (`hub-details-modal-test`) | In Hub UI, open app details modal; verify changelog section renders notes or empty state gracefully: **covered**. |
 | Recent projects tracking, file-to-app detection, recency reordering, JSON persistence, and launch delegation | `apps/hub/tests/test_recent_projects.cpp` (`hub-recent-projects-test`) | Open Projects tab in Hub; open project file via dialog or quick cards; verify list updates with recency order, app badges, and removal: **covered**. |
-| Suite storage calculation, multi-directory cache discovery, byte formatting, and cache cleanup | `apps/hub/tests/test_storage_manager.cpp` (`hub-storage-manager-test`) | Select dedicated "Armazenamento" tab in sidebar; verify total cache size displays formatted bytes; inspect per-directory breakdown; trigger "Limpar Cache Seguro" and verify feedback and size update: **covered**. |
+| Suite storage calculation, cache cleanup results, failure logs, feedback, and activities | `apps/hub/tests/test_storage_manager.cpp`, `test_storage_page.cpp` (`hub-storage-manager-test`, `hub-storage-page-test`), registered in `apps/hub/tests/CMakeLists.txt` | Automated coverage present for removal/remaining bytes, multiple/nested/duplicate roots, hidden files, partial/total failure, retry, cancellation, empty cache, invalid roots, new files during cleanup, and error/history consistency. The Windows widget test uses a real file handle denying deletion. Native visual, directory ACL, Debug, and macOS/Linux checks remain **pending**; follow [STORAGE.md](STORAGE.md). |
 | Activity and notification center, event logging, read state tracking, and popup dropdown | `apps/hub/tests/test_activity_manager.cpp` (`hub-activity-manager-test`) | Click notification bell in Hub header bar; verify unread badge, categorized event list, "Marcar lidas", and "Limpar": **covered**. |
 | Backup identity, unique creation, persisted source paths, legacy compatibility, and origin labels | `apps/hub/tests/test_backup_manager.cpp`, `test_backups_page.cpp` (`hub-backup-manager-test`, `hub-backups-page-test`), registered in `apps/hub/tests/CMakeLists.txt` | Automated coverage present for same-named projects, repeated creation, restart, malformed records, source labels, and unknown legacy origins. Native folder-opening and new label presentation remain **pending**; follow [BACKUPS.md](BACKUPS.md). |
 | Snapshot relative references, supported document versions, and relocation for restoration | `apps/hub/tests/test_backup_manager.cpp` and `test_backup_formats.cpp` (`hub-backup-manager-test`, `hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; real Image/Video/Motion persistence producers and consumers | Automated coverage present. Native UI restoration checks and macOS/Linux execution remain **pending**; see [BACKUPS.md](BACKUPS.md) for the contract and manual steps. |
 | Application discovery, sibling configuration directories, bundle paths, fallbacks, and installation-path priority | `apps/hub/tests/test_app_launcher.cpp` (`hub-launcher-test`, `hub-launcher-build-layout-test`), registered in `apps/hub/tests/CMakeLists.txt`; the integration test uses the enabled editors' actual CMake outputs | Automated coverage present. Native launch and project-open checks for each editor are documented below and remain **pending**, as do Debug and macOS/Linux execution. |
+
+## Cache cleanup verification on 2026-10-11
+
+The new storage widget regression failed before the fix: the success message
+appeared while a real Windows file handle prevented cache deletion. The Hub
+and affected tests rebuilt in Release, and all 15 Hub CTest entries passed in
+12.56 seconds. Tests verify partial/full failure, real unlock-and-retry,
+removed/remaining bytes, root preservation, history and feedback consistency,
+cancellation, zero-byte files, empty caches, invalid roots, deterministic denied
+removal, duplicate/nested roots, error logs, and concurrent cache additions.
+Native directory symlink creation lacked the required Windows privilege and
+remains pending, along with visual/ACL acceptance, Debug, and macOS/Linux
+execution. The canonical Hub executable was rebuilt at
+`build/apps/hub/Release/creative-suite-hub.exe` (2026-10-11 12:54:24 UTC).
+Follow [STORAGE.md](STORAGE.md) for the cleanup contract and manual checks.
 
 ## Installation refresh verification on 2026-10-11
 

@@ -59,6 +59,11 @@ target_link_libraries(hub-storage-manager-test PRIVATE creative-suite-hub-core Q
 target_compile_features(hub-storage-manager-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-storage-manager-test COMMAND hub-storage-manager-test)
 
+add_executable(hub-storage-page-test test_storage_page.cpp)
+target_link_libraries(hub-storage-page-test PRIVATE creative-suite-hub-core Qt6::Widgets)
+target_compile_features(hub-storage-page-test PRIVATE cxx_std_20)
+add_creative_suite_test(NAME hub-storage-page-test COMMAND hub-storage-page-test)
+
 add_executable(hub-activity-manager-test test_activity_manager.cpp)
 target_link_libraries(hub-activity-manager-test PRIVATE creative-suite-hub-core Qt6::Core)
 target_compile_features(hub-activity-manager-test PRIVATE cxx_std_20)
@@ -125,6 +130,7 @@ if(WIN32)
             hub-changelog-reader-test
             hub-recent-projects-test
             hub-storage-manager-test
+            hub-storage-page-test
             hub-activity-manager-test
             hub-backup-manager-test
             hub-backups-page-test)
