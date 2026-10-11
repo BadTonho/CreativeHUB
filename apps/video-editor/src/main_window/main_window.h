@@ -20,6 +20,7 @@
 #include "settings/shortcut_manager.h"
 
 #include <QMainWindow>
+#include <QByteArray>
 #include <QString>
 #include <QThreadPool>
 #include <QtGlobal>
@@ -53,6 +54,7 @@ class QSpinBox;
 class QTabWidget;
 class QScrollArea;
 class QTimer;
+class QToolButton;
 class MediaBrowserBinTreeWidget;
 class MediaBrowserListWidget;
 class QListWidgetItem;
@@ -115,6 +117,8 @@ private:
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
+    void setMediaPoolExpanded(bool expanded);
+    void updateMediaPoolExpandButton();
     void applyInitialWindowLayout();
     void saveWindowGeometry();
     void activateMediaPoolGroup();
@@ -318,6 +322,9 @@ private:
     QDockWidget* preview_dock_ = nullptr;
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
+    QToolButton* media_pool_expand_button_ = nullptr;
+    QByteArray media_pool_restore_layout_state_;
+    bool media_pool_expanded_ = false;
     PreviewWidget* preview_widget_ = nullptr;
     ui::FunctionPalette* function_palette_ = nullptr;
     ui::EditWorkspace* edit_workspace_ = nullptr;

@@ -48,6 +48,8 @@
 #include <QSlider>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QToolButton>
+#include <QStyle>
 #include <QTextEdit>
 #include <QUrl>
 #include <QWidget>
@@ -376,6 +378,15 @@ void MainWindow::createWorkspace() {
         "Media",
         "mediaDock",
         createMediaPanel());
+    media_pool_expand_button_ = addDockTitleBarAction(
+        media_dock_,
+        DockTitleBarAction{
+            "mediaPoolExpandButton",
+            "Expand Media Pool to full window height",
+            "Expand Media Pool to full window height",
+            style()->standardIcon(QStyle::SP_TitleBarMaxButton),
+            true,
+            [this](bool expanded) { setMediaPoolExpanded(expanded); }});
     addDockWidget(Qt::LeftDockWidgetArea, bins_dock_);
     addDockWidget(Qt::LeftDockWidgetArea, media_dock_);
     splitDockWidget(bins_dock_, media_dock_, Qt::Vertical);
@@ -1136,7 +1147,15 @@ void MainWindow::restoreWorkspaceLayout() {
     QSettings settings;
     const auto saved_state = settings.value(
         "workspace/dock_layout_state").toByteArray();
+    const auto restoreMediaPoolExpansion = [this, &settings] {
+        media_pool_expanded_ = settings.value(
+            "workspace/media_pool_expanded", false).toBool();
+        media_pool_restore_layout_state_ = settings.value(
+            "workspace/media_pool_restore_layout_state").toByteArray();
+        updateMediaPoolExpandButton();
+    };
     if (!saved_state.isEmpty() && restoreState(saved_state, 9)) {
+        restoreMediaPoolExpansion();
         if (workspace_host_ != nullptr) {
             workspace_host_->refreshCentralWorkspaceVisibility();
         }
@@ -1158,6 +1177,7 @@ void MainWindow::restoreWorkspaceLayout() {
     };
 
     if (!saved_state.isEmpty() && restoreState(saved_state, 8)) {
+        restoreMediaPoolExpansion();
         // Version 8 introduced Preview, but could save it in a narrow
         // vertical split after restoring a pre-dock layout. Repair that
         // default placement once while retaining intentional tab/floating,
@@ -1176,6 +1196,7 @@ void MainWindow::restoreWorkspaceLayout() {
         return;
     }
     if (!saved_state.isEmpty() && restoreState(saved_state, 7)) {
+        restoreMediaPoolExpansion();
         // Version 7 predates the Preview dock. Keep its existing panel layout
         // and add Preview as the large panel beside Inspector.
         placePreviewBesideInspector();
@@ -1197,7 +1218,90 @@ void MainWindow::restoreWorkspaceLayout() {
 void MainWindow::saveWorkspaceLayout() {
     QSettings settings;
     settings.setValue("workspace/dock_layout_state", saveState(9));
+    settings.setValue("workspace/media_pool_expanded", media_pool_expanded_);
+    if (media_pool_expanded_ && !media_pool_restore_layout_state_.isEmpty()) {
+        settings.setValue(
+            "workspace/media_pool_restore_layout_state",
+            media_pool_restore_layout_state_);
+    }
     settings.sync();
+}
+
+void MainWindow::setMediaPoolExpanded(bool expanded) {
+    if (media_pool_expanded_ == expanded ||
+        bins_dock_ == nullptr || media_dock_ == nullptr ||
+        preview_dock_ == nullptr || inspector_dock_ == nullptr ||
+        timeline_dock_ == nullptr) {
+        updateMediaPoolExpandButton();
+        return;
+    }
+
+    QSettings settings;
+    if (expanded) {
+        media_pool_restore_layout_state_ = saveState(9);
+        settings.setValue(
+            "workspace/media_pool_restore_layout_state",
+            media_pool_restore_layout_state_);
+
+        bins_dock_->setFloating(false);
+        media_dock_->setFloating(false);
+        preview_dock_->setFloating(false);
+        inspector_dock_->setFloating(false);
+        timeline_dock_->setFloating(false);
+
+        addDockWidget(Qt::LeftDockWidgetArea, bins_dock_);
+        addDockWidget(Qt::LeftDockWidgetArea, media_dock_);
+        splitDockWidget(bins_dock_, media_dock_, Qt::Vertical);
+
+        addDockWidget(Qt::RightDockWidgetArea, preview_dock_);
+        addDockWidget(Qt::RightDockWidgetArea, timeline_dock_);
+        splitDockWidget(preview_dock_, timeline_dock_, Qt::Vertical);
+        addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+        splitDockWidget(preview_dock_, inspector_dock_, Qt::Horizontal);
+
+        const int available_height = std::max(1, height());
+        resizeDocks(
+            {bins_dock_, media_dock_},
+            {std::max(140, available_height / 4),
+             std::max(260, available_height * 3 / 4)},
+            Qt::Vertical);
+        resizeDocks(
+            {preview_dock_, timeline_dock_},
+            {std::max(260, available_height * 2 / 3),
+             std::max(220, available_height / 3)},
+            Qt::Vertical);
+        media_pool_expanded_ = true;
+    } else {
+        if (!media_pool_restore_layout_state_.isEmpty() &&
+            restoreState(media_pool_restore_layout_state_, 9)) {
+            if (workspace_host_ != nullptr) {
+                workspace_host_->refreshCentralWorkspaceVisibility();
+            }
+        } else {
+            restoreDefaultLayout();
+        }
+        media_pool_expanded_ = false;
+        media_pool_restore_layout_state_.clear();
+        settings.remove("workspace/media_pool_restore_layout_state");
+    }
+
+    updateMediaPoolExpandButton();
+    saveWorkspaceLayout();
+}
+
+void MainWindow::updateMediaPoolExpandButton() {
+    if (media_pool_expand_button_ == nullptr) return;
+    const QSignalBlocker blocker(media_pool_expand_button_);
+    media_pool_expand_button_->setChecked(media_pool_expanded_);
+    media_pool_expand_button_->setIcon(style()->standardIcon(
+        media_pool_expanded_ ? QStyle::SP_TitleBarNormalButton
+                             : QStyle::SP_TitleBarMaxButton));
+    media_pool_expand_button_->setToolTip(
+        media_pool_expanded_
+            ? QStringLiteral("Restore Media Pool layout")
+            : QStringLiteral("Expand Media Pool to full window height"));
+    media_pool_expand_button_->setAccessibleName(
+        media_pool_expand_button_->toolTip());
 }
 
 void MainWindow::applyInitialWindowLayout() {
@@ -1283,6 +1387,10 @@ void MainWindow::updateEffectsActionState() {
 }
 
 void MainWindow::restoreDefaultLayout() {
+    media_pool_expanded_ = false;
+    media_pool_restore_layout_state_.clear();
+    QSettings().remove("workspace/media_pool_restore_layout_state");
+
     bins_dock_->setFloating(false);
     media_dock_->setFloating(false);
     toolbox_dock_->setFloating(false);
@@ -1317,6 +1425,7 @@ void MainWindow::restoreDefaultLayout() {
     preview_dock_->show();
     inspector_dock_->show();
     timeline_dock_->show();
+    updateMediaPoolExpandButton();
     updateMediaPoolActionState();
     updateEffectsActionState();
     saveWorkspaceLayout();

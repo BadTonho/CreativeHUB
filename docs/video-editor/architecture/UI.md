@@ -86,7 +86,15 @@ Effects pair in the same left workspace area. The docks can also be controlled
 individually through the
 `View > Media Pool` submenu. The global action is checked only when both docks
 are visible while the Effects pair is hidden, and it does not affect project
-state.
+state. A reusable action area in dock title bars supports additional panel
+commands while retaining close and float controls. The `Media` dock's checked
+title-bar button expands the `Bins` and `Media` docks together into a full-height
+left column. Preview and Inspector stay above the Timeline on the right; no dock
+is hidden. Clicking the button again restores the layout captured before
+expansion. The expanded state and its restore layout are saved globally in
+`workspace/media_pool_expanded` and
+`workspace/media_pool_restore_layout_state`, alongside the current native dock
+state. This is workspace presentation only and does not affect project state.
 
 The Effects workspace contains three additional native docks: `Toolbox`,
 `Favorites`, and `Effects`. `Toolbox` and `Favorites` form a vertical column,

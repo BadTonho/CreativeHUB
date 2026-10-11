@@ -4,6 +4,9 @@
 #include <QHBoxLayout>
 #include <QImageReader>
 #include <QLabel>
+#include <QMouseEvent>
+#include <QStyle>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -14,6 +17,95 @@ extern "C" {
 #include <system_error>
 
 namespace main_window_detail {
+
+namespace {
+
+class DockTitleBar final : public QWidget {
+public:
+    DockTitleBar(QDockWidget* dock, QWidget* parent)
+        : QWidget(parent), dock_(dock), layout_(new QHBoxLayout(this)) {
+        setObjectName(QStringLiteral("dockTitleBar"));
+        setFixedHeight(23);
+        layout_->setContentsMargins(4, 0, 3, 0);
+        layout_->setSpacing(2);
+
+        title_ = new QLabel(dock_->windowTitle(), this);
+        title_->setObjectName(QStringLiteral("dockTitleLabel"));
+        title_->setAttribute(Qt::WA_TransparentForMouseEvents);
+        layout_->addWidget(title_);
+        layout_->addStretch(1);
+
+        float_button_ = createButton(QStringLiteral("dockFloatButton"));
+        close_button_ = createButton(QStringLiteral("dockCloseButton"));
+        layout_->addWidget(float_button_);
+        layout_->addWidget(close_button_);
+
+        connect(dock_, &QDockWidget::windowTitleChanged,
+                title_, &QLabel::setText);
+        connect(dock_, &QDockWidget::topLevelChanged,
+                this, [this](bool floating) { updateFloatButton(floating); });
+        connect(float_button_, &QToolButton::clicked,
+                dock_, [dock] { dock->setFloating(!dock->isFloating()); });
+        connect(close_button_, &QToolButton::clicked,
+                dock_, &QDockWidget::close);
+        updateFloatButton(dock_->isFloating());
+        close_button_->setIcon(style()->standardIcon(QStyle::SP_TitleBarCloseButton));
+        close_button_->setToolTip(QStringLiteral("Close panel"));
+        close_button_->setAccessibleName(QStringLiteral("Close panel"));
+    }
+
+    QToolButton* addAction(DockTitleBarAction action) {
+        auto* button = createButton(action.object_name);
+        button->setIcon(action.icon);
+        button->setToolTip(action.tool_tip);
+        button->setAccessibleName(action.accessible_name.isEmpty()
+            ? action.tool_tip
+            : action.accessible_name);
+        button->setCheckable(action.checkable);
+        layout_->insertWidget(layout_->count() - 2, button);
+        if (action.triggered) {
+            connect(button, &QToolButton::clicked, this,
+                    [callback = std::move(action.triggered)](bool checked) {
+                        callback(checked);
+                    });
+        }
+        return button;
+    }
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override { event->ignore(); }
+    void mouseMoveEvent(QMouseEvent* event) override { event->ignore(); }
+    void mouseReleaseEvent(QMouseEvent* event) override { event->ignore(); }
+    void mouseDoubleClickEvent(QMouseEvent* event) override { event->ignore(); }
+
+private:
+    QToolButton* createButton(const QString& object_name) {
+        auto* button = new QToolButton(this);
+        button->setObjectName(object_name);
+        button->setAutoRaise(true);
+        button->setIconSize(QSize(12, 12));
+        button->setFixedSize(18, 18);
+        return button;
+    }
+
+    void updateFloatButton(bool floating) {
+        float_button_->setIcon(style()->standardIcon(
+            floating ? QStyle::SP_TitleBarNormalButton
+                     : QStyle::SP_TitleBarMaxButton));
+        float_button_->setToolTip(
+            floating ? QStringLiteral("Dock panel")
+                     : QStringLiteral("Float panel"));
+        float_button_->setAccessibleName(float_button_->toolTip());
+    }
+
+    QDockWidget* dock_ = nullptr;
+    QHBoxLayout* layout_ = nullptr;
+    QLabel* title_ = nullptr;
+    QToolButton* float_button_ = nullptr;
+    QToolButton* close_button_ = nullptr;
+};
+
+} // namespace
 
 QString fromUtf8(const std::string& value) {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
@@ -198,7 +290,16 @@ QDockWidget* createDock(const QString& title, const QString& object_name, QWidge
                       QDockWidget::DockWidgetMovable |
                       QDockWidget::DockWidgetFloatable);
     dock->setWidget(content);
+    dock->setTitleBarWidget(new DockTitleBar(dock, dock));
     return dock;
+}
+
+QToolButton* addDockTitleBarAction(
+    QDockWidget* dock,
+    DockTitleBarAction action) {
+    if (dock == nullptr) return nullptr;
+    auto* title_bar = dynamic_cast<DockTitleBar*>(dock->titleBarWidget());
+    return title_bar == nullptr ? nullptr : title_bar->addAction(std::move(action));
 }
 
 } // namespace main_window_detail

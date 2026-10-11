@@ -4,13 +4,16 @@
 
 #include <QString>
 #include <QStringList>
+#include <QIcon>
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 
 class QDockWidget;
+class QToolButton;
 class QWidget;
 
 namespace main_window_detail {
@@ -38,9 +41,22 @@ namespace main_window_detail {
 [[nodiscard]] QWidget* createPlaceholder(
     const QString& title,
     const QString& description);
+
+struct DockTitleBarAction {
+    QString object_name;
+    QString accessible_name;
+    QString tool_tip;
+    QIcon icon;
+    bool checkable = false;
+    std::function<void(bool)> triggered;
+};
+
 [[nodiscard]] QDockWidget* createDock(
     const QString& title,
     const QString& object_name,
     QWidget* content);
+[[nodiscard]] QToolButton* addDockTitleBarAction(
+    QDockWidget* dock,
+    DockTitleBarAction action);
 
 } // namespace main_window_detail
