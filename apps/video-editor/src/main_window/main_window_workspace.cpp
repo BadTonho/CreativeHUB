@@ -20,6 +20,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QEvent>
 #include <QCoreApplication>
 #include <QDockWidget>
 #include <QFileDialog>
@@ -378,6 +379,13 @@ void MainWindow::createWorkspace() {
         "Media",
         "mediaDock",
         createMediaPanel());
+    media_dock_->installEventFilter(this);
+    media_pool_width_save_timer_ = new QTimer(this);
+    media_pool_width_save_timer_->setSingleShot(true);
+    media_pool_width_save_timer_->setInterval(120);
+    connect(
+        media_pool_width_save_timer_, &QTimer::timeout,
+        this, &MainWindow::persistExpandedMediaPoolWidth);
     media_pool_expand_button_ = addDockTitleBarAction(
         media_dock_,
         DockTitleBarAction{
@@ -1227,6 +1235,25 @@ void MainWindow::saveWorkspaceLayout() {
     settings.sync();
 }
 
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == media_dock_ && event != nullptr &&
+        event->type() == QEvent::Resize && media_pool_expanded_ &&
+        media_pool_width_save_timer_ != nullptr) {
+        media_pool_width_save_timer_->start();
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::persistExpandedMediaPoolWidth() {
+    if (!media_pool_expanded_ || media_dock_ == nullptr ||
+        media_dock_->width() <= 0) {
+        return;
+    }
+    QSettings settings;
+    settings.setValue(
+        "workspace/media_pool_expanded_width", media_dock_->width());
+}
+
 void MainWindow::restoreExpandedMediaPoolWidth() {
     if (!media_pool_expanded_ || media_pool_restore_layout_state_.isEmpty()) {
         return;
@@ -1307,9 +1334,14 @@ void MainWindow::setMediaPoolExpanded(bool expanded) {
              std::max(220, timeline_geometry.height())},
             Qt::Vertical);
         media_pool_expanded_ = true;
+        if (media_pool_width_save_timer_ != nullptr) {
+            media_pool_width_save_timer_->start();
+        }
     } else {
-        settings.setValue(
-            "workspace/media_pool_expanded_width", media_dock_->width());
+        if (media_pool_width_save_timer_ != nullptr) {
+            media_pool_width_save_timer_->stop();
+        }
+        persistExpandedMediaPoolWidth();
         if (!media_pool_restore_layout_state_.isEmpty() &&
             restoreState(media_pool_restore_layout_state_, 9)) {
             if (workspace_host_ != nullptr) {
@@ -1374,8 +1406,7 @@ void MainWindow::saveWindowGeometry() {
     settings.setValue("workspace/window_geometry", saveGeometry());
     settings.setValue("workspace/window_maximized", isMaximized());
     if (media_pool_expanded_ && media_dock_ != nullptr) {
-        settings.setValue(
-            "workspace/media_pool_expanded_width", media_dock_->width());
+        persistExpandedMediaPoolWidth();
     }
     settings.sync();
 }

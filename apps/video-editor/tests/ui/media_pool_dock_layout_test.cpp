@@ -6,6 +6,7 @@
 #include <QEventLoop>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QToolButton>
 
 #include <algorithm>
@@ -22,6 +23,13 @@ void settleLayout() {
     for (int index = 0; index < 10; ++index) {
         QApplication::processEvents(QEventLoop::AllEvents);
     }
+}
+
+void waitForWidthPersistence() {
+    QEventLoop loop;
+    QTimer::singleShot(180, &loop, &QEventLoop::quit);
+    loop.exec();
+    settleLayout();
 }
 
 struct Docks {
@@ -140,7 +148,7 @@ int main(int argc, char** argv) {
                  (widened_expanded_width - target_expanded_width)},
             Qt::Horizontal);
         settleLayout();
-        const int resized_expanded_width = docks.media->width();
+        int resized_expanded_width = docks.media->width();
         require(resized_expanded_width < widened_expanded_width,
                 "The expanded Media Pool column could not be narrowed.");
 
@@ -163,6 +171,36 @@ int main(int argc, char** argv) {
         requireExpandedGeometry(docks);
         require(docks.media->width() == resized_expanded_width,
                 "Re-expanding the Media Pool did not restore its adjusted width.");
+
+        const int next_target_expanded_width = resized_expanded_width + 70;
+        window.resizeDocks(
+            {docks.media, docks.preview},
+            {next_target_expanded_width,
+             std::max(280, docks.preview->width() - 70)},
+            Qt::Horizontal);
+        settleLayout();
+        resized_expanded_width = docks.media->width();
+        require(resized_expanded_width > next_target_expanded_width - 10,
+                "The expanded Media Pool could not accept a later width adjustment.");
+        waitForWidthPersistence();
+        require(QSettings().value(
+                    "workspace/media_pool_expanded_width").toInt() ==
+                    resized_expanded_width,
+                "A later expanded-width adjustment was not persisted after the dock settled.");
+        docks.expand->click();
+        settleLayout();
+        require(!docks.expand->isChecked(),
+                "The Media Pool did not collapse after its later width adjustment.");
+        require(window.saveState(9) == normal_state,
+                "A later expanded-width adjustment changed the normal dock layout.");
+        require(QSettings().value(
+                    "workspace/media_pool_expanded_width").toInt() ==
+                    resized_expanded_width,
+                "Collapsing after a later adjustment did not replace the saved expanded width.");
+        docks.expand->click();
+        settleLayout();
+        require(docks.media->width() == resized_expanded_width,
+                "Re-expanding restored the original width instead of the latest adjustment.");
         require(window.close(), "The expanded editor did not close cleanly.");
 
         MainWindow reopened;

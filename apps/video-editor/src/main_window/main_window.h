@@ -95,6 +95,7 @@ public:
 protected:
     void closeEvent(QCloseEvent* event) override;
     void showEvent(QShowEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     friend class MainWindowIntegrationTest;
@@ -120,6 +121,7 @@ private:
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
     void restoreExpandedMediaPoolWidth();
+    void persistExpandedMediaPoolWidth();
     void setMediaPoolExpanded(bool expanded);
     void updateMediaPoolExpandButton();
     void applyInitialWindowLayout();
@@ -329,6 +331,7 @@ private:
     QByteArray media_pool_restore_layout_state_;
     bool media_pool_expanded_ = false;
     bool media_pool_expanded_width_restore_pending_ = false;
+    QTimer* media_pool_width_save_timer_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     ui::FunctionPalette* function_palette_ = nullptr;
     ui::EditWorkspace* edit_workspace_ = nullptr;
