@@ -63,6 +63,29 @@ installed app. It has no “Update all” action. A shared per-user lock allows 
 most one suite download at a time. The Hub also has its own independent update
 check and installer.
 
+The Hub refreshes each editor service's installed version, destination,
+executable name, and registered-installation flag from the current registry
+snapshot whenever it scans installations, including refreshes after setup. It
+reads the snapshot again before launching setup and when opening update details.
+The details action rechecks the catalog unless a check/download is already
+active. Removing a registration clears the service's installed version and
+destination and restores its catalog executable name; finding a development
+binary still permits launching it, without treating it as a registered install.
+First installation remains interactive; later updates use the newly registered
+destination. A verified package already installed at that version or newer is
+not launched again. An invalid registered version blocks setup with a local
+error log. Successful Hub rollback also refreshes installation and catalog data.
+
+`UpdateService::setInstallationState` is a synchronous QObject-thread operation
+that changes only installation configuration. It retains active requests,
+partial downloads, package identity, download locks, and release signal
+references. Callers recheck the catalog to refresh the offer and validate live
+installation state before scheduling setup. `MainWindow::UpdateDependencies`
+accepts optional registry-reader, service, and runtime factories for isolated
+application regressions; factories parent their objects to the supplied owner
+and run on the GUI thread. Production uses the Windows registry, Qt network,
+shared update directory, and native process launcher.
+
 After the person confirms the download, the verified full installer is staged
 and installation is scheduled for when the target application closes. If the
 Hub starts an update for a closed editor, the installer can run immediately.
@@ -140,6 +163,16 @@ advanced when its installer contents change.
 
 ## Verification record
 
+**2026-10-11 installation-refresh fix:** the Hub regression failed before the
+fix because a refreshed service still held the previous installed version.
+All four Release applications and affected tests rebuilt on Windows, and all
+21 selected CTest entries passed in 33.25 seconds: 14 Hub tests, three updater
+tests, Video main-window, Image UI, and Motion startup/UI. The new Hub test
+uses synthetic installations/catalogs/packages and simulated setup launches;
+the shared service tests retain controlled in-flight requests/downloads.
+Native installer lifecycle and GUI acceptance, Debug, and macOS/Linux
+execution remain pending.
+
 **2026-10-11 pending-install fix:** the new runtime regression failed before
 the queue correction. Windows/Release built all four applications and the
 affected consumer test executables. All 18 selected CTest entries passed in
@@ -155,6 +188,8 @@ Automated coverage is registered in `libs/updater/tests/CMakeLists.txt`:
 - `updater-service-test` covers network failure, resumable downloads,
   cancellation and resume, rejection of incomplete or incorrectly hashed
   packages, unchanged app versions, and the one-download-at-a-time lock.
+  Installation refresh is covered during catalog requests and active downloads,
+  including unchanged package identity/configuration and clearing old metadata.
 - `updater-runtime-test` covers multiple open editors closing in either order,
   resuming all schema-1 pending records with managed IDs or file enumeration,
   mixed open/closed targets, deduplication, self-update deferral, per-app launch
@@ -163,6 +198,15 @@ Automated coverage is registered in `libs/updater/tests/CMakeLists.txt`:
   storage, real application leases, and simulated launches; it does not run
   installers or modify registered installations.
 - `hub-catalog-test` covers the Hub's per-app published-version state.
+- The Windows-only `hub-update-installation-refresh-test`, registered in
+  `apps/hub/tests/CMakeLists.txt`, exercises the real Hub window, service and
+  installation runtime with simulated registry/catalog/process boundaries.
+  It covers all three editors, first install followed by another update without
+  restart, relocated destinations/executables, removed registrations, rollback
+  version snapshots, stale-package suppression, invalid-version logging,
+  refresh during a download, and reopening the actual update dialog. Synthetic
+  packages pass real pending-record and hash validation; native registrations
+  are never written and no installers or editor processes run.
 
 Required manual Windows checks are indexed in the [Hub](hub/REGRESSION_TESTING.md),
 [Video Editor](video-editor/REGRESSION_TESTING.md),
@@ -183,6 +227,19 @@ schema-1 pending records present and repeat. In a disposable profile, make one
 setup launch fail and verify that the other app proceeds, the failed pending
 record remains available for retry, and its log identifies the affected app.
 These packaged lifecycle checks remain **pending**.
+
+For live installation refresh, use a disposable Windows profile and keep the
+same Hub session open. Install each editor into a chosen directory, finish
+setup, and choose Check updates: its current version must match the registration
+and the installed release must not be offered again. Publish a newer compatible
+test catalog and confirm the next update reuses that editor's registered
+destination silently. Repeat after relocation and after restoring the previous
+version. Remove an editor through its uninstaller and confirm setup returns to
+interactive first-install behavior. If registration changes during a download,
+setup must use the latest destination or skip an already installed package.
+Reopen update details and verify the current-version label and offer agree.
+These native installer/UI checks remain **pending**; the automated regression
+uses controlled I/O rather than establishing packaged acceptance.
 
 The current Release build passed **79/79 CTest tests**. Inno Setup 6.7.3
 compiled the four installers and the script generated `updates.json` with the

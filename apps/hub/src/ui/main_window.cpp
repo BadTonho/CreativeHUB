@@ -23,8 +23,28 @@
 namespace creative_suite::hub {
 
 MainWindow::MainWindow(QWidget* parent)
+    : MainWindow(UpdateDependencies{}, parent)
+{}
+
+MainWindow::MainWindow(UpdateDependencies dependencies, QWidget* parent)
     : QMainWindow(parent)
+    , m_updateDependencies(std::move(dependencies))
 {
+#ifdef Q_OS_WIN
+    if (!m_updateDependencies.read_installation) {
+        m_updateDependencies.read_installation = creative_suite::updater::readInstalledApplication;
+    }
+    if (!m_updateDependencies.create_service) {
+        m_updateDependencies.create_service = [](auto config, QObject* owner) {
+            return new creative_suite::updater::UpdateService(std::move(config), owner);
+        };
+    }
+    if (!m_updateDependencies.create_runtime) {
+        m_updateDependencies.create_runtime = [](QObject* owner) {
+            return new creative_suite::updater::UpdateRuntime(QStringLiteral("hub"), owner);
+        };
+    }
+#endif
     setWindowTitle(QStringLiteral("Creative Suite Hub"));
     setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
     resize(1080, 700);
@@ -136,7 +156,14 @@ void MainWindow::scanInstalledApps() {
 
     for (const auto& app : m_catalog.apps()) {
 #ifdef Q_OS_WIN
-        const auto registration = creative_suite::updater::readInstalledApplication(app.id());
+        const auto registration = m_updateDependencies.read_installation(app.id());
+        if (auto* service = m_updateServices.value(app.id(), nullptr)) {
+            service->setInstallationState(registration.has_value(),
+                registration ? registration->version : QString{},
+                registration ? registration->install_path : QString{},
+                registration && !registration->executable_name.isEmpty()
+                    ? registration->executable_name : app.executableName());
+        }
         if (registration) {
             m_launcher.addSearchPath(registration->install_path);
             const auto comparison = creative_suite::updater::compareVersions(
@@ -146,6 +173,14 @@ void MainWindow::scanInstalledApps() {
             m_catalog.updateAppVersion(app.id(), registration->version);
         } else if (m_launcher.isInstalled(app)) {
             m_catalog.updateAppStatus(app.id(), AppStatus::Installed);
+            m_catalog.updateAppVersion(app.id(), QString{});
+        } else {
+            m_catalog.updateAppStatus(app.id(), AppStatus::NotInstalled);
+            m_catalog.updateAppVersion(app.id(), QString{});
+        }
+        if (auto* service = m_updateServices.value(app.id(), nullptr);
+            service && service->state() == creative_suite::updater::UpdateState::Downloading) {
+            m_catalog.updateAppStatus(app.id(), AppStatus::Downloading);
         }
 #else
         if (m_launcher.isInstalled(app)) {
@@ -163,17 +198,33 @@ void MainWindow::scanInstalledApps() {
     }
 }
 
+void MainWindow::refreshServiceInstallation(creative_suite::updater::UpdateService* service) {
+#ifdef Q_OS_WIN
+    const auto app = m_catalog.findApp(service->config().app_id);
+    if (!app) return;
+    const auto registration = m_updateDependencies.read_installation(app->id());
+    service->setInstallationState(registration.has_value(),
+        registration ? registration->version : QString{},
+        registration ? registration->install_path : QString{},
+        registration && !registration->executable_name.isEmpty()
+            ? registration->executable_name : app->executableName());
+#else
+    Q_UNUSED(service);
+#endif
+}
+
 void MainWindow::configureUpdateServices() {
 #ifdef Q_OS_WIN
-    m_updateRuntime = new creative_suite::updater::UpdateRuntime(QStringLiteral("hub"), this);
+    m_updateRuntime = m_updateDependencies.create_runtime(this);
     m_updateRuntime->resumePendingInstalls({QStringLiteral("video-editor"),
                                             QStringLiteral("image-editor"),
                                             QStringLiteral("motion-editor")});
     for (const auto& app : m_catalog.apps()) {
-        auto* service = new creative_suite::updater::UpdateService(
+        auto* service = m_updateDependencies.create_service(
             creative_suite::updater::defaultConfig(
                 app.id(), app.name(), app.executableName(), app.latestVersion()), this);
         m_updateServices.insert(app.id(), service);
+        refreshServiceInstallation(service);
         connect(service, &creative_suite::updater::UpdateService::updateAvailable,
                 this, [this, service](const creative_suite::updater::ReleaseEntry& entry) {
             m_catalog.updateLatestVersion(entry.app_id, entry.version);
@@ -213,7 +264,26 @@ void MainWindow::configureUpdateServices() {
                 this, [this, service](const QString& installer,
                                       const creative_suite::updater::ReleaseEntry& entry) {
             if (!m_updateRuntime) return;
+            refreshServiceInstallation(service);
             const auto& config = service->config();
+            if (config.installed) {
+                const auto comparison = creative_suite::updater::compareVersions(
+                    entry.version, config.current_version);
+                if (!comparison) {
+                    HubLogger::instance().logError(QStringLiteral("MainWindow"),
+                        QStringLiteral("install_update"),
+                        QStringLiteral("The registered application version is invalid."),
+                        config.app_id + QStringLiteral(": ") + config.current_version);
+                    statusBar()->showMessage(QStringLiteral("Não foi possível verificar a versão instalada."), 8000);
+                    return;
+                }
+                if (*comparison <= 0) {
+                    scanInstalledApps();
+                    // Keep the emitted release reference valid until signal delivery ends.
+                    QTimer::singleShot(0, service, &creative_suite::updater::UpdateService::checkForUpdates);
+                    return;
+                }
+            }
             if (!m_updateRuntime->installOrWait(entry.app_id, config.install_path,
                     config.executable_name, installer, entry.sha256_hex, config.installed)) {
                 return;
@@ -241,7 +311,7 @@ void MainWindow::configureUpdateServices() {
     }
     QTimer::singleShot(0, this, [this] {
         for (const auto& app : m_catalog.apps()) {
-            const auto registration = creative_suite::updater::readInstalledApplication(app.id());
+            const auto registration = m_updateDependencies.read_installation(app.id());
             if (!registration || !registration->rollback_available ||
                 !registration->needs_launch_check) continue;
 
@@ -258,6 +328,7 @@ void MainWindow::configureUpdateServices() {
             if (recovery.clickedButton() == restore) {
                 QString error;
                 if (creative_suite::updater::restorePreviousVersion(app.id(), &error)) {
+                    onRefreshApps();
                     QMessageBox::information(this, QStringLiteral("Versão restaurada"),
                         QStringLiteral("A versão anterior do %1 foi restaurada.").arg(app.name()));
                 } else {
@@ -400,6 +471,11 @@ void MainWindow::onDownloadApp(const QString& appId) {
     if (!service || !m_updateRuntime) {
         statusBar()->showMessage(QStringLiteral("O atualizador não está disponível para este aplicativo."), 8000);
         return;
+    }
+    scanInstalledApps();
+    if (service->state() != creative_suite::updater::UpdateState::Downloading &&
+        service->state() != creative_suite::updater::UpdateState::Checking) {
+        service->checkForUpdates();
     }
     creative_suite::updater::UpdateDialog dialog(service, m_updateRuntime, this);
     dialog.exec();

@@ -602,6 +602,14 @@ UpdateService::~UpdateService() {
     releaseDownloadLock();
 }
 
+void UpdateService::setInstallationState(bool installed, QString current_version,
+                                         QString install_path, QString executable_name) {
+    m_config.installed = installed;
+    m_config.current_version = installed ? std::move(current_version) : QString{};
+    m_config.install_path = installed ? std::move(install_path) : QString{};
+    m_config.executable_name = std::move(executable_name);
+}
+
 void UpdateService::setState(UpdateState state) {
     if (m_state == state) return;
     m_state = state;

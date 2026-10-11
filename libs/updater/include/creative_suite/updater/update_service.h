@@ -144,6 +144,12 @@ public:
     [[nodiscard]] const std::optional<ReleaseEntry>& release() const noexcept { return m_release; }
     [[nodiscard]] QString downloadedInstallerPath() const { return m_downloaded_installer_path; }
 
+    // Call on the QObject thread with the caller's latest installation snapshot.
+    // Updates configuration only: active requests, package identity, locks and
+    // signal arguments remain valid. Recheck the catalog to refresh the offer.
+    // For an unregistered app, version/path are cleared; supply its default exe.
+    void setInstallationState(bool installed, QString current_version,
+                              QString install_path, QString executable_name);
     void checkForUpdates();
     void downloadUpdate();
     void cancelDownload();

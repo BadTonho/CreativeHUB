@@ -105,6 +105,10 @@ if(BUILD_IMAGE_EDITOR OR BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
 endif()
 
 if(WIN32)
+    add_executable(hub-update-installation-refresh-test test_update_installation_refresh.cpp)
+    target_link_libraries(hub-update-installation-refresh-test PRIVATE creative-suite-hub-core Qt6::Widgets)
+    target_compile_features(hub-update-installation-refresh-test PRIVATE cxx_std_20)
+    add_creative_suite_test(NAME hub-update-installation-refresh-test COMMAND hub-update-installation-refresh-test)
     get_target_property(QT_HUB_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
     if(NOT QT_HUB_CORE_DLL)
         get_target_property(QT_HUB_CORE_DLL Qt6::Core IMPORTED_LOCATION)
@@ -132,6 +136,10 @@ if(WIN32)
             VERBATIM
         )
     endforeach()
+    add_custom_command(TARGET hub-update-installation-refresh-test POST_BUILD
+        COMMAND "${QT_HUB_DEPLOY_TOOL}" --no-translations --no-compiler-runtime
+            "$<TARGET_FILE:hub-update-installation-refresh-test>"
+        VERBATIM)
     if(TARGET hub-backup-format-test)
         add_custom_command(TARGET hub-backup-format-test POST_BUILD
             COMMAND "${QT_HUB_DEPLOY_TOOL}" --no-translations --no-compiler-runtime

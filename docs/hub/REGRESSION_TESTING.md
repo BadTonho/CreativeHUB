@@ -23,6 +23,7 @@ and condition. Debug and macOS/Linux execution of this change remain pending.
 
 | Behavior | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
+| Live registered-installation refresh and next-update installer arguments | `apps/hub/tests/test_update_installation_refresh.cpp` (`hub-update-installation-refresh-test`, Windows only), registered in `apps/hub/tests/CMakeLists.txt`; `libs/updater/tests/update_service_test.cpp` (`updater-service-test`) | Automated coverage present for all three editors, first install, a subsequent update without restart, version/path/executable changes, removed registrations, rollback snapshots, stale-package suppression, invalid-version logging, active downloads, and reopening update details. Native installer lifecycle and GUI acceptance remain **pending**; follow [WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md). |
 | Published versions and per-app update status | `apps/hub/tests/test_app_catalog.cpp` (`hub-catalog-test`) | Hub UI refresh and version labels in a packaged Windows build: **pending**. |
 | Catalog parsing, semantic version comparison, malformed assets and sizes, and URL resolution | `libs/updater/tests/release_catalog_test.cpp` (`updater-catalog-test`) | Covered by the shared updater test suite; actual GitHub Release availability remains a release operation. |
 | Download, resume, cancellation, network failure, incomplete/hash rejection, and one-download lock | `libs/updater/tests/update_service_test.cpp` (`updater-service-test`) | Network interruption and resume through the visible Hub dialog: **pending**. |
@@ -36,6 +37,21 @@ and condition. Debug and macOS/Linux execution of this change remain pending.
 | Backup identity, unique creation, persisted source paths, legacy compatibility, and origin labels | `apps/hub/tests/test_backup_manager.cpp`, `test_backups_page.cpp` (`hub-backup-manager-test`, `hub-backups-page-test`), registered in `apps/hub/tests/CMakeLists.txt` | Automated coverage present for same-named projects, repeated creation, restart, malformed records, source labels, and unknown legacy origins. Native folder-opening and new label presentation remain **pending**; follow [BACKUPS.md](BACKUPS.md). |
 | Snapshot relative references, supported document versions, and relocation for restoration | `apps/hub/tests/test_backup_manager.cpp` and `test_backup_formats.cpp` (`hub-backup-manager-test`, `hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; real Image/Video/Motion persistence producers and consumers | Automated coverage present. Native UI restoration checks and macOS/Linux execution remain **pending**; see [BACKUPS.md](BACKUPS.md) for the contract and manual steps. |
 | Application discovery, sibling configuration directories, bundle paths, fallbacks, and installation-path priority | `apps/hub/tests/test_app_launcher.cpp` (`hub-launcher-test`, `hub-launcher-build-layout-test`), registered in `apps/hub/tests/CMakeLists.txt`; the integration test uses the enabled editors' actual CMake outputs | Automated coverage present. Native launch and project-open checks for each editor are documented below and remain **pending**, as do Debug and macOS/Linux execution. |
+
+## Installation refresh verification on 2026-10-11
+
+The new Hub window regression failed before the fix: its service retained
+0.1.0 after the simulated installation changed to 0.1.1 and the Hub refreshed.
+After the fix, all four Release applications and the affected tests built.
+All 21 selected CTest entries passed on Windows/Release in 33.25 seconds:
+14 Hub tests, three shared updater tests, Video main-window, Image UI, and
+Motion startup/UI. Tests ran outside the tool filesystem restriction with
+isolated registry/catalog/process adapters; no installer or release package
+was generated or executed. The canonical Hub executable was rebuilt at
+`build/apps/hub/Release/creative-suite-hub.exe` (2026-10-11 12:38:33 UTC).
+Native installer lifecycle, GUI acceptance, Debug, and macOS/Linux execution
+remain pending. Follow the live-refresh checklist in
+[WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md).
 
 ## Backup verification on 2026-10-10
 

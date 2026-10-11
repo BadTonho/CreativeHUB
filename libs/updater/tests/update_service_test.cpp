@@ -146,6 +146,9 @@ private slots:
     void catalogNetworkFailureLeavesInstalledVersionUsable();
     void unchangedVersionDoesNotOfferUpdate();
     void onlyOneSuiteDownloadCanRunAtOnce();
+    void installationRefreshDuringCatalogRequestUsesNewVersion();
+    void installationRefreshPreservesActiveDownload();
+    void unregisteredInstallationClearsPreviousIdentity();
 };
 
 void UpdateServiceTest::resumesAfterNetworkFailure() {
@@ -323,6 +326,76 @@ void UpdateServiceTest::onlyOneSuiteDownloadCanRunAtOnce() {
     QCOMPARE(second_network.requests.size(), 1);
     first.cancelDownload();
     QCOMPARE(first.state(), UpdateState::UpdateAvailable);
+}
+
+void UpdateServiceTest::installationRefreshDuringCatalogRequestUsesNewVersion() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    NetworkHarness network;
+    UpdateService service(makeConfig(directory.path()), network.handler());
+    QSignalSpy available(&service, &UpdateService::updateAvailable);
+    service.checkForUpdates();
+    service.setInstallationState(true, "0.1.1", directory.filePath("new destination"), "new-editor.exe");
+    QCOMPARE(service.state(), UpdateState::Checking);
+    const QByteArray installer("installer");
+    network.replies[0]->beginResponse(200);
+    network.replies[0]->pushData(makeCatalog(installer,
+        QCryptographicHash::hash(installer, QCryptographicHash::Sha256).toHex()));
+    network.replies[0]->finishResponse();
+    QCOMPARE(service.state(), UpdateState::UpToDate);
+    QCOMPARE(available.size(), 0);
+    QCOMPARE(service.config().current_version, QString("0.1.1"));
+    QCOMPARE(service.config().install_path, directory.filePath("new destination"));
+    QCOMPARE(service.config().executable_name, QString("new-editor.exe"));
+}
+
+void UpdateServiceTest::installationRefreshPreservesActiveDownload() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    NetworkHarness network;
+    const auto original = makeConfig(directory.path());
+    UpdateService service(original, network.handler());
+    const QByteArray installer("installer bytes after registration refresh");
+    QSignalSpy ready(&service, &UpdateService::downloadReady);
+    QVERIFY(prepareDownload(service, network, makeCatalog(installer,
+        QCryptographicHash::hash(installer, QCryptographicHash::Sha256).toHex())));
+    network.replies[1]->beginResponse(200);
+    network.replies[1]->pushData(installer.left(7));
+    service.setInstallationState(true, "0.1.1", directory.filePath("new"), "relocated.exe");
+    QCOMPARE(service.state(), UpdateState::Downloading);
+    QCOMPARE(service.release()->version, QString("0.1.1"));
+    QCOMPARE(network.requests.size(), 2);
+    QCOMPARE(service.config().app_id, original.app_id);
+    QCOMPARE(service.config().app_name, original.app_name);
+    QCOMPARE(service.config().catalog_url, original.catalog_url);
+    QCOMPARE(service.config().release_asset_base_url, original.release_asset_base_url);
+    QCOMPARE(service.config().download_directory, original.download_directory);
+    network.replies[1]->pushData(installer.mid(7));
+    network.replies[1]->finishResponse();
+    QCOMPARE(service.state(), UpdateState::ReadyToInstall);
+    QCOMPARE(ready.size(), 1);
+    QFile verified(service.downloadedInstallerPath());
+    QVERIFY(verified.open(QIODevice::ReadOnly));
+    QCOMPARE(verified.readAll(), installer);
+}
+
+void UpdateServiceTest::unregisteredInstallationClearsPreviousIdentity() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    NetworkHarness network;
+    UpdateService service(makeConfig(directory.path()), network.handler());
+    service.setInstallationState(false, "old ignored version", "old ignored path", "default.exe");
+    QVERIFY(!service.config().installed);
+    QVERIFY(service.config().current_version.isEmpty());
+    QVERIFY(service.config().install_path.isEmpty());
+    QCOMPARE(service.config().executable_name, QString("default.exe"));
+    service.checkForUpdates();
+    const QByteArray installer("installer");
+    network.replies[0]->beginResponse(200);
+    network.replies[0]->pushData(makeCatalog(installer,
+        QCryptographicHash::hash(installer, QCryptographicHash::Sha256).toHex()));
+    network.replies[0]->finishResponse();
+    QCOMPARE(service.state(), UpdateState::UpdateAvailable);
 }
 
 QTEST_GUILESS_MAIN(UpdateServiceTest)

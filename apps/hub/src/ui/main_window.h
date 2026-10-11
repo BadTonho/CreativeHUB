@@ -16,6 +16,7 @@
 #include <QMainWindow>
 #include <QHash>
 #include <QStackedWidget>
+#include <creative_suite/updater/update_service.h>
 
 namespace creative_suite::updater {
 class UpdateRuntime;
@@ -28,7 +29,15 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
+    // Optional I/O adapters run on the GUI thread. Factories must parent their
+    // objects to the supplied owner; empty callbacks use the production I/O.
+    struct UpdateDependencies {
+        std::function<std::optional<creative_suite::updater::InstalledApplication>(const QString&)> read_installation;
+        std::function<creative_suite::updater::UpdateService*(creative_suite::updater::UpdateServiceConfig, QObject*)> create_service;
+        std::function<creative_suite::updater::UpdateRuntime*(QObject*)> create_runtime;
+    };
     explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(UpdateDependencies dependencies, QWidget* parent = nullptr);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -46,8 +55,10 @@ private:
     void setupUi();
     void scanInstalledApps();
     void configureUpdateServices();
+    void refreshServiceInstallation(creative_suite::updater::UpdateService* service);
 
     AppCatalog m_catalog;
+    UpdateDependencies m_updateDependencies;
     AppLauncher m_launcher;
     RecentProjectsManager m_recentProjectsManager;
 
