@@ -1,3 +1,4 @@
+#include "image_editor_ui_wait.h"
 #include "image_editor_window.h"
 #include "image_export_dialog.h"
 #include "image_export_controller.h"

@@ -18,6 +18,9 @@
 #include "../diagnostics/performance_metrics_panel.h"
 
 #include <QAction>
+#include <QActionGroup>
+#include <QPointer>
+#include <QUuid>
 #include <QApplication>
 #include <QAbstractSpinBox>
 #include <QCryptographicHash>
@@ -66,6 +69,8 @@ namespace image_editor {
 
 struct ImageEditorDocumentTab {
     ImageDocumentSession session;
+    QHash<QString,QImage> thumbnails, mask_thumbnails;
+    QString rendering_identity = QUuid::createUuid().toString(QUuid::WithoutBraces);
     QWidget* page = nullptr;
     ImageCanvas* canvas = nullptr;
     QStringList selected_object_ids;
@@ -207,6 +212,30 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
       performance_log_(std::move(performance_log_directory)),
       recovery_store_(std::move(recovery_data_directory)) {
     background_task_pool_.setMaxThreadCount(2);
+    render_controller_ = new ImageRenderController(this);
+    connect(render_controller_, &ImageRenderController::renderFailed, this,
+        [this](const QString& operation, const QString& cause) { logger_.logError(operation, cause); });
+    connect(render_controller_, &ImageRenderController::frameReady, this,
+        [this](const InteractiveFrame& frame) {
+            if (!hasActiveDocumentTab() || document_tabs_.at(active_document_tab_)->rendering_identity != frame.document_id) return;
+            latest_render_frame_=frame;
+            // Diagnostics retain counters and timing only, never a texture lease.
+            latest_render_frame_.texture.reset(); latest_render_frame_.image={};
+            latest_render_frame_.thumbnails.clear(); latest_render_frame_.mask_thumbnails.clear();
+            auto& metrics=ImageEditorPerformanceMetrics::instance();
+            metrics.record(ImageEditorPerformanceStage::InteractiveRender,frame.latency_nanoseconds);
+            if(frame.texture) {
+                metrics.record(ImageEditorPerformanceStage::GpuUpload,frame.timings.upload_nanoseconds);
+                metrics.record(ImageEditorPerformanceStage::GpuDrawSubmission,frame.timings.draw_submission_nanoseconds);
+                metrics.record(ImageEditorPerformanceStage::GpuFenceSubmission,frame.timings.producer_fence_submission_nanoseconds);
+            }
+            activeCanvas()->setRenderFrame(frame);
+            if (!frame.transient) {
+                auto* tab=document_tabs_.at(active_document_tab_);
+                tab->thumbnails=frame.thumbnails; tab->mask_thumbnails=frame.mask_thumbnails;
+                layer_panel_->setThumbnails(tab->thumbnails, tab->mask_thumbnails);
+            }
+        });
     empty_document_state_ = std::make_unique<ImageEditorDocumentTab>();
     setWindowTitle(QStringLiteral("Image Editor"));
     resize(1180, 760);
@@ -466,6 +495,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
 }
 
 ImageEditorWindow::~ImageEditorWindow() {
+    for (auto* tab : document_tabs_) if (tab->canvas) tab->canvas->releaseGpuFrames();
+    delete render_controller_; render_controller_ = nullptr;
     background_task_pool_.waitForDone();
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
     if (performance_metrics_timer_ != nullptr) performance_metrics_timer_->stop();
@@ -481,81 +512,45 @@ ImageEditorWindow::~ImageEditorWindow() {
     for (auto* tab : document_tabs_) delete tab;
 }
 
-void ImageEditorWindow::requestBlurPreview(
-    ImageCanvas* canvas, const QVector<QPointF>& points,
-    int diameter, int radius) {
-    if (canvas == nullptr || activeCanvas() != canvas) return;
-    BlurPreviewRequest request;
-    request.canvas = canvas;
-    request.points = points;
-    request.diameter = diameter;
-    request.radius = radius;
-    request.clipping_path = canvas->areaSelectionClipPath();
-    request.mask_target = editingMask();
-    request.sequence = ++blur_preview_sequence_;
-    blur_preview_canvas_ = canvas;
-
-    if (blur_preview_running_) {
-        pending_blur_preview_ = std::move(request);
-        return;
-    }
-    startBlurPreview(std::move(request));
+void ImageEditorWindow::requestCanvasRender(const ImagePreview& preview) {
+    if (!render_controller_ || !hasActiveDocumentTab() || !activeSession().hasSource()) return;
+    render_controller_->request(activeSession().interactiveSnapshot(preview),
+        document_tabs_.at(active_document_tab_)->rendering_identity, preview.kind != ImagePreviewKind::None);
 }
-
-void ImageEditorWindow::cancelBlurPreview(ImageCanvas* canvas) {
-    if (canvas == nullptr) return;
-    canvas->setTransientImage({});
-    if (blur_preview_canvas_ != canvas) return;
-    ++blur_preview_sequence_;
-    pending_blur_preview_.reset();
-    blur_preview_canvas_ = nullptr;
+void ImageEditorWindow::clearInteractivePreview(ImageCanvas* canvas) {
+    if (!canvas || activeCanvas() != canvas || !render_controller_) return;
+    render_controller_->cancel(); canvas->setTransientImage({}); requestCanvasRender();
 }
-
-void ImageEditorWindow::startBlurPreview(BlurPreviewRequest request) {
-    if (request.sequence != blur_preview_sequence_ ||
-        request.canvas == nullptr || activeCanvas() != request.canvas) {
-        return;
-    }
-    auto render_task = activeSession().makeBlurStrokePreviewTask(
-        request.points, request.diameter, request.radius,
-        std::move(request.clipping_path), request.mask_target);
-    if (!render_task) return;
-
-    blur_preview_running_ = true;
-    const std::uint64_t sequence = request.sequence;
-    ImageCanvas* const canvas = request.canvas;
-    background_task_pool_.start(QRunnable::create(
-        [this, sequence, canvas, render_task = std::move(render_task)]() mutable {
-            QImage image;
-            try {
-                image = render_task();
-            } catch (...) {
-                // A failed preview is discarded; the committed document remains untouched.
-            }
-            QMetaObject::invokeMethod(this,
-                [this, sequence, canvas, image = std::move(image)]() mutable {
-                    finishBlurPreview(sequence, canvas, std::move(image));
-                }, Qt::QueuedConnection);
-        }));
+void ImageEditorWindow::requestBlurPreview(ImageCanvas* canvas, const QVector<QPointF>& points, int diameter, int radius) {
+    if (!canvas || activeCanvas() != canvas) return;
+    ImagePreview preview; preview.kind = ImagePreviewKind::Blur; preview.points = points;
+    preview.diameter = diameter; preview.radius = radius; preview.mask = editingMask();
+    preview.clipping = canvas->areaSelectionClipPath(); requestCanvasRender(preview);
 }
-
-void ImageEditorWindow::finishBlurPreview(
-    std::uint64_t sequence, ImageCanvas* canvas, QImage image) {
-    blur_preview_running_ = false;
-    if (sequence == blur_preview_sequence_ &&
-        blur_preview_canvas_ == canvas && activeCanvas() == canvas &&
-        !image.isNull()) {
-        canvas->setTransientImage(std::move(image));
-    }
-    if (!pending_blur_preview_.has_value()) return;
-    BlurPreviewRequest next = std::move(*pending_blur_preview_);
-    pending_blur_preview_.reset();
-    if (next.sequence == blur_preview_sequence_ && activeCanvas() == next.canvas)
-        startBlurPreview(std::move(next));
-}
+void ImageEditorWindow::cancelBlurPreview(ImageCanvas* canvas) { clearInteractivePreview(canvas); }
 
 void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
     if (canvas == nullptr) return;
+    canvas->setAsyncSampling(true);
+    connect(canvas, &ImageCanvas::gpuPresentationFailed, this, [this, canvas](const QString& cause) {
+        if (render_controller_) { render_controller_->disableGpu(cause); canvas->releaseGpuFrames(); requestCanvasRender(); }
+    });
+    connect(canvas, &ImageCanvas::colorSampleRequested, this, [this, canvas](const QPoint& pixel) {
+        if (activeCanvas() != canvas) return;
+        const auto snapshot = activeSession().interactiveSnapshot();
+        const auto sequence = render_controller_->sequence(); const QPointer<ImageCanvas> target(canvas);
+        background_task_pool_.start(QRunnable::create([this, target, snapshot, sequence, pixel] {
+            const auto image = ImageDocumentRenderer::composite(snapshot.document, snapshot.source_image, snapshot.raster_images);
+            const bool valid = !image.isNull() && image.rect().contains(pixel);
+            const QColor color = valid ? image.pixelColor(pixel) : QColor();
+            QMetaObject::invokeMethod(this, [this, target, sequence, color, valid] {
+                if (target && activeCanvas() == target && render_controller_ && render_controller_->sequence() == sequence) {
+                    if (valid && color.alpha() != 0) tool_sidebar_->setBrushColor(color);
+                    else if (!valid) logger_.logError(QStringLiteral("sample_color"), QStringLiteral("The committed document could not be sampled."));
+                }
+            }, Qt::QueuedConnection);
+        }));
+    });
     connect(canvas, &ImageCanvas::colorSampled, tool_sidebar_,
             &ToolSidebar::setBrushColor);
     connect(canvas, &ImageCanvas::cropSelected, this,
@@ -623,11 +618,12 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
     connect(canvas, &ImageCanvas::linearGradientPreviewRequested, this,
             [this, canvas](const QPointF& start, const QPointF& end, const QColor& color) {
                 if (activeCanvas() == nullptr || activeCanvas() != canvas) return;
-                canvas->setTransientImage(activeSession().renderedImageWithLinearGradient(
-                    start, end, color, canvas->areaSelectionClipPath(), editingMask()));
+                ImagePreview preview; preview.kind = ImagePreviewKind::Gradient;
+                preview.start = start; preview.end = end; preview.color = color; preview.mask = editingMask();
+                preview.clipping = canvas->areaSelectionClipPath(); requestCanvasRender(preview);
             });
-    connect(canvas, &ImageCanvas::linearGradientPreviewCleared, canvas, [canvas]() {
-        canvas->setTransientImage({});
+    connect(canvas, &ImageCanvas::linearGradientPreviewCleared, this, [this, canvas]() {
+        clearInteractivePreview(canvas);
     });
     connect(canvas, &ImageCanvas::linearGradientRequested, this,
             [this, canvas](const QPointF& start, const QPointF& end, const QColor& color) {
@@ -647,25 +643,20 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
                     points, diameter, radius, canvas->areaSelectionClipPath());
             });
     connect(canvas, &ImageCanvas::erasePreviewRequested, this,
-            [this, canvas](const QVector<QPointF>& points, int diameter) {
-                if (activeCanvas() == nullptr) return;
-                activeCanvas()->setTransientImage(
-                    editingMask()
-                        ? activeSession().renderedImageWithMaskStroke(
-                            points, Qt::black, diameter, canvas->areaSelectionClipPath())
-                        : activeSession().renderedImageWithEraseStroke(
-                            points, diameter, canvas->areaSelectionClipPath()));
-            });
+        [this, canvas](const QVector<QPointF>& points, int diameter) {
+            if (activeCanvas() != canvas) return;
+            ImagePreview preview; preview.kind = ImagePreviewKind::Erase; preview.points = points;
+            preview.color = Qt::black; preview.diameter = diameter; preview.mask = editingMask();
+            preview.clipping = canvas->areaSelectionClipPath(); requestCanvasRender(preview);
+        });
     connect(canvas, &ImageCanvas::maskPaintPreviewRequested, this,
-            [this, canvas](const QVector<QPointF>& points, const QColor& color, int diameter) {
-                if (activeCanvas() != nullptr)
-                    activeCanvas()->setTransientImage(
-                        activeSession().renderedImageWithMaskStroke(
-                            points, color, diameter, canvas->areaSelectionClipPath()));
-            });
-    connect(canvas, &ImageCanvas::erasePreviewCleared, canvas, [canvas]() {
-        canvas->setTransientImage({});
-    });
+        [this, canvas](const QVector<QPointF>& points, const QColor& color, int diameter) {
+            if (activeCanvas() != canvas) return;
+            ImagePreview preview; preview.kind = ImagePreviewKind::MaskPaint; preview.points = points;
+            preview.color = color; preview.diameter = diameter; preview.mask = true;
+            preview.clipping = canvas->areaSelectionClipPath(); requestCanvasRender(preview);
+        });
+    connect(canvas, &ImageCanvas::erasePreviewCleared, this, [this, canvas]() { clearInteractivePreview(canvas); });
     connect(canvas, &ImageCanvas::eraseStrokeSelected, this,
             [this, canvas](const QVector<QPointF>& points, int diameter) {
                 handleEraseStroke(points, diameter, canvas->areaSelectionClipPath());
@@ -684,8 +675,8 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
             [this](const ImageTextData& text, bool existing) {
                 handleTextEditingStarted(text, existing);
             });
-    connect(canvas, &ImageCanvas::textEditingCancelled, canvas, [canvas]() {
-        canvas->setTransientImage({});
+    connect(canvas, &ImageCanvas::textEditingCancelled, this, [this, canvas]() {
+        clearInteractivePreview(canvas);
     });
     connect(canvas, &ImageCanvas::objectsSelected, this,
             [this](const QStringList& object_ids, const QString& layer_id) {
@@ -726,15 +717,18 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
                 for (const auto& object : activeSession().visibleObjects())
                     if (object_ids.contains(imageObjectId(object.operation)) &&
                         object.operation.kind == OperationKind::RasterImage) {
-                        activeCanvas()->setTransientImage(activeSession().renderedImage());
+                        requestCanvasRender();
                         return;
                     }
-                activeCanvas()->setTransientImage(activeSession().renderedImageWithoutObjects(object_ids));
+                ImagePreview preview; preview.kind = ImagePreviewKind::ExcludeObjects; preview.excluded = object_ids;
+                requestCanvasRender(preview);
             });
     connect(canvas, &ImageCanvas::objectsPreviewRequested, this,
             [this](const QVector<ImageObjectPlacement>& objects) {
-                if (activeCanvas() != nullptr)
-                    activeCanvas()->setTransientImage(activeSession().renderedImageWithObjects(objects));
+                if (activeCanvas() != nullptr) {
+                    ImagePreview preview; preview.kind = ImagePreviewKind::Objects; preview.objects = objects;
+                    requestCanvasRender(preview);
+                }
             });
     connect(canvas, &ImageCanvas::imagesDropped, this,
             [this](const QStringList& paths, const QPointF& center) {
@@ -772,6 +766,11 @@ int ImageEditorWindow::addDocumentTab(bool activate) {
 }
 
 void ImageEditorWindow::activateDocumentTab(int index) {
+    if (render_controller_) render_controller_->cancel();
+    if (activeCanvas() && index != active_document_tab_) {
+        activeCanvas()->releaseGpuFrames();
+        if (hasActiveDocumentTab()) { activeTabState().thumbnails.clear(); activeTabState().mask_thumbnails.clear(); }
+    }
     if (index < 0 || index >= document_tabs_.size()) {
         if (active_document_tab_ >= 0 && activeCanvas() != nullptr)
             activeCanvas()->commitTextEditing();
@@ -804,6 +803,7 @@ void ImageEditorWindow::activateDocumentTab(int index) {
 }
 
 void ImageEditorWindow::closeDocumentTab(int index) {
+    if (render_controller_) render_controller_->cancel();
     if (importing_ || index < 0 || index >= document_tabs_.size()) return;
     auto* closing = document_tabs_.at(index);
     if (!closing->linked_document_path.isEmpty() ||
@@ -1317,7 +1317,8 @@ void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
 
 void ImageEditorWindow::handleTextEditingStarted(const ImageTextData& text, bool existing) {
     if (existing) {
-        activeCanvas()->setTransientImage(activeSession().renderedImageWithoutObjects({text.id}));
+        ImagePreview preview; preview.kind = ImagePreviewKind::ExcludeObjects; preview.excluded = {text.id};
+        requestCanvasRender(preview);
     }
     text_style_.font_family = text.font_family;
     text_style_.font_pixel_size = text.font_pixel_size;
@@ -1997,6 +1998,23 @@ void ImageEditorWindow::createActions() {
     view_menu->addAction(performance_panel_action);
 
     auto* settings_menu = menuBar()->addMenu(QStringLiteral("Settings"));
+    auto* rendering_menu = settings_menu->addMenu(QStringLiteral("Rendering"));
+    auto* rendering_group = new QActionGroup(this);
+    QSettings rendering_settings;
+    const bool automatic = rendering_settings.value(QStringLiteral("ImageEditor/Rendering/automatic"), true).toBool();
+    for (const auto& option : {QStringLiteral("Automatic"), QStringLiteral("CPU")}) {
+        auto* action = rendering_menu->addAction(option); action->setCheckable(true); rendering_group->addAction(action);
+        const bool use_gpu = option == QStringLiteral("Automatic"); action->setChecked(use_gpu == automatic);
+        action->setObjectName(use_gpu ? QStringLiteral("automaticRenderingAction") : QStringLiteral("cpuRenderingAction"));
+        connect(action, &QAction::triggered, this, [this, use_gpu] {
+            QSettings settings; settings.setValue(QStringLiteral("ImageEditor/Rendering/automatic"), use_gpu); settings.sync();
+            if (settings.status() != QSettings::NoError) logger_.logError(QStringLiteral("save_rendering_preferences"), QStringLiteral("Rendering preferences could not be saved."));
+            render_controller_->setAutomatic(use_gpu);
+            for (auto* tab : document_tabs_) tab->canvas->releaseGpuFrames();
+            requestCanvasRender();
+        });
+    }
+    render_controller_->setAutomatic(automatic);
     settings_menu->setObjectName(QStringLiteral("settingsMenu"));
     performance_metrics_action_ = settings_menu->addAction(
         QStringLiteral("Collect Performance Metrics"));
@@ -2136,10 +2154,9 @@ void ImageEditorWindow::updateLayerPanel() {
             logger_.logError(QStringLiteral("load_imported_image"), it.value(), raster.source_path);
         }
     loggedRasterProblems() = problems;
-    const QSize size(LayerPanel::kThumbnailWidth, LayerPanel::kThumbnailHeight);
     layer_panel_->setDocument(activeSession().data(), activeSession().selectedLayerId(),
-        activeSession().selectedGroupId(), activeSession().renderedLayerThumbnails(size),
-        activeSession().renderedLayerMaskThumbnails(size), selectedMaskLayerId(), problems,
+        activeSession().selectedGroupId(), document_tabs_.at(active_document_tab_)->thumbnails,
+        document_tabs_.at(active_document_tab_)->mask_thumbnails, selectedMaskLayerId(), problems,
         selectedStackItems());
 }
 
@@ -2181,8 +2198,10 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     }
     if (!editingMask()) selectedMaskLayerId().clear();
     activeCanvas()->setMaskEditing(editingMask());
-    const QImage rendered = activeSession().renderedImage();
-    activeCanvas()->setImage(rendered, !preserveCanvasView);
+    const QSize rendered = ImageDocumentRenderer::documentSize(activeSession().data(), activeSession().data().source_size);
+    activeCanvas()->setDocumentGeometry(rendered, !preserveCanvasView);
+    activeCanvas()->setTransientImage({});
+    requestCanvasRender();
     tool_sidebar_->setDocumentAvailable(activeSession().hasSource());
     tool_sidebar_->setPaintingAllowed(activeSession().hasSource() &&
                                       activeSession().selectedLayerIsEditable());
@@ -2226,7 +2245,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
             : QStringLiteral("No image open"));
         return;
     }
-    const QSize size = rendered.size();
+    const QSize size = rendered;
     status_label_->setText(QStringLiteral("%1 × %2 px  |  %3%")
         .arg(size.width()).arg(size.height())
         .arg(static_cast<int>(activeCanvas()->zoomFactor() * 100.0)));
@@ -2311,7 +2330,7 @@ void ImageEditorWindow::createNewCanvas(bool new_tab) {
 void ImageEditorWindow::resizeCanvas() {
     if (activeCanvas() == nullptr || !activeSession().hasSource()) return;
     activeCanvas()->commitTextEditing();
-    CanvasSizeDialog dialog(activeSession().renderedImage().size(), this);
+    CanvasSizeDialog dialog(ImageDocumentRenderer::documentSize(activeSession().data(), activeSession().data().source_size), this);
     if (dialog.exec() != QDialog::Accepted) return;
     QString error;
     const QPoint old_offset = activeSession().data().canvas_base_offset;
@@ -2911,6 +2930,10 @@ void ImageEditorWindow::writePerformanceMetricsSummary(
     QJsonObject entry{
         {QStringLiteral("schema_version"), 1},
         {QStringLiteral("record_type"), QStringLiteral("session_snapshot")},
+        {QStringLiteral("interactive_gpu_known_bytes"),static_cast<qint64>(latest_render_frame_.gpu_bytes)},
+        {QStringLiteral("interactive_cpu_cache_bytes"),static_cast<qint64>(latest_render_frame_.cpu_cache_bytes)},
+        {QStringLiteral("interactive_uploaded_bytes_last_frame"),static_cast<qint64>(latest_render_frame_.timings.uploaded_bytes)},
+        {QStringLiteral("interactive_readback_bytes_last_frame"),static_cast<qint64>(latest_render_frame_.timings.readback_bytes)},
         {QStringLiteral("timestamp_utc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
         {QStringLiteral("application_version"), QCoreApplication::applicationVersion()},
         {QStringLiteral("os"), QSysInfo::prettyProductName()},

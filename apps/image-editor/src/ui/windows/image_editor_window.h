@@ -17,6 +17,7 @@
 #include <QMainWindow>
 #include <QMetaObject>
 #include <QThreadPool>
+#include "../rendering/image_render_controller.h"
 #include <QStringList>
 #include <QVector>
 
@@ -68,24 +69,13 @@ protected:
 private:
     enum class OpenTarget { CurrentTab, NewTab };
 
-    struct BlurPreviewRequest {
-        ImageCanvas* canvas = nullptr;
-        QVector<QPointF> points;
-        int diameter = 0;
-        int radius = 0;
-        std::optional<QPainterPath> clipping_path;
-        bool mask_target = false;
-        std::uint64_t sequence = 0;
-    };
-
     void connectCanvas(ImageCanvas* canvas);
     void requestBlurPreview(ImageCanvas* canvas,
                             const QVector<QPointF>& points,
                             int diameter, int radius);
     void cancelBlurPreview(ImageCanvas* canvas);
-    void startBlurPreview(BlurPreviewRequest request);
-    void finishBlurPreview(std::uint64_t sequence, ImageCanvas* canvas,
-                           QImage image);
+    void requestCanvasRender(const ImagePreview& preview = {});
+    void clearInteractivePreview(ImageCanvas* canvas);
     [[nodiscard]] int addDocumentTab(bool activate = true);
     void activateDocumentTab(int index);
     void closeDocumentTab(int index);
@@ -196,11 +186,10 @@ private:
     std::uint64_t performance_log_sample_count_ = 0;
     bool performance_log_error_reported_ = false;
     QThreadPool background_task_pool_;
-    std::optional<BlurPreviewRequest> pending_blur_preview_;
-    ImageCanvas* blur_preview_canvas_ = nullptr;
-    std::uint64_t blur_preview_sequence_ = 0;
+    ImageRenderController* render_controller_ = nullptr;
+    InteractiveFrame latest_render_frame_;
     std::uint64_t magic_wand_sequence_ = 0;
-    bool blur_preview_running_ = false;
+
     QMetaObject::Connection focus_changed_connection_;
     QAction* relink_action_ = nullptr;
     QAction* import_layer_action_ = nullptr;

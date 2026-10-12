@@ -1,3 +1,4 @@
+#include "image_editor_ui_wait.h"
 #include "image_editor_window.h"
 #include "image_canvas.h"
 #include "layer_panel.h"
@@ -8,6 +9,7 @@
 #include <QFile>
 #include <QLineEdit>
 #include <QMenu>
+
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSignalSpy>
@@ -23,6 +25,7 @@
 using namespace image_editor;
 
 bool testDeletionUi(const QString& root) {
+    std::cerr << "Running testDeletionUi.\n";
     const auto check = [](bool ok, const char* cause) {
         if (!ok) std::cerr << "Deletion UI: " << cause << '\n';
         return ok;
@@ -76,7 +79,7 @@ bool testDeletionUi(const QString& root) {
     canvas = window.findChild<ImageCanvas*>();
     if (!canvas) return false;
     selection->setChecked(true);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const auto row = [&](const QString& name) -> QTreeWidgetItem* {
         for (QTreeWidgetItemIterator it(tree); *it; ++it) if ((*it)->text(0) == name) return *it;
         return nullptr;
@@ -89,7 +92,7 @@ bool testDeletionUi(const QString& root) {
         QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
             QPoint(rect.left() + 16, rect.center().y()));
         canvas->setFocus();
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
         return objects->isEnabled() && contextual->isEnabled();
     };
     ImageDocumentSession persisted;
@@ -133,7 +136,7 @@ bool testDeletionUi(const QString& root) {
     auto* rename = window.findChild<QToolButton*>("renameImageLayerButton");
     if (!choose_image() || !rename) return false;
     rename->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto* editor = qobject_cast<QLineEdit*>(QApplication::focusWidget());
     if (!check(editor && !contextual->isEnabled(), "Rename did not protect Delete.")) return false;
     editor->setText("Layer"); editor->setCursorPosition(0);
@@ -141,7 +144,7 @@ bool testDeletionUi(const QString& root) {
     if (!check(editor->text() == "ayer" && tree->topLevelItemCount() == 3,
         "Delete removed a layer during rename.")) return false;
     QTest::keyClick(editor, Qt::Key_Escape);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto* paint = window.findChild<QAction*>("paintToolAction");
     paint->setChecked(true);
     auto* size = window.findChild<QSpinBox*>("paintBrushSizeSpinBox");
@@ -166,7 +169,7 @@ bool testDeletionUi(const QString& root) {
 
     // A panel Delete removes the whole selected layer, not just its raster.
     if (!choose_image()) return false;
-    tree->setFocus(); QCoreApplication::processEvents();
+    tree->setFocus(); processImageEditorEvents();
     QTest::keyClick(tree, Qt::Key_Delete);
     if (!check(!row("delete-ui-second.png") && undo->isEnabled(), "Panel Delete did not remove its layer.")) return false;
     undo->trigger();
@@ -190,7 +193,7 @@ bool testDeletionUi(const QString& root) {
     if (!check(opened && !row("delete-ui-second.png"), "Delete Layer context menu failed.")) return false;
     // The offscreen platform does not reactivate the owner after QMenu::exec.
     window.activateWindow();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     undo->trigger();
     // Group + child + Background selection: delete once, keep Background.
     tree->clearSelection();
@@ -198,7 +201,7 @@ bool testDeletionUi(const QString& root) {
     tree->setCurrentItem(group_row, 0, QItemSelectionModel::ClearAndSelect);
     row("delete-ui-second.png")->setSelected(true);
     row("Background")->setSelected(true);
-    tree->setFocus(); QCoreApplication::processEvents();
+    tree->setFocus(); processImageEditorEvents();
     if (!check(tree->selectedItems().size() == 3 && contextual->isEnabled(),
         "Mixed selection/shortcut was not ready.")) {
         std::cerr << "Selected=" << tree->selectedItems().size() << " enabled=" << contextual->isEnabled()
@@ -218,10 +221,10 @@ bool testDeletionUi(const QString& root) {
     if (!check(row("Group 1") && row("Group 1")->childCount() == 2 && saved_matches(baseline),
         "Mixed deletion undo was not atomic.")) return false;
     tree->setCurrentItem(row("Background"), 0, QItemSelectionModel::ClearAndSelect);
-    tree->setFocus(); QCoreApplication::processEvents();
+    tree->setFocus(); processImageEditorEvents();
     if (!check(!contextual->isEnabled() && !layers_button->isEnabled(), "Background deletion enabled.")) return false;
     QTest::keyClick(tree, Qt::Key_Delete);
-    tree->clearSelection(); QCoreApplication::processEvents();
+    tree->clearSelection(); processImageEditorEvents();
     if (!check(!contextual->isEnabled() && !layers_button->isEnabled() && tree->topLevelItemCount() == 3 &&
         bytes(second_path) == original, "Empty deletion or original file preservation failed.")) return false;
 
@@ -230,7 +233,7 @@ bool testDeletionUi(const QString& root) {
     item = row("delete-ui-second.png");
     if (!check(item && item->toolTip(0).contains("Relink Image"), "Missing source fixture failed.")) return false;
     tree->setCurrentItem(item, 0, QItemSelectionModel::ClearAndSelect);
-    tree->setFocus(); QCoreApplication::processEvents();
+    tree->setFocus(); processImageEditorEvents();
     QTest::keyClick(tree, Qt::Key_Delete);
     save->trigger();
     if (!check(persisted.openDocument(doc) && persisted.rasterSourceProblems().isEmpty() &&

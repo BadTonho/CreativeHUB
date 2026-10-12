@@ -1,3 +1,4 @@
+#include "image_editor_ui_wait.h"
 #include "image_editor_window.h"
 #include "image_canvas.h"
 
@@ -12,6 +13,7 @@
 #include <iostream>
 
 bool testLayerMasksUi(const QString& directory) {
+    std::cerr << "Running testLayerMasksUi.\n";
     const QString source = directory + "/mask-ui-source.png";
     const QString document = directory + "/mask-ui.cimg";
     const QString output = directory + "/mask-ui.png";
@@ -27,7 +29,7 @@ bool testLayerMasksUi(const QString& directory) {
     window.resize(1000, 700);
     window.show();
     if (!window.openLinkedImage(source, document, output)) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto* canvas = window.findChild<image_editor::ImageCanvas*>();
     auto* tree = window.findChild<QTreeWidget*>("imageLayerTree");
     auto* add = window.findChild<QAction*>("addLayerMaskAction");

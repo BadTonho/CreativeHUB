@@ -20,6 +20,8 @@ persistence, and recovery.
 - `src/core/recovery/` contains local recovery snapshot persistence.
 - `src/core/diagnostics/` contains bounded technical error logging and the
   optional performance collector and JSON Lines summary writer.
+- `src/ui/rendering/` owns immutable interactive jobs, bounded latest-request scheduling,
+  the dedicated render worker and the shared raster backend adapter.
 - `src/ui/import/` contains the UI controller for cancellable raster decode
   jobs; image format decoding remains in the core document module.
 - `src/ui/canvas/`, `src/ui/diagnostics/`, `src/ui/dialogs/`, `src/ui/layers/`,
@@ -61,7 +63,7 @@ persistence, and recovery.
 - `src/ui/tools/blur/blur_tool.*` owns the temporary blur-brush stroke and its
   size, radius, and selection snapshot. `ImageCanvas` forwards live previews
   and the completed stroke; the window renders one preview at a time on a
-  bounded background pool and keeps only the newest pending stroke state. The
+  dedicated render worker and keeps only the newest pending request. The
   session blurs only the active layer or selected mask in premultiplied RGBA
   and records one operation when pixels change. The brush cursor repaints its
   previous and current bounds instead of waiting for another canvas event.
@@ -484,7 +486,8 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   history restoration invalidate that cache. Selection changes do not.
   Group cache lookups use the existing thumbnail hit/miss metrics, and the
   `group_thumbnail` stage is recorded only when the renderer runs. Mask
-  thumbnails remain uncached. PNG/JPEG export is measured separately for the
+  thumbnails remain uncached in the legacy session benchmark; the interactive
+  render worker caches them by mask content. PNG/JPEG export is measured separately for the
   `export` profile.
 - Benchmark schema version 2 reports wall time and each stage's total elapsed
   time per measured iteration, with average, p50, p95, maximum, iteration
@@ -503,7 +506,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   The same-PC post-cache comparison is recorded in
   [`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](performance-after-group-thumbnail-cache-windows-2026-10-06.json);
   its before/after summary is in `GPU_ACCELERATION_PLAN.md`.
-  Normal session composition also keeps premultiplied rasterized layer images
+  The retained CPU `renderedImage()` API also keeps premultiplied rasterized layer images
   in a per-session cache capped at 64 MiB. Entries contain the layer operations
   and applied mask; visibility, opacity, stack order, and group composition are
   applied afterward. The cache validates layer operation/mask revisions,
@@ -520,9 +523,9 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
 
 ## Layer mask ownership and rendering
 
-The future [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) preserves this
-operation/alpha contract while proposing a shared backend adapter. It is
-documentation only; the CPU renderer described here remains the implementation.
+The implemented [interactive GPU path](GPU_ACCELERATION_PLAN.md) preserves this
+operation/alpha contract. CPU rasterization and export/publication remain the
+reference; shared raster composition and presentation avoid full-frame readback.
 
 `ImageLayerData` owns optional `ImageLayerMaskData` with an enabled flag and a
 separate operation vector. Undo snapshots share operation buffers rather than
@@ -568,10 +571,9 @@ license, and its WebP codec uses the BSD 3-Clause license. Distribution
 packages must include the plugins and preserve the applicable license notices
 for the codecs actually shipped.
 
-Decoded images and transparent layer buffers are currently rendered
-synchronously as `QImage`. Very large images or many painted layers can use
-substantial memory or pause the UI; profile representative documents before
-expanding this workflow. Undo and redo retain up to 100 in-memory document
+Decoding, tool rasterization, and export use `QImage`; interactive rasterization
+and composition run on the render worker. Opening very large sources and
+document edits can still allocate substantial memory. Undo and redo retain up to 100 in-memory document
 snapshots and are not stored in the `.cimg` file.
 
 The `.cimg` format is application-specific and does not change or embed into
@@ -580,3 +582,49 @@ as a saved PNG plus a native `.cimg` companion. The Video Editor owns shared
 Media Pool links and clip-specific variants in `.csp` v10; the current
 behavior and remaining validation are documented in the
 [cross-application proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
+
+
+## Interactive rendering ownership and lifetime
+
+The UI now uses `ImageRenderController` and `ImageInteractiveRasterCache`, rather
+than synchronously calling the session's composite/preview APIs. The latter remain
+available for CPU exports, publication, tests and compatibility. Each request owns
+an immutable `ImageExportSnapshot`; results identify document, request sequence,
+logical document revision and gesture identity,
+size, transient status and either a CPU QImage or an OpenGlTextureFrame lease.
+Sequence supersession invalidates pending/current work across gestures and tabs.
+The worker owns cache, compositor, context and GL resource destruction; the GUI
+owns the surface and presenter, and releases texture leases before worker teardown.
+The global sharing context is borrowed, never operated on the render worker.
+
+The incremental cache stores independent content and compact mask coverage, plus
+Background, within 64 MiB including worker/active-panel thumbnail generations.
+Thumbnail space is reserved before rasterizing a request. Unchanged pixels are shared; changed paint/erase regions
+are cleared and reconstructed from ordered operations with an antialias margin.
+Blur, gradient, transform and object edits rebuild the relevant layer. Confirmed
+cache entries are unchanged by transient requests. Semantic revision metadata
+survives pixel eviction, so an intact resident GPU texture requires no new upload.
+GPU inputs document layout/stride/origin/alpha and previous revision; partial
+uploads are accepted only when that previous revision is resident. The 256 MiB
+compositor texture budget includes sources, masks, group scratch, output targets
+and still-leased frames. Driver and Qt backing-store memory are tracked separately
+from these known texture allocations.
+
+`ImageCanvas` owns document geometry and input even without a CPU image. Its
+OpenGL child renders textures, checkerboard, border and existing overlays; text
+editing stays in the widget above it. CPU presentation remains replaceable.
+Zoom/pan only redraw the current frame. On-demand confirmed CPU sampling checks
+request identity before selecting an Eyedropper color. Thumbnails are prepared off
+UI by source/content signature. Completion updates thumbnail roles in place,
+preserving tree items used by editors and menus. Mask controls use document
+metadata independently of thumbnail availability. Confirmed updates cancel active
+gestures even when document dimensions stay unchanged. Settings persist Automatic / CPU. Unsupported or
+busy requests use complete CPU composition; technical failures are logged first
+and disable GPU for the session, with complete CPU recovery after exceptions.
+
+The adapter links Qt Gui/OpenGL/OpenGLWidgets, with optional native video interop
+isolated behind BUILD_VIDEO_MEDIA_LIBRARY. Image-only builds do not link FFmpeg.
+See [GPU_ACCELERATION_PLAN.md](GPU_ACCELERATION_PLAN.md) for the public raster
+contract, two-level final-channel tolerance, exact mask coverage and activation
+gate, and [the Windows results](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md)
+for measurements and platform acceptance limits.

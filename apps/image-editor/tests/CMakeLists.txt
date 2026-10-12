@@ -183,7 +183,7 @@ target_include_directories(creative-suite-image-editor-ui-tests PRIVATE
     ../src/ui/layers
 )
 target_link_libraries(creative-suite-image-editor-ui-tests PRIVATE
-    creative-suite-image-editor-core
+    creative-suite-image-editor-rendering
     creative-suite::shortcuts
     creative-suite::system-monitor
     Qt6::Widgets
@@ -334,7 +334,7 @@ target_include_directories(creative-suite-image-editor-export-ui-tests PRIVATE
     ../src/ui/layers
 )
 target_link_libraries(creative-suite-image-editor-export-ui-tests PRIVATE
-    creative-suite-image-editor-core
+    creative-suite-image-editor-rendering
     creative-suite::shortcuts
     creative-suite::system-monitor
     Qt6::Widgets
@@ -381,5 +381,32 @@ if(WIN32)
             VERBATIM
         )
         creative_suite_deploy_qt_imageformat_plugins(${TEST_TARGET})
+    endforeach()
+endif()
+
+add_executable(creative-suite-image-editor-interactive-tests image_editor_interactive_test.cpp)
+target_link_libraries(creative-suite-image-editor-interactive-tests PRIVATE creative-suite-image-editor-rendering Qt6::Test)
+target_compile_features(creative-suite-image-editor-interactive-tests PRIVATE cxx_std_20)
+add_creative_suite_test(NAME creative-suite-image-editor-interactive COMMAND creative-suite-image-editor-interactive-tests)
+set_tests_properties(creative-suite-image-editor-interactive PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+if(WIN32)
+    add_creative_suite_test(NAME creative-suite-image-editor-gpu-raster
+        COMMAND creative-suite-image-editor-interactive-tests -o gpu-raster-test.txt,txt)
+    set_tests_properties(creative-suite-image-editor-gpu-raster PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
+    add_custom_command(TARGET creative-suite-image-editor-interactive-tests POST_BUILD
+        COMMAND "${QT_TEST_DEPLOY_TOOL}" --no-translations --no-compiler-runtime --include-plugins qoffscreen "$<TARGET_FILE:creative-suite-image-editor-interactive-tests>" VERBATIM)
+endif()
+
+if(WIN32)
+    add_creative_suite_test(NAME creative-suite-image-editor-native-rendering-ui
+        COMMAND creative-suite-image-editor-ui-tests --rendering-only)
+    set_tests_properties(creative-suite-image-editor-native-rendering-ui PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=windows")
+endif()
+
+if(COMMAND creative_suite_deploy_media_runtime)
+    foreach(raster_runtime_target IN ITEMS creative-suite-image-editor-interactive-tests
+            creative-suite-image-editor-ui-tests creative-suite-image-editor-export-ui-tests)
+        creative_suite_deploy_media_runtime(${raster_runtime_target})
     endforeach()
 endif()

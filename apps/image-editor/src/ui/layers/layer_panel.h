@@ -36,6 +36,9 @@ public:
                      const QHash<QString, QString>& source_problems = {},
                      const QVector<ImageStackItemData>& selected_stack_items = {});
     void setSelectedMask(const QString& layer_id);
+    // Completed rendering must preserve items held by editors and context menus.
+    void setThumbnails(const QHash<QString, QImage>& thumbnails,
+                       const QHash<QString, QImage>& mask_thumbnails);
     void setQuickExportEnabled(bool enabled);
     [[nodiscard]] QVector<ImageStackItemData> selectedStackItems() const;
     void requestDeleteSelection();

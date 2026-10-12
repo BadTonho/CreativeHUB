@@ -889,3 +889,35 @@ and outcome; these visual checks have no recorded manual result yet.
 10. Modify an original externally during a session. Loaded pixels remain stable;
     reopening or relinking picks up the change. Original files are never modified
     by gestures, document save, export, or recovery.
+
+
+## Interactive CPU / GPU rendering
+
+Record the executable/configuration, Qt, OS, driver, GPU, dimensions and outcome.
+Use Settings > Rendering > Automatic, then CPU on the same document. Repeat on
+native Windows, macOS and Linux; portable/headless tests do not accept drivers.
+
+1. Create a transparent canvas; compare empty output, antialiased translucent
+   strokes, overlap, opacity and checkerboard. Add white, black and gray masks;
+   toggle enablement, edit/erase masks and confirm coverage and layer ordering.
+2. Group two layers, change child/group opacity, rotate, flip and crop. Move and
+   resize strokes, shapes, text and raster objects. Check document geometry,
+   selection outlines and text caret while zooming/panning.
+3. Paint normally; preview/cancel eraser, masks, gradient, blur and object gestures
+   with Escape. Switch tools/tabs during work, Undo/Redo, replace and close
+   documents. Confirm no cancelled/old preview reappears and one committed gesture
+   creates one history edit.
+4. Confirm layer/mask thumbnails update when content changes and remain stable
+   during zoom/pan/selection. Sample the confirmed composite with Eyedropper,
+   including transparent pixels and editing while sampling is pending.
+5. Export PNG/JPEG and selected layer/group; publish a linked PNG and compare
+   geometry, alpha/mask coverage with the preview. Verify Video Editor import,
+   refresh and export still use the CPU-published image. No GPU export is claimed.
+6. Repeat opening/closing and switch Automatic/CPU with heavy documents. Check
+   bounded compositor texture usage and clean shutdown; oversized requests use
+   complete CPU results. Use registered fault tests for deterministic allocation,
+   context loss, busy pool and resource-release coverage; review the technical
+   error log before CPU recovery, with no error entry for cancellation/busy.
+
+The reference Windows measurement/visual record and pending native platforms are
+in [INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md).

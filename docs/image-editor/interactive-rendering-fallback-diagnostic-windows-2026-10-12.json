@@ -1,0 +1,16 @@
+{
+    "architecture": "x86_64",
+    "error": "Automatic benchmark received CPU fallback (reference, request 5, GPU bytes 74649600).",
+    "gl_version": "3.2.0 NVIDIA 617.42",
+    "gpu_renderer": "NVIDIA GeForce GTX 1660 SUPER/PCIe/SSE2",
+    "gpu_vendor": "NVIDIA Corporation",
+    "os": "Windows 11 Version 26H2",
+    "performance_gate_passed": false,
+    "presentation_boundary": "CPU paint completion / QOpenGLWidget frameSwapped; swap interval 0",
+    "qt_version": "6.7.2",
+    "repeat_runs": 3,
+    "samples_per_mode": 30,
+    "schema_version": 1,
+    "timestamp_utc": "2026-10-12T13:06:25.214Z",
+    "warmups_per_mode": 4
+}

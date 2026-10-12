@@ -24,6 +24,7 @@
 #include <QStringList>
 #include <QVector>
 #include <QWidget>
+#include "../rendering/image_render_controller.h"
 
 class QEvent;
 class QKeyEvent;
@@ -35,6 +36,8 @@ class QDropEvent;
 
 namespace image_editor {
 
+class ImageGpuPresenter;
+
 class ImageCanvas final : public QWidget {
     Q_OBJECT
 
@@ -45,6 +48,13 @@ public:
     explicit ImageCanvas(QWidget* parent = nullptr);
 
     void setImage(QImage image, bool resetView = true);
+    void setDocumentGeometry(const QSize& size, bool resetView);
+    void setRenderFrame(const InteractiveFrame& frame);
+    void releaseGpuFrames();
+    void setAsyncSampling(bool enabled) { async_sampling_ = enabled; }
+    void update();
+    void update(const QRect& rect);
+    [[nodiscard]] bool displayingGpu() const noexcept { return bool(committed_texture_); }
     void setCropMode(bool enabled);
     void setPaintMode(bool enabled);
     void setEraserMode(bool enabled);
@@ -96,6 +106,8 @@ public:
     [[nodiscard]] double zoomFactor() const noexcept { return zoom_; }
 
 signals:
+    void colorSampleRequested(const QPoint& pixel);
+    void gpuPresentationFailed(const QString& cause);
     void imagesDropped(const QStringList& paths, const QPointF& center);
     void objectsPreviewRequested(const QVector<image_editor::ImageObjectPlacement>& objects);
     void cropSelected(const QRect& image_rect);
@@ -174,6 +186,15 @@ private:
     void updateTextEditorGeometry();
     void finishTextEditing(bool commit);
 
+    void paintScene(QPainter& painter, const QRect& dirty, bool gpu);
+    QSize document_size_;
+    ImageGpuPresenter* gpu_presenter_ = nullptr;
+    creative_suite::composition::OpenGlTextureFramePtr committed_texture_, transient_texture_;
+    bool async_sampling_ = false;
+    QElapsedTimer frame_received_;
+    qint64 request_latency_ = 0;
+    bool awaiting_presentation_ = false;
+    void recordPresentation();
     QImage image_;
     QImage transient_image_;
     QRect blur_cursor_dirty_rect_;

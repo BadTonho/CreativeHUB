@@ -4,6 +4,7 @@
 #endif
 
 #include <QApplication>
+#include <QSurfaceFormat>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QIcon>
@@ -14,6 +15,10 @@
 #endif
 
 int main(int argc, char* argv[]) {
+    QSurfaceFormat format;
+    format.setRenderableType(QSurfaceFormat::OpenGL); format.setVersion(3, 2);
+    format.setProfile(QSurfaceFormat::CoreProfile); QSurfaceFormat::setDefaultFormat(format);
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication application(argc, argv);
     application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));

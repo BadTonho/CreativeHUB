@@ -13,6 +13,15 @@ namespace image_editor {
 
 class ImageDocumentRenderer final {
 public:
+    // Worker-owned rasterization cache support. A nonempty region reconstructs
+    // only that region; callers use it exclusively for local drawing operations.
+    [[nodiscard]] static QImage rasterize(const QSize& size,
+        const QVector<ImageOperation>& operations, const QHash<QString, QImage>& resources,
+        bool mask, QImage previous = {}, const QRect& region = {},
+        const std::atomic_bool* cancellation_requested = nullptr);
+    [[nodiscard]] static QImage transformRaster(QImage pixels,
+        const QVector<ImageOperation>& operations,
+        const std::atomic_bool* cancellation_requested = nullptr);
     [[nodiscard]] static QSize documentSize(
         const ImageDocumentData& document, const QSize& source_size) noexcept;
 

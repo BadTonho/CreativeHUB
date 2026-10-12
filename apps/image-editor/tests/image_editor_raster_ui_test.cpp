@@ -1,3 +1,4 @@
+#include "image_editor_ui_wait.h"
 #include "image_editor_window.h"
 #include "image_canvas.h"
 #include "image_import_controller.h"
@@ -21,6 +22,7 @@
 #include <cmath>
 using namespace image_editor;
 bool testRasterImagesUi(const QString& root) {
+    std::cerr << "Running testRasterImagesUi.\n";
     const auto check=[](bool ok,const char* cause) { if (!ok) std::cerr<<cause<<'\n'; return ok; };
     const QString background=root+"/raster-ui-background.png";
     const QString source=root+"/raster-ui-source.png";
@@ -53,7 +55,7 @@ bool testRasterImagesUi(const QString& root) {
     if (!window.openLinkedImage(background,doc,output)) return false;
     canvas=window.findChild<ImageCanvas*>();
     if (!canvas) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!check(import->isEnabled(),"Import disabled with document.")) return false;
     // Exercise the actual file dialog command.
     QTimer chooser; QObject::connect(&chooser,&QTimer::timeout,&window,[&]() {
@@ -153,7 +155,7 @@ bool testRasterImagesUi(const QString& root) {
     ImageDocumentSession unavailable;
     if (!unavailable.openDocument(doc)) return false;
     if (!window.openLinkedImage(background,doc,output)) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!check(tree->topLevelItem(0)->toolTip(0).contains("Relink Image"),"Source problem missing from panel.")) return false;
     QTimer errors; QObject::connect(&errors,&QTimer::timeout,&window,[](){
         for(auto* w:QApplication::topLevelWidgets()) if(auto* m=qobject_cast<QMessageBox*>(w)) m->accept();

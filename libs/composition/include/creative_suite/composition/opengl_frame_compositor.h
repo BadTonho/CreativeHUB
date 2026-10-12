@@ -5,6 +5,9 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <QImage>
+#include <QRect>
+#include <QTransform>
 
 class QOffscreenSurface;
 class QOpenGLContext;
@@ -115,6 +118,41 @@ struct OpenGlImageOperation {
     std::vector<effects::ColorAdjustmentParameters> colors;
 };
 
+// Optional raster contract: top-down ARGB32 premultiplied content and ARGB32
+// premultiplied or Grayscale8 coverage masks in document pixel coordinates.
+// QImage supplies row stride and native channel layout; no aspect fit is applied.
+// Images are implicitly shared immutable inputs for this call. Empty masks reveal
+// all pixels. Gray coverage multiplies every premultiplied channel before opacity.
+// Group children compose first, then ordered transforms and group opacity once.
+// A partial upload is valid only when previous_key matches the resident image.
+struct OpenGlRasterInput {
+    std::string identity;
+    QImage pixels;
+    qint64 previous_key = 0;
+    QRect dirty;
+    // Stable semantic revision survives CPU pixel eviction. Zero uses QImage cacheKey.
+    qint64 revision = 0;
+};
+struct OpenGlRasterTransform {
+    QTransform matrix;
+    QRect clip;
+};
+struct OpenGlRasterLayer {
+    OpenGlRasterInput content;
+    OpenGlRasterInput mask;
+    int opacity = 100;
+};
+struct OpenGlRasterNode {
+    std::vector<OpenGlRasterLayer> layers;
+    std::vector<OpenGlRasterTransform> transforms;
+    int opacity = 100;
+    bool group = false;
+};
+struct OpenGlRasterRequest {
+    QSize size;
+    std::vector<OpenGlRasterNode> nodes;
+};
+
 // Opaque identity for a submitted asynchronous RGBA readback. Tickets are
 // valid only for the compositor that created them and must be collected FIFO.
 struct OpenGlReadbackTicket {
@@ -188,6 +226,11 @@ public:
     [[nodiscard]] OpenGlTextureCompositionResult composeTexture(
         int width, int height, const std::vector<CompositionLayer>& layers,
         const CancellationPredicate& cancel = {}, OpenGlCompositionTimings* timings = nullptr);
+    // Transparent premultiplied output; no video fitting or readback. Source
+    // texture cache and group scratch share the supplied pool's byte budget.
+    [[nodiscard]] OpenGlTextureCompositionResult composeRasterTexture(
+        const OpenGlRasterRequest&, const CancellationPredicate& cancel = {},
+        OpenGlCompositionTimings* timings = nullptr);
     // Transparent RGBA8 intermediates for graph evaluation. Input leases are
     // synchronized, source alpha is retained, and Merge uses straight alpha.
     [[nodiscard]] OpenGlTextureCompositionResult processImage(

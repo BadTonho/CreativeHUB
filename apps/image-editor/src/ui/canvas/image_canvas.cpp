@@ -1,4 +1,5 @@
 #include "image_canvas.h"
+#include "image_gpu_presenter.h"
 
 #include "image_document_store.h"
 #include "../transparency_checkerboard.h"
@@ -49,6 +50,8 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
     }
     resetBlurTool(true);
     resetBrushTools(true);
+    document_size_ = image.size();
+    releaseGpuFrames();
     image_ = std::move(image);
     transient_image_ = {};
     static_cast<void>(shape_tool_.cancelGesture());
@@ -62,6 +65,61 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
         fitToWindow();
     }
     update();
+}
+
+void ImageCanvas::update() {
+    QWidget::update();
+    if (gpu_presenter_ && gpu_presenter_->isVisible()) gpu_presenter_->update();
+}
+void ImageCanvas::update(const QRect& rect) {
+    QWidget::update(rect);
+    if (gpu_presenter_ && gpu_presenter_->isVisible()) gpu_presenter_->update();
+}
+void ImageCanvas::releaseGpuFrames() {
+    committed_texture_.reset(); transient_texture_.reset();
+    if (gpu_presenter_) { gpu_presenter_->setFrame({}); gpu_presenter_->hide(); }
+}
+void ImageCanvas::setDocumentGeometry(const QSize& size, bool resetView) {
+    // A confirmed document update cancels gestures even when its dimensions
+    // stay unchanged (for example, deleting an object during a drag).
+    if (linear_gradient_tool_.gestureActive()) {
+        linear_gradient_tool_.cancelGesture(); emit linearGradientPreviewCleared();
+    }
+    resetBlurTool(true); resetBrushTools(true);
+    static_cast<void>(shape_tool_.cancelGesture()); clearObjectInteraction();
+    resizing_brush_ = false;
+    if (size != document_size_ || resetView) {
+        releaseGpuFrames(); image_ = {}; transient_image_ = {};
+        document_size_ = size;
+        if (resetView) { pan_ = {}; fit_to_window_ = true; static_cast<void>(crop_tool_.cancelGesture()); clearAreaSelection(); }
+        if (fit_to_window_) fitToWindow();
+    }
+    update();
+}
+void ImageCanvas::recordPresentation() {
+    if(!awaiting_presentation_) return;
+    awaiting_presentation_=false;
+    ImageEditorPerformanceMetrics::instance().record(ImageEditorPerformanceStage::InteractivePresentation,
+        request_latency_+frame_received_.nsecsElapsed());
+}
+void ImageCanvas::setRenderFrame(const InteractiveFrame& frame) {
+    request_latency_=frame.latency_nanoseconds; frame_received_.start(); awaiting_presentation_=true;
+    document_size_ = frame.size;
+    if (frame.transient) { transient_image_ = frame.image; transient_texture_ = frame.texture; }
+    else { image_ = frame.image; committed_texture_ = frame.texture; transient_image_ = {}; transient_texture_.reset(); }
+    const auto texture = frame.transient ? transient_texture_ : committed_texture_;
+    if (texture) {
+        if (!gpu_presenter_) {
+            gpu_presenter_ = new ImageGpuPresenter(this);
+            connect(gpu_presenter_, &QOpenGLWidget::frameSwapped, this, [this] { recordPresentation(); });
+            gpu_presenter_->targetRect = [this] { return imageTargetRect(); };
+            gpu_presenter_->paintOverlays = [this](QPainter& painter) { paintScene(painter, rect(), true); };
+            gpu_presenter_->failed = [this](const QString& cause) { emit gpuPresentationFailed(cause); };
+        }
+        gpu_presenter_->setGeometry(rect()); gpu_presenter_->setFrame(texture); gpu_presenter_->show();
+        gpu_presenter_->lower();
+    } else if (gpu_presenter_) { gpu_presenter_->setFrame({}); gpu_presenter_->hide(); }
+    updateTextEditorGeometry(); update();
 }
 
 void ImageCanvas::setCropMode(bool enabled) {
@@ -420,7 +478,7 @@ void ImageCanvas::clearAreaSelection() {
 AreaSelectionTool::FinishResult ImageCanvas::applyAreaSelectionPath(
     const QPainterPath& path) {
     const auto result = area_selection_tool_.applySelectionPath(
-        path, QRectF(QPointF(0.0, 0.0), QSizeF(image_.size())));
+        path, QRectF(QPointF(0.0, 0.0), QSizeF(document_size_)));
     if (result.status == AreaSelectionTool::FinishStatus::Applied) {
         emit areaSelectionChanged(true);
         update();
@@ -440,7 +498,7 @@ void ImageCanvas::cancelAreaSelectionGesture() {
 
 std::optional<QPainterPath> ImageCanvas::areaSelectionClipPath() const {
     return area_selection_tool_.clipPath(
-        QRectF(QPointF(0.0, 0.0), QSizeF(image_.size())));
+        QRectF(QPointF(0.0, 0.0), QSizeF(document_size_)));
 }
 
 bool ImageCanvas::hasAreaSelection() const noexcept {
@@ -500,7 +558,11 @@ void ImageCanvas::setMaskEditing(bool enabled) {
 }
 
 void ImageCanvas::setTransientImage(QImage image) {
-    if (!image.isNull() && image.size() == image_.size()) {
+    if (image.isNull()) {
+        transient_texture_.reset();
+        if (gpu_presenter_) { gpu_presenter_->setFrame(committed_texture_); gpu_presenter_->setVisible(bool(committed_texture_)); }
+    }
+    if (!image.isNull() && image.size() == document_size_) {
         transient_image_ = std::move(image);
     } else {
         transient_image_ = {};
@@ -516,9 +578,9 @@ void ImageCanvas::setBrush(QColor color, int diameter) {
 }
 
 void ImageCanvas::fitToWindow() {
-    if (image_.isNull() || width() <= 0 || height() <= 0) return;
-    const double width_scale = static_cast<double>(std::max(1, width() - 48)) / image_.width();
-    const double height_scale = static_cast<double>(std::max(1, height() - 48)) / image_.height();
+    if (document_size_.isEmpty() || width() <= 0 || height() <= 0) return;
+    const double width_scale = static_cast<double>(std::max(1, width() - 48)) / document_size_.width();
+    const double height_scale = static_cast<double>(std::max(1, height() - 48)) / document_size_.height();
     zoom_ = std::clamp(std::min(width_scale, height_scale), 0.01, 16.0);
     pan_ = {};
     fit_to_window_ = true;
@@ -527,19 +589,19 @@ void ImageCanvas::fitToWindow() {
 }
 
 QRectF ImageCanvas::imageTargetRect() const {
-    if (image_.isNull()) return {};
-    const QSizeF scaled(image_.width() * zoom_, image_.height() * zoom_);
+    if (document_size_.isEmpty()) return {};
+    const QSizeF scaled(document_size_.width() * zoom_, document_size_.height() * zoom_);
     const QPointF origin((width() - scaled.width()) / 2.0 + pan_.x(),
                          (height() - scaled.height()) / 2.0 + pan_.y());
     return {origin, scaled};
 }
 
 TextToolContext ImageCanvas::textToolContext() const {
-    return {image_.size(), imageTargetRect(), zoom_};
+    return {document_size_, imageTargetRect(), zoom_};
 }
 
 CropToolContext ImageCanvas::cropToolContext() const {
-    return {image_.size(), imageTargetRect(), zoom_};
+    return {document_size_, imageTargetRect(), zoom_};
 }
 
 QPointF ImageCanvas::widgetToCropImageCoordinates(const QPointF& position) const {
@@ -549,8 +611,8 @@ QPointF ImageCanvas::widgetToCropImageCoordinates(const QPointF& position) const
     const qreal y = (position.y() - target.top()) / zoom_;
     // Crop coordinates describe image edges, so the far edge is width/height
     // rather than the last pixel center used by widgetToImageCoordinates().
-    return {std::clamp(x, 0.0, static_cast<qreal>(image_.width())),
-            std::clamp(y, 0.0, static_cast<qreal>(image_.height()))};
+    return {std::clamp(x, 0.0, static_cast<qreal>(document_size_.width())),
+            std::clamp(y, 0.0, static_cast<qreal>(document_size_.height()))};
 }
 
 QPointF ImageCanvas::widgetToImageCoordinates(const QPointF& position) const {
@@ -558,8 +620,8 @@ QPointF ImageCanvas::widgetToImageCoordinates(const QPointF& position) const {
     if (target.isEmpty() || zoom_ <= 0.0) return {};
     const qreal x = (position.x() - target.left()) / zoom_;
     const qreal y = (position.y() - target.top()) / zoom_;
-    return {std::clamp(x, 0.0, static_cast<qreal>(image_.width() - 1)),
-            std::clamp(y, 0.0, static_cast<qreal>(image_.height() - 1))};
+    return {std::clamp(x, 0.0, static_cast<qreal>(document_size_.width() - 1)),
+            std::clamp(y, 0.0, static_cast<qreal>(document_size_.height() - 1))};
 }
 
 QPointF ImageCanvas::unboundedImagePoint(const QPointF& position) const {
@@ -578,11 +640,11 @@ QStringList dropPaths(const QMimeData* mime) {
 }
 }
 void ImageCanvas::dragEnterEvent(QDragEnterEvent* event) {
-    if (!image_.isNull() && !dropPaths(event->mimeData()).isEmpty()) event->acceptProposedAction();
+    if (!document_size_.isEmpty() && !dropPaths(event->mimeData()).isEmpty()) event->acceptProposedAction();
 }
 void ImageCanvas::dropEvent(QDropEvent* event) {
     const auto paths = dropPaths(event->mimeData());
-    if (image_.isNull() || paths.isEmpty() || !imageTargetRect().contains(event->position())) return;
+    if (document_size_.isEmpty() || paths.isEmpty() || !imageTargetRect().contains(event->position())) return;
     event->acceptProposedAction();
     emit imagesDropped(paths, unboundedImagePoint(event->position()));
 }
@@ -679,7 +741,7 @@ ObjectSelectionToolContext ImageCanvas::objectSelectionToolContext(
     context.widget_position = position;
     context.image_position = widgetToImageCoordinates(position);
     context.unbounded_image_position = unboundedImagePoint(position);
-    context.image_bounds = QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()));
+    context.image_bounds = QRectF(QPointF(0.0, 0.0), QSizeF(document_size_));
     context.image_target = imageTargetRect();
     context.zoom = zoom_;
     context.pointer_on_image = context.image_target.contains(position);
@@ -745,7 +807,7 @@ void ImageCanvas::updateBrushToolCursor(const QPointF& position) {
 void ImageCanvas::resetBrushTools(bool clear_preview_notification) {
     const bool should_clear_preview =
         eraser_tool_.drawing() || (paint_tool_.drawing() && mask_editing_) ||
-        !transient_image_.isNull();
+        (!transient_image_.isNull() || bool(transient_texture_));
     (void)paint_tool_.cancel(mask_editing_);
     (void)eraser_tool_.cancel();
     paint_tool_.hideCursor();
@@ -779,9 +841,15 @@ void ImageCanvas::paintEvent(QPaintEvent* event) {
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::CanvasPaint);
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(34, 37, 43));
+    paintScene(painter, event->rect(), false);
+    painter.end();
+    if (!gpu_presenter_ || !gpu_presenter_->isVisible()) recordPresentation();
+}
+
+void ImageCanvas::paintScene(QPainter& painter, const QRect& dirty, bool gpu) {
+    if (!gpu) painter.fillRect(rect(), QColor(34, 37, 43));
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    if (image_.isNull()) {
+    if (document_size_.isEmpty()) {
         painter.setPen(QColor(190, 195, 204));
         painter.drawText(rect(), Qt::AlignCenter,
                          QStringLiteral("Open an image to start editing"));
@@ -789,29 +857,31 @@ void ImageCanvas::paintEvent(QPaintEvent* event) {
     }
 
     const QRectF target = imageTargetRect();
-    painter.fillRect(target.adjusted(-2, -2, 2, 2), QColor(18, 19, 22));
-    constexpr qreal checker_size = 16.0;
-    painter.save();
-    painter.setClipRect(target);
-    const QRectF dirty_target = target.intersected(QRectF(event->rect()));
-    if (!dirty_target.isEmpty()) {
-        const int first_column = static_cast<int>(std::floor(dirty_target.left() / checker_size));
-        const int last_column = static_cast<int>(std::ceil(dirty_target.right() / checker_size));
-        const int first_row = static_cast<int>(std::floor(dirty_target.top() / checker_size));
-        const int last_row = static_cast<int>(std::ceil(dirty_target.bottom() / checker_size));
-        for (int row = first_row; row < last_row; ++row) {
-            for (int column = first_column; column < last_column; ++column) {
-                const QColor color = QColor::fromRgba(((row + column) % 2 == 0)
-                    ? ui::kTransparencyCheckerLight : ui::kTransparencyCheckerDark);
-                painter.fillRect(QRectF(column * checker_size, row * checker_size,
-                                        checker_size, checker_size), color);
+    if (!gpu) {
+        painter.fillRect(target.adjusted(-2, -2, 2, 2), QColor(18, 19, 22));
+        constexpr qreal checker_size = 16.0;
+        painter.save();
+        painter.setClipRect(target);
+        const QRectF dirty_target = target.intersected(QRectF(dirty));
+        if (!dirty_target.isEmpty()) {
+            const int first_column = static_cast<int>(std::floor(dirty_target.left() / checker_size));
+            const int last_column = static_cast<int>(std::ceil(dirty_target.right() / checker_size));
+            const int first_row = static_cast<int>(std::floor(dirty_target.top() / checker_size));
+            const int last_row = static_cast<int>(std::ceil(dirty_target.bottom() / checker_size));
+            for (int row = first_row; row < last_row; ++row) {
+                for (int column = first_column; column < last_column; ++column) {
+                    const QColor color = QColor::fromRgba(((row + column) % 2 == 0)
+                        ? ui::kTransparencyCheckerLight : ui::kTransparencyCheckerDark);
+                    painter.fillRect(QRectF(column * checker_size, row * checker_size,
+                                            checker_size, checker_size), color);
+                }
             }
         }
+        painter.restore();
+        painter.drawImage(target, transient_image_.isNull() ? image_ : transient_image_);
     }
-    painter.restore();
-    painter.drawImage(target, transient_image_.isNull() ? image_ : transient_image_);
     AreaSelectionToolRenderContext selection_context;
-    selection_context.image_bounds = QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()));
+    selection_context.image_bounds = QRectF(QPointF(0.0, 0.0), QSizeF(document_size_));
     selection_context.image_target = target;
     selection_context.image_to_widget.translate(target.left(), target.top());
     selection_context.image_to_widget.scale(zoom_, zoom_);
@@ -843,6 +913,7 @@ void ImageCanvas::paintEvent(QPaintEvent* event) {
 
 void ImageCanvas::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
+    if (gpu_presenter_) gpu_presenter_->setGeometry(rect());
     if (fit_to_window_) fitToWindow();
     updateTextEditorGeometry();
 }
@@ -867,7 +938,12 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
     }
     const auto modifiers = event->modifiers();
     if (eyedropper_mode_ && event->button() == Qt::LeftButton) {
-        if (!image_.isNull() && imageTargetRect().contains(event->position())) {
+        if (!document_size_.isEmpty() && imageTargetRect().contains(event->position())) {
+            if (async_sampling_) {
+                const auto point = widgetToImageCoordinates(event->position());
+                emit colorSampleRequested(QPoint(std::clamp(int(std::floor(point.x())),0,document_size_.width()-1), std::clamp(int(std::floor(point.y())),0,document_size_.height()-1)));
+                event->accept(); return;
+            }
             const auto sampled = eyedropper_tool_.sample(
                 image_, widgetToImageCoordinates(event->position()));
             if (sampled) emit colorSampled(*sampled);
@@ -876,18 +952,18 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         return;
     }
     if (bucket_fill_mode_ && event->button() == Qt::LeftButton) {
-        if (!image_.isNull() && imageTargetRect().contains(event->position())) {
+        if (!document_size_.isEmpty() && imageTargetRect().contains(event->position())) {
             const auto seed = bucket_fill_tool_.seedAt(
-                widgetToImageCoordinates(event->position()), image_.size());
+                widgetToImageCoordinates(event->position()), document_size_);
             if (seed) emit bucketFillRequested(*seed, bucket_fill_tolerance_, brush_color_);
         }
         event->accept();
         return;
     }
     if (magic_wand_mode_ && event->button() == Qt::LeftButton) {
-        if (!image_.isNull() && imageTargetRect().contains(event->position())) {
+        if (!document_size_.isEmpty() && imageTargetRect().contains(event->position())) {
             const auto seed = MagicWandTool::seedAt(
-                widgetToImageCoordinates(event->position()), image_.size());
+                widgetToImageCoordinates(event->position()), document_size_);
             if (seed) emit magicWandRequested(*seed, magic_wand_tolerance_);
         }
         event->accept();
@@ -907,9 +983,9 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         return;
     }
     if (linear_gradient_mode_ && event->button() == Qt::LeftButton) {
-        if (!image_.isNull() && imageTargetRect().contains(event->position()) &&
+        if (!document_size_.isEmpty() && imageTargetRect().contains(event->position()) &&
             linear_gradient_tool_.beginGesture(
-                widgetToImageCoordinates(event->position()), image_.size(), brush_color_)) {
+                widgetToImageCoordinates(event->position()), document_size_, brush_color_)) {
             emit linearGradientPreviewRequested(
                 linear_gradient_tool_.start(), linear_gradient_tool_.end(),
                 linear_gradient_tool_.color());
@@ -919,7 +995,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         return;
     }
     if (blur_mode_ && event->button() == Qt::LeftButton) {
-        if (!image_.isNull() && imageTargetRect().contains(event->position()) &&
+        if (!document_size_.isEmpty() && imageTargetRect().contains(event->position()) &&
             blur_tool_.begin(brushToolContext(event->position()), blur_radius_)) {
             const auto stroke = blur_tool_.currentStroke();
             emit blurPreviewRequested(stroke.points, stroke.diameter, stroke.radius);
@@ -965,7 +1041,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (object_selection_mode_ && event->button() == Qt::LeftButton && !image_.isNull()) {
+    if (object_selection_mode_ && event->button() == Qt::LeftButton && !document_size_.isEmpty()) {
         const auto context = objectSelectionToolContext(event->position(), modifiers);
         const auto result = object_selection_tool_.press(context);
         if (result.handled) {
@@ -1152,7 +1228,7 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
     }
     if (event->button() == Qt::LeftButton && crop_tool_.gestureActive()) {
         const auto selection = crop_tool_.finishGesture(
-            widgetToCropImageCoordinates(event->position()), image_.size());
+            widgetToCropImageCoordinates(event->position()), document_size_);
         if (selection) emit cropSelected(*selection);
         update();
         event->accept();
@@ -1161,7 +1237,7 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton && area_selection_tool_.gestureActive()) {
         const auto result = area_selection_tool_.finishGesture(
             widgetToImageCoordinates(event->position()),
-            QRectF(QPointF(0.0, 0.0), QSizeF(image_.size())));
+            QRectF(QPointF(0.0, 0.0), QSizeF(document_size_)));
         if (result.status == AreaSelectionTool::FinishStatus::Applied) {
             emit areaSelectionChanged(true);
         } else if (result.status == AreaSelectionTool::FinishStatus::Rejected) {
@@ -1215,14 +1291,14 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void ImageCanvas::wheelEvent(QWheelEvent* event) {
-    if (image_.isNull()) return;
+    if (document_size_.isEmpty()) return;
     const double old_zoom = zoom_;
     const double factor = event->angleDelta().y() > 0 ? 1.15 : 1.0 / 1.15;
     const double new_zoom = std::clamp(old_zoom * factor, 0.01, 16.0);
     const QPointF cursor = event->position();
     const QPointF relative = (cursor - imageTargetRect().topLeft()) / old_zoom;
     zoom_ = new_zoom;
-    const QSizeF scaled(image_.width() * zoom_, image_.height() * zoom_);
+    const QSizeF scaled(document_size_.width() * zoom_, document_size_.height() * zoom_);
     const QPointF centered((width() - scaled.width()) / 2.0,
                            (height() - scaled.height()) / 2.0);
     pan_ = cursor - relative * zoom_ - centered;

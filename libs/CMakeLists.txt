@@ -55,7 +55,7 @@ target_link_libraries(creative-suite-composition PUBLIC
 )
 target_compile_features(creative-suite-composition PUBLIC cxx_std_20)
 
-if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
+if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_IMAGE_EDITOR)
     find_package(Qt6 CONFIG REQUIRED COMPONENTS Gui OpenGL)
     add_library(creative-suite-composition-opengl STATIC
         composition/src/opengl_frame_compositor.cpp
@@ -64,8 +64,11 @@ if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
     add_library(creative-suite::composition-opengl ALIAS creative-suite-composition-opengl)
     target_link_libraries(creative-suite-composition-opengl PUBLIC
         creative-suite::composition Qt6::Gui Qt6::OpenGL)
-    target_link_libraries(creative-suite-composition-opengl PUBLIC creative-suite::video-media)
-    if(WIN32)
+    if(BUILD_VIDEO_MEDIA_LIBRARY)
+        target_link_libraries(creative-suite-composition-opengl PUBLIC creative-suite::video-media)
+        target_compile_definitions(creative-suite-composition-opengl PRIVATE CS_NATIVE_VIDEO_INTEROP=1)
+    endif()
+    if(WIN32 AND BUILD_VIDEO_MEDIA_LIBRARY)
         target_link_libraries(creative-suite-composition-opengl PRIVATE d3d11 d3dcompiler opengl32)
     endif()
     target_compile_features(creative-suite-composition-opengl PUBLIC cxx_std_20)

@@ -134,6 +134,11 @@ const char* imageEditorPerformanceStageName(
     case ImageEditorPerformanceStage::LayerRasterCacheMiss: return "layer_raster_cache_miss";
     case ImageEditorPerformanceStage::LayerRasterCacheBypass: return "layer_raster_cache_bypass";
     case ImageEditorPerformanceStage::CanvasPaint: return "canvas_paint";
+    case ImageEditorPerformanceStage::InteractiveRender: return "interactive_render";
+    case ImageEditorPerformanceStage::InteractivePresentation: return "interactive_presentation";
+    case ImageEditorPerformanceStage::GpuUpload: return "gpu_upload";
+    case ImageEditorPerformanceStage::GpuDrawSubmission: return "gpu_draw_submission";
+    case ImageEditorPerformanceStage::GpuFenceSubmission: return "gpu_fence_submission";
     case ImageEditorPerformanceStage::ExportRender: return "export_render";
     case ImageEditorPerformanceStage::JpegFlatten: return "jpeg_flatten";
     case ImageEditorPerformanceStage::ExportEncode: return "export_encode";

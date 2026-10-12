@@ -1,184 +1,108 @@
 # Image Editor GPU Acceleration Plan
 
-Status: **provisional Image Editor integration plan, saved on 2026-10-02;
-Image Editor GPU implementation deferred**.
-All Image Editor GPU stages below are planned. Video Editor is the first
-consumer of the now implemented shared optional compositor.
+Status: **interactive raster composition and direct texture presentation implemented**.
+The first delivery keeps tools, standalone export, Quick Export, and linked PNG
+publication on the CPU. Automatic / CPU is available in Settings > Rendering.
+Automatic activation requires the correctness and performance gate described below;
+reference Windows evidence is recorded in [the delivery results](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md).
+Native macOS/Linux acceptance remains pending; the existing three-platform CI matrix
+builds the implementation and runs the registered portable tests.
 
-## Current implementation and shared direction
+## Implemented interactive boundary
 
-`ImageDocumentSession` currently replays editable operations into CPU `QImage`
-buffers and composes layers/groups with `QPainter`. Layer buffers use
-premultiplied alpha. Masks multiply layer pixels before opacity and group
-composition. The canvas displays the composed image; standalone exports render
-immutable snapshots on a worker, while linked PNG publication remains
-synchronous. See [ARCHITECTURE.md](ARCHITECTURE.md).
+`ImageRenderController` captures implicitly shared immutable document/resource
+snapshots. One dedicated worker owns the incremental raster cache and OpenGL
+compositor. There is one running job and one latest pending request. Monotonic
+request identities and cancellation reject superseded results after edits, preview
+cancellation, Undo/Redo, tab changes, closing, and document replacement. No worker
+accesses the live session or UI widgets. Surface creation/destruction occurs on
+the GUI thread; context/resource operations and destruction occur on the worker.
+Qt context sharing is configured before QApplication construction.
 
-An opt-in CPU performance collector and synthetic Release benchmark now record
-operation replay, mask/layer/group composition, thumbnails, canvas paint, PNG/
-JPEG export, process CPU, and sampled memory. The first reference-PC results
-are available in
-[`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json).
-They characterize only the current CPU path; they do not measure GPU parity,
-interaction latency, allocation/transfer costs, or optimization gains.
+The CPU raster cache retains content and mask pixels separately within 64 MiB,
+including Background and thumbnail generations; space for thumbnails is reserved
+before rasterization. Paint/erase changes reconstruct the union of changed stroke
+bounds with a two-pixel antialias margin, replaying preceding operations within
+the region so overlapping alpha remains correct. Global-context operations such
+as blur, transforms, gradients, and changed object geometry invalidate a whole
+layer. Transient previews reuse confirmed entries without replacing them or
+creating history actions. Compact Grayscale8 masks preserve Qt's exact qGray
+coverage. Semantic source revisions survive CPU pixel eviction, avoiding repeated
+GPU uploads of intact layers when large documents exceed the CPU cache.
 
-The [Video Editor plan](../video-editor/GPU_ACCELERATION_PLAN.md) establishes
-Video Editor as the first consumer of the shared OpenGL compositor. Reuse its resource/backend services
-when their contract fits; Image Editor needs transparent output, document pixel
-coordinates, affine image transforms, and different sampling behavior. The
-current shared video compositor's opaque black output, aspect fit, and nearest
-sampling cannot be applied unchanged to image documents. Extend the shared
-boundary without changing its existing consumers' defaults.
-The Video backend is now available as an optional Qt adapter; Image Editor
-integration remains planned and requires its own transparent-output contract.
-Video Editor Stage 3 also delivers per-job offline GPU composition with isolated
-worker resources and two 16 KiB axis lookup buffers for UHD/portrait 4K. The
-[export contract](../video-editor/GPU_EXPORT.md) and
-[measurements](../video-editor/GPU_EXPORT_RESULTS.md) provide reuse evidence.
-Image Editor export/publication remains CPU; transparent-output and mask semantics
-still require its own covered adapter integration.
+The shared `creative-suite::composition-opengl` adapter adds a distinct raster
+contract: canvas-sized top-down premultiplied ARGB32 content, ARGB32 or Grayscale8
+masks, native QImage channel layout and stride, document pixel coordinates,
+ordered layers, masks before opacity, and grouped children before ordered affine
+transforms and group opacity. Empty output is transparent. Video aspect fit,
+opaque clearing, and video sampling rules do not apply to this entry point.
+Inputs supply resource identities, semantic revisions, preceding revisions, and
+dirty rectangles. A dirty upload is accepted only against the resident preceding
+revision. Normal GPU delivery uses texture leases and GPU synchronization without
+full-frame readback. Released output targets order pending producer/consumer
+fences on the GPU before reuse, preventing CPU fallback merely because a released
+target has unfinished GPU work. Live leases still protect frames from reuse.
+Readback exists for parity tests, not normal editing. The benchmark rejects every
+CPU fallback in its GPU runs instead of mixing CPU samples into GPU results.
 
-GPU rendering is a runtime implementation choice. Keep the current `.cimg`
-format (v16), its supported older versions, recovery wrapper v1, and the Video
-Editor's `.csp` contract unchanged. Editable operations remain the source of truth; textures
-are disposable caches, not persisted document or Undo state.
+Known compositor-owned GPU textures are limited to 256 MiB per window, including
+source content, coverage masks, group intermediates, final targets and leased
+frames. Unused sources are removed in use order; the output pool has at most three
+targets. Driver storage and Qt's internal window/widget backing storage are not
+reported as compositor texture bytes. Capacity limits and temporary pool occupancy
+use CPU for the complete request without an error entry. Technical failures are
+logged before recovered frames are presented; context failure disables GPU for the
+session. Allocation/exception recovery uses the established complete CPU renderer.
 
-## Stage 1 — Rendering contract and experimental adapter
+`ImageCanvas` still owns gestures. A replaceable OpenGL child presents the leased
+texture and existing selection/cursor overlays, with editable text above it.
+Document dimensions exist independently of a CPU frame. Zoom/pan redraw the same
+texture. Mask, eraser, gradient, blur, object movement and text previews use the
+controller; ordinary brush gestures retain their existing stroke overlay.
+Thumbnails are generated on the worker only when their content changes and update
+existing panel items. Mask controls remain usable before thumbnail completion. Eyedropper
+sampling renders a confirmed CPU snapshot on demand and checks the current request
+identity before applying the result; transparent pixels leave the color unchanged.
 
-- Extend the current opt-in timing/resource collector to any new GPU stages.
-  The six-profile CPU baseline records operation replay, mask application,
-  group composition, thumbnails, canvas paint, and export on the reference PC.
-  Add gesture-response, allocation, and transfer measurements before introducing
-  complex optimizations.
-- Define a shared raster input/output contract with explicit alpha convention,
-  channel layout, stride, origin, pixel coordinates, sampling, and clear color.
-  Preserve transparent output and the existing antialiasing/smoothing behavior.
-- Introduce an optional adapter for GPU composition, retaining CPU rasterization
-  of paint, eraser, text, shapes, and masks in the first increment.
-- Keep document/history/UI ownership in Image Editor. Provide immutable render
-  inputs, cancellation, generation checks, and worker-owned contexts; respect
-  Qt's GUI-thread requirements for surface creation/destruction.
-- Keep CPU rendering as the default during the experiment. Capability limits,
-  allocation failures, or context loss must fall back for the complete request
-  without modifying the document. Log technical failures with useful context.
+Image-only configuration sets BUILD_VIDEO_EDITOR, BUILD_MOTION_EDITOR,
+BUILD_CREATIVE_HUB and BUILD_VIDEO_MEDIA_LIBRARY to OFF. The raster adapter still
+builds without FFmpeg; native video/D3D interop is compiled only with the optional
+video media library. Qt OpenGL/OpenGLWidgets come from the existing Qt dependency
+and retain its existing license obligations. No new external package is added.
 
-**Exit:** a documented transparent composition contract, covered adapter and
-fallback boundaries, and baseline measurements. This stage does not promise a
-faster brush or move all operation replay to the GPU.
+## Correctness and activation gate
 
-## Stage 2 — Layer, mask, and group composition
+- Incremental CPU output must exactly match a complete CPU rebuild normalized to
+  premultiplied ARGB32 after edits, masks, clipping, object changes, transforms,
+  history restoration and document replacement.
+- CPU/GPU geometry and coverage are exact. Final normalized premultiplied channel
+  composition allows at most two byte levels per channel because Qt and GL
+  source-over rounding differ. Coverage is separately checked at all 256 gray
+  levels with no tolerance. Canvas/checkerboard display is inspected separately.
+- Bounded queues, cancellation, failure recovery, session disable, resource
+  release, cache eviction, pool occupancy and memory limits have regression tests.
+  Shared Video Editor and Motion Studio consumers retain their own regressions.
+- Release performance uses the same incremental cache in CPU and GPU modes,
+  three paired runs per profile, four warmups and thirty measured samples each.
+  Timing ends at CPU paint completion or GPU frameSwapped with swap interval zero.
+  Record p50/p95, uploaded/readback bytes, CPU cache and known GPU bytes, process
+  CPU/RAM, driver, Qt, OS and hardware; counts exclude warmups for transfers.
+- Automatic activation requires >=20% lower mean run p95 in at least two heavy
+  composition profiles and no measured profile with >10% regression. Correct
+  failed paths and repeat the gate before activating. These are machine-specific
+  observations, not a general hardware performance guarantee.
 
-- Blend visible layers in the existing stack order and retain opacity semantics.
-  Preserve the locked Background and transparent canvases.
-- Apply enabled raster masks before layer opacity and group composition. White
-  reveals, black hides, and gray controls coverage; a disabled mask has no
-  visual effect. Preserve premultiplied channel and alpha multiplication.
-- Compose each group's children first, apply its crop/rotation/flips, and apply
-  group opacity once. Keep the current one-level group boundary; do not add
-  masks to groups or Background.
-- Preserve clipping to the canvas and the operation order. Unsupported
-  operations must use a defined CPU path instead of silently disappearing.
-- Keep GPU resources bounded and reusable; account for source uploads, group
-  intermediates, masks, and final output separately.
+## Verification and deferred work
 
-**Exit:** CPU/GPU comparison covers transparent edges, white/black/gray masks,
-disabled/removed masks, overlapping layers, group opacity, crops, rotations,
-flips, hidden items, and empty output. Record any allowed pixel tolerance.
+The feature index is in [ROADMAP.md](ROADMAP.md), with repeatable native steps in
+[MANUAL_VALIDATION.md](MANUAL_VALIDATION.md). No document, history or recovery
+version changes. `.cimg` v16 and recovery wrapper v1 remain current. CPU export
+and publication remain the result reference, with existing producer/consumer
+coverage. GPU brush kernels, GPU export, PNG publication acceleration, new effects,
+color-management changes, nested groups and alternate graphics APIs are deferred.
 
-## Stage 3 — Interactive editing and canvas presentation
-
-- Use GPU composition for temporary gesture previews and confirmed document
-  states. Reject stale frames after edits, Undo/Redo, deletion, or New/Open.
-- Preserve imported-image movement, proportional/independent scale, and free
-  rotation. Object gestures leave masks and unselected objects fixed; existing
-  layer transforms still affect both content and mask.
-- Preserve Paint/Eraser thumbnail targeting, grayscale mask painting, eraser
-  behavior, antialiased edges, one history action per stroke/gesture, and Esc.
-- Profile incremental uploads, dirty regions, and cached operation replay;
-  implement them only where measurements justify the complexity. Start GPU
-  brush/raster kernels only with separate coverage for existing pixel semantics.
-- Present completed textures directly where practical, with explicit shared
-  context ownership and synchronization. Retain CPU presentation and ensure
-  checkerboard, zoom/pan, text editing, and selection overlays remain correct.
-- Generate content/mask thumbnails from the same rendering semantics. Prevent
-  cache growth across history, document replacement, relink, and deletion.
-
-**Exit:** interactive preview, confirmed output, thumbnails, cancellation, and
-Undo/Redo agree; responsiveness and memory are measured on real drivers.
-
-## Stage 4 — Export and Video Editor publication
-
-- Render full export, Quick Export, and published PNG through the same covered
-  composition contract, using the appropriate immutable snapshot and scope.
-- Preserve full-canvas selected-layer/group export, Background export, PNG
-  alpha, JPEG quality/matte, output dimensions, and encoding behavior.
-- Use export-worker resources safely. Read back at the image-writer boundary;
-  account for that transfer and preserve cancellation and atomic publication.
-- Preserve missing/unreadable/incompatible source diagnostics, export blocking,
-  compatible relinking, session-stable decoded sources, and original files.
-  Saving and editing other layers must remain possible with unavailable sources.
-- Cover publication and consumption together: Video Editor import, linked-image
-  refresh, shared links/clip variants, preview, and rendered export must retain
-  the masked PNG result and its alpha. Failed output preserves the prior file.
-
-**Exit:** standalone exports and the two-app PNG workflow pass producer/consumer
-regressions and documented native checks; document/protocol formats are intact.
-
-## Stage 5 — Acceptance and default selection
-
-- Compare CPU/GPU on the documented 1080p workload with up to five layers and
-  one group. Include mask-heavy, stroke-heavy, large-image, and repeated-source
-  documents as separate workloads; these are measurements, not new size limits.
-- Record build, OS, GPU/driver, workload, interaction latency, composition/export
-  time, upload/readback, CPU/RAM, and GPU memory where available. Use repeat runs.
-- Compile affected applications in Debug and Release; run focused Image Editor,
-  shared-core, and Video Editor consumer tests plus the full Release suite as
-  part of the future implementation delivery.
-- Validate Windows, macOS, and Linux contexts, packaged dependencies, resource
-  exhaustion, and CPU fallback. Headless success is not native driver acceptance.
-- Change the default only after correctness and repeatable gains are recorded.
-  Retain fallback and choose CPU for unsupported requests or unsuitable workloads.
-
-**Exit:** coverage, native platform evidence, and measured acceptance support
-the default choice; no general performance claim is made from one machine.
-
-## Technology and scope
-
-Use the shared experiment described in the Motion plan as the provisional
-starting point. OpenGL through public Qt APIs offers reuse of existing suite
-dependencies; costs include shader parity, driver differences, texture memory,
-and transfers. Compare Qt RHI or native backends if platform support or profiling
-justifies their compatibility, dependency, and maintenance costs. Record module
-licenses and deployment requirements before adding dependencies.
-
-This plan accelerates existing editing behavior. Retouching, new color/effect
-features, embedded imported images, live external refresh, perspective, advanced
-typography, nested groups, and new mask types remain outside this delivery.
-
-## Future regression and manual evidence
-
-Extend the existing core, mask, raster-image, UI, and export checks listed in
-[ROADMAP.md](ROADMAP.md). Add shared GPU boundary coverage and preserve the
-Video Editor consumer fixture. Existing CPU tests do not establish GPU parity.
-
-For each stage, document native comparisons for transparent edges, mask/gesture
-behavior, thumbnails, export, source failures, context loss, and repeated
-opening/closing. The publication check must run both editors and confirm updated
-PNG content in Video Editor preview and export. Follow
-[MANUAL_VALIDATION.md](MANUAL_VALIDATION.md) and the repository
-[regression policy](../REGRESSION_POLICY.md).
-
-## Resuming and delivery record
-
-Read `AGENTS.md`, this plan, the architecture, format, and regression guides;
-inspect the current repository and shared GPU work before starting Stage 1.
-After each delivery, record implemented items, build/test results, platform
-evidence, unresolved issues, and the next stage here.
-
-- 2026-10-02: documentation saved; implementation, GPU measurements, and GPU
-  acceptance remain planned. Coordinate shared work with the
-  [Motion Studio](../motion-editor/GPU_ACCELERATION_PLAN.md) and
-  [Video Editor](../video-editor/GPU_ACCELERATION_PLAN.md) plans.
+The earlier CPU measurements below are historical renderer/session baselines;
+they are not directly comparable to the new request-to-presentation benchmark.
 
 ## Image Editor CPU measurement baseline
 

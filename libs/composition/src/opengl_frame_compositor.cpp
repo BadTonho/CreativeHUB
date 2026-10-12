@@ -11,6 +11,10 @@
 #include <QOpenGLVersionFunctionsFactory>
 #include <QVector3D>
 #include <QThread>
+#include <QMatrix3x3>
+#include <QSysInfo>
+#include <unordered_map>
+#include <unordered_set>
 
 #include <algorithm>
 #include <array>
@@ -40,7 +44,13 @@ OpenGlCompositionResult result(OpenGlCompositionStatus status,
 bool usable(const CompositionLayer& layer) {
     if (!layer.frame || !animation::validTransform(layer.transform)) return false;
     const auto& f = *layer.frame;
-    if (layer.native_frame) return f.width == layer.native_frame->width() && f.height == layer.native_frame->height();
+    if (layer.native_frame) {
+#ifdef CS_NATIVE_VIDEO_INTEROP
+        return f.width == layer.native_frame->width() && f.height == layer.native_frame->height();
+#else
+        return false;
+#endif
+    }
     if (layer.texture_frame) return layer.texture_frame->valid() &&
         f.width == layer.texture_frame->width() && f.height == layer.texture_frame->height();
     return f.width > 0 && f.height > 0 &&
@@ -313,6 +323,12 @@ struct OpenGlFrameCompositor::Impl {
     std::unique_ptr<QOpenGLShaderProgram> effect_program;
     std::unique_ptr<QOpenGLShaderProgram> image_program;
     const OpenGlImageOperation* image_operation = nullptr;
+    const OpenGlRasterRequest* raster_request = nullptr;
+    std::unique_ptr<QOpenGLShaderProgram> raster_program;
+    struct RasterTexture { GLuint texture = 0; qint64 key = 0; QSize size; std::uint64_t used = 0; unsigned pixel_bytes = 4; };
+    std::unordered_map<std::string, RasterTexture> raster_textures;
+    std::unique_ptr<QOpenGLFramebufferObject> raster_scratch[2];
+    std::uint64_t raster_reserved = 0, raster_clock = 0;
     GLuint image_textures[2]{};
     std::uint64_t image_texture_bytes[2]{};
     std::unique_ptr<detail::WindowsVideoInterop> video_interop;
@@ -363,6 +379,10 @@ struct OpenGlFrameCompositor::Impl {
     ~Impl() {
         if (context && context->makeCurrent(surface)) {
             video_interop.reset();
+            raster_program.reset();
+            for (auto& pair : raster_textures) gl->glDeleteTextures(1, &pair.second.texture);
+            raster_textures.clear();
+            raster_scratch[0].reset(); raster_scratch[1].reset();
             for (auto& target : targets) {
                 if (target.state) {
                     std::lock_guard lock(target.state->mutex);
@@ -396,6 +416,10 @@ struct OpenGlFrameCompositor::Impl {
             }
             readback_slots.clear();
             context->doneCurrent();
+        }
+        {
+            std::lock_guard lock(budget->impl_->mutex);
+            budget->impl_->bytes -= raster_reserved;
         }
         for (auto& target : targets) {
             if (target.state) target.state->valid.store(false);
@@ -499,6 +523,209 @@ struct OpenGlFrameCompositor::Impl {
                 "Cannot reactivate the worker OpenGL context.");
         return result(OpenGlCompositionStatus::Complete);
     }
+
+    bool reserveRaster(std::uint64_t bytes) {
+        std::lock_guard lock(budget->impl_->mutex);
+        if (bytes > budget->impl_->byte_limit || budget->impl_->bytes > budget->impl_->byte_limit - bytes) return false;
+        budget->impl_->bytes += bytes; raster_reserved += bytes; return true;
+    }
+    void releaseRaster(std::uint64_t bytes) {
+        std::lock_guard lock(budget->impl_->mutex);
+        budget->impl_->bytes -= bytes; raster_reserved -= bytes;
+    }
+    OpenGlCompositionResult renderRaster(const OpenGlRasterRequest& request,
+        const OpenGlFrameCompositor::CancellationPredicate& cancel, OpenGlCompositionTimings& measured) {
+        if (!selected_output) return result(OpenGlCompositionStatus::Failed, "raster-target", "No raster output target.");
+        const int width = request.size.width(), height = request.size.height();
+        std::unordered_set<std::string> needed;
+        for (const auto& node : request.nodes) {
+            if (!node.group && (!node.transforms.empty() || node.opacity != 100))
+                return result(OpenGlCompositionStatus::Unsupported, "raster-node", "Only groups accept transforms or node opacity.");
+            for (const auto& transform : node.transforms) {
+                if (!transform.matrix.isAffine() || !transform.matrix.isInvertible() ||
+                    !std::isfinite(transform.matrix.m11()) || !std::isfinite(transform.matrix.m12()) ||
+                    !std::isfinite(transform.matrix.m21()) || !std::isfinite(transform.matrix.m22()) ||
+                    !std::isfinite(transform.matrix.dx()) || !std::isfinite(transform.matrix.dy()))
+                    return result(OpenGlCompositionStatus::Unsupported, "raster-transform", "Raster transforms must be finite invertible affine matrices.");
+            }
+        }
+        for (const auto& node : request.nodes) for (const auto& layer : node.layers) {
+            for (const auto* input : {&layer.content, &layer.mask}) {
+                if (input->pixels.isNull()) continue;
+                if (input->identity.empty() || input->pixels.size() != request.size ||
+                    (input->pixels.format() != QImage::Format_ARGB32_Premultiplied &&
+                     (input != &layer.mask || input->pixels.format() != QImage::Format_Grayscale8)))
+                    return result(OpenGlCompositionStatus::Unsupported, "raster-input", "Raster inputs must be canvas-sized premultiplied ARGB32 images with identities.");
+                needed.insert(input->identity);
+            }
+            if (layer.opacity < 0 || layer.opacity > 100)
+                return result(OpenGlCompositionStatus::Unsupported, "raster-opacity", "Invalid layer opacity.");
+        }
+        const auto canvas_bytes = std::uint64_t(width) * height * 4;
+        // Evict unused sources in LRU order before allocating current resources.
+        for (;;) {
+            auto victim = raster_textures.end();
+            for (auto it = raster_textures.begin(); it != raster_textures.end(); ++it)
+                if (!needed.contains(it->first) && (victim == raster_textures.end() || it->second.used < victim->second.used)) victim = it;
+            if (victim == raster_textures.end()) break;
+            gl->glDeleteTextures(1, &victim->second.texture);
+            releaseRaster(std::uint64_t(victim->second.size.width()) * victim->second.size.height() * victim->second.pixel_bytes);
+            raster_textures.erase(victim);
+        }
+        if (!raster_program) {
+            constexpr char fragment[] = R"GLSL(#version 150 core
+uniform sampler2D source_image;
+uniform sampler2D mask_image;
+uniform bool has_mask;
+uniform bool mask_gray;
+uniform bool bottom_left;
+uniform int canvas_height;
+uniform int opacity256;
+uniform mat3 inverse_matrix;
+uniform ivec4 clip_rect;
+out vec4 color;
+void main() {
+    vec2 point = vec2(gl_FragCoord.x, float(canvas_height) - gl_FragCoord.y);
+    ivec2 pixel = ivec2(floor((inverse_matrix * vec3(point, 1.0)).xy));
+    ivec2 size = textureSize(source_image, 0);
+    if (pixel.x < 0 || pixel.y < 0 || pixel.x >= size.x || pixel.y >= size.y ||
+        pixel.x < clip_rect.x || pixel.y < clip_rect.y || pixel.x >= clip_rect.z || pixel.y >= clip_rect.w) { color = vec4(0); return; }
+    ivec2 source_pixel = bottom_left ? ivec2(pixel.x, size.y - 1 - pixel.y) : pixel;
+    ivec4 bytes = ivec4(floor(texelFetch(source_image, source_pixel, 0) * 255.0 + 0.5));
+    if (has_mask) {
+        ivec3 mask_bytes = ivec3(floor(texelFetch(mask_image, pixel, 0).rgb * 255.0 + 0.5));
+        int coverage = mask_gray ? mask_bytes.r : (mask_bytes.r * 11 + mask_bytes.g * 16 + mask_bytes.b * 5) / 32;
+        bytes = (bytes * coverage + ivec4(127)) / 255;
+    }
+    // Match Qt's 0..256 constant-alpha scale before source-over blending.
+    bytes = (bytes * opacity256) / 256;
+    color = vec4(bytes) / 255.0;
+})GLSL";
+            raster_program = std::make_unique<QOpenGLShaderProgram>();
+            if (!raster_program->addShaderFromSourceCode(QOpenGLShader::Vertex, vertex_shader) ||
+                !raster_program->addShaderFromSourceCode(QOpenGLShader::Fragment, fragment) || !raster_program->link())
+                return result(OpenGlCompositionStatus::Failed, "raster-shader", raster_program->log().toStdString());
+        }
+        bool groups = false, transforms = false;
+        for (const auto& node : request.nodes) { groups |= node.group; transforms |= !node.transforms.empty();
+            if (node.opacity < 0 || node.opacity > 100) return result(OpenGlCompositionStatus::Unsupported, "raster-opacity", "Invalid group opacity."); }
+        for (int i = 0; i < 2; ++i) {
+            const bool required = i == 0 ? groups : transforms;
+            if (raster_scratch[i] && (!required || raster_scratch[i]->size() != request.size)) {
+                releaseRaster(std::uint64_t(raster_scratch[i]->width()) * raster_scratch[i]->height() * 4);
+                raster_scratch[i].reset();
+            }
+            if (required && !raster_scratch[i]) {
+                if (!reserveRaster(canvas_bytes)) return result(OpenGlCompositionStatus::Unsupported, "raster-budget", "Group intermediates exceed the raster budget.");
+                QOpenGLFramebufferObjectFormat format; format.setInternalTextureFormat(GL_RGBA8);
+                raster_scratch[i] = std::make_unique<QOpenGLFramebufferObject>(width, height, format);
+                if (!raster_scratch[i]->isValid()) return result(OpenGlCompositionStatus::Failed, "raster-group", "Cannot allocate a group intermediate.");
+            }
+        }
+        const auto upload = [&](const OpenGlRasterInput& input, unsigned slot) -> OpenGlCompositionResult {
+            gl->glActiveTexture(GL_TEXTURE0 + slot);
+            auto& entry = raster_textures[input.identity];
+            entry.used = ++raster_clock;
+            if (entry.texture && (entry.size != request.size || entry.pixel_bytes != (input.pixels.format()==QImage::Format_Grayscale8?1U:4U))) {
+                gl->glDeleteTextures(1, &entry.texture); entry.texture = 0;
+                releaseRaster(std::uint64_t(entry.size.width()) * entry.size.height() * entry.pixel_bytes);
+            }
+            const bool gray=input.pixels.format()==QImage::Format_Grayscale8;
+            const unsigned pixel_bytes=gray?1:4;
+            bool fresh = entry.texture == 0;
+            if (fresh) {
+                if (!reserveRaster(canvas_bytes/4*pixel_bytes)) { raster_textures.erase(input.identity); return result(OpenGlCompositionStatus::Unsupported, "raster-budget", "Source textures exceed the raster budget."); }
+                gl->glGenTextures(1, &entry.texture); entry.size = request.size; entry.pixel_bytes=pixel_bytes;
+            }
+            gl->glBindTexture(GL_TEXTURE_2D, entry.texture);
+            if (fresh) {
+                gl->glTexImage2D(GL_TEXTURE_2D, 0, gray?GL_R8:GL_RGBA8, width, height, 0, gray?GL_RED:GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            }
+            const qint64 revision = input.revision ? input.revision : input.pixels.cacheKey();
+            if (fresh || entry.key != revision) {
+                const auto started = Clock::now();
+                const QRect dirty = !fresh && entry.key == input.previous_key && !input.dirty.isEmpty()
+                    ? input.dirty.intersected(QRect(QPoint(), request.size)) : QRect(QPoint(), request.size);
+                gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+                gl->glPixelStorei(GL_UNPACK_ROW_LENGTH, input.pixels.bytesPerLine() / pixel_bytes);
+                // ARGB32 is BGRA on little-endian platforms. The big-endian path
+                // returns Unsupported below, instead of misinterpreting channels.
+                gl->glTexSubImage2D(GL_TEXTURE_2D, 0, dirty.x(), dirty.y(), dirty.width(), dirty.height(), gray?GL_RED:GL_BGRA, GL_UNSIGNED_BYTE,
+                    input.pixels.constScanLine(dirty.y()) + dirty.x() * pixel_bytes);
+                gl->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                measured.uploaded_bytes += std::uint64_t(dirty.width()) * dirty.height() * pixel_bytes;
+                ++measured.uploaded_layers; measured.upload_nanoseconds += elapsed(started);
+                entry.key = revision;
+            }
+            return result(OpenGlCompositionStatus::Complete);
+        };
+        if constexpr (QSysInfo::ByteOrder != QSysInfo::LittleEndian)
+            return result(OpenGlCompositionStatus::Unsupported, "raster-layout", "Native ARGB raster upload requires little-endian storage.");
+        raster_program->bind(); gl->glBindVertexArray(vao);
+        gl->glViewport(0, 0, width, height);
+        gl->glDisable(GL_DEPTH_TEST); gl->glDisable(GL_STENCIL_TEST); gl->glDisable(GL_SCISSOR_TEST);
+        gl->glDisable(GL_CULL_FACE); gl->glDisable(GL_DITHER); gl->glDisable(GL_FRAMEBUFFER_SRGB); gl->glDisable(GL_MULTISAMPLE);
+        gl->glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA); gl->glBlendEquation(GL_FUNC_ADD);
+        raster_program->setUniformValue("source_image", 0); raster_program->setUniformValue("mask_image", 1);
+        raster_program->setUniformValue("canvas_height", height);
+        const auto draw = [&](GLuint source, bool bottom, GLuint mask, int opacity, const OpenGlRasterTransform& transform) -> bool {
+            bool invertible = false; const auto inverse = transform.matrix.inverted(&invertible);
+            if (!invertible || !transform.matrix.isAffine()) return false;
+            QMatrix3x3 matrix;
+            matrix(0,0)=float(inverse.m11()); matrix(0,1)=float(inverse.m21()); matrix(0,2)=float(inverse.dx());
+            matrix(1,0)=float(inverse.m12()); matrix(1,1)=float(inverse.m22()); matrix(1,2)=float(inverse.dy());
+            matrix(2,0)=0; matrix(2,1)=0; matrix(2,2)=1;
+            raster_program->setUniformValue("inverse_matrix", matrix);
+            const QRect clip = transform.clip.isValid() ? transform.clip : QRect(QPoint(), request.size);
+            gl->glUniform4i(raster_program->uniformLocation("clip_rect"), clip.x(), clip.y(), clip.x()+clip.width(), clip.y()+clip.height());
+            raster_program->setUniformValue("bottom_left", bottom); raster_program->setUniformValue("has_mask", mask != 0);
+            raster_program->setUniformValue("opacity256", opacity * 256 / 100);
+            gl->glActiveTexture(GL_TEXTURE0); gl->glBindTexture(GL_TEXTURE_2D, source);
+            gl->glActiveTexture(GL_TEXTURE1); gl->glBindTexture(GL_TEXTURE_2D, mask);
+            gl->glDrawArrays(GL_TRIANGLES, 0, 3); return true;
+        };
+        const auto clear = [&](QOpenGLFramebufferObject* target) { target->bind(); gl->glClearColor(0,0,0,0); gl->glClear(GL_COLOR_BUFFER_BIT); };
+        clear(selected_output);
+        const auto started = Clock::now();
+        for (const auto& node : request.nodes) {
+            if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
+            auto* target = node.group ? raster_scratch[0].get() : selected_output;
+            if (node.group) clear(target); else target->bind();
+            gl->glEnable(GL_BLEND);
+            for (const auto& layer : node.layers) {
+                if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
+                if (layer.content.pixels.isNull()) continue;
+                auto loaded = upload(layer.content, 0); if (loaded.status != OpenGlCompositionStatus::Complete) return loaded;
+                GLuint mask = 0;
+                if (!layer.mask.pixels.isNull()) {
+                    loaded = upload(layer.mask, 1); if (loaded.status != OpenGlCompositionStatus::Complete) return loaded;
+                    mask = raster_textures.at(layer.mask.identity).texture;
+                }
+                raster_program->setUniformValue("mask_gray", layer.mask.pixels.format()==QImage::Format_Grayscale8);
+                if (!draw(raster_textures.at(layer.content.identity).texture, false, mask, layer.opacity, {}))
+                    return result(OpenGlCompositionStatus::Unsupported, "raster-transform", "Invalid raster transform.");
+            }
+            if (!node.group) continue;
+            gl->glDisable(GL_BLEND);
+            for (const auto& transform : node.transforms) {
+                auto* next = target == raster_scratch[0].get() ? raster_scratch[1].get() : raster_scratch[0].get();
+                clear(next);
+                if (!draw(target->texture(), true, 0, 100, transform))
+                    return result(OpenGlCompositionStatus::Unsupported, "raster-transform", "Invalid group transform.");
+                target = next;
+            }
+            selected_output->bind(); gl->glEnable(GL_BLEND);
+            draw(target->texture(), true, 0, node.opacity, {});
+        }
+        measured.draw_submission_nanoseconds += elapsed(started);
+        rememberResourcePeak();
+        if (const auto code = gl->glGetError(); code != GL_NO_ERROR)
+            return result(OpenGlCompositionStatus::Failed, "raster-compose", "OpenGL raster composition failed.", code);
+        return result(OpenGlCompositionStatus::Complete);
+    }
+
     OpenGlCompositionResult renderImage(const OpenGlImageOperation& operation,
         const OpenGlFrameCompositor::CancellationPredicate& cancel, OpenGlCompositionTimings& measured) {
         if (!selected_output || !selected_output->bind() || !image_program->bind())
@@ -642,9 +869,10 @@ struct OpenGlFrameCompositor::Impl {
             std::lock_guard lock(state.mutex);
             if (state.unsafe) return result(OpenGlCompositionStatus::Failed, "consumer-fence",
                 "A consumer could not protect its texture draw.");
-            if (image_operation && target.state.use_count() == 1) {
-                // Internal graph evaluation may reuse a released intermediate
-                // immediately. Synchronize on the GPU before overwriting it.
+            if ((image_operation || raster_request) && target.state.use_count() == 1) {
+                // Graph evaluation and interactive raster composition can reuse
+                // released targets immediately. Order outstanding producer and
+                // consumer work on the GPU before overwriting their pixels.
                 if (state.producer) {
                     gl->glWaitSync(state.producer, 0, GL_TIMEOUT_IGNORED);
                     gl->glDeleteSync(state.producer); state.producer = nullptr;
@@ -688,6 +916,7 @@ struct OpenGlFrameCompositor::Impl {
         if (effect_scratch && effect_scratch->isValid())
             bytes += static_cast<std::uint64_t>(effect_scratch->width()) *
                 effect_scratch->height() * 4;
+        bytes += raster_reserved;
         const std::uint64_t geometry = (lookup_buffers[0] ? 16384ULL : 0) +
             (lookup_buffers[1] ? 16384ULL : 0) + (lookup_buffers[2] ? 4096ULL : 0);
         return {bytes, geometry, std::max(peak_known_bytes, bytes + geometry)};
@@ -718,8 +947,22 @@ OpenGlFrameCompositor::OpenGlFrameCompositor(QOffscreenSurface* surface, OpenGlP
     : impl_(std::make_unique<Impl>(surface, precision, share_context, std::move(budget))) {}
 OpenGlFrameCompositor::~OpenGlFrameCompositor() = default;
 
-int OpenGlImageInput::width() const noexcept { return native ? native->width() : texture ? texture->width() : rgba ? rgba->width : 0; }
-int OpenGlImageInput::height() const noexcept { return native ? native->height() : texture ? texture->height() : rgba ? rgba->height : 0; }
+int OpenGlImageInput::width() const noexcept {
+#ifdef CS_NATIVE_VIDEO_INTEROP
+    if (native) return native->width();
+#else
+    if (native) return 0;
+#endif
+    return texture ? texture->width() : rgba ? rgba->width : 0;
+}
+int OpenGlImageInput::height() const noexcept {
+#ifdef CS_NATIVE_VIDEO_INTEROP
+    if (native) return native->height();
+#else
+    if (native) return 0;
+#endif
+    return texture ? texture->height() : rgba ? rgba->height : 0;
+}
 
 OpenGlTextureCompositionResult OpenGlFrameCompositor::importFrame(
     const media::NativeVideoFramePtr& frame, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
@@ -730,6 +973,7 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::importFrame(
 
 OpenGlCompositionResult OpenGlFrameCompositor::copyToNative(const OpenGlTextureFramePtr& source,
     const std::shared_ptr<const media::NativeVideoFrame>& destination, const CancellationPredicate& cancel) {
+#if defined(CS_NATIVE_VIDEO_INTEROP)
     auto& p = *impl_;
     struct Guard { Impl& p; ~Guard() { if (p.context) p.context->doneCurrent(); } } guard{p};
     try {
@@ -746,6 +990,11 @@ OpenGlCompositionResult OpenGlFrameCompositor::copyToNative(const OpenGlTextureF
         if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
         return result;
     } catch (const std::exception& error) { return {OpenGlCompositionStatus::Failed, {}, "copy-native-output", error.what()}; }
+#else
+    (void)source; (void)destination;
+    if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
+    return {OpenGlCompositionStatus::Unsupported, {}, "native-video-disabled", "Native video integration is not compiled in this raster-only backend."};
+#endif
 }
 
 OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
@@ -1085,6 +1334,13 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, 
     }
 }
 
+OpenGlTextureCompositionResult OpenGlFrameCompositor::composeRasterTexture(
+    const OpenGlRasterRequest& request, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    impl_->raster_request = &request;
+    struct Guard { Impl& p; ~Guard() { p.raster_request = nullptr; } } guard{*impl_};
+    return composeTexture(request.size.width(), request.size.height(), {}, cancel, timings);
+}
+
 OpenGlCompositionResult OpenGlFrameCompositor::readback(const OpenGlTextureFramePtr& frame,
     const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
     if (timings) *timings = {};
@@ -1202,6 +1458,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         if (!bounded(width, height, p.texture_limit))
             return result(OpenGlCompositionStatus::Unsupported, "check-limits",
                 "Canvas exceeds the device texture limit or 256 MiB texture budget.");
+        if (p.raster_request) return p.renderRaster(*p.raster_request, cancel, measured);
         if (p.image_operation) return p.renderImage(*p.image_operation, cancel, measured);
         for (std::size_t layer_index = 0; layer_index < layers.size(); ++layer_index) {
             const auto& layer = layers[layer_index];

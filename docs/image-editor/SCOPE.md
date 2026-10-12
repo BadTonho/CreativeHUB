@@ -6,6 +6,13 @@ editor in `apps/image-editor/`. Its current behavior and the approved next
 release direction are recorded separately below. See the
 [roadmap](ROADMAP.md) for milestone order and acceptance gates.
 
+Interactive editing uses an incremental CPU raster cache and optional shared GPU
+composition with direct texture presentation. Settings > Rendering offers Automatic
+and CPU, with complete CPU recovery on capacity/technical failures. Automatic GPU
+activation is governed by the correctness/performance gate and reference Windows
+[evidence](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md). Tools, export and
+published PNG rasterization remain CPU. Native macOS/Linux GPU acceptance is pending.
+
 ## Implemented Today
 
 The current application supports one raster document at a time, either linked

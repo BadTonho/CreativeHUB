@@ -1,7 +1,7 @@
 #include "windows_video_interop.h"
 #include <QOpenGLContext>
 #include <QOpenGLFunctions_3_2_Core>
-#ifdef _WIN32
+#if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -16,7 +16,7 @@
 #include <vector>
 
 namespace creative_suite::composition::detail {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
 using Microsoft::WRL::ComPtr;
 namespace {
 constexpr char vertex_source[] = R"(
@@ -162,14 +162,14 @@ struct WindowsVideoInterop::Impl {
 struct WindowsVideoInterop::Impl {};
 #endif
 WindowsVideoInterop::WindowsVideoInterop(QOpenGLContext* context, QOpenGLFunctions_3_2_Core* gl)
-#ifdef _WIN32
+#if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
     : impl_(std::make_unique<Impl>(context, gl)) {}
 #else
     : impl_(std::make_unique<Impl>()) { (void)context; (void)gl; }
 #endif
 WindowsVideoInterop::~WindowsVideoInterop() = default;
 OpenGlCompositionResult WindowsVideoInterop::begin(const media::NativeVideoFramePtr& frame) {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
     if (!impl_->available) return {OpenGlCompositionStatus::Unsupported, {}, "check-d3d11-interop", "WGL_NV_DX_interop2 is unavailable."};
     if (active_import_ && active_import_->locked)
         return {OpenGlCompositionStatus::Busy, {}, "native-import-pool", "A native import is still in use."};
@@ -232,7 +232,7 @@ OpenGlCompositionResult WindowsVideoInterop::begin(const media::NativeVideoFrame
 #endif
 }
 OpenGlCompositionResult WindowsVideoInterop::end() {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
     if (active_import_ && active_import_->locked) {
         auto& p = *active_import_;
         if (!p.unlock_objects(p.interop_device, 1, &p.object))
@@ -244,7 +244,7 @@ OpenGlCompositionResult WindowsVideoInterop::end() {
     return {OpenGlCompositionStatus::Complete};
 }
 OpenGlCompositionResult WindowsVideoInterop::write(unsigned source_texture, const media::NativeVideoFramePtr& destination) {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
     auto& p = *impl_;
     if (!p.available) return {OpenGlCompositionStatus::Unsupported, {}, "check-encoding-interop", "WGL_NV_DX_interop2 is unavailable."};
     if (!destination) return {OpenGlCompositionStatus::Unsupported, {}, "check-encoding-frame", "A native encoding frame is required."};
@@ -287,14 +287,14 @@ OpenGlCompositionResult WindowsVideoInterop::write(unsigned source_texture, cons
 #endif
 }
 unsigned WindowsVideoInterop::texture() const noexcept {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
     return active_import_ ? active_import_->texture : 0;
 #else
     return 0;
 #endif
 }
 std::uint64_t WindowsVideoInterop::reservedBytes() const noexcept {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
     std::uint64_t bytes = 0;
     for (const auto& entry : imports_)
         bytes += std::uint64_t(entry->storage_width) * entry->storage_height * 3 / 2 +

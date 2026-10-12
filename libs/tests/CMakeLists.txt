@@ -59,7 +59,9 @@ endif()
 
 if(TARGET creative-suite::composition-opengl)
     add_executable(creative-suite-composition-opengl-tests opengl_composition_test.cpp)
-    creative_suite_deploy_media_runtime(creative-suite-composition-opengl-tests)
+    if(COMMAND creative_suite_deploy_media_runtime)
+        creative_suite_deploy_media_runtime(creative-suite-composition-opengl-tests)
+    endif()
     target_link_libraries(creative-suite-composition-opengl-tests PRIVATE creative-suite::composition-opengl)
     qt_import_plugins(creative-suite-composition-opengl-tests
         INCLUDE Qt6::QOffscreenIntegrationPlugin)

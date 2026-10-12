@@ -1,0 +1,518 @@
+{
+    "architecture": "x86_64",
+    "gl_version": "3.2.0 NVIDIA 617.42",
+    "gpu_mode_requires_texture_per_frame": true,
+    "gpu_renderer": "NVIDIA GeForce GTX 1660 SUPER/PCIe/SSE2",
+    "gpu_vendor": "NVIDIA Corporation",
+    "os": "Windows 11 Version 26H2",
+    "performance_gate_passed": true,
+    "presentation_boundary": "CPU paint completion / QOpenGLWidget frameSwapped; swap interval 0",
+    "profiles": [
+        {
+            "cpu_mean_run_p95_ms": 16.70443333333333,
+            "gpu_mean_run_p95_ms": 2.4617,
+            "height": 1080,
+            "p95_improvement_percent": 85.26319360329492,
+            "profile": "reference",
+            "runs": [
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 13.1654,
+                        "presentation_p95_ms": 16.1699,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 384.18421134459516,
+                        "sampled_peak_process_cpu_percent": 1386.357036845841,
+                        "sampled_peak_working_set_bytes": 143261696,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 13.9204
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 66355200,
+                        "presentation_p50_ms": 1.152,
+                        "presentation_p95_ms": 2.4071,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 227.53076109354942,
+                        "sampled_peak_process_cpu_percent": 2754.031902705561,
+                        "sampled_peak_working_set_bytes": 201220096,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.5051
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 12.1221,
+                        "presentation_p95_ms": 14.6394,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 386.53220290940385,
+                        "sampled_peak_process_cpu_percent": 1573.4881925446032,
+                        "sampled_peak_working_set_bytes": 198569984,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 11.8484
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 66355200,
+                        "presentation_p50_ms": 0.9329,
+                        "presentation_p95_ms": 1.6453,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 101.88185779726274,
+                        "sampled_peak_process_cpu_percent": 2439.5003903200623,
+                        "sampled_peak_working_set_bytes": 217452544,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.0602
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 12.6251,
+                        "presentation_p95_ms": 19.304,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 379.9170210440088,
+                        "sampled_peak_process_cpu_percent": 1454.903288610488,
+                        "sampled_peak_working_set_bytes": 221724672,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 14.0857
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 66355200,
+                        "presentation_p50_ms": 1.449,
+                        "presentation_p95_ms": 3.3327,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 92.64300476507864,
+                        "sampled_peak_process_cpu_percent": 1473.3616218764735,
+                        "sampled_peak_working_set_bytes": 217903104,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.5421
+                    }
+                }
+            ],
+            "width": 1920
+        },
+        {
+            "cpu_mean_run_p95_ms": 80.03583333333334,
+            "gpu_mean_run_p95_ms": 6.434766666666666,
+            "height": 1080,
+            "p95_improvement_percent": 91.96014285268058,
+            "profile": "mask-heavy",
+            "runs": [
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 70.9936,
+                        "presentation_p95_ms": 84.8211,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 158.4640583251474,
+                        "sampled_peak_process_cpu_percent": 551.822781010233,
+                        "sampled_peak_working_set_bytes": 230518784,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 82.046
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 74649600,
+                        "presentation_p50_ms": 1.257,
+                        "presentation_p95_ms": 2.0032,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 192.54612016953465,
+                        "sampled_peak_process_cpu_percent": 2067.2091023351195,
+                        "sampled_peak_working_set_bytes": 255176704,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.2923
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 69.8541,
+                        "presentation_p95_ms": 80.2149,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 151.6933131009673,
+                        "sampled_peak_process_cpu_percent": 674.0996186213997,
+                        "sampled_peak_working_set_bytes": 258940928,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 78.663
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 74649600,
+                        "presentation_p50_ms": 4.1215,
+                        "presentation_p95_ms": 9.7217,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 101.0606207695569,
+                        "sampled_peak_process_cpu_percent": 745.8411895271963,
+                        "sampled_peak_working_set_bytes": 252899328,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.4617
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 68.3745,
+                        "presentation_p95_ms": 75.0715,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 169.6292954670564,
+                        "sampled_peak_process_cpu_percent": 595.6343120551986,
+                        "sampled_peak_working_set_bytes": 256274432,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 73.6201
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 74649600,
+                        "presentation_p50_ms": 4.4555,
+                        "presentation_p95_ms": 7.5794,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 131.02493192728377,
+                        "sampled_peak_process_cpu_percent": 976.4709558478893,
+                        "sampled_peak_working_set_bytes": 256606208,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 0.9994
+                    }
+                }
+            ],
+            "width": 1920
+        },
+        {
+            "cpu_mean_run_p95_ms": 13.518300000000002,
+            "gpu_mean_run_p95_ms": 3.2160666666666664,
+            "height": 1080,
+            "p95_improvement_percent": 76.20953324998952,
+            "profile": "stroke-heavy",
+            "runs": [
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 11.1157,
+                        "presentation_p95_ms": 13.3373,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 424.43288557280226,
+                        "sampled_peak_process_cpu_percent": 1319.2839981885031,
+                        "sampled_peak_working_set_bytes": 252706816,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 11.5486
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 66355200,
+                        "presentation_p50_ms": 1.1973,
+                        "presentation_p95_ms": 2.76,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 178.6753250894851,
+                        "sampled_peak_process_cpu_percent": 3017.865765330758,
+                        "sampled_peak_working_set_bytes": 249937920,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.2096
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 11.1728,
+                        "presentation_p95_ms": 13.0979,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 340.16550938497585,
+                        "sampled_peak_process_cpu_percent": 1369.6048525647768,
+                        "sampled_peak_working_set_bytes": 240803840,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 11.2875
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 66355200,
+                        "presentation_p50_ms": 1.1839,
+                        "presentation_p95_ms": 2.0616,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 194.8244647158867,
+                        "sampled_peak_process_cpu_percent": 2468.989491980722,
+                        "sampled_peak_working_set_bytes": 249626624,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.0877
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 11.5219,
+                        "presentation_p95_ms": 14.1197,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 539.0361536784725,
+                        "sampled_peak_process_cpu_percent": 1262.9834700723436,
+                        "sampled_peak_working_set_bytes": 251731968,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 12.1647
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 49828608,
+                        "peak_known_gpu_texture_bytes": 66355200,
+                        "presentation_p50_ms": 2.3565,
+                        "presentation_p95_ms": 4.8266,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 167.13966788757207,
+                        "sampled_peak_process_cpu_percent": 1466.8147823638014,
+                        "sampled_peak_working_set_bytes": 243662848,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.6887
+                    }
+                }
+            ],
+            "width": 1920
+        },
+        {
+            "cpu_mean_run_p95_ms": 89.87716666666665,
+            "gpu_mean_run_p95_ms": 49.57996666666667,
+            "height": 2160,
+            "p95_improvement_percent": 44.83585931169019,
+            "profile": "large-image",
+            "runs": [
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 66417408,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 81.3016,
+                        "presentation_p95_ms": 92.4817,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 356.04118982565967,
+                        "sampled_peak_process_cpu_percent": 511.63827520282916,
+                        "sampled_peak_working_set_bytes": 308494336,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 84.9358
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 66417408,
+                        "peak_known_gpu_texture_bytes": 265420800,
+                        "presentation_p50_ms": 39.4164,
+                        "presentation_p95_ms": 47.9322,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 158.9604055785027,
+                        "sampled_peak_process_cpu_percent": 300.1814124924869,
+                        "sampled_peak_working_set_bytes": 276500480,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 46.6583
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 66417408,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 76.1386,
+                        "presentation_p95_ms": 82.8748,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 313.71907227775705,
+                        "sampled_peak_process_cpu_percent": 682.778209361041,
+                        "sampled_peak_working_set_bytes": 303394816,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 79.9638
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 66417408,
+                        "peak_known_gpu_texture_bytes": 265420800,
+                        "presentation_p50_ms": 39.2286,
+                        "presentation_p95_ms": 53.2758,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 160.84829602408414,
+                        "sampled_peak_process_cpu_percent": 357.7379513857973,
+                        "sampled_peak_working_set_bytes": 303734784,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 49.5936
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 66417408,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 85.3339,
+                        "presentation_p95_ms": 94.275,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 298.76972976219554,
+                        "sampled_peak_process_cpu_percent": 561.6195787192431,
+                        "sampled_peak_working_set_bytes": 330567680,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 90.4282
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 66417408,
+                        "peak_known_gpu_texture_bytes": 265420800,
+                        "presentation_p50_ms": 42.5969,
+                        "presentation_p95_ms": 47.5319,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 133.56673855993535,
+                        "sampled_peak_process_cpu_percent": 299.523956591657,
+                        "sampled_peak_working_set_bytes": 345399296,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 46.3885
+                    }
+                }
+            ],
+            "width": 3840
+        },
+        {
+            "cpu_mean_run_p95_ms": 83.06339999999999,
+            "gpu_mean_run_p95_ms": 4.901599999999999,
+            "height": 1080,
+            "p95_improvement_percent": 94.09896536862205,
+            "profile": "mask-stroke-heavy",
+            "runs": [
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 68.5176,
+                        "presentation_p95_ms": 74.1052,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 148.13883867241998,
+                        "sampled_peak_process_cpu_percent": 505.3491426466163,
+                        "sampled_peak_working_set_bytes": 310145024,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 72.7671
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 74649600,
+                        "presentation_p50_ms": 2.6511,
+                        "presentation_p95_ms": 5.9095,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 145.6541000771414,
+                        "sampled_peak_process_cpu_percent": 1671.5699384862262,
+                        "sampled_peak_working_set_bytes": 317112320,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.2018
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 74.167,
+                        "presentation_p95_ms": 86.1922,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 134.50135635643116,
+                        "sampled_peak_process_cpu_percent": 332.1594081716529,
+                        "sampled_peak_working_set_bytes": 319991808,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 83.6693
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 74649600,
+                        "presentation_p50_ms": 2.8052,
+                        "presentation_p95_ms": 4.3862,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 52.670268204519246,
+                        "sampled_peak_process_cpu_percent": 1081.9138623459355,
+                        "sampled_peak_working_set_bytes": 287608832,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.9983
+                    }
+                },
+                {
+                    "cpu": {
+                        "mode": "cpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 0,
+                        "presentation_p50_ms": 74.6391,
+                        "presentation_p95_ms": 88.8928,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 146.11945973513892,
+                        "sampled_peak_process_cpu_percent": 545.3538989051737,
+                        "sampled_peak_working_set_bytes": 291692544,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 85.9938
+                    },
+                    "gpu": {
+                        "mode": "gpu",
+                        "peak_cpu_raster_cache_bytes": 58164480,
+                        "peak_known_gpu_texture_bytes": 74649600,
+                        "presentation_p50_ms": 2.2291,
+                        "presentation_p95_ms": 4.4091,
+                        "readback_bytes": 0,
+                        "sampled_mean_process_cpu_percent": 131.157148913003,
+                        "sampled_peak_process_cpu_percent": 1335.9268125854994,
+                        "sampled_peak_working_set_bytes": 276574208,
+                        "samples": 30,
+                        "uploaded_bytes": 0,
+                        "worker_p95_ms": 1.9377
+                    }
+                }
+            ],
+            "width": 1920
+        }
+    ],
+    "qt_version": "6.7.2",
+    "repeat_runs": 3,
+    "samples_per_mode": 30,
+    "schema_version": 1,
+    "timestamp_utc": "2026-10-12T13:30:43.284Z",
+    "warmups_per_mode": 4
+}

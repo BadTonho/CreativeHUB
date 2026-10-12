@@ -29,6 +29,19 @@ struct ImageEditableSelectionTarget {
     QPoint seed;
 };
 
+enum class ImagePreviewKind { None, Erase, MaskPaint, Gradient, Blur, Objects, ExcludeObjects };
+struct ImagePreview {
+    ImagePreviewKind kind = ImagePreviewKind::None;
+    QVector<QPointF> points;
+    QColor color = Qt::black;
+    int diameter = 12, radius = 10;
+    QPointF start, end;
+    bool mask = false;
+    std::optional<QPainterPath> clipping;
+    QVector<ImageObjectPlacement> objects;
+    QStringList excluded;
+};
+
 class ImageDocumentSession final {
 public:
     [[nodiscard]] bool importRasterImages(const QVector<PreparedRasterImage>& images,
@@ -58,6 +71,8 @@ public:
                                    const ImageExportOptions& options,
                                    QString* error = nullptr) const;
     [[nodiscard]] ImageExportSnapshot exportSnapshot() const;
+    // Builds an immutable preview without rendering or changing history.
+    [[nodiscard]] ImageExportSnapshot interactiveSnapshot(const ImagePreview& preview = {}) const;
 
     [[nodiscard]] bool applyCrop(const QRect& crop, QString* error = nullptr);
     [[nodiscard]] bool applyPaintStroke(const QVector<QPointF>& points,

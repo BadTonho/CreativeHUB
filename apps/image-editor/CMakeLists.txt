@@ -3,7 +3,7 @@ include(GNUInstallDirs)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets)
 
 add_library(creative-suite-image-editor-core STATIC
     src/core/document/persistence/image_document_codec.cpp
@@ -20,6 +20,8 @@ add_library(creative-suite-image-editor-core STATIC
     src/core/document/editing/image_document_history.h
     src/core/document/editing/image_document_object_editor.cpp
     src/core/document/editing/image_document_object_editor.h
+    src/core/document/rendering/image_interactive_raster_cache.cpp
+    src/core/document/rendering/image_interactive_raster_cache.h
     src/core/document/rendering/image_document_renderer.cpp
     src/core/document/rendering/image_layer_raster_cache.cpp
     src/core/document/rendering/image_layer_raster_cache.h
@@ -59,6 +61,15 @@ target_link_libraries(creative-suite-image-editor-core PUBLIC
 )
 
 target_compile_features(creative-suite-image-editor-core PUBLIC cxx_std_20)
+
+add_library(creative-suite-image-editor-rendering STATIC
+    src/ui/rendering/image_render_controller.cpp
+    src/ui/rendering/image_render_controller.h
+    src/ui/canvas/image_gpu_presenter.cpp
+    src/ui/canvas/image_gpu_presenter.h)
+target_link_libraries(creative-suite-image-editor-rendering PUBLIC
+    creative-suite-image-editor-core creative-suite::composition-opengl Qt6::OpenGLWidgets)
+target_compile_features(creative-suite-image-editor-rendering PUBLIC cxx_std_20)
 
 add_executable(creative-suite-image-editor
     src/app/main.cpp
@@ -134,7 +145,7 @@ target_include_directories(creative-suite-image-editor PRIVATE
 )
 
 target_link_libraries(creative-suite-image-editor PRIVATE
-    creative-suite-image-editor-core
+    creative-suite-image-editor-rendering
     creative-suite::shortcuts
     creative-suite::updater
     creative-suite::system-monitor
@@ -289,4 +300,24 @@ endif()
 if(BUILD_TESTING)
     find_package(Qt6 CONFIG REQUIRED COMPONENTS Test)
     add_subdirectory(tests)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(creative-suite-image-editor-interactive-benchmark tests/image_editor_interactive_benchmark.cpp)
+    target_link_libraries(creative-suite-image-editor-interactive-benchmark PRIVATE creative-suite-image-editor-rendering creative-suite::system-monitor)
+    if(WIN32)
+        add_custom_command(TARGET creative-suite-image-editor-interactive-benchmark POST_BUILD
+            COMMAND "${QT_IMAGE_DEPLOY_TOOL}" --no-translations --no-compiler-runtime "$<TARGET_FILE:creative-suite-image-editor-interactive-benchmark>" VERBATIM)
+    endif()
+endif()
+
+# Unified builds can retain the optional video adapter in Debug. Deploy its
+# existing runtime through the shared helper; image-only builds need no FFmpeg.
+if(COMMAND creative_suite_deploy_media_runtime)
+    foreach(raster_runtime_target IN ITEMS creative-suite-image-editor
+            creative-suite-image-editor-interactive-benchmark)
+        if(TARGET ${raster_runtime_target})
+            creative_suite_deploy_media_runtime(${raster_runtime_target})
+        endif()
+    endforeach()
 endif()

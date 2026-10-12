@@ -219,6 +219,64 @@ bool ImageDocumentSession::relinkRaster(const QString& id, const PreparedRasterI
     return true;
 }
 
+ImageExportSnapshot ImageDocumentSession::interactiveSnapshot(const ImagePreview& preview) const {
+    auto snapshot = exportSnapshot();
+    if (preview.kind == ImagePreviewKind::None) return snapshot;
+    if (preview.kind == ImagePreviewKind::Objects) {
+        auto prepared = ImageDocumentObjectEditor::updateObjectsRendered(data_, preview.objects,
+            renderedSize(), selected_layer_id_, selected_group_id_, nullptr);
+        if (prepared) snapshot.document = std::move(prepared->document);
+        return snapshot;
+    }
+    if (preview.kind == ImagePreviewKind::ExcludeObjects) {
+        for (auto& layer : snapshot.document.layers) {
+            layer.operations.erase(std::remove_if(layer.operations.begin(), layer.operations.end(),
+                [&preview](const auto& op) {
+                    QString id;
+                    switch (op.kind) {
+                    case OperationKind::PaintStroke: id = op.paint_stroke.id; break;
+                    case OperationKind::EraseStroke: id = op.erase_stroke.id; break;
+                    case OperationKind::Shape: id = op.shape.id; break;
+                    case OperationKind::Text: id = op.text.id; break;
+                    case OperationKind::RasterImage: id = op.raster.id; break;
+                    default: break;
+                    }
+                    return !id.isEmpty() && preview.excluded.contains(id);
+                }), layer.operations.end());
+        }
+        return snapshot;
+    }
+    auto* layer = findLayer(snapshot.document, selected_layer_id_);
+    if (!hasSource() || !selectedLayerIsEditable() || !layer) return snapshot;
+    std::optional<ImageOperation> operation;
+    if (preview.kind == ImagePreviewKind::Gradient)
+        operation = prepareLinearGradientOperation(preview.start, preview.end, preview.color, preview.clipping, preview.mask, nullptr);
+    else if (preview.kind == ImagePreviewKind::Blur)
+        operation = prepareBlurStrokeOperation(preview.points, preview.diameter, preview.radius, preview.clipping, preview.mask, nullptr);
+    else if (preview.mask || preview.kind == ImagePreviewKind::MaskPaint)
+        operation = ImageLayerMaskEditor::prepareStroke(data_, selected_layer_id_, renderedSize(),
+            preview.points, preview.color, preview.diameter, preview.clipping, ImageLayerMaskStrokeKind::Paint);
+    else if (preview.kind == ImagePreviewKind::Erase && !preview.points.isEmpty()) {
+        if (preview.diameter < 1 || preview.diameter > ImageDocumentStore::kMaximumPaintBrushDiameter) return snapshot;
+        for (const auto& point : preview.points)
+            if (!std::isfinite(point.x()) || !std::isfinite(point.y()) || point.x() < 0 || point.y() < 0 ||
+                point.x() >= renderedSize().width() || point.y() >= renderedSize().height()) return snapshot;
+        QVector<QPointF> points = preview.points; auto clipping = preview.clipping;
+        ImageDocumentGeometry::mapStrokeGeometryThroughGroup(&points, &clipping,
+            findGroup(data_, layer->parent_group_id), renderedSize());
+        if (clipping) clipping = clipping->intersected(ImageDocumentGeometry::imageBoundsPath(renderedSize()));
+        ImageOperation erase; erase.kind = OperationKind::EraseStroke;
+        erase.erase_stroke.points = std::move(points); erase.erase_stroke.diameter = preview.diameter;
+        erase.erase_stroke.clipping_path = std::move(clipping); operation = std::move(erase);
+    }
+    if (operation) {
+        if (preview.mask || preview.kind == ImagePreviewKind::MaskPaint) {
+            if (layer->mask) layer->mask->operations.append(std::move(*operation));
+        } else layer->operations.append(std::move(*operation));
+    }
+    return snapshot;
+}
+
 QImage ImageDocumentSession::renderedImageWithObjects(const QVector<ImageObjectPlacement>& objects) const {
     ImageDocumentSession preview;
     preview.data_ = data_;

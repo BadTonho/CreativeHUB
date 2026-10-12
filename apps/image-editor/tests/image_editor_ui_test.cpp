@@ -1,3 +1,4 @@
+#include "image_editor_ui_wait.h"
 #include "image_canvas.h"
 #include "image_editor_window.h"
 #include "rendering/image_document_geometry.h"
@@ -17,6 +18,8 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QSurfaceFormat>
+#include <QOpenGLWidget>
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
@@ -150,6 +153,7 @@ void setCurrentLayerRow(QTreeWidget* tree, int row) {
 }
 
 bool testLayerGroupsUi(const QString& directory) {
+    std::cerr << "Running testLayerGroupsUi.\n";
     const QString source_path = directory + QStringLiteral("/group-ui-source.png");
     QImage source(64, 48, QImage::Format_ARGB32);
     source.fill(Qt::transparent);
@@ -158,7 +162,7 @@ bool testLayerGroupsUi(const QString& directory) {
     image_editor::ImageEditorWindow window;
     window.show();
     if (!window.openImagePath(source_path)) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto* tree = window.findChild<QTreeWidget*>(QStringLiteral("imageLayerTree"));
     auto* add_button = window.findChild<QToolButton*>(QStringLiteral("addImageLayerButton"));
     auto* group_button = window.findChild<QToolButton*>(
@@ -173,14 +177,14 @@ bool testLayerGroupsUi(const QString& directory) {
         add_group_action == nullptr || layerRowCount(tree) != 2) return false;
 
     add_group_action->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(tree) != 3 || tree->currentItem() == nullptr ||
         tree->currentItem()->text(0) != QStringLiteral("Group 1") ||
         !tree->currentItem()->data(0, Qt::UserRole + 2).toBool()) return false;
 
     add_button->click();
     add_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(tree) != 5 || layerRowItem(tree, 0)->text(0) != QStringLiteral("Layer 3") ||
         layerRowItem(tree, 1)->text(0) != QStringLiteral("Layer 2")) return false;
 
@@ -190,26 +194,26 @@ bool testLayerGroupsUi(const QString& directory) {
                       QPoint(top_row.left() + 100, top_row.center().y()));
     QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::ControlModifier,
                       QPoint(next_row.left() + 100, next_row.center().y()));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!group_button->isEnabled() || tree->selectedItems().size() != 2) return false;
     group_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(tree) != 4 || layerRowItem(tree, 0)->text(0) != QStringLiteral("Group 2") ||
         layerRowItem(tree, 0)->childCount() != 2) return false;
 
     opacity->setValue(55);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (opacity->value() != 55) return false;
     const QRect group_row = tree->visualItemRect(layerRowItem(tree, 0));
     QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
                       QPoint(group_row.right() - 17, group_row.center().y()));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!layerRowItem(tree, 0)->data(0, Qt::AccessibleDescriptionRole).toString()
              .contains(QStringLiteral("Hidden"))) return false;
 
     setCurrentLayerRow(tree, 0);
     ungroup_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(tree) != 5 || layerRowItem(tree, 0)->text(0) != QStringLiteral("Layer 3") ||
         layerRowItem(tree, 1)->text(0) != QStringLiteral("Layer 2")) return false;
 
@@ -219,19 +223,20 @@ bool testLayerGroupsUi(const QString& directory) {
     QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::ControlModifier,
                       QPoint(tree->visualItemRect(layerRowItem(tree, 1)).left() + 100,
                              tree->visualItemRect(layerRowItem(tree, 1)).center().y()));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!group_button->isEnabled()) return false;
     group_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (tree->currentItem() == nullptr || tree->currentItem()->text(0) != QStringLiteral("Group 2")) {
         return false;
     }
     delete_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     return layerRowCount(tree) == 3 && layerRowItem(tree, 0)->text(0) == QStringLiteral("Group 1");
 }
 
 bool testLayerGroupContextMenu(const QString& directory) {
+    std::cerr << "Running testLayerGroupContextMenu.\n";
     const auto fail = [](const char* stage) {
         std::cerr << "Layer context menu check failed: " << stage << ".\n";
         return false;
@@ -244,7 +249,7 @@ bool testLayerGroupContextMenu(const QString& directory) {
     image_editor::ImageEditorWindow window;
     window.show();
     if (!window.openImagePath(source_path)) return fail("open source image");
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto* tree = window.findChild<QTreeWidget*>(QStringLiteral("imageLayerTree"));
     auto* add_button = window.findChild<QToolButton*>(QStringLiteral("addImageLayerButton"));
     auto* menu = window.findChild<QMenu*>(QStringLiteral("imageLayerContextMenu"));
@@ -263,7 +268,7 @@ bool testLayerGroupContextMenu(const QString& directory) {
 
     add_button->click();
     add_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(tree) != 4) return fail("create test layers");
 
     struct MenuState {
@@ -318,7 +323,7 @@ bool testLayerGroupContextMenu(const QString& directory) {
 
     click_row(0, Qt::NoModifier);
     click_row(3, Qt::ControlModifier);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     MenuState background_selection;
     if (tree->selectedItems().size() != 2 ||
         !invoke_context_menu(0, {}, &background_selection) ||
@@ -327,7 +332,7 @@ bool testLayerGroupContextMenu(const QString& directory) {
 
     click_row(0, Qt::NoModifier);
     click_row(2, Qt::ControlModifier);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (tree->selectedItems().size() != 2) return fail("create non-contiguous selection");
     MenuState non_contiguous;
     if (!invoke_context_menu(0, {}, &non_contiguous) ||
@@ -342,7 +347,7 @@ bool testLayerGroupContextMenu(const QString& directory) {
 
     click_row(0, Qt::NoModifier);
     click_row(1, Qt::ControlModifier);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     MenuState valid_selection;
     if (!invoke_context_menu(0, QStringLiteral("groupSelectedLayersContextAction"),
                              &valid_selection) ||
@@ -381,13 +386,14 @@ bool testLayerGroupContextMenu(const QString& directory) {
 }
 
 bool testTextEditorGrowthLayout() {
+    std::cerr << "Running testTextEditorGrowthLayout.\n";
     image_editor::ImageCanvas canvas;
     canvas.resize(1584, 912);
     QImage image(1920, 1080, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
     canvas.setImage(image);
     canvas.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto* editor = canvas.findChild<QPlainTextEdit*>(
         QStringLiteral("imageCanvasTextEditor"));
     if (editor == nullptr) return false;
@@ -397,11 +403,11 @@ bool testTextEditorGrowthLayout() {
         text.position = QPointF(40, 100);
         text.box_width = initial_width;
         canvas.beginTextEditing(text, false);
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
         const int initial_editor_width = editor->width();
         for (qsizetype index = 0; index < heading.size(); ++index) {
             QTest::keyClicks(editor, QString(heading.at(index)));
-            QCoreApplication::processEvents();
+            processImageEditorEvents();
             const QString typed = heading.left(index + 1);
             const QTextLayout* layout = editor->document()->firstBlock().layout();
             const QRect caret = editor->cursorRect();
@@ -443,7 +449,7 @@ bool testTextEditorGrowthLayout() {
             Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(editor->viewport(), &drag_move);
         QTest::mouseRelease(editor->viewport(), Qt::LeftButton, Qt::NoModifier, drag_end);
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
         if (editor->textCursor().selectedText() != heading.left(3)) {
             std::cerr << "Mouse selection did not match the visible text after expansion.\n";
             return false;
@@ -454,7 +460,7 @@ bool testTextEditorGrowthLayout() {
             return false;
         }
         QTest::keyClicks(editor, QStringLiteral("DE"));
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
         if (editor->toPlainText() != QStringLiteral("DE") + heading.mid(3) ||
             editor->textCursor().position() != 2) {
             std::cerr << "Typing did not replace the mouse-selected text.\n";
@@ -462,7 +468,7 @@ bool testTextEditorGrowthLayout() {
         }
         QTest::keyClick(editor, Qt::Key_End, Qt::ControlModifier);
         QTest::keyClicks(editor, heading.repeated(3));
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
         if (editor->document()->firstBlock().layout()->lineCount() <= 1 ||
             editor->verticalScrollBar()->maximum() != 0 ||
             !editor->viewport()->rect().contains(editor->cursorRect().center())) {
@@ -472,7 +478,7 @@ bool testTextEditorGrowthLayout() {
         const int wrapped_height = editor->height();
         QTest::keyClick(editor, Qt::Key_Return);
         QTest::keyClicks(editor, QStringLiteral("second line"));
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
         if (editor->height() <= wrapped_height ||
             editor->verticalScrollBar()->maximum() != 0 ||
             !editor->viewport()->rect().contains(editor->cursorRect().center())) {
@@ -485,6 +491,7 @@ bool testTextEditorGrowthLayout() {
 }
 
 bool testWindowTeardownWithFocusedTextEditor(const QString& directory) {
+    std::cerr << "Running testWindowTeardownWithFocusedTextEditor.\n";
     const QString source_path = directory + QStringLiteral("/window-teardown-source.png");
     QImage source(64, 48, QImage::Format_ARGB32_Premultiplied);
     source.fill(Qt::white);
@@ -493,7 +500,7 @@ bool testWindowTeardownWithFocusedTextEditor(const QString& directory) {
     auto window = std::make_unique<image_editor::ImageEditorWindow>();
     window->show();
     if (!window->openImagePath(source_path)) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto* canvas = window->findChild<image_editor::ImageCanvas*>();
     auto* editor = window->findChild<QPlainTextEdit*>(
         QStringLiteral("imageCanvasTextEditor"));
@@ -503,15 +510,16 @@ bool testWindowTeardownWithFocusedTextEditor(const QString& directory) {
     text.position = QPointF(8, 8);
     text.content = QStringLiteral("close while editing");
     canvas->beginTextEditing(text, false);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!editor->isVisible() || QApplication::focusWidget() != editor) return false;
 
     window.reset();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     return true;
 }
 
 bool testWindowTextGrowth() {
+    std::cerr << "Running testWindowTextGrowth.\n";
     image_editor::ImageEditorWindow window;
     const bool native = QApplication::platformName() == QStringLiteral("windows");
     if (native) {
@@ -525,7 +533,7 @@ bool testWindowTextGrowth() {
     window.raise();
     window.activateWindow();
     if (native && !QTest::qWaitForWindowActive(&window)) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto* new_canvas = window.findChild<QAction*>(QStringLiteral("newCanvasAction"));
     if (new_canvas == nullptr) return false;
     bool configured = false;
@@ -552,7 +560,7 @@ bool testWindowTextGrowth() {
     if (canvas == nullptr || editor == nullptr || tool == nullptr) return false;
     QTest::mouseClick(window.windowHandle(), Qt::LeftButton, Qt::NoModifier,
                       tool->mapTo(&window, tool->rect().center()));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const qreal zoom = canvas->zoomFactor();
     const QPoint start(qRound((canvas->width() - 1920.0 * zoom) / 2.0 + 40 * zoom),
                        qRound((canvas->height() - 1080.0 * zoom) / 2.0 + 100 * zoom));
@@ -664,6 +672,7 @@ bool testWindowTextGrowth() {
 }
 
 bool testEditableTextUi(const QString& directory) {
+    std::cerr << "Running testEditableTextUi.\n";
     const QString source_path = directory + QStringLiteral("/editable-text-source.png");
     const QString document_path = directory + QStringLiteral("/editable-text-linked.cimg");
     const QString output_path = directory + QStringLiteral("/editable-text-published.png");
@@ -675,7 +684,7 @@ bool testEditableTextUi(const QString& directory) {
     window.resize(1100, 800);
     window.show();
     if (!window.openLinkedImage(source_path, document_path, output_path)) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto* canvas = window.findChild<image_editor::ImageCanvas*>();
     auto* text_tool = window.findChild<QToolButton*>(QStringLiteral("textToolButton"));
     auto* selection_tool = window.findChild<QToolButton*>(
@@ -706,7 +715,7 @@ bool testEditableTextUi(const QString& directory) {
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, first_start);
     QTest::mouseMove(canvas, first_end);
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, first_end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!text_editor->isVisible()) return false;
     const auto liveTextInk = [canvas, text_editor]() {
         const QRect region = text_editor->geometry().adjusted(3, 3, -3, -3);
@@ -715,10 +724,10 @@ bool testEditableTextUi(const QString& directory) {
     const int initial_text_editor_width = text_editor->width();
     const int initial_text_editor_height = text_editor->height();
     QTest::keyClicks(text_editor, QStringLiteral("d"));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const int single_character_ink = liveTextInk();
     text_editor->clear();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     for (const auto& [key, character] : {
              std::pair{Qt::Key_E, QStringLiteral("e")},
              std::pair{Qt::Key_B, QStringLiteral("b")}}) {
@@ -733,20 +742,20 @@ bool testEditableTextUi(const QString& directory) {
             return false;
         }
         QTest::keyClick(text_editor, key);
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
         if (!text_editor->isVisible() || !text_tool->isChecked() ||
             text_editor->toPlainText() != character) {
             std::cerr << "A Paint/Eraser shortcut interrupted text input.\n";
             return false;
         }
         text_editor->clear();
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
     }
     const QString long_heading = QStringLiteral(
         "This exceptionally long heading continues beyond canvas edge");
     for (qsizetype index = 0; index < long_heading.size(); ++index) {
         QTest::keyClicks(text_editor, QString(long_heading.at(index)));
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
         if (!text_editor->isVisible() || QApplication::focusWidget() != text_editor ||
             text_editor->toPlainText() != long_heading.left(index + 1) ||
             text_editor->textCursor().position() != index + 1 ||
@@ -760,7 +769,7 @@ bool testEditableTextUi(const QString& directory) {
     for (int index = 0; index < QStringLiteral("This").size(); ++index) {
         QTest::keyClick(text_editor, Qt::Key_Right, Qt::ShiftModifier);
     }
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (text_editor->textCursor().selectedText() != QStringLiteral("This")) {
         std::cerr << "Selecting text in the expanded editor did not select the word.\n";
         return false;
@@ -781,7 +790,7 @@ bool testEditableTextUi(const QString& directory) {
         std::cerr << "Ctrl+End did not return the cursor to the end of the expanded text.\n";
         return false;
     }
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const int expanded_text_ink = liveTextInk();
     if (expanded_text_ink <= single_character_ink * 3) {
         std::cerr << "The live editor did not render the full typed heading (single-character "
@@ -800,13 +809,13 @@ bool testEditableTextUi(const QString& directory) {
     QTest::keyClick(text_editor, Qt::Key_Return);
     QTest::keyClicks(text_editor, QStringLiteral("Second line"));
     if (!text_editor->toPlainText().contains(QLatin1Char('\n'))) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (text_editor->height() <= wrapped_text_editor_height) {
         std::cerr << "Typing another line did not grow the text box vertically.\n";
         return false;
     }
     QTest::keyClick(text_editor, Qt::Key_Return, Qt::ControlModifier);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (text_editor->isVisible() || layerRowCount(layer_tree) != 3) {
         std::cerr << "Ctrl+Enter did not commit a multiline text layer.\n";
         return false;
@@ -858,7 +867,7 @@ bool testEditableTextUi(const QString& directory) {
     QTest::mouseDClick(canvas, Qt::LeftButton, Qt::NoModifier,
                        widgetPoint(first_text.position.x() + first_text.box_width - 5,
                                    first_text.position.y() + 4));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!text_editor->isVisible()) {
         std::cerr << "Double-click did not reopen an existing text operation.\n";
         return false;
@@ -879,7 +888,7 @@ bool testEditableTextUi(const QString& directory) {
     }
     text_size->setValue(22);
     QTest::keyClick(text_editor, Qt::Key_Escape);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (text_editor->isVisible() || window.windowTitle().startsWith(QLatin1Char('*'))) {
         std::cerr << "Esc did not cancel an existing text edit without dirtying the document.\n";
         return false;
@@ -899,7 +908,7 @@ bool testEditableTextUi(const QString& directory) {
     QTest::mouseDClick(canvas, Qt::LeftButton, Qt::NoModifier,
                        widgetPoint(first_text.position.x() + 4,
                                    first_text.position.y() + 4));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!text_editor->isVisible()) return false;
     text_size->setValue(22);
     QString expected_font_family = first_text.font_family;
@@ -942,7 +951,7 @@ bool testEditableTextUi(const QString& directory) {
     QTest::mouseDClick(canvas, Qt::LeftButton, Qt::NoModifier,
                        widgetPoint(first_text.position.x() + 4,
                                    first_text.position.y() + 4));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!text_editor->isVisible()) return false;
     QTest::keyClick(text_editor, Qt::Key_A, Qt::ControlModifier);
     QTest::keyClick(text_editor, Qt::Key_Backspace);
@@ -966,14 +975,14 @@ bool testEditableTextUi(const QString& directory) {
     const QPoint empty_start = widgetPoint(20, 160);
     if (!text_tool->isChecked()) text_tool->click();
     QTest::mouseClick(canvas, Qt::LeftButton, Qt::NoModifier, empty_start);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!text_editor->isVisible()) {
         std::cerr << "Clicking empty canvas did not start the new text editor.\n";
         return false;
     }
     QTest::keyClicks(text_editor, QStringLiteral("ABC"));
     QTest::keyClicks(text_editor, QStringLiteral("DE"));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (text_editor->toPlainText() != QStringLiteral("ABCDE") ||
         text_editor->textCursor().position() != 5) {
         std::cerr << "Typing into a click-created empty text box did not preserve input order.\n";
@@ -998,20 +1007,20 @@ bool testEditableTextUi(const QString& directory) {
     }
     QTest::mouseClick(click_target, Qt::LeftButton, Qt::NoModifier,
                       click_target->mapFrom(canvas, canvas_click_position));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (text_editor->textCursor().position() != 0) {
         std::cerr << "Clicking before the first character did not move the insertion cursor.\n";
         return false;
     }
     QTest::keyClicks(text_editor, QStringLiteral("DE"));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (text_editor->toPlainText() != QStringLiteral("DEABC") ||
         text_editor->textCursor().position() != 2) {
         std::cerr << "Typing after moving the cursor to the beginning did not insert there.\n";
         return false;
     }
     QTest::keyClick(text_editor, Qt::Key_Escape);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(layer_tree) != layers_before_empty_cancel) {
         std::cerr << "Cancelling a new empty text frame left a layer behind.\n";
         return false;
@@ -1022,7 +1031,7 @@ bool testEditableTextUi(const QString& directory) {
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, second_start);
     QTest::mouseMove(canvas, second_end);
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, second_end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QTest::keyClicks(text_editor, QStringLiteral("Outside click"));
     QTimer::singleShot(0, []() {
         if (auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
@@ -1030,7 +1039,7 @@ bool testEditableTextUi(const QString& directory) {
         }
     });
     QTest::mouseClick(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(300, 220));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (text_editor->isVisible() || layerRowCount(layer_tree) != layers_before_empty_cancel + 1) {
         std::cerr << "Clicking outside the editor did not commit a new text layer.\n";
         return false;
@@ -1079,6 +1088,7 @@ bool testEditableTextUi(const QString& directory) {
 } // namespace
 
 bool testAreaSelectionToolUi(const QString& root) {
+    std::cerr << "Running testAreaSelectionToolUi.\n";
     const QString source_path = root + QStringLiteral("/area-selection-ui.png");
     QImage source(32, 24, QImage::Format_ARGB32);
     source.fill(Qt::white);
@@ -1089,7 +1099,7 @@ bool testAreaSelectionToolUi(const QString& root) {
     window.resize(960, 720);
     window.show();
     if (!window.openImagePath(source_path)) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
 
     auto* canvas = window.findChild<image_editor::ImageCanvas*>();
     auto* area_tool = window.findChild<QAction*>(QStringLiteral("areaSelectionToolAction"));
@@ -1112,7 +1122,7 @@ bool testAreaSelectionToolUi(const QString& root) {
         return false;
     }
     area_tool->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!options->isVisible() || !canvas->areaSelectionMode()) {
         std::cerr << "Area Selection did not activate its canvas tool and options.\n";
         return false;
@@ -1128,7 +1138,7 @@ bool testAreaSelectionToolUi(const QString& root) {
         QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(x1, y1));
         QTest::mouseMove(canvas, widgetPoint(x2, y2));
         QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(x2, y2));
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
     };
     drag(4, 4, 15, 15);
     const auto first_selection = canvas->areaSelectionClipPath();
@@ -1139,13 +1149,13 @@ bool testAreaSelectionToolUi(const QString& root) {
     }
 
     paint_tool->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (canvas->areaSelectionMode() || !canvas->hasAreaSelection() || options->isVisible()) {
         std::cerr << "Switching tools removed the area selection or kept stale tool options.\n";
         return false;
     }
     QTest::keyClick(canvas, Qt::Key_M);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!canvas->areaSelectionMode()) {
         std::cerr << "The M shortcut did not activate Area Selection.\n";
         return false;
@@ -1173,7 +1183,7 @@ bool testAreaSelectionToolUi(const QString& root) {
         return false;
     }
     lasso_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!lasso_button->isChecked() || !canvas->lassoMode() ||
         !options->isVisible() || shape_combo->isVisible() || !mode_combo->isVisible()) {
         std::cerr << "The standalone Lasso button did not activate its dedicated mode.\n";
@@ -1191,7 +1201,7 @@ bool testAreaSelectionToolUi(const QString& root) {
     QTest::mouseMove(canvas, widgetPoint(16, 4));
     QTest::mouseMove(canvas, widgetPoint(16, 16));
     QTest::mouseMove(canvas, widgetPoint(4, 16));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!canvas->areaSelectionGestureActive()) {
         std::cerr << "The Lasso tool did not track an in-progress gesture.\n";
         return false;
@@ -1203,7 +1213,7 @@ bool testAreaSelectionToolUi(const QString& root) {
         return false;
     }
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(4, 16));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto lasso_selection = canvas->areaSelectionClipPath();
     if (!lasso_selection || !lasso_selection->contains(QPointF(9, 9)) ||
         lasso_selection->contains(QPointF(22, 9))) {
@@ -1212,15 +1222,15 @@ bool testAreaSelectionToolUi(const QString& root) {
     }
 
     paint_tool->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QTest::mouseMove(canvas, widgetPoint(0, 0));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const QImage before_lasso_paint = canvas->grab().toImage();
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(0, 10));
     QTest::mouseMove(canvas, widgetPoint(24, 10));
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(24, 10));
     QTest::mouseMove(canvas, widgetPoint(0, 0));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const QImage after_lasso_paint = canvas->grab().toImage();
     const QColor inside_before = before_lasso_paint.pixelColor(widgetPoint(9, 10));
     const QColor inside_after = after_lasso_paint.pixelColor(widgetPoint(9, 10));
@@ -1234,10 +1244,10 @@ bool testAreaSelectionToolUi(const QString& root) {
     auto* undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
     if (undo == nullptr || !undo->isEnabled()) return false;
     undo->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
 
     area_tool->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!canvas->areaSelectionMode()) {
         std::cerr << "Area Selection did not reactivate for its Escape cancellation check.\n";
         return false;
@@ -1247,7 +1257,7 @@ bool testAreaSelectionToolUi(const QString& root) {
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(2, 2));
     QTest::mouseMove(canvas, widgetPoint(12, 12));
     QTest::keyClick(canvas, Qt::Key_Escape);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!canvas->hasAreaSelection() || canvas->areaSelectionGestureActive() ||
         canvas->areaSelectionClipPath() != before_cancel) {
         std::cerr << "Escape did not cancel the gesture while preserving the prior selection.\n";
@@ -1255,7 +1265,7 @@ bool testAreaSelectionToolUi(const QString& root) {
     }
 
     deselect->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (canvas->hasAreaSelection() || deselect->isEnabled()) {
         std::cerr << "Deselect did not clear the area selection.\n";
         return false;
@@ -1264,7 +1274,7 @@ bool testAreaSelectionToolUi(const QString& root) {
     shape_combo->setCurrentIndex(shape_combo->findData(0));
     drag(3, 3, 8, 8);
     QTest::keyClick(canvas, Qt::Key_D, Qt::ControlModifier);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (canvas->hasAreaSelection()) {
         std::cerr << "Ctrl+D did not clear the area selection.\n";
         return false;
@@ -1283,7 +1293,7 @@ bool testAreaSelectionToolUi(const QString& root) {
     }
     paint_tool->trigger();
     QTest::mouseClick(canvas, Qt::LeftButton, Qt::NoModifier, canvas->rect().center());
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (window.windowTitle().startsWith('*') || (undo != nullptr && undo->isEnabled())) {
         std::cerr << "An empty area selection allowed painting or dirtied the document.\n";
         return false;
@@ -1292,6 +1302,7 @@ bool testAreaSelectionToolUi(const QString& root) {
 }
 
 bool testAreaSelectionToolState() {
+    std::cerr << "Running testAreaSelectionToolState.\n";
     using image_editor::AreaSelectionTool;
     const QRectF image_bounds(0.0, 0.0, 32.0, 24.0);
     AreaSelectionTool tool;
@@ -1511,6 +1522,7 @@ bool testAreaSelectionToolState() {
 }
 
 bool testShapeToolState() {
+    std::cerr << "Running testShapeToolState.\n";
     using image_editor::ImageShapeData;
     using image_editor::ImageShapeKind;
     using image_editor::ShapeTool;
@@ -1632,6 +1644,7 @@ bool testShapeToolState() {
 }
 
 bool testCropToolState() {
+    std::cerr << "Running testCropToolState.\n";
     using image_editor::CropTool;
     using image_editor::CropToolContext;
 
@@ -1694,10 +1707,11 @@ bool testCropToolState() {
 }
 
 bool testCropCanvasMapping() {
+    std::cerr << "Running testCropCanvasMapping.\n";
     image_editor::ImageCanvas canvas;
     canvas.resize(640, 480);
     canvas.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QImage image(100, 80, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::blue);
     canvas.setImage(image);
@@ -1738,6 +1752,7 @@ bool testCropCanvasMapping() {
 }
 
 bool testTextToolState() {
+    std::cerr << "Running testTextToolState.\n";
     using image_editor::ImageTextAlignment;
     using image_editor::ImageTextData;
     using image_editor::TextTool;
@@ -1746,7 +1761,7 @@ bool testTextToolState() {
     QWidget host;
     host.resize(400, 300);
     host.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
 
     TextTool tool(&host);
     TextToolContext context;
@@ -1813,7 +1828,7 @@ bool testTextToolState() {
         return false;
     }
     QTest::keyClicks(editor, QStringLiteral("hello"));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     tool.finishEditing(true);
     if (tool.editing() || committed_text.content != QStringLiteral("hello") ||
         committed_text.position != dragged_text->position || committed_existing) {
@@ -1839,6 +1854,7 @@ bool testTextToolState() {
 }
 
 bool testObjectSelectionToolState() {
+    std::cerr << "Running testObjectSelectionToolState.\n";
     image_editor::ObjectSelectionTool tool;
 
     image_editor::ImageObjectPlacement top_shape;
@@ -2013,10 +2029,11 @@ bool testObjectSelectionToolState() {
 }
 
 bool testGeneralCanvasSelection() {
+    std::cerr << "Running testGeneralCanvasSelection.\n";
     image_editor::ImageCanvas canvas;
     canvas.resize(640, 480);
     canvas.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
 
     QImage backing(QSize(100, 80), QImage::Format_ARGB32_Premultiplied);
     backing.fill(Qt::transparent);
@@ -2205,6 +2222,7 @@ bool testGeneralCanvasSelection() {
 }
 
 bool testRenamedShortcutPersistence() {
+    std::cerr << "Running testRenamedShortcutPersistence.\n";
     const QKeySequence select_shortcut(QStringLiteral("Ctrl+Alt+S"));
     const QKeySequence delete_shortcut(QStringLiteral("Ctrl+Alt+D"));
     {
@@ -2235,6 +2253,7 @@ bool testRasterImagesUi(const QString& directory);
 bool testDeletionUi(const QString& directory);
 
 bool testDocumentTabs(const QString& directory) {
+    std::cerr << "Running testDocumentTabs.\n";
     const QString first_path = directory + QStringLiteral("/tabs-first.png");
     const QString second_path = directory + QStringLiteral("/tabs-second.png");
     const QString replacement_path = directory + QStringLiteral("/tabs-replacement.png");
@@ -2251,7 +2270,7 @@ bool testDocumentTabs(const QString& directory) {
     window.resize(1100, 760);
     window.show();
     if (!window.openImagePath(first_path)) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
 
     auto* tabs = window.findChild<QTabBar*>(QStringLiteral("imageDocumentTabBar"));
     auto* stack = window.findChild<QStackedWidget*>(QStringLiteral("imageDocumentStack"));
@@ -2311,7 +2330,7 @@ bool testDocumentTabs(const QString& directory) {
     first_canvas->fitToWindow();
     const double first_zoom = first_canvas->zoomFactor();
     area_selection_tool->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const auto first_canvas_point = [first_canvas](qreal x, qreal y) {
         const qreal zoom = first_canvas->zoomFactor();
         return QPoint(qRound((first_canvas->width() - 72.0 * zoom) / 2.0 + x * zoom),
@@ -2322,7 +2341,7 @@ bool testDocumentTabs(const QString& directory) {
     QTest::mouseMove(first_canvas, first_canvas_point(22, 22));
     QTest::mouseRelease(first_canvas, Qt::LeftButton, Qt::NoModifier,
                         first_canvas_point(22, 22));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const auto first_tab_area_selection = first_canvas->areaSelectionClipPath();
     if (!first_tab_area_selection ||
         !first_tab_area_selection->contains(QPointF(16, 16)) ||
@@ -2363,14 +2382,14 @@ bool testDocumentTabs(const QString& directory) {
     const double second_zoom = second_canvas->zoomFactor();
     tabs->setMovable(true);
     tabs->moveTab(0, 1);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool second_state_survived_reorder = tabs->currentIndex() == 0 &&
         stack->currentWidget()->findChild<image_editor::ImageCanvas*>() == second_canvas &&
         layerRowCount(layer_tree) == 2 && !undo->isEnabled() &&
         second_canvas->zoomFactor() == second_zoom;
     tabs->moveTab(0, 1);
     tabs->setMovable(false);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!second_state_survived_reorder || tabs->currentIndex() != 1 ||
         stack->currentWidget()->findChild<image_editor::ImageCanvas*>() != second_canvas ||
         layerRowCount(layer_tree) != 2 || undo->isEnabled()) {
@@ -2378,7 +2397,7 @@ bool testDocumentTabs(const QString& directory) {
         return false;
     }
     next_tab->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (stack->currentWidget()->findChild<image_editor::ImageCanvas*>() != first_canvas ||
         first_canvas->areaSelectionClipPath() != first_tab_area_selection ||
         second_canvas->hasAreaSelection() ||
@@ -2392,13 +2411,13 @@ bool testDocumentTabs(const QString& directory) {
     undo->trigger();
     if (layerRowCount(layer_tree) != 2 || !redo->isEnabled()) return false;
     previous_tab->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (tabs->currentIndex() != 1) {
         std::cerr << "The previous-tab shortcut action did not activate the adjacent tab.\n";
         return false;
     }
     tabs->setCurrentIndex(1);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(layer_tree) != 2 || undo->isEnabled() ||
         layer_tree->selectedItems().size() != 1 ||
         second_canvas->zoomFactor() != second_zoom) {
@@ -2419,14 +2438,14 @@ bool testDocumentTabs(const QString& directory) {
         return false;
     }
     tabs->setCurrentIndex(0);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layer_tree->currentItem() == nullptr ||
         layer_tree->currentItem()->text(0) != QStringLiteral("Layer 1")) {
         std::cerr << "The active layer leaked into another document tab.\n";
         return false;
     }
     tabs->setCurrentIndex(1);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layer_tree->currentItem() == nullptr ||
         layer_tree->currentItem()->text(0) != QStringLiteral("tabs-first.png")) {
         std::cerr << "Switching tabs did not restore the active layer selection.\n";
@@ -2498,7 +2517,7 @@ bool testDocumentTabs(const QString& directory) {
     }
 
     tabs->setCurrentIndex(2);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     add_layer->click();
     const auto request_close = [tabs]() {
         return QMetaObject::invokeMethod(
@@ -2635,7 +2654,7 @@ bool testDocumentTabs(const QString& directory) {
         return false;
     }
 
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     bool plus_menu_has_all_options = false;
     QTimer::singleShot(0, [&plus_menu_has_all_options]() {
         auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
@@ -2714,6 +2733,7 @@ bool testDocumentTabs(const QString& directory) {
 }
 
 bool testMultiDocumentRecovery(const QString& directory) {
+    std::cerr << "Running testMultiDocumentRecovery.\n";
     QCoreApplication::setApplicationName(
         QStringLiteral("Image Editor Multi Tab Recovery Test %1")
             .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
@@ -2791,6 +2811,7 @@ bool testMultiDocumentRecovery(const QString& directory) {
 }
 
 bool testWindowCloseAcrossDirtyTabs(const QString& directory) {
+    std::cerr << "Running testWindowCloseAcrossDirtyTabs.\n";
     const QString recovery_directory =
         directory + QStringLiteral("/window-close-recovery-data");
     image_editor::RecoveryStore recovery(recovery_directory);
@@ -2951,6 +2972,7 @@ bool testWindowCloseAcrossDirtyTabs(const QString& directory) {
 }
 
 bool testPerformanceMetricsUi(const QString& temporary_directory) {
+    std::cerr << "Running testPerformanceMetricsUi.\n";
     QSettings settings;
     settings.beginGroup(QStringLiteral("ImageEditor/Performance"));
     const bool original_enabled = settings.value(QStringLiteral("enabled"), false).toBool();
@@ -2988,23 +3010,23 @@ bool testPerformanceMetricsUi(const QString& temporary_directory) {
     if (!metrics.enabled() || !window.openImagePath(source_path)) return false;
     panel_action->trigger();
     QTest::qWait(1100);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool panel_visible = dock->isVisible();
 
     bool composite_visible = false;
     for (int row = 0; row < table->rowCount(); ++row) {
-        if (table->item(row, 0)->text() == QStringLiteral("composite")) {
+        if (table->item(row, 0)->text() == QStringLiteral("interactive_render")) {
             composite_visible = table->item(row, 1)->text() != QStringLiteral("—");
             break;
         }
     }
     const auto before_disable = metrics.snapshot().timing(
-        image_editor::ImageEditorPerformanceStage::Composite).count;
+        image_editor::ImageEditorPerformanceStage::InteractiveRender).count;
     collection_action->setChecked(false);
     const auto disabled_snapshot = metrics.snapshot();
-    metrics.record(image_editor::ImageEditorPerformanceStage::Composite, 10);
+    metrics.record(image_editor::ImageEditorPerformanceStage::InteractiveRender, 10);
     const auto after_disabled_record = metrics.snapshot().timing(
-        image_editor::ImageEditorPerformanceStage::Composite).count;
+        image_editor::ImageEditorPerformanceStage::InteractiveRender).count;
     QSettings check_settings;
     check_settings.beginGroup(QStringLiteral("ImageEditor/Performance"));
     const bool preference_saved = !check_settings.value(
@@ -3027,7 +3049,7 @@ bool testPerformanceMetricsUi(const QString& temporary_directory) {
         unchanged_log.size() == log_size_after_disable;
 
     window.close();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     settings.beginGroup(QStringLiteral("ImageEditor/Performance"));
     settings.setValue(QStringLiteral("enabled"), original_enabled);
     settings.endGroup();
@@ -3037,7 +3059,7 @@ bool testPerformanceMetricsUi(const QString& temporary_directory) {
         !metrics.enabled() && preference_saved &&
         final_summary_written && QJsonDocument::fromJson(performance_record).isObject() &&
         private_path_omitted && log_stopped &&
-        disabled_snapshot.timing(image_editor::ImageEditorPerformanceStage::Composite).count == before_disable &&
+        disabled_snapshot.timing(image_editor::ImageEditorPerformanceStage::InteractiveRender).count == before_disable &&
         after_disabled_record == before_disable;
     if (!result) {
         std::cerr << "Performance UI check details: panel=" << panel_visible
@@ -3054,6 +3076,7 @@ bool testPerformanceMetricsUi(const QString& temporary_directory) {
 }
 
 bool testEyedropperTool() {
+    std::cerr << "Running testEyedropperTool.\n";
     const QColor expected_color(73, 131, 199, 157);
     image_editor::EyedropperTool eyedropper_tool;
     QImage sample_pixels(2, 2, QImage::Format_ARGB32);
@@ -3099,14 +3122,14 @@ bool testEyedropperTool() {
     tool_sidebar.setDocumentAvailable(true);
     tool_sidebar.setPaintingAllowed(true);
     canvas.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
 
     QSignalSpy sampled(&canvas, &image_editor::ImageCanvas::colorSampled);
     QSignalSpy painted(&canvas, &image_editor::ImageCanvas::paintStrokeSelected);
     eyedropper_button->click();
     const QPoint sample_position = canvas.rect().center();
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, sample_position);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool valid_sample = sampled.size() == 1 &&
         sampled.at(0).at(0).value<QColor>() == expected_color &&
         tool_sidebar.brushColor() == expected_color &&
@@ -3122,20 +3145,20 @@ bool testEyedropperTool() {
         static_cast<int>(std::floor(target_top + canvas.zoomFactor() * 0.5)));
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier,
                       transparent_sample_position);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool transparent_click_ignored = sampled.size() == 1 &&
         tool_sidebar.brushColor() == expected_color && painted.isEmpty();
 
     const QPoint outside_position(static_cast<int>(std::floor(target_left / 2.0)),
                                   static_cast<int>(std::floor(target_top / 2.0)));
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, outside_position);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool outside_click_ignored = sampled.size() == 1 &&
         tool_sidebar.brushColor() == expected_color && painted.isEmpty();
 
     tool_sidebar.setActiveTool(image_editor::ToolSidebar::Tool::Paint);
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, sample_position);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool paint_uses_sampled_color = painted.size() == 1 &&
         painted.at(0).at(1).value<QColor>() == expected_color &&
         !tool_sidebar.eyedropperToolActive() && !canvas.eyedropperMode();
@@ -3173,6 +3196,7 @@ bool testEyedropperTool() {
 }
 
 bool testBucketFillTool() {
+    std::cerr << "Running testBucketFillTool.\n";
     image_editor::ToolSidebar sidebar;
     auto* button = sidebar.findChild<QToolButton*>(
         QStringLiteral("bucketFillToolButton"));
@@ -3213,12 +3237,12 @@ bool testBucketFillTool() {
     }
 
     canvas.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QSignalSpy fills(&canvas, &image_editor::ImageCanvas::bucketFillRequested);
     button->click();
     const QPoint inside = canvas.rect().center();
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, inside);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const int inside_count = fills.size();
     const bool activated = sidebar.bucketFillToolActive() && canvas.cursor().shape() == Qt::PointingHandCursor;
     const bool click_emitted = fills.size() == 1 &&
@@ -3231,7 +3255,7 @@ bool testBucketFillTool() {
     const QPoint outside_position(static_cast<int>(std::floor(target_left / 2.0)),
                                   static_cast<int>(std::floor(target_top / 2.0)));
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, outside_position);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool outside_ignored = fills.size() == 1;
     if (!activated || !click_emitted || !outside_ignored) {
         std::cerr << "Bucket Fill UI details: active=" << activated
@@ -3251,6 +3275,7 @@ bool testBucketFillTool() {
 }
 
 bool testMagicWandTool() {
+    std::cerr << "Running testMagicWandTool.\n";
     image_editor::MagicWandTool wand;
     QImage regions(4, 4, QImage::Format_ARGB32);
     regions.fill(QColor(180, 30, 40, 255));
@@ -3418,7 +3443,7 @@ bool testMagicWandTool() {
         &image_editor::ImageToolOptionsBar::magicWandToleranceChanged);
     tolerance_control->setValue(18);
     canvas.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QSignalSpy clicks(&canvas, &image_editor::ImageCanvas::magicWandRequested);
     QObject::connect(&canvas, &image_editor::ImageCanvas::magicWandRequested,
         &canvas, [&canvas, &displayed, &wand](const QPoint& seed, int tolerance_value) {
@@ -3436,21 +3461,21 @@ bool testMagicWandTool() {
                       static_cast<int>(std::floor(target_top + (y + 0.5) * canvas.zoomFactor())));
     };
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, widgetPointForPixel(7, 7));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto current_selection = canvas.areaSelectionClipPath();
     const bool first_region_selected = current_selection &&
         current_selection->contains(QPointF(7.5, 7.5)) &&
         !current_selection->contains(QPointF(1.5, 1.5));
     combine_mode->setCurrentIndex(combine_mode->findData(1));
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, widgetPointForPixel(1, 1));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     current_selection = canvas.areaSelectionClipPath();
     const bool add_mode_works = current_selection &&
         current_selection->contains(QPointF(7.5, 7.5)) &&
         current_selection->contains(QPointF(1.5, 1.5));
     combine_mode->setCurrentIndex(combine_mode->findData(2));
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, widgetPointForPixel(1, 1));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     current_selection = canvas.areaSelectionClipPath();
     const bool subtract_mode_works = current_selection &&
         current_selection->contains(QPointF(7.5, 7.5)) &&
@@ -3459,7 +3484,7 @@ bool testMagicWandTool() {
                          static_cast<int>(std::floor(target_top / 2.0)));
     const int inside_click_count = clicks.count();
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, outside);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool outside_ignored = clicks.count() == inside_click_count;
     const bool selection_mode_logic = add_mode && subtract_mode;
     const bool controls_work = button->isEnabled() && sidebar.magicWandToolActive() &&
@@ -3506,6 +3531,7 @@ bool testMagicWandTool() {
 }
 
 bool testLinearGradientTool() {
+    std::cerr << "Running testLinearGradientTool.\n";
     image_editor::ToolSidebar sidebar;
     auto* button = sidebar.findChild<QToolButton*>(
         QStringLiteral("linearGradientToolButton"));
@@ -3528,7 +3554,7 @@ bool testLinearGradientTool() {
     sidebar.setDocumentAvailable(true);
     sidebar.setPaintingAllowed(true);
     canvas.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
 
     QSignalSpy previews(&canvas,
         &image_editor::ImageCanvas::linearGradientPreviewRequested);
@@ -3542,7 +3568,7 @@ bool testLinearGradientTool() {
     QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
     QTest::mouseMove(&canvas, end, 1);
     QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool activated = sidebar.linearGradientToolActive() &&
         canvas.linearGradientMode() && button->isEnabled();
     const bool previewed = previews.size() >= 2 &&
@@ -3562,12 +3588,12 @@ bool testLinearGradientTool() {
     QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, outside);
     QTest::mouseMove(&canvas, start, 1);
     QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, start);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool outside_ignored = gradients.size() == 1;
 
     QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
     QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, start);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool zero_length_ignored = gradients.size() == 1;
     if (!activated || !previewed || !committed || !preview_cleared ||
         !outside_ignored || !zero_length_ignored) {
@@ -3582,6 +3608,7 @@ bool testLinearGradientTool() {
 }
 
 bool testBlurTool() {
+    std::cerr << "Running testBlurTool.\n";
     image_editor::ToolSidebar sidebar;
     auto* button = sidebar.findChild<QToolButton*>(QStringLiteral("blurToolButton"));
     if (button == nullptr || button->isEnabled()) {
@@ -3634,7 +3661,7 @@ bool testBlurTool() {
     }
 
     canvas.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QSignalSpy previews(&canvas, &image_editor::ImageCanvas::blurPreviewRequested);
     QSignalSpy strokes(&canvas, &image_editor::ImageCanvas::blurStrokeSelected);
     QSignalSpy cleared(&canvas, &image_editor::ImageCanvas::blurPreviewCleared);
@@ -3646,7 +3673,7 @@ bool testBlurTool() {
     QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
     QTest::mouseMove(&canvas, end, 1);
     QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool activated = sidebar.blurToolActive() && canvas.blurMode();
     const bool previewed = previews.size() >= 2 &&
         previews.back().at(0).value<QVector<QPointF>>().size() >= 2 &&
@@ -3659,7 +3686,7 @@ bool testBlurTool() {
     QTest::mousePress(&canvas, Qt::LeftButton,
                       Qt::ControlModifier | Qt::AltModifier, start);
     QTest::mouseMove(&canvas, start + QPoint(20, 0));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool resize_updated_own_control = diameter->value() == 38 &&
         radius->value() == 6 && resized_diameters.size() == 1 && strokes.size() == 1;
     QTest::mouseRelease(&canvas, Qt::LeftButton,
@@ -3669,7 +3696,7 @@ bool testBlurTool() {
     QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
     QTest::mouseMove(&canvas, end, 1);
     QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool resized_diameter_used_for_blur = strokes.size() == 2 &&
         strokes.back().at(1).toInt() == 38 && previews.back().at(1).toInt() == 38;
 
@@ -3688,7 +3715,7 @@ bool testBlurTool() {
     QTest::mouseMove(&canvas, end, 1);
     QTest::keyClick(&canvas, Qt::Key_Escape);
     QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool escape_cancelled = strokes.size() == 2 && cleared.size() == 3;
     if (!activated || !previewed || !committed || !preview_cleared ||
         !resize_updated_own_control || !resized_diameter_used_for_blur ||
@@ -3707,6 +3734,7 @@ bool testBlurTool() {
 }
 
 bool testBrushSizeControls(const QString& directory) {
+    std::cerr << "Running testBrushSizeControls.\n";
     const QString source_path = directory + QStringLiteral("/brush-size-source.png");
     QImage source(64, 64, QImage::Format_ARGB32_Premultiplied);
     source.fill(Qt::transparent);
@@ -3716,7 +3744,7 @@ bool testBrushSizeControls(const QString& directory) {
     window.resize(900, 700);
     window.show();
     if (!window.openImagePath(source_path)) return false;
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
 
     auto* canvas = window.findChild<image_editor::ImageCanvas*>();
     auto* paint_button = window.findChild<QToolButton*>(QStringLiteral("paintToolButton"));
@@ -3728,7 +3756,7 @@ bool testBrushSizeControls(const QString& directory) {
         slider == nullptr || spin == nullptr)
         return false;
     paint_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!canvas->paintMode() || !slider->isEnabled() || !spin->isEnabled()) return false;
 
     int painted_diameter = 0;
@@ -3741,7 +3769,7 @@ bool testBrushSizeControls(const QString& directory) {
         const QPoint center = canvas->rect().center();
         QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, center);
         QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, center);
-        QCoreApplication::processEvents();
+        processImageEditorEvents();
         return painted_diameter;
     };
 
@@ -3764,7 +3792,7 @@ bool testBrushSizeControls(const QString& directory) {
     QTest::mousePress(canvas, Qt::LeftButton,
                       Qt::ControlModifier | Qt::AltModifier, resize_start);
     QTest::mouseMove(canvas, resize_start + QPoint(30, 0), 1);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const int resized_value = spin->value();
     QTest::mouseRelease(canvas, Qt::LeftButton,
                         Qt::ControlModifier | Qt::AltModifier,
@@ -3800,7 +3828,49 @@ bool testBrushSizeControls(const QString& directory) {
         canvas_gesture_increased_size && maximum_is_reachable;
 }
 
+bool testInteractiveRenderingWindow(const QString& directory, const QString& screenshot) {
+    std::cerr << "Running testInteractiveRenderingWindow.\n";
+    QImage source(512,320,QImage::Format_ARGB32_Premultiplied); source.fill(Qt::transparent);
+    { QPainter painter(&source); painter.setRenderHint(QPainter::Antialiasing); painter.setPen(Qt::NoPen);
+      painter.setBrush(QColor(220,70,130,170)); painter.drawEllipse(QRectF(60,30,260,240)); }
+    const auto path=QDir(directory).filePath("interactive-window.png"); if(!source.save(path)) return false;
+    image_editor::ImageEditorWindow window(nullptr,directory); window.resize(1100,750); window.show();
+    auto* renderer=window.findChild<image_editor::ImageRenderController*>();
+    auto* cpu=window.findChild<QAction*>("cpuRenderingAction"); auto* automatic=window.findChild<QAction*>("automaticRenderingAction");
+    if(!renderer || !cpu || !automatic || !automatic->isChecked()) return false;
+    int cpu_count=0,gpu_count=0; bool recovery_logged=false;
+    const QString injected="Native canvas recovery regression: context lost.";
+    QObject::connect(renderer,&image_editor::ImageRenderController::frameReady,&window,[&](const image_editor::InteractiveFrame& frame) {
+        if(frame.texture) ++gpu_count; else ++cpu_count;
+        if(!frame.texture) {
+            QFile log(QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)).filePath("logs/image-editor.log"));
+            if(log.open(QIODevice::ReadOnly)) recovery_logged=log.readAll().contains(injected.toUtf8());
+        }
+    });
+    if(!window.openImagePath(path)) return false; processImageEditorEvents(); QTest::qWait(50);
+    auto* canvas=window.findChild<image_editor::ImageCanvas*>(); if(!canvas || gpu_count!=1) return false;
+    const auto gpu_pixels=canvas->grab().toImage(); if(gpu_pixels.isNull()) return false;
+    auto* tree=window.findChild<QTreeWidget*>();
+    if(!tree || !tree->topLevelItemCount()) return false;
+    auto* stable_item=tree->topLevelItem(0);
+    if(!screenshot.isEmpty() && !window.grab().save(screenshot)) return false;
+    cpu->trigger(); processImageEditorEvents(); if(cpu_count!=1 || !cpu->isChecked()) return false;
+    if(tree->topLevelItem(0)!=stable_item) return false;
+    const auto cpu_pixels=canvas->grab().toImage();
+    if(gpu_pixels.size()!=cpu_pixels.size()) return false;
+    // Interpolated display edges can differ; compare the document center coverage.
+    const auto point=canvas->rect().center(); const auto a=gpu_pixels.pixelColor(point),b=cpu_pixels.pixelColor(point);
+    if(std::abs(a.red()-b.red())>2 || std::abs(a.green()-b.green())>2 || std::abs(a.blue()-b.blue())>2) return false;
+    automatic->trigger(); processImageEditorEvents(); if(gpu_count!=2) return false;
+    renderer->injectGpuFailureForTesting(injected); automatic->trigger(); processImageEditorEvents();
+    if(cpu_count!=2 || !recovery_logged) return false;
+    automatic->trigger(); processImageEditorEvents(); if(cpu_count!=3 || gpu_count!=2) return false;
+    return true;
+}
+
 int main(int argc, char* argv[]) {
+    QSurfaceFormat format; format.setVersion(3,2); format.setProfile(QSurfaceFormat::CoreProfile);
+    QSurfaceFormat::setDefaultFormat(format); QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
     QCoreApplication::setApplicationName(
@@ -3812,6 +3882,13 @@ int main(int argc, char* argv[]) {
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, temporary.path());
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, temporary.path());
+    if (application.arguments().contains(QStringLiteral("--rendering-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        const QString screenshot=application.arguments().size()>2?application.arguments().at(2):QString();
+        const bool result=testInteractiveRenderingWindow(temporary.path(),screenshot);
+        if(!result) std::cerr << "Native interactive window presentation, CPU selection, or logged recovery failed.\n";
+        return result?0:1;
+    }
     if (application.arguments().contains(QStringLiteral("--window-close-tabs"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testWindowCloseAcrossDirtyTabs(temporary.path()) ? 0 : 1;
@@ -4020,7 +4097,7 @@ int main(int argc, char* argv[]) {
 
     image_editor::ImageEditorWindow window;
     window.show();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
 
     auto* startup_options_toolbar = window.findChild<QToolBar*>(
         QStringLiteral("toolOptionsToolBar"));
@@ -4129,11 +4206,11 @@ int main(int argc, char* argv[]) {
             dialog->resize(dialog->width(),
                            std::max(dialog->minimumHeight(),
                                     std::min(initial_height, 640)));
-            QCoreApplication::processEvents();
+            processImageEditorEvents();
             const bool list_scrolls_when_compact =
                 table->verticalScrollBar()->maximum() > 0;
             dialog->resize(dialog->width(), initial_height);
-            QCoreApplication::processEvents();
+            processImageEditorEvents();
             if (!list_scrolls_when_compact) {
                 dialog->reject();
                 return;
@@ -4255,7 +4332,7 @@ int main(int argc, char* argv[]) {
             clear->click();
             const bool is_empty = editor->keySequence().isEmpty();
             buttons->button(QDialogButtonBox::Ok)->click();
-            if (is_empty) QCoreApplication::processEvents();
+            if (is_empty) processImageEditorEvents();
         });
     if (!shortcut_cleared || !paint_tool_action->shortcut().isEmpty()) {
         std::cerr << "The Clear control did not remove the Paint shortcut.\n";
@@ -4309,6 +4386,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "The right-side layer dock did not show the default selected layer stack.\n";
         return 1;
     }
+    processImageEditorEvents();
     const QImage editable_thumbnail =
         layerRowItem(layer_list, 0)->data(0, Qt::UserRole + 5).value<QImage>();
     const QImage background_thumbnail =
@@ -4338,7 +4416,7 @@ int main(int argc, char* argv[]) {
     const QRect background_row = layer_list->visualItemRect(layerRowItem(layer_list, 1));
     QTest::mouseClick(layer_list->viewport(), Qt::LeftButton, Qt::NoModifier,
                       QPoint(background_row.right() - 17, background_row.center().y()));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (currentLayerRow(layer_list) != 0 ||
         !layerRowItem(layer_list, 1)->data(0, Qt::AccessibleDescriptionRole).toString()
              .contains(QStringLiteral("Hidden"))) {
@@ -4349,7 +4427,7 @@ int main(int argc, char* argv[]) {
     QTest::mouseClick(layer_list->viewport(), Qt::LeftButton, Qt::NoModifier,
                       QPoint(hidden_background_row.right() - 17,
                              hidden_background_row.center().y()));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (currentLayerRow(layer_list) != 0 ||
         !layerRowItem(layer_list, 1)->data(0, Qt::AccessibleDescriptionRole).toString()
              .contains(QStringLiteral("Visible"))) {
@@ -4416,7 +4494,7 @@ int main(int argc, char* argv[]) {
     auto* layer_edit_hint = window.findChild<QLabel*>(QStringLiteral("layerEditingHint"));
     const QString title_before_layer_selection = window.windowTitle();
     setCurrentLayerRow(layer_list, 1);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (paint_tool_button == nullptr || layer_edit_hint == nullptr ||
         paint_tool_button->isEnabled() || rotate_action->isEnabled() ||
         paint_tool_action->isEnabled() ||
@@ -4428,27 +4506,27 @@ int main(int argc, char* argv[]) {
     }
     window.activateWindow();
     QTest::keyClick(&window, Qt::Key_B);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (paint_tool_button->isChecked() || paint_tool_action->isChecked()) {
         std::cerr << "The Paint shortcut activated while Background was selected.\n";
         return 1;
     }
     setCurrentLayerRow(layer_list, 0);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!paint_tool_button->isEnabled() || !rotate_action->isEnabled() ||
         !paint_tool_action->isEnabled() || !eraser_tool_action->isEnabled()) {
         std::cerr << "Selecting an editable layer did not enable its tools.\n";
         return 1;
     }
     QTest::keyClick(&window, Qt::Key_B);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!paint_tool_button->isChecked() || !paint_tool_action->isChecked() ||
         !canvas->paintMode()) {
         std::cerr << "The B shortcut did not activate Paint and synchronize its button.\n";
         return 1;
     }
     QTest::keyClick(&window, Qt::Key_B);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (paint_tool_button->isChecked() || paint_tool_action->isChecked() ||
         canvas->paintMode()) {
         std::cerr << "The B shortcut did not deactivate Paint and synchronize its button.\n";
@@ -4457,14 +4535,14 @@ int main(int argc, char* argv[]) {
     auto* eraser_tool_button = window.findChild<QToolButton*>(
         QStringLiteral("eraserToolButton"));
     QTest::keyClick(&window, Qt::Key_E);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (eraser_tool_button == nullptr || !eraser_tool_button->isChecked() ||
         !eraser_tool_action->isChecked() || !canvas->eraserMode() || canvas->paintMode()) {
         std::cerr << "The E shortcut did not activate the exclusive Eraser tool.\n";
         return 1;
     }
     QTest::keyClick(&window, Qt::Key_E);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (eraser_tool_button->isChecked() || eraser_tool_action->isChecked() ||
         canvas->eraserMode()) {
         std::cerr << "The E shortcut did not deactivate Eraser.\n";
@@ -4693,7 +4771,7 @@ int main(int argc, char* argv[]) {
                       Qt::ControlModifier | Qt::AltModifier, preview_anchor);
     const QPoint preview_drag_position = preview_anchor + QPoint(20, 5);
     QTest::mouseMove(canvas, preview_drag_position);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const QImage resized_brush_preview = canvas->grab().toImage();
     const qreal resized_brush_radius = std::max(
         3.0, brush_size->value() * canvas->zoomFactor()) / 2.0;
@@ -4707,7 +4785,7 @@ int main(int argc, char* argv[]) {
 
     const QPoint outside_image(0, preview_anchor.y());
     QTest::mouseMove(canvas, outside_image);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const QImage resized_outside_preview = canvas->grab().toImage();
     const qreal minimum_brush_radius = std::max(
         3.0, brush_size->value() * canvas->zoomFactor()) / 2.0;
@@ -4719,7 +4797,7 @@ int main(int argc, char* argv[]) {
 
     QTest::mouseRelease(canvas, Qt::LeftButton,
                         Qt::ControlModifier | Qt::AltModifier, outside_image);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const QImage released_preview = canvas->grab().toImage();
     const bool cursor_restored_to_press_position =
         QCursor::pos() == expected_restored_cursor;
@@ -4727,7 +4805,7 @@ int main(int argc, char* argv[]) {
         hasBrightPixelNear(released_preview, outside_drag_anchor_edge);
     const QPoint reentered_image = preview_anchor + QPoint(80, 0);
     QTest::mouseMove(canvas, reentered_image);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const QImage reentered_preview = canvas->grab().toImage();
     const bool brush_preview_followed_cursor_after_release =
         hasBrightPixelNear(reentered_preview,
@@ -4787,7 +4865,7 @@ int main(int argc, char* argv[]) {
     const QPoint erase_start = paint_center - QPoint(20, 0);
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, erase_start);
     QTest::mouseMove(canvas, paint_center + QPoint(20, 0));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool default_eraser_preview_was_live = live_erase_preview_spy.size() > 0;
     const QColor live_erased_center_pixel = canvas->grab().toImage().pixelColor(paint_center);
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier,
@@ -4803,7 +4881,7 @@ int main(int argc, char* argv[]) {
     const int live_preview_count_before_overlay = live_erase_preview_spy.size();
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, erase_start);
     QTest::mouseMove(canvas, paint_center + QPoint(20, 0));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const bool overlay_preview_kept_layer_pixels_until_release =
         live_erase_preview_spy.size() == live_preview_count_before_overlay &&
         erase_committed_spy.size() == 1;
@@ -4862,9 +4940,9 @@ int main(int argc, char* argv[]) {
     }
     QSignalSpy cancel_crop_spy(cancel_crop_action, &QAction::triggered);
     window.activateWindow();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QTest::keyClick(&window, Qt::Key_Escape);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (crop_action->isChecked() || cancel_crop_action->isEnabled() ||
         canvas->cropMode()) {
         std::cerr << "Escape did not cancel crop through its configurable action. triggered="
@@ -5037,7 +5115,7 @@ int main(int argc, char* argv[]) {
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, areaCanvasPoint(10, 10));
     QTest::mouseMove(canvas, areaCanvasPoint(20, 20));
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, areaCanvasPoint(20, 20));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     auto area_before_resize = canvas->areaSelectionClipPath();
     if (!area_before_resize || !area_before_resize->contains(QPointF(15, 15))) {
         std::cerr << "Area Selection could not be prepared for the resize history check.\n";
@@ -5151,7 +5229,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     layer_list->currentItem()->setText(0, QStringLiteral("Overlay"));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layer_list->currentItem() == nullptr ||
         layer_list->currentItem()->text(0) != QStringLiteral("Overlay")) {
         std::cerr << "Inline layer renaming did not update the selected layer.\n";
@@ -5185,7 +5263,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     setCurrentLayerRow(layer_list, 1);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (paint_button->isEnabled() || eraser_button->isEnabled() ||
         !shapes_button->isEnabled() || !shapes_tool_action->isEnabled() ||
         opacity_slider->isEnabled()) {
@@ -5193,7 +5271,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     shapes_tool_action->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes ||
         !shapes_button->isChecked()) {
         std::cerr << "Shapes could not remain active with Background selected.\n";
@@ -5213,7 +5291,7 @@ int main(int argc, char* argv[]) {
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, background_shape_start);
     QTest::mouseMove(canvas, background_shape_end);
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, background_shape_end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(layer_list) != 3 || currentLayerRow(layer_list) != 1 ||
         layer_list->currentItem() == nullptr ||
         layer_list->currentItem()->text(0) != QStringLiteral("Shape 1")) {
@@ -5293,12 +5371,12 @@ int main(int argc, char* argv[]) {
     QTest::mouseMove(linked_canvas, linkedCanvasPoint(22, 17));
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier,
                         linkedCanvasPoint(22, 17));
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     linked_paint_action->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QTest::mouseClick(linked_canvas, Qt::LeftButton, Qt::NoModifier,
                       linked_canvas->rect().center());
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QImage published_before_save(linked_output);
     if (published_before_save.isNull() ||
         published_before_save.pixelColor(16, 12) != QColor(240, 20, 10, 255)) {
@@ -5306,7 +5384,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     linked_save_action->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QImage published_after_save(linked_output);
     if (published_after_save.isNull() ||
         published_after_save.pixelColor(16, 12) == QColor(240, 20, 10, 255) ||
@@ -5392,14 +5470,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     linked_shapes_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!shape_palette->isVisible() || linked_shapes_button->isChecked() ||
         linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Paint) {
         std::cerr << "Opening the Shapes palette changed the active tool before a shape was chosen.\n";
         return 1;
     }
     shape_line_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!shape_palette->isVisible() || !shape_line_button->isChecked() ||
         !linked_shapes_button->isChecked() || shape_fill->isEnabled() ||
         linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes) {
@@ -5407,11 +5485,11 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     linked_paint_action->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     shape_palette->close();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     linked_shapes_action->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!linked_shapes_button->isChecked() || !shape_options_action->isVisible() ||
         shape_palette->isVisible() || !shape_line_button->isChecked() ||
         shape_fill->isEnabled() ||
@@ -5420,7 +5498,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     linked_shapes_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!shape_palette->isVisible() || !shape_palette->isWindow() ||
         !shape_palette->windowFlags().testFlag(Qt::Tool) ||
         !linked_shapes_button->isChecked() ||
@@ -5429,7 +5507,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     shape_rectangle_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     shape_fill->setChecked(true);
     if (!shape_palette->isVisible() || !shape_rectangle_button->isChecked() ||
         !shape_stroke->isChecked() || !shape_fill->isChecked() || shape_width->value() != 2 ||
@@ -5440,7 +5518,7 @@ int main(int argc, char* argv[]) {
     }
     shape_palette->move(120, 80);
     shape_palette->close();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (shape_palette->isVisible() || !linked_shapes_button->isChecked() ||
         linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes ||
         !shape_rectangle_button->isChecked()) {
@@ -5448,7 +5526,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     linked_shapes_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!shape_palette->isVisible() || shape_palette->pos() != QPoint(120, 80) ||
         !shape_rectangle_button->isChecked()) {
         std::cerr << "Reopening the Shapes palette did not retain its position and selected type.\n";
@@ -5481,7 +5559,7 @@ int main(int argc, char* argv[]) {
     QTest::mouseMove(linked_canvas, cancelled_end);
     QTest::keyClick(linked_canvas, Qt::Key_Escape);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, cancelled_end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (linked_undo_action == nullptr ||
         linked_undo_action->isEnabled() != undo_enabled_before_cancel ||
         linked_window.windowTitle().startsWith('*') != dirty_before_cancel) {
@@ -5496,7 +5574,7 @@ int main(int argc, char* argv[]) {
     QTest::mouseMove(linked_canvas, shape_end);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::ShiftModifier, shape_end);
     QTest::keyRelease(linked_canvas, Qt::Key_Shift);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(linked_layer_list) != 3 || currentLayerRow(linked_layer_list) != 0 ||
         linked_layer_list->currentItem() == nullptr ||
         linked_layer_list->currentItem()->text(0) != QStringLiteral("Shape 1")) {
@@ -5507,14 +5585,14 @@ int main(int argc, char* argv[]) {
         QStringLiteral("addImageLayerButton"));
     if (add_shape_layer == nullptr) return 1;
     add_shape_layer->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     shape_ellipse_button->click();
     const QPoint ellipse_start = imagePoint(linked_canvas, QSize(32, 24), QPointF(17, 14));
     const QPoint ellipse_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(25, 22));
     QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_start);
     QTest::mouseMove(linked_canvas, ellipse_end);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(linked_layer_list) != 5 || currentLayerRow(linked_layer_list) != 0 ||
         linked_layer_list->currentItem() == nullptr ||
         linked_layer_list->currentItem()->text(0) != QStringLiteral("Shape 2")) {
@@ -5524,7 +5602,7 @@ int main(int argc, char* argv[]) {
     auto* linked_eraser_action = linked_window.findChild<QAction*>(
         QStringLiteral("eraserToolAction"));
     setCurrentLayerRow(linked_layer_list, layerRowCount(linked_layer_list) - 1);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (linked_eraser_action == nullptr || linked_paint_action->isEnabled() ||
         linked_eraser_action->isEnabled() || !linked_shapes_action->isEnabled() ||
         linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes) {
@@ -5539,7 +5617,7 @@ int main(int argc, char* argv[]) {
     QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, background_line_start);
     QTest::mouseMove(linked_canvas, background_line_end);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, background_line_end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (layerRowCount(linked_layer_list) != 6 || currentLayerRow(linked_layer_list) != 4 ||
         linked_layer_list->currentItem() == nullptr ||
         linked_layer_list->currentItem()->text(0) != QStringLiteral("Shape 3")) {
@@ -5563,41 +5641,41 @@ int main(int argc, char* argv[]) {
     const QPoint brush_start = imagePoint(linked_canvas, QSize(32, 24), QPointF(28, 21));
     const QPoint brush_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(30, 21));
     linked_paint_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, brush_start);
     QTest::mouseMove(linked_canvas, brush_end);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, brush_end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!linked_canvas->paintMode() || linked_canvas->cursor().shape() != Qt::BlankCursor ||
         shape_layer_paint_strokes.count() != 1) {
         std::cerr << "Paint did not draw on the newly created shape layer.\n";
         return 1;
     }
     linked_eraser_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, brush_start);
     QTest::mouseMove(linked_canvas, brush_end);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, brush_end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!linked_canvas->eraserMode() || linked_canvas->cursor().shape() != Qt::BlankCursor ||
         shape_layer_erase_strokes.count() != 1) {
         std::cerr << "Eraser did not work on the newly created shape layer.\n";
         return 1;
     }
     shape_ellipse_button->click();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     linked_select_shapes_action->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (!linked_select_shapes_button->isChecked() || linked_shapes_button->isChecked() ||
         shape_options_action->isVisible() || !shape_ellipse_button->isChecked()) {
         std::cerr << "Shapes and Selection were not mutually exclusive.\n";
         return 1;
     }
     setCurrentLayerRow(linked_layer_list, 2);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const QPoint ellipse_center = imagePoint(linked_canvas, QSize(32, 24), QPointF(21, 18));
     QTest::mouseClick(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_center);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     if (currentLayerRow(linked_layer_list) != 0) {
         std::cerr << "Selecting a shape on another visible layer did not activate its layer.\n";
         return 1;
@@ -5607,17 +5685,17 @@ int main(int argc, char* argv[]) {
     QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, old_center);
     QTest::mouseMove(linked_canvas, moved_center);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, moved_center);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     const QPoint moved_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(30, 13));
     const QPoint resized_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(31, 14));
     QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, moved_end);
     QTest::mouseMove(linked_canvas, resized_end);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, resized_end);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     shape_fill->setChecked(false);
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     linked_save_action->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QImage published_after_shape(linked_output);
     if (published_after_shape.isNull() ||
         published_after_shape.pixelColor(7, 8) != QColor(240, 20, 10, 255) ||
@@ -5754,7 +5832,7 @@ int main(int argc, char* argv[]) {
         failed_publish_document_before_file.readAll();
     failed_publish_document_before_file.close();
     failed_publish_paint->trigger();
-    QCoreApplication::processEvents();
+    processImageEditorEvents();
     QTest::mouseClick(failed_publish_canvas, Qt::LeftButton, Qt::NoModifier,
                       failed_publish_canvas->rect().center());
     if (!QFile::remove(failed_publish_output) ||

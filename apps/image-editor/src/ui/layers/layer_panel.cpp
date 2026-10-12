@@ -43,6 +43,7 @@ constexpr int kMaskSelectedRole = Qt::UserRole + 8;
 constexpr int kMaskEnabledRole = Qt::UserRole + 9;
 constexpr int kSourceProblemRole = Qt::UserRole + 10;
 constexpr int kRasterObjectRole = Qt::UserRole + 11;
+constexpr int kHasMaskRole = Qt::UserRole + 12;
 constexpr int kLayerRowHeight = 46;
 
 QRect maskThumbnailRect(const QRect& row) {
@@ -118,7 +119,7 @@ public:
 
         const QImage mask_thumbnail = index.data(kMaskThumbnailRole).value<QImage>();
         int content_right = thumbnail_rect.right();
-        if (!mask_thumbnail.isNull()) {
+        if (index.data(kHasMaskRole).toBool()) {
             const QRect mask_rect = maskThumbnailRect(row);
             painter->fillRect(mask_rect, Qt::black);
             const QSize fitted = mask_thumbnail.size().scaled(mask_rect.size(), Qt::KeepAspectRatio);
@@ -432,7 +433,7 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
 
                 const bool is_group = item->data(0, kGroupRole).toBool();
                 const bool editable = !is_group && !item->data(0, kBackgroundRole).toBool();
-                const bool has_mask = !item->data(0, kMaskThumbnailRole).value<QImage>().isNull();
+                const bool has_mask = item->data(0, kHasMaskRole).toBool();
                 add_mask_action->setVisible(editable && !has_mask);
                 enable_mask_action->setVisible(editable && has_mask);
                 remove_mask_action->setVisible(editable && has_mask);
@@ -562,6 +563,16 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     updateControls();
 }
 
+void LayerPanel::setThumbnails(const QHash<QString, QImage>& thumbnails,
+                               const QHash<QString, QImage>& mask_thumbnails) {
+    const QSignalBlocker blocker(layer_tree_);
+    for (QTreeWidgetItemIterator item(layer_tree_); *item; ++item) {
+        const auto id = (*item)->data(0, kItemIdRole).toString();
+        (*item)->setData(0, kThumbnailRole, thumbnails.value(id));
+        (*item)->setData(0, kMaskThumbnailRole, mask_thumbnails.value(id));
+    }
+}
+
 void LayerPanel::setDocument(const ImageDocumentData& document,
                              const QString& selected_layer_id,
                              const QString& selected_group_id,
@@ -582,6 +593,7 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
     const QSignalBlocker blocker(layer_tree_);
     document_ = document;
     const auto set_mask_data = [&](QTreeWidgetItem* item, const ImageLayerData& layer) {
+        item->setData(0, kHasMaskRole, layer.mask.has_value());
         item->setData(0, kMaskThumbnailRole, mask_thumbnails.value(layer.id));
         item->setData(0, kMaskSelectedRole, layer.id == selected_mask_id);
         item->setData(0, kMaskEnabledRole, layer.mask.has_value() && layer.mask->enabled);
@@ -705,10 +717,10 @@ bool LayerPanel::eventFilter(QObject* watched, QEvent* event) {
             QTreeWidgetItem* item = layer_tree_->itemAt(mouse->pos());
             if (mouse->button() == Qt::LeftButton && item != nullptr &&
                 !item->data(0, kGroupRole).toBool() &&
-                (!item->data(0, kMaskThumbnailRole).value<QImage>().isNull() ||
+                (item->data(0, kHasMaskRole).toBool() ||
                  !item->data(0, kRasterObjectRole).toString().isEmpty())) {
                 const QRect row = layer_tree_->visualItemRect(item);
-                const bool mask_hit = !item->data(0, kMaskThumbnailRole).value<QImage>().isNull() &&
+                const bool mask_hit = item->data(0, kHasMaskRole).toBool() &&
                     maskThumbnailRect(row).contains(mouse->pos());
                 const QRect content_rect(row.left() + 6, row.center().y() - 18, 48, 36);
                 if (mask_hit || content_rect.contains(mouse->pos())) {

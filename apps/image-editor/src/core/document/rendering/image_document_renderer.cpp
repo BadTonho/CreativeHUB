@@ -40,9 +40,10 @@ ImageEditorPerformanceStage operationPerformanceStage(OperationKind kind) noexce
     return ImageEditorPerformanceStage::OperationReplay;
 }
 
-QImage paintStroke(QImage image, const ImagePaintStroke& stroke) {
+QImage paintStroke(QImage image, const ImagePaintStroke& stroke, const QRect& region = {}) {
     image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     QPainter painter(&image);
+    if (!region.isEmpty()) painter.setClipRect(region);
     painter.setRenderHint(QPainter::Antialiasing, true);
     if (stroke.clipping_path.has_value()) {
         painter.setClipPath(*stroke.clipping_path, Qt::IntersectClip);
@@ -67,9 +68,10 @@ QImage paintStroke(QImage image, const ImagePaintStroke& stroke) {
     return image;
 }
 
-QImage eraseStroke(QImage image, const ImageEraseStroke& stroke) {
+QImage eraseStroke(QImage image, const ImageEraseStroke& stroke, const QRect& region = {}) {
     image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     QPainter painter(&image);
+    if (!region.isEmpty()) painter.setClipRect(region);
     painter.setRenderHint(QPainter::Antialiasing, true);
     if (stroke.clipping_path.has_value()) {
         painter.setClipPath(*stroke.clipping_path, Qt::IntersectClip);
@@ -95,9 +97,10 @@ QImage eraseStroke(QImage image, const ImageEraseStroke& stroke) {
     return image;
 }
 
-QImage drawShape(QImage image, const ImageShapeData& shape) {
+QImage drawShape(QImage image, const ImageShapeData& shape, const QRect& region = {}) {
     image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     QPainter painter(&image);
+    if (!region.isEmpty()) painter.setClipRect(region);
     painter.setRenderHint(QPainter::Antialiasing, true);
     const QRectF bounds(shape.start, shape.end);
     if (shape.kind == ImageShapeKind::Line) {
@@ -121,9 +124,10 @@ QImage drawShape(QImage image, const ImageShapeData& shape) {
     return image;
 }
 
-QImage drawText(QImage image, const ImageTextData& text) {
+QImage drawText(QImage image, const ImageTextData& text, const QRect& region = {}) {
     image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     QPainter painter(&image);
+    if (!region.isEmpty()) painter.setClipRect(region);
     QFont font(text.font_family);
     font.setPixelSize(text.font_pixel_size);
     painter.setFont(font);
@@ -153,7 +157,8 @@ QImage applyOperations(QImage image,
                        const QVector<ImageOperation>& operations,
                        bool fixed_canvas,
                        const std::atomic_bool* cancellation_requested = nullptr,
-                       const QHash<QString, QImage>& resources = {}) {
+                       const QHash<QString, QImage>& resources = {},
+                       const QRect& region = {}) {
     ImageEditorPerformanceScope replay_scope(
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::OperationReplay);
@@ -171,6 +176,7 @@ QImage applyOperations(QImage image,
             const QImage source = resources.value(operation.raster.id, resources.value(operation.raster.source_path));
             if (!source.isNull() && source.size() == operation.raster.source_size) {
                 QPainter painter(&image);
+                if (!region.isEmpty()) painter.setClipRect(region);
                 painter.setRenderHint(QPainter::SmoothPixmapTransform);
                 painter.setTransform(operation.raster.transform);
                 painter.drawImage(0, 0, source);
@@ -239,10 +245,10 @@ QImage applyOperations(QImage image,
             break;
         }
         case OperationKind::PaintStroke:
-            image = paintStroke(std::move(image), operation.paint_stroke);
+            image = paintStroke(std::move(image), operation.paint_stroke, region);
             break;
         case OperationKind::EraseStroke:
-            image = eraseStroke(std::move(image), operation.erase_stroke);
+            image = eraseStroke(std::move(image), operation.erase_stroke, region);
             break;
         case OperationKind::BucketFill: {
             bool changed = false;
@@ -261,10 +267,10 @@ QImage applyOperations(QImage image,
             break;
         }
         case OperationKind::Shape:
-            image = drawShape(std::move(image), operation.shape);
+            image = drawShape(std::move(image), operation.shape, region);
             break;
         case OperationKind::Text:
-            image = drawText(std::move(image), operation.text);
+            image = drawText(std::move(image), operation.text, region);
             break;
         }
     }
@@ -745,6 +751,30 @@ QSize ImageDocumentRenderer::documentSize(const ImageDocumentData& document,
         else if (operation.kind == OperationKind::Rotate) size.transpose();
     }
     return size;
+}
+
+QImage ImageDocumentRenderer::rasterize(const QSize& size,
+    const QVector<ImageOperation>& operations, const QHash<QString, QImage>& resources,
+    bool mask, QImage previous, const QRect& region, const std::atomic_bool* cancel) {
+    if (previous.isNull() || previous.size() != size) {
+        previous = QImage(size, QImage::Format_ARGB32_Premultiplied);
+        if (previous.isNull()) return {};
+        previous.fill(mask ? Qt::white : Qt::transparent);
+    } else if (!region.isEmpty()) {
+        previous=previous.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        QPainter painter(&previous);
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        painter.fillRect(region, mask ? Qt::white : Qt::transparent);
+    }
+    ImageLayerMaskData mask_data;
+    mask_data.operations = operations;
+    return applyOperations(std::move(previous), mask ? maskRenderOperations(mask_data) : operations,
+        true, cancel, resources, region);
+}
+
+QImage ImageDocumentRenderer::transformRaster(QImage pixels,
+    const QVector<ImageOperation>& operations, const std::atomic_bool* cancel) {
+    return applyOperations(std::move(pixels), operations, true, cancel);
 }
 
 QImage ImageDocumentRenderer::composite(const ImageDocumentData& document,
