@@ -136,6 +136,7 @@ target_include_directories(creative-suite-main-editor-preview-performance-metric
 
 target_link_libraries(creative-suite-main-editor-preview-performance-metrics-tests PRIVATE
     Threads::Threads
+    Qt6::Gui
 )
 
 target_compile_features(creative-suite-main-editor-preview-performance-metrics-tests PRIVATE cxx_std_20)

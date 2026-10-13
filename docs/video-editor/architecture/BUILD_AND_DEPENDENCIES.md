@@ -2,8 +2,10 @@
 
 Status: **provisional**.
 
-The video-playback regression target links Qt Gui for the existing preview
-performance observer's composition image types. Shared decoding itself retains
+The video-playback and preview-performance-metrics regression targets link Qt Gui
+for the existing preview performance observer's composition image types.
+Their clean target builds are part of the local regression gate; a previously
+built executable cannot verify these dependencies. Shared decoding itself retains
 its Qt-independent API; tagged YUV test fixtures use the existing FFmpeg libraries.
 
 The root `vcpkg.json` tracks Qt 6 through `qtbase` and `qtmultimedia`, and

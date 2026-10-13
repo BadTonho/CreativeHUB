@@ -82,6 +82,13 @@ do not block silent video export, output contains no audio, the full Timeline
 duration and black tail remain, and enabling audio fails with a logged source
 path while preserving the previous destination. This case failed before the fix.
 
+Fresh verification also found a missing Qt Gui dependency in the standalone
+preview-performance-metrics test target. Build
+`creative-suite-main-editor-preview-performance-metrics-tests` and run
+`creative-suite-main-editor-preview-performance-metrics` to protect compilation
+and the existing concurrent timing/counter contract. The initial fresh build
+failed at the composition boundary's `QImage` include before this dependency fix.
+
 ## Local gate
 
 From the repository root, run:
