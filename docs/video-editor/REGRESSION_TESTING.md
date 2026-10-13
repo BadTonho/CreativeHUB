@@ -25,8 +25,8 @@ before the related change is considered complete.
 
 The [Video Editor audit](AUDIT_2026-10-12.md) records ten reproduced functional
 defects in recovery, audio, linked assets, media metadata, and export. The
-selected 60-test gate, strict native hardware checks, and five MainWindow
-integration repeats passed, but do not exercise those failing scenarios.
+initial selected 60-test gate, strict native hardware checks, and five MainWindow
+integration repeats passed, but did not exercise those failing scenarios.
 The report identifies the missing regression cases and repair priorities.
 F01 now has automated coverage in `tests/project/autosave_manager_test.cpp`
 for newer corrupt writes, missing main files, valid newer saves, identical
@@ -88,6 +88,17 @@ preview-performance-metrics test target. Build
 `creative-suite-main-editor-preview-performance-metrics` to protect compilation
 and the existing concurrent timing/counter contract. The initial fresh build
 failed at the composition boundary's `QImage` include before this dependency fix.
+
+Final repair verification (2026-10-13): the canonical Windows Release build
+and Qt deployment completed. The scoped CTest gate passed 66/66 entries in
+86.67 seconds, with no failures or skips, covering the editor, affected shared
+modules, Image Editor core/masks, Motion Studio preview/export, and Hub backup
+format/manager consumers. The explicit hardware-required media check and native
+H.264/HEVC Video Editor pipeline checks passed after this build. The directly
+launched output is `build/apps/video-editor/Release/creative-suite-video-editor.exe`,
+modified 2026-10-13 12:13:47 UTC (2,783,232 bytes). See the audit for per-finding
+commits and retained logs. Physical display/audio, representative real projects,
+native macOS/Linux, and packaged-runtime acceptance remain pending.
 
 ## Local gate
 

@@ -8,19 +8,21 @@ documented separately below. Some approved release capabilities remain planned.
 The Video Editor currently includes:
 
 - Qt 6 desktop shell with dockable workspace panels;
-- FFmpeg metadata import and first-frame decoding;
+- FFmpeg metadata import and first-frame decoding, source YUV matrix/range
+  conversion, and display orientation matching decoded dimensions;
 - provisional Qt OpenGL presentation with CPU fallback and grayscale, plus
   optional shared GPU timeline composition and direct texture delivery
   (Settings > General, default off; RGBA/CPU fallback);
-- CPU playback with worker-thread frame stepping and playback;
+- worker-thread frame stepping and playback, with CPU decoding by default and
+  experimental Windows D3D11 H.264/HEVC 8-bit decoding;
 - multiple video tracks with stable identifiers, absolute positions, gaps,
   cross-track overlap, direct selection, track management, and positional
   drops from the Media Browser;
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 25, including migration from
-  versions 1 through 13, a rational Timeline rate and separate source/Timeline
+- versioned `.csp` persistence through version 25, with versions 1 through 24
+  readable, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio media kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
   Image Editor links and Motion links with persisted publication positions.
@@ -52,6 +54,10 @@ The Video Editor currently includes:
   images are rejected until per-frame Timeline timing is designed;
 - initial Image Editor handoff for shared Media Pool images and isolated
   timeline image variants, with saved PNG refresh and no unsaved live preview;
+- clip-level Motion Studio handoff, published visual refresh, retained original
+  audio, and publication positions preserved across split/trim/save/history;
+- operating-system file drops on Media Browser bins/lists and the Timeline,
+  using asynchronous import and atomic placement with stale-project protection;
 - atomic project autosave and recovery snapshots with configurable global
   interval and retention;
 - offline FFmpeg video export with embedded and independent audio, black frames
@@ -59,6 +65,8 @@ The Video Editor currently includes:
   but no YouTube-named preset;
 - independent per-job experimental GPU export composition (Render > Video,
   default off), supporting 1080p, 1440p and 4K UHD with RGBA readback and CPU fallback;
+- experimental ordered GPU effects/Fusion and native Windows/NVIDIA
+  decode/composition/NVENC delivery, with explicit recovery and transfer metrics;
 - local structured diagnostic logging;
 - Edit and Fusion workspace pages in the same window; Fusion reuses the Edit
   Preview as its Viewer and replaces the Timeline dock with a draggable node
@@ -84,15 +92,16 @@ effect to the Timeline stack. Merge combines its background and foreground with
 straight-alpha source-over. The graph output replaces the clip image before
 its existing Inspector effect stack and Timeline transform/keyframes.
 
-Graph data is stored in `.csp` version 22 and remains compatible with version 23. Versions 1 through 21 retain their
+Graph animation was introduced in `.csp` version 22 and is retained in version 25.
+Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its
 duration. Preview and export evaluate the same graph at the clip-local frame;
 keyframes are adjusted when the clip is split, trimmed, or converted to another
 frame rate. Graph editing participates in Timeline Undo/Redo. This phase does
 not add graph animation to Color or other effect parameters, text, audio, masks,
-effects beyond the four existing video effects, nested compositions, or Motion
-Studio integration.
+effects beyond the four existing video effects, or nested compositions.
+Clip-level Motion Studio handoff is a separate implemented workflow.
 
 Each node has a `VIEW` control that routes that node's output to the shared
 Fusion Viewer. Output is active when Fusion opens. Choosing a different node is
@@ -118,7 +127,7 @@ composition, including its other tracks, clip effects, and transforms.
   an AMD Ryzen 5 3600 with 32 GB RAM, an NVIDIA GeForce GTX 1660 SUPER with
   6 GB VRAM, and Windows 11. Determine numeric minimum hardware requirements
   from measurements on this and additional systems.
-- Add operating-system file drops using the existing media importer. A drop on
+- Retain operating-system file drops using the existing media importer. A drop on
   the Media Browser imports supported files there; a drop on the Timeline
   imports and inserts using the existing Timeline media-drop behavior. Keep the
   import dialog and Media Browser drag workflow available.
@@ -139,15 +148,23 @@ composition, including its other tracks, clip effects, and transforms.
   file export;
 - image sequences, SRT import, automatic captions, rich text, and animated text
   content;
-- advanced compositing, GPU effects/decoding/encoding, easing, masks, 3D layers, and
+- advanced compositing, easing, masks, 3D layers, and
   transition effects beyond the essential pair;
 - advanced ripple editing, automatic gap management, or history covering every
   project subsystem;
 - thumbnails, proxies, complete relinking, and project-size-independent
   performance guarantees;
-- animated node parameters, masks, nested compositions, and advanced Fusion
+- animation of Color and other effect parameters beyond Transform/Brightness,
+  masks, nested compositions, and advanced Fusion
   processing beyond the initial visual graph nodes;
-- linked Motion Studio composition handoff and Rust integration.
+- nested Motion Studio composition editing and Rust integration.
+
+The implemented GPU and handoff paths retain separate release-acceptance gates.
+Native macOS/Linux devices and codecs, representative physical display/audio
+checks, and packaged runtimes remain pending. Windows synthetic regression
+results do not establish those acceptance statuses; see
+[GPU pipeline evidence](../GPU_PIPELINE.md) and
+[cross-application contracts](../../CROSS_APPLICATION_COMPATIBILITY.md).
 
 The Video Editor owns its project format, timeline policy, and UI. It also uses
 focused shared libraries for media, animation, composition, diagnostics,
