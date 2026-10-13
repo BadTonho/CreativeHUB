@@ -12,8 +12,69 @@ extern "C" {
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <cstring>
 
 namespace creative_suite::media::test_support {
+inline void remuxWithOrientation(const std::filesystem::path& source, const std::filesystem::path& target,
+    const std::array<std::int32_t, 9>& matrix) {
+    struct Resources {
+        AVFormatContext* input = nullptr; AVFormatContext* output = nullptr; AVPacket* packet = nullptr;
+        ~Resources() {
+            av_packet_free(&packet); avformat_close_input(&input);
+            if (output) { if (output->pb) avio_closep(&output->pb); avformat_free_context(output); }
+        }
+    } resources;
+    auto utf8 = [](const std::filesystem::path& path) { const auto value = path.u8string();
+        return std::string(reinterpret_cast<const char*>(value.data()), value.size()); };
+    auto check = [](int result) { if (result < 0) throw std::runtime_error("Orientation fixture remux failed: " + std::to_string(result)); };
+    check(avformat_open_input(&resources.input, utf8(source).c_str(), nullptr, nullptr));
+    check(avformat_find_stream_info(resources.input, nullptr));
+    check(avformat_alloc_output_context2(&resources.output, nullptr, "mp4", utf8(target).c_str()));
+    auto* stream = avformat_new_stream(resources.output, nullptr);
+    if (!stream) throw std::runtime_error("Orientation fixture stream allocation failed.");
+    check(avcodec_parameters_copy(stream->codecpar, resources.input->streams[0]->codecpar));
+    stream->codecpar->codec_tag = 0;
+    const auto* side = av_packet_side_data_new(&stream->codecpar->coded_side_data,
+        &stream->codecpar->nb_coded_side_data, AV_PKT_DATA_DISPLAYMATRIX, sizeof(matrix), 0);
+    if (!side) throw std::runtime_error("Orientation fixture matrix allocation failed.");
+    std::memcpy(side->data, matrix.data(), sizeof(matrix));
+    stream->time_base = resources.input->streams[0]->time_base;
+    check(avio_open(&resources.output->pb, utf8(target).c_str(), AVIO_FLAG_WRITE));
+    check(avformat_write_header(resources.output, nullptr));
+    resources.packet = av_packet_alloc();
+    if (!resources.packet) throw std::runtime_error("Orientation fixture packet allocation failed.");
+    int result = 0;
+    while ((result = av_read_frame(resources.input, resources.packet)) >= 0) {
+        av_packet_rescale_ts(resources.packet, resources.input->streams[0]->time_base, stream->time_base);
+        resources.packet->stream_index = stream->index; resources.packet->pos = -1;
+        check(av_interleaved_write_frame(resources.output, resources.packet)); av_packet_unref(resources.packet);
+    }
+    if (result != AVERROR_EOF) check(result);
+    check(av_write_trailer(resources.output));
+}
+// Clockwise rotations in top-down pixel coordinates; reflection follows rotation.
+inline std::array<std::int32_t, 9> orientationMatrix(int turns, bool mirror = false) {
+    constexpr std::array<std::array<int, 4>, 4> values{{{1,0,0,1}, {0,1,-1,0}, {-1,0,0,-1}, {0,-1,1,0}}};
+    const auto& value = values[turns];
+    return {value[0] * 65536 * (mirror ? -1 : 1), value[1] * 65536, 0,
+        value[2] * 65536 * (mirror ? -1 : 1), value[3] * 65536, 0, 0, 0, 1 << 30};
+}
+template<class Frame> void checkOrientedPixels(const Frame& raw, const Frame& actual, int turns, bool mirror) {
+    const int width = turns % 2 ? raw.height : raw.width, height = turns % 2 ? raw.width : raw.height;
+    if (actual.width != width || actual.height != height) throw std::runtime_error("Video orientation geometry is incorrect.");
+    for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x) {
+        const int rx = mirror ? width - 1 - x : x;
+        const int sx = turns == 0 ? rx : turns == 1 ? y : turns == 2 ? raw.width - 1 - rx : raw.width - 1 - y;
+        const int sy = turns == 0 ? y : turns == 1 ? raw.height - 1 - rx : turns == 2 ? raw.height - 1 - y : rx;
+        for (int channel = 0; channel < 4; ++channel) {
+            if (raw.rgba_pixels[sy * raw.stride + sx * 4 + channel] != actual.rgba_pixels[y * actual.stride + x * 4 + channel])
+                throw std::runtime_error("Video orientation mismatch: turns=" + std::to_string(turns) +
+                    " mirror=" + std::to_string(mirror) + " x=" + std::to_string(x) + " y=" + std::to_string(y) +
+                    " expected=" + std::to_string(raw.rgba_pixels[sy * raw.stride + sx * 4 + channel]) +
+                    " actual=" + std::to_string(actual.rgba_pixels[y * actual.stride + x * 4 + channel]));
+        }
+    }
+}
 inline constexpr std::array<std::array<int, 3>, 4> patches{{
     {63, 102, 240}, {160, 60, 60}, {100, 230, 120}, {32, 128, 128}}};
 inline void checked(int result, const char* operation) {

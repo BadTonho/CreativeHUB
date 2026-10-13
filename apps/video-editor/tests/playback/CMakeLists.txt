@@ -22,6 +22,7 @@ target_link_directories(creative-suite-main-editor-video-playback-tests PRIVATE
 
 target_link_libraries(creative-suite-main-editor-video-playback-tests PRIVATE
     creative-suite::video-media
+    creative-suite::media-assets
     Qt6::Gui
     ${FFMPEG_LIBRARIES}
 )

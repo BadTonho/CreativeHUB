@@ -380,6 +380,7 @@ preserve_video_editor_test_working_directory()
 add_executable(creative-suite-main-editor-render-export-tests
     render_export_test.cpp
 )
+target_include_directories(creative-suite-main-editor-render-export-tests PRIVATE ${PROJECT_SOURCE_DIR}/libs/media/tests)
 target_link_libraries(creative-suite-main-editor-render-export-tests PRIVATE
     creative-suite-main-editor-core
 )

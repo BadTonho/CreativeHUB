@@ -2,6 +2,7 @@
 #include "media/audio_playback.h"
 #include "media/video_probe.h"
 #include "timeline/timeline_history.h"
+#include "video_fixture.h"
 #include "rendering/offline_export_renderer.h"
 #include "rendering/render_output_capabilities.h"
 #include "workspaces/render/queue/render_queue_controller.h"
@@ -1485,6 +1486,32 @@ void validateMotionPublicationExport(const OutputChoice& output,
     checkPublication();
 }
 
+void validateOrientedVideoExport(const OutputChoice& output, const std::filesystem::path& root) {
+    const auto raw_path = root / "orientation-original.mkv", rotated_path = root / "orientation.mp4";
+    creative_suite::media::test_support::createTaggedVideo(raw_path, AVCOL_SPC_SMPTE170M, AVCOL_RANGE_MPEG, "mpeg4");
+    creative_suite::media::test_support::remuxWithOrientation(raw_path, rotated_path,
+        creative_suite::media::test_support::orientationMatrix(1));
+    auto job = makeImageJob(output, rotated_path, root / "orientation-export.mkv", 506, 3);
+    job.settings.width = 180; job.settings.height = 320; job.settings.frame_rate = 30;
+    job.settings.export_audio = false;
+    job.project_snapshot.canvas_width = 1080; job.project_snapshot.canvas_height = 1920;
+    auto& clip = job.project_snapshot.timeline_tracks[0].clips[0];
+    clip.kind = timeline::ClipKind::Video; clip.source_duration_frames = 3;
+    std::atomic_bool canceled{false}; renderJob(job, canceled);
+    auto exported = media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path));
+    auto expected = media::VideoPlaybackSession::open(rotated_path);
+    for (int index = 0; index < 3; ++index) {
+        const auto actual = exported->decode_frame_at(index), reference = expected->decode_frame_at(index);
+        require(actual && reference && (*actual)->width == 180 && (*actual)->height == 320, "Oriented export lost display geometry.");
+        for (int patch = 0; patch < 4; ++patch) {
+            const auto offset = (320 * (patch / 2 * 2 + 1) / 4) * (*actual)->stride + (180 * (patch % 2 * 2 + 1) / 4) * 4;
+            for (int channel = 0; channel < 3; ++channel)
+                require(std::abs(int((*actual)->rgba_pixels[offset + channel]) - int((*reference)->rgba_pixels[offset + channel])) <= 3,
+                    "Export changed the oriented video colors or corner positions.");
+        }
+    }
+}
+
 void validateMotionSplitContinuity(const OutputChoice& output, const std::filesystem::path& root) {
     const auto source = createVideoWithAudioFixture(root);
     const auto published = root / "motion-animated.mkv";
@@ -1669,6 +1696,7 @@ int main(int argc, char* argv[]) {
         validateSharedImageExport(output, image_path, green_image_path, root);
         validateMotionPublicationExport(output, image_path, root);
         validateMotionSplitContinuity(output, root);
+        validateOrientedVideoExport(output, root);
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
         validatePublishedImage(output, root);
 #endif

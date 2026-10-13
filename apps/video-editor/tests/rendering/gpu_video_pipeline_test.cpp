@@ -62,6 +62,19 @@ private:
     int& calls_;
 };
 void pipeline(const std::filesystem::path& path, QOffscreenSurface* surface, const std::string& codec = "h264_nvenc") {
+    const auto orientation_source = path.parent_path() / "orientation-native.mkv";
+    csmedia::test_support::createTaggedVideo(orientation_source, AVCOL_SPC_BT709, AVCOL_RANGE_MPEG, codec.c_str());
+    auto raw_orientation = csmedia::VideoPlaybackSession::open(orientation_source, csmedia::DecodeOptions{csmedia::DecodeAcceleration::PreferHardware});
+    for (int turns : {1, 2, 3}) for (bool mirror : {false, true}) {
+        const auto oriented_path = path.parent_path() / ("orientation-" + std::to_string(turns) + std::to_string(mirror) + ".mp4");
+        csmedia::test_support::remuxWithOrientation(orientation_source, oriented_path, csmedia::test_support::orientationMatrix(turns, mirror));
+        auto session = csmedia::VideoPlaybackSession::open(oriented_path, csmedia::DecodeOptions{csmedia::DecodeAcceleration::PreferHardware});
+        const auto frame = session->decode_frame_at_native(2);
+        require(frame && frame->rgba && !frame->native, "Oriented native decode did not use explicit RGBA presentation.");
+        csmedia::test_support::checkOrientedPixels(**raw_orientation->decode_frame_at(2), *frame->rgba, turns, mirror);
+        require(session->acceleration_diagnostics().backend == csmedia::DecodeBackend::D3D11 &&
+            session->acceleration_diagnostics().downloaded_frames > 0, "Oriented native transfers were not reported.");
+    }
     for (const auto matrix : {AVCOL_SPC_SMPTE170M, AVCOL_SPC_BT709, AVCOL_SPC_BT2020_NCL}) {
         for (const auto range : {AVCOL_RANGE_MPEG, AVCOL_RANGE_JPEG}) {
             const auto tagged_path = path.parent_path() / ("native-tagged-" + std::to_string(matrix) + "-" + std::to_string(range) + ".mkv");

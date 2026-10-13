@@ -1,6 +1,7 @@
 #include <creative_suite/media/video_probe.h>
 
 #include <creative_suite/diagnostics/logger.h>
+#include "video_orientation.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -194,8 +195,9 @@ VideoMetadata VideoProbe::probe(const std::filesystem::path& source_path) const 
         metadata.video_codec = codec->long_name != nullptr
             ? codec->long_name
             : (codec->name != nullptr ? codec->name : "Unknown");
-        metadata.width = decoder->width;
-        metadata.height = decoder->height;
+        const auto display = detail::VideoOrientation::fromStream(*stream).bounds(decoder->width, decoder->height);
+        metadata.width = display.width;
+        metadata.height = display.height;
         metadata.frame_rate = frameRateFromStream(stream, format.get());
 
         metadata.duration_seconds = secondsFromTimestamp(stream->duration, stream->time_base);

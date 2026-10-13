@@ -21,6 +21,10 @@ and losslessly repacks its chroma planes to the YUV420P reference before swscale
 The direct NV12 fast converter failed parity on the reference device. Native
 APIs instead retain immutable FFmpeg/D3D11 surfaces with device ownership after
 session reset/destruction. Explicit recovery downloads are counted. The cache
+also retains correctly oriented RGBA for sources with a display matrix.
+Nonidentity orientations require counted CPU presentation conversion even with
+D3D11 decoding; they are outside the current direct-surface delivery contract.
+Identity media retains the native path. The cache
 retains eight entries within its existing 64 MiB equivalent-frame limit (one
 oversized entry may remain). Decoder surfaces also reserve space for these leases.
 

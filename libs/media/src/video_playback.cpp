@@ -1,5 +1,6 @@
 #include <creative_suite/media/video_playback.h>
 #include <creative_suite/diagnostics/logger.h>
+#include "video_orientation.h"
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -545,6 +546,7 @@ struct VideoPlaybackSession::Impl {
     std::int64_t last_decoded_timestamp = AV_NOPTS_VALUE;
     std::deque<CachedFrame> frame_cache;
     SwsContextPtr scaler;
+    detail::VideoOrientation orientation;
     std::size_t cached_bytes = 0;
     std::uint64_t cache_hit_count = 0;
     ~Impl() {
@@ -724,6 +726,7 @@ std::unique_ptr<VideoPlaybackSession::Impl> VideoPlaybackSession::openImpl(
     }
 
     impl->stream_time_base = stream->time_base;
+    impl->orientation = detail::VideoOrientation::fromStream(*stream);
     impl->stream_start_time = stream->start_time;
     impl->frame_rate = av_guess_frame_rate(impl->format.get(), stream, nullptr);
 
@@ -1181,13 +1184,14 @@ void VideoPlaybackSession::reset() {
 }
 
 VideoFramePtr VideoPlaybackSession::convertFrame(Impl& impl) {
+    const auto orientation = impl.orientation.forFrame(*impl.frame);
     const auto* parameters = impl.format->streams[impl.stream_index]->codecpar;
     if (impl.frame->colorspace == AVCOL_SPC_UNSPECIFIED) impl.frame->colorspace = parameters->color_space;
     if (impl.frame->color_range == AVCOL_RANGE_UNSPECIFIED) impl.frame->color_range = parameters->color_range;
     if (impl.frame->format != AV_PIX_FMT_D3D11)
-        return copyRgbaFrame(*impl.frame, impl.scaler, impl.observer);
+        return orientation.apply(copyRgbaFrame(*impl.frame, impl.scaler, impl.observer));
     if (impl.options.hardware_frame_guard) impl.options.hardware_frame_guard(impl.current_frame_index);
-    if (impl.native_delivery) {
+    if (impl.native_delivery && orientation.identity()) {
         auto retained = std::make_unique<NativeVideoFrame::Impl>();
         retained->frame.reset(av_frame_clone(impl.frame.get()));
         retained->source_path = impl.source_path;
@@ -1200,7 +1204,7 @@ VideoFramePtr VideoPlaybackSession::convertFrame(Impl& impl) {
     ++impl.acceleration.downloaded_frames;
     impl.acceleration.downloaded_bytes += static_cast<std::uint64_t>(impl.frame->width) * impl.frame->height * 3 / 2;
     if (impl.observer) impl.observer->record_acceleration(impl.acceleration);
-    return frame;
+    return orientation.apply(std::move(frame));
 }
 
 bool VideoPlaybackSession::recoverInSoftware(const MediaError& error) {

@@ -2,6 +2,8 @@
 #include "media/video_playback.h"
 #include "rendering/preview_performance_metrics.h"
 #include "video_fixture.h"
+#include <creative_suite/media/video_probe.h>
+#include <creative_suite/media/video_decoder.h>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -556,6 +558,58 @@ int main(int argc, char* argv[]) {
         const auto interframe_path = createInterframeTestVideo(
             directory / "interframe-seek.mkv");
         validateTimestampSeekObserver(interframe_path);
+        const auto orientation_source = directory / "orientation-source.mkv";
+        // MPEG-4 remuxing does not preserve a BT.709 matrix in every MP4 muxer;
+        // keep orientation isolated from container color-tag compatibility.
+        creative_suite::media::test_support::createTaggedVideo(orientation_source, AVCOL_SPC_SMPTE170M, AVCOL_RANGE_MPEG, "mpeg4");
+        auto raw_session = media::VideoPlaybackSession::open(orientation_source);
+        for (int turns = 0; turns < 4; ++turns) for (bool mirror : {false, true}) {
+            const auto path = directory / ("orientation-" + std::to_string(turns) + "-" + std::to_string(mirror) + ".mp4");
+            creative_suite::media::test_support::remuxWithOrientation(orientation_source, path,
+                creative_suite::media::test_support::orientationMatrix(turns, mirror));
+            const auto metadata = creative_suite::media::VideoProbe{}.probe(path);
+            require(metadata.width == (turns % 2 ? 180 : 320) && metadata.height == (turns % 2 ? 320 : 180),
+                "Probe did not report display dimensions.");
+            auto session = media::VideoPlaybackSession::open(path);
+            for (int index : {0, 2, 1, 0}) {
+                const auto actual = session->decode_frame_at(index), raw = raw_session->decode_frame_at(index);
+                require(actual && raw, "Oriented fixture did not decode.");
+                creative_suite::media::test_support::checkOrientedPixels(**raw, **actual, turns, mirror);
+            }
+            session->reset();
+            const auto first = session->decode_next_frame();
+            require(first.has_value(), "Oriented reset did not decode.");
+            creative_suite::media::test_support::checkOrientedPixels(**raw_session->decode_frame_at(0), **first, turns, mirror);
+            const auto thumbnail = creative_suite::media::VideoDecoder{}.decode_first_frame(path);
+            creative_suite::media::test_support::checkOrientedPixels(**raw_session->decode_frame_at(0), thumbnail, turns, mirror);
+        }
+        const auto affine_path = directory / "orientation-affine.mp4";
+        creative_suite::media::test_support::remuxWithOrientation(orientation_source, affine_path,
+            {46341,46341,0,-46341,46341,0,0,0,1 << 30});
+        const auto affine_metadata = creative_suite::media::VideoProbe{}.probe(affine_path);
+        require(affine_metadata.width == 354 && affine_metadata.height == 354, "Affine display bounds are incorrect.");
+        const auto affine = *media::VideoPlaybackSession::open(affine_path)->decode_next_frame();
+        const auto raw = *raw_session->decode_frame_at(0);
+        require(affine->rgba_pixels[3] == 0, "Uncovered affine pixels must be transparent.");
+        const std::array<std::array<int, 2>, 4> rotated_centers{{{152,88},{265,201},{88,152},{201,265}}};
+        for (int patch = 0; patch < 4; ++patch) {
+            const auto source_offset = (patch / 2 * 90 + 45) * raw->stride + (patch % 2 * 160 + 80) * 4;
+            const auto destination = rotated_centers[patch][1] * affine->stride + rotated_centers[patch][0] * 4;
+            require(std::equal(raw->rgba_pixels.begin() + source_offset, raw->rgba_pixels.begin() + source_offset + 4,
+                affine->rgba_pixels.begin() + destination), "Affine display orientation misplaced a patch.");
+        }
+        for (bool perspective : {false, true}) {
+            auto invalid_matrix = creative_suite::media::test_support::orientationMatrix(0);
+            if (perspective) invalid_matrix[2] = 1;
+            else invalid_matrix[0] = invalid_matrix[4] = 0;
+            const auto invalid_path = directory / (perspective ? "perspective.mp4" : "singular.mp4");
+            creative_suite::media::test_support::remuxWithOrientation(orientation_source, invalid_path, invalid_matrix);
+            expectMediaError(invalid_path, perspective ? "display matrices" : "invalid geometry");
+            bool probe_rejected = false;
+            try { static_cast<void>(creative_suite::media::VideoProbe{}.probe(invalid_path)); }
+            catch (const media::MediaError&) { probe_rejected = true; }
+            require(probe_rejected, "Probe accepted an invalid display matrix.");
+        }
         for (const auto matrix : {AVCOL_SPC_UNSPECIFIED, AVCOL_SPC_SMPTE170M, AVCOL_SPC_BT709, AVCOL_SPC_BT2020_NCL}) {
             for (const auto range : {AVCOL_RANGE_MPEG, AVCOL_RANGE_JPEG}) {
                 const auto path = directory / ("tagged-" + std::to_string(matrix) + "-" + std::to_string(range) + ".mkv");

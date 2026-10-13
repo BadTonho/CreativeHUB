@@ -44,6 +44,16 @@ Hardware downloads preserve these properties. Native D3D11 views carry neutral
 The output remains SDR RGBA8; this is not HDR tone mapping, transfer-function
 conversion, or complete color management.
 
+Stream display matrices are applied before frames cross the shared boundary;
+per-frame matrices override the stream matrix. Probe dimensions describe the
+oriented bounding box, matching thumbnails, preview, and export. Quarter-turns
+and reflections preserve pixels exactly; other affine orientations use nearest
+sampling with transparent uncovered pixels. Perspective/singular matrices are
+rejected with logged media errors. Hardware decoding may remain active, but
+oriented native requests return explicit RGBA after a counted download until
+the GPU surface contract supports display transforms. Identity sources retain
+their direct native path. Pixel aspect ratio and HDR acceptance remain separate.
+
 The playback worker owns one session at a time. The session and its buffers are
 destroyed on the worker thread, and decoded frames are transferred as owning
 shared payloads.

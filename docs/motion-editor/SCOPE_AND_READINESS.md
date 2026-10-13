@@ -5,6 +5,10 @@ RGBA8 composition. Decoder changes require the Motion preview/export consumer
 gate and the shared tagged-color tests indexed in
 [Video Editor regression coverage](../video-editor/REGRESSION_TESTING.md).
 This remains an SDR pipeline; HDR color-management acceptance is pending.
+Shared display orientation also applies before composition; imported dimensions
+and decoded pixels agree. Quarter-turn/reflection and oriented export regressions
+are indexed in the same shared-decoder gate. Nonidentity display matrices use
+explicit RGBA presentation while native transform delivery is pending.
 
 Status: **approved 2D MVP product boundary; Windows technical acceptance
 remains in progress**. A standalone

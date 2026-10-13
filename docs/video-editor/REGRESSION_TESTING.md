@@ -35,8 +35,7 @@ Its fresh scoped build/deployment gate remained incomplete because the local
 Qt deployment helper could not query `qtpaths`; existing executable results
 must not be treated as clean-build acceptance. A subsequent native scoped
 build succeeded outside the restricted process environment; the deployment
-failure did not require a repository build-configuration change. F09–F10
-remain open.
+failure did not require a repository build-configuration change. F10 remains open.
 F02 is covered by `verifyRecoveryDurability` in the MainWindow integration
 test: snapshots survive restoration, session destruction, and failed saves;
 successful Save/Save As and explicit Discard release the recovered set.
@@ -69,6 +68,14 @@ pipeline gate repeats tagged H.264/HEVC fixtures, requiring native import and
 CPU/download/GPU parity. The playback test links Qt Gui because the existing
 performance observer references the composition boundary's Qt image types.
 Run Motion Studio preview/export consumer tests for shared-decoder changes.
+F09 is covered by MP4 display matrices in video-playback: all quarter-turns and
+horizontal reflection combinations verify oriented probe geometry, every RGBA
+pixel, thumbnail decoding, seeking, and reset. An affine 45-degree case verifies
+bounds, transparent uncovered pixels, and patch positions; singular/perspective
+matrices must fail at both probe and decode boundaries with logged errors.
+`validateOrientedVideoExport` verifies portrait export
+and corner positions. The strict H.264/HEVC gate checks D3D11 decode with explicit
+oriented RGBA delivery and counted downloads; ordinary native parity stays active.
 
 ## Local gate
 
