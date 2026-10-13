@@ -40,6 +40,7 @@
 #include <QRunnable>
 #include <QSize>
 #include <QSignalBlocker>
+#include <QScopedValueRollback>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSlider>
@@ -311,25 +312,18 @@ MainWindow::autosaveSnapshotsForSettings() const {
 bool MainWindow::restoreAutosaveSnapshot(
     const QString& snapshot_path,
     const QString& project_path) {
-    if (snapshot_path.isEmpty() || !confirmProjectChange()) return false;
+    if (snapshot_path.isEmpty()) return false;
+    // Save/Discard in this prompt must not delete the snapshot being selected.
+    QScopedValueRollback<bool> confirming(autosave_restore_confirmation_, true);
+    if (!confirmProjectChange()) return false;
 
     const auto snapshot = QFileInfo(snapshot_path).filesystemFilePath();
     if (!project_path.isEmpty()) {
         const auto active_project = QFileInfo(project_path).filesystemFilePath();
         return openProjectPath(snapshot, active_project, std::nullopt,
-            [this, active_project](bool succeeded) {
+            [this, snapshot, active_project](bool succeeded) {
                 if (!succeeded) return;
-                try {
-                    project_controller_.removeSnapshotsForProject(active_project);
-                } catch (const project::ProjectError& error) {
-                    logging::Logger::instance().log(
-                        logging::Level::Warning,
-                        "project",
-                        "autosave_cleanup",
-                        error.what(),
-                        {{"project_path", pathToUtf8(active_project)},
-                         {"cause", error.what()}});
-                }
+                restored_autosave_ = project::AutosaveSnapshot{snapshot, {}, active_project};
             });
     }
 
@@ -338,18 +332,25 @@ bool MainWindow::restoreAutosaveSnapshot(
     return openProjectPath(snapshot, std::nullopt, std::move(blank_document),
         [this, snapshot](bool succeeded) {
             if (!succeeded) return;
-            try {
-                project_controller_.removeUnsavedSnapshotsForSession(snapshot);
-            } catch (const project::ProjectError& error) {
-                logging::Logger::instance().log(
-                    logging::Level::Warning,
-                    "project",
-                    "autosave_cleanup",
-                    error.what(),
-                    {{"snapshot_path", pathToUtf8(snapshot)},
-                     {"cause", error.what()}});
-            }
+            restored_autosave_ = project::AutosaveSnapshot{snapshot, {}, {}};
         });
+}
+
+void MainWindow::cleanupRestoredAutosave() {
+    if (!restored_autosave_ || autosave_restore_confirmation_) return;
+    try {
+        if (restored_autosave_->project_path.empty()) {
+            project_controller_.removeUnsavedSnapshotsForSession(restored_autosave_->path);
+        } else {
+            project_controller_.removeSnapshotsForProject(restored_autosave_->project_path);
+        }
+        restored_autosave_.reset();
+    } catch (const project::ProjectError& error) {
+        logging::Logger::instance().log(
+            logging::Level::Warning, "project", "autosave_cleanup", error.what(),
+            {{"snapshot_path", pathToUtf8(restored_autosave_->path)},
+             {"error_code", std::to_string(static_cast<int>(error.code()))}});
+    }
 }
 
 void MainWindow::deleteAutosaveSnapshot(const QString& snapshot_path) {
@@ -441,8 +442,11 @@ bool MainWindow::saveProjectTo(
         statusBar()->showMessage("Could not save project.");
         return false;
     }
+    cleanupRestoredAutosave();
     try {
-        project_controller_.removeCurrentUnsavedSnapshots();
+        if (!autosave_restore_confirmation_) {
+            project_controller_.removeCurrentUnsavedSnapshots();
+        }
     } catch (const project::ProjectError& error) {
         logging::Logger::instance().log(
             logging::Level::Warning,
@@ -503,7 +507,10 @@ bool MainWindow::confirmProjectChange() {
         saveProject();
         return !project_dirty_;
     }
-    if (prompt.clickedButton() == discard_button) return true;
+    if (prompt.clickedButton() == discard_button) {
+        cleanupRestoredAutosave();
+        return true;
+    }
     static_cast<void>(cancel_button);
     return false;
 }
@@ -534,6 +541,7 @@ void MainWindow::clearProjectState(
     playback_is_playing_ = false;
 
     project_controller_.reset(canvas_width, canvas_height, frame_rate);
+    restored_autosave_.reset();
     ++project_generation_;
     clearActiveTimelineSelection();
     playback_frame_index_ = 0;
@@ -647,13 +655,14 @@ void MainWindow::openProject() {
         source_path,
         selected_project_path,
         std::nullopt,
-        [this, selected_project_path, recovered](bool succeeded) {
+        [this, source_path, selected_project_path, recovered](bool succeeded) {
             if (!succeeded) return;
+            if (recovered) {
+                restored_autosave_ = project::AutosaveSnapshot{
+                    source_path, {}, selected_project_path};
+            }
             try {
                 project_controller_.removeCurrentUnsavedSnapshots();
-                if (recovered) {
-                    project_controller_.removeSnapshotsForProject(selected_project_path);
-                }
             } catch (const project::ProjectError& error) {
             logging::Logger::instance().log(
                 logging::Level::Warning,
@@ -903,6 +912,7 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
         std::move(prepared.active_project_path),
         loaded_document,
         std::move(prepared.saved_baseline));
+    restored_autosave_.reset();
     ++project_generation_;
     clearActiveTimelineSelection();
     playback_frame_index_ = 0;

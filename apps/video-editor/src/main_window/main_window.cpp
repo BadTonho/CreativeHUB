@@ -146,6 +146,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
             error.what(),
             { {"cause", error.what()} });
     }
+    cleanupRestoredAutosave();
     saveWorkspaceLayout();
     saveWindowGeometry();
     event->accept();
@@ -267,15 +268,6 @@ void MainWindow::offerUnsavedProjectRecovery() {
         std::move(blank_document),
         [this, snapshot = *selected](bool succeeded) {
             if (!succeeded) return;
-            try {
-                project_controller_.removeUnsavedSnapshotsForSession(snapshot);
-            } catch (const project::ProjectError& error) {
-                logging::Logger::instance().log(
-                    logging::Level::Warning,
-                    "project",
-                    "autosave_cleanup",
-                    error.what(),
-                    {{"cause", error.what()}});
-            }
+            restored_autosave_ = project::AutosaveSnapshot{snapshot, {}, {}};
         }));
 }

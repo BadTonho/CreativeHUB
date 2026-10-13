@@ -388,9 +388,13 @@ The Settings `Autosave` tab provides a second management path for the current
 project and unsaved-project snapshots. It lists valid snapshots by project,
 type, date, and filename, and supports refresh, restoration, individual
 deletion, and opening the containing folder. Restoration asks for confirmation
-when the current document is dirty. After a successful restoration, the
-recovered project's or session's snapshot set is removed so the same recovery
-is not offered repeatedly. The main `.csp` file remains untouched.
+when the current document is dirty. Successful restoration retains the
+recovered project's or session's snapshot set until a successful atomic Save
+or Save As, or an explicit Discard. Failed saves and process termination
+without Save/Discard preserve the recovery set. A recovered unsaved project
+also retains its previous session's snapshots until Save As succeeds.
+The main `.csp` file remains untouched during restoration. Cleanup failures
+are logged and do not invalidate an already successful project save.
 
 Media paths in snapshots use the same serialization rules as normal projects;
 no new media or personal data is added by autosave.

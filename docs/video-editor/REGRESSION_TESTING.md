@@ -35,8 +35,13 @@ Its fresh scoped build/deployment gate remained incomplete because the local
 Qt deployment helper could not query `qtpaths`; existing executable results
 must not be treated as clean-build acceptance. A subsequent native scoped
 build succeeded outside the restricted process environment; the deployment
-failure did not require a repository build-configuration change. F02–F10
+failure did not require a repository build-configuration change. F03–F10
 remain open.
+F02 is covered by `verifyRecoveryDurability` in the MainWindow integration
+test: snapshots survive restoration, session destruction, and failed saves;
+successful Save/Save As and explicit Discard release the recovered set.
+Save/Discard while selecting another Restore preserves the selected snapshot
+until that restoration completes.
 
 ## Local gate
 
@@ -162,7 +167,7 @@ hardware and drivers. No percentage target is set from this measurement.
 | Inspector panel scrolling | `tests/application/main_window_integration_test.cpp` and `tests/ui/fusion_workspace_test.cpp`; Edit Inspector, Audio, and Effects tabs plus Fusion Inspector use vertical scroll areas with on-demand scrollbars, wheel scrolling, and access to content after forcing a short viewport; controls remain descendants of their original panels. Manual Release check: reduce and enlarge the Edit and Fusion Inspector docks, scroll to the final controls, and confirm the bar appears only when needed. **Automated coverage present; manual check documented and pending.** |
 | MainWindow integration | Offscreen New Project choices, defaults, create/cancel behavior, vertical canvas and 60 fps propagation into Project and Render, Project Settings current-value loading, standard and existing nonstandard rate choices, apply/cancel, immediate Render defaults, dirty state and one-step Undo/Redo; landscape/30 fps defaults and clean state; multi-track project open, preservation of tracks, clips, and stable IDs, clean dirty state immediately after opening, selection initialized by ID, equality using only the canonical loaded document, save/reopen round-trip, stale pending activation rejection, EditWorkspace-built Inspector/Audio/Effects tabs and control placement, global Effects-tab persistence without project dirty state or selection-driven tab changes, registered Copy Attributes/Paste Attributes actions with Ctrl+C/Ctrl+Shift+V and customizable shortcuts, Paste Attributes dialog compatibility/default selection and missing-target state, normal Ctrl+C in text fields, FusionWorkspace-built panels shared with WorkspaceHost, one shared Preview/Timeline/EditorSession, initial Preview dock size and placement, Render page hidden outside Render, Preview dock and View action, Preview visibility after reopening, restoration of its complete dock state when leaving Render or closing from Render, repair of a collapsed version 8 Preview layout, unchanged selection/playback/history/dirty state across workspace changes, Application/Shared/Edit shortcut activation on initial open and after Edit/Fusion/Render switches, preservation of configured inactive bindings, workspace-specific menu and toolbar visibility for Application/Shared/Edit plus Fusion/Render fixtures, empty menu and separator pruning, unchanged QAction enablement after visibility refresh, workspace-only layout behavior, and controlled MainWindow construction and shutdown |
 | Project validation | Out-of-range JSON integers, overflowing timeline ranges, and overflowing media-source ranges are rejected before reaching editing code |
-| Autosave and recovery | Retention, Unicode project paths, recovery filtering against valid main files, older snapshots after newer corrupt writes, missing main files, identical-document suppression, and actionable logs for malformed snapshots/main projects |
+| Autosave and recovery | `tests/project/autosave_manager_test.cpp` and `tests/application/main_window_integration_test.cpp`: retention, Unicode paths, recovery filtering against valid main files, older snapshots after newer corrupt writes, missing main files, identical-document suppression, actionable logs, restored-copy durability across failed saves/session destruction, Save/Save As cleanup, and Save/Discard during another Restore |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
@@ -968,7 +973,9 @@ in the running Video Editor after UI or integration changes:
 - Settings > Autosave recovery: with a dirty project, confirm Restore Selected
   asks for confirmation, leaves the main `.csp` untouched, loads the selected
   snapshot as dirty working data, closes Settings only after success, and
-  clears the restored project's or session's snapshot set;
+  retains the restored project's or session's snapshot set until successful
+  Save/Save As or explicit Discard; a failed save or another process failure
+  must leave the snapshot recoverable;
 - recovery: leave a newer snapshot, restart the editor, and confirm the
   dialog lists snapshots by date; Restore opens dirty working data without
   replacing the original `.csp`, Ignore leaves the snapshots available, and

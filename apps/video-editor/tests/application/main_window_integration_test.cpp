@@ -231,6 +231,124 @@ bool writePngAtomically(const std::filesystem::path& path, const QImage& image) 
 
 class MainWindowIntegrationTest final {
 public:
+    static void verifyRecoveryDurability(const std::filesystem::path& directory) {
+        project::ProjectDocument original;
+        original.bins = {"Unsorted"};
+        auto recovered = original;
+        recovered.timeline_zoom = 2.0;
+        const auto project_path = directory / "recovery-durability.csp";
+        project::save(project_path, original);
+        project::AutosaveManager manager(directory / "recovery", "previous-session");
+        manager.saveSnapshot(recovered, project_path, 5);
+        const auto snapshot = manager.validSnapshotsForProject(project_path).front().path;
+        const auto restore = [&](MainWindow& window, const std::filesystem::path& path,
+                                 const std::filesystem::path& active_project) {
+            require(window.restoreAutosaveSnapshot(
+                        QString::fromStdWString(path.wstring()),
+                        QString::fromStdWString(active_project.wstring())),
+                    "A valid recovery snapshot could not be opened.");
+            QEventLoop loop;
+            QTimer poll;
+            QTimer timeout;
+            timeout.setSingleShot(true);
+            QObject::connect(&poll, &QTimer::timeout, &loop, [&] {
+                if (!window.project_load_pending_) loop.quit();
+            });
+            QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+            poll.start(5);
+            timeout.start(10000);
+            loop.exec();
+            require(!window.project_load_pending_ && window.project_dirty_ &&
+                        window.currentProjectDocument().timeline_zoom == 2.0,
+                    "Recovery did not finish with the recovered dirty document.");
+        };
+        {
+            MainWindow window;
+            restore(window, snapshot, project_path);
+            require(manager.validSnapshotsForProject(project_path).size() == 1 &&
+                        project::load(project_path).timeline_zoom == 1.0,
+                    "Recovery removed its durable copy before saving the main project.");
+            QTimer::singleShot(0, [] {
+                if (auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+                    for (auto* button : prompt->buttons()) {
+                        if (button->text() == QStringLiteral("Discard")) {
+                            button->click();
+                            break;
+                        }
+                    }
+                }
+            });
+            restore(window, snapshot, project_path);
+            require(manager.validSnapshotsForProject(project_path).size() == 1,
+                    "Discard during a new Restore deleted the selected recovery snapshot.");
+            window.editUi().timeline->setZoomFactor(3.0);
+            window.updateProjectDirtyState();
+            QTimer::singleShot(0, [] {
+                if (auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+                    for (auto* button : prompt->buttons()) {
+                        if (button->text() == QStringLiteral("Save")) {
+                            button->click();
+                            break;
+                        }
+                    }
+                }
+            });
+            restore(window, snapshot, project_path);
+            require(manager.validSnapshotsForProject(project_path).size() == 1 &&
+                        project::load(project_path).timeline_zoom == 3.0,
+                    "Save during a new Restore deleted the selected recovery snapshot.");
+        }
+        require(manager.validSnapshotsForProject(project_path).size() == 1,
+                "Destroying a session without Save/Discard lost the recovered copy.");
+        {
+            MainWindow window;
+            restore(window, snapshot, project_path);
+            QTimer::singleShot(0, [] {
+                if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+                    warning->accept();
+            });
+            require(!window.saveProjectTo(directory, "save") && window.project_dirty_ &&
+                        manager.validSnapshotsForProject(project_path).size() == 1,
+                    "A failed recovery save removed the snapshot or cleared dirty state.");
+            require(window.saveProjectTo(project_path, "save") && !window.project_dirty_ &&
+                        project::load(project_path).timeline_zoom == 2.0 &&
+                        manager.validSnapshotsForProject(project_path).empty(),
+                    "A successful recovery save did not durably save before cleanup.");
+        }
+        manager.saveSnapshot(recovered, 5);
+        const auto unsaved = manager.unsavedSnapshots().front().path;
+        {
+            MainWindow window;
+            restore(window, unsaved, {});
+            require(manager.unsavedSnapshots().size() == 1,
+                    "Unsaved-project restoration removed its recovery copy.");
+            require(window.saveProjectTo(directory / "recovered-save-as.csp", "save_as") &&
+                        manager.unsavedSnapshots().empty(),
+                    "Save As did not clean up the recovered previous session after saving.");
+        }
+        project::save(project_path, original);
+        manager.saveSnapshot(recovered, project_path, 5);
+        {
+            MainWindow window;
+            restore(window, manager.validSnapshotsForProject(project_path).front().path,
+                    project_path);
+            QTimer::singleShot(0, [] {
+                if (auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+                    for (auto* button : prompt->buttons()) {
+                        if (button->text() == QStringLiteral("Discard")) {
+                            button->click();
+                            break;
+                        }
+                    }
+                }
+            });
+            require(window.confirmProjectChange() &&
+                        manager.validSnapshotsForProject(project_path).empty() &&
+                        project::load(project_path).timeline_zoom == 1.0,
+                    "Explicit Discard did not release the restored recovery set.");
+        }
+    }
+
     static void setWorkspacePageImmediately(
         MainWindow& window,
         ui::WorkspacePageId page) {
@@ -376,6 +494,8 @@ public:
         // shortcuts and dock state. Transition timing is covered by the
         // dedicated workspace-page-transition test.
         settings::setWorkspacePageTransitionsEnabled(false);
+
+        verifyRecoveryDurability(directory);
 
         std::array<bool, 8> dock_visibility_before_close{};
         {

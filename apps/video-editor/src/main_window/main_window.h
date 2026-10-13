@@ -152,6 +152,7 @@ private:
     void flushPreviewPerformanceMetrics();
     void configureProjectAutosave(bool enabled, int interval_seconds);
     void autosaveProject();
+    void cleanupRestoredAutosave();
     [[nodiscard]] std::vector<settings::AutosaveSnapshotItem>
     autosaveSnapshotsForSettings() const;
     [[nodiscard]] bool restoreAutosaveSnapshot(
@@ -408,6 +409,8 @@ private:
     const std::optional<project::ProjectDocument>& saved_project_document_ =
         editor_session_.savedProjectDocument();
     const bool& project_dirty_ = editor_session_.projectDirtyState();
+    std::optional<project::AutosaveSnapshot> restored_autosave_;
+    bool autosave_restore_confirmation_ = false;
     bool initial_window_layout_pending_ = false;
     bool playback_activation_loading_ = false;
     std::optional<MediaImportIntent> active_media_import_intent_;
