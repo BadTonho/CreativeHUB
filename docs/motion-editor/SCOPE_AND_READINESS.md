@@ -1,5 +1,11 @@
 # Motion Studio Scope and Readiness
 
+Shared video decoding honors tagged YUV matrices and full/limited range before
+RGBA8 composition. Decoder changes require the Motion preview/export consumer
+gate and the shared tagged-color tests indexed in
+[Video Editor regression coverage](../video-editor/REGRESSION_TESTING.md).
+This remains an SDR pipeline; HDR color-management acceptance is pending.
+
 Status: **approved 2D MVP product boundary; Windows technical acceptance
 remains in progress**. A standalone
 Motion Studio shell and in-memory composition/layer model have started using

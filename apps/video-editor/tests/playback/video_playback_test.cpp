@@ -1,6 +1,7 @@
 #include "media/video_metadata.h"
 #include "media/video_playback.h"
 #include "rendering/preview_performance_metrics.h"
+#include "video_fixture.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -555,6 +556,18 @@ int main(int argc, char* argv[]) {
         const auto interframe_path = createInterframeTestVideo(
             directory / "interframe-seek.mkv");
         validateTimestampSeekObserver(interframe_path);
+        for (const auto matrix : {AVCOL_SPC_UNSPECIFIED, AVCOL_SPC_SMPTE170M, AVCOL_SPC_BT709, AVCOL_SPC_BT2020_NCL}) {
+            for (const auto range : {AVCOL_RANGE_MPEG, AVCOL_RANGE_JPEG}) {
+                const auto path = directory / ("tagged-" + std::to_string(matrix) + "-" + std::to_string(range) + ".mkv");
+                creative_suite::media::test_support::createTaggedVideo(path, matrix, range);
+                auto session = media::VideoPlaybackSession::open(path);
+                for (int index : {0, 2, 1, 0}) {
+                    const auto frame = session->decode_frame_at(index);
+                    require(frame && *frame, "Tagged fixture did not decode.");
+                    creative_suite::media::test_support::checkTaggedPixels(**frame, matrix, range);
+                }
+            }
+        }
 
         if (argc == 2) {
             validateReference(argv[1]);

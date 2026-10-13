@@ -74,7 +74,11 @@ resources predictably; selected encoder failures never change encoder silently.
 The Windows bridge requires `WGL_NV_DX_interop2`. Decode NV12 is copied to a
 shader-readable surface and converted to BGRA on D3D11, then synchronized for
 OpenGL. Conversion follows the baseline swscale 8-bit signed fixed-point terms
-and default SDR matrix/range behavior. A least-recently-used cache retains up to four device/dimension conversion bridges,
+and the source's tagged SDR matrix/full-or-limited range, with BT.601 fallback
+for unspecified YUV. CPU downloads retain the same metadata. Independent
+tagged YUV fixtures and CPU/GPU parity cover BT.601, BT.709, and BT.2020 NCL
+at both ranges for H.264/HEVC; this does not establish HDR color management.
+A least-recently-used cache retains up to four device/dimension conversion bridges,
 each bounded to 64 MiB (256 MiB in total). This avoids recreating shaders and
 registrations when switching tracks. Both NV12 and BGRA storage are bounded;
 an absent extension or unsupported request retains explicit RGBA recovery.

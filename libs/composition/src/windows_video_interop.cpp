@@ -11,6 +11,7 @@
 #include <wrl/client.h>
 #endif
 #include <cstring>
+#include <cmath>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -27,24 +28,17 @@ float4 main(uint id : SV_VertexID) : SV_Position {
 constexpr char pixel_source[] = R"(
 Texture2D<float> luma : register(t0);
 Texture2D<float2> chroma : register(t1);
-cbuffer Conversion : register(b0) { float full_range; float3 padding; };
+cbuffer Conversion : register(b0) { int4 coefficients; int4 range; };
 float4 main(float4 position : SV_Position) : SV_Target {
     int2 pixel = int2(position.xy);
     int y = int(round(luma.Load(int3(pixel, 0)) * 255));
     int2 uv = int2(round(chroma.Load(int3(pixel / 2, 0)) * 255)) - 128;
     // Match the baseline swscale planar 8-bit converter: each signed
     // fixed-point term truncates before addition, including both green terms.
-    int3 rgb;
-    if (full_range != 0) {
-        rgb = y + int3((uv.y * 8 * 11485) >> 16,
-            ((uv.x * 8 * -2819) >> 16) + ((uv.y * 8 * -5850) >> 16),
-            (uv.x * 8 * 14516) >> 16);
-    } else {
-        y = ((y - 16) * 8 * 9539) >> 16;
-        rgb = y + int3((uv.y * 8 * 13075) >> 16,
-            ((uv.x * 8 * -3209) >> 16) + ((uv.y * 8 * -6660) >> 16),
-            (uv.x * 8 * 16525) >> 16);
-    }
+    y = ((y - range.y) * 8 * range.x) >> 16;
+    int3 rgb = y + int3((uv.y * 8 * coefficients.x) >> 16,
+        ((uv.x * 8 * coefficients.z) >> 16) + ((uv.y * 8 * coefficients.w) >> 16),
+        (uv.x * 8 * coefficients.y) >> 16);
     return float4(clamp(rgb, 0, 255) / 255.0, 1);
 })";
 OpenGlCompositionResult failed(const char* operation, std::string cause, HRESULT code) {
@@ -147,7 +141,7 @@ struct WindowsVideoInterop::Impl {
         result = D3DCompile(pixel_source, sizeof(pixel_source), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, &code, &errors);
         if (FAILED(result)) return result;
         result = device->CreatePixelShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &pixel); if (FAILED(result)) return result;
-        D3D11_BUFFER_DESC buffer{}; buffer.ByteWidth = 16;
+        D3D11_BUFFER_DESC buffer{}; buffer.ByteWidth = 32;
         buffer.Usage = D3D11_USAGE_DEFAULT; buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         result = device->CreateBuffer(&buffer, nullptr, &constants); if (FAILED(result)) return result;
         gl->glGenTextures(1, &texture); gl->glBindTexture(GL_TEXTURE_2D, texture);
@@ -215,7 +209,12 @@ OpenGlCompositionResult WindowsVideoInterop::begin(const media::NativeVideoFrame
         p.commands->VSSetShader(p.vertex.Get(), nullptr, 0); p.commands->PSSetShader(p.pixel.Get(), nullptr, 0);
         ID3D11ShaderResourceView* planes[]{p.y_view.Get(), p.uv_view.Get()};
         p.commands->PSSetShaderResources(0, 2, planes);
-        const float values[]{view.full_range ? 1.0F : 0.0F, 0, 0, 0};
+        const double scale = view.full_range ? 224.0 / 255.0 : 1.0;
+        int values[8]{};
+        for (int i = 0; i < 4; ++i)
+            values[i] = static_cast<int>(std::lround(view.yuv_coefficients[i] * scale / 8.0)) * (i >= 2 ? -1 : 1);
+        values[4] = view.full_range ? 8192 : 9539;
+        values[5] = view.full_range ? 0 : 16;
         p.commands->UpdateSubresource(p.constants.Get(), 0, nullptr, values, 0, 0);
         ID3D11Buffer* constants = p.constants.Get(); p.commands->PSSetConstantBuffers(0, 1, &constants);
         p.commands->Draw(3, 0); p.commands->ClearState(); p.commands->Flush();

@@ -164,6 +164,16 @@ void validateInputFile(const std::filesystem::path& source_path) {
     }
 }
 
+const int* colorCoefficients(AVColorSpace space) {
+    switch (space) {
+    case AVCOL_SPC_BT709: return sws_getCoefficients(SWS_CS_ITU709);
+    case AVCOL_SPC_FCC: return sws_getCoefficients(SWS_CS_FCC);
+    case AVCOL_SPC_SMPTE240M: return sws_getCoefficients(SWS_CS_SMPTE240M);
+    case AVCOL_SPC_BT2020_NCL: return sws_getCoefficients(SWS_CS_BT2020);
+    default: return sws_getCoefficients(SWS_CS_DEFAULT);
+    }
+}
+
 VideoFramePtr copyRgbaFrame(
     const AVFrame& frame,
     SwsContextPtr& scaler,
@@ -210,6 +220,16 @@ VideoFramePtr copyRgbaFrame(
         throw MediaError("Could not create the video color conversion context.");
     }
     scaler.reset(cached_scaler);
+    const auto* descriptor = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame.format));
+    const bool full_range = frame.color_range == AVCOL_RANGE_JPEG ||
+        (frame.color_range == AVCOL_RANGE_UNSPECIFIED &&
+            ((descriptor && (descriptor->flags & AV_PIX_FMT_FLAG_RGB)) ||
+             frame.format == AV_PIX_FMT_YUVJ420P || frame.format == AV_PIX_FMT_YUVJ422P ||
+             frame.format == AV_PIX_FMT_YUVJ444P));
+    const auto* coefficients = colorCoefficients(frame.colorspace);
+    const int color_result = sws_setColorspaceDetails(scaler.get(), coefficients,
+        full_range ? 1 : 0, coefficients, 1, 0, 1 << 16, 1 << 16);
+    if (color_result < 0) throwFfmpegError(color_result, "Configuring video matrix and range");
 
     std::uint8_t* destination_data[4] = {result->rgba_pixels.data(), nullptr, nullptr, nullptr};
     int destination_linesize[4] = {result->stride, 0, 0, 0};
@@ -355,6 +375,8 @@ VideoFramePtr downloadD3D11Frame(const AVFrame& frame, SwsContextPtr& scaler, De
     if (!transferred) throw MediaError("Could not allocate the hardware transfer frame.");
     const int result = av_hwframe_transfer_data(transferred.get(), &frame, 0);
     if (result < 0) throwFfmpegError(result, "Downloading a D3D11 video frame");
+    const int properties = av_frame_copy_props(transferred.get(), &frame);
+    if (properties < 0) throwFfmpegError(properties, "Retaining downloaded video metadata");
     if (transferred->format == AV_PIX_FMT_NV12) {
         // swscale's NV12 fast converter does not use the same chroma sampling
         // as the established YUV420P reference. Repack losslessly before that
@@ -363,6 +385,8 @@ VideoFramePtr downloadD3D11Frame(const AVFrame& frame, SwsContextPtr& scaler, De
         if (!planar) throw MediaError("Could not allocate the planar transfer frame.");
         planar->format = frame.color_range == AVCOL_RANGE_JPEG ? AV_PIX_FMT_YUVJ420P : AV_PIX_FMT_YUV420P;
         planar->width = transferred->width; planar->height = transferred->height;
+        const int planar_properties = av_frame_copy_props(planar.get(), &frame);
+        if (planar_properties < 0) throwFfmpegError(planar_properties, "Retaining planar video metadata");
         const int allocation = av_frame_get_buffer(planar.get(), 32);
         if (allocation < 0) throwFfmpegError(allocation, "Allocating planar transfer pixels");
         for (int y = 0; y < planar->height; ++y)
@@ -399,7 +423,9 @@ D3D11VideoFrameView NativeVideoFrame::d3d11_view() const {
     return {device->device, impl_->frame->data[0],
         static_cast<unsigned>(reinterpret_cast<std::uintptr_t>(impl_->frame->data[1])),
         width(), height(), frames->sw_format == AV_PIX_FMT_BGRA ? NativeVideoFormat::Bgra8 : NativeVideoFormat::Nv12,
-        impl_->frame->color_range == AVCOL_RANGE_JPEG};
+        impl_->frame->color_range == AVCOL_RANGE_JPEG,
+        {colorCoefficients(impl_->frame->colorspace)[0], colorCoefficients(impl_->frame->colorspace)[1],
+         colorCoefficients(impl_->frame->colorspace)[2], colorCoefficients(impl_->frame->colorspace)[3]}};
 #else
     throw MediaError("A D3D11 frame cannot be accessed on this platform.");
 #endif
@@ -1155,6 +1181,9 @@ void VideoPlaybackSession::reset() {
 }
 
 VideoFramePtr VideoPlaybackSession::convertFrame(Impl& impl) {
+    const auto* parameters = impl.format->streams[impl.stream_index]->codecpar;
+    if (impl.frame->colorspace == AVCOL_SPC_UNSPECIFIED) impl.frame->colorspace = parameters->color_space;
+    if (impl.frame->color_range == AVCOL_RANGE_UNSPECIFIED) impl.frame->color_range = parameters->color_range;
     if (impl.frame->format != AV_PIX_FMT_D3D11)
         return copyRgbaFrame(*impl.frame, impl.scaler, impl.observer);
     if (impl.options.hardware_frame_guard) impl.options.hardware_frame_guard(impl.current_frame_index);

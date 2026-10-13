@@ -3,6 +3,7 @@ if(WIN32)
     add_executable(creative-suite-main-editor-gpu-video-pipeline-tests gpu_video_pipeline_test.cpp)
     target_link_libraries(creative-suite-main-editor-gpu-video-pipeline-tests PRIVATE
         creative-suite-main-editor-core creative-suite::video-encoding)
+    target_include_directories(creative-suite-main-editor-gpu-video-pipeline-tests PRIVATE ${PROJECT_SOURCE_DIR}/libs/media/tests)
     copy_ffmpeg_test_runtime(creative-suite-main-editor-gpu-video-pipeline-tests)
     deploy_qt_test_runtime(creative-suite-main-editor-gpu-video-pipeline-tests)
     # Explicit native acceptance target: missing hardware is a failure, not a skip.

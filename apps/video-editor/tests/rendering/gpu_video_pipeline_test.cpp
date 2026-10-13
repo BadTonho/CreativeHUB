@@ -6,6 +6,7 @@
 #include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
 #include "rendering/preview_performance_metrics.h"
 #include "logging/logger.h"
+#include "video_fixture.h"
 #include <QGuiApplication>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
@@ -61,6 +62,27 @@ private:
     int& calls_;
 };
 void pipeline(const std::filesystem::path& path, QOffscreenSurface* surface, const std::string& codec = "h264_nvenc") {
+    for (const auto matrix : {AVCOL_SPC_SMPTE170M, AVCOL_SPC_BT709, AVCOL_SPC_BT2020_NCL}) {
+        for (const auto range : {AVCOL_RANGE_MPEG, AVCOL_RANGE_JPEG}) {
+            const auto tagged_path = path.parent_path() / ("native-tagged-" + std::to_string(matrix) + "-" + std::to_string(range) + ".mkv");
+            csmedia::test_support::createTaggedVideo(tagged_path, matrix, range, codec.c_str());
+            auto tagged_cpu = csmedia::VideoPlaybackSession::open(tagged_path);
+            auto tagged_gpu = csmedia::VideoPlaybackSession::open(tagged_path, csmedia::DecodeOptions{csmedia::DecodeAcceleration::PreferHardware});
+            composition::OpenGlFrameCompositor converter(surface, composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext());
+            for (int index : {0, 2, 1}) {
+                const auto cpu_frame = tagged_cpu->decode_frame_at(index);
+                const auto native_frame = tagged_gpu->decode_frame_at_native(index);
+                require(cpu_frame && native_frame && native_frame->native, "Tagged video did not use D3D11.");
+                csmedia::test_support::checkTaggedPixels(**cpu_frame, matrix, range, 5);
+                compare(**cpu_frame, *native_frame->native->download_rgba());
+                const auto imported = converter.importFrame(native_frame->native);
+                require(imported.frame != nullptr, "Tagged native import failed.");
+                const auto actual = converter.readback(imported.frame);
+                require(actual.frame.has_value(), "Tagged native readback failed.");
+                compare(**cpu_frame, *actual.frame);
+            }
+        }
+    }
     csmedia::VideoEncodingSettings encoding;
     encoding.output_path = path; encoding.container_name = "matroska";
     encoding.video_encoder_name = codec; encoding.width = 320; encoding.height = 180;

@@ -2,6 +2,7 @@
 
 #include <creative_suite/media/video_frame.h>
 #include <functional>
+#include <array>
 #include <memory>
 
 namespace creative_suite::media {
@@ -15,6 +16,9 @@ struct D3D11VideoFrameView {
     int width = 0, height = 0;
     NativeVideoFormat format = NativeVideoFormat::Nv12;
     bool full_range = false;
+    // Limited-range 16.16 YUV coefficients: R/Cr, B/Cb, G/Cb, G/Cr.
+    // Untagged sources use BT.601; full_range controls the range conversion.
+    std::array<int, 4> yuv_coefficients{104597, 132201, 25675, 53279};
 };
 class NativeVideoFrame final {
 public:

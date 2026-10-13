@@ -35,6 +35,15 @@ sequential decoding, reset, end-of-file state, previous-frame re-decoding, and
 frame-at-index decoding. It owns the FFmpeg format context, codec context,
 packet, decoded frame, and RGBA conversion resources through RAII.
 
+Decoded YUV uses the frame's matrix and full/limited range, falling back to
+stream metadata when a frame is untagged. BT.709, FCC, SMPTE 240M, BT.2020
+non-constant luminance, and BT.601/default coefficients are applied explicitly;
+untagged YUV retains limited-range BT.601 and legacy YUVJ retains full range.
+Hardware downloads preserve these properties. Native D3D11 views carry neutral
+16.16 YUV coefficients and range so GPU conversion uses the same contract.
+The output remains SDR RGBA8; this is not HDR tone mapping, transfer-function
+conversion, or complete color management.
+
 The playback worker owns one session at a time. The session and its buffers are
 destroyed on the worker thread, and decoded frames are transferred as owning
 shared payloads.

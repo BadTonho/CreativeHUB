@@ -12,6 +12,7 @@ add_executable(creative-suite-main-editor-video-playback-tests
 
 target_include_directories(creative-suite-main-editor-video-playback-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/libs/media/tests
     ${FFMPEG_INCLUDE_DIRS}
 )
 
@@ -21,6 +22,7 @@ target_link_directories(creative-suite-main-editor-video-playback-tests PRIVATE
 
 target_link_libraries(creative-suite-main-editor-video-playback-tests PRIVATE
     creative-suite::video-media
+    Qt6::Gui
     ${FFMPEG_LIBRARIES}
 )
 

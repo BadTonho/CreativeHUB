@@ -35,7 +35,7 @@ Its fresh scoped build/deployment gate remained incomplete because the local
 Qt deployment helper could not query `qtpaths`; existing executable results
 must not be treated as clean-build acceptance. A subsequent native scoped
 build succeeded outside the restricted process environment; the deployment
-failure did not require a repository build-configuration change. F08–F10
+failure did not require a repository build-configuration change. F09–F10
 remain open.
 F02 is covered by `verifyRecoveryDurability` in the MainWindow integration
 test: snapshots survive restoration, session destruction, and failed saves;
@@ -62,6 +62,13 @@ F07 is covered by the Timeline Motion-link split/trim checks,
 `validateMotionSplitContinuity` (history and Preview/Fusion/export), project
 v25 round-trip/v24 migration, and `hub-backup-format-test` preserving the
 publication position while relocating the document references.
+F08 is covered by tagged lossless YUV fixtures in the video-playback test:
+independent RGB equations verify BT.601/default, BT.709, and BT.2020 NCL at
+full/limited range after sequential and random decoding. The strict GPU video
+pipeline gate repeats tagged H.264/HEVC fixtures, requiring native import and
+CPU/download/GPU parity. The playback test links Qt Gui because the existing
+performance observer references the composition boundary's Qt image types.
+Run Motion Studio preview/export consumer tests for shared-decoder changes.
 
 ## Local gate
 
