@@ -163,6 +163,10 @@ previews are outside this first integration step.
 - Video Editor `.csp` version 10 stores optional shared and clip-specific
   references. Versions 1 through 9 load without those references. Resolution
   order is clip variant, shared Media Pool output, then original source.
+  Offline export resolves this same order from its immutable project snapshot,
+  including shared publications used by explicit still-image Fusion inputs.
+  Missing publication files fall back to the next source; an existing but
+  undecodable publication fails export with a logged media error.
 - The Image Editor receives `--linked-source`, `--linked-document`, and
   `--publish-output`. It opens an existing `.cimg` or creates one from the
   supplied source. Save writes the native document and then atomically replaces

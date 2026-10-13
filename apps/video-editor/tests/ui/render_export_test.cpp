@@ -1395,6 +1395,49 @@ void validateLosslessParity(const OutputChoice& output, const std::filesystem::p
     require(frames == 8 && !b->decode_next_frame(), "Lossless export dropped or duplicated frames.");
 }
 
+void validateSharedImageExport(const OutputChoice& output,
+    const std::filesystem::path& source, const std::filesystem::path& published,
+    const std::filesystem::path& root) {
+    std::atomic_bool cancel{false};
+    auto expectedFrame = [&](const std::filesystem::path& path) {
+        auto baseline = makeImageJob(output, path, root / "link-baseline.mkv", 501, 1);
+        renderJob(baseline, cancel);
+        return *media::VideoPlaybackSession::open(pathFromQString(baseline.settings.output_path))->decode_next_frame();
+    };
+    const auto original_frame = expectedFrame(source);
+    const auto published_frame = expectedFrame(published);
+    auto job = makeImageJob(output, source, root / "shared-link-export.mkv", 502, 1);
+    project::ProjectMedia item;
+    item.source_path = source;
+    item.kind = media::MediaKind::Image;
+    item.image_editor_link = media::LinkedImageReference{"shared", root / "shared.cimg", published};
+    job.project_snapshot.media.push_back(item);
+    auto check = [&](const media::VideoFramePtr& expected) {
+        renderJob(job, cancel);
+        const auto actual = *media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path))->decode_next_frame();
+        require(actual->rgba_pixels == expected->rgba_pixels, "Linked image export selected the wrong revision.");
+    };
+    check(published_frame);
+    auto& clip = job.project_snapshot.timeline_tracks[0].clips[0];
+    clip.node_graph = fusion::nodes::makePassthroughGraph();
+    clip.node_graph->nodes[0].source_path = source;
+    clip.node_graph->nodes[0].source_is_still = true;
+    check(published_frame);
+    clip.node_graph.reset();
+    clip.image_editor_variant = media::LinkedImageReference{"variant", root / "variant.cimg", source};
+    check(original_frame);
+    clip.image_editor_variant->published_output_path = root / "missing-variant.png";
+    check(published_frame);
+    clip.image_editor_variant.reset();
+    job.project_snapshot.media[0].image_editor_link->published_output_path = root / "missing-shared.png";
+    check(original_frame);
+    // An online publication remains usable when the original media is offline.
+    clip.source_path = root / "offline-original.png";
+    job.project_snapshot.media[0].source_path = clip.source_path;
+    job.project_snapshot.media[0].image_editor_link->published_output_path = published;
+    check(published_frame);
+}
+
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
 void validatePublishedImage(const OutputChoice& output, const std::filesystem::path& root) {
     const auto source = root / "producer-source.png", published = root / "published.png";
@@ -1422,6 +1465,18 @@ void validatePublishedImage(const OutputChoice& output, const std::filesystem::p
     decoder = media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path));
     auto refreshed = *decoder->decode_next_frame();
     require(old->rgba_pixels != refreshed->rgba_pixels, "Export reused stale published Image Editor pixels.");
+    job.project_snapshot.timeline_tracks[0].clips[0].image_editor_variant.reset();
+    project::ProjectMedia shared;
+    shared.source_path = source;
+    shared.kind = media::MediaKind::Image;
+    shared.image_editor_link = media::LinkedImageReference{"shared-publication", root / "producer.cimg", published};
+    job.project_snapshot.media.push_back(shared);
+    decoder.reset();
+    renderJob(job, cancel);
+    decoder = media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path));
+    const auto shared_frame = *decoder->decode_next_frame();
+    require(shared_frame->rgba_pixels == refreshed->rgba_pixels,
+        "Shared Image Editor publication differs from the isolated publication.");
 }
 #endif
 
@@ -1511,6 +1566,7 @@ int main(int argc, char* argv[]) {
         validateGpuFallback(output, image_path, root);
         validateActiveQueueShutdown(output, image_path, root);
         validateLosslessParity(output, image_path, root);
+        validateSharedImageExport(output, image_path, green_image_path, root);
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
         validatePublishedImage(output, root);
 #endif

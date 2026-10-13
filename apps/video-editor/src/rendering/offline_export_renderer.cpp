@@ -3,6 +3,7 @@
 
 #include "logging/logger.h"
 #include "media/audio_playback.h"
+#include "media/media_library.h"
 #include "media/timeline_audio_mix.h"
 #include "media/still_image_decoder.h"
 #include "media/video_playback.h"
@@ -81,6 +82,7 @@ struct RenderClip {
     std::size_t track_index = 0;
     std::size_t clip_index = 0;
     double source_fps = 30.0;
+    std::filesystem::path visual_path;
     std::unique_ptr<media::VideoPlaybackSession> video;
     std::optional<media::VideoFrame> still;
     std::optional<media::VideoFrame> text;
@@ -139,7 +141,21 @@ private:
     OfflineExportMetrics& metrics_;
 };
 
-std::filesystem::path clipPath(const project::ProjectClip& clip) {
+std::filesystem::path sharedImagePath(
+    const project::ProjectDocument& document, const std::filesystem::path& source) {
+    const auto identity = media::MediaLibrary::canonicalPath(source);
+    for (const auto& item : document.media) {
+        if (item.kind != media::MediaKind::Image || !item.image_editor_link ||
+            media::MediaLibrary::canonicalPath(item.source_path) != identity) continue;
+        std::error_code error;
+        if (std::filesystem::is_regular_file(item.image_editor_link->published_output_path, error) && !error)
+            return item.image_editor_link->published_output_path;
+    }
+    return source;
+}
+
+std::filesystem::path clipPath(
+    const project::ProjectDocument& document, const project::ProjectClip& clip) {
     if (clip.image_editor_variant.has_value() &&
         !clip.image_editor_variant->published_output_path.empty()) {
         std::error_code error;
@@ -148,7 +164,8 @@ std::filesystem::path clipPath(const project::ProjectClip& clip) {
             return clip.image_editor_variant->published_output_path;
         }
     }
-    return clip.source_path;
+    return clip.kind == timeline::ClipKind::Image
+        ? sharedImagePath(document, clip.source_path) : clip.source_path;
 }
 
 double validFrameRate(const std::optional<double>& value, double fallback) {
@@ -331,7 +348,7 @@ std::optional<media::VideoFrame> composeFrame(
                 if (!source_frame) {
                     checkCanceled(canceled);
                     throw std::runtime_error(
-                        "A video frame could not be decoded from " + pathUtf8(clipPath(clip)));
+                        "A video frame could not be decoded from " + pathUtf8(render_clip.visual_path));
                 }
             }
             if (clip.node_graph.has_value()) {
@@ -557,7 +574,8 @@ std::vector<RenderClip> prepareClips(
                 clips.push_back(std::move(entry));
                 continue;
             }
-            const auto path = clipPath(clip);
+            const auto path = clipPath(document, clip);
+            entry.visual_path = path;
             if (path.empty()) {
                 throw std::runtime_error("A timeline clip has no source path.");
             }
@@ -586,17 +604,19 @@ std::vector<RenderClip> prepareClips(
                     if (node.type != fusion::nodes::NodeType::Input || node.source_path.empty())
                         continue;
                     std::error_code source_error;
-                    if (!std::filesystem::is_regular_file(node.source_path, source_error) || source_error)
+                    const auto graph_path = node.source_is_still
+                        ? sharedImagePath(document, node.source_path) : node.source_path;
+                    if (!std::filesystem::is_regular_file(graph_path, source_error) || source_error)
                         throw std::runtime_error("A Fusion input source is offline: " +
-                                                 pathUtf8(node.source_path));
+                                                 pathUtf8(graph_path));
                     RenderClip::GraphSource graph_source;
                     graph_source.node_id = node.id;
                     graph_source.frame_rate = node.source_frame_rate;
                     graph_source.still_source = node.source_is_still;
                     if (node.source_is_still) {
-                        graph_source.still = media::StillImageDecoder{}.decode_first_frame(node.source_path);
+                        graph_source.still = media::StillImageDecoder{}.decode_first_frame(graph_path);
                     } else {
-                        graph_source.video = media::VideoPlaybackSession::open(node.source_path, {job.settings.hardware_decoding_enabled
+                        graph_source.video = media::VideoPlaybackSession::open(graph_path, {job.settings.hardware_decoding_enabled
                             ? creative_suite::media::DecodeAcceleration::PreferHardware : creative_suite::media::DecodeAcceleration::Software}, observer);
                     }
                     entry.graph_sources.push_back(std::move(graph_source));

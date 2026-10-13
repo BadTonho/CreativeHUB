@@ -59,6 +59,12 @@ are rasterized against that same project canvas. Offline Render's Project
 resolution uses the active project dimensions, while the existing fixed and
 custom output resolutions remain available.
 
+Offline image sources resolve a regular-file clip publication first, then the
+shared Media Pool publication in the job snapshot, then the original image.
+Explicit still-image Fusion inputs resolve the shared publication by original
+media identity. Each render opens the selected file again so new publications
+are consumed; an offline original does not block an online publication.
+
 Composed Preview playback mixes embedded audio from active video clips only
 when their audio has not been externalized, and independent audio from every
 active Audio clip, including clips whose video is covered by a higher-priority
