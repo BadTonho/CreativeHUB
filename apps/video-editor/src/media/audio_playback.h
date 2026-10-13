@@ -44,6 +44,9 @@ public:
         std::int64_t source_frame,
         double video_frame_rate);
     void seek_to_sample_index(std::int64_t sample_index);
+    // maximum_samples limits output sample frames per channel, not codec input.
+    // Unreturned PCM is retained until the next call; EOF includes resampler
+    // draining. Seek/reset discard buffered PCM, cancellation consumes none.
     [[nodiscard]] std::optional<AudioPcmChunk> decode_samples(
         std::size_t maximum_samples = 4096,
         const CancellationPredicate& should_cancel = {});

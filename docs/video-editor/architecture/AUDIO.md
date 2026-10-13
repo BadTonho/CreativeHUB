@@ -17,6 +17,14 @@ and resampler through RAII. It exposes standard C++ PCM chunks in signed
 16-bit interleaved form. The playback worker is the only owner that opens a
 session or decodes audio; the UI never performs audio work.
 
+Decode block limits count output sample frames per channel. Codec frames are
+fully converted and any unreturned PCM remains owned by the session until the
+next call, with contiguous output sample indices. The decoder drains available
+frames before reading another packet and drains the resampler before reporting
+EOF. Zero-size/cancelled output requests do not consume buffered PCM; seek and
+reset discard buffered PCM. Regression coverage compares complete output across
+block sizes and mono/stereo resampling rates, including final delayed samples.
+
 During composition playback, the worker mixes active Audio clips and embedded
 video streams only for video clips whose audio has not been externalized. This
 includes clips whose video is covered by a higher-priority visual track. Audio

@@ -99,6 +99,55 @@ void testAudioDecodeAndSeek(const std::filesystem::path& path) {
     CS_TEST_CHECK(exact_sample->first_sample_index >= 1234);
 }
 
+std::vector<std::int16_t> decodeEntireAudio(
+    const std::filesystem::path& path,
+    media::AudioPlaybackSession::OutputSpec output,
+    std::size_t block_size) {
+    auto session = media::AudioPlaybackSession::open(path, output);
+    std::vector<std::int16_t> pcm;
+    std::int64_t next_sample = 0;
+    while (auto chunk = session->decode_samples(block_size)) {
+        CS_TEST_CHECK(chunk->first_sample_index == next_sample);
+        CS_TEST_CHECK(chunk->sampleCount() > 0 && chunk->sampleCount() <= block_size);
+        next_sample += static_cast<std::int64_t>(chunk->sampleCount());
+        CS_TEST_CHECK(session->current_sample_index() == next_sample);
+        pcm.insert(pcm.end(), chunk->samples.begin(), chunk->samples.end());
+    }
+    CS_TEST_CHECK(session->at_end());
+    return pcm;
+}
+
+void testAudioBlockSizeAndResamplerDrain(const std::filesystem::path& path) {
+    for (const auto output : {media::AudioPlaybackSession::OutputSpec{8000, 1},
+                              media::AudioPlaybackSession::OutputSpec{16000, 2},
+                              media::AudioPlaybackSession::OutputSpec{48000, 2}}) {
+        const auto reference = decodeEntireAudio(path, output, 65536);
+        CS_TEST_CHECK(reference.size() == static_cast<std::size_t>(output.sample_rate) *
+                                            static_cast<std::size_t>(output.channel_count));
+        for (const std::size_t block_size : {1U, 511U, 4096U}) {
+            CS_TEST_CHECK(decodeEntireAudio(path, output, block_size) == reference);
+        }
+        auto session = media::AudioPlaybackSession::open(path, output);
+        CS_TEST_CHECK(!session->decode_samples(0).has_value() && !session->at_end());
+        CS_TEST_CHECK(!session->decode_samples(511, [] { return true; }).has_value());
+        const auto first = session->decode_samples(511);
+        CS_TEST_CHECK(first.has_value());
+        const auto position = session->current_sample_index();
+        CS_TEST_CHECK(!session->decode_samples(511, [] { return true; }).has_value() &&
+                      session->current_sample_index() == position);
+        const auto second = session->decode_samples(511);
+        CS_TEST_CHECK(second.has_value());
+        const auto channels = static_cast<std::size_t>(output.channel_count);
+        const auto reference_begin = reference.begin() +
+            static_cast<std::ptrdiff_t>(first->sampleCount() * channels);
+        CS_TEST_CHECK(second->samples == std::vector<std::int16_t>(reference_begin,
+            reference_begin + static_cast<std::ptrdiff_t>(second->sampleCount() * channels)));
+        session->reset();
+        const auto reset_first = session->decode_samples(511);
+        CS_TEST_CHECK(reset_first.has_value() && reset_first->samples == first->samples);
+    }
+}
+
 void testMissingAudioDoesNotBecomeAnError(const std::filesystem::path& path) {
     auto session = media::AudioPlaybackSession::open(path);
     CS_TEST_CHECK(!session->has_audio());
@@ -140,6 +189,7 @@ int main(int argc, char** argv) {
     const auto wav_path = createWav();
     try {
         testAudioDecodeAndSeek(wav_path);
+        testAudioBlockSizeAndResamplerDrain(wav_path);
         testDisabledAudioOutputFallback();
         testMonitorVolumeNormalization();
         if (argc > 1) {

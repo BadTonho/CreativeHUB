@@ -162,6 +162,33 @@ struct AudioPlaybackSession::Impl {
     bool end_reached = false;
     std::int64_t current_sample_index = 0;
     std::int64_t requested_sample_index = 0;
+    std::optional<AudioPcmChunk> pending_chunk;
+    std::size_t pending_sample_offset = 0;
+
+    AudioPcmChunk takePending(std::size_t maximum_samples) {
+        auto& pending = *pending_chunk;
+        const auto count = std::min(maximum_samples,
+            pending.sampleCount() - pending_sample_offset);
+        AudioPcmChunk result;
+        if (pending_sample_offset == 0 && count == pending.sampleCount()) {
+            result = std::move(pending);
+            pending_chunk.reset();
+        } else {
+            result.sample_rate = pending.sample_rate;
+            result.channel_count = pending.channel_count;
+            result.first_sample_index = pending.first_sample_index +
+                static_cast<std::int64_t>(pending_sample_offset);
+            const auto channels = static_cast<std::size_t>(pending.channel_count);
+            const auto begin = pending.samples.begin() +
+                static_cast<std::ptrdiff_t>(pending_sample_offset * channels);
+            result.samples.assign(begin, begin + static_cast<std::ptrdiff_t>(count * channels));
+            pending_sample_offset += count;
+            if (pending_sample_offset == pending.sampleCount()) pending_chunk.reset();
+        }
+        current_sample_index = result.first_sample_index + static_cast<std::int64_t>(count);
+        if (!pending_chunk) pending_sample_offset = 0;
+        return result;
+    }
 };
 
 AudioPlaybackSession::AudioPlaybackSession(std::unique_ptr<Impl> impl)
@@ -351,6 +378,8 @@ void AudioPlaybackSession::seek_to_sample_index(std::int64_t sample_index) {
         impl_->end_reached = false;
         impl_->requested_sample_index = sample_index;
         impl_->current_sample_index = sample_index;
+        impl_->pending_chunk.reset();
+        impl_->pending_sample_offset = 0;
     } catch (const MediaError& error) {
         logFailure(impl_->source_path, "seek", error);
         throw;
@@ -371,8 +400,12 @@ std::optional<AudioPcmChunk> AudioPlaybackSession::decode_samples(
         };
         while (true) {
             if (cancelled()) return std::nullopt;
-            if (!impl_->flush_sent) {
+            if (impl_->pending_chunk) return impl_->takePending(maximum_samples);
+            const int receive_result = avcodec_receive_frame(
+                impl_->decoder.get(), impl_->frame.get());
+            if (receive_result == AVERROR(EAGAIN) && !impl_->flush_sent) {
                 while (true) {
+                    if (cancelled()) return std::nullopt;
                     const int read_result = av_read_frame(impl_->format.get(), impl_->packet.get());
                     if (read_result == AVERROR_EOF) {
                         const int flush_result = avcodec_send_packet(impl_->decoder.get(), nullptr);
@@ -390,41 +423,32 @@ std::optional<AudioPcmChunk> AudioPlaybackSession::decode_samples(
                     const int send_result = avcodec_send_packet(
                         impl_->decoder.get(), impl_->packet.get());
                     av_packet_unref(impl_->packet.get());
-                    if (send_result < 0 && send_result != AVERROR(EAGAIN)) {
+                    if (send_result < 0) {
                         throwFfmpegError(send_result, "Sending audio packet to decoder");
                     }
                     break;
                 }
-            }
-
-            const int receive_result = avcodec_receive_frame(
-                impl_->decoder.get(), impl_->frame.get());
-            if (receive_result == AVERROR(EAGAIN)) {
-                if (impl_->flush_sent) {
-                    impl_->end_reached = true;
-                    return std::nullopt;
-                }
                 continue;
             }
-            if (receive_result == AVERROR_EOF) {
-                impl_->end_reached = true;
-                return std::nullopt;
-            }
-            if (receive_result < 0) {
+
+            const bool draining = receive_result == AVERROR_EOF ||
+                (receive_result == AVERROR(EAGAIN) && impl_->flush_sent);
+            if (receive_result < 0 && !draining) {
                 throwFfmpegError(receive_result, "Receiving decoded audio frame");
             }
 
             const int64_t delay = swr_get_delay(
                 impl_->resampler.get(),
                 impl_->decoder->sample_rate);
-            const int output_capacity = static_cast<int>(std::min<std::int64_t>(
-                std::numeric_limits<int>::max(),
+            const int input_samples = draining ? 0 : impl_->frame->nb_samples;
+            const int output_capacity = static_cast<int>(std::clamp<std::int64_t>(
                 av_rescale_rnd(
-                    delay + impl_->frame->nb_samples,
+                    delay + input_samples,
                     impl_->output.sample_rate,
                     impl_->decoder->sample_rate,
-                    AV_ROUND_UP)));
-            if (output_capacity <= 0) continue;
+                    AV_ROUND_UP),
+                1,
+                std::numeric_limits<int>::max()));
 
             AudioPcmChunk chunk;
             chunk.sample_rate = impl_->output.sample_rate;
@@ -438,10 +462,16 @@ std::optional<AudioPcmChunk> AudioPlaybackSession::decode_samples(
                 impl_->resampler.get(),
                 output_planes,
                 output_capacity,
-                const_cast<const std::uint8_t**>(impl_->frame->extended_data),
-                impl_->frame->nb_samples);
+                draining ? nullptr : const_cast<const std::uint8_t**>(impl_->frame->extended_data),
+                input_samples);
             if (converted < 0) throwFfmpegError(converted, "Resampling audio frame");
-            if (converted == 0) continue;
+            if (converted == 0) {
+                if (draining) {
+                    impl_->end_reached = true;
+                    return std::nullopt;
+                }
+                continue;
+            }
             chunk.samples.resize(static_cast<std::size_t>(converted) *
                                  static_cast<std::size_t>(impl_->output.channel_count));
 
@@ -455,12 +485,9 @@ std::optional<AudioPcmChunk> AudioPlaybackSession::decode_samples(
                 chunk.first_sample_index += static_cast<std::int64_t>(skip);
             }
             if (chunk.samples.empty()) continue;
-            const auto available = chunk.sampleCount();
-            const auto limited = std::min(maximum_samples, available);
-            chunk.samples.resize(limited * static_cast<std::size_t>(chunk.channel_count));
-            impl_->current_sample_index = chunk.first_sample_index +
-                static_cast<std::int64_t>(limited);
-            return chunk;
+            impl_->pending_chunk = std::move(chunk);
+            impl_->pending_sample_offset = 0;
+            return impl_->takePending(maximum_samples);
         }
     } catch (const MediaError& error) {
         logFailure(impl_->source_path, "decode", error);
