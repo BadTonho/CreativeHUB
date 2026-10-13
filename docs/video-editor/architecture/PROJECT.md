@@ -379,6 +379,10 @@ snapshot from an unsaved project after a previous session ended unexpectedly,
 it asks whether to restore, ignore, or delete the snapshot. Restoring loads
 the snapshot as dirty working data while leaving the original `.csp` untouched.
 Invalid or incomplete snapshots are ignored and technical failures are logged.
+If the main project is corrupt, missing, or cannot be validated, every valid
+snapshot remains eligible regardless of its modification time. Snapshot age
+and document equality suppress recovery only against a valid main project;
+failure to validate the main project is logged with its path and error code.
 
 The Settings `Autosave` tab provides a second management path for the current
 project and unsaved-project snapshots. It lists valid snapshots by project,

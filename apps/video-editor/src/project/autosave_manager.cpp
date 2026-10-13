@@ -87,6 +87,20 @@ void logInvalidSnapshot(const std::filesystem::path& snapshot_path) noexcept {
     }
 }
 
+void logRecoveryMainFailure(
+    const std::filesystem::path& project_path,
+    const char* cause,
+    int error_code) noexcept {
+    try {
+        logging::Logger::instance().log(
+            logging::Level::Warning, "project", "autosave_main_validate", cause,
+            {{"project_path", pathToUtf8(project_path)},
+             {"error_code", std::to_string(error_code)}});
+    } catch (...) {
+        // Recovery must remain available if diagnostic allocation fails.
+    }
+}
+
 } // namespace
 
 AutosaveManager::AutosaveManager(
@@ -272,16 +286,27 @@ std::vector<AutosaveSnapshot> AutosaveManager::validSnapshots(
 std::vector<AutosaveSnapshot> AutosaveManager::recoverableSnapshotsForProject(
     const std::filesystem::path& project_path) const {
     auto snapshots = validSnapshots(snapshotsForProject(project_path));
-    std::error_code error;
-    const auto project_time = std::filesystem::last_write_time(project_path, error);
-    if (error) return {};
+    if (snapshots.empty()) return snapshots;
 
     std::optional<ProjectDocument> current_document;
     try {
         current_document = project::load(project_path);
+    } catch (const ProjectError& error) {
+        logRecoveryMainFailure(project_path, error.what(), static_cast<int>(error.code()));
+        return snapshots;
+    } catch (const std::exception& error) {
+        logRecoveryMainFailure(project_path, error.what(), -1);
+        return snapshots;
     } catch (...) {
-        // A valid recovery snapshot must remain usable even when the main
-        // project file is damaged.
+        logRecoveryMainFailure(project_path, "The main project could not be validated.", -1);
+        return snapshots;
+    }
+
+    std::error_code error;
+    const auto project_time = std::filesystem::last_write_time(project_path, error);
+    if (error) {
+        logRecoveryMainFailure(project_path, error.message().c_str(), error.value());
+        return snapshots;
     }
 
     snapshots.erase(
@@ -289,7 +314,6 @@ std::vector<AutosaveSnapshot> AutosaveManager::recoverableSnapshotsForProject(
             snapshots.begin(), snapshots.end(),
             [&project_time, &current_document](const AutosaveSnapshot& snapshot) {
                 if (snapshot.modified_time <= project_time) return true;
-                if (!current_document.has_value()) return false;
                 try {
                     return project::load(snapshot.path) == *current_document;
                 } catch (...) {

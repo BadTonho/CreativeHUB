@@ -94,8 +94,25 @@ int main(int argc, char* argv[]) {
         std::ofstream damaged_project(project_path, std::ios::binary | std::ios::trunc);
         damaged_project << "damaged project";
         damaged_project.close();
+        std::filesystem::last_write_time(
+            project_path, project_time + std::chrono::seconds(5));
         require(manager.recoverableSnapshotsForProject(project_path).size() == 5,
-                "A damaged main project hid valid recovery snapshots.");
+                "A newer damaged main project hid older valid recovery snapshots.");
+        require(readFile(logger.log_path()).find("operation=\"autosave_main_validate\"") !=
+                    std::string::npos,
+                "A damaged main project was not logged during recovery discovery.");
+        std::filesystem::remove(project_path);
+        require(manager.recoverableSnapshotsForProject(project_path).size() == 5,
+                "A missing main project hid valid recovery snapshots.");
+        project::save(project_path, recovery_document);
+        std::filesystem::last_write_time(project_path, project_time);
+        require(manager.recoverableSnapshotsForProject(project_path).empty(),
+                "Snapshots identical to a valid main project were offered for recovery.");
+        project::save(project_path, original);
+        std::filesystem::last_write_time(
+            project_path, project_time + std::chrono::seconds(5));
+        require(manager.recoverableSnapshotsForProject(project_path).empty(),
+                "Older snapshots were offered after a valid newer project save.");
         manager.removeSnapshotsForProject(project_path);
         require(manager.validSnapshotsForProject(project_path).empty(),
                 "Saved-project snapshot cleanup did not remove the recovery set.");
