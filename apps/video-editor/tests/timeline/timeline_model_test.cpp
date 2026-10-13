@@ -207,6 +207,35 @@ void testMotionLinkPreservesTimelineClipState(const std::filesystem::path& direc
             "Linking a clip preserved its source, position, duration, and original audio state.");
     require(!model.setMotionLink(clip_id, link),
             "An identical Motion link was reported as a new timeline change.");
+    require(model.splitClip(0, 0, 15) == timeline::SplitClipResult::Split,
+        "A linked Motion clip could not be split.");
+    require(model.tracks()[0].clips[0].motion_link->render_start_time_us == 0 &&
+        model.tracks()[0].clips[1].motion_link->render_start_time_us == 500000,
+        "Splitting a Motion clip restarted the right publication.");
+    auto rolling = model;
+    require(rolling.trimClipEdge(0, 1, timeline::ClipEdge::Left, 52,
+        timeline::ClipEdgeEditMode::Rolling) == timeline::TrimClipResult::Trimmed &&
+        rolling.tracks()[0].clips[1].motion_link->render_start_time_us == 333333,
+        "Rolling a Motion cut did not preserve publication time.");
+    require(model.trimClip(0, 1, 30, 90) == timeline::TrimClipResult::Trimmed,
+        "A linked Motion clip could not be trimmed.");
+    require(model.tracks()[0].clips[1].motion_link->render_start_time_us == 1000000,
+        "Trimming a Motion clip did not advance publication time.");
+    require(model.trimClipEdge(0, 1, timeline::ClipEdge::Left, 67,
+        timeline::ClipEdgeEditMode::Individual) == timeline::TrimClipResult::Trimmed &&
+        model.tracks()[0].clips[1].motion_link->render_start_time_us == 1333333,
+        "A Motion edge trim did not preserve publication time.");
+    const auto converted = timeline::TimelineModel::rescaleSnapshotFrameRate(model.snapshot(), {24, 1});
+    require(converted && converted->tracks[0].clips[1].motion_link->render_start_time_us == 1333333,
+        "Project-rate conversion changed the absolute Motion publication time.");
+    for (std::int64_t cut = 1; cut < 24; ++cut) {
+        const auto offset_us = static_cast<std::int64_t>(std::llround(cut * 1000000.0 / 24));
+        for (std::int64_t local = 0; local < 24; ++local) {
+            require(timeline::motionRenderFrame(local, {24, 1}, 30, offset_us) ==
+                timeline::motionRenderFrame(cut + local, {24, 1}, 30, 0),
+                "Stored Motion cut time changed midpoint rounding across frame rates.");
+        }
+    }
 }
 
 void testVideoAudioCompanionTracks(const std::filesystem::path& directory) {

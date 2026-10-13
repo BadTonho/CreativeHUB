@@ -203,6 +203,11 @@ previews are outside this first integration step.
   item. Each contains `composition.motion`, `handoff.json`, and the published
   render. Video Editor `.csp` v24 stores the link, source identity, and output
   profile; versions 1 through 23 load without Motion references.
+  Version 25 stores nonnegative `render_start_time_us` on links; v24 links start
+  at zero. The Video Editor advances publication time on splits and left/rolling
+  trims, preserving it across history, saves, and project frame-rate changes.
+  Preview, Fusion Viewer, and export convert this time to the publication's
+  actual frame rate; original audio source-in remains independent.
 - The Video Editor offers a container, compatible video codec, and quality on
   first link creation. Motion Studio uses the composition canvas and frame rate
   for publication and exports without audio. It saves `.motion` before

@@ -70,6 +70,17 @@ std::optional<std::int64_t> secondsToMicroseconds(double seconds) noexcept {
     return static_cast<std::int64_t>(std::llround(microseconds));
 }
 
+bool shiftMotionRender(std::optional<media::MotionLinkReference>& link, std::int64_t local_delta, FrameRate rate) {
+    if (!link) return true;
+    const auto elapsed = timelineFramesToMicroseconds(std::abs(local_delta), rate);
+    if (!elapsed) return false;
+    auto& offset = link->render_start_time_us;
+    if (offset < 0 || (local_delta < 0 && *elapsed > offset) ||
+        (local_delta >= 0 && *elapsed > std::numeric_limits<std::int64_t>::max() - offset)) return false;
+    offset += local_delta < 0 ? -*elapsed : *elapsed;
+    return true;
+}
+
 std::optional<std::int64_t> sourceFramesToMicroseconds(
     std::int64_t source_frames,
     double source_frame_rate) noexcept {
@@ -1077,6 +1088,19 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
         }
     }
 
+    if (edge == ClipEdge::Left && original.motion_link) {
+        const auto available = static_cast<std::int64_t>(std::floor(
+            static_cast<long double>(original.motion_link->render_start_time_us) *
+            timeline_frame_rate.numerator / (1'000'000.0L * timeline_frame_rate.denominator) + 1.0e-4L));
+        minimum_boundary = std::max(minimum_boundary, original.timeline_start_frame - available);
+    }
+    if (edge == ClipEdge::Right && neighbor_index && track.clips[*neighbor_index].motion_link) {
+        const auto& neighbor = track.clips[*neighbor_index];
+        const auto available = static_cast<std::int64_t>(std::floor(
+            static_cast<long double>(neighbor.motion_link->render_start_time_us) *
+            timeline_frame_rate.numerator / (1'000'000.0L * timeline_frame_rate.denominator) + 1.0e-4L));
+        minimum_boundary = std::max(minimum_boundary, neighbor.timeline_start_frame - available);
+    }
     if (minimum_boundary > maximum_boundary) return std::nullopt;
     const auto boundary = std::clamp(
         requested_boundary_frame, minimum_boundary, maximum_boundary);
@@ -1087,6 +1111,8 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
     preview.boundary_frame = boundary;
     if (edge == ClipEdge::Left) {
         preview.clip.timeline_start_frame = boundary;
+        if (!shiftMotionRender(preview.clip.motion_link, boundary - original.timeline_start_frame, timeline_frame_rate))
+            return std::nullopt;
         preview.clip.timeline_duration_frames = *original_end - boundary;
         const auto source_start = shiftedSourceStart(
             original, boundary, timeline_frame_rate);
@@ -1180,6 +1206,8 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
             }
         } else {
             neighbor.timeline_start_frame = boundary;
+            if (!shiftMotionRender(neighbor.motion_link, boundary - original_neighbor.timeline_start_frame, timeline_frame_rate))
+                return std::nullopt;
             neighbor.timeline_duration_frames = *neighbor_end - boundary;
             if (original_neighbor.kind == ClipKind::Audio) {
                 const auto source_start_time = shiftAudioSourceTime(
@@ -1741,6 +1769,7 @@ SplitClipResult TimelineModel::splitClip(
     }
     const auto original_transform = clip.transform;
     TimelineClip right = clip;
+    if (!shiftMotionRender(right.motion_link, local_frame, frame_rate_)) return SplitClipResult::InvalidBoundary;
     right.clip_id = next_clip_id_++;
     if (clip.kind == ClipKind::Audio) {
         clip.audio_gain_keyframes = sliceAudioGainEnvelope(
@@ -2150,6 +2179,8 @@ TrimClipResult TimelineModel::trimClip(
               source_delta,
               clip.frame_rate.value_or(frame_rate_.asDouble()), frame_rate_).value_or(0)
         : source_delta;
+    auto trimmed_motion = clip.motion_link;
+    if (!shiftMotionRender(trimmed_motion, local_start, frame_rate_)) return TrimClipResult::InvalidRange;
     Transform2D trimmed_transform;
     const auto trimmed_keyframes = trimKeyframes(
         clip.transform,
@@ -2161,6 +2192,7 @@ TrimClipResult TimelineModel::trimClip(
     trimNodeGraphKeyframes(
         clip.node_graph, 0, local_start, new_duration_frames);
     clip.source_start_frame = new_source_start_frame;
+    clip.motion_link = std::move(trimmed_motion);
     clip.source_duration_frames = *converted_duration;
     clip.timeline_duration_frames = new_duration_frames;
     clip.transform = trimmed_transform;

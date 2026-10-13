@@ -34,6 +34,8 @@ struct MotionLinkReference {
     std::string codec;
     std::string quality;
     double bitrate_mbps = 10.0;
+    // Clip-local publication position; independent of the original video's source-in.
+    std::int64_t render_start_time_us = 0;
 
     friend bool operator==(const MotionLinkReference&, const MotionLinkReference&) = default;
 };

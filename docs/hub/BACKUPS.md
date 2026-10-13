@@ -25,7 +25,7 @@ producer/consumer regression coverage when supported schemas gain path fields.
 | Format identifier | Supported versions | References rewritten |
 | --- | --- | --- |
 | `creative-suite-image-document` | 1–16 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
-| `creative-suite.main-editor` | 1–24 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
+| `creative-suite.main-editor` | 1–25 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
 | `creative-suite.motion-studio` | 1–6 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
 
 Image paths use the original document directory. Video and Motion paths use
@@ -127,10 +127,12 @@ that same-named rows expose distinct source paths and that legacy origins are
 identified as unknown, using temporary data without opening folders.
 `hub-backup-format-test` links the enabled editors' actual persistence
 readers/writers in the test executable only. With all three editors enabled it
-checks 46 supported document versions, opening both the vault snapshot and a
+checks 47 supported document versions, opening both the vault snapshot and a
 copy relocated for restoration. Coverage includes imported images inside
 groups, Fusion inputs, Image Editor sidecars, Motion links, Unicode paths,
 spaces, offline sidecars, unchanged source data, and snapshot size accounting.
+Video v25 coverage preserves nonzero Motion publication positions as well as
+rebased link paths, so restored split clips retain their animation time.
 The consumer checks are conditional on the corresponding CMake app options;
 the manager regression also runs in Hub-only configurations.
 

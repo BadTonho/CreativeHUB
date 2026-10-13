@@ -102,6 +102,7 @@ int main(int argc, char** argv) {
             directory / "clip render.mp4", first_source, "video", "mp4", "libx264",
             "Balanced (10 Mbps)", 10.0};
         original.timeline_tracks.front().clips[1].source_duration_frames = 30;
+        original.timeline_tracks.front().clips[0].motion_link->render_start_time_us = 1234567;
         original.timeline_tracks.front().track_id = 1;
         original.timeline_tracks.front().clips[0].clip_id = 1;
         original.timeline_tracks.front().clips[1].clip_id = 2;
@@ -204,6 +205,14 @@ int main(int argc, char** argv) {
             {"Video 2", 1.0, false, {second_track_title}, {}});
         original.timeline_tracks.back().track_id = 2;
         project::save(project_path, original);
+        auto negative_motion_offset = original;
+        negative_motion_offset.timeline_tracks[0].clips[0].motion_link->render_start_time_us = -1;
+        bool negative_offset_rejected = false;
+        try { project::save(directory / "invalid-motion-offset.csp", negative_motion_offset); }
+        catch (const project::ProjectError& error) {
+            negative_offset_rejected = error.code() == project::ProjectErrorCode::InvalidValue;
+        }
+        require(negative_offset_rejected, "A negative Motion publication position was accepted.");
 
         const auto loaded = project::load(project_path);
         require(loaded == original, "A project did not round-trip through JSON.");
@@ -279,7 +288,8 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 24") != std::string::npos &&
+        require(saved_json.find("\"version\": 25") != std::string::npos &&
+                    saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -303,7 +313,14 @@ int main(int argc, char** argv) {
                     saved_json.find("image_editor_variant") != std::string::npos &&
                     saved_json.find("motion_link") != std::string::npos &&
                     saved_json.find("render-é final.mp4") != std::string::npos,
-                "Timeline timing, group row heights, effect states, Fusion node animation, and linked application references were not written to the version 24 project.");
+                "Timeline timing, Fusion animation, and linked publication time were not written to the version 25 project.");
+
+        auto legacy_v24_json = QJsonDocument::fromJson(QByteArray::fromStdString(saved_json)).object();
+        legacy_v24_json.insert("version", 24);
+        const auto legacy_v24_path = directory / "legacy-v24.csp";
+        writeText(legacy_v24_path, QJsonDocument(legacy_v24_json).toJson().toStdString());
+        require(project::load(legacy_v24_path).timeline_tracks[0].clips[0].motion_link->render_start_time_us == 0,
+            "Version 24 Motion links must migrate with zero publication offset.");
 
         auto legacy_v23_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();

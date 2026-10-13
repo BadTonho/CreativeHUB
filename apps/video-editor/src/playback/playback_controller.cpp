@@ -286,7 +286,8 @@ void PlaybackController::refreshComposition() {
                 fusion_preview_node_id,
                 clip.motion_link.has_value()
                     ? pathToQString(clip.motion_link->published_output_path)
-                    : QString()});
+                    : QString(),
+                clip.motion_link.has_value() ? clip.motion_link->render_start_time_us : 0});
         }
 
         for (const auto& transition : track.transitions) {

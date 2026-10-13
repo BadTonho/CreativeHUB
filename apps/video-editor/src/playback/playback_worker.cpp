@@ -1,4 +1,5 @@
 #include "playback_worker.h"
+#include "media/video_probe.h"
 #include <QOpenGLContext>
 
 #include <creative_suite/effects/effects.h>
@@ -816,6 +817,10 @@ void PlaybackWorker::setComposition(
                         composition_session.session = openVideoPlaybackSession(
                             QFileInfo(spec.source_path).filesystemFilePath(), hardware_decoding_enabled_);
                     }
+                }
+                if (!composition_session.spec.linked_render_path.isEmpty()) {
+                    const auto metadata = media::VideoProbe{}.probe(decode_file);
+                    composition_session.publication_frame_rate = metadata.frame_rate.value_or(spec.timeline_frame_rate.asDouble());
                 }
             } else if (spec.kind == timeline::ClipKind::Image) {
                 if (spec.still_frame == nullptr) continue;
@@ -2646,8 +2651,12 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeFusionNodePreview(
         if (!source_offset.has_value() || spec.source_start_frame < 0 ||
             *source_offset > std::numeric_limits<std::int64_t>::max() -
                 spec.source_start_frame) return std::nullopt;
-        const auto decoded = composition.session->decode_frame_at(
-            spec.source_start_frame + *source_offset, should_cancel);
+        const auto selected_frame = spec.linked_render_path.isEmpty()
+            ? std::optional<std::int64_t>(spec.source_start_frame + *source_offset)
+            : timeline::motionRenderFrame(local_frame, spec.timeline_frame_rate,
+                composition.publication_frame_rate, spec.linked_render_start_time_us);
+        if (!selected_frame) return std::nullopt;
+        const auto decoded = composition.session->decode_frame_at(*selected_frame, should_cancel);
         if (decoded.has_value()) selected_clip_frame = *decoded;
     }
     if (should_cancel()) return std::nullopt;
@@ -2785,9 +2794,11 @@ PlaybackWorker::decodeCompositionLayers(
                 spec.source_start_frame) {
             continue;
         }
+        const auto linked_frame = timeline::motionRenderFrame(request.local_frame,
+            spec.timeline_frame_rate, composition.publication_frame_rate, spec.linked_render_start_time_us);
+        if (!spec.linked_render_path.isEmpty() && !linked_frame) continue;
         const auto source_frame = spec.linked_render_path.isEmpty()
-            ? spec.source_start_frame + *source_offset
-            : request.local_frame;
+            ? spec.source_start_frame + *source_offset : *linked_frame;
         std::shared_ptr<const media::VideoFrame> frame;
         creative_suite::media::NativeVideoFramePtr native_frame;
         creative_suite::composition::OpenGlTextureFramePtr graph_texture;
@@ -3285,6 +3296,10 @@ std::optional<std::int64_t> PlaybackWorker::sourceFrameForLocal(
             });
         if (active != composition_sessions_.cend()) {
             const auto& spec = active->spec;
+            if (!spec.linked_render_path.isEmpty()) {
+                return timeline::motionRenderFrame(local_frame, spec.timeline_frame_rate,
+                    active->publication_frame_rate, spec.linked_render_start_time_us);
+            }
             const auto offset = timeline::sourceFrameOffsetForTimelineFrame(
                 local_frame, spec.frame_rate, spec.timeline_frame_rate,
                 spec.source_duration_frames);

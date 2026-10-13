@@ -194,6 +194,7 @@ QJsonObject motionLinkJson(
     object.insert("quality", QString::fromUtf8(link.quality.data(),
         static_cast<qsizetype>(link.quality.size())));
     object.insert("bitrate_mbps", link.bitrate_mbps);
+    object.insert("render_start_time_us", static_cast<qint64>(link.render_start_time_us));
     return object;
 }
 

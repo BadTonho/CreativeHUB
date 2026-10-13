@@ -1,5 +1,9 @@
 # Hub Regression Testing
 
+The Video Editor v25 producer/consumer backup gate includes nonzero Motion
+publication positions. Run `hub-backup-format-test` for snapshot/restoration
+round-trips and `hub-backup-manager-test` for rejection of future v26 documents.
+
 This guide indexes behavior owned by the Hub. Shared update behavior and the
 release contract are documented in [`../WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md).
 Follow the repository-wide requirements in

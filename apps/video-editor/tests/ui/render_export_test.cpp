@@ -1,5 +1,7 @@
 #include "media/video_playback.h"
 #include "media/audio_playback.h"
+#include "media/video_probe.h"
+#include "timeline/timeline_history.h"
 #include "rendering/offline_export_renderer.h"
 #include "rendering/render_output_capabilities.h"
 #include "workspaces/render/queue/render_queue_controller.h"
@@ -1483,6 +1485,59 @@ void validateMotionPublicationExport(const OutputChoice& output,
     checkPublication();
 }
 
+void validateMotionSplitContinuity(const OutputChoice& output, const std::filesystem::path& root) {
+    const auto source = createVideoWithAudioFixture(root);
+    const auto published = root / "motion-animated.mkv";
+    std::filesystem::copy_file(source, published);
+    timeline::TimelineModel model;
+    require(model.addClip(0, media::VideoProbe{}.probe(source), 0) == timeline::AddClipResult::Added,
+        "Motion split fixture could not be inserted.");
+    media::MotionLinkReference link{"split-motion", root / "split.motion", published, source,
+        "video", "matroska", "ffv1", "lossless", 10};
+    require(model.setMotionLink(model.tracks()[0].clips[0].clip_id, link), "Motion link fixture failed.");
+    timeline::TimelineHistory history;
+    timeline::EditState before; before.timeline = model.snapshot();
+    history.recordBeforeEdit(before);
+    require(model.splitClip(0, 0, 45) == timeline::SplitClipResult::Split, "Motion split failed.");
+    timeline::EditState after; after.timeline = model.snapshot();
+    const auto undone = history.undo(after);
+    require(undone && undone->timeline == before.timeline, "Undo lost the Motion publication position.");
+    const auto redone = history.redo(*undone);
+    require(redone && redone->timeline == after.timeline, "Redo lost the Motion publication position.");
+    const auto& right = model.tracks()[0].clips[1];
+    require(right.motion_link->render_start_time_us == 1500000, "Motion split offset is incorrect.");
+    playback::PlaybackWorker worker;
+    std::vector<playback::VideoFramePtr> frames;
+    QObject::connect(&worker, &playback::PlaybackWorker::frameReady,
+        [&](playback::VideoFramePtr frame, qint64, quint64, quint64) { frames.push_back(std::move(frame)); });
+    playback::CompositionLayerSpec spec;
+    spec.source_path = pathToQString(source); spec.frame_rate = 30;
+    spec.timeline_frame_rate = {24, 1}; spec.source_start_frame = right.source_start_frame;
+    spec.segment_frame_count = 12; spec.source_duration_frames = 15;
+    spec.track_index = 0; spec.clip_index = 0; spec.track_id = 1; spec.clip_id = right.clip_id;
+    spec.linked_render_path = pathToQString(published);
+    spec.linked_render_start_time_us = right.motion_link->render_start_time_us;
+    worker.setComposition({spec}, {}, 900);
+    worker.renderCompositionFrame(0, 0, 900);
+    require(frames.size() == 1, "Motion split preview did not return a frame.");
+    auto greenCenter = [](const media::VideoFrame& frame) {
+        const auto offset = static_cast<std::size_t>((frame.height / 2) * frame.stride + (frame.width / 2) * 4);
+        return frame.rgba_pixels[offset + 1] > frame.rgba_pixels[offset] + 80;
+    };
+    require(greenCenter(*frames.back()), "Motion split preview restarted the published animation.");
+    spec.node_graph = fusion::nodes::makePassthroughGraph(); spec.fusion_preview_node_id = 2;
+    worker.setComposition({spec}, {}, 901); worker.renderCompositionFrame(0, 0, 901);
+    require(frames.size() == 2 && greenCenter(*frames.back()), "Fusion preview lost the Motion split offset.");
+    auto job = makeImageJob(output, source, root / "motion-split-export.mkv", 505, 12);
+    job.project_snapshot.timeline_frame_rate = {24, 1};
+    auto& clip = job.project_snapshot.timeline_tracks[0].clips[0];
+    clip.kind = timeline::ClipKind::Video; clip.source_start_frame = 45; clip.source_duration_frames = 15;
+    clip.motion_link = right.motion_link;
+    std::atomic_bool cancel{false}; renderJob(job, cancel);
+    const auto exported = *media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path))->decode_next_frame();
+    require(greenCenter(*exported), "Motion split export restarted the published animation.");
+}
+
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
 void validatePublishedImage(const OutputChoice& output, const std::filesystem::path& root) {
     const auto source = root / "producer-source.png", published = root / "published.png";
@@ -1613,6 +1668,7 @@ int main(int argc, char* argv[]) {
         validateLosslessParity(output, image_path, root);
         validateSharedImageExport(output, image_path, green_image_path, root);
         validateMotionPublicationExport(output, image_path, root);
+        validateMotionSplitContinuity(output, root);
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
         validatePublishedImage(output, root);
 #endif

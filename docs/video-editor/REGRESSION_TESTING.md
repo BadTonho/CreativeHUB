@@ -35,7 +35,7 @@ Its fresh scoped build/deployment gate remained incomplete because the local
 Qt deployment helper could not query `qtpaths`; existing executable results
 must not be treated as clean-build acceptance. A subsequent native scoped
 build succeeded outside the restricted process environment; the deployment
-failure did not require a repository build-configuration change. F07–F10
+failure did not require a repository build-configuration change. F08–F10
 remain open.
 F02 is covered by `verifyRecoveryDurability` in the MainWindow integration
 test: snapshots survive restoration, session destruction, and failed saves;
@@ -58,6 +58,10 @@ original source-in/audio retention, differing publication/project/export rates,
 missing-publication fallback, and audio-disabled export with an offline original.
 Run `creative-suite-motion-editor-export` to verify the producer's export
 contract with this consumer gate.
+F07 is covered by the Timeline Motion-link split/trim checks,
+`validateMotionSplitContinuity` (history and Preview/Fusion/export), project
+v25 round-trip/v24 migration, and `hub-backup-format-test` preserving the
+publication position while relocating the document references.
 
 ## Local gate
 

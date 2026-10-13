@@ -20,6 +20,14 @@ frame to the nearest corresponding source frame using the clip's source rate
 and the persisted project rate. Trimming and splitting use the same conversion
 and enforce the available source-frame bounds.
 
+Motion-linked visual clips retain a separate publication in-point in
+microseconds. Split and left/rolling trim operations advance this position by
+elapsed project time, independent of the original video's source-frame rate.
+Extending a left edge cannot precede publication time zero. Moves preserve the
+in-point, and rate changes preserve its absolute time. Preview/Fusion/export
+map publication time to its native frame rate with half-microsecond rounding
+tolerance so persisted cut positions preserve native-frame midpoint rounding.
+
 `File > Project Settings` can change the active project's canvas and Timeline
 rate. Canvas changes preserve clip transform values and do not automatically
 fit or reposition content. Rate changes preserve elapsed Timeline time by

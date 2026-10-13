@@ -117,6 +117,24 @@ struct FrameRate {
     return result;
 }
 
+// Resolves publication time before rounding to its native frame grid.
+[[nodiscard]] inline std::optional<std::int64_t> motionRenderFrame(
+    std::int64_t local_frame, FrameRate timeline_rate, double publication_rate,
+    std::int64_t render_start_time_us) noexcept {
+    if (local_frame < 0 || render_start_time_us < 0 || !validFrameRate(timeline_rate) ||
+        !std::isfinite(publication_rate) || publication_rate <= 0 || publication_rate > 1000)
+        return std::nullopt;
+    const long double seconds = static_cast<long double>(render_start_time_us) / 1'000'000.0L +
+        static_cast<long double>(local_frame) * timeline_rate.denominator / timeline_rate.numerator;
+    const auto frame = seconds * publication_rate;
+    if (!std::isfinite(frame) || frame >= std::ldexp(1.0L, 63)) return std::nullopt;
+    // Compensate for the half-microsecond quantization of a stored cut position
+    // so a native-frame midpoint rounds identically before and after splitting.
+    const auto rounded = std::floor(frame + 0.5L + publication_rate * 0.0000005L);
+    if (rounded >= std::ldexp(1.0L, 63)) return std::nullopt;
+    return static_cast<std::int64_t>(rounded);
+}
+
 // Converts the full source duration to Timeline frames, rounding up so the
 // converted clip does not end before the source media duration.
 [[nodiscard]] inline std::optional<std::int64_t> timelineFramesForSourceDuration(

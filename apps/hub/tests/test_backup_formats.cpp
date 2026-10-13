@@ -186,6 +186,7 @@ void testVideoDocuments(const QString& root) {
     clip.source_path = fsPath(footage);
     clip.duration_frames = clip.source_duration_frames = 30;
     clip.motion_link = document.media.front().motion_link;
+    clip.motion_link->render_start_time_us = 1234567;
     clip.node_graph = fusion::nodes::makePassthroughGraph();
     clip.node_graph->nodes.front().source_path = fsPath(still);
     clip.node_graph->nodes.front().source_is_still = true;
@@ -229,6 +230,9 @@ void testVideoDocuments(const QString& root) {
         CS_TEST_CHECK(project::load(fsPath(snapshot.vault)) == before);
         const auto after = project::load(fsPath(snapshot.restored));
         CS_TEST_CHECK(after == before);
+        if (version >= project::motion_render_offset_format_version) {
+            CS_TEST_CHECK(after.timeline_tracks[0].clips[0].motion_link->render_start_time_us == 1234567);
+        }
         CS_TEST_CHECK(std::filesystem::exists(after.media.front().source_path));
     }
     CS_TEST_CHECK(readBytes(footage) == "media bytes");

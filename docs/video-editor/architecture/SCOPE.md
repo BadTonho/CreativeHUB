@@ -19,11 +19,12 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 23, including migration from
+- versioned `.csp` persistence through version 25, including migration from
   versions 1 through 13, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio media kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
-  Image Editor links. New projects offer 1920×1080 (16:9) and 1080×1920 (9:16)
+  Image Editor links and Motion links with persisted publication positions.
+  New projects offer 1920×1080 (16:9) and 1080×1920 (9:16)
   canvases plus 24, 25, 30, 48, 50, and 60 fps, defaulting to 16:9 at 30 fps;
 - embedded video audio exposed as linked Audio-track companions, independent
   audio-only tracks, synchronized mixing, per-clip and per-track gain/mute,

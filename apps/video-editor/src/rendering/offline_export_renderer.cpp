@@ -338,7 +338,14 @@ std::optional<media::VideoFrame> composeFrame(
                         *source_offset) {
                     throw std::runtime_error("A source frame index exceeded the supported range.");
                 }
-                source_frame_index = (render_clip.linked_motion ? 0 : clip.source_start_frame) + *source_offset;
+                if (render_clip.linked_motion) {
+                    const auto publication_frame = timeline::motionRenderFrame(local_frame,
+                        timeline_frame_rate, render_clip.source_fps, clip.motion_link->render_start_time_us);
+                    if (!publication_frame) throw std::runtime_error("The Motion publication position is invalid.");
+                    source_frame_index = *publication_frame;
+                } else {
+                    source_frame_index = clip.source_start_frame + *source_offset;
+                }
                 if (compositor.nativeDelivery()) {
                     const auto decoded = render_clip.video->decodeFrameAtNative(source_frame_index,
                         [&canceled] { return canceled.load(std::memory_order_acquire); });

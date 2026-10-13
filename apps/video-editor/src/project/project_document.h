@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 24;
+inline constexpr int current_format_version = 25;
+inline constexpr int motion_render_offset_format_version = 25;
 inline constexpr int linked_motion_format_version = 24;
 inline constexpr int timeline_group_row_heights_format_version = 23;
 inline constexpr int node_animation_format_version = 22;

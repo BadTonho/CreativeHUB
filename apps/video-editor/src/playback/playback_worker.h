@@ -92,6 +92,7 @@ struct CompositionLayerSpec {
     // Ephemeral viewer routing; never serialized to the project document.
     std::optional<fusion::nodes::NodeId> fusion_preview_node_id;
     QString linked_render_path;
+    qint64 linked_render_start_time_us = 0;
 };
 
 struct CompositionTransitionSpec {
@@ -343,6 +344,7 @@ private:
     std::atomic<quint64> pending_seek_sequence_{0};
     std::atomic_bool seek_dispatch_scheduled_{false};
     struct CompositionSession {
+        double publication_frame_rate = 30.0;
         struct GraphInputSession {
             fusion::nodes::NodeId node_id = 0;
             double frame_rate = 30.0;

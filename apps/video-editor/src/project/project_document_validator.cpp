@@ -64,7 +64,8 @@ bool validMotionLinkReference(const media::MotionLinkReference& link,
     if (link.id.empty() || link.document_path.empty() ||
         link.published_output_path.empty() || link.source_path.empty() ||
         link.container.empty() || link.codec.empty() || link.quality.empty() ||
-        !std::isfinite(link.bitrate_mbps) || link.bitrate_mbps <= 0.0) return false;
+        !std::isfinite(link.bitrate_mbps) || link.bitrate_mbps <= 0.0 ||
+        link.render_start_time_us < 0) return false;
     if (link.source_kind != "video" && link.source_kind != "image") return false;
     const auto document = media::MediaLibrary::canonicalPath(link.document_path);
     const auto output = media::MediaLibrary::canonicalPath(link.published_output_path);
