@@ -35,6 +35,13 @@ sequential decoding, reset, end-of-file state, previous-frame re-decoding, and
 frame-at-index decoding. It owns the FFmpeg format context, codec context,
 packet, decoded frame, and RGBA conversion resources through RAII.
 
+Software RGBA conversion gives swscale aligned destination rows and a final
+guard region, then compacts rows in place. Returned frames retain the existing
+tightly packed stride and byte count; no second full-frame buffer is needed.
+This also protects CPU source preparation for adjustment frames. Shared encoder
+tests cover small, unaligned and 1080x1920 portrait conversions under Debug heap
+guards, with YUV round-trip color tolerance separate from pre-encoding parity.
+
 Decoded YUV uses the frame's matrix and full/limited range, falling back to
 stream metadata when a frame is untagged. BT.709, FCC, SMPTE 240M, BT.2020
 non-constant luminance, and BT.601/default coefficients are applied explicitly;

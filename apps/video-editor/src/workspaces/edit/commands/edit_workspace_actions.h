@@ -66,6 +66,7 @@ private:
     std::function<void(const QString&)> status_message_;
     std::vector<QAction*> menu_actions_;
     std::vector<QAction*> shortcut_only_actions_;
+    QAction* duplicate_adjustment_action_ = nullptr;
     QAction* delete_clip_action_ = nullptr;
     QAction* ripple_delete_clip_action_ = nullptr;
     QAction* copy_attributes_action_ = nullptr;

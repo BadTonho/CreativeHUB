@@ -100,7 +100,7 @@ MainWindow::selectedTimelineClipLocation() const noexcept {
             location.has_value()) {
             const auto& clip = timeline_model_.tracks()[location->track_index]
                 .clips[location->clip_index];
-            if (clip.kind == timeline::ClipKind::Text) return location;
+            if (timeline::isGeneratedClipKind(clip.kind)) return location;
             const auto selected_index = selectedMediaIndex();
             if (selected_index.has_value() &&
                 normalizedPath(clip.source_path) == normalizedPath(
@@ -116,7 +116,7 @@ MainWindow::selectedTimelineClipLocation() const noexcept {
             *active_timeline_track_index_cache_)) {
         const auto& active_clip = timeline_model_.tracks()
             [*active_timeline_track_index_cache_].clips[*active_timeline_clip_index_cache_];
-        if (active_clip.kind == timeline::ClipKind::Text) {
+        if (timeline::isGeneratedClipKind(active_clip.kind)) {
             return timeline::ClipLocation{
                 *active_timeline_track_index_cache_, *active_timeline_clip_index_cache_};
         }
@@ -226,7 +226,7 @@ bool MainWindow::canPlaybackSelectedMedia() const noexcept {
 
     const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_cache_]
         .clips[*active_timeline_clip_index_cache_];
-    if (clip.kind == timeline::ClipKind::Text) {
+    if (timeline::isGeneratedClipKind(clip.kind)) {
         return playback_controller_ != nullptr && playback_controller_->available();
     }
 

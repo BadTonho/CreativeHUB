@@ -237,6 +237,27 @@ void testVideoDocuments(const QString& root) {
     }
     CS_TEST_CHECK(readBytes(footage) == "media bytes");
     CS_TEST_CHECK(readBytes(still) == "image bytes");
+    project::ProjectClip adjustment;
+    adjustment.clip_id = 3;
+    adjustment.kind = timeline::ClipKind::Adjustment;
+    adjustment.duration_frames = 60;
+    adjustment.effects = {creative_suite::effects::makeDefaultInstance("video.grayscale")};
+    adjustment.transform.opacity = 0.5;
+    adjustment.keyframes.scale = {{0, 1.0}, {59, 1.5}};
+    project::ProjectTrack adjustment_track;
+    adjustment_track.track_id = 2;
+    adjustment_track.name = "Adjustment";
+    adjustment_track.clips = {adjustment};
+    document.timeline_tracks.insert(document.timeline_tracks.begin(), adjustment_track);
+    const auto adjustment_path = QDir(QFileInfo(assets).absolutePath()).filePath("adjustment.csp");
+    project::save(fsPath(adjustment_path), document);
+    const auto saved = project::load(fsPath(adjustment_path));
+    const auto snapshot = backup(QDir(root).filePath("video-adjustment-v26"), adjustment_path);
+    CS_TEST_CHECK(project::load(fsPath(snapshot.vault)) == saved);
+    const auto restored = project::load(fsPath(snapshot.restored));
+    CS_TEST_CHECK(restored == saved);
+    CS_TEST_CHECK(restored.timeline_tracks.front().clips.front().source_path.empty());
+    CS_TEST_CHECK(restored.timeline_tracks.front().clips.front().keyframes == adjustment.keyframes);
 }
 #endif
 

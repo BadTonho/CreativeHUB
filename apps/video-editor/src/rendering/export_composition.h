@@ -35,6 +35,9 @@ public:
     ExportComposition(const RenderJob&, const OfflineExportOptions&, OfflineExportMetrics&);
     composition::OpenGlFrameCompositor* graphBackend();
     bool nativeDelivery() const noexcept;
+    bool cpuSourceRecovery() const noexcept { return cpu_source_recovery_; }
+    int outputWidth() const noexcept { return job_.settings.width; }
+    int outputHeight() const noexcept { return job_.settings.height; }
     void setCpuSourceRecovery(bool enabled) noexcept { cpu_source_recovery_ = enabled; }
     std::optional<creative_suite::media::RgbaFrame> compose(const std::vector<composition::CompositionLayer>&,
         std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,

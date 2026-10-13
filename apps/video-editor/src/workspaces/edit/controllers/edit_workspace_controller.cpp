@@ -416,6 +416,78 @@ void EditWorkspaceController::addTextClipAt(
     }
 }
 
+void EditWorkspaceController::duplicateSelectedAdjustmentClip() {
+    if (!active_timeline_clip_id_ || playback_is_loading_) return;
+    try {
+        const auto result = execute(application::DuplicateAdjustmentClipCommand{*active_timeline_clip_id_});
+        if (result.changed()) publishCommittedEdit(result, true, true, QStringLiteral("Adjustment Clip duplicated."));
+        else emit statusMessageRequested(QStringLiteral("No free range is available immediately after this Adjustment Clip."));
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(logging::Level::Error, "timeline", "duplicate_adjustment", error.what(),
+            {{"clip_id", std::to_string(*active_timeline_clip_id_)}});
+        emit statusMessageRequested(QStringLiteral("Could not duplicate the Adjustment Clip."));
+    }
+}
+
+void EditWorkspaceController::addAdjustmentClipAt(
+    timeline::TrackId track_id,
+    qint64 timeline_frame) {
+    const auto track_index = timeline_model_.locateTrack(track_id);
+    if (!track_index.has_value() || timeline_frame < 0) {
+        emit statusMessageRequested(
+            QStringLiteral("No video track is available for an adjustment clip."));
+        return;
+    }
+
+    const double frame_rate = timeline_model_.frameRate().asDouble();
+    const auto duration_frames = std::max<std::int64_t>(
+        1, static_cast<std::int64_t>(std::ceil(frame_rate * 5.0)));
+    try {
+        const auto result = execute(application::AddAdjustmentClipCommand{
+            track_id, timeline_frame, duration_frames});
+        if (!result.changed()) {
+            if (result.reason == application::EditReason::Overlap) {
+                emit statusMessageRequested(
+                    QStringLiteral("A clip already occupies that range."));
+            } else {
+                emit statusMessageRequested(
+                    QStringLiteral("The adjustment clip could not be added."));
+            }
+            return;
+        }
+
+        publishCommittedEdit(
+            result, false, true, QStringLiteral("Adjustment Clip added."));
+        if (playback_available_ && result.selection.active_clip_id.has_value()) {
+            const auto location = timeline_model_.locateClip(
+                *result.selection.active_clip_id);
+            if (location.has_value() &&
+                timeline_model_.tracks()[location->track_index]
+                    .clips[location->clip_index].kind == timeline::ClipKind::Adjustment) {
+                emit renderCompositionFrameRequested(
+                    timelinePlayheadFrame(), playback_frame_index_);
+                return;
+            }
+        }
+        if (canPlaybackSelectedMedia()) {
+            emit seekActiveClipRequested(playback_frame_index_);
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "add_adjustment",
+            error.what(),
+            {{"track_id", std::to_string(track_id)},
+             {"timeline_frame", std::to_string(timeline_frame)}});
+        emit statusMessageRequested(
+            QStringLiteral("Could not add the adjustment clip."));
+        emit warningMessageRequested(
+            QStringLiteral("Timeline error"),
+            QStringLiteral("The adjustment clip could not be added."));
+    }
+}
+
 void EditWorkspaceController::handleTimelineEffectDrop(
     const QString& effect_id,
     timeline::TrackId track_id,
@@ -431,6 +503,10 @@ void EditWorkspaceController::handleTimelineEffectDrop(
         const auto clip_id = timeline_model_.tracks()[location->track_index]
             .clips[location->clip_index].clip_id;
         static_cast<void>(addEffectToClip(clip_id, effect_id));
+        return;
+    }
+    if (effect_id == QStringLiteral("video.adjustment_clip")) {
+        addAdjustmentClipAt(track_id, timeline_frame);
         return;
     }
     if (effect_id != QStringLiteral("text.text")) {
@@ -450,7 +526,7 @@ bool EditWorkspaceController::selectedClipSupportsEffects() const noexcept {
     }
     const auto kind = timeline_model_.tracks()[location->track_index]
         .clips[location->clip_index].kind;
-    return kind == timeline::ClipKind::Video || kind == timeline::ClipKind::Image;
+    return timeline::supportsClipEffects(kind);
 }
 
 void EditWorkspaceController::applyFusionNodeGraph(
@@ -715,7 +791,7 @@ bool EditWorkspaceController::addEffectToClip(
     }
     const auto clip = timeline_model_.tracks()[location->track_index]
         .clips[location->clip_index];
-    if (clip.kind != timeline::ClipKind::Video && clip.kind != timeline::ClipKind::Image) {
+    if (!timeline::supportsClipEffects(clip.kind)) {
         return false;
     }
     auto effects = clip.effects;
@@ -745,7 +821,7 @@ bool EditWorkspaceController::addEffectToClip(
 void EditWorkspaceController::addEffectToSelectedClip(const QString& effect_id) {
     if (!selectedClipSupportsEffects()) {
         emit statusMessageRequested(
-            QStringLiteral("Select a video or image clip to add an effect."));
+            QStringLiteral("Select a video, image, or adjustment clip to add an effect."));
         return;
     }
     const auto location = selectedTimelineClipLocation();
@@ -770,8 +846,7 @@ void EditWorkspaceController::setSelectedClipEffectEnabled(int index, bool enabl
     }
     const auto& clip = timeline_model_.tracks()[location->track_index]
         .clips[location->clip_index];
-    if ((clip.kind != timeline::ClipKind::Video &&
-         clip.kind != timeline::ClipKind::Image) ||
+    if (!timeline::supportsClipEffects(clip.kind) ||
         index < 0 || static_cast<std::size_t>(index) >= clip.effects.size()) {
         return;
     }
@@ -1238,7 +1313,7 @@ void EditWorkspaceController::setPlaybackPresentation(
         location.has_value()) {
         const auto& clip = timeline_model_.tracks()[location->track_index]
             .clips[location->clip_index];
-        if (clip.kind == timeline::ClipKind::Text) {
+        if (timeline::isGeneratedClipKind(clip.kind)) {
             has_available_timeline_clip = true;
         } else {
             const auto media = std::find_if(
@@ -1357,7 +1432,7 @@ EditWorkspaceController::selectedTimelineClipLocation() const noexcept {
             location.has_value()) {
             const auto& clip = timeline_model_.tracks()[location->track_index]
                 .clips[location->clip_index];
-            if (clip.kind == timeline::ClipKind::Text) return location;
+            if (timeline::isGeneratedClipKind(clip.kind)) return location;
             if (selected_path.has_value() &&
                 clip.source_path.lexically_normal() == selected_path->lexically_normal()) {
                 return location;
@@ -1422,7 +1497,7 @@ bool EditWorkspaceController::canPlaybackSelectedMedia() const noexcept {
     if (!location.has_value()) return false;
     const auto& clip = timeline_model_.tracks()[location->track_index]
         .clips[location->clip_index];
-    if (clip.kind == timeline::ClipKind::Text) return true;
+    if (timeline::isGeneratedClipKind(clip.kind)) return true;
     const auto found = std::find_if(
         session_.mediaItems().begin(), session_.mediaItems().end(),
         [&clip](const application::ImportedMedia& item) {
@@ -1630,8 +1705,7 @@ void EditWorkspaceController::updateInspector() {
         ? &timeline_model_.tracks()[location->track_index].clips[location->clip_index]
         : nullptr;
     const bool effects_enabled = selected_clip != nullptr && !transition_enabled &&
-        (selected_clip->kind == timeline::ClipKind::Video ||
-         selected_clip->kind == timeline::ClipKind::Image);
+        timeline::supportsClipEffects(selected_clip->kind);
     publishEffectTargetAvailability(effects_enabled);
     if (selected_clip != nullptr && selected_clip->clip_id != inspector_effect_clip_id_) {
         inspector_effect_clip_id_ = selected_clip->clip_id;
@@ -2304,7 +2378,7 @@ void EditWorkspaceController::handleTimelineClipSplit(
         if (media != session_.mediaItems().end() && !media->offline) {
             emit activateTimelineClipRequested(
                 edited.clip_id, 0, false, false);
-        } else if (source_clip.kind == timeline::ClipKind::Text) {
+        } else if (timeline::isGeneratedClipKind(source_clip.kind)) {
             emit renderCompositionFrameRequested(
                 timelinePlayheadFrame(), playback_frame_index_);
         }
@@ -2360,7 +2434,7 @@ void EditWorkspaceController::handleTimelineClipTrim(
         if (!edited_location.has_value()) return;
         const auto& edited = timeline_model_.tracks()[edited_location->track_index]
             .clips[edited_location->clip_index];
-        if (edited.kind == timeline::ClipKind::Text ||
+        if (timeline::isGeneratedClipKind(edited.kind) ||
             edited.kind == timeline::ClipKind::Image) {
             emit activateTimelineClipRequested(
                 edited.clip_id, playback_frame_index_, false, true);
@@ -2491,7 +2565,7 @@ void EditWorkspaceController::deleteActiveTimelineClip() {
     if (!location.has_value() || playback_is_loading_) return;
     const auto clip = timeline_model_.tracks()[location->track_index]
         .clips[location->clip_index];
-    if (clip.kind != timeline::ClipKind::Text) {
+    if (!timeline::isGeneratedClipKind(clip.kind)) {
         const auto imported = std::find_if(
             session_.mediaItems().begin(), session_.mediaItems().end(),
             [&clip](const application::ImportedMedia& item) {
@@ -2511,7 +2585,7 @@ void EditWorkspaceController::deleteActiveTimelineClip() {
         const auto& next_clip = timeline_model_.tracks()[next->track_index]
             .clips[next->clip_index];
         emit selectMediaBrowserClipRequested(next_clip.clip_id);
-        if (next_clip.kind == timeline::ClipKind::Text) {
+        if (timeline::isGeneratedClipKind(next_clip.kind)) {
             emit activateTimelineClipRequested(next_clip.clip_id, 0, false, false);
         } else {
             const auto next_media = std::find_if(
@@ -2556,7 +2630,7 @@ void EditWorkspaceController::rippleDeleteActiveTimelineClip() {
         const auto& next_clip = timeline_model_.tracks()[next->track_index]
             .clips[next->clip_index];
         emit selectMediaBrowserClipRequested(next_clip.clip_id);
-        if (next_clip.kind == timeline::ClipKind::Text) {
+        if (timeline::isGeneratedClipKind(next_clip.kind)) {
             emit activateTimelineClipRequested(next_clip.clip_id, 0, false, false);
         } else {
             const auto next_media = std::find_if(
@@ -2587,7 +2661,7 @@ void EditWorkspaceController::splitActiveClipAtPlayhead() {
     if (!location.has_value() || playback_is_loading_) return;
     const auto& clip = timeline_model_.tracks()[location->track_index]
         .clips[location->clip_index];
-    if (clip.kind != timeline::ClipKind::Text && !canPlaybackSelectedMedia()) return;
+    if (!timeline::isGeneratedClipKind(clip.kind) && !canPlaybackSelectedMedia()) return;
     handleTimelineClipSplit(clip.clip_id, playback_frame_index_);
 }
 
@@ -2666,7 +2740,7 @@ void EditWorkspaceController::handleTimelineClipSelectionChanged(
 
     const bool base_track_media = location->track_index == 0 &&
         timeline::isMediaClipKind(clip.kind);
-    if (!base_track_media && clip.kind == timeline::ClipKind::Text) {
+    if (!base_track_media && timeline::isGeneratedClipKind(clip.kind)) {
         playback_is_playing_ = false;
         playback_frame_index_ = selected_local_frame;
         updateTimelineState();
@@ -2674,7 +2748,8 @@ void EditWorkspaceController::handleTimelineClipSelectionChanged(
         emit refreshPlaybackUiRequested();
         emit activateTimelineClipRequested(
             clip.clip_id, selected_local_frame, false, !move_playhead);
-        emit statusMessageRequested(QStringLiteral("Text clip selected."));
+        emit statusMessageRequested(clip.kind == timeline::ClipKind::Adjustment
+            ? QStringLiteral("Adjustment Clip selected.") : QStringLiteral("Text clip selected."));
         return;
     }
 

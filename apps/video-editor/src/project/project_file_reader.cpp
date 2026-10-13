@@ -854,6 +854,9 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         clip.kind = timeline::ClipKind::Video;
                     } else if (kind.toString() == QLatin1String("image")) {
                         clip.kind = timeline::ClipKind::Image;
+                    } else if (version >= adjustment_clip_format_version &&
+                               kind.toString() == QLatin1String("adjustment")) {
+                        clip.kind = timeline::ClipKind::Adjustment;
                     } else if (kind.toString() == QLatin1String("text")) {
                         clip.kind = timeline::ClipKind::Text;
                     } else if (version >= audio_tracks_format_version &&
@@ -866,8 +869,15 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                 if (timeline::isMediaClipKind(clip.kind)) {
                     clip.source_path = resolvedPath(
                         project_path, requiredString(clip_object, "source", project_path));
-                } else {
+                } else if (clip.kind == timeline::ClipKind::Text) {
                     clip.text = parseTextStyle(clip_object, project_path);
+                } else if (clip.kind == timeline::ClipKind::Adjustment &&
+                           (clip_object.contains("source") || clip_object.contains("text") ||
+                            clip_object.contains("source_duration_frames") ||
+                            clip_object.contains("source_start_time_us") ||
+                            clip_object.contains("source_duration_time_us"))) {
+                    throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                              "An adjustment clip cannot contain media or text fields.");
                 }
                 if (version >= linked_image_format_version &&
                     clip_object.contains("image_editor_variant")) {

@@ -8,6 +8,33 @@ source paths, media metadata, explicit timeline positions, source offsets, and
 segment durations.
 It does not own decoded frames, FFmpeg resources, or Qt objects.
 
+## Adjustment clips
+
+Effects > Video includes a draggable **Adjustment Clip** generator. Dropping it
+on an unoccupied video track creates five seconds in project frames (rounded up,
+minimum one frame). The violet block has no thumbnail or waveform. Selection
+routes Preview to the timeline composition and enables the existing transform
+and effects Inspector. Functions can add the four existing visual filters.
+
+`ClipKind::Adjustment` owns identity, duration, effects and transform curves,
+without source media, audio, text, external links or Fusion graphs. It affects
+strictly lower video tracks; moving a track changes that scope. Multiple
+adjustments apply from the bottom of the stack upward. Audio tracks, any
+same-track collision and transitions involving an adjustment are rejected as
+normal editing outcomes. Media and text keep their existing overlap rules.
+
+Move, individual/rolling edge edits, split, delete, attribute clipboard and
+Undo/Redo use the existing command service. **Edit > Duplicate Adjustment Clip**
+places a copy immediately after the selected adjustment, including its effects
+and transform curves, if that range is free. It has no default shortcut.
+Generated duration can extend beyond its initial five seconds while respecting
+neighbors, the one-frame minimum and numeric timeline limits. Source offset and
+source duration remain zero after edits. Splits and trims use the existing
+curve slicing, including endpoint anchors and easing continuity. Project FPS
+changes rescale timeline positions, duration and curves by the existing rational
+timebase conversion; generated metadata follows the new duration.
+
+
 ## Timeline timebase
 
 Each project stores a reduced rational Timeline frame rate. File > New Project

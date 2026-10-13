@@ -32,7 +32,16 @@ enum class ClipKind {
     Image,
     Text,
     Audio,
+    Adjustment,
 };
+
+[[nodiscard]] constexpr bool isGeneratedClipKind(ClipKind kind) noexcept {
+    return kind == ClipKind::Text || kind == ClipKind::Adjustment;
+}
+
+[[nodiscard]] constexpr bool supportsClipEffects(ClipKind kind) noexcept {
+    return kind == ClipKind::Video || kind == ClipKind::Image || kind == ClipKind::Adjustment;
+}
 
 enum class TrackKind {
     Video,
@@ -349,6 +358,9 @@ public:
 
     // Compatibility helpers for the original single-track API.
     AddClipResult addClip(const media::VideoMetadata& metadata);
+    AddClipResult addAdjustmentClip(
+        std::size_t track_index, std::int64_t timeline_start_frame,
+        std::int64_t duration_frames);
     AddClipResult addTextClip(
         std::size_t track_index,
         std::int64_t timeline_start_frame,

@@ -75,6 +75,8 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/playback_frame_mailbox.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/playback_frame_mailbox.h
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/frame_compositor.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/adjustment_composition.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/adjustment_composition.h
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/frame_compositor.h
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/preview_performance_metrics.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/preview_performance_metrics.h

@@ -26,6 +26,7 @@ const QVector<Definition>& definitions() {
                               QString::fromUtf8(effect.category_id.data(),
                                                 static_cast<qsizetype>(effect.category_id.size()))});
         }
+        result.push_back({QStringLiteral("video.adjustment_clip"), QStringLiteral("Adjustment Clip"), QStringLiteral("video")});
         result.push_back({QStringLiteral("audio.gain"), QStringLiteral("Gain"), QStringLiteral("audio")});
         result.push_back({QStringLiteral("transitions.cross_dissolve"), QStringLiteral("Cross Dissolve"), QStringLiteral("transitions")});
         result.push_back({QStringLiteral("transitions.fade_to_black"), QStringLiteral("Fade to Black"), QStringLiteral("transitions")});

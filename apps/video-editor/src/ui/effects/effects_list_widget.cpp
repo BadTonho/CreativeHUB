@@ -18,6 +18,7 @@ bool isDraggableEffect(const QString& effect_id) {
     return creative_suite::effects::findDefinition(
                std::string_view(utf8.constData(), static_cast<std::size_t>(utf8.size()))) != nullptr ||
         effect_id == QStringLiteral("text.text") ||
+        effect_id == QStringLiteral("video.adjustment_clip") ||
         effect_id == QStringLiteral("transitions.cross_dissolve") ||
         effect_id == QStringLiteral("transitions.fade_to_black");
 }

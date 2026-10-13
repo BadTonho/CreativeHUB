@@ -226,7 +226,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     effects_page_layout->setContentsMargins(12, 12, 12, 12);
     effects_page_layout->setSpacing(8);
     ui_.effect_selection_hint = new QLabel(
-        "Select a video or image clip to view and edit its effects.", effects_page);
+        "Select a video, image, or adjustment clip to view and edit its effects.", effects_page);
     ui_.effect_selection_hint->setWordWrap(true);
     ui_.effect_selection_hint->setStyleSheet("color: #9aa4b2;");
     effects_page_layout->addWidget(ui_.effect_selection_hint);

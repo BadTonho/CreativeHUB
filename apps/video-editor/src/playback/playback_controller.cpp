@@ -664,7 +664,7 @@ PlaybackCommandResult PlaybackController::activateClip(
     }
     playing_ = timeline_clock_active_ || resume_playback;
 
-    if (clip.kind == timeline::ClipKind::Text ||
+    if (timeline::isGeneratedClipKind(clip.kind) ||
         clip.kind == timeline::ClipKind::Image ||
         clip.kind == timeline::ClipKind::Audio) {
         if (composition_ready_) {
@@ -763,7 +763,7 @@ std::int64_t PlaybackController::timelineFrame() const noexcept {
 }
 
 bool PlaybackController::clipCanPlay(const timeline::TimelineClip& clip) const {
-    if (clip.kind == timeline::ClipKind::Text) return true;
+    if (timeline::isGeneratedClipKind(clip.kind)) return true;
     const auto& library = session_.mediaLibrary();
     if (!library.contains(clip.source_path)) return false;
     const auto index = library.indexForPath(clip.source_path);
@@ -796,7 +796,7 @@ PlaybackCommandResult PlaybackController::play() {
             clip.clip_id;
     const bool ready = same_clip &&
         (ready_clip_id_ == clip.clip_id ||
-         clip.kind == timeline::ClipKind::Text ||
+         timeline::isGeneratedClipKind(clip.kind) ||
          clip.kind == timeline::ClipKind::Image);
     if (!ready) {
         const auto local = target_frame - clip.timeline_start_frame;
@@ -897,7 +897,7 @@ PlaybackCommandResult PlaybackController::seekTimeline(std::int64_t global_frame
         session_.timeline().tracks()[active->track_index].clips[active->clip_index].clip_id ==
             clip.clip_id;
     if (!same_clip || ready_clip_id_ != clip.clip_id ||
-        clip.kind == timeline::ClipKind::Text ||
+        timeline::isGeneratedClipKind(clip.kind) ||
         clip.kind == timeline::ClipKind::Image) {
         return activateClip(clip.clip_id, local, false);
     }

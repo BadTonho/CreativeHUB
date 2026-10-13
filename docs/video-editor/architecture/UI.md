@@ -134,10 +134,16 @@ favoriting behavior yet. The Toolbox contains
 the categories `All`, `Video`, `Audio`, `Transitions`, and `Text`. Selecting a
 category filters the four CPU visual filters — `Grayscale`, `Brightness`,
 `Contrast`, and `Saturation` — plus the existing `Gain`, `Cross Dissolve`,
-`Fade to Black`, and `Text` entries. The four visual filters can be dragged
-onto a video or image clip in the Timeline. They are added in order and may be
+`Fade to Black`, `Text`, and `Adjustment Clip` entries. The four visual filters can be dragged
+onto a video, image or adjustment clip in the Timeline. They are added in order and may be
 repeated. Selecting a visual clip exposes its effect stack, parameters, and
 reorder/remove controls in the Inspector. `Gain` remains an audio UI prototype.
+Adjustment Clip can be dragged to a free video-track range to create five
+seconds of generated adjustment content. Its violet block has no thumbnail or
+waveform. Selection presents the composed Timeline in Preview and the existing
+Inspector effects and transform controls; opacity controls adjustment strength.
+Edit > Duplicate Adjustment Clip copies the selected adjustment immediately
+after it if space is free. Transitions reject adjustment endpoints.
 The Text entry is the Timeline text-clip tool: it can be dragged to a track and
 frame in the Timeline to create a five-second text clip. `Cross Dissolve` and
 `Fade to Black` can be dragged onto a contiguous cut in the same track; the
@@ -348,7 +354,7 @@ batches only after acceptance; cancelling preserves the active bindings.
 `Shift + Space` opens and closes the non-modal floating `Functions` window.
 The 420x360 filter picker is centered over the Video Editor. It offers search
 across the four visual filters and an `Add`/`Cancel` action row. With no
-selected video or image clip, search remains enabled and `Add` is disabled.
+selected video, image or adjustment clip, search remains enabled and `Add` is disabled.
 `Add` or Enter applies the selected filter and closes the picker; Cancel closes
 it without editing the Timeline. Functions is an additional quick-access path
 and does not replace the Effects dock. Both Effects and Functions can drag

@@ -5,6 +5,17 @@ boundary for session state and timeline commands. Project/media lifecycle is
 described in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md);
 playback ownership is described in [Playback Controller](PLAYBACK_CONTROLLER.md).
 
+## Generated adjustment commands
+
+`AddAdjustmentClipCommand` inserts source-free generated content on a video
+track. `DuplicateAdjustmentClipCommand` stages insertion and copies effects,
+transform and keyframes before publishing one history entry. Both commands
+select the new stable clip ID and invalidate playback. Collisions, incompatible
+tracks and invalid numeric ranges leave the session and history unchanged.
+Existing move, trim, split, delete, attributes and project-rate commands operate
+on adjustments; media/Fusion/audio operations reject this kind.
+
+
 ## Ownership
 
 `application::EditorSession` owns the working timeline model and undo history, the media library and bins, stable timeline selection, the playhead, the current project path, the saved project baseline, and the dirty flag. The project file format is unchanged. Project lifecycle, media mutation, asynchronous import, and transactional open are described in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md).

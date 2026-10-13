@@ -21,6 +21,98 @@ The required policy for every current and future application is in
 should have either an automated test or a documented manual validation step
 before the related change is considered complete.
 
+## Adjustment Clip verification
+
+`tests/rendering/adjustment_clip_test.cpp`, registered in
+`tests/rendering/CMakeLists.txt` as `creative-suite-main-editor-adjustment`,
+exercises the following observable contracts:
+
+| Behavior | Verification |
+| --- | --- |
+| Creation, selection and controls | Actual Qt drop events create five seconds on video tracks; collisions, audio tracks, transition drops and read-only Timeline are rejected. The real Edit workspace enables all transform/keyframe controls, Functions' existing effect insertion and Duplicate Adjustment Clip. |
+| Editing and history | Stable identities; movement, track reordering, trim/extension, split, duplication, deletion, attribute paste, undo/redo and FPS conversion. Source timing remains zero; partial linear/Bezier curves retain sampled values through split and trim. |
+| Composed pixels | Synthetic sources, strength 0/50/100%, black exposed transform areas, higher layers, stacked adjustments, no lower content, disabled neutral stacks and cancellation. Worker checks include cuts, lower transitions, text, Fusion and linked Motion publication sampling. |
+| Preview/export parity and routing | Borrowed RGBA export frames are compared byte-for-byte with PlaybackWorker output before encoding; FFV1 decoded output is checked with RGB tolerance 6 for the existing RGBA/YUV conversions. Stacked transformed adjustments, a cut, Fusion and an upper layer repeat pre-encoding parity. Deterministic GPU adapters prove ordinary frames resume GPU after adjusted CPU frames without warnings or GPU failure. |
+| Persistence and diagnostics | v26 save/reopen and autosave, no source/text fields, rejection of adjustment in v25 and invalid media fields. Source preparation failure is logged before worker feedback. Hub producer/consumer restoration is in `hub-backup-format-test`. |
+
+Relevant existing gates remain Timeline/model/command-service/trim/geometry/UI,
+project/autosave, playback worker/controller/frame navigation, effects panel,
+Edit controller, main window, transform/text composition, render export and
+Hub backup format/manager. The Adjustment test runs Qt offscreen with audio
+output disabled; native GPU tests and human acceptance remain separate.
+
+Manual check (pending native graphical acceptance):
+
+1. Launch `build/apps/video-editor/Debug/creative-suite-video-editor.exe`.
+   Put distinct source clips across a cut on a lower video track; include a
+   transition, text and a Fusion or linked publication on lower tracks.
+2. Open Effects > Video and drag Adjustment Clip to a free upper video lane.
+   Expect a violet five-second block without thumbnail/waveform. Select it;
+   Preview shows the composed Timeline, and the Inspector enables effects,
+   position, scale, rotation, opacity and their keyframe controls.
+3. Add Grayscale/Brightness with Effects drag and Shift+Space Functions. Change
+   strength to 0%, 50% and 100%; compare original, mixed and adjusted results.
+   Keyframe every transform property, move/trim/extend/split, duplicate through
+   Edit, copy/paste attributes, delete, Undo and Redo. No jump should occur at
+   an animated split. Audio placement, same-track collision and transition
+   endpoints must be refused without an error entry.
+4. Add another adjustment and an upper ordinary clip; reorder video tracks.
+   Verify bottom-to-top application and preservation of content above each
+   adjustment. Seek gaps and the first/last adjusted frame. Repeat Full, Half
+   and Quarter quality with GPU composition enabled; GPU resumes on ordinary
+   frames without a warning. Repeat export with an accelerated encoder.
+5. Save/reopen and recover an autosave; backup/restore in the Debug Hub and
+   reopen the relocated snapshot. Effects/curves and lower media must persist,
+   and no missing-media message may identify the adjustment.
+
+Record build, OS, GPU/driver and codec details with each outcome. macOS/Linux
+native execution, hardware encoder routing and prolonged decoded-media playback
+are pending until separately recorded. Synthetic CPU measurements below do not
+establish native playback or release acceptance.
+
+### Windows Debug measurements, 2026-10-13
+
+The canonical Video Editor and Hub Debug targets built successfully. The scoped
+gate finished with all 27 relevant tests passing and no skips: 26 existing
+Timeline, project, playback, UI, export, shared media, Motion consumer and Hub
+backup tests passed in the broad run; the final Adjustment test passed after
+its drop fixture was moved from the clip boundary to its center. MainWindow
+coverage also verifies adjustment insertion/effects dirty the real document,
+save clears the flag and undo returns to that saved state. Native OpenGL
+timeline regression passed on Windows; adjustment routing itself uses
+deterministic adapters and does not claim hardware encoder acceptance.
+
+Verified runnable outputs (local time, UTC-03:00):
+
+- `build/apps/video-editor/Debug/creative-suite-video-editor.exe`, modified
+  2026-10-13 14:45:16, 9,959,424 bytes.
+- `build/apps/hub/Debug/creative-suite-hub.exe`, modified
+  2026-10-13 14:08:41, 2,305,024 bytes; the final build confirmed it was current.
+
+No application version metadata, installers or remote submissions were changed.
+
+Host: AMD Ryzen 5 3600 (6 cores / 12 logical processors), Qt 6.7.2, MSVC
+Debug. Run the adjustment test with `--benchmark small`, `medium`, or `heavy`.
+Each separate process renders 12 sequential frames and 12 nonsequential seeks
+through PlaybackWorker, using shared synthetic still pixels, neutral transforms
+and half-strength Grayscale adjustments. Full/Half/Quarter use the normal
+1920x1080 project canvas. Times include worker composition and bounded cache
+handling; they exclude file decoding, timed playback, audio and presentation.
+
+| Workload | Clips / active sources / adjustments | Output | Sequential ms/frame | Seek ms/frame | Peak working set MiB | Sampled peak private MiB |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| Small | 10 / 2 / 1 | 480x270 | 31.44 | 33.10 | 27.32 | 28.00 |
+| Medium | 100 / 4 / 2 | 960x540 | 267.66 | 262.29 | 35.44 | 34.18 |
+| Heavy | 1000 / 8 / 3 | 1920x1080 | 1560.33 | 1536.50 | 70.59 | 71.44 |
+
+Windows process peak working set and private bytes sampled every 100 ms include
+Qt, source storage and frame caches. These Debug CPU results show that medium
+and heavy stacks need lower Preview quality or further measured optimization
+for interactive playback. They do not establish Release performance or a
+long-session memory ceiling. Native graphical interaction, real decoded-media
+playback, hardware encoding and macOS/Linux execution remain pending.
+
+
 ## 2026-10-12 audit gaps
 
 The [Video Editor audit](AUDIT_2026-10-12.md) records ten reproduced functional

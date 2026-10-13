@@ -3,6 +3,19 @@
 Status: the current implementation and approved foundation direction are
 documented separately below. Some approved release capabilities remain planned.
 
+## Adjustment Clip first version
+
+Adjustment clips compose and modify all lower video tracks for their duration,
+with ordered existing effects, position/scale/rotation and opacity strength,
+including transform keyframes. Generated duration editing, splitting,
+duplication, attribute clipboard, history, persistence/recovery and Hub backup
+are implemented. Adjusted frames use CPU composition; ordinary frames retain
+the configured GPU path. Fusion on adjustments, independent Fusion
+compositions, new effects and selecting a subset of lower tracks are excluded.
+Native graphical acceptance and macOS/Linux runtime validation remain pending
+until separately recorded; implemented behavior does not imply release acceptance.
+
+
 ## Implemented today
 
 The Video Editor currently includes:
@@ -21,9 +34,9 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 25, with versions 1 through 24
+- versioned `.csp` persistence through version 26, with versions 1 through 25
   readable, a rational Timeline rate and separate source/Timeline
-  clip durations, video/image/text/audio media kinds, typed tracks,
+  clip durations, video/image/text/audio/adjustment clip kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
   Image Editor links and Motion links with persisted publication positions.
   New projects offer 1920×1080 (16:9) and 1080×1920 (9:16)
@@ -92,7 +105,7 @@ effect to the Timeline stack. Merge combines its background and foreground with
 straight-alpha source-over. The graph output replaces the clip image before
 its existing Inspector effect stack and Timeline transform/keyframes.
 
-Graph animation was introduced in `.csp` version 22 and is retained in version 25.
+Graph animation was introduced in `.csp` version 22 and is retained in version 26.
 Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its

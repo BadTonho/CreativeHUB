@@ -400,6 +400,7 @@ private:
     qint64 last_transition_preroll_start_frame_ = -1;
     quint64 composition_revision_ = 0;
     rendering::FrameCompositionTimings composition_timings_scratch_;
+    bool adjustment_cpu_frame_ = false;
     bool composition_enabled_ = false;
     std::int64_t primary_timeline_start_frame_ = 0;
     std::int64_t composition_start_frame_ = 0;

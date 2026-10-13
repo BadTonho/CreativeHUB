@@ -10,6 +10,12 @@ and decoded pixels agree. Quarter-turn/reflection and oriented export regression
 are indexed in the same shared-decoder gate. Nonidentity display matrices use
 explicit RGBA presentation while native transform delivery is pending.
 
+Shared RGBA conversion pads swscale destination rows and compacts them in place
+before delivery, preserving stride, byte count and pixel order. The shared
+`creative-suite-video-encoder` Debug regression exercises unaligned and portrait
+storage; `creative-suite-motion-editor-preview` and
+`creative-suite-motion-editor-export` protect both Motion consumers.
+
 Status: **approved 2D MVP product boundary; Windows technical acceptance
 remains in progress**. A standalone
 Motion Studio shell and in-memory composition/layer model have started using

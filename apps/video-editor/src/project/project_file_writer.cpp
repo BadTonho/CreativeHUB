@@ -242,7 +242,8 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         for (const auto& clip : track_source.clips) {
             QJsonObject item;
             item.insert("clip_id", static_cast<qint64>(clip.clip_id));
-            const char* clip_kind = clip.kind == timeline::ClipKind::Text
+            const char* clip_kind = clip.kind == timeline::ClipKind::Adjustment
+                ? "adjustment" : clip.kind == timeline::ClipKind::Text
                 ? "text"
                 : clip.kind == timeline::ClipKind::Image ? "image"
                 : clip.kind == timeline::ClipKind::Audio ? "audio" : "video";
@@ -253,7 +254,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             }
             if (timeline::isMediaClipKind(clip.kind)) {
                 item.insert("source", storedPath(project_path, clip.source_path));
-            } else {
+            } else if (clip.kind == timeline::ClipKind::Text) {
                 QJsonObject text;
                 text.insert("content", QString::fromUtf8(
                     clip.text.content.data(), static_cast<int>(clip.text.content.size())));

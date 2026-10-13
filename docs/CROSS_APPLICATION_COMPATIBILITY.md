@@ -337,3 +337,15 @@ is enabled, the Video Editor main-window regression links the Image Editor core
 for a test fixture, publishes a masked PNG, and checks refresh, retained alpha,
 and clip-variant isolation. This test dependency does not affect application
 runtime dependencies or a Video Editor-only build.
+
+## Video adjustment persistence and Hub backups
+
+The Video Editor owns source-free Adjustment Clips in `.csp` v26. Their ordered
+lower-track composition is an editor-specific timeline operation, reusing shared
+animation, effects and composition primitives. It does not introduce a shared
+Motion/Image document or handoff protocol. The Hub path adapter accepts v26
+and preserves adjustment duration, effects and transform curves without adding
+media references. `hub-backup-format-test` produces with the Video Editor writer
+and restores through its reader, alongside versions 1–25. Application version
+metadata remains unchanged. Native restore/reopen visual acceptance is separate
+from this automated producer/consumer contract; see [Hub regression testing](hub/REGRESSION_TESTING.md).

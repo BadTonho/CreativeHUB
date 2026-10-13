@@ -8,6 +8,20 @@ on the shared RGBA frame type and standard C++ only; it does not depend on Qt
 Widgets or own application UI. Each application keeps its own effect model,
 document format, and user interface.
 
+## Video Editor adjustment layer
+
+The Effects > Video catalog also contains `video.adjustment_clip`, an
+application-owned generator rather than a new shared filter. Existing
+Grayscale, Brightness, Contrast and Saturation stacks can target an adjustment
+through drag/drop, Functions or the Inspector, with enabled state and order
+retained. The Inspector's position, scale, rotation and opacity curves work on
+the lower-track composition. Opacity controls the strength of the complete
+adjustment: 0% preserves the original; 100% uses the fully adjusted canvas.
+Copy/Paste Attributes exchanges effects and transforms with ordinary visual
+clips; audio, text and Fusion attributes remain incompatible with adjustments.
+See [TIMELINE.md](TIMELINE.md) and [RENDERING.md](RENDERING.md).
+
+
 ## Built-in filters
 
 | Stable ID | Parameter | Range | Default |

@@ -192,7 +192,13 @@ VideoFramePtr copyRgbaFrame(
     }
 
     const std::size_t stride = width * bytes_per_pixel;
-    if (height > std::numeric_limits<std::size_t>::max() / stride) {
+    // swscale's SIMD conversion needs padded rows and a final guard region.
+    // Compact in place afterward to retain the public tightly packed layout.
+    constexpr std::size_t alignment = 32;
+    constexpr std::size_t guard = AV_INPUT_BUFFER_PADDING_SIZE;
+    const auto conversion_stride = (stride + alignment - 1) & ~(alignment - 1);
+    if (conversion_stride > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+        height > (std::numeric_limits<std::size_t>::max() - guard) / conversion_stride) {
         throw MediaError("Decoded video frame is too large.");
     }
 
@@ -200,7 +206,7 @@ VideoFramePtr copyRgbaFrame(
     result->width = frame.width;
     result->height = frame.height;
     result->stride = static_cast<int>(stride);
-    result->rgba_pixels.resize(stride * height);
+    result->rgba_pixels.resize(conversion_stride * height + guard);
 
     ObserverTimingScope conversion_timing(
         observer,
@@ -233,7 +239,7 @@ VideoFramePtr copyRgbaFrame(
     if (color_result < 0) throwFfmpegError(color_result, "Configuring video matrix and range");
 
     std::uint8_t* destination_data[4] = {result->rgba_pixels.data(), nullptr, nullptr, nullptr};
-    int destination_linesize[4] = {result->stride, 0, 0, 0};
+    int destination_linesize[4] = {static_cast<int>(conversion_stride), 0, 0, 0};
     const int scaled_height = sws_scale(
         scaler.get(),
         frame.data,
@@ -245,6 +251,14 @@ VideoFramePtr copyRgbaFrame(
     if (scaled_height != frame.height) {
         throw MediaError("Could not convert the decoded video frame to RGBA.");
     }
+
+    if (conversion_stride != stride) {
+        for (std::size_t row = 1; row < height; ++row) {
+            std::memmove(result->rgba_pixels.data() + row * stride,
+                         result->rgba_pixels.data() + row * conversion_stride, stride);
+        }
+    }
+    result->rgba_pixels.resize(stride * height);
 
     return result;
 }

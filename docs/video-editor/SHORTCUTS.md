@@ -83,6 +83,18 @@ and Fusion. Empty menus and separators are hidden. This changes presentation
 only; each command keeps its existing enablement rule, handler, and shortcut.
 Context menus continue to be controlled by their owning widgets.
 
+## Adjustment Clip editing
+
+Adjustment clips use the existing clip selection, split, delete, Undo/Redo,
+Copy Attributes and Paste Attributes commands listed above. Functions
+(Shift + Space) applies existing filters to a selected adjustment. Position,
+scale, rotation and opacity use the existing Inspector keyframe controls;
+opacity means adjustment strength. **Edit > Duplicate Adjustment Clip** copies
+it immediately after the original when the range is free and has no default
+keyboard shortcut. Creation is by dragging **Effects > Video > Adjustment Clip**
+onto a video track.
+
+
 ## Image Editor
 
 | Shortcut | Action | Context |

@@ -87,6 +87,12 @@ EditWorkspaceActions::EditWorkspaceActions(
         controller_.rippleDeleteActiveTimelineClip();
     });
 
+    duplicate_adjustment_action_ = createMenuAction(
+        QStringLiteral("Duplicate Adjustment Clip"), QStringLiteral("edit.duplicate_adjustment_clip"));
+    duplicate_adjustment_action_->setEnabled(false);
+    connect(duplicate_adjustment_action_, &QAction::triggered,
+        &controller_, &EditWorkspaceController::duplicateSelectedAdjustmentClip);
+
     auto* split_clip_action = createMenuAction(
         QStringLiteral("Split Clip at Playhead"),
         QStringLiteral("edit.split_clip"),
@@ -300,7 +306,7 @@ void EditWorkspaceActions::refreshAvailability() {
     if (can_edit_timeline) {
         const auto& clip = session.timeline().tracks()[location->track_index]
             .clips[location->clip_index];
-        can_delete = clip.kind == timeline::ClipKind::Text ||
+        can_delete = timeline::isGeneratedClipKind(clip.kind) ||
             std::any_of(
                 session.mediaItems().cbegin(), session.mediaItems().cend(),
                 [&clip](const application::ImportedMedia& item) {
@@ -309,6 +315,8 @@ void EditWorkspaceActions::refreshAvailability() {
                             media::MediaLibrary::canonicalPath(clip.source_path);
                 });
     }
+    duplicate_adjustment_action_->setEnabled(can_edit_timeline &&
+        session.timeline().tracks()[location->track_index].clips[location->clip_index].kind == timeline::ClipKind::Adjustment);
     delete_clip_action_->setEnabled(can_delete);
     ripple_delete_clip_action_->setEnabled(can_edit_timeline);
 }

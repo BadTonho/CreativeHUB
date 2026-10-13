@@ -155,6 +155,13 @@ void validateDocument(const ProjectDocument& document,
     }
 
     auto validate_clip = [&project_path](const ProjectClip& clip) {
+        if (clip.kind == timeline::ClipKind::Adjustment &&
+            (!clip.source_path.empty() || clip.source_start_frame != 0 ||
+             clip.source_duration_frames != 0 || clip.linked_clip_id ||
+             clip.audio_companion_pending || clip.audio_extracted || clip.audio_gain != 1.0 ||
+             clip.audio_muted || clip.source_start_time_us != 0 || clip.source_duration_time_us != 0))
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                      "An adjustment clip cannot reference media or audio.");
         if (timeline::isMediaClipKind(clip.kind) && clip.source_path.empty()) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains a media clip without a source.");
         }
@@ -200,8 +207,7 @@ void validateDocument(const ProjectDocument& document,
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid text clip styling.");
         }
         if (!creative_suite::effects::isValidStack(clip.effects) ||
-            (!clip.effects.empty() && clip.kind != timeline::ClipKind::Video &&
-             clip.kind != timeline::ClipKind::Image)) {
+            (!clip.effects.empty() && !timeline::supportsClipEffects(clip.kind))) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid effect stack for this clip.");
         }
@@ -354,6 +360,7 @@ void validateDocument(const ProjectDocument& document,
                 (!audio_crossfade &&
                  (from.kind == timeline::ClipKind::Audio ||
                   to.kind == timeline::ClipKind::Audio)) ||
+                from.kind == timeline::ClipKind::Adjustment || to.kind == timeline::ClipKind::Adjustment ||
                 (from.kind == timeline::ClipKind::Text &&
                  to.kind == timeline::ClipKind::Text)) {
                 throwJson(ProjectErrorCode::InvalidTimeline, project_path,
@@ -402,7 +409,8 @@ void validateDocument(const ProjectDocument& document,
                                 transition.to_clip_index == right;
                         });
                 if (overlap &&
-                    ((first.kind == timeline::ClipKind::Text &&
+                    (first.kind == timeline::ClipKind::Adjustment || second.kind == timeline::ClipKind::Adjustment ||
+                     (first.kind == timeline::ClipKind::Text &&
                       second.kind == timeline::ClipKind::Text) ||
                      (first.kind == timeline::ClipKind::Audio &&
                       second.kind == timeline::ClipKind::Audio &&

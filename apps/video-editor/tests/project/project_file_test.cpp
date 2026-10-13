@@ -288,7 +288,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 25") != std::string::npos &&
+        require(saved_json.find("\"version\": 26") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -313,7 +313,7 @@ int main(int argc, char** argv) {
                     saved_json.find("image_editor_variant") != std::string::npos &&
                     saved_json.find("motion_link") != std::string::npos &&
                     saved_json.find("render-é final.mp4") != std::string::npos,
-                "Timeline timing, Fusion animation, and linked publication time were not written to the version 25 project.");
+                "Timeline timing, Fusion animation, and linked publication time were not written to the version 26 project.");
 
         auto legacy_v24_json = QJsonDocument::fromJson(QByteArray::fromStdString(saved_json)).object();
         legacy_v24_json.insert("version", 24);

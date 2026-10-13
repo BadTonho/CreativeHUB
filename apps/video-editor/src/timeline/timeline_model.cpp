@@ -3,6 +3,7 @@
 #include "../media/still_image_decoder.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <limits>
@@ -669,11 +670,92 @@ std::optional<std::int64_t> shiftedSourceStart(
     return std::nullopt;
 }
 
+// Slice generated adjustment curves without changing the sampled animation.
+// De Casteljau subdivision retains the easing on partial Bezier segments.
+struct CurvePoint { double x, y; };
+CurvePoint mixCurvePoint(CurvePoint a, CurvePoint b, double t) {
+    return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t};
+}
+using CurveSegment = std::array<CurvePoint, 4>;
+std::pair<CurveSegment, CurveSegment> subdivideCurve(const CurveSegment& curve, double t) {
+    const auto a = mixCurvePoint(curve[0], curve[1], t);
+    const auto b = mixCurvePoint(curve[1], curve[2], t);
+    const auto c = mixCurvePoint(curve[2], curve[3], t);
+    const auto d = mixCurvePoint(a, b, t), e = mixCurvePoint(b, c, t);
+    const auto f = mixCurvePoint(d, e, t);
+    return {CurveSegment{curve[0], a, d, f}, CurveSegment{f, e, c, curve[3]}};
+}
+double curveParameterAtX(const CurveSegment& curve, double x) {
+    double low = 0, high = 1;
+    for (int iteration = 0; iteration < 60; ++iteration) {
+        const auto middle = (low + high) * 0.5;
+        const auto point = subdivideCurve(curve, middle).first.back();
+        if (point.x < x) low = middle; else high = middle;
+    }
+    return (low + high) * 0.5;
+}
+TransformKeyframes reframeAdjustmentKeyframes(
+    const TimelineClip& old_clip, std::int64_t new_start,
+    std::int64_t duration, Transform2D& new_transform) {
+    const auto delta = new_start - old_clip.timeline_start_frame;
+    new_transform = evaluateTransform(old_clip.transform, old_clip.keyframes, delta);
+    TransformKeyframes result;
+    for (const auto property : {TransformProperty::PositionX, TransformProperty::PositionY,
+            TransformProperty::Scale, TransformProperty::Rotation, TransformProperty::Opacity}) {
+        const auto& source = keyframesFor(old_clip.keyframes, property);
+        if (source.empty()) continue;
+        auto& output = mutableTransformKeyframes(result, property);
+        const auto valueAt = [&](std::int64_t frame) {
+            return evaluateProperty(old_clip.transform, old_clip.keyframes, property, frame);
+        };
+        output.push_back({0, valueAt(delta)});
+        for (const auto& key : source) {
+            // Comparison in source coordinates avoids overflowing a shifted key.
+            if (key.frame > delta && key.frame - std::max<std::int64_t>(0, delta) < duration &&
+                (delta >= 0 || key.frame <= std::numeric_limits<std::int64_t>::max() + delta)) {
+                const auto shifted = key.frame - delta;
+                if (shifted < duration) { auto copy = key; copy.frame = shifted; output.push_back(copy); }
+            }
+        }
+        if (output.back().frame != duration - 1)
+            output.push_back({duration - 1, valueAt(delta + duration - 1)});
+        for (std::size_t index = 0; index + 1 < output.size(); ++index) {
+            auto& left = output[index];
+            const auto begin = left.frame + delta, end = output[index + 1].frame + delta;
+            const auto upper = std::upper_bound(source.begin(), source.end(), begin,
+                [](std::int64_t frame, const auto& key) { return frame < key.frame; });
+            left.interpolation = creative_suite::animation::InterpolationMode::Linear;
+            if (upper == source.begin() || upper == source.end()) continue;
+            const auto& original_left = *(upper - 1);
+            const auto& original_right = *upper;
+            if (original_left.interpolation != creative_suite::animation::InterpolationMode::CubicBezier) continue;
+            const double interval = static_cast<double>(original_right.frame - original_left.frame);
+            const auto x0 = static_cast<double>(begin - original_left.frame) / interval;
+            const auto x1 = static_cast<double>(end - original_left.frame) / interval;
+            CurveSegment curve{CurvePoint{0, 0}, CurvePoint{original_left.easing.x1, original_left.easing.y1},
+                CurvePoint{original_left.easing.x2, original_left.easing.y2}, CurvePoint{1, 1}};
+            const auto t0 = curveParameterAtX(curve, x0), t1 = curveParameterAtX(curve, x1);
+            if (t0 > 0) curve = subdivideCurve(curve, t0).second;
+            if (t1 < 1) curve = subdivideCurve(curve, (t1 - t0) / (1 - t0)).first;
+            const auto dx = curve[3].x - curve[0].x, dy = curve[3].y - curve[0].y;
+            if (dx <= 0 || dy <= 0) continue;
+            left.interpolation = creative_suite::animation::InterpolationMode::CubicBezier;
+            left.easing = {std::clamp((curve[1].x - curve[0].x) / dx, 0.0, 1.0),
+                std::clamp((curve[1].y - curve[0].y) / dy, 0.0, 1.0),
+                std::clamp((curve[2].x - curve[0].x) / dx, 0.0, 1.0),
+                std::clamp((curve[2].y - curve[0].y) / dy, 0.0, 1.0)};
+        }
+    }
+    return result;
+}
+
 TransformKeyframes reframeKeyframes(
     const TimelineClip& old_clip,
     std::int64_t new_timeline_start_frame,
     std::int64_t new_duration_frames,
-    Transform2D& new_transform) noexcept {
+    Transform2D& new_transform) {
+    if (old_clip.kind == ClipKind::Adjustment)
+        return reframeAdjustmentKeyframes(old_clip, new_timeline_start_frame, new_duration_frames, new_transform);
     const auto start_delta = new_timeline_start_frame - old_clip.timeline_start_frame;
     const auto old_anchor_frame = std::max<std::int64_t>(0, start_delta);
     new_transform = evaluateTransform(
@@ -730,7 +812,8 @@ TransformKeyframes reframeKeyframes(
 }
 
 bool sameOverlapClass(const TimelineClip& left, const TimelineClip& right) noexcept {
-    return left.kind == right.kind ||
+    return left.kind == ClipKind::Adjustment || right.kind == ClipKind::Adjustment ||
+        left.kind == right.kind ||
         (isFrameTimedMediaClipKind(left.kind) &&
          isFrameTimedMediaClipKind(right.kind));
 }
@@ -778,7 +861,7 @@ ClipAttributeCompatibility clipAttributeCompatibility(
     ClipKind target_kind,
     bool target_has_audio_volume_envelope) noexcept {
     const auto is_visual = [](ClipKind kind) {
-        return kind == ClipKind::Video || kind == ClipKind::Image;
+        return supportsClipEffects(kind);
     };
     const auto is_transformable = [](ClipKind kind) {
         return kind != ClipKind::Audio;
@@ -870,7 +953,8 @@ bool TimelineModel::overlapsSameKind(
     std::int64_t duration_frames) noexcept {
     const bool same_visual_media_kind = isFrameTimedMediaClipKind(left.kind) &&
         isFrameTimedMediaClipKind(kind);
-    return (left.kind == kind || same_visual_media_kind) &&
+    return (left.kind == ClipKind::Adjustment || kind == ClipKind::Adjustment ||
+            left.kind == kind || same_visual_media_kind) &&
         overlaps(left, start_frame, duration_frames);
 }
 
@@ -1170,6 +1254,12 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
             original, begin_local,
             begin_local + preview.clip.timeline_duration_frames);
     }
+    if (original.kind == ClipKind::Adjustment) {
+        preview.clip.source_start_frame = 0;
+        preview.clip.source_duration_frames = 0;
+        preview.clip.frame_count = preview.clip.timeline_duration_frames;
+        preview.clip.duration_seconds = static_cast<double>(preview.clip.timeline_duration_frames) / timeline_frame_rate.asDouble();
+    }
     preview.clip.keyframes = reframeKeyframes(
         original,
         preview.clip.timeline_start_frame,
@@ -1236,6 +1326,12 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
                 if (*source_start > original_source_end) return std::nullopt;
                 neighbor.source_duration_frames = original_source_end - *source_start;
             }
+        }
+        if (neighbor.kind == ClipKind::Adjustment) {
+            neighbor.source_start_frame = 0;
+            neighbor.source_duration_frames = 0;
+            neighbor.frame_count = neighbor.timeline_duration_frames;
+            neighbor.duration_seconds = static_cast<double>(neighbor.timeline_duration_frames) / timeline_frame_rate.asDouble();
         }
         neighbor.keyframes = reframeKeyframes(
             original_neighbor,
@@ -1621,6 +1717,37 @@ PendingMediaTimingMigrationResult TimelineModel::migratePendingMediaTiming(
     return PendingMediaTimingMigrationResult::Migrated;
 }
 
+AddClipResult TimelineModel::addAdjustmentClip(
+    std::size_t track_index, std::int64_t timeline_start_frame,
+    std::int64_t duration_frames) {
+    auto* track = trackAt(track_index);
+    if (!track) return AddClipResult::InvalidTrack;
+    if (track->kind != TrackKind::Video) return AddClipResult::IncompatibleTrack;
+    if (timeline_start_frame < 0 || duration_frames <= 0 ||
+        timeline_start_frame > std::numeric_limits<std::int64_t>::max() - duration_frames)
+        return AddClipResult::InvalidPosition;
+    for (const auto& existing : track->clips)
+        if (overlaps(existing, timeline_start_frame, duration_frames)) return AddClipResult::Overlap;
+    TimelineClip clip;
+    clip.kind = ClipKind::Adjustment;
+    clip.display_name = "Adjustment Clip";
+    clip.timeline_start_frame = timeline_start_frame;
+    clip.timeline_duration_frames = duration_frames;
+    clip.frame_rate = frame_rate_.asDouble();
+    clip.frame_count = duration_frames;
+    clip.duration_seconds = static_cast<double>(duration_frames) / frame_rate_.asDouble();
+    clip.clip_id = next_clip_id_++;
+    clip.track_id = track->track_id;
+    track->clips.push_back(std::move(clip));
+    std::stable_sort(track->clips.begin(), track->clips.end(),
+        [](const auto& left, const auto& right) {
+            return left.timeline_start_frame < right.timeline_start_frame;
+        });
+    removeInvalidTransitions(*track);
+    assertIdentityInvariants();
+    return AddClipResult::Added;
+}
+
 AddClipResult TimelineModel::addTextClip(
     std::size_t track_index,
     std::int64_t timeline_start_frame,
@@ -1793,19 +1920,33 @@ SplitClipResult TimelineModel::splitClip(
         right.source_duration_frames = source_duration - source_offset;
         clip.source_duration_frames = source_offset;
     }
-    right.keyframes = splitKeyframes(
-        clip.transform,
-        clip.keyframes,
-        local_frame,
-        right.transform);
-    clip.keyframes = trimKeyframes(
-        clip.transform,
-        clip.keyframes,
-        0,
-        0,
-        local_frame,
-        clip.transform);
-    clip.transform = original_transform;
+    if (clip.kind == ClipKind::Adjustment) {
+        right.keyframes = reframeKeyframes(clip, right.timeline_start_frame,
+            right.timeline_duration_frames, right.transform);
+        auto left_transform = clip.transform;
+        auto left_curves = reframeKeyframes(clip, clip.timeline_start_frame,
+            local_frame, left_transform);
+        clip.transform = left_transform;
+        clip.keyframes = std::move(left_curves);
+        clip.frame_count = local_frame;
+        right.frame_count = right.timeline_duration_frames;
+        clip.duration_seconds = static_cast<double>(local_frame) / frame_rate_.asDouble();
+        right.duration_seconds = static_cast<double>(right.timeline_duration_frames) / frame_rate_.asDouble();
+    } else {
+        right.keyframes = splitKeyframes(
+            clip.transform,
+            clip.keyframes,
+            local_frame,
+            right.transform);
+        clip.keyframes = trimKeyframes(
+            clip.transform,
+            clip.keyframes,
+            0,
+            0,
+            local_frame,
+            clip.transform);
+        clip.transform = original_transform;
+    }
     clip.timeline_duration_frames = local_frame;
     track->clips.insert(
         track->clips.begin() + static_cast<std::ptrdiff_t>(clip_index + 1),
@@ -2141,6 +2282,22 @@ TrimClipResult TimelineModel::trimClip(
         removeInvalidTransitions(*track);
         return TrimClipResult::Trimmed;
     }
+    if (clip.kind == ClipKind::Adjustment) {
+        if (new_source_start_frame != 0 || new_duration_frames <= 0 ||
+            clip.timeline_start_frame > std::numeric_limits<std::int64_t>::max() - new_duration_frames)
+            return TrimClipResult::InvalidRange;
+        for (std::size_t index = 0; index < track->clips.size(); ++index)
+            if (index != clip_index && overlaps(track->clips[index], clip.timeline_start_frame, new_duration_frames))
+                return TrimClipResult::InvalidRange;
+        auto transformed = clip.transform;
+        auto curves = reframeKeyframes(clip, clip.timeline_start_frame, new_duration_frames, transformed);
+        clip.transform = transformed;
+        clip.keyframes = std::move(curves);
+        clip.timeline_duration_frames = new_duration_frames;
+        clip.frame_count = new_duration_frames;
+        clip.duration_seconds = static_cast<double>(new_duration_frames) / frame_rate_.asDouble();
+        return TrimClipResult::Trimmed;
+    }
     const auto old_source_duration = sourceDurationForClip(clip, frame_rate_);
     if (clip.source_start_frame < 0 || clip.timeline_duration_frames <= 0 ||
         old_source_duration < 0 ||
@@ -2385,7 +2542,7 @@ std::optional<ClipLocation> TimelineModel::clipAt(
         const auto& clip = track->clips[index];
         if (timeline_frame >= clip.timeline_start_frame &&
             timeline_frame < clip.timeline_start_frame + clip.timeline_duration_frames) {
-            if (clip.kind == ClipKind::Text) return ClipLocation{track_index, index};
+            if (isGeneratedClipKind(clip.kind)) return ClipLocation{track_index, index};
             video_match = ClipLocation{track_index, index};
         }
     }
@@ -2531,7 +2688,7 @@ std::optional<TimelineModel::Snapshot> TimelineModel::rescaleSnapshotFrameRate(
                 return std::nullopt;
             }
 
-            if (clip.kind == ClipKind::Text) {
+            if (isGeneratedClipKind(clip.kind)) {
                 clip.duration_seconds = static_cast<double>(
                     static_cast<long double>(clip.timeline_duration_frames) *
                     target_frame_rate.denominator / target_frame_rate.numerator);
@@ -2573,6 +2730,7 @@ std::optional<TimelineModel::Snapshot> TimelineModel::rescaleSnapshotFrameRate(
             }
             if ((transition.kind == TransitionKind::AudioCrossfade) !=
                     (track.kind == TrackKind::Audio) ||
+                from->kind == ClipKind::Adjustment || to->kind == ClipKind::Adjustment ||
                 (transition.kind == TransitionKind::AudioCrossfade &&
                     (from->kind != ClipKind::Audio || to->kind != ClipKind::Audio ||
                      from->linked_clip_id.has_value() || to->linked_clip_id.has_value())) ||
@@ -2589,7 +2747,8 @@ std::optional<TimelineModel::Snapshot> TimelineModel::rescaleSnapshotFrameRate(
             for (std::size_t right = left + 1; right < track.clips.size(); ++right) {
                 const auto& second = track.clips[right];
                 if (second.timeline_start_frame >= first_end) continue;
-                if ((first.kind == ClipKind::Text && second.kind == ClipKind::Text) ||
+                if (first.kind == ClipKind::Adjustment || second.kind == ClipKind::Adjustment ||
+                    (first.kind == ClipKind::Text && second.kind == ClipKind::Text) ||
                     (first.kind == ClipKind::Audio && second.kind == ClipKind::Audio &&
                      !hasPermittedOverlapTransition(track, left, right))) {
                     return std::nullopt;
@@ -2632,7 +2791,7 @@ void TimelineModel::restore(Snapshot snapshot) {
     for (auto& track : tracks_) {
         for (auto& clip : track.clips) {
             if (clip.source_duration_frames > 0 ||
-                clip.kind == ClipKind::Text || clip.kind == ClipKind::Audio) {
+                isGeneratedClipKind(clip.kind) || clip.kind == ClipKind::Audio) {
                 continue;
             }
             clip.source_duration_frames = sourceDurationForClip(clip, frame_rate_);
@@ -2774,8 +2933,10 @@ void TimelineModel::removeInvalidTransitions(TimelineTrack& track) noexcept {
             keep = track.kind == TrackKind::Video;
         }
         if (keep) {
-            keep = track.clips[indexes->first].kind != ClipKind::Text ||
-                track.clips[indexes->second].kind != ClipKind::Text;
+            keep = track.clips[indexes->first].kind != ClipKind::Adjustment &&
+                track.clips[indexes->second].kind != ClipKind::Adjustment &&
+                (track.clips[indexes->first].kind != ClipKind::Text ||
+                 track.clips[indexes->second].kind != ClipKind::Text);
         }
         if (keep) {
             keep = !duplicate_pair;
@@ -2857,6 +3018,8 @@ AudioParameterResult TimelineModel::setClipAudio(
     }
     if (!validAudioGain(gain)) return AudioParameterResult::InvalidValue;
     auto& clip = track->clips[clip_index];
+    if (clip.kind == ClipKind::Adjustment && (gain != 1.0 || muted))
+        return AudioParameterResult::InvalidValue;
     if (clip.audio_gain == gain && clip.audio_muted == muted) {
         return AudioParameterResult::NoChange;
     }
@@ -3016,7 +3179,7 @@ EffectMutationResult TimelineModel::setClipEffects(
         return EffectMutationResult::InvalidIndex;
     }
     auto& clip = track->clips[clip_index];
-    if (clip.kind != ClipKind::Video && clip.kind != ClipKind::Image) {
+    if (!supportsClipEffects(clip.kind)) {
         return EffectMutationResult::IncompatibleClip;
     }
     if (!creative_suite::effects::isValidStack(effects)) {
@@ -3074,7 +3237,8 @@ TransitionMutationResult TimelineModel::addTransition(
         (!audio_crossfade && track->kind != TrackKind::Video)) {
         return TransitionMutationResult::InvalidBoundary;
     }
-    if (from.kind == ClipKind::Text && to.kind == ClipKind::Text) {
+    if (from.kind == ClipKind::Adjustment || to.kind == ClipKind::Adjustment ||
+        (from.kind == ClipKind::Text && to.kind == ClipKind::Text)) {
         return TransitionMutationResult::InvalidBoundary;
     }
     if (const auto* existing = transitionBetween(

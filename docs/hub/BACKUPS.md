@@ -25,8 +25,13 @@ producer/consumer regression coverage when supported schemas gain path fields.
 | Format identifier | Supported versions | References rewritten |
 | --- | --- | --- |
 | `creative-suite-image-document` | 1–16 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
-| `creative-suite.main-editor` | 1–25 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
+| `creative-suite.main-editor` | 1–26 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
 | `creative-suite.motion-studio` | 1–6 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
+
+Video v26 adjustment clips have no source path. Their duration, effects and
+transform curves are preserved by backup and restoration. They do not cause
+media lookup or path rewriting. Versions 1–25 remain accepted, and versions
+newer than 26 are rejected until their reference contracts are supported.
 
 Image paths use the original document directory. Video and Motion paths use
 the weakly canonical original document location, matching their readers.

@@ -54,6 +54,10 @@ struct OfflineExportOptions {
     std::function<void(const std::string&, std::int64_t)> warning_callback;
     std::function<void(const OfflineExportMetrics&)> metrics_callback;
     std::function<std::unique_ptr<ExportGpuCompositor>(QOffscreenSurface*)> gpu_factory;
+    // Optional synchronous diagnostic observer for RGBA frames before encoding.
+    // The frame is borrowed only during this worker-thread call. Native-only
+    // frames are omitted; observer exceptions follow the export error boundary.
+    std::function<void(const creative_suite::media::RgbaFrame&, std::int64_t)> prepared_frame_callback;
 };
 
 class ExportCanceled final : public std::runtime_error {

@@ -1,3 +1,4 @@
+#include "rendering/adjustment_composition.h"
 #include "rendering/offline_export_renderer.h"
 #include "rendering/export_composition.h"
 
@@ -288,11 +289,26 @@ std::optional<media::VideoFrame> composeFrame(
     const std::atomic_bool& canceled,
     creative_suite::media::NativeVideoFramePool* native_pool,
     creative_suite::media::NativeVideoFramePtr& native_output) {
+    const auto requests = activeClipRequests(clips, transitions, timeline_frame);
+    const bool adjustment_cpu = std::any_of(requests.begin(), requests.end(), [&](const auto& request) {
+        const auto& clip = *clips[request.clip_index].clip;
+        const auto local_frame = request.local_frame >= 0 ? request.local_frame : timeline_frame - clip.timeline_start_frame;
+        return clip.kind == timeline::ClipKind::Adjustment && rendering::adjustmentRequiresProcessing(
+            timeline::evaluateTransform(clip.transform, clip.keyframes, local_frame), clip.effects);
+    });
+    const auto previous_recovery = compositor.cpuSourceRecovery();
+    if (adjustment_cpu) compositor.setCpuSourceRecovery(true);
+    struct RestoreAdjustmentRecovery {
+        detail::ExportComposition& compositor;
+        bool previous;
+        ~RestoreAdjustmentRecovery() { compositor.setCpuSourceRecovery(previous); }
+    } restore_adjustment{compositor, previous_recovery};
+    std::vector<rendering::TimelineCompositionStep> steps;
     std::vector<rendering::CompositionLayer> layers;
     std::vector<media::VideoFramePtr> decoded_frames;
     {
         detail::ExportTimedScope preparation(metrics.preparation_nanoseconds);
-        const auto requests = activeClipRequests(clips, transitions, timeline_frame);
+
         decoded_frames.reserve(requests.size());
         layers.reserve(requests.size());
         for (const auto& request : requests) {
@@ -308,6 +324,15 @@ std::optional<media::VideoFrame> composeFrame(
             auto transform = local_transform;
             setFrameOpacity(transform, request.opacity);
 
+            if (clip.kind == timeline::ClipKind::Adjustment) {
+                if (rendering::adjustmentRequiresProcessing(transform, clip.effects)) {
+                    rendering::CompositionLayer operation;
+                    operation.transform = transform;
+                    operation.effect_stack = clip.effects;
+                    steps.push_back({operation, true});
+                }
+                continue;
+            }
             media::VideoFramePtr source_frame;
             creative_suite::media::NativeVideoFramePtr native_frame;
             creative_suite::composition::OpenGlTextureFramePtr graph_texture;
@@ -448,6 +473,7 @@ std::optional<media::VideoFrame> composeFrame(
             layers.back().effect_stack = clip.effects;
             layers.back().native_frame = std::move(native_frame);
             layers.back().texture_frame = std::move(graph_texture);
+            steps.push_back({layers.back(), false});
         }
         std::uint64_t resident = 0;
         for (const auto& decoded : decoded_frames) resident += decoded->rgba_pixels.size();
@@ -456,6 +482,16 @@ std::optional<media::VideoFrame> composeFrame(
             if (clip.text) resident += clip.text->rgba_pixels.size();
         }
         metrics.peak_prepared_source_bytes = std::max(metrics.peak_prepared_source_bytes, resident);
+    }
+    if (adjustment_cpu) {
+        native_output.reset();
+        detail::ExportTimedScope timing(metrics.composition_nanoseconds);
+        detail::ExportTimedScope cpu_timing(metrics.cpu_composition_nanoseconds);
+        auto frame = rendering::composeAdjustmentLayers(compositor.outputWidth(), compositor.outputHeight(),
+            steps, [&] { return canceled.load(); });
+        checkCanceled(canceled);
+        if (frame) { ++metrics.cpu_frames; }
+        return frame;
     }
     try {
         return compositor.compose(layers, output_frame, timeline_frame, canceled, native_pool, &native_output);
@@ -585,7 +621,7 @@ std::vector<RenderClip> prepareClips(
             entry.track = &track;
             entry.track_index = track_index;
             entry.clip_index = clip_index;
-            if (clip.kind == timeline::ClipKind::Text) {
+            if (timeline::isGeneratedClipKind(clip.kind)) {
                 clips.push_back(std::move(entry));
                 continue;
             }
@@ -866,6 +902,9 @@ void OfflineExportRenderer::render(
                 job.project_snapshot.canvas_height,
                 compositor, frame_index, metrics, cancel_requested, encoder.nativePool(), native_frame);
             if (!frame.has_value()) throw std::runtime_error("Composing an output frame failed.");
+            checkCanceled(cancel_requested);
+            if (!native_frame && options.prepared_frame_callback)
+                options.prepared_frame_callback(*frame, timeline_frame);
             checkCanceled(cancel_requested);
             metrics.peak_cpu_frame_bytes = std::max(metrics.peak_cpu_frame_bytes,
                 static_cast<std::uint64_t>(frame->rgba_pixels.size()));

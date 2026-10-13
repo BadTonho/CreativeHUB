@@ -957,7 +957,7 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
         setActiveTimelineSelection(*first_clip_location);
         const auto& clip = timeline_model_.tracks()[first_clip_location->track_index]
             .clips[first_clip_location->clip_index];
-        if (clip.kind == timeline::ClipKind::Text) {
+        if (timeline::isGeneratedClipKind(clip.kind)) {
             activateTimelineClipAt(
                 first_clip_location->track_index,
                 first_clip_location->clip_index,

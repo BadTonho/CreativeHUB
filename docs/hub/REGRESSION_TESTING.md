@@ -1,8 +1,9 @@
 # Hub Regression Testing
 
-The Video Editor v25 producer/consumer backup gate includes nonzero Motion
-publication positions. Run `hub-backup-format-test` for snapshot/restoration
-round-trips and `hub-backup-manager-test` for rejection of future v26 documents.
+The Video Editor v26 producer/consumer backup gate includes adjustment clips
+and the nonzero Motion publication positions introduced in v25.
+Run `hub-backup-format-test` for snapshot/restoration
+round-trips and `hub-backup-manager-test` for rejection of future v27 documents.
 
 This guide indexes behavior owned by the Hub. Shared update behavior and the
 release contract are documented in [`../WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md).
@@ -211,3 +212,25 @@ Windows build, installer versions, selected install paths, steps, and outcome.
 **Current result:** Inno Setup 6.7.3 compiled all four installers. The manual
 install, update, cancellation, rollback, and Hub restoration checklist remains
 pending until it is run in a disposable Windows user profile.
+
+## Adjustment document backup gate
+
+`tests/test_backup_formats.cpp` (`hub-backup-format-test`) produces v26 through
+the Video Editor writer, relocates the snapshot, and restores it through the
+Video Editor reader. It asserts the full normalized document, including
+adjustment effects, opacity and scale curves, while retaining linked-image,
+Fusion Input and Motion publication references on ordinary clips. The existing
+versions 1–25 producer/consumer cases remain in this gate.
+`hub-backup-manager-test` rejects v27 and malformed documents with diagnostics.
+
+On 2026-10-13, the canonical Hub Debug target built successfully and both
+backup tests passed as part of the scoped Adjustment Clip gate. The Video
+Editor consumer also passed its v26 persistence, autosave/recovery and
+MainWindow document-state tests. This is automated contract evidence; it does
+not replace the following native UI check.
+
+Manual acceptance: save a project with an adjustment and media below it in the
+Debug Video Editor, back it up in the Debug Hub, restore it into another folder,
+and reopen it. The same adjustment and lower media must render; no missing-media
+prompt may identify the adjustment. Native UI and macOS/Linux validation remain
+pending until recorded with the build and platform.

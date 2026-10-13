@@ -206,6 +206,36 @@ int main(int argc, char** argv)
         require(decoded_count == 3, "the shared encoder round-trips every video frame");
         require(saw_green, "the decoded output contains the changed source frame");
 
+        // Unaligned RGBA row lengths and portrait frames exercise swscale's
+        // destination padding under Debug heap guards as well as pixel parity.
+        for (const auto [width, height] : {std::pair{8, 8}, std::pair{54, 48}, std::pair{1080, 1920}}) {
+            creative_suite::media::VideoEncodingSettings lossless;
+            lossless.output_path = temporary_directory.path() /
+                ("rgba-padding-" + std::to_string(width) + ".mkv");
+            lossless.container_name = "matroska"; lossless.video_encoder_name = "ffv1";
+            lossless.width = width; lossless.height = height;
+            lossless.frame_rate_numerator = 30;
+            creative_suite::media::RgbaFrame pixels{width, height, width * 4,
+                std::vector<std::uint8_t>(static_cast<std::size_t>(width) * height * 4)};
+            for (std::size_t offset = 0; offset < pixels.rgba_pixels.size(); offset += 4) {
+                pixels.rgba_pixels[offset] = static_cast<std::uint8_t>((offset / 4) % 251);
+                pixels.rgba_pixels[offset + 1] = pixels.rgba_pixels[offset];
+                pixels.rgba_pixels[offset + 2] = pixels.rgba_pixels[offset];
+                pixels.rgba_pixels[offset + 3] = 255;
+            }
+            const auto path = lossless.output_path;
+            { creative_suite::media::VideoEncoder writer(lossless);
+              writer.writeVideo(pixels, 0); writer.finish(); }
+            auto reader = creative_suite::media::VideoPlaybackSession::open(path);
+            const auto decoded = reader->decode_next_frame();
+            require(decoded && *decoded && (*decoded)->stride == pixels.stride &&
+                (*decoded)->rgba_pixels.size() == pixels.rgba_pixels.size(),
+                "Padded conversion changed the public RGBA layout.");
+            for (std::size_t index = 0; index < pixels.rgba_pixels.size(); ++index)
+                require(std::abs(int((*decoded)->rgba_pixels[index]) - int(pixels.rgba_pixels[index])) <= 2,
+                    "Padded conversion changed pixel order or color beyond YUV round-trip tolerance.");
+        }
+
         std::cout << "Shared video encoder tests passed.\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

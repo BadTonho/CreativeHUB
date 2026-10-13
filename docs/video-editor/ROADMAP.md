@@ -8,6 +8,19 @@ open technical validation, and later expansion. A completed product-decision
 item records an agreed direction; it does not mean its feature is implemented.
 Update it when implementation, scope, or a decision changes.
 
+## Adjustment Clip v1
+
+Implemented for the pending 0.1.1 release: a generated violet Adjustment Clip in
+Effects > Video, existing effects and keyframed transforms on the composition of
+lower tracks, opacity as adjustment strength, generated-duration editing and
+history, shared preview/export stages and per-frame CPU routing. `.csp` v26 and
+Hub backups preserve the new kind; versions 1–25 remain readable. Application
+versions remain unchanged. Fusion on adjustments, independent compositions,
+new filters and explicit track targeting remain later work. Automated coverage
+and performance evidence are indexed in [Regression Testing](REGRESSION_TESTING.md);
+graphical and cross-platform runtime acceptance are separate pending gates.
+
+
 ## Current direction
 
 - The Video Editor is an active application track and its stability remains a

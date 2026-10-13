@@ -939,8 +939,8 @@ void MainWindow::flushPreviewPerformanceMetrics() {
             *active_timeline_track_index_cache_)) {
         const auto& clip = timeline_model_.tracks()[
             *active_timeline_track_index_cache_].clips[*active_timeline_clip_index_cache_];
-        if (clip.kind == timeline::ClipKind::Text) {
-            context[source_kind_index].second = "text";
+        if (timeline::isGeneratedClipKind(clip.kind)) {
+            context[source_kind_index].second = clip.kind == timeline::ClipKind::Adjustment ? "adjustment" : "text";
         } else {
             context[source_kind_index].second = clip.kind == timeline::ClipKind::Image
                 ? "image" : "video";
@@ -1068,7 +1068,7 @@ void MainWindow::activateTimelineClipAt(
     }
 
     const auto& clip = timeline_model_.tracks()[track_index].clips[clip_index];
-    if (clip.kind == timeline::ClipKind::Text ||
+    if (timeline::isGeneratedClipKind(clip.kind) ||
         clip.kind == timeline::ClipKind::Image) {
         target_frame = std::clamp<std::int64_t>(
             target_frame, 0, std::max<std::int64_t>(

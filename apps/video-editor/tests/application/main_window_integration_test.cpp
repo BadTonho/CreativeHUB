@@ -2998,6 +2998,29 @@ public:
 
         verifyRenderQueueCancellationOnClose(directory);
 
+        {
+            MainWindow adjustment_window;
+            auto* controller = adjustment_window.edit_workspace_->controller();
+            controller->setPlaybackPresentation(false, false, true);
+            const auto track_id = adjustment_window.timeline_model_.tracks()[0].track_id;
+            controller->handleTimelineEffectDrop("video.adjustment_clip", track_id, 0);
+            require(adjustment_window.project_dirty_ &&
+                    adjustment_window.timeline_model_.tracks()[0].clips[0].kind == timeline::ClipKind::Adjustment &&
+                    adjustment_window.edit_workspace_->ui().clip_effects_controls->isEnabled(),
+                    "Adjustment insertion must dirty the real document and enable its Inspector.");
+            require(adjustment_window.saveProjectTo(directory / "adjustment-ui.csp", "save") &&
+                    !adjustment_window.project_dirty_, "Adjustment save did not establish a clean document.");
+            controller->addEffectToSelectedClip("video.grayscale");
+            require(adjustment_window.project_dirty_, "Adjustment effects must dirty the real document.");
+            auto* duplicate = editAction(adjustment_window, "edit.duplicate_adjustment_clip");
+            require(duplicate && duplicate->isEnabled(), "Adjustment duplication is unavailable in Edit.");
+            duplicate->trigger();
+            require(adjustment_window.timeline_model_.clipCount(0) == 2 &&
+                    controller->undo().changed() && controller->undo().changed() &&
+                    adjustment_window.timeline_model_.clipCount(0) == 1 && !adjustment_window.project_dirty_,
+                    "Adjustment Undo must restore the saved document and dirty state.");
+        }
+
         std::error_code cleanup_error;
         std::filesystem::remove_all(directory, cleanup_error);
         if (cleanup_error) {

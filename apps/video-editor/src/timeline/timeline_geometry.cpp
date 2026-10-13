@@ -295,7 +295,7 @@ std::optional<ClipLocation> TimelineHitTester::clipAt(
         const ClipLocation location{*track_index, clip_index};
         const auto& clip = displayedClip(tracks, location, preview);
         if (!geometry.clipRect(clip, *track_index).contains(position)) continue;
-        if (clip.kind == ClipKind::Text) return location;
+        if (isGeneratedClipKind(clip.kind)) return location;
         media_match = location;
     }
     return media_match;
@@ -316,6 +316,7 @@ std::optional<std::pair<std::size_t, std::size_t>> TimelineHitTester::transition
     for (std::size_t from_index = 0; from_index + 1 < track.clips.size(); ++from_index) {
         const auto& from = displayedClip(tracks, {*track_index, from_index}, preview);
         const auto& to = displayedClip(tracks, {*track_index, from_index + 1}, preview);
+        if (from.kind == ClipKind::Adjustment || to.kind == ClipKind::Adjustment) continue;
         if (from.timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
                 from.timeline_duration_frames) {
             continue;

@@ -1,3 +1,4 @@
+#include "rendering/adjustment_composition.h"
 #include "playback_worker.h"
 #include "media/video_probe.h"
 #include <QOpenGLContext>
@@ -503,7 +504,7 @@ void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* s
 }
 
 creative_suite::composition::OpenGlFrameCompositor* PlaybackWorker::graphGpuBackend() {
-    if (!gpu_composition_enabled_ || gpu_composition_failed_ || !gpu_surface_) return nullptr;
+    if (!gpu_composition_enabled_ || gpu_composition_failed_ || adjustment_cpu_frame_ || !gpu_surface_) return nullptr;
     if (!gpu_graph_compositor_)
         gpu_graph_compositor_ = std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(gpu_surface_,
             creative_suite::composition::OpenGlPrecisionPolicy::Automatic,
@@ -1030,7 +1031,7 @@ void PlaybackWorker::setActiveCompositionClip(
     }
     updateFrameRateMetrics();
 
-    if (active->kind == timeline::ClipKind::Text ||
+    if (timeline::isGeneratedClipKind(active->kind) ||
         active->kind == timeline::ClipKind::Image ||
         active->kind == timeline::ClipKind::Audio) {
         source_path_.clear();
@@ -1302,6 +1303,7 @@ void PlaybackWorker::renderCompositionFrame(
                     layer.kind = rendering::SlowFrameLayerKind::Text;
                     break;
                 case timeline::ClipKind::Audio:
+                case timeline::ClipKind::Adjustment:
                     continue;
                 }
                 layer.decode_path = decoded.decode_path;
@@ -2779,11 +2781,31 @@ PlaybackWorker::decodeCompositionLayers(
             return left_spec.clip_index < right_spec.clip_index;
         });
 
+    adjustment_cpu_frame_ = std::any_of(requests.begin(), requests.end(), [&](const auto& request) {
+        const auto& spec = composition_sessions_[request.session_index].spec;
+        return spec.kind == timeline::ClipKind::Adjustment &&
+            rendering::adjustmentRequiresProcessing(
+                timeline::evaluateTransform(spec.transform, spec.keyframes, request.local_frame), spec.effects);
+    });
     for (const auto& request : requests) {
         auto& composition = composition_sessions_[request.session_index];
         const auto& spec = composition.spec;
         if (request.local_frame < 0 ||
             request.local_frame >= spec.segment_frame_count) {
+            continue;
+        }
+        if (spec.kind == timeline::ClipKind::Adjustment) {
+            const auto transform = timeline::evaluateTransform(spec.transform, spec.keyframes, request.local_frame);
+            if (!rendering::adjustmentRequiresProcessing(transform, spec.effects)) continue;
+            DecodedCompositionLayer adjustment;
+            adjustment.kind = timeline::ClipKind::Adjustment;
+            adjustment.transform = transform;
+            adjustment.track_id = spec.track_id;
+            adjustment.clip_id = spec.clip_id;
+            adjustment.track_index = spec.track_index;
+            adjustment.clip_index = spec.clip_index;
+            adjustment.composition_session_index = request.session_index;
+            layers.push_back(std::move(adjustment));
             continue;
         }
         const auto source_offset = timeline::sourceFrameOffsetForTimelineFrame(
@@ -2842,7 +2864,7 @@ PlaybackWorker::decodeCompositionLayers(
             decode_path = rendering::SlowFrameDecodePath::StaticFrame;
         } else if (composition.session != nullptr) {
             std::optional<media::VideoFramePtr> decoded;
-            const bool native_delivery = hardware_decoding_enabled_ && gpu_composition_enabled_ && !gpu_composition_failed_;
+            const bool native_delivery = hardware_decoding_enabled_ && gpu_composition_enabled_ && !gpu_composition_failed_ && !adjustment_cpu_frame_;
             const auto acceptNative = [&](const std::optional<creative_suite::media::DecodedVideoFrame>& result) {
                 if (!result) return;
                 native_frame = result->native;
@@ -3020,6 +3042,17 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
         layer.native_frame = decoded.native_frame;
         layer.texture_frame = decoded.texture_frame;
         layers.push_back(std::move(layer));
+    }
+    if (adjustment_cpu_frame_) {
+        std::vector<rendering::TimelineCompositionStep> steps;
+        steps.reserve(layers.size());
+        for (std::size_t index = 0; index < layers.size(); ++index)
+            steps.push_back({layers[index], decoded_layers[index].kind == timeline::ClipKind::Adjustment});
+        auto composed = rendering::composeAdjustmentLayers(width, height, steps, should_cancel);
+        if (should_cancel && should_cancel()) { last_composition_cancelled_ = true; return {}; }
+        if (composed) metrics.recordCompositionBackend(false, {}, gpu_composition_enabled_);
+        if (timings) { timings->canvas_width = width; timings->canvas_height = height; }
+        return composed;
     }
     if (gpu_composition_enabled_ && !gpu_composition_failed_) {
         OpenGlCompositionTimings gpu_timings;
