@@ -25,6 +25,16 @@ EOF. Zero-size/cancelled output requests do not consume buffered PCM; seek and
 reset discard buffered PCM. Regression coverage compares complete output across
 block sizes and mono/stereo resampling rates, including final delayed samples.
 
+Seeking uses decoded timestamps and codec preroll, then discards real samples
+up to the requested output index. The resampler retains the phase of the
+source/output sample-rate grid. Positions near the beginning reopen the source
+to preserve codec priming and demuxer skip metadata. A request for the current
+output position continues the existing decoder and pending PCM. Missing seek
+timestamps produce a logged error rather than relabeling unrelated samples.
+WAV and AAC (48 kHz and 44.1 kHz to 48 kHz stereo) regressions compare the actual
+PCM after forward/backward seeks with sequential decoding, including the first
+sample, small blocks, and continuous reads after seeking.
+
 During composition playback, the worker mixes active Audio clips and embedded
 video streams only for video clips whose audio has not been externalized. This
 includes clips whose video is covered by a higher-priority visual track. Audio

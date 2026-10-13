@@ -15,6 +15,7 @@ extern "C" {
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -162,6 +163,8 @@ struct AudioPlaybackSession::Impl {
     bool end_reached = false;
     std::int64_t current_sample_index = 0;
     std::int64_t requested_sample_index = 0;
+    std::int64_t next_decoded_sample_index = 0;
+    bool align_after_seek = false;
     std::optional<AudioPcmChunk> pending_chunk;
     std::size_t pending_sample_offset = 0;
 
@@ -337,9 +340,14 @@ void AudioPlaybackSession::seek_to_source_frame(
         logFailure(impl_->source_path, "seek", error);
         throw error;
     }
-    const auto sample_index = static_cast<std::int64_t>(std::llround(
-        static_cast<long double>(source_frame) * impl_->output.sample_rate /
-        static_cast<long double>(video_frame_rate)));
+    const auto samples = static_cast<long double>(source_frame) * impl_->output.sample_rate /
+        static_cast<long double>(video_frame_rate);
+    if (samples > static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
+        const MediaError error("The requested audio source position is too large.");
+        logFailure(impl_->source_path, "seek", error);
+        throw error;
+    }
+    const auto sample_index = static_cast<std::int64_t>(std::llround(samples));
     seek_to_sample_index(sample_index);
 }
 
@@ -349,11 +357,32 @@ void AudioPlaybackSession::seek_to_sample_index(std::int64_t sample_index) {
             throw MediaError("The requested audio source position is invalid.");
         }
         if (!has_audio()) return;
+        if (sample_index == impl_->current_sample_index && !impl_->end_reached) return;
 
+        const auto* parameters = impl_->format->streams[impl_->stream_index]->codecpar;
+        const auto codec_preroll = std::max<std::int64_t>(
+            std::max(0, parameters->seek_preroll),
+            static_cast<std::int64_t>(impl_->decoder->frame_size) * 2);
+        const auto preroll = std::max<std::int64_t>(impl_->output.sample_rate / 10,
+            av_rescale_rnd(codec_preroll, impl_->output.sample_rate,
+                impl_->decoder->sample_rate, AV_ROUND_UP));
+        if (sample_index <= preroll) {
+            // Reopening preserves initial codec padding and demuxer skip metadata.
+            // A seek to timestamp zero can omit the packets preceding the first sample.
+            auto replacement = openImpl(impl_->source_path, impl_->output);
+            replacement->requested_sample_index = sample_index;
+            replacement->current_sample_index = sample_index;
+            impl_ = std::move(replacement);
+            return;
+        }
         const auto timestamp = av_rescale_q(
-            sample_index,
+            std::max<std::int64_t>(0, sample_index - preroll),
             AVRational{1, impl_->output.sample_rate},
             impl_->stream_time_base);
+        if (timestamp < 0 || (impl_->stream_start_time > 0 &&
+            timestamp > std::numeric_limits<std::int64_t>::max() - impl_->stream_start_time)) {
+            throw MediaError("The requested audio seek timestamp is too large.");
+        }
         const auto seek_timestamp = impl_->stream_start_time == AV_NOPTS_VALUE
             ? timestamp
             : impl_->stream_start_time + timestamp;
@@ -378,6 +407,8 @@ void AudioPlaybackSession::seek_to_sample_index(std::int64_t sample_index) {
         impl_->end_reached = false;
         impl_->requested_sample_index = sample_index;
         impl_->current_sample_index = sample_index;
+        impl_->next_decoded_sample_index = 0;
+        impl_->align_after_seek = true;
         impl_->pending_chunk.reset();
         impl_->pending_sample_offset = 0;
     } catch (const MediaError& error) {
@@ -437,6 +468,28 @@ std::optional<AudioPcmChunk> AudioPlaybackSession::decode_samples(
                 throwFfmpegError(receive_result, "Receiving decoded audio frame");
             }
 
+            if (!draining && impl_->align_after_seek) {
+                const auto timestamp = impl_->frame->best_effort_timestamp != AV_NOPTS_VALUE
+                    ? impl_->frame->best_effort_timestamp : impl_->frame->pts;
+                const auto source_sample = sampleIndexForTimestamp(timestamp,
+                    impl_->stream_time_base, impl_->stream_start_time,
+                    impl_->decoder->sample_rate);
+                if (!source_sample) {
+                    throw MediaError("The decoded audio has no timestamp for accurate seeking.");
+                }
+                // Prime the rational resampling phase on the same sample grid as
+                // decoding from the beginning; seek preroll removes this silence.
+                const auto period = impl_->decoder->sample_rate /
+                    std::gcd(impl_->decoder->sample_rate, impl_->output.sample_rate);
+                const auto prefix = static_cast<int>((*source_sample % period + period) % period);
+                const int priming = swr_inject_silence(impl_->resampler.get(), prefix);
+                if (priming < 0) throwFfmpegError(priming, "Priming audio after a seek");
+                impl_->next_decoded_sample_index = av_rescale_q(
+                    *source_sample - prefix, AVRational{1, impl_->decoder->sample_rate},
+                    AVRational{1, impl_->output.sample_rate});
+                impl_->align_after_seek = false;
+            }
+
             const int64_t delay = swr_get_delay(
                 impl_->resampler.get(),
                 impl_->decoder->sample_rate);
@@ -453,7 +506,7 @@ std::optional<AudioPcmChunk> AudioPlaybackSession::decode_samples(
             AudioPcmChunk chunk;
             chunk.sample_rate = impl_->output.sample_rate;
             chunk.channel_count = impl_->output.channel_count;
-            chunk.first_sample_index = impl_->current_sample_index;
+            chunk.first_sample_index = impl_->next_decoded_sample_index;
             chunk.samples.resize(static_cast<std::size_t>(output_capacity) *
                                  static_cast<std::size_t>(impl_->output.channel_count));
             auto* output_data = reinterpret_cast<std::uint8_t*>(chunk.samples.data());
@@ -474,6 +527,7 @@ std::optional<AudioPcmChunk> AudioPlaybackSession::decode_samples(
             }
             chunk.samples.resize(static_cast<std::size_t>(converted) *
                                  static_cast<std::size_t>(impl_->output.channel_count));
+            impl_->next_decoded_sample_index += converted;
 
             if (chunk.first_sample_index < impl_->requested_sample_index) {
                 const auto skip = static_cast<std::size_t>(std::min<std::int64_t>(

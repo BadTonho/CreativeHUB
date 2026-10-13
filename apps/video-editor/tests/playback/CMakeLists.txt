@@ -138,6 +138,8 @@ target_link_directories(creative-suite-main-editor-audio-playback-tests PRIVATE
 
 target_link_libraries(creative-suite-main-editor-audio-playback-tests PRIVATE
     Qt6::Core
+    creative-suite::video-encoding
+    creative-suite::video-media
     ${FFMPEG_LIBRARIES}
 )
 

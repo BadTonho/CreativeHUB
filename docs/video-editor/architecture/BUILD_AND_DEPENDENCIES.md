@@ -88,6 +88,11 @@ The native `creative-suite-main-editor-gpu-timeline` test also links that produc
 fixture to compare masked PNG consumption and refresh through the real worker
 GPU backend. This adds no Image Editor dependency to the Video Editor executable.
 
+The audio playback regression target links the existing video-encoding and
+video-media libraries to generate AAC fixtures in process. It needs no external
+FFmpeg command-line executable or new dependency; sample-content checks compare
+seeking with sequential decoding at equal and different input/output rates.
+
 The pinned hardware expansion requests `nvcodec`, `amf`, and `qsv` on Windows
 x64, and `nvcodec`, `vaapi`, and `qsv` on Linux x86/x64. The baseline port enables
 VideoToolbox on macOS without an additional feature. Dependencies are

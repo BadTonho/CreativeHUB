@@ -1,11 +1,13 @@
 #include "media/audio_playback.h"
 #include "media/video_metadata.h"
 #include "playback/audio_output.h"
+#include <creative_suite/media/video_encoder.h>
 
 #include <QCoreApplication>
 
 #include "../../../../cmake/test_support/test_check.h"
 #include <cstdint>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -148,6 +150,73 @@ void testAudioBlockSizeAndResamplerDrain(const std::filesystem::path& path) {
     }
 }
 
+std::filesystem::path createAacFixture(int sample_rate) {
+    const auto path = std::filesystem::temp_directory_path() /
+        ("creative-suite-audio-seek-" + std::to_string(sample_rate) + ".mp4");
+    creative_suite::media::VideoEncodingSettings settings;
+    settings.output_path = path;
+    settings.container_name = "mp4";
+    settings.video_encoder_name = "mpeg4";
+    settings.width = 32;
+    settings.height = 32;
+    settings.frame_rate_numerator = 30;
+    settings.audio = creative_suite::media::AudioEncodingSettings{"aac", 192, sample_rate, 2};
+    creative_suite::media::VideoEncoder encoder(settings);
+    const creative_suite::media::RgbaFrame frame{
+        32, 32, 128, std::vector<std::uint8_t>(32 * 128, 255)};
+    for (int index = 0; index < 60; ++index) encoder.writeVideo(frame, index);
+    int position = 0;
+    while (position < sample_rate * 2) {
+        const int count = std::min(encoder.nextAudioInputSampleCount(), sample_rate * 2 - position);
+        std::vector<float> samples(static_cast<std::size_t>(count) * 2);
+        for (int index = 0; index < count; ++index) {
+            const double time = static_cast<double>(position + index) / sample_rate;
+            samples[static_cast<std::size_t>(index) * 2] =
+                static_cast<float>(0.35 * std::sin(6.283185307179586 * (211 * time + 167 * time * time)));
+            samples[static_cast<std::size_t>(index) * 2 + 1] =
+                static_cast<float>(0.2 * std::sin(6.283185307179586 * (317 * time + 113 * time * time)));
+        }
+        encoder.writeAudio(samples, count);
+        position += count;
+    }
+    encoder.finish();
+    return path;
+}
+
+void testSeekPcmContent(const std::filesystem::path& path) {
+    const media::AudioPlaybackSession::OutputSpec output{48000, 2};
+    const auto reference = decodeEntireAudio(path, output, 65536);
+    auto session = media::AudioPlaybackSession::open(path, output);
+    for (const std::int64_t requested : {0, 12345, 6789, 4095, 1, 24576}) {
+        session->seek_to_sample_index(requested);
+        std::size_t checked = 0;
+        while (checked < 1024) {
+            const auto chunk = session->decode_samples(127);
+            CS_TEST_CHECK(chunk.has_value());
+            CS_TEST_CHECK(chunk->first_sample_index == requested + static_cast<std::int64_t>(checked));
+            const auto offset = static_cast<std::size_t>(chunk->first_sample_index) * 2;
+            CS_TEST_CHECK(offset + chunk->samples.size() <= reference.size());
+            for (std::size_t index = 0; index < chunk->samples.size(); ++index) {
+                const auto error = std::abs(static_cast<int>(chunk->samples[index]) - reference[offset + index]);
+                if (error > 1) {
+                    std::cerr << "seek PCM error=" << error << " requested=" << requested
+                              << " offset=" << offset + index << '\n';
+                }
+                CS_TEST_CHECK(error <= 1);
+            }
+            checked += chunk->sampleCount();
+        }
+        const auto next = session->current_sample_index();
+        session->seek_to_sample_index(next);
+        const auto continuous = session->decode_samples(127);
+        CS_TEST_CHECK(continuous.has_value() && continuous->first_sample_index == next);
+        const auto offset = static_cast<std::size_t>(next) * 2;
+        for (std::size_t index = 0; index < continuous->samples.size(); ++index) {
+            CS_TEST_CHECK(std::abs(static_cast<int>(continuous->samples[index]) - reference[offset + index]) <= 1);
+        }
+    }
+}
+
 void testMissingAudioDoesNotBecomeAnError(const std::filesystem::path& path) {
     auto session = media::AudioPlaybackSession::open(path);
     CS_TEST_CHECK(!session->has_audio());
@@ -190,6 +259,12 @@ int main(int argc, char** argv) {
     try {
         testAudioDecodeAndSeek(wav_path);
         testAudioBlockSizeAndResamplerDrain(wav_path);
+        testSeekPcmContent(wav_path);
+        for (const int sample_rate : {48000, 44100}) {
+            const auto compressed = createAacFixture(sample_rate);
+            testSeekPcmContent(compressed);
+            std::filesystem::remove(compressed);
+        }
         testDisabledAudioOutputFallback();
         testMonitorVolumeNormalization();
         if (argc > 1) {
