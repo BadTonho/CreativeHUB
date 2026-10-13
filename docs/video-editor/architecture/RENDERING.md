@@ -65,6 +65,12 @@ Explicit still-image Fusion inputs resolve the shared publication by original
 media identity. Each render opens the selected file again so new publications
 are consumed; an offline original does not block an online publication.
 
+Linked Motion clips export the published visual source at clip-local time,
+rescaled from the project rate to the publication rate. Embedded audio uses a
+separate session on the original video and its original source-in/rate; extracted
+audio remains owned by its companion. Missing publications fall back to the
+original visual source. Audio-disabled export needs only the published video.
+
 Composed Preview playback mixes embedded audio from active video clips only
 when their audio has not been externalized, and independent audio from every
 active Audio clip, including clips whose video is covered by a higher-priority

@@ -189,6 +189,11 @@ previews are outside this first integration step.
   clip's Timeline position, duration, and original audio. A longer Motion
   render remains trimmed to that clip duration until the editor user extends
   the clip.
+- Video Editor offline export opens the published Motion video at clip-local
+  time using the publication's frame rate. Original source-in and frame rate
+  remain the basis for original embedded audio; publication audio is ignored.
+  A missing publication falls back to the original video. An online publication
+  can export without audio while the original video is offline.
 - Right-click a video or image Media Pool item to create or reopen a separate
   linked composition. The source stays unchanged and the linked render is
   added as a new Video item. Image layers begin with Motion Studio's existing

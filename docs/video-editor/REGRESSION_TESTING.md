@@ -35,7 +35,7 @@ Its fresh scoped build/deployment gate remained incomplete because the local
 Qt deployment helper could not query `qtpaths`; existing executable results
 must not be treated as clean-build acceptance. A subsequent native scoped
 build succeeded outside the restricted process environment; the deployment
-failure did not require a repository build-configuration change. F06–F10
+failure did not require a repository build-configuration change. F07–F10
 remain open.
 F02 is covered by `verifyRecoveryDurability` in the MainWindow integration
 test: snapshots survive restoration, session destruction, and failed saves;
@@ -53,6 +53,11 @@ F05 is covered by `validateSharedImageExport` and `validatePublishedImage` in
 the render-export test: publication precedence/fallback, shared Fusion inputs,
 offline originals, and a real Image Editor masked PNG producer. Also run the
 Image Editor core/mask gate when validating this producer/consumer boundary.
+F06 is covered by `validateMotionPublicationExport`: publication selection,
+original source-in/audio retention, differing publication/project/export rates,
+missing-publication fallback, and audio-disabled export with an offline original.
+Run `creative-suite-motion-editor-export` to verify the producer's export
+contract with this consumer gate.
 
 ## Local gate
 

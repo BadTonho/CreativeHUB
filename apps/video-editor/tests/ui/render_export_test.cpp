@@ -1438,6 +1438,51 @@ void validateSharedImageExport(const OutputChoice& output,
     check(published_frame);
 }
 
+void validateMotionPublicationExport(const OutputChoice& output,
+    const std::filesystem::path& image, const std::filesystem::path& root) {
+    std::atomic_bool cancel{false};
+    const auto original = createVideoWithAudioFixture(root);
+    const auto published = root / "motion-publication.mkv";
+    auto publication = makeImageJob(output, image, published, 503, 24);
+    publication.project_snapshot.timeline_frame_rate = {24, 1};
+    publication.settings.frame_rate = 24;
+    publication.settings.export_audio = false;
+    renderJob(publication, cancel);
+    auto job = makeImageJob(output, original, root / "motion-consumer.mkv", 504, 24);
+    job.project_snapshot.timeline_frame_rate = {24, 1};
+    auto& clip = job.project_snapshot.timeline_tracks[0].clips[0];
+    clip.kind = timeline::ClipKind::Video;
+    clip.source_start_frame = 30;
+    clip.source_duration_frames = 30;
+    renderJob(job, cancel);
+    const auto original_rms = decodedAudioRms(pathFromQString(job.settings.output_path));
+    clip.motion_link = media::MotionLinkReference{"motion-export", root / "composition.motion", published, original};
+    renderJob(job, cancel);
+    require(std::abs(decodedAudioRms(pathFromQString(job.settings.output_path)) - original_rms) < 0.002,
+        "Motion publication export changed the original trimmed audio.");
+    auto checkPublication = [&] {
+        auto decoder = media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path));
+        int frames = 0;
+        while (const auto frame = decoder->decode_next_frame()) {
+            const auto offset = static_cast<std::size_t>(((*frame)->height / 2) * (*frame)->stride + ((*frame)->width / 2) * 4);
+            require((*frame)->rgba_pixels[offset] > (*frame)->rgba_pixels[offset + 1] + 80,
+                "Motion export ignored the publication or used the original source-in.");
+            ++frames;
+        }
+        require(frames == 60, "Motion publication export changed the timeline duration or frame-rate mapping.");
+    };
+    checkPublication();
+    clip.motion_link->published_output_path = root / "missing-motion.mkv";
+    renderJob(job, cancel);
+    require(std::abs(decodedAudioRms(pathFromQString(job.settings.output_path)) - original_rms) < 0.002,
+        "Missing Motion publication did not fall back to the original source.");
+    clip.motion_link->published_output_path = published;
+    clip.source_path = root / "offline-motion-original.mkv";
+    job.settings.export_audio = false;
+    renderJob(job, cancel);
+    checkPublication();
+}
+
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
 void validatePublishedImage(const OutputChoice& output, const std::filesystem::path& root) {
     const auto source = root / "producer-source.png", published = root / "published.png";
@@ -1567,6 +1612,7 @@ int main(int argc, char* argv[]) {
         validateActiveQueueShutdown(output, image_path, root);
         validateLosslessParity(output, image_path, root);
         validateSharedImageExport(output, image_path, green_image_path, root);
+        validateMotionPublicationExport(output, image_path, root);
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
         validatePublishedImage(output, root);
 #endif

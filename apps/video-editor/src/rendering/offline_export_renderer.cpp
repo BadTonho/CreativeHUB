@@ -82,6 +82,8 @@ struct RenderClip {
     std::size_t track_index = 0;
     std::size_t clip_index = 0;
     double source_fps = 30.0;
+    double audio_source_fps = 30.0;
+    bool linked_motion = false;
     std::filesystem::path visual_path;
     std::unique_ptr<media::VideoPlaybackSession> video;
     std::optional<media::VideoFrame> still;
@@ -156,6 +158,11 @@ std::filesystem::path sharedImagePath(
 
 std::filesystem::path clipPath(
     const project::ProjectDocument& document, const project::ProjectClip& clip) {
+    if (clip.kind == timeline::ClipKind::Video && clip.motion_link) {
+        std::error_code error;
+        if (std::filesystem::is_regular_file(clip.motion_link->published_output_path, error) && !error)
+            return clip.motion_link->published_output_path;
+    }
     if (clip.image_editor_variant.has_value() &&
         !clip.image_editor_variant->published_output_path.empty()) {
         std::error_code error;
@@ -325,13 +332,13 @@ std::optional<media::VideoFrame> composeFrame(
             } else {
                 const auto source_offset = timeline::sourceFrameOffsetForTimelineFrame(
                     local_frame, render_clip.source_fps, timeline_frame_rate,
-                    clip.source_duration_frames);
+                    render_clip.linked_motion ? 0 : clip.source_duration_frames);
                 if (!source_offset.has_value() || *source_offset < 0 ||
                     clip.source_start_frame > std::numeric_limits<std::int64_t>::max() -
                         *source_offset) {
                     throw std::runtime_error("A source frame index exceeded the supported range.");
                 }
-                source_frame_index = clip.source_start_frame + *source_offset;
+                source_frame_index = (render_clip.linked_motion ? 0 : clip.source_start_frame) + *source_offset;
                 if (compositor.nativeDelivery()) {
                     const auto decoded = render_clip.video->decodeFrameAtNative(source_frame_index,
                         [&canceled] { return canceled.load(std::memory_order_acquire); });
@@ -593,10 +600,17 @@ std::vector<RenderClip> prepareClips(
             } else {
                 const auto metadata = media::VideoProbe{}.probe(path);
                 entry.source_fps = validFrameRate(metadata.frame_rate, timeline_fps);
+                entry.audio_source_fps = entry.source_fps;
+                entry.linked_motion = clip.motion_link.has_value() &&
+                    path == clip.motion_link->published_output_path;
                 entry.video = media::VideoPlaybackSession::open(path, {job.settings.hardware_decoding_enabled
                     ? creative_suite::media::DecodeAcceleration::PreferHardware : creative_suite::media::DecodeAcceleration::Software}, observer);
-                if (job.settings.export_audio) {
-                    entry.audio = media::AudioPlaybackSession::open(path, {48000, 2});
+                if (job.settings.export_audio && !clip.audio_extracted) {
+                    if (entry.linked_motion) {
+                        const auto original = media::VideoProbe{}.probe(clip.source_path);
+                        entry.audio_source_fps = validFrameRate(original.frame_rate, timeline_fps);
+                    }
+                    entry.audio = media::AudioPlaybackSession::open(clip.source_path, {48000, 2});
                 }
             }
             if (clip.node_graph.has_value()) {
@@ -680,7 +694,7 @@ std::vector<media::TimelineAudioMixClip> audioMixClips(
             clip.timeline_start_frame,
             clip.duration_frames,
             clip.source_start_frame,
-            render_clip.source_fps,
+            render_clip.audio_source_fps,
             render_clip.track->audio_gain,
             clip.audio_gain,
             render_clip.track->audio_muted,
