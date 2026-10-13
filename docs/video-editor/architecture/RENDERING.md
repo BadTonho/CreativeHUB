@@ -69,7 +69,9 @@ Linked Motion clips export the published visual source at clip-local time,
 rescaled from the project rate to the publication rate. Embedded audio uses a
 separate session on the original video and its original source-in/rate; extracted
 audio remains owned by its companion. Missing publications fall back to the
-original visual source. Audio-disabled export needs only the published video.
+original visual source. Audio-disabled export needs only the published video and
+skips audio-only sources before any path check or decoder allocation. Timeline
+duration still includes audio-only tails, which render as black without audio.
 The persisted Motion publication offset is added to clip-local time before
 rounding to a published frame. Preview and the selected Fusion-node Viewer use
 the same mapping, including after splitting or trimming and after rate changes.

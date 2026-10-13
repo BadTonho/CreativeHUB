@@ -88,7 +88,10 @@ fields are absent.
 Video export remains a video file. Its duration reaches the end of the longest
 Timeline clip. If audio extends beyond visual content, the renderer emits black
 frames until the audio ends. Disabling export audio omits the output audio
-stream. Preview and export share sample scheduling for embedded and
+stream and skips audio-only source preparation, including offline audio files.
+The complete Timeline still determines video duration and its black tail. With
+audio enabled, an offline audio source fails with a detailed log and preserves
+the previous destination. Preview and export share sample scheduling for embedded and
 independent audio sources, including trims, gains, mutes, and silence.
 
 Audio clip waveforms are derived after insertion and displayed from separate

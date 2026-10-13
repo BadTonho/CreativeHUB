@@ -1486,6 +1486,48 @@ void validateMotionPublicationExport(const OutputChoice& output,
     checkPublication();
 }
 
+void validateOfflineAudioDisabledExport(const OutputChoice& output, const std::filesystem::path& image,
+    const std::filesystem::path& root) {
+    auto job = makeImageJob(output, image, root / "offline-audio-disabled.mkv", 507, 2);
+    job.settings.export_audio = false; job.settings.frame_rate = 30;
+    project::ProjectTrack audio_track;
+    audio_track.name = "A1"; audio_track.track_id = 2; audio_track.kind = timeline::TrackKind::Audio;
+    project::ProjectClip missing_audio;
+    missing_audio.kind = timeline::ClipKind::Audio; missing_audio.source_path = root / "offline-audio.wav";
+    missing_audio.timeline_start_frame = 0; missing_audio.duration_frames = 5;
+    missing_audio.source_duration_time_us = 166667;
+    audio_track.clips.push_back(missing_audio); job.project_snapshot.timeline_tracks.push_back(audio_track);
+    std::atomic_bool canceled{false}; renderJob(job, canceled);
+    auto session = media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path));
+    int count = 0;
+    while (const auto frame = session->decode_next_frame()) {
+        if (count >= 2) {
+            for (std::size_t pixel = 0; pixel < (*frame)->rgba_pixels.size(); pixel += 4)
+                require((*frame)->rgba_pixels[pixel] <= 3 && (*frame)->rgba_pixels[pixel + 1] <= 3 &&
+                    (*frame)->rgba_pixels[pixel + 2] <= 3 && (*frame)->rgba_pixels[pixel + 3] == 255,
+                    "Audio-disabled export did not preserve the black timeline tail.");
+        }
+        ++count;
+    }
+    require(count == 5, "Skipping offline audio changed the timeline export duration.");
+    const auto metadata = media::VideoProbe{}.probe(pathFromQString(job.settings.output_path));
+    require(!metadata.audio, "Audio-disabled export produced an audio stream.");
+    session.reset();
+    const std::string sentinel = "previous destination";
+    std::ofstream(pathFromQString(job.settings.output_path), std::ios::binary) << sentinel;
+    job.settings.export_audio = true;
+    bool failed = false;
+    try { renderJob(job, canceled); } catch (const std::exception&) { failed = true; }
+    require(failed, "Audio-enabled export accepted offline audio.");
+    std::ifstream preserved(pathFromQString(job.settings.output_path), std::ios::binary);
+    require(std::string(std::istreambuf_iterator<char>(preserved), {}) == sentinel,
+        "Missing audio damaged the previous output destination.");
+    std::ifstream log(logging::Logger::instance().log_path());
+    const std::string entries(std::istreambuf_iterator<char>(log), {});
+    require(entries.find("offline-audio.wav") != std::string::npos,
+        "Audio-enabled export did not log its missing source.");
+}
+
 void validateOrientedVideoExport(const OutputChoice& output, const std::filesystem::path& root) {
     const auto raw_path = root / "orientation-original.mkv", rotated_path = root / "orientation.mp4";
     creative_suite::media::test_support::createTaggedVideo(raw_path, AVCOL_SPC_SMPTE170M, AVCOL_RANGE_MPEG, "mpeg4");
@@ -1697,6 +1739,7 @@ int main(int argc, char* argv[]) {
         validateMotionPublicationExport(output, image_path, root);
         validateMotionSplitContinuity(output, root);
         validateOrientedVideoExport(output, root);
+        validateOfflineAudioDisabledExport(output, image_path, root);
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
         validatePublishedImage(output, root);
 #endif

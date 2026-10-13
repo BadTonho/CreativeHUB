@@ -579,6 +579,7 @@ std::vector<RenderClip> prepareClips(
             checkCanceled(canceled);
             const auto& clip = track.clips[clip_index];
             if (clip.duration_frames <= 0 || clip.timeline_start_frame < 0) continue;
+            if (clip.kind == timeline::ClipKind::Audio && !job.settings.export_audio) continue;
             RenderClip entry;
             entry.clip = &clip;
             entry.track = &track;

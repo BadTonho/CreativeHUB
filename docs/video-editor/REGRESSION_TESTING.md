@@ -35,7 +35,8 @@ Its fresh scoped build/deployment gate remained incomplete because the local
 Qt deployment helper could not query `qtpaths`; existing executable results
 must not be treated as clean-build acceptance. A subsequent native scoped
 build succeeded outside the restricted process environment; the deployment
-failure did not require a repository build-configuration change. F10 remains open.
+failure did not require a repository build-configuration change. All ten findings
+now have fixes and permanent regression coverage.
 F02 is covered by `verifyRecoveryDurability` in the MainWindow integration
 test: snapshots survive restoration, session destruction, and failed saves;
 successful Save/Save As and explicit Discard release the recovered set.
@@ -76,6 +77,10 @@ matrices must fail at both probe and decode boundaries with logged errors.
 `validateOrientedVideoExport` verifies portrait export
 and corner positions. The strict H.264/HEVC gate checks D3D11 decode with explicit
 oriented RGBA delivery and counted downloads; ordinary native parity stays active.
+F10 is covered by `validateOfflineAudioDisabledExport`: offline audio-only clips
+do not block silent video export, output contains no audio, the full Timeline
+duration and black tail remain, and enabling audio fails with a logged source
+path while preserving the previous destination. This case failed before the fix.
 
 ## Local gate
 
