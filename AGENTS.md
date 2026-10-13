@@ -249,20 +249,41 @@ Important decisions must be recorded in the documentation, indicating whether th
   app is updated unless the output matches the executable they launch.
 - Treat documentation as part of the implementation. Keep it aligned with the current code, architecture, behavior, and decisions, and update every affected document in the same change whenever code, UI, behavior, an API, a data format, build configuration, dependency, or project status changes. Verify the updated documentation against the implementation before considering the work complete.
 - Update the documentation whenever an architectural decision is made.
-- Create a version-specific changelog at
-  `Changelog/<application-id>/<version>.md` whenever an application's release
-  is prepared or documented, even if its version metadata has not changed in
-  the repository. This includes prereleases and releases already published
-  externally. Add the changelog in the same change when preparing a release. If
-  an already published release lacks a changelog, create it retroactively using
-  the available release information; do not change version metadata solely to
-  add retrospective documentation. Use the release catalog IDs: `hub`,
-  `video-editor`, `image-editor`, and `motion-editor`. Record the changes
-  delivered since that application's previous version, including applicable
-  new features, improvements, fixes, and removals. If a version contains no
-  user-visible changes, state that and summarize the relevant maintenance or
-  distribution changes. Write changelog entries in English, like other project
-  documentation.
+- Maintain application changelogs only in version-specific files at
+  `Changelog/<application-id>/<version>.md`, using the release catalog IDs:
+  `hub`, `video-editor`, `image-editor`, and `motion-editor`. Update the
+  corresponding file as each feature, improvement, fix, removal, compatibility
+  change, or significant build/dependency/distribution maintenance is
+  implemented. Include the entry in the same change and, when committing is
+  authorized, the same commit as the implementation. This is a completion and
+  commit requirement even when the application's version metadata is unchanged.
+  Purely editorial documentation corrections do not require changelog entries.
+- During development, accumulate changes in the version-specific file for the
+  intended next release, as designated by the maintainer or repository release
+  planning. Reuse that file; for example, changes intended for 0.1.1 belong in
+  `Changelog/<application-id>/0.1.1.md` while the executable may still report
+  0.1.0. Mark the file `Unreleased` until publication. Do not create
+  `UNRELEASED.md` or another generic file in place of a version-specific
+  changelog. A changelog filename or status does not authorize a release or an
+  application version change. When the intended release version changes,
+  consolidate its pending entries into the chosen version's file.
+- Keep application version metadata unchanged during ordinary development.
+  Advance it only as part of maintainer-authorized release preparation, before
+  compiling release artifacts, and verify that each application's executable,
+  installer, and update-catalog entry agree. The suite release version remains
+  independent of application versions. Document/protocol schema versions are
+  separate and may advance when required by a validated compatibility change.
+- The initial 0.1.0 baseline is an explicit historical exception: no retroactive
+  changelog is required for it. Every subsequent version, including prereleases,
+  must have its version-specific changelog when prepared or documented. If a
+  later published release lacks one, reconstruct it from available release
+  evidence without changing version metadata merely to add documentation.
+  Record changes since that application's previous published version. For
+  shared-library changes, update the changelogs of applications whose delivered
+  behavior or relevant maintenance is affected. Write entries in English. If a
+  release has no user-visible changes, state that and summarize its maintenance
+  or distribution changes. Preserve published release history when accumulating
+  work for a later version.
 - Document user-facing keyboard shortcuts in the corresponding application's
   guide, such as `docs/video-editor/SHORTCUTS.md` or
   `docs/image-editor/SHORTCUTS.md`. Create `docs/<application-id>/SHORTCUTS.md`
