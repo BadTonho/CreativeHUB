@@ -140,6 +140,7 @@ add_executable(creative-suite-main-editor-timeline-widget-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_trim_gesture.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_trim_gesture.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_widget.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/effects/effects_catalog.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_widget.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
@@ -151,6 +152,7 @@ target_include_directories(creative-suite-main-editor-timeline-widget-tests PRIV
 
 target_link_libraries(creative-suite-main-editor-timeline-widget-tests PRIVATE
     Qt6::Widgets
+    creative-suite::diagnostics
 )
 
 target_compile_features(creative-suite-main-editor-timeline-widget-tests PRIVATE cxx_std_20)

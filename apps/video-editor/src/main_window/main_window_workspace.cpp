@@ -605,6 +605,7 @@ void MainWindow::refreshFusionSelection() {
             selected = &model.tracks()[location->track_index].clips[location->clip_index];
     }
     fusion_workspace_->setSelection(selected, std::move(choices));
+    refreshEffectsContext();
 }
 
 void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
@@ -614,6 +615,7 @@ void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
 }
 
 void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
+    refreshEffectsContext();
     if (shortcut_manager_ != nullptr) {
         shortcut_manager_->setWorkspace(page);
     }

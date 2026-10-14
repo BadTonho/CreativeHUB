@@ -6,6 +6,16 @@
 
 namespace effects {
 
+enum class Workspace { Edit, Fusion, None };
+
+// UI actions only; rendering and graph node types remain owned by Fusion.
+enum class Action {
+    Unavailable, VisualEffect, AudioEffect, BackgroundClip, CompositionClip,
+    AdjustmentClip, TextClip, Transition,
+    InputNode, TransformNode, ColorNode, MergeNode, BackgroundNode, TextNode,
+    RectangleMaskNode, EllipseMaskNode,
+};
+
 struct Category {
     QString id;
     QString name;
@@ -16,11 +26,17 @@ struct Definition {
     QString id;
     QString name;
     QString category_id;
+    Action edit_action = Action::Unavailable;
+    Action fusion_action = Action::Unavailable;
 };
 
 const QVector<Category>& categories();
 const QVector<Definition>& definitions();
 [[nodiscard]] bool isDraggable(const QString& id);
+[[nodiscard]] Action actionFor(const QString& id, Workspace workspace);
+[[nodiscard]] bool isAvailable(const QString& id, Workspace workspace);
+[[nodiscard]] bool isDraggable(const QString& id, Workspace workspace);
+[[nodiscard]] bool categoryAvailable(const QString& id, Workspace workspace);
 [[nodiscard]] QStringList favoriteIds();
 [[nodiscard]] bool setFavorite(const QString& id, bool enabled);
 // Includes descendants, so Video also lists its Generators subcategory.

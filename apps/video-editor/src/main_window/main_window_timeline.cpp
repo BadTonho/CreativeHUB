@@ -155,6 +155,9 @@ void MainWindow::synchronizeActiveTimelineSelection() noexcept {
         active_timeline_clip_index_cache_ = location->clip_index;
         return;
     }
+    // Session IDs are authoritative. Cached indexes must not resurrect a
+    // selection cleared by the Edit controller (including generated clips).
+    active_timeline_clip_index_cache_.reset();
     if (active_timeline_track_id_.has_value()) {
         const auto track_index = timeline_model_.locateTrack(*active_timeline_track_id_);
         if (track_index.has_value()) {
@@ -162,19 +165,8 @@ void MainWindow::synchronizeActiveTimelineSelection() noexcept {
             return;
         }
         active_timeline_track_id_.reset();
-        active_timeline_track_index_cache_.reset();
     }
-    if (active_timeline_track_index_cache_.has_value() &&
-        *active_timeline_track_index_cache_ < timeline_model_.trackCount()) {
-        const auto& track = timeline_model_.tracks()[*active_timeline_track_index_cache_];
-        active_timeline_track_id_ = track.track_id;
-        if (active_timeline_clip_index_cache_.has_value() &&
-            *active_timeline_clip_index_cache_ < track.clips.size()) {
-            active_timeline_clip_id_ = track.clips[*active_timeline_clip_index_cache_].clip_id;
-        }
-    } else if (!active_timeline_clip_index_cache_.has_value()) {
-        active_timeline_track_index_cache_.reset();
-    }
+    active_timeline_track_index_cache_.reset();
 }
 
 void MainWindow::setActiveTimelineSelection(timeline::ClipLocation location) noexcept {

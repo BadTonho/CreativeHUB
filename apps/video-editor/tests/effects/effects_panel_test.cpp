@@ -6,6 +6,7 @@
 
 #include <QApplication>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QSettings>
 #include <QTemporaryDir>
 
@@ -50,7 +51,7 @@ int main(int argc, char* argv[]) {
                 "Text category is missing.");
         require(toolbox.currentCategoryId() == "all",
                 "Effects Toolbox must initially select All.");
-        require(effects_list.count() == 11,
+        require(effects_list.count() == 17,
                 "Effects list must contain all visual filters and existing tools.");
         require(effects_list.categoryId() == "all",
                 "Effects list must initially show All.");
@@ -151,10 +152,81 @@ int main(int argc, char* argv[]) {
                     effects_list.visibleEffectCount() == 11,
                 "Unknown categories must fall back to All.");
 
-        require(effects::categories().size() == 6,
+        require(effects::categories().size() == 8,
                 "Shared effect catalog contains unimplemented categories.");
-        require(effects::definitions().size() == 11,
+        require(effects::definitions().size() == 17,
                 "The Effects catalog must retain existing tools alongside visual filters.");
+        QObject::connect(&toolbox, &EffectsToolboxWidget::categoryChanged,
+                         &effects_list, &EffectsListWidget::setCategory);
+        require(effects::setFavorite("fusion.ellipse_mask", true) &&
+                effects::setFavorite("video.adjustment_clip", true) &&
+                effects::setFavorite("video.background", true), "Favorites setup failed.");
+        favorites.refresh();
+        require(favorites.count() == 2, "Edit must hide Fusion-only favorites.");
+        toolbox.setCurrentRow(3); // Audio disappears on entering Fusion.
+        effects_list.setWorkspace(effects::Workspace::Fusion);
+        favorites.setWorkspace(effects::Workspace::Fusion);
+        toolbox.setWorkspace(effects::Workspace::Fusion);
+        require(toolbox.count() == 6 && toolbox.currentCategoryId() == "all" &&
+                effects_list.categoryId() == "all" && effects_list.visibleEffectCount() == 12,
+                "Fusion categories and All fallback are incorrect.");
+        require(favorites.count() == 2 && effects::favoriteIds().size() == 3,
+                "Workspace filtering must retain hidden saved favorites.");
+        for (const auto& id : {"video.adjustment_clip", "video.fusion_composition", "audio.gain",
+                               "transitions.cross_dissolve", "transitions.fade_to_black"}) {
+            for (int i = 0; i < effects_list.count(); ++i) if (effects_list.item(i)->data(Qt::UserRole) == id) {
+                require(effects_list.item(i)->isHidden() &&
+                        effects_list.mimeData({effects_list.item(i)}) == nullptr,
+                        "Fusion must reject Edit-only MIME even for a stale item.");
+            }
+        }
+        effects_list.setCategory("fusion.masks");
+        require(effects_list.visibleEffectCount() == 2, "Masks category must contain both shapes.");
+        verifyDragMime("Ellipse Mask", "fusion.ellipse_mask");
+        effects_list.setCategory("fusion");
+        require(effects_list.visibleEffectCount() == 6, "Fusion must include its Masks descendants.");
+        int activations = 0;
+        QObject::connect(&effects_list, &EffectsListWidget::creationRequested,
+                         [&](const QString& id) { if (id == "fusion.ellipse_mask") ++activations; });
+        auto* ellipse = effects_list.findItems("Ellipse Mask", Qt::MatchExactly).front();
+        effects_list.resize(260, 400);
+        effects_list.show();
+        application.processEvents();
+        effects_list.scrollToItem(ellipse);
+        const auto point = effects_list.visualItemRect(ellipse).center();
+        const auto global = effects_list.viewport()->mapToGlobal(point);
+        for (const auto type : {QEvent::MouseButtonPress, QEvent::MouseButtonRelease,
+                                QEvent::MouseButtonDblClick, QEvent::MouseButtonRelease}) {
+            QMouseEvent event(type, QPointF(point), QPointF(global), Qt::LeftButton,
+                type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(effects_list.viewport(), &event);
+        }
+        require(activations == 1, "Double click must request Fusion node creation.");
+        effects_list.setEnabled(false);
+        effects_list.itemDoubleClicked(ellipse);
+        require(activations == 1 && effects_list.mimeData({ellipse}) == nullptr,
+                "Unavailable creation must reject activation and dragging.");
+        effects_list.setEnabled(true);
+        int favorite_activations = 0;
+        QObject::connect(&favorites, &EffectsFavoritesWidget::creationRequested,
+                         [&](const QString& id) { if (id == "fusion.ellipse_mask") ++favorite_activations; });
+        favorites.itemDoubleClicked(favorites.findItems("Ellipse Mask", Qt::MatchExactly).front());
+        require(favorite_activations == 1, "Fusion favorites must support double click.");
+        effects_list.setWorkspace(effects::Workspace::Edit);
+        favorites.setWorkspace(effects::Workspace::Edit);
+        toolbox.setCurrentRow(toolbox.count() - 1); // Masks disappears on returning to Edit.
+        toolbox.setWorkspace(effects::Workspace::Edit);
+        require(toolbox.currentCategoryId() == "all" && effects_list.visibleEffectCount() == 11 &&
+                favorites.count() == 2 && effects::favoriteIds().size() == 3,
+                "Returning to Edit must restore its catalog without losing favorites.");
+        effects_list.itemDoubleClicked(ellipse);
+        require(activations == 1 && effects_list.mimeData({ellipse}) == nullptr,
+                "Fusion-only items must not activate or drag in Edit.");
+        effects_list.setWorkspace(effects::Workspace::None);
+        favorites.setWorkspace(effects::Workspace::None);
+        toolbox.setWorkspace(effects::Workspace::None);
+        require(toolbox.count() == 0 && favorites.count() == 0 && effects_list.visibleEffectCount() == 0,
+                "Render must not offer editing actions.");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

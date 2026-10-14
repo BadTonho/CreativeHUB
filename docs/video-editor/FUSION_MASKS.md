@@ -1,6 +1,6 @@
 # Fusion Masks
 
-Rectangle Mask and Ellipse Mask are available in Fusion > Add Node for video,
+Rectangle Mask and Ellipse Mask are available in Effects > Fusion > Masks while in Fusion for video,
 image and independent Fusion Composition graphs. Edit geometry in the Inspector
 and press Apply Settings. The Viewer has no geometry handles. VIEW on a mask
 shows opaque grayscale coverage and does not modify the project.

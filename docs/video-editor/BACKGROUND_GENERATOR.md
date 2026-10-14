@@ -30,7 +30,7 @@ refresh the controls; no separate color property or rendering path is introduced
 
 Color and node alpha are static in this version. Node alpha combines normally
 with the clip's keyframed opacity. Open Fusion to add nodes, masks or media and
-continue editing. A Background added directly through Fusion Add Node and a
+continue editing. A Background added through Effects while in Fusion and a
 normal Fusion Composition still start transparent; only this preset is white.
 Existing Preview, node Viewer, GPU/CPU processing and export render the graph.
 

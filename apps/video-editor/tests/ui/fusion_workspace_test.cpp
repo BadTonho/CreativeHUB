@@ -1,6 +1,7 @@
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/fusion/nodes/ui/node_canvas.h"
 #include "ui/media_browser/media_drag_mime.h"
+#include "ui/effects/effects_list_widget.h"
 
 #include <QApplication>
 #include <QByteArray>
@@ -9,6 +10,7 @@
 #include <QDragMoveEvent>
 #include <QDoubleSpinBox>
 #include <QGraphicsItem>
+#include <QGraphicsLineItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QLabel>
@@ -224,7 +226,7 @@ int runFusionWorkspaceTest() {
             "Entering Fusion must pause playback, activate the clip at its start, and target Output.");
     auto* add_type = root.findChild<QComboBox*>("fusionAddNodeType");
     auto* add = root.findChild<QPushButton*>("fusionAddNodeButton");
-    require(add_type && add, "Node controls were not created.");
+    require(!add_type && !add, "The obsolete Add Node controls must be removed.");
 
     auto* canvas = root.findChild<QGraphicsView*>("fusionNodeCanvas");
     require(canvas != nullptr, "The Fusion node canvas was not created.");
@@ -347,9 +349,7 @@ int runFusionWorkspaceTest() {
     require(edit_count == 2 && edited.connections.size() == 1,
             "Dragging node ports did not restore the default connection.");
 
-    add_type->setCurrentIndex(add_type->findData(
-        static_cast<int>(fusion::nodes::NodeType::Transform)));
-    add->click();
+    require(workspace.addCatalogNode("fusion.transform"), "Catalog node creation failed.");
     require(selected_clip_id_was_preserved && edit_count == 3 &&
                 edited.nodes.size() == 3,
             "Adding a node did not update the selected clip graph.");
@@ -426,9 +426,7 @@ int runFusionWorkspaceTest() {
     require(edit_count == 7 && edited.connections.size() == 2,
             "Dragging an output back to a disconnected input did not reconnect it.");
 
-    add_type->setCurrentIndex(add_type->findData(
-        static_cast<int>(fusion::nodes::NodeType::Color)));
-    add->click();
+    require(workspace.addCatalogNode("fusion.color"), "Catalog node creation failed.");
     const auto color_id = edited.nodes.back().id;
     require(edit_count == 8,
             "Adding a Color node did not update the selected graph.");
@@ -545,13 +543,13 @@ int runFusionWorkspaceTest() {
                     fusion::nodes::NodeType::Effect && edited.connections.size() == 2,
             "Dropping a video effect on empty canvas did not create a disconnected node.");
     const auto detached_effect_id = edited.nodes.back().id;
-    for (const auto* rejected_id : {"audio.gain", "text.text",
+    for (const auto* rejected_id : {"audio.gain", "video.fusion_composition", "video.adjustment_clip",
                                     "transitions.cross_dissolve",
                                     "transitions.fade_to_black"}) {
         require(!drop_effect(blank_canvas_position, QByteArray(rejected_id)) &&
                     edit_count == 14 &&
                     fusion::nodes::findNode(edited, detached_effect_id) != nullptr,
-                "A non-video Effects item was accepted by the Fusion canvas.");
+                "An Edit-only Effects item was accepted by the Fusion canvas.");
     }
 
     node_canvas->setSelectedNode(connected_effect_id);
@@ -570,9 +568,7 @@ int runFusionWorkspaceTest() {
                 creative_suite::effects::parameterValue(effect_node->effect, "amount") == 45.0,
             "Effect Inspector changes were not committed to the selected graph node.");
 
-    add_type->setCurrentIndex(add_type->findData(
-        static_cast<int>(fusion::nodes::NodeType::Transform)));
-    add->click();
+    require(workspace.addCatalogNode("fusion.transform"), "Catalog node creation failed.");
     const auto animated_transform_id = edited.nodes.back().id;
     node_canvas->setSelectedNode(animated_transform_id);
     auto* animated_scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
@@ -722,6 +718,101 @@ int runFusionWorkspaceTest() {
     return 0;
 }
 
+void verifyCatalogDrops() {
+    QWidget owner;
+    ui::FusionWorkspace workspace;
+    workspace.createPanels(&owner);
+    timeline::TimelineClip clip;
+    clip.kind = timeline::ClipKind::FusionComposition;
+    clip.clip_id = 71;
+    clip.timeline_duration_frames = 150;
+    clip.node_graph = fusion::nodes::makeCompositionGraph();
+    workspace.setSelection(&clip, {});
+    require(!workspace.addCatalogNode("fusion.input"), "Inactive Fusion must refuse creation.");
+    workspace.setActive(true);
+    auto graph = *clip.node_graph;
+    int edits = 0;
+    QObject::connect(&workspace, &ui::FusionWorkspace::graphEditRequested,
+        [&](auto, const auto& value) { graph = value; ++edits; });
+    EffectsListWidget catalog;
+    catalog.setWorkspace(effects::Workspace::Fusion);
+    auto* canvas = workspace.nodeEditorPanel()->findChild<fusion::nodes::NodeCanvas*>();
+    const auto initial_connections = graph.connections;
+    const QStringList ids{"fusion.input", "fusion.transform", "fusion.color", "fusion.merge",
+        "video.background", "text.text", "fusion.rectangle_mask", "fusion.ellipse_mask"};
+    for (const auto& id : ids) {
+        QListWidgetItem* entry = nullptr;
+        for (int i = 0; i < catalog.count(); ++i)
+            if (catalog.item(i)->data(Qt::UserRole).toString() == id) entry = catalog.item(i);
+        require(entry != nullptr, "Fusion catalog entry is missing.");
+        std::unique_ptr<QMimeData> mime(catalog.mimeData({entry}));
+        require(mime != nullptr, "Fusion catalog entry cannot be dragged.");
+        const QPoint position(80 + edits * 15, 220);
+        const auto scene_position = canvas->mapToScene(position);
+        QDragEnterEvent enter(position, Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &enter);
+        QDropEvent drop(QPointF(position), Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &drop);
+        require(enter.isAccepted() && drop.isAccepted() && graph.nodes.size() == 2 + edits &&
+                graph.nodes.back().x == scene_position.x() && graph.nodes.back().y == scene_position.y() &&
+                workspace.selectedNodeId() == graph.nodes.back().id && graph.connections == initial_connections,
+                "Catalog drop must create and select a disconnected node at the drop position.");
+        if (id == "video.background") require(graph.nodes.back().background_color[3] == 0,
+            "Fusion Background must retain transparent defaults.");
+        if (id == "text.text") require(graph.nodes.back().text.content == "Text",
+            "Fusion Text must retain its generator defaults.");
+    }
+    require(edits == 8, "Each catalog drop must produce one graph edit.");
+    require(workspace.addCatalogNode("fusion.merge"), "Double-click creation route failed.");
+    const auto& added = graph.nodes.back();
+    for (std::size_t i = 0; i + 1 < graph.nodes.size(); ++i) {
+        const auto& other = graph.nodes[i];
+        require(!QRectF(added.x, added.y, 210, 140).intersects(QRectF(other.x, other.y, 210, 140)),
+                "Automatic catalog placement must avoid existing nodes.");
+    }
+    const auto before = edits;
+    require(!workspace.addCatalogNode("video.adjustment_clip") &&
+            !workspace.addCatalogNode("video.fusion_composition") &&
+            !workspace.addCatalogNode("unknown") && edits == before,
+            "Unknown and Edit-only actions must not edit a graph.");
+    auto masked_graph = fusion::nodes::makeCompositionGraph();
+    fusion::nodes::Node mask;
+    mask.id = masked_graph.next_id++;
+    mask.type = fusion::nodes::NodeType::RectangleMask;
+    mask.x = 700; mask.y = 300;
+    masked_graph.nodes.push_back(mask);
+    masked_graph.connections.push_back({mask.id, 2, 2});
+    clip.node_graph = masked_graph;
+    workspace.setSelection(&clip, {});
+    QPoint mask_cable_position;
+    bool found_mask_cable = false;
+    for (auto* item : canvas->scene()->items()) {
+        if (item->data(1).toInt() == 3 && item->data(2).toInt() == 2) {
+            auto* line = qgraphicsitem_cast<QGraphicsLineItem*>(item);
+            require(line != nullptr, "Mask cable geometry is unavailable.");
+            mask_cable_position = canvas->mapFromScene(line->line().pointAt(0.5));
+            found_mask_cable = true;
+            break;
+        }
+    }
+    require(found_mask_cable, "Mask cable must be drawn.");
+    QMimeData filter_mime;
+    filter_mime.setData(ui::kEffectIdMimeType, "video.grayscale");
+    QDragEnterEvent enter(mask_cable_position, Qt::CopyAction, &filter_mime, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &enter);
+    QDropEvent drop(QPointF(mask_cable_position), Qt::CopyAction, &filter_mime, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(), &drop);
+    require(!drop.isAccepted() && edits == before, "Visual effects must not split mask cables.");
+    workspace.setSelection(nullptr, {});
+    require(!workspace.addCatalogNode("fusion.input") && edits == before,
+            "Missing selection must refuse node creation.");
+    timeline::TimelineClip audio = clip;
+    audio.kind = timeline::ClipKind::Audio;
+    workspace.setSelection(&audio, {});
+    require(!workspace.addCatalogNode("text.text") && edits == before,
+            "Audio clips must refuse graph creation.");
+}
+
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     try {
@@ -734,6 +825,7 @@ int main(int argc, char** argv) {
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                            settings_directory.path());
         testGridPreferencesAndRendering();
+        verifyCatalogDrops();
         return runFusionWorkspaceTest();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

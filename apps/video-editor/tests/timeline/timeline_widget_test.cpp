@@ -628,6 +628,23 @@ int main(int argc, char* argv[]) {
         require(visual_filter_drop_received,
                 "A visual filter could not be dropped onto a video clip.");
 
+        int invalid_catalog_drops = 0;
+        QObject::connect(&widget, &timeline::TimelineWidget::effectDropRequested,
+            [&](const QString& id, auto, auto) {
+                if (id.startsWith("fusion.") || id == "unknown") ++invalid_catalog_drops;
+            });
+        for (const auto* id : {"fusion.input", "fusion.rectangle_mask", "unknown"}) {
+            QMimeData mime;
+            mime.setData(ui::kEffectIdMimeType, id);
+            QDragEnterEvent enter(effect_drop_position.toPoint(), Qt::CopyAction, &mime,
+                                  Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&widget, &enter);
+            QDropEvent drop(effect_drop_position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&widget, &drop);
+            require(!enter.isAccepted() && !drop.isAccepted() && invalid_catalog_drops == 0,
+                    "The Timeline must reject Fusion-only and unknown catalog MIME.");
+        }
+
         qint64 transition_drop_count = 0;
         qint64 transition_drop_kind = -1;
         const auto sendTransitionDrop = [

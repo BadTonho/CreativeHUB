@@ -1,5 +1,6 @@
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/fusion/nodes/ui/node_canvas.h"
+#include "ui/effects/effects_catalog.h"
 
 #include <creative_suite/effects/effects.h>
 
@@ -90,6 +91,31 @@ bool hasKeyAtFrame(
         [frame](const auto& keyframe) { return keyframe.frame == frame; });
 }
 
+std::optional<fusion::nodes::Node> catalogNode(const QString& id) {
+    using effects::Action;
+    using fusion::nodes::NodeType;
+    fusion::nodes::Node node;
+    switch (effects::actionFor(id, effects::Workspace::Fusion)) {
+    case Action::VisualEffect: {
+        const auto key = id.toStdString();
+        if (!creative_suite::effects::findDefinition(key)) return std::nullopt;
+        node.type = NodeType::Effect;
+        node.effect = creative_suite::effects::makeDefaultInstance(key);
+        break;
+    }
+    case Action::InputNode: node.type = NodeType::Input; break;
+    case Action::TransformNode: node.type = NodeType::Transform; break;
+    case Action::ColorNode: node.type = NodeType::Color; break;
+    case Action::MergeNode: node.type = NodeType::Merge; break;
+    case Action::BackgroundNode: node.type = NodeType::Background; break;
+    case Action::TextNode: node.type = NodeType::Text; break;
+    case Action::RectangleMaskNode: node.type = NodeType::RectangleMask; break;
+    case Action::EllipseMaskNode: node.type = NodeType::EllipseMask; break;
+    default: return std::nullopt;
+    }
+    return node;
+}
+
 } // namespace
 
 FusionWorkspace::FusionWorkspace(QObject* parent) : QObject(parent) {}
@@ -114,24 +140,10 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     auto* toolbar = new QWidget(node_editor_panel_);
     auto* toolbar_layout = new QHBoxLayout(toolbar);
     toolbar_layout->setContentsMargins(8, 6, 8, 6);
-    auto* add_type = new QComboBox(toolbar);
-    add_type->setObjectName("fusionAddNodeType");
-    add_type->addItem("Input", static_cast<int>(fusion::nodes::NodeType::Input));
-    add_type->addItem("Transform", static_cast<int>(fusion::nodes::NodeType::Transform));
-    add_type->addItem("Color", static_cast<int>(fusion::nodes::NodeType::Color));
-    add_type->addItem("Merge", static_cast<int>(fusion::nodes::NodeType::Merge));
-    add_type->addItem("Background", static_cast<int>(fusion::nodes::NodeType::Background));
-    add_type->addItem("Text", static_cast<int>(fusion::nodes::NodeType::Text));
-    add_type->addItem("Rectangle Mask", static_cast<int>(fusion::nodes::NodeType::RectangleMask));
-    add_type->addItem("Ellipse Mask", static_cast<int>(fusion::nodes::NodeType::EllipseMask));
-    auto* add_button = new QPushButton("Add Node", toolbar);
-    add_button->setObjectName("fusionAddNodeButton");
     auto* grid_button = new QPushButton("Grid", toolbar);
     grid_button->setObjectName("fusionGridSettingsButton");
     grid_button->setToolTip("Adjust the Node Editor background grid.");
     grid_button->setAccessibleName("Grid Settings");
-    toolbar_layout->addWidget(add_type);
-    toolbar_layout->addWidget(add_button);
     toolbar_layout->addWidget(grid_button);
     toolbar_layout->addStretch(1);
     node_layout->addWidget(toolbar);
@@ -270,50 +282,10 @@ void FusionWorkspace::createPanels(QWidget* parent) {
             commitGraph(std::move(*candidate), QStringLiteral("Connection removed."));
         });
     node_canvas->setEffectDropRequestedHandler(
-        [this](const QString& effect_id, const QPointF& position,
+        [this](const QString& id, const QPointF& position,
                std::optional<fusion::nodes::Connection> cable) {
-            if (clip_id_ == 0 || (cable && cable->input==2)) return false;
-            const auto effect_bytes = effect_id.toUtf8();
-            const std::string effect_key(effect_bytes.constData(),
-                                         static_cast<std::size_t>(effect_bytes.size()));
-            if (creative_suite::effects::findDefinition(effect_key) == nullptr) return false;
-            auto candidate = graph_;
-            fusion::nodes::Node effect_node;
-            effect_node.id = candidate.next_id++;
-            effect_node.type = fusion::nodes::NodeType::Effect;
-            effect_node.x = position.x();
-            effect_node.y = position.y();
-            effect_node.effect = creative_suite::effects::makeDefaultInstance(effect_key);
-            const auto effect_node_id = effect_node.id;
-            candidate.nodes.push_back(std::move(effect_node));
-            if (cable.has_value()) {
-                candidate.connections.erase(std::remove(candidate.connections.begin(),
-                    candidate.connections.end(), *cable), candidate.connections.end());
-                candidate.connections.push_back({cable->from, effect_node_id, 0});
-                candidate.connections.push_back({effect_node_id, cable->to, cable->input});
-                if (!fusion::nodes::validate(candidate)) {
-                    if (auto* label = inspector_panel_->findChild<QLabel*>("fusionNodeStatus"))
-                        label->setText("Effect insertion rejected: the cable cannot be split without creating an invalid or cyclic graph.");
-                    return false;
-                }
-            }
-            selected_node_id_ = effect_node_id;
-            commitGraph(std::move(candidate), cable.has_value()
-                ? QStringLiteral("Effect inserted into the connection.")
-                : QStringLiteral("Effect node added; connect it to the graph."));
-            return true;
+            return createCatalogNode(id, position, cable);
         });
-    connect(add_button, &QPushButton::clicked, this, [this, add_type] {
-        if (clip_id_ == 0) return;
-        auto candidate = graph_;
-        const auto type = static_cast<fusion::nodes::NodeType>(add_type->currentData().toInt());
-        const auto index = candidate.nodes.size();
-        candidate.nodes.push_back(fusion::nodes::Node{candidate.next_id++, type,
-            80.0 + static_cast<double>(index % 5) * 245.0,
-            90.0 + static_cast<double>(index / 5) * 145.0});
-        selected_node_id_ = candidate.nodes.back().id;
-        commitGraph(std::move(candidate), QStringLiteral("Node added."));
-    });
 
     inspector_panel_ = new QWidget(parent);
     inspector_panel_->setObjectName("fusionInspector");
@@ -352,6 +324,52 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     inspector_scroll_area->setWidget(inspector_content);
     inspector_panel_layout->addWidget(inspector_scroll_area);
     setSelection(nullptr, {});
+}
+
+bool FusionWorkspace::addCatalogNode(const QString& id) {
+    if (!active_ || clip_id_ == 0 || node_editor_panel_ == nullptr) return false;
+    const auto node = catalogNode(id);
+    auto* canvas = node_editor_panel_->findChild<fusion::nodes::NodeCanvas*>("fusionNodeCanvas");
+    if (!node || !canvas) return false;
+    const auto position = canvas->freeNodePosition(node->type);
+    if (!createCatalogNode(id, position, std::nullopt)) return false;
+    const QRectF bounds(position, QSizeF(230, 160));
+    canvas->setSceneRect(canvas->sceneRect().united(bounds.adjusted(-30, -30, 30, 30)));
+    canvas->ensureVisible(bounds, 20, 20);
+    return true;
+}
+
+bool FusionWorkspace::createCatalogNode(
+    const QString& id, const QPointF& position,
+    std::optional<fusion::nodes::Connection> cable) {
+    if (!active_ || clip_id_ == 0) return false;
+    auto node = catalogNode(id);
+    if (!node) return false;
+    const bool split_cable = cable && node->type == fusion::nodes::NodeType::Effect;
+    if (split_cable && cable->input == 2) return false;
+    auto candidate = graph_;
+    node->id = candidate.next_id++;
+    node->x = position.x();
+    node->y = position.y();
+    const auto node_id = node->id;
+    candidate.nodes.push_back(std::move(*node));
+    if (split_cable) {
+        candidate.connections.erase(std::remove(candidate.connections.begin(),
+            candidate.connections.end(), *cable), candidate.connections.end());
+        candidate.connections.push_back({cable->from, node_id, 0});
+        candidate.connections.push_back({node_id, cable->to, cable->input});
+    }
+    if (!fusion::nodes::validate(candidate) ||
+        !fusion::nodes::validKeyframeRange(candidate, clip_duration_frames_)) {
+        if (auto* label = inspector_panel_->findChild<QLabel*>("fusionNodeStatus"))
+            label->setText("Node creation rejected: the graph would be invalid.");
+        return false;
+    }
+    selected_node_id_ = node_id;
+    commitGraph(std::move(candidate), split_cable
+        ? QStringLiteral("Effect inserted into the connection.")
+        : QStringLiteral("Node added; connect it to the graph."));
+    return true;
 }
 
 void FusionWorkspace::setSelection(const timeline::TimelineClip* clip,

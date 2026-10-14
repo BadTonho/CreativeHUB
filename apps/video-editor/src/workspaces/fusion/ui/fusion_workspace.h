@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <vector>
+#include <QPointF>
+#include <optional>
 
 class QWidget;
 
@@ -30,6 +32,8 @@ public:
     void setMediaChoices(std::vector<MediaChoice> media_choices);
     void setTimelinePlayheadFrame(std::int64_t timeline_frame);
     void setActive(bool active);
+    // Creates a catalog node at a free position in the visible graph.
+    bool addCatalogNode(const QString& id);
     [[nodiscard]] bool isActive() const noexcept { return active_; }
     [[nodiscard]] timeline::ClipId selectedClipId() const noexcept {
         return clip_id_;
@@ -87,6 +91,8 @@ private:
         fusion::nodes::NodeId node_id,
         const std::string& parameter_id);
     void commitGraph(fusion::nodes::NodeGraph graph, const QString& status);
+    bool createCatalogNode(const QString& id, const QPointF& position,
+                           std::optional<fusion::nodes::Connection> cable);
 };
 
 }  // namespace ui

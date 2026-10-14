@@ -203,14 +203,12 @@ void uiWorkflow() {
     CS_TEST_CHECK(fusion.selectedClipId() == selected.clip_id);
     NodeGraph edited = *selected.node_graph;
     QObject::connect(&fusion, &ui::FusionWorkspace::graphEditRequested, [&](auto, const auto& graph) { edited = graph; });
-    auto* types = fusion.nodeEditorPanel()->findChild<QComboBox*>("fusionAddNodeType");
-    auto* add = fusion.nodeEditorPanel()->findChild<QPushButton*>("fusionAddNodeButton");
-    types->setCurrentIndex(types->findData(static_cast<int>(NodeType::Text))); add->click();
+    CS_TEST_CHECK(fusion.addCatalogNode("text.text"));
     auto* content = fusion.inspectorPanel()->findChild<QPlainTextEdit*>("fusionTextContent");
     CS_TEST_CHECK(content); content->setPlainText("Composition title");
     fusion.inspectorPanel()->findChild<QPushButton*>("fusionApplyText")->click();
     CS_TEST_CHECK(edited.nodes.back().text.content == "Composition title");
-    types->setCurrentIndex(types->findData(static_cast<int>(NodeType::Input))); add->click();
+    CS_TEST_CHECK(fusion.addCatalogNode("fusion.input"));
     auto* source = fusion.inspectorPanel()->findChild<QComboBox*>("fusionInputMediaSource");
     CS_TEST_CHECK(source && source->itemText(0) == "Transparent");
     timeline::TimelineWidget timeline; timeline.resize(1000, 350); timeline.setFrameRate({30, 1});

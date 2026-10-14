@@ -1,18 +1,28 @@
 # UI Boundary
 
+## Workspace Effects catalog
+
+Effects Toolbox, list and Favorites follow the active workspace. Fusion-only nodes appear under Fusion and Fusion > Masks; Background stays under Video > Generators and Text under Text. Drag chooses the position; double click creates and selects a disconnected node near the visible center. Creation is disabled without a compatible clip. Grid remains in the Node Editor toolbar. See [the catalog contract](EFFECTS.md#workspace-catalog).
+
+
+Session clip/track IDs are authoritative for selection. When the controller
+clears a selection, MainWindow clears its derived index caches instead of
+restoring the former clip from them. Fusion creation availability follows that
+selection through the existing selection-presentation signal.
+
 ## Background Generator
 
 The Edit Inspector discovers Background nodes on video/image/composition graphs. One node shows RGBA controls directly; several show a node-ID selector. Choosing a node is transient; accepting color commits one graph edit, while Cancel changes nothing. Fusion shares the same data. See [Background Generator](../BACKGROUND_GENERATOR.md).
 
 ## Fusion masks v1
 
-Fusion Add Node includes Rectangle Mask and Ellipse Mask. Gold Mask and blue Image ports have distinct labels and connection types. The Inspector supplies center, dimensions, rotation, Soft Edge and Invert; five geometry rows have keyframe controls. VIEW shows grayscale coverage with no drag/resize handles. See [Fusion Masks](../FUSION_MASKS.md).
+In Fusion, Effects > Fusion > Masks contains Rectangle Mask and Ellipse Mask. Gold Mask and blue Image ports have distinct labels and connection types. The Inspector supplies center, dimensions, rotation, Soft Edge and Invert; five geometry rows have keyframe controls. VIEW shows grayscale coverage with no drag/resize handles. See [Fusion Masks](../FUSION_MASKS.md).
 
 ## Fusion Composition workflow
 
 Drag Fusion Composition from Effects > Video to a free video-track range.
 Its teal block selects the normal Inspector and composed Timeline Preview;
-entering Fusion edits its graph. Add Node offers Background and Text alongside
+entering Fusion edits its graph. The Effects catalog offers Background and Text alongside
 the existing nodes. Generator colors include alpha; Text content/font/size/
 alignment are committed with Apply Text. Independent Input offers Transparent
 instead of Selected Timeline clip. Edit > Duplicate Fusion Composition has no

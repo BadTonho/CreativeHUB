@@ -1,5 +1,10 @@
 # Video Editor Roadmap
 
+## Workspace Effects catalog
+
+Implemented for pending 0.1.1: Effects is the workspace-filtered node creation catalog, replacing the Add Node selector/button. Fusion supports drag and double-click creation from the list and Favorites; exclusive tools stay in their workspace. See [the catalog contract](architecture/EFFECTS.md#workspace-catalog).
+
+
 ## Background Generator
 
 Implemented for pending 0.1.1: an opaque-white Background preset under Video > Generators, RGBA editing from Edit/Fusion, persisted composition names in CSP v29 and Hub backup support. Gradients, color animation and further generators remain later work. See [the guide](BACKGROUND_GENERATOR.md).

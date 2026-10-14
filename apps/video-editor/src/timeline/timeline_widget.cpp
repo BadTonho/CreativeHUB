@@ -1,4 +1,5 @@
 #include "timeline_widget.h"
+#include "ui/effects/effects_catalog.h"
 #include "ui/media_browser/external_file_urls.h"
 #include "timeline_time.h"
 
@@ -2181,6 +2182,9 @@ void TimelineWidget::dropEvent(QDropEvent* event) {
 }
 
 bool TimelineWidget::isSupportedDrop(const QMimeData* mime_data) const noexcept {
+    if (mime_data && mime_data->hasFormat(ui::kEffectIdMimeType))
+        return effects::isDraggable(QString::fromUtf8(mime_data->data(ui::kEffectIdMimeType)),
+                                    effects::Workspace::Edit);
     return mime_data != nullptr &&
         (mime_data->hasFormat(ui::kMediaPathMimeType) ||
          mime_data->hasFormat(ui::kEffectIdMimeType) ||
@@ -2319,6 +2323,7 @@ bool TimelineWidget::processDrop(
     const bool is_external_file_drop = !external_paths.isEmpty();
     const bool is_effect_drop = mime_data != nullptr &&
         mime_data->hasFormat(ui::kEffectIdMimeType);
+    if (is_effect_drop && !isSupportedDrop(mime_data)) return false;
     if ((!is_media_drop && !is_external_file_drop && !is_effect_drop) ||
         (!track.has_value() && !empty_group.has_value()) || !frame.has_value()) {
         return false;

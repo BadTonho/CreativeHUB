@@ -1,5 +1,14 @@
 # Build and Dependencies
 
+## Workspace Effects catalog
+
+The standalone timeline-widget regression target now compiles the existing
+effects catalog and links the existing diagnostics library so drop validation
+uses the same workspace metadata as the dock. This adds no external dependency.
+The catalog change is Video Editor-local; build its Debug executable and affected
+UI, graph, history and project tests. Hub and other applications are unaffected.
+
+
 ## Background Generator
 
 Background generator integration adds no third-party dependency. The effects-panel regression target links the existing diagnostics library for actionable favorites-settings failures. Build Video Editor, Hub and their affected tests; unrelated application executables are not required.

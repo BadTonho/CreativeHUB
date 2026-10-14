@@ -1,5 +1,46 @@
 # Shared Visual Effects Contract
 
+## Workspace catalog
+
+The Effects dock is the creation catalog for Edit and Fusion. App-owned
+`Definition` metadata describes an action for each workspace; `actionFor`,
+`isAvailable`, workspace-aware `isDraggable`, and `categoryAvailable` are shared
+by Toolbox, Effects and Favorites. This UI catalog does not own render engines
+or persisted graph types. Render offers no catalog creation actions.
+
+| Category | Edit | Fusion |
+| --- | --- | --- |
+| Video | Visual effects, Fusion Composition, Adjustment Clip | Visual effect nodes |
+| Video > Generators | Opaque-white Background clip | Transparent Background node |
+| Text | Text clip | Text node |
+| Audio / Transitions | Existing Edit tools | Hidden |
+| Fusion | Hidden | Input, Transform, Color, Merge |
+| Fusion > Masks | Hidden | Rectangle Mask, Ellipse Mask |
+
+All includes only available items; parents include descendants and empty
+categories are hidden. A category unavailable after a workspace change resets
+to All. Favorites keep their existing settings key and stable IDs; filtering
+never removes a hidden workspace-specific favorite from storage.
+
+In Fusion, drag from Effects or Favorites to create a node at the drop position,
+or double-click to create and select a disconnected node at a free location
+near the visible graph center. Automatic placement avoids existing nodes and
+scrolls the result into view. Creation is disabled without a compatible selected
+clip. The Node Editor retains Grid controls; the Add Node selector/button have
+been removed. Existing visual effects still split image cables when dropped
+on them and refuse mask cables. Other catalog nodes remain disconnected even
+when dropped over a cable. Typed wiring is unchanged.
+
+Fusion IDs `fusion.input`, `fusion.transform`, `fusion.color`, `fusion.merge`,
+`fusion.rectangle_mask`, and `fusion.ellipse_mask` use the existing effect-ID
+MIME with the same copy semantics. Background and Text retain `video.background`
+and `text.text`, resolving to the workspace's action. Both drop destinations
+validate compatibility; unknown IDs and Fusion-only timeline drops are refused.
+Creation reuses graph commands, dirty tracking, playback invalidation and
+Undo/Redo. Functions remains the existing four-filter picker. No shortcut,
+rendering or CSP v29 format change is introduced.
+
+
 ## Background Generator
 
 Video has a Generators child category containing Background; parent filtering includes descendants. Background uses `video.background` drag MIME and creates a clip. All and local Favorites expose it too. Favorites persist known draggable catalog IDs and can be removed through context menus. See [Background Generator](../BACKGROUND_GENERATOR.md).

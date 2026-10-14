@@ -45,6 +45,8 @@ public:
     void setGraph(const NodeGraph& graph);
     void setSelectedNode(NodeId id);
     void setViewerNode(NodeId id);
+    // Finds an unoccupied node-sized area near the current viewport center.
+    [[nodiscard]] QPointF freeNodePosition(NodeType type) const;
     void setSelectionChangedHandler(std::function<void(NodeId)> handler);
     void setViewerNodeRequestedHandler(std::function<void(NodeId)> handler);
     void setPositionChangedHandler(std::function<void(NodeId, double, double)> handler);

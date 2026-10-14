@@ -8,10 +8,34 @@
 namespace effects {
 
 bool isDraggable(const QString& id) {
-    const auto bytes = id.toUtf8();
-    return creative_suite::effects::findDefinition(std::string_view(bytes.constData(),bytes.size())) != nullptr ||
-        id == "video.background" || id == "video.fusion_composition" || id == "video.adjustment_clip" ||
-        id == "text.text" || id == "transitions.cross_dissolve" || id == "transitions.fade_to_black";
+    return isDraggable(id, Workspace::Edit) || isDraggable(id, Workspace::Fusion);
+}
+
+Action actionFor(const QString& id, Workspace workspace) {
+    if (workspace == Workspace::None) return Action::Unavailable;
+    for (const auto& definition : definitions()) {
+        if (definition.id == id)
+            return workspace == Workspace::Fusion
+                ? definition.fusion_action : definition.edit_action;
+    }
+    return Action::Unavailable;
+}
+
+bool isAvailable(const QString& id, Workspace workspace) {
+    return actionFor(id, workspace) != Action::Unavailable;
+}
+
+bool isDraggable(const QString& id, Workspace workspace) {
+    const auto action = actionFor(id, workspace);
+    return action != Action::Unavailable && action != Action::AudioEffect;
+}
+
+bool categoryAvailable(const QString& id, Workspace workspace) {
+    return std::any_of(definitions().cbegin(), definitions().cend(),
+        [&](const Definition& definition) {
+            return isAvailable(definition.id, workspace) &&
+                categoryContains(id, definition.category_id);
+        });
 }
 QStringList favoriteIds() {
     const auto saved = QSettings().value("effects/favorites").toStringList();
@@ -48,6 +72,8 @@ const QVector<Category>& categories() {
         {QStringLiteral("audio"), QStringLiteral("Audio")},
         {QStringLiteral("transitions"), QStringLiteral("Transitions")},
         {QStringLiteral("text"), QStringLiteral("Text")},
+        {QStringLiteral("fusion"), QStringLiteral("Fusion")},
+        {QStringLiteral("fusion.masks"), QStringLiteral("Masks"), QStringLiteral("fusion")},
     };
     return values;
 }
@@ -75,15 +101,22 @@ const QVector<Definition>& definitions() {
                               QString::fromUtf8(effect.name.data(),
                                                 static_cast<qsizetype>(effect.name.size())),
                               QString::fromUtf8(effect.category_id.data(),
-                                                static_cast<qsizetype>(effect.category_id.size()))});
+                                                static_cast<qsizetype>(effect.category_id.size())),
+                              Action::VisualEffect, Action::VisualEffect});
         }
-        result.push_back({QStringLiteral("video.background"), QStringLiteral("Background"), QStringLiteral("video.generators")});
-        result.push_back({QStringLiteral("video.fusion_composition"), QStringLiteral("Fusion Composition"), QStringLiteral("video")});
-        result.push_back({QStringLiteral("video.adjustment_clip"), QStringLiteral("Adjustment Clip"), QStringLiteral("video")});
-        result.push_back({QStringLiteral("audio.gain"), QStringLiteral("Gain"), QStringLiteral("audio")});
-        result.push_back({QStringLiteral("transitions.cross_dissolve"), QStringLiteral("Cross Dissolve"), QStringLiteral("transitions")});
-        result.push_back({QStringLiteral("transitions.fade_to_black"), QStringLiteral("Fade to Black"), QStringLiteral("transitions")});
-        result.push_back({QStringLiteral("text.text"), QStringLiteral("Text"), QStringLiteral("text")});
+        result.push_back({"video.background", "Background", "video.generators", Action::BackgroundClip, Action::BackgroundNode});
+        result.push_back({"video.fusion_composition", "Fusion Composition", "video", Action::CompositionClip});
+        result.push_back({"video.adjustment_clip", "Adjustment Clip", "video", Action::AdjustmentClip});
+        result.push_back({"audio.gain", "Gain", "audio", Action::AudioEffect});
+        result.push_back({"transitions.cross_dissolve", "Cross Dissolve", "transitions", Action::Transition});
+        result.push_back({"transitions.fade_to_black", "Fade to Black", "transitions", Action::Transition});
+        result.push_back({"text.text", "Text", "text", Action::TextClip, Action::TextNode});
+        result.push_back({"fusion.input", "Input", "fusion", Action::Unavailable, Action::InputNode});
+        result.push_back({"fusion.transform", "Transform", "fusion", Action::Unavailable, Action::TransformNode});
+        result.push_back({"fusion.color", "Color", "fusion", Action::Unavailable, Action::ColorNode});
+        result.push_back({"fusion.merge", "Merge", "fusion", Action::Unavailable, Action::MergeNode});
+        result.push_back({"fusion.rectangle_mask", "Rectangle Mask", "fusion.masks", Action::Unavailable, Action::RectangleMaskNode});
+        result.push_back({"fusion.ellipse_mask", "Ellipse Mask", "fusion.masks", Action::Unavailable, Action::EllipseMaskNode});
         return result;
     }();
     return values;

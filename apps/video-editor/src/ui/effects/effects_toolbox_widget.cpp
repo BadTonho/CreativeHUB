@@ -4,6 +4,7 @@
 
 #include <QAbstractItemView>
 #include <QListWidgetItem>
+#include <QSignalBlocker>
 
 EffectsToolboxWidget::EffectsToolboxWidget(QWidget* parent)
     : QListWidget(parent) {
@@ -13,16 +14,31 @@ EffectsToolboxWidget::EffectsToolboxWidget(QWidget* parent)
     setUniformItemSizes(true);
     setMinimumWidth(20);
 
-    for (const auto& category : effects::categories()) {
-        auto* item = new QListWidgetItem(category.parent_id.isEmpty() ? category.name : QStringLiteral("    ") + category.name, this);
-        item->setData(Qt::UserRole, category.id);
-    }
-
     connect(this, &QListWidget::currentRowChanged, this, [this](int) {
         emit categoryChanged(currentCategoryId());
     });
 
-    if (count() > 0) setCurrentRow(0);
+    setWorkspace(effects::Workspace::Edit);
+}
+
+void EffectsToolboxWidget::setWorkspace(effects::Workspace workspace) {
+    if (workspace_ == workspace) return;
+    workspace_ = workspace;
+    const auto previous = currentCategoryId();
+    {
+        const QSignalBlocker blocker(this);
+        clear();
+        int selected = 0;
+        for (const auto& category : effects::categories()) {
+            if (!effects::categoryAvailable(category.id, workspace)) continue;
+            auto* item = new QListWidgetItem(category.parent_id.isEmpty()
+                ? category.name : QStringLiteral("    ") + category.name, this);
+            item->setData(Qt::UserRole, category.id);
+            if (category.id == previous) selected = count() - 1;
+        }
+        if (count() > 0) setCurrentRow(selected);
+    }
+    emit categoryChanged(currentCategoryId());
 }
 
 QString EffectsToolboxWidget::currentCategoryId() const {

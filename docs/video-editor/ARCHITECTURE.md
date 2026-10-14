@@ -1,5 +1,10 @@
 # Application Architecture
 
+## Workspace Effects catalog
+
+The app-owned Effects catalog centralizes workspace availability and creation actions for Toolbox, list, Favorites and drop validation. Fusion node creation uses the existing graph edit/history path; no rendering or CSP v29 change is needed. See [the catalog contract](architecture/EFFECTS.md#workspace-catalog).
+
+
 ## Background Generator
 
 The Background generator is an Edit preset of the existing Fusion Composition model and renderer. Its Inspector edits existing graph nodes, and v29 persists optional composition names. See [Background Generator](BACKGROUND_GENERATOR.md).

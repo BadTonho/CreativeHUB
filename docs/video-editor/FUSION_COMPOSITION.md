@@ -2,7 +2,7 @@
 
 The [Background Generator](BACKGROUND_GENERATOR.md) in Edit creates an opaque-white
 preset of this clip. Both workspaces edit the same Background node colors; normal
-Fusion Composition and Add Node defaults remain transparent. CSP v29 optionally
+Fusion Composition and the Fusion catalog Background node defaults remain transparent. CSP v29 optionally
 preserves composition display names.
 
 Fusion Composition is independent generated content on the Video Editor Timeline.
@@ -18,7 +18,7 @@ Select it in Edit to preview the Timeline and edit the normal Inspector effects,
 transform and keyframes. Open Fusion to edit its graph; leaving Fusion restores
 Timeline composition. Node VIEW controls remain temporary viewer state.
 
-Add Background, Text, Input, Transform, Color, Merge, Rectangle Mask or Ellipse Mask with Add Node. Existing
+Add Background, Text, Input, Transform, Color, Merge, Rectangle Mask or Ellipse Mask through the workspace-filtered Effects catalog by dragging or double-clicking. Existing
 Effects/Functions filter drops create effect nodes. Background has static RGBA
 color; its default alpha is zero. Text reuses the normal text renderer with
 content, font, pixel size, alignment and RGBA color. Set these properties and
@@ -66,6 +66,24 @@ Input video samples local time plus that offset. Negative times and samples
 past EOF are transparent. Clip/node curves remain clip-local and are sliced
 without restarting the sampled animation. Duplication copies the offset and
 graph by value, so later edits are independent.
+
+## Creating nodes from Effects
+
+The Node Editor toolbar contains Grid settings. Use the Effects dock to create
+nodes: Video lists the four filters; Video > Generators lists Background; Text
+lists Text; Fusion lists Input, Transform, Color and Merge and includes its
+Masks child category. All and Favorites follow the active workspace.
+
+Drag an entry onto the graph to choose its position, or double-click it in the
+list or Favorites for automatic free placement near the visible center. New
+nodes are disconnected and selected in the Inspector. Filter drops on image
+cables keep their existing insertion behavior; mask cables reject filters.
+With no compatible selected clip, creation is disabled. Output remains required
+and is not an addable catalog entry. Each creation is one Undo/Redo operation.
+Edit-only timeline tools are hidden in Fusion; Fusion-only nodes are hidden in
+Edit, including their favorites, without deleting saved favorites. Background
+from this Fusion catalog starts transparent; the Edit generator starts white.
+See [the catalog contract](architecture/EFFECTS.md#workspace-catalog).
 
 ## Persistence and boundaries
 

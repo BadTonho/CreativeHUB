@@ -13,6 +13,11 @@ EffectsFavoritesWidget::EffectsFavoritesWidget(QWidget* parent) : QListWidget(pa
     setDragDropMode(QAbstractItemView::DragOnly);
     setDefaultDropAction(Qt::CopyAction);
     setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
+        const auto id = item->data(Qt::UserRole).toString();
+        if (isEnabled() && workspace_ == effects::Workspace::Fusion &&
+            effects::isDraggable(id, workspace_)) emit creationRequested(id);
+    });
     connect(this,&QWidget::customContextMenuRequested,this,[this](QPoint position) {
         auto* entry=itemAt(position);
         if (!entry) return;
@@ -26,12 +31,17 @@ EffectsFavoritesWidget::EffectsFavoritesWidget(QWidget* parent) : QListWidget(pa
 }
 void EffectsFavoritesWidget::refresh() {
     clear();
-    for (const auto& id : effects::favoriteIds()) for (const auto& d : effects::definitions()) if (d.id==id) {
+    for (const auto& id : effects::favoriteIds()) for (const auto& d : effects::definitions()) if (d.id==id && effects::isAvailable(id, workspace_)) {
         auto* entry=new QListWidgetItem(d.name,this);entry->setData(Qt::UserRole,id);break;
     }
+}
+void EffectsFavoritesWidget::setWorkspace(effects::Workspace workspace) {
+    if (workspace_ == workspace) return;
+    workspace_ = workspace;
+    refresh();
 }
 QMimeData* EffectsFavoritesWidget::mimeData(const QList<QListWidgetItem*>& entries) const {
     if (entries.size()!=1 || !entries.front()) return nullptr;
     const auto id=entries.front()->data(Qt::UserRole).toString();
-    return effects::isDraggable(id) ? ui::createEffectIdMimeData(id) : nullptr;
+    return isEnabled() && effects::isDraggable(id, workspace_) ? ui::createEffectIdMimeData(id) : nullptr;
 }

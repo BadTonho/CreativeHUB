@@ -185,9 +185,7 @@ void inspector() {
     timeline::TimelineClip clip;clip.kind=timeline::ClipKind::FusionComposition;clip.clip_id=1;clip.timeline_duration_frames=100;clip.node_graph=makeCompositionGraph();
     workspace.setSelection(&clip,{});workspace.setActive(true);NodeGraph edited=*clip.node_graph;int edits=0;
     QObject::connect(&workspace,&ui::FusionWorkspace::graphEditRequested,[&](auto,const auto& g){edited=g;++edits;});
-    auto* types=workspace.nodeEditorPanel()->findChild<QComboBox*>("fusionAddNodeType");
-    types->setCurrentIndex(types->findData(static_cast<int>(NodeType::EllipseMask)));
-    workspace.nodeEditorPanel()->findChild<QPushButton*>("fusionAddNodeButton")->click();
+    CS_TEST_CHECK(workspace.addCatalogNode("fusion.ellipse_mask"));
     auto* x=workspace.inspectorPanel()->findChild<QDoubleSpinBox*>("fusionMask0");CS_TEST_CHECK(x && x->minimum()==-200 && x->maximum()==300);x->setValue(70);
     workspace.inspectorPanel()->findChild<QCheckBox*>("fusionMaskInvert")->setChecked(true);
     workspace.inspectorPanel()->findChild<QPushButton*>("fusionApplyNodeSettingsButton")->click();

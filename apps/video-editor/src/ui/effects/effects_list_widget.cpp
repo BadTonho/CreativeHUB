@@ -3,13 +3,10 @@
 #include "ui/effects/effects_catalog.h"
 #include "ui/media_browser/media_drag_mime.h"
 
-#include <creative_suite/effects/effects.h>
-
 #include <QAbstractItemView>
 #include <QMimeData>
 #include <QListWidgetItem>
 
-#include <algorithm>
 #include <QMenu>
 #include <QMessageBox>
 
@@ -35,6 +32,11 @@ EffectsListWidget::EffectsListWidget(QWidget* parent)
     }
 
     setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
+        const auto id = item->data(Qt::UserRole).toString();
+        if (isEnabled() && !item->isHidden() && workspace_ == effects::Workspace::Fusion &&
+            effects::isDraggable(id, workspace_)) emit creationRequested(id);
+    });
     connect(this,&QWidget::customContextMenuRequested,this,[this](QPoint position) {
         auto* entry = itemAt(position);
         if (!entry) return;
@@ -51,19 +53,15 @@ EffectsListWidget::EffectsListWidget(QWidget* parent)
 }
 
 void EffectsListWidget::setCategory(const QString& category_id) {
-    if (category_id_ == category_id) {
-        updateVisibility();
-        return;
-    }
-
-    const auto known_category = std::any_of(
-        effects::categories().cbegin(),
-        effects::categories().cend(),
-        [&category_id](const effects::Category& category) {
-            return category.id == category_id;
-        });
+    const auto known_category = effects::categoryAvailable(category_id, workspace_);
     category_id_ = known_category ? category_id : QStringLiteral("all");
     updateVisibility();
+}
+
+void EffectsListWidget::setWorkspace(effects::Workspace workspace) {
+    if (workspace_ == workspace) return;
+    workspace_ = workspace;
+    setCategory(category_id_);
 }
 
 QString EffectsListWidget::categoryId() const {
@@ -84,7 +82,8 @@ QMimeData* EffectsListWidget::mimeData(
         return nullptr;
     }
     const auto effect_id = items.front()->data(Qt::UserRole).toString();
-    if (!effects::isDraggable(effect_id)) return nullptr;
+    if (!isEnabled() || items.front()->isHidden() ||
+        !effects::isDraggable(effect_id, workspace_)) return nullptr;
 
     return ui::createEffectIdMimeData(effect_id);
 }
@@ -92,8 +91,13 @@ QMimeData* EffectsListWidget::mimeData(
 void EffectsListWidget::updateVisibility() {
     for (int index = 0; index < count(); ++index) {
         auto* item = this->item(index);
-        const bool visible = effects::categoryContains(category_id_, item->data(Qt::UserRole + 1).toString());
+        const auto id = item->data(Qt::UserRole).toString();
+        const bool visible = effects::isAvailable(id, workspace_) &&
+            effects::categoryContains(category_id_, item->data(Qt::UserRole + 1).toString());
         item->setHidden(!visible);
+        item->setFlags(effects::isDraggable(id, workspace_)
+            ? item->flags() | Qt::ItemIsDragEnabled
+            : item->flags() & ~Qt::ItemIsDragEnabled);
     }
     clearSelection();
 }

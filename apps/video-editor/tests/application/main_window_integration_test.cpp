@@ -2,6 +2,9 @@
 #include "main_window/main_window_support.h"
 
 #include "ui/preview/preview_widget.h"
+#include "ui/effects/effects_list_widget.h"
+#include "ui/effects/effects_toolbox_widget.h"
+#include "ui/effects/effects_favorites_widget.h"
 #include "ui/workspace/workspace_host.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/fusion/nodes/ui/node_canvas.h"
@@ -3042,6 +3045,68 @@ public:
                     controller->undo().changed() && controller->undo().changed() &&
                     composition_window.timeline_model_.clipCount(0) == 1 && !composition_window.project_dirty_,
                     "Fusion Composition Undo must restore the saved document and dirty state.");
+        }
+
+        {
+            MainWindow catalog_window;
+            auto* controller = catalog_window.edit_workspace_->controller();
+            controller->setPlaybackPresentation(false, false, true);
+            setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Fusion);
+            require(!catalog_window.effects_list_->isEnabled() && !catalog_window.effects_favorites_->isEnabled() &&
+                    catalog_window.effects_list_->visibleEffectCount() == 12,
+                    "Fusion must show its catalog with creation disabled without a clip.");
+            setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Edit);
+            const auto track = catalog_window.timeline_model_.tracks()[0].track_id;
+            controller->handleTimelineEffectDrop("video.fusion_composition", track, 0);
+            require(catalog_window.saveProjectTo(directory / "catalog-ui.csp", "save") && !catalog_window.project_dirty_,
+                    "Catalog test could not establish a clean composition baseline.");
+            require(effects::setFavorite("fusion.rectangle_mask", true) &&
+                    effects::setFavorite("video.adjustment_clip", true), "Catalog favorites setup failed.");
+            catalog_window.effects_toolbox_->setCurrentRow(3); // Audio is Edit-only.
+            setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Fusion);
+            require(catalog_window.effects_list_->isEnabled() && catalog_window.effects_favorites_->isEnabled() &&
+                    catalog_window.effects_toolbox_->currentCategoryId() == "all" &&
+                    catalog_window.effects_list_->categoryId() == "all",
+                    "Workspace switching must enable creation and reset unavailable categories.");
+            auto* entry = catalog_window.effects_list_->findItems("Rectangle Mask", Qt::MatchExactly).front();
+            catalog_window.effects_list_->itemDoubleClicked(entry);
+            const auto& clip = catalog_window.timeline_model_.tracks()[0].clips[0];
+            require(catalog_window.project_dirty_ && clip.node_graph->nodes.size() == 3 &&
+                    clip.node_graph->nodes.back().type == fusion::nodes::NodeType::RectangleMask &&
+                    catalog_window.fusion_workspace_->selectedNodeId() == clip.node_graph->nodes.back().id,
+                    "Effects double click must create a selected node and dirty the real document.");
+            require(controller->undo().changed() && !catalog_window.project_dirty_ &&
+                    catalog_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.size() == 2,
+                    "Catalog node Undo must restore the saved graph and clean state.");
+            require(controller->redo().changed() && catalog_window.project_dirty_ &&
+                    catalog_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.size() == 3,
+                    "Catalog node Redo must restore the graph.");
+            const auto favorite = catalog_window.effects_favorites_->findItems("Rectangle Mask", Qt::MatchExactly);
+            require(favorite.size() == 1 &&
+                    catalog_window.effects_favorites_->findItems("Adjustment Clip", Qt::MatchExactly).isEmpty(),
+                    "Fusion Favorites must hide incompatible saved items.");
+            catalog_window.effects_favorites_->itemDoubleClicked(favorite.front());
+            require(catalog_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.size() == 4,
+                    "Favorite double click must create an independent node.");
+            setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Edit);
+            catalog_window.effects_list_->itemDoubleClicked(entry);
+            require(entry->isHidden() && catalog_window.effects_list_->visibleEffectCount() == 11 &&
+                    catalog_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.size() == 4 &&
+                    catalog_window.effects_favorites_->findItems("Adjustment Clip", Qt::MatchExactly).size() == 1 &&
+                    effects::favoriteIds().contains("fusion.rectangle_mask"),
+                    "Returning to Edit must hide Fusion actions and retain their favorites.");
+            setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Render);
+            require(catalog_window.effects_list_->visibleEffectCount() == 0 &&
+                    !catalog_window.effects_list_->isEnabled(), "Render must not offer catalog creation.");
+            setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Fusion);
+            controller->handleTimelineClipSelectionCleared();
+            require(!catalog_window.effects_list_->isEnabled() && !catalog_window.effects_favorites_->isEnabled() &&
+                    !catalog_window.active_timeline_clip_id_.has_value() &&
+                    !catalog_window.active_timeline_clip_index_cache_.has_value() &&
+                    catalog_window.fusion_workspace_->selectedClipId() == 0,
+                    "Clearing selection must disable Fusion catalog creation immediately.");
+            require(effects::setFavorite("fusion.rectangle_mask", false) &&
+                    effects::setFavorite("video.adjustment_clip", false), "Catalog favorites cleanup failed.");
         }
 
         {

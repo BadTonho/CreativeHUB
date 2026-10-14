@@ -1,6 +1,7 @@
 #include "node_canvas.h"
 
 #include "ui/media_browser/media_drag_mime.h"
+#include "ui/effects/effects_catalog.h"
 
 #include <creative_suite/effects/effects.h>
 
@@ -58,9 +59,8 @@ QString title(const Node& node) {
 QString effectIdFromMime(const QMimeData* mime) {
     if (mime == nullptr || !mime->hasFormat(ui::kEffectIdMimeType)) return {};
     const auto value = mime->data(ui::kEffectIdMimeType);
-    const auto id = value.toStdString();
-    return creative_suite::effects::findDefinition(id) != nullptr
-        ? QString::fromUtf8(value.constData(), value.size()) : QString{};
+    const auto id = QString::fromUtf8(value.constData(), value.size());
+    return effects::isDraggable(id, effects::Workspace::Fusion) ? id : QString{};
 }
 
 double inputPortY(NodeType type, std::uint8_t input) {
@@ -338,6 +338,31 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         hit_target->setData(2, static_cast<int>(edge.input));
         hit_target->setZValue(-0.5);
     }
+}
+
+QPointF NodeCanvas::freeNodePosition(NodeType type) const {
+    const auto center = mapToScene(viewport()->rect().center());
+    const auto origin = center - QPointF(105.0, nodeHeight(type) / 2.0);
+    // Search outward with a fixed gap, bounded by the existing node count.
+    const auto free = [&](const QPointF& position) {
+        const QRectF bounds(position, QSizeF(230.0, nodeHeight(type) + 20.0));
+        return std::none_of(graph_.nodes.begin(), graph_.nodes.end(),
+            [&](const Node& node) {
+                return bounds.intersects(QRectF(node.x - 10.0, node.y - 10.0,
+                    230.0, nodeHeight(node.type) + 20.0));
+            });
+    };
+    for (std::size_t ring = 0; ring <= graph_.nodes.size() + 1; ++ring) {
+        const auto radius = static_cast<int>(ring);
+        for (int y = -radius; y <= radius; ++y) {
+            for (int x = -radius; x <= radius; ++x) {
+                if (std::max(std::abs(x), std::abs(y)) != radius) continue;
+                const auto position = origin + QPointF(x * 250.0, y * 170.0);
+                if (free(position)) return position;
+            }
+        }
+    }
+    return origin;
 }
 
 void NodeCanvas::setSelectedNode(NodeId id) {

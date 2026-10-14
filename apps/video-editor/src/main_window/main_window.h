@@ -113,6 +113,7 @@ private:
     void createWorkspace();
     void setWorkspacePage(ui::WorkspacePageId page);
     void handleWorkspacePageChanged(ui::WorkspacePageId page);
+    void refreshEffectsContext();
     void registerWorkspaceMenuAction(
         QAction* action, settings::ShortcutScope scope);
     void refreshWorkspaceMenuVisibility();

@@ -1,5 +1,42 @@
 # Regression Testing
 
+## Workspace Effects catalog
+
+| Behavior | Automated coverage |
+| --- | --- |
+| Edit/Fusion/Render availability, category fallback, parent/All filters, favorite persistence and context-safe MIME/activation | `tests/effects/effects_panel_test.cpp` (`creative-suite-main-editor-effects-panel`) |
+| Catalog node drops, positions, defaults, disconnected creation, Inspector selection, unavailable selection, removed Add Node controls and retained Grid | `tests/ui/fusion_workspace_test.cpp` (`creative-suite-main-editor-fusion-workspace`) |
+| Workspace routing, list/Favorites double-click creation, real document dirty state, Undo/Redo and selection availability without restoring stale cached clip indexes | `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`) |
+| Refused Fusion-only/unknown timeline MIME; retained Edit effect/text/transition drops | `tests/timeline/timeline_widget_test.cpp` (`creative-suite-main-editor-timeline-widget`) |
+| Text/Input and mask Inspector after catalog creation; existing evaluation, history and persistence | `creative-suite-main-editor-fusion-composition`, `creative-suite-main-editor-fusion-mask`, `creative-suite-main-editor-background-generator` |
+
+Registrations: [effects](../../apps/video-editor/tests/effects/CMakeLists.txt),
+[UI](../../apps/video-editor/tests/ui/CMakeLists.txt),
+[application](../../apps/video-editor/tests/application/CMakeLists.txt),
+[timeline](../../apps/video-editor/tests/timeline/CMakeLists.txt), and
+[rendering](../../apps/video-editor/tests/rendering/CMakeLists.txt).
+
+**Automated coverage present.** Windows Debug verification (2026-10-14):
+all 11 focused CTest entries passed (catalog, MainWindow, project, generators,
+masks, composition, graph, command history, timeline widget and workspace
+switching). The canonical `build/apps/video-editor/Debug/creative-suite-video-editor.exe`
+was rebuilt and verified at 2026-10-14 15:34:49 UTC. The window regression also
+protects cleared session selection from stale index-cache restoration. No CSP
+schema, application version, Hub or other application changes were required.
+
+Native graphical check (pending): select a video/image/composition and enter
+Fusion. Confirm the Node Editor shows Grid with no Add Node selector/button;
+check the category mapping in [Effects](architecture/EFFECTS.md#workspace-catalog).
+Drag every new entry to the graph, then double-click list and favorite entries;
+confirm selection, free placement, editing and one-step Undo/Redo. Filter drops
+split image cables and refuse mask cables; other node drops stay disconnected.
+Switch Edit/Fusion with Masks selected, check All fallback and hidden favorites
+returning without loss. Remove selection and confirm creation is disabled.
+Confirm white Background clips in Edit and transparent Background nodes in
+Fusion. Native Windows interaction and macOS/Linux graphical acceptance remain
+pending separately from automated offscreen checks.
+
+
 ## Background Generator verification
 
 | Behavior | Automated gate |
@@ -38,7 +75,7 @@ accept; verify dirty state and Undo/Redo. Add another Background in Fusion,
 change both from Edit and Fusion, remove the chosen node and verify Inspector
 selection. Save/reopen, recover and restore a Hub backup; compare a transparent
 background over another track in Preview/export. Confirm that ordinary Fusion
-Composition and Add Node Background remain transparent. Native graphical,
+Composition and the Fusion catalog Background node remain transparent. Native graphical,
 macOS/Linux and font/driver acceptance remain separate from automated coverage.
 
 ## Fusion masks verification
@@ -430,7 +467,7 @@ hardware and drivers. No percentage target is set from this measurement.
 | Workspace page switching | Edit startup state with Render Settings hidden; movable Preview dock and `View > Preview` restoration action; Fusion Viewer title, Node Editor, and Inspector; Render settings, shared Preview, and queue columns; responsive horizontal/vertical layout switching at 1100 px; constrained Settings fields with accessible Browse action and no horizontal scrolling; fixed Add to Queue footer outside the Settings scroll area; wheel scrolling over closed selectors and numeric controls without changing their values; runtime FFmpeg output discovery; project-derived defaults; prepared-job snapshots; WorkspaceHost-driven Fusion activation and deactivation; controller-coordinated Edit → Fusion → Render transitions; exclusive selectors and lower dock titles; replacement of the Timeline with the Node Editor in the same lower dock; shared Timeline identity; Preview transfer into the middle Render column and restoration to the Preview dock, preserving its visibility and floating/tabified arrangement; hidden Timeline controls and blocked Timeline input in Render while the application footer remains visible; project dirty-state preservation when preparing jobs; background Render queue continuing from captured snapshots after switching to Edit and Fusion; Cancel remaining available only on the Render page; active-queue cancellation on accepted application close with no final destination published; preservation of mixed prior dock visibility across repeated Render selection and exit, including a previously hidden Preview or Timeline; prepare-for-close restoration; and MainWindow close/reopen dock-layout persistence including the Preview dock. Manual Release check: Edit and Fusion do not show an empty central column between Media Pool and Preview.
 | Media Pool and Inspector full-height layouts | `tests/ui/media_pool_dock_layout_test.cpp` (`creative-suite-main-editor-media-pool-dock-layout`) covers reusable title-bar actions, checked state, independent Media Pool and Inspector width settings, resizing and latest-width persistence through toggles and reopening, all four expansion combinations and toggle orders, native dock animations enabled during Inspector-only expansion, collapsing Media Pool from the combined layout and reopening Inspector-only, migration of saved v9 Inspector-only dock trees, default-layout restoration, Timeline spanning Media Pool and Preview with no empty area below Media, Media Pool geometry immediately after Inspector expansion and again after Qt layout stabilization, full-height side columns at tall and short window sizes, Preview geometry across toggles, Timeline placement and visibility, and native title-bar float/re-dock and close controls. Manual Release check: in tall and short windows, drag each dock divider in normal and expanded layouts; verify adjusted widths survive toggles and reopening; exercise Media Pool-only, Inspector-only, both, and neither in both toggle orders; confirm Inspector-only leaves Bins and Media in their normal geometry after the layout settles, Inspector-only places Timeline below both Media and Preview with no empty lower-left column; Preview size is preserved within divider rounding and its horizontal position can shift by at most six logical pixels when the redundant outer separator is removed; Preview may resize naturally when dragging the Inspector divider; verify Timeline placement, dock dragging, floating, re-docking, and closing; switch to Effects and back. **Automated coverage present; manual check documented and pending.** |
 | Fusion preview lifecycle | `tests/ui/fusion_workspace_test.cpp` (`creative-suite-main-editor-fusion-workspace`); `tests/ui/workspace_page_switch_test.cpp` (`creative-suite-main-editor-workspace-page-switch`); `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`); `tests/playback/playback_controller_test.cpp` (`creative-suite-main-editor-playback-controller`) | WorkspaceHost forwards Fusion entry and exit; Fusion requests a pause, current-node target, and selected-clip activation at local frame zero on entry; switching preview nodes does not alter Inspector selection or graph history; losing a clip clears the target; removing the selected preview node falls back to Output; leaving Fusion clears the target and returns to normal Timeline composition; save/reopen and graph Undo/Redo continue through the existing project/history services. Manual Release check: Edit → Fusion → Edit, inspect several node previews during playback, then confirm the normal multi-track Viewer returns. **Automated coverage present; manual check documented and pending.** |
-| Fusion node workspace | `tests/ui/fusion_workspace_test.cpp`; `tests/timeline/timeline_command_service_test.cpp`; `tests/timeline/node_graph_test.cpp` | Adding, moving, and removing nodes; connecting by dragging an output port to an input; rewiring and disconnecting by dragging the cable or input port to empty canvas; dragging existing video effects from Effects and Functions onto blank canvas or a cable; cable splitting, effect Inspector state/parameters, rejection of text/transitions/audio effects, effect evaluation and bypass, alpha preservation and chained/repeated effects; Transform and Brightness diamonds, clip-local Inspector values, seeded/updated/removed keys, playback pause, graph Undo/Redo; disconnected-input transparency; compatible connections; visible cycle rejection; selected-clip mutation; dirty state; and playback invalidation. Grid coverage verifies Lines/Dots rendering, visibility, live spacing and intensity changes, setting restoration and invalid-value normalization, and no graph edit from the controls. Manual Release check: adjust the grid in Fusion and confirm the pattern stays behind nodes and cables while nodes remain selectable and draggable. **Automated coverage present; manual check documented and pending.** |
+| Fusion node workspace | `tests/ui/fusion_workspace_test.cpp`; `tests/timeline/timeline_command_service_test.cpp`; `tests/timeline/node_graph_test.cpp` | Adding, moving, and removing nodes; connecting by dragging an output port to an input; rewiring and disconnecting by dragging the cable or input port to empty canvas; dragging existing video effects from Effects and Functions onto blank canvas or a cable; cable splitting, effect Inspector state/parameters, Text node creation and rejection of Edit-only generators/transitions/audio effects, effect evaluation and bypass, alpha preservation and chained/repeated effects; Transform and Brightness diamonds, clip-local Inspector values, seeded/updated/removed keys, playback pause, graph Undo/Redo; disconnected-input transparency; compatible connections; visible cycle rejection; selected-clip mutation; dirty state; and playback invalidation. Grid coverage verifies Lines/Dots rendering, visibility, live spacing and intensity changes, setting restoration and invalid-value normalization, and no graph edit from the controls. Manual Release check: adjust the grid in Fusion and confirm the pattern stays behind nodes and cables while nodes remain selectable and draggable. **Automated coverage present; manual check documented and pending.** |
 | Render queue model | Default-off per-job GPU settings and independent snapshots/tooltips; runtime container/encoder compatibility filtering; stable job IDs and status/progress/error roles; project-document snapshot isolation; append, remove, and reorder behavior; retry reset; structure locking during execution; invalid operation rejection; and a new session starting with an empty queue |
 | Offline Render export | CPU default and per-job experimental GPU composition at configured output dimensions, independent of Playback Preview Quality; persisted Timeline-to-source mapping followed by Timeline-to-output FPS conversion, including a 24 fps Timeline at 60 fps output with a trimmed 30 fps video source; moving outgoing and incoming Cross Dissolve frames with the incoming clip continuing from local frame D; embedded video audio hard-cut at a visual transition; independent audio crossfade matching the Preview mixer with gain, mute, and envelope; black gaps and black frames through an independent audio tail; text clips and transform keyframes; output file reopen and stream validation; embedded and independent audio mixing with clip/track gain and mute; linked video audio companion export at the same RMS as embedded-only playback to catch double mixing; mixed-source audio-disabled output; monotonic progress; cancellation and failure preserving an existing destination and cleaning temporary files; ordered queue continuation after failure; cancellation leaving later jobs unstarted; and no change to the project snapshot. The current Windows development Release encoder, muxer, and image-reader inventory is documented in [MEDIA_CAPABILITIES_WINDOWS_RELEASE.md](MEDIA_CAPABILITIES_WINDOWS_RELEASE.md); package export compatibility and licensing checks remain release gates. |
 | Edit workspace controller | Shared-session clip selection and playhead state; typed playback, media-drop, and seek requests; track creation, renaming, reordering, and removal; media and text insertion, automatic Audio N track creation/reuse and Undo/Redo; clip movement, nudge, split, trim, delete, and clear; Audio Crossfade add/update/remove commands with ripple and Undo/Redo; Inspector transition type and duration commands; command-result, committed-edit, and history signals; rejected and no-op edits; occupied positions; offline or unregistered media; and unchanged project state for rejected commands |
@@ -1590,8 +1627,8 @@ Confirm that a blank-canvas drop stays disconnected and a cable drop inserts
 the node between its endpoints. Select
 the effect nodes and confirm the Inspector shows Enabled and the effect's
 existing parameter controls. Toggle Enabled, adjust values, and confirm the
-Preview changes. Confirm Text, transitions, and Audio Gain are rejected by the
-node graph. Add a Merge, connect the selected clip as background and a Media Pool image as
+Preview changes. Confirm Text creates a disconnected Text node; transitions,
+Edit-only generators, and Audio Gain are unavailable and rejected by the graph. Add a Merge, connect the selected clip as background and a Media Pool image as
 foreground, and confirm transparent pixels reveal the background. Add a
 Media Pool video input and confirm it starts at the selected clip's local
 frame zero and becomes transparent at its end. Export the same frame and

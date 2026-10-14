@@ -1,5 +1,10 @@
 # Current Scope and Non-goals
 
+## Workspace Effects catalog
+
+The Effects catalog filters tools by Edit/Fusion and replaces the Fusion Add Node selector/button. Node creation uses drag or double click, preserves graph history, and keeps Output mandatory. No new graph types, shortcuts, rendering engine or project format are introduced. See [the catalog contract](EFFECTS.md#workspace-catalog).
+
+
 ## Background Generator
 
 The Edit Background generator and shared RGBA Inspector are implemented for pending 0.1.1. It reuses Fusion Composition and adds optional names in CSP v29. Color stays static; existing transform/opacity animation remains available. See [Background Generator](../BACKGROUND_GENERATOR.md).
