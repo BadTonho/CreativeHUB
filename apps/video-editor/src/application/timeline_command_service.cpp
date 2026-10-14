@@ -1215,6 +1215,33 @@ TimelineEditResult TimelineCommandService::execute(const AddFusionCompositionCom
     return output;
 }
 
+TimelineEditResult TimelineCommandService::execute(const AddBackgroundGeneratorCommand& command) {
+    const auto track = session_.timeline_.locateTrack(command.track_id);
+    if (!track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    auto staged = session_.timeline_;
+    const auto new_id = staged.snapshot().next_clip_id;
+    const auto added = staged.addFusionComposition(*track, command.timeline_start_frame, command.duration_frames);
+    if (added != timeline::AddClipResult::Added) return result(EditStatus::Rejected, reasonForAdd(added));
+    const auto location = staged.locateClip(new_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    auto snapshot = staged.snapshot();
+    auto& clip = snapshot.tracks[location->track_index].clips[location->clip_index];
+    clip.display_name = "Background";
+    clip.node_graph->nodes.front().background_color = {255,255,255,255};
+    staged.restore(std::move(snapshot));
+    auto before = session_.captureEditState();
+    session_.timeline_ = std::move(staged);
+    recordSuccessfulEdit(std::move(before));
+    selectClip(*location);
+    session_.playhead_frame_ = 0;
+    session_.preserved_playhead_frame_.reset();
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {command.track_id};
+    output.affected_clip_ids = {new_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
 TimelineEditResult TimelineCommandService::execute(const DuplicateFusionCompositionCommand& command) {
     const auto location = session_.timeline_.locateClip(command.clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
@@ -1233,6 +1260,7 @@ TimelineEditResult TimelineCommandService::execute(const DuplicateFusionComposit
     if (!copied) return result(EditStatus::Rejected, EditReason::InvalidTarget);
     auto snapshot = staged_timeline.snapshot();
     auto& duplicate = snapshot.tracks[copied->track_index].clips[copied->clip_index];
+    duplicate.display_name = original.display_name;
     duplicate.effects = original.effects;
     duplicate.transform = original.transform;
     duplicate.keyframes = original.keyframes;

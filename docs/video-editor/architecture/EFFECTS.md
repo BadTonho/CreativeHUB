@@ -1,5 +1,9 @@
 # Shared Visual Effects Contract
 
+## Background Generator
+
+Video has a Generators child category containing Background; parent filtering includes descendants. Background uses `video.background` drag MIME and creates a clip. All and local Favorites expose it too. Favorites persist known draggable catalog IDs and can be removed through context menus. See [Background Generator](../BACKGROUND_GENERATOR.md).
+
 ## Fusion masks v1
 
 Optional typed Mask input 2 limits Effect/Color/Transform processing through premultiplied blending with the original. Merge attenuates foreground contribution; generators/Input/Output multiply alpha. No mask preserves existing behavior. See [Fusion Masks](../FUSION_MASKS.md).

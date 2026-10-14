@@ -1,5 +1,9 @@
 # Editor Session and Timeline Commands
 
+## Background Generator
+
+AddBackgroundGeneratorCommand stages a white Background → Output composition named Background and publishes one insertion/history entry. Color changes reuse SetClipNodeGraphCommand. Node selection and canceled dialogs are presentation-only. DuplicateFusionCompositionCommand preserves the name with an independent graph. See [Background Generator](../BACKGROUND_GENERATOR.md).
+
 ## Fusion masks v1
 
 Mask creation, Inspector settings, keyframes, typed reconnection and removal are graph replacements through SetClipNodeGraphCommand, preserving existing selection, dirty state and Undo/Redo. Invalid connections are expected no-ops. No shortcut or new timeline command is introduced. See [Fusion Masks](../FUSION_MASKS.md).

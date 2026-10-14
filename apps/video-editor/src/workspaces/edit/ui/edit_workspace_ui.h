@@ -57,6 +57,10 @@ struct EditWorkspaceUi final {
     std::array<QDoubleSpinBox*, 5> transform_spins{};
     std::array<QSlider*, 5> transform_sliders{};
     std::array<QPushButton*, 5> transform_keys{};
+    QWidget* background_controls = nullptr;
+    QComboBox* background_nodes = nullptr;
+    QPushButton* background_color = nullptr;
+    QLabel* background_sample = nullptr;
     QWidget* text_controls = nullptr;
     QLabel* effect_selection_hint = nullptr;
     QWidget* clip_effects_controls = nullptr;

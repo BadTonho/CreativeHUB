@@ -15,6 +15,9 @@ public:
     [[nodiscard]] int visibleEffectCount() const;
     QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override;
 
+signals:
+    void favoritesChanged();
+
 private:
     void updateVisibility();
 

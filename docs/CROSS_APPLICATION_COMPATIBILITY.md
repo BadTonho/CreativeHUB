@@ -1,5 +1,13 @@
 # Cross-Application Compatibility Proposal
 
+## Named Background compositions
+
+CSP v29 adds optional Fusion Composition display names for the Edit Background
+preset. Video Editor owns insertion, naming and graph editing. Hub supports
+schemas 1–29, preserves names and graph/input-offset data, relocates external
+Input sources, and rejects future v30. Producer/consumer coverage is in
+`hub-backup-format-test`; no shared rendering API or other app format changes.
+
 ## Fusion mask contracts
 
 Video Editor owns CSP v28 mask geometry/animation and typed graph connections.

@@ -2267,13 +2267,13 @@ bool TimelineWidget::updateDropHover(
         const bool is_transition_effect =
             effect_id == QStringLiteral("transitions.cross_dissolve") ||
             effect_id == QStringLiteral("transitions.fade_to_black");
-        if ((effect_id == QStringLiteral("video.adjustment_clip") || effect_id == QStringLiteral("video.fusion_composition"))) {
+        if ((effect_id == QStringLiteral("video.adjustment_clip") || effect_id == QStringLiteral("video.fusion_composition") || effect_id == QStringLiteral("video.background"))) {
             const auto duration = std::max<qint64>(1, static_cast<qint64>(std::ceil(frame_rate_.asDouble() * 5.0)));
             const bool compatible = track.has_value() && frame.has_value() &&
                 tracks_[*track].kind == TrackKind::Video &&
                 *frame <= std::numeric_limits<qint64>::max() - duration &&
                 !placementOverlaps(*track, *frame, duration);
-            preview.label = effect_id == QStringLiteral("video.fusion_composition") ? QStringLiteral("Fusion Composition") : QStringLiteral("Adjustment Clip");
+            preview.label = effect_id == QStringLiteral("video.background") ? QStringLiteral("Background") : effect_id == QStringLiteral("video.fusion_composition") ? QStringLiteral("Fusion Composition") : QStringLiteral("Adjustment Clip");
             preview.media = true;
             preview.duration_frames = duration;
             preview.valid = compatible;
@@ -2379,7 +2379,7 @@ bool TimelineWidget::processDrop(
                 is_cross_dissolve ? 0 : 1);
             return true;
         }
-        if ((effect_id == QStringLiteral("video.adjustment_clip") || effect_id == QStringLiteral("video.fusion_composition"))) {
+        if ((effect_id == QStringLiteral("video.adjustment_clip") || effect_id == QStringLiteral("video.fusion_composition") || effect_id == QStringLiteral("video.background"))) {
             const auto duration = std::max<qint64>(1, static_cast<qint64>(std::ceil(frame_rate_.asDouble() * 5.0)));
             if (tracks_[*track].kind != TrackKind::Video ||
                 *frame > std::numeric_limits<qint64>::max() - duration ||

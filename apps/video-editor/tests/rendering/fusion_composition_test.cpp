@@ -295,6 +295,25 @@ void workerAndExport(const QString& directory) {
     CS_TEST_CHECK(output->rgba_pixels[std::size_t(135) * output->stride + 240 * 4] == 0);
     spec.composition_input_offset_frames = 12; persisted.composition_input_offset_frames = 12; compare(7);
     CS_TEST_CHECK(output->rgba_pixels[std::size_t(135) * output->stride + 240 * 4] == 0);
+    // The Edit generator uses the same complete Preview/export pipeline.
+    EditorSession generated_session;TimelineCommandService generated_commands(generated_session);
+    CS_TEST_CHECK(generated_commands.execute(AddBackgroundGeneratorCommand{generated_session.timeline().tracks()[0].track_id,0,4}).changed());
+    auto generated_document=ProjectDocumentMapper::toDocument(generated_session,{});
+    spec.node_graph=generated_document.timeline_tracks[0].clips[0].node_graph;
+    spec.composition_input_offset_frames=0;
+    job.project_snapshot.timeline_tracks=generated_document.timeline_tracks;
+    compare(8);CS_TEST_CHECK(output->rgba_pixels[0]==255 && output->rgba_pixels[1]==255 && output->rgba_pixels[2]==255);
+    auto generated_lower=spec;generated_lower.track_index=1;generated_lower.clip_id=2;generated_lower.track_id=2;
+    generated_lower.node_graph=coloredGraph({0,0,255,255});extra={generated_lower};
+    auto lower_record=generated_document.timeline_tracks[0];lower_record.track_id=2;lower_record.name="Lower";
+    lower_record.clips[0].clip_id=2;lower_record.clips[0].node_graph=generated_lower.node_graph;
+    job.project_snapshot.timeline_tracks.push_back(lower_record);
+    spec.node_graph->nodes[0].background_color={180,40,20,128};
+    job.project_snapshot.timeline_tracks[0].clips[0].node_graph=spec.node_graph;
+    compare(9);CS_TEST_CHECK(output->rgba_pixels[0]>0 && output->rgba_pixels[2]>100);
+    spec.node_graph->nodes[0].background_color[3]=0;
+    job.project_snapshot.timeline_tracks[0].clips[0].node_graph=spec.node_graph;
+    compare(10);CS_TEST_CHECK(output->rgba_pixels[0]==0 && output->rgba_pixels[2]==255);extra.clear();
     // Transparent Fusion output blends with lower tracks and an upper adjustment.
     spec.node_graph = coloredGraph({180, 40, 20, 128}); spec.composition_input_offset_frames = 0; spec.track_index = 1;
     auto adjusted = spec; adjusted.kind = timeline::ClipKind::Adjustment; adjusted.track_index = 0; adjusted.clip_id = 2;

@@ -1,5 +1,9 @@
 # Timeline Boundary
 
+## Background Generator
+
+Background creates a five-second, opaque-white Fusion Composition named Background through one command/history entry. Existing generated-duration, transitions, attributes, splits, trims, FPS conversion and independent graph duplication apply. The name survives these edits and persistence. See [Background Generator](../BACKGROUND_GENERATOR.md).
+
 ## Fusion masks v1
 
 Video/image graphs and Fusion Compositions may own Rectangle/Ellipse masks. Splits and trims preserve their five scalar curves, including subdivided Bezier easing; FPS conversion rescales their key times. Graph copies remain independent. Composition input offsets are preserved. See [Fusion Masks](../FUSION_MASKS.md).

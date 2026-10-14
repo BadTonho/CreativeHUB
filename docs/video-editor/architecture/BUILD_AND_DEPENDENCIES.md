@@ -1,5 +1,9 @@
 # Build and Dependencies
 
+## Background Generator
+
+Background generator integration adds no third-party dependency. The effects-panel regression target links the existing diagnostics library for actionable favorites-settings failures. Build Video Editor, Hub and their affected tests; unrelated application executables are not required.
+
 Status: **provisional**.
 
 The video-playback and preview-performance-metrics regression targets link Qt Gui

@@ -24,6 +24,7 @@
 #include <QApplication>
 #include <QAction>
 #include <QDialog>
+#include <QColorDialog>
 #include <QDialogButtonBox>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
@@ -3041,6 +3042,32 @@ public:
                     controller->undo().changed() && controller->undo().changed() &&
                     composition_window.timeline_model_.clipCount(0) == 1 && !composition_window.project_dirty_,
                     "Fusion Composition Undo must restore the saved document and dirty state.");
+        }
+
+        {
+            MainWindow background_window;
+            auto* controller=background_window.edit_workspace_->controller();
+            controller->setPlaybackPresentation(false,false,true);
+            const auto track=background_window.timeline_model_.tracks()[0].track_id;
+            controller->handleTimelineEffectDrop("video.background",track,0);
+            require(background_window.project_dirty_ && background_window.timeline_model_.tracks()[0].clips[0].display_name=="Background",
+                "Background insertion did not dirty the real document.");
+            require(background_window.saveProjectTo(directory/"background-ui.csp","save") && !background_window.project_dirty_,
+                "Background save did not establish a clean document.");
+            QTimer::singleShot(0,[] {
+                auto* dialog=qobject_cast<QColorDialog*>(QApplication::activeModalWidget());
+                require(dialog!=nullptr,"Background color dialog is unavailable.");
+                dialog->setCurrentColor(QColor(90,120,160,128));dialog->accept();
+            });
+            background_window.edit_workspace_->ui().background_color->click();
+            require(background_window.project_dirty_,"Background color did not dirty the document.");
+            require(controller->undo().changed() && !background_window.project_dirty_,"Background color Undo did not restore the saved baseline.");
+            QTimer::singleShot(0,[] {
+                auto* dialog=qobject_cast<QColorDialog*>(QApplication::activeModalWidget());
+                require(dialog!=nullptr,"Background color dialog is unavailable.");dialog->reject();
+            });
+            background_window.edit_workspace_->ui().background_color->click();
+            require(!background_window.project_dirty_,"Cancelled Background color changed dirty state.");
         }
 
         std::error_code cleanup_error;

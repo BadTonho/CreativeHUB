@@ -1,5 +1,46 @@
 # Regression Testing
 
+## Background Generator verification
+
+| Behavior | Automated gate |
+| --- | --- |
+| Video/Generators hierarchy, parent/All filtering, stable generator MIME, Favorites persistence/removal/drag | `creative-suite-main-editor-effects-panel` (`tests/effects/effects_panel_test.cpp`) |
+| White source-free insertion, duration, rejection, one history entry, names through duplicate/split/trim/FPS, v29 persistence/open/autosave and v27/v28 compatibility | `creative-suite-main-editor-background-generator` (`tests/rendering/background_generator_test.cpp`) |
+| Edit/Fusion RGBA synchronization, multiple-node selection, node removal, ordinary video/image graphs, canceled dialogs and real video/audio/collision drops | `creative-suite-main-editor-background-generator` |
+| Dirty state, color Undo to saved baseline and cancellation in the real application | `creative-suite-main-editor-main-window` |
+| Pre-encoding Preview/export parity for the white preset and colored/transparent backgrounds over lower tracks | `creative-suite-main-editor-fusion-composition` |
+| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future v30 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
+
+The generator drag test sends actual Qt drag/drop events directly, without
+showing the standalone TimelineWidget. In this Windows/offscreen fixture,
+showing that widget at 24 FPS / 100× zoom crashed in Qt track-header text drawing
+before any generator insertion. This is a pending graphical check, not a skipped
+model/drop assertion; the existing Timeline/application suites remain painting
+regression gates, with native graphical acceptance pending below. No production
+painting behavior was changed to accommodate this fixture.
+
+Windows Debug evidence (2026-10-14): all 25 selected affected tests passed,
+including the Background generator, real-window dirty state, existing Timeline
+painting regressions, full pre-encoding Preview/export parity, native GPU and
+both Hub backup gates. No tests were skipped. The separate standalone painting
+limitation above remains pending and is not counted as validated by this gate.
+Video Editor and Hub compiled in their canonical Debug directories. The direct
+Video Editor executable is
+`C:\Users\Admin\Desktop\ProjetosCode\AdobeShoppee\build\apps\video-editor\Debug\creative-suite-video-editor.exe`,
+modified at 2026-10-14 10:33:55 UTC−03:00 (13:33:55 UTC), 10,220,544 bytes.
+Hub Debug was modified at 10:14:20 UTC−03:00, 2,305,024 bytes. No installers,
+application version changes, commits or pushes are part of this delivery.
+
+Reproducible native check (pending): open Video > Generators, drag Background to
+a free video track and confirm white output and the Background label. Favorite
+it, restart and drag it from Favorites. In Edit choose RGBA, cancel and then
+accept; verify dirty state and Undo/Redo. Add another Background in Fusion,
+change both from Edit and Fusion, remove the chosen node and verify Inspector
+selection. Save/reopen, recover and restore a Hub backup; compare a transparent
+background over another track in Preview/export. Confirm that ordinary Fusion
+Composition and Add Node Background remain transparent. Native graphical,
+macOS/Linux and font/driver acceptance remain separate from automated coverage.
+
 ## Fusion masks verification
 
 | Behavior | Automated gate |
@@ -53,7 +94,7 @@ Background/Text/Merge parity through the native graph backend and requires that
 GPU work actually occurred. The main-window test checks insertion/effects dirty
 state, save and undo to the saved baseline. `hub-backup-format-test` preserves
 generator data, graph input paths and signed offsets through relocated restore;
-`hub-backup-manager-test` rejects future v29. Existing graph, timeline, playback,
+`hub-backup-manager-test` rejects future v30. Existing graph, timeline, playback,
 project, autosave, Inspector, adjustment and export gates remain relevant.
 
 CSP v27 also round-trips optional cubic Bezier easing for clip/node curves;

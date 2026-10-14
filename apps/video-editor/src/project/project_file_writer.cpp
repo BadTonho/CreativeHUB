@@ -282,6 +282,8 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 : clip.kind == timeline::ClipKind::Image ? "image"
                 : clip.kind == timeline::ClipKind::Audio ? "audio" : "video";
             item.insert("kind", clip_kind);
+            if (clip.kind == timeline::ClipKind::FusionComposition && !clip.display_name.empty())
+                item.insert("display_name", QString::fromStdString(clip.display_name));
             if (clip.kind == timeline::ClipKind::FusionComposition)
                 item.insert("composition_input_offset_frames", static_cast<qint64>(clip.composition_input_offset_frames));
             if (clip.image_editor_variant.has_value()) {

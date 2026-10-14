@@ -1,5 +1,14 @@
 # Project Document and Persistence
 
+## Composition names (version 29)
+
+Fusion Composition clips may store UTF-8 `display_name`. Background presets use
+this field while retaining `kind: "fusion_composition"` and the existing graph.
+Missing/empty names reconstruct Fusion Composition. Custom names on other clip
+kinds or in older root versions are refused. Mapping, opening, autosave and
+recovery preserve names, node data and input offsets. Hub supports v29 and
+rejects future v30. See [Background Generator](../BACKGROUND_GENERATOR.md).
+
 ## Fusion masks (version 28)
 
 New node types `rectangle_mask` and `ellipse_mask` store normalized geometry in
@@ -9,7 +18,7 @@ frame/value/interpolation/easing representation. Mask connections use input 2;
 image input indices remain unchanged. Mask data is accepted only in v28 and
 later. Versions 1–27 retain their previous reader behavior. Generated composition
 input offsets, autosave and recovery remain intact. Hub supports v28 and rejects
-future v29. See [Fusion Masks](../FUSION_MASKS.md).
+future v30. See [Fusion Masks](../FUSION_MASKS.md).
 
 ## Fusion Composition and generators (version 27)
 
@@ -24,7 +33,7 @@ properties. The graph adds `background` with RGBA `background_color` and `text`
 with the existing text-style fields in its `text` object. New kinds/nodes require
 v27. Legacy graph validation still requires Input in versions 1–26. Current
 graphs may have generators or a disconnected Output without media. Hub accepts
-v28 and rewrites only external Input/media references. See
+v29 and rewrites only external Input/media references. See
 [Fusion Composition](../FUSION_COMPOSITION.md) for time slicing and recovery.
 
 
@@ -37,12 +46,12 @@ retain it, and project-rate conversion leaves this absolute time unchanged.
 Version 24 links migrate with zero offset, matching their previous initial
 playback. Older readers reject v25 instead of silently restarting split renders.
 
-The current root uses `version: 28`. Versions 1 through 27 remain readable.
+The current root uses `version: 29`. Versions 1 through 28 remain readable.
 Version 24 adds optional Motion Studio links to Media Pool items and Timeline
 clips, retaining the previous Image Editor link fields. A Motion link stores
 its ID, editable document, published output, original source, source kind, and
 export profile. Paths use the same relative-within-project rules. Versions
-1–23 open without Motion links. Ordinary saves write version 28; references to
+1–23 open without Motion links. Ordinary saves write version 29; references to
 older field versions below describe when those fields were introduced.
 Version 20 introduced optional Fusion node graphs on visual Timeline clips;
 version 21 adds existing video effects as graph nodes; version 22 adds local

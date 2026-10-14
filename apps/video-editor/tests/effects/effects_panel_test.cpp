@@ -6,6 +6,8 @@
 
 #include <QApplication>
 #include <QMimeData>
+#include <QSettings>
+#include <QTemporaryDir>
 
 #include <cstdio>
 #include <stdexcept>
@@ -20,6 +22,12 @@ void require(bool condition, const char* message) {
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
+    QTemporaryDir settings_dir;
+    if (!settings_dir.isValid()) return 1;
+    QCoreApplication::setOrganizationName("CreativeSuiteTests");
+    QCoreApplication::setApplicationName("effects-panel");
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,settings_dir.path());
 
     try {
         EffectsToolboxWidget toolbox;
@@ -28,25 +36,25 @@ int main(int argc, char* argv[]) {
 
         require(favorites.count() == 0,
                 "Effects Favorites must initially be empty.");
-        require(toolbox.count() == 5,
-                "Effects Toolbox must contain five implemented categories.");
+        require(toolbox.count() == 6,
+                "Effects Toolbox must contain the implemented categories and Generators.");
         require(toolbox.item(0)->text() == "All",
                 "All category must be first.");
         require(toolbox.item(1)->text() == "Video",
                 "Video category is missing.");
-        require(toolbox.item(2)->text() == "Audio",
+        require(toolbox.item(3)->text() == "Audio",
                 "Audio category is missing.");
-        require(toolbox.item(3)->text() == "Transitions",
+        require(toolbox.item(4)->text() == "Transitions",
                 "Transitions category is missing.");
-        require(toolbox.item(4)->text() == "Text",
+        require(toolbox.item(5)->text() == "Text",
                 "Text category is missing.");
         require(toolbox.currentCategoryId() == "all",
                 "Effects Toolbox must initially select All.");
-        require(effects_list.count() == 10,
+        require(effects_list.count() == 11,
                 "Effects list must contain all visual filters and existing tools.");
         require(effects_list.categoryId() == "all",
                 "Effects list must initially show All.");
-        require(effects_list.visibleEffectCount() == 10,
+        require(effects_list.visibleEffectCount() == 11,
                 "All category must show every effect.");
         require(effects_list.item(0)->data(Qt::UserRole).toString() ==
                     "video.grayscale",
@@ -84,6 +92,7 @@ int main(int argc, char* argv[]) {
                     "A draggable effect has invalid MIME data.");
             delete mime;
         };
+        verifyDragMime("Background", QByteArrayLiteral("video.background"));
         verifyDragMime("Fusion Composition", QByteArrayLiteral("video.fusion_composition"));
         verifyDragMime("Adjustment Clip", QByteArrayLiteral("video.adjustment_clip"));
         verifyDragMime("Text", QByteArrayLiteral("text.text"));
@@ -114,9 +123,20 @@ int main(int argc, char* argv[]) {
         effects_list.setCategory(toolbox.currentCategoryId());
         require(effects_list.categoryId() == "video",
                 "Effects list category did not change to Video.");
-        require(effects_list.visibleEffectCount() == 6,
+        require(effects_list.visibleEffectCount() == 7,
                 "Video category must show the four visual filters.");
 
+        require(toolbox.item(2)->text().trimmed()=="Generators","Generators subcategory is missing.");
+        effects_list.setCategory("video.generators");
+        require(effects_list.visibleEffectCount()==1,"Generators must show Background only.");
+        require(effects::setFavorite("video.background",true),"Background could not be favorited.");
+        favorites.refresh();require(favorites.count()==1,"Favorites did not show Background.");
+        auto* favorite_mime=favorites.mimeData({favorites.item(0)});
+        require(favorite_mime && favorite_mime->data(ui::kEffectIdMimeType)=="video.background","Favorite Background is not draggable.");
+        delete favorite_mime;
+        EffectsFavoritesWidget reopened;require(reopened.count()==1,"Favorite did not persist.");
+        require(effects::setFavorite("video.background",false),"Background could not be unfavorited.");
+        favorites.refresh();require(favorites.count()==0,"Removed favorite remained visible.");
         effects_list.setCategory("audio");
         require(effects_list.visibleEffectCount() == 1,
                 "Audio category must show one effect.");
@@ -128,12 +148,12 @@ int main(int argc, char* argv[]) {
                 "Text category must show one effect.");
         effects_list.setCategory("unknown");
         require(effects_list.categoryId() == "all" &&
-                    effects_list.visibleEffectCount() == 10,
+                    effects_list.visibleEffectCount() == 11,
                 "Unknown categories must fall back to All.");
 
-        require(effects::categories().size() == 5,
+        require(effects::categories().size() == 6,
                 "Shared effect catalog contains unimplemented categories.");
-        require(effects::definitions().size() == 10,
+        require(effects::definitions().size() == 11,
                 "The Effects catalog must retain existing tools alongside visual filters.");
         return 0;
     } catch (const std::exception& error) {

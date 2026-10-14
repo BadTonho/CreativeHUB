@@ -58,7 +58,7 @@ CSP v28 adds `rectangle_mask` / `ellipse_mask` nodes, normalized `mask` paramete
 five scalar arrays in `mask_keyframes` (`center_x`, `center_y`, `width`, `height`,
 `rotation`) and typed connections to input 2. Mask data is rejected in older
 formats. Versions 1–27 remain readable; Hub backups accept v28, preserve masks
-and relocate only external Input/media paths. Future v29 is rejected.
+and relocate only external Input/media paths. Current Hub backups also accept v29 composition names and reject future v30.
 
 Direct Viewer editing, pen/polygon masks, mask combinations, tracking and masks
 on Adjustment Clips remain outside this delivery. See [regression testing](REGRESSION_TESTING.md)

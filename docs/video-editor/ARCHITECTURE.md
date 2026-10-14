@@ -1,5 +1,9 @@
 # Application Architecture
 
+## Background Generator
+
+The Background generator is an Edit preset of the existing Fusion Composition model and renderer. Its Inspector edits existing graph nodes, and v29 persists optional composition names. See [Background Generator](BACKGROUND_GENERATOR.md).
+
 ## Fusion masks v1
 
 Fusion mask geometry, scalar animation and coverage caching are Video Editor owned. The existing shared composition engine supplies CPU/OpenGL ApplyMask and MaskedBlend; image intermediates remain on their device. See [Fusion Masks](FUSION_MASKS.md).

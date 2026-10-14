@@ -16,6 +16,7 @@ target_include_directories(creative-suite-main-editor-effects-panel-tests PRIVAT
 
 target_link_libraries(creative-suite-main-editor-effects-panel-tests PRIVATE
     Qt6::Widgets
+    creative-suite::diagnostics
 )
 
 target_compile_features(creative-suite-main-editor-effects-panel-tests PRIVATE cxx_std_20)

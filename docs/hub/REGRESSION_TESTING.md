@@ -1,12 +1,23 @@
 # Hub Regression Testing
 
+## Background Generator backup verification
+
+`hub-backup-format-test` produces CSP v29 with a named Background composition,
+generators, mask animation, external Input paths and a signed composition offset.
+Both vault and relocated restore are reopened through the Video Editor reader
+and compared with the producer document. The existing version loop covers older
+schemas; `hub-backup-manager-test` rejects future v30. Native backup/restore
+acceptance remains separate and pending. Both backup gates passed in the
+2026-10-14 Windows Debug run, and `build/apps/hub/Debug/creative-suite-hub.exe`
+was rebuilt at 10:14:20 UTC−03:00 (2,305,024 bytes).
+
 ## Fusion mask backup verification
 
 `hub-backup-format-test` creates CSP v28 with an Ellipse Mask, inversion, softness,
 Bezier geometry animation, a Mask connection, generators, external Input media
 and signed composition time offset. Snapshot and relocated restore are compared
 through the Video Editor reader. Legacy schemas remain covered by the existing
-version loop. `hub-backup-manager-test` rejects future v29 with diagnostics.
+version loop. `hub-backup-manager-test` rejects future v30 with diagnostics.
 Native backup/restore acceptance on Windows, macOS and Linux remains separate.
 Both v28 backup gates passed in the 2026-10-14 Windows Debug run. The canonical
 `build/apps/hub/Debug/creative-suite-hub.exe` was rebuilt (00:25:49 UTC−03:00).
@@ -16,7 +27,7 @@ Both v28 backup gates passed in the 2026-10-14 Windows Debug run. The canonical
 `hub-backup-format-test` creates CSP v28 with masks, Background, Text, an external Input
 and a signed composition offset. Snapshot and relocated restore are reopened by
 the Video Editor reader and compared to the normalized producer document.
-`hub-backup-manager-test` rejects future v29. Manual/native restore acceptance
+`hub-backup-manager-test` rejects future v30. Manual/native restore acceptance
 remains separate from the automated format contract.
 Both backup tests passed in the 2026-10-14 Windows Debug gate; the canonical
 Hub application was rebuilt and its v27 consumer contract passed through the
@@ -26,7 +37,7 @@ Video Editor reader.
 The Video Editor v27 producer/consumer backup gate includes Fusion Composition and adjustment clips
 and the nonzero Motion publication positions introduced in v25.
 Run `hub-backup-format-test` for snapshot/restoration
-round-trips and `hub-backup-manager-test` for rejection of future v29 documents.
+round-trips and `hub-backup-manager-test` for rejection of future v30 documents.
 
 This guide indexes behavior owned by the Hub. Shared update behavior and the
 release contract are documented in [`../WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md).
@@ -244,7 +255,7 @@ Video Editor reader. It asserts the full normalized document, including
 adjustment effects, opacity and scale curves, while retaining linked-image,
 Fusion Input and Motion publication references on ordinary clips. The existing
 versions 1–25 producer/consumer cases remain in this gate.
-`hub-backup-manager-test` rejects future v29 and malformed documents with diagnostics.
+`hub-backup-manager-test` rejects future v30 and malformed documents with diagnostics.
 
 On 2026-10-13, the canonical Hub Debug target built successfully and both
 backup tests passed as part of the scoped Adjustment Clip gate. The Video

@@ -1,5 +1,9 @@
 # Rendering Boundary
 
+## Background Generator
+
+The Edit Background preset feeds the existing graph generator preparer and evaluator. RGBA, clip opacity, effects, transforms, masks and underlying tracks use the same Preview/Viewer/export processing as other Fusion Compositions. No rendering engine or pixel contract changes. See [Background Generator](../BACKGROUND_GENERATOR.md).
+
 ## Fusion masks v1
 
 Preview, node VIEW and export share the application mask rasterizer (fixed 2×2 coverage, signed-distance smoothstep). A per-evaluation four-entry / 64 MiB cache avoids animated history. GPU ApplyMask/MaskedBlend upload coverage in a third texture slot without image readback; shared resource accounting, cancellation and full CPU recovery remain in force. See [Fusion Masks](../FUSION_MASKS.md).

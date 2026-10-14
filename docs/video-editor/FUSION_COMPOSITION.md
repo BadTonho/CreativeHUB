@@ -1,5 +1,10 @@
 # Fusion Composition
 
+The [Background Generator](BACKGROUND_GENERATOR.md) in Edit creates an opaque-white
+preset of this clip. Both workspaces edit the same Background node colors; normal
+Fusion Composition and Add Node defaults remain transparent. CSP v29 optionally
+preserves composition display names.
+
 Fusion Composition is independent generated content on the Video Editor Timeline.
 It owns a Fusion graph and has no primary media file or audio. It is separate
 from an Adjustment Clip: its graph produces a normal visual layer.

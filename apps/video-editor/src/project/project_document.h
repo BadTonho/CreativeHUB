@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 28;
+inline constexpr int current_format_version = 29;
+inline constexpr int composition_name_format_version = 29;
 inline constexpr int fusion_masks_format_version = 28;
 inline constexpr int fusion_composition_format_version = 27;
 inline constexpr int adjustment_clip_format_version = 26;
@@ -76,6 +77,8 @@ struct ProjectClip {
     bool audio_extracted = false;
     bool audio_companion_pending = false;
     std::int64_t composition_input_offset_frames = 0;
+    // Empty keeps the historical Fusion Composition display name.
+    std::string display_name;
 
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
 };

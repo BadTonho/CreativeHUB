@@ -249,7 +249,7 @@ void testRejectedBackups(const QString& root) {
     QObject::connect(&manager, &BackupManager::backupCreated, [&notifications](const BackupRecord&) { ++notifications; });
     const std::vector<std::pair<QString, QByteArray>> invalid{
         {"corrupt.cimg", "not JSON"},
-        {"future.csp", R"({"format":"creative-suite.main-editor","version":29})"},
+        {"future.csp", R"({"format":"creative-suite.main-editor","version":30})"},
         {"future.motion", R"({"format":"creative-suite.motion-studio","version":7})"},
         {"future.csie", R"({"format":"creative-suite-image-document","version":17})"},
         {"fractional.cimg", R"({"format":"creative-suite-image-document","version":1.5})"},

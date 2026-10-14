@@ -173,6 +173,7 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/edit/commands/edit_workspace_actions.cpp
     src/workspaces/edit/commands/edit_workspace_actions.h
     src/workspaces/edit/ui/edit_workspace_ui.h
+    src/workspaces/edit/controllers/edit_workspace_background.cpp
     src/workspaces/edit/controllers/edit_workspace_controller.cpp
     src/workspaces/edit/controllers/edit_workspace_controller.h
     src/workspaces/fusion/ui/fusion_workspace.cpp

@@ -67,6 +67,9 @@ public:
         std::optional<timeline::TrackKind> create_track_kind = std::nullopt);
     void duplicateSelectedAdjustmentClip();
     void duplicateSelectedFusionCompositionClip();
+    void addBackgroundGeneratorAt(timeline::TrackId track_id, qint64 timeline_frame);
+    void selectBackgroundNode(int index);
+    void chooseBackgroundColor();
     void addFusionCompositionClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void addAdjustmentClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void addTextClipAt(timeline::TrackId track_id, qint64 timeline_frame);
@@ -237,6 +240,9 @@ signals:
     void effectTargetAvailabilityChanged(bool available);
 
 private:
+    void refreshBackgroundInspector(const timeline::TimelineClip* clip);
+    timeline::ClipId background_clip_id_ = 0;
+    fusion::nodes::NodeId background_node_id_ = 0;
     void synchronizeActiveTimelineSelection() noexcept;
     void collapseTimelineSelectionToPrimary();
     [[nodiscard]] std::optional<timeline::ClipLocation>

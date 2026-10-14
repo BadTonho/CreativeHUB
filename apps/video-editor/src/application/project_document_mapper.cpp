@@ -59,6 +59,8 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.transform = clip.transform;
             project_clip.keyframes = clip.keyframes;
             project_clip.kind = clip.kind;
+            if (clip.kind == timeline::ClipKind::FusionComposition && clip.display_name != "Fusion Composition")
+                project_clip.display_name = clip.display_name;
             project_clip.text = clip.text;
             project_clip.image_editor_variant = clip.image_editor_variant;
             project_clip.motion_link = clip.motion_link;

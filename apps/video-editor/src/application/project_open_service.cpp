@@ -672,7 +672,8 @@ ProjectOpenResult ProjectOpenService::prepare(
                 if (project_clip.kind == timeline::ClipKind::Adjustment || project_clip.kind == timeline::ClipKind::FusionComposition) {
                     timeline::TimelineClip adjustment;
                     adjustment.kind = project_clip.kind;
-                    adjustment.display_name = project_clip.kind == timeline::ClipKind::FusionComposition ? "Fusion Composition" : "Adjustment Clip";
+                    adjustment.display_name = project_clip.kind == timeline::ClipKind::FusionComposition
+                        ? (project_clip.display_name.empty() ? "Fusion Composition" : project_clip.display_name) : "Adjustment Clip";
                     adjustment.clip_id = project_clip.clip_id;
                     adjustment.track_id = track_id;
                     adjustment.timeline_start_frame = project_clip.timeline_start_frame;

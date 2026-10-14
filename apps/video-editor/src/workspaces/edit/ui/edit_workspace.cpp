@@ -315,6 +315,25 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         });
     }
     layout->addLayout(form);
+    ui_.background_controls = new QGroupBox("Background", inspector_page);
+    ui_.background_controls->setObjectName("editBackgroundControls");
+    auto* background_layout = new QVBoxLayout(ui_.background_controls);
+    ui_.background_nodes = new QComboBox(ui_.background_controls);
+    ui_.background_nodes->setObjectName("editBackgroundNodes");
+    ui_.background_sample = new QLabel(ui_.background_controls);
+    ui_.background_sample->setObjectName("editBackgroundSample");
+    ui_.background_color = new QPushButton("Choose RGBA Color", ui_.background_controls);
+    ui_.background_color->setObjectName("editBackgroundColor");
+    background_layout->addWidget(ui_.background_nodes);
+    background_layout->addWidget(ui_.background_sample);
+    background_layout->addWidget(ui_.background_color);
+    layout->addWidget(ui_.background_controls);
+    ui_.background_controls->hide();
+    connect(ui_.background_nodes, qOverload<int>(&QComboBox::currentIndexChanged), edit_controller,
+        &EditWorkspaceController::selectBackgroundNode);
+    connect(ui_.background_color, &QPushButton::clicked, edit_controller,
+        &EditWorkspaceController::chooseBackgroundColor);
+
 
     ui_.clip_effects_controls = new QGroupBox("Clip Effects", effects_page);
     auto* effects_layout = new QVBoxLayout(ui_.clip_effects_controls);

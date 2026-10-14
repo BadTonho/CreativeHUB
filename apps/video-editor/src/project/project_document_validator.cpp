@@ -155,6 +155,8 @@ void validateDocument(const ProjectDocument& document,
     }
 
     auto validate_clip = [&project_path](const ProjectClip& clip) {
+        if (clip.kind != timeline::ClipKind::FusionComposition && !clip.display_name.empty())
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Only Fusion Compositions can store a custom display name.");
         if ((clip.kind == timeline::ClipKind::Adjustment || clip.kind == timeline::ClipKind::FusionComposition) &&
             (!clip.source_path.empty() || clip.source_start_frame != 0 ||
              clip.source_duration_frames != 0 || clip.linked_clip_id ||

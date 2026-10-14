@@ -260,6 +260,7 @@ void testVideoDocuments(const QString& root) {
     CS_TEST_CHECK(restored.timeline_tracks.front().clips.front().keyframes == adjustment.keyframes);
     auto composition = adjustment;
     composition.kind = timeline::ClipKind::FusionComposition;
+    composition.display_name = "Background";
     composition.node_graph = fusion::nodes::makeCompositionGraph();
     composition.node_graph->nodes[0].background_color = {12, 34, 56, 78};
     fusion::nodes::Node text; text.id = 3; text.type = fusion::nodes::NodeType::Text;
@@ -276,7 +277,7 @@ void testVideoDocuments(const QString& root) {
     const auto fusion_path = QDir(QFileInfo(assets).absolutePath()).filePath("fusion.csp");
     project::save(fsPath(fusion_path), document);
     const auto fusion_saved = project::load(fsPath(fusion_path));
-    const auto fusion_backup = backup(QDir(root).filePath("video-fusion-mask-v28"), fusion_path);
+    const auto fusion_backup = backup(QDir(root).filePath("video-background-v29"), fusion_path);
     CS_TEST_CHECK(project::load(fsPath(fusion_backup.vault)) == fusion_saved);
     CS_TEST_CHECK(project::load(fsPath(fusion_backup.restored)) == fusion_saved);
 }

@@ -1,3 +1,11 @@
+add_executable(creative-suite-main-editor-background-generator-tests background_generator_test.cpp)
+target_link_libraries(creative-suite-main-editor-background-generator-tests PRIVATE creative-suite-main-editor-core)
+target_compile_features(creative-suite-main-editor-background-generator-tests PRIVATE cxx_std_20)
+copy_ffmpeg_test_runtime(creative-suite-main-editor-background-generator-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-background-generator-tests)
+add_creative_suite_test(NAME creative-suite-main-editor-background-generator COMMAND creative-suite-main-editor-background-generator-tests)
+set_tests_properties(creative-suite-main-editor-background-generator PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1")
+
 add_executable(creative-suite-main-editor-fusion-mask-tests fusion_mask_test.cpp)
 target_link_libraries(creative-suite-main-editor-fusion-mask-tests PRIVATE creative-suite-main-editor-core)
 target_compile_features(creative-suite-main-editor-fusion-mask-tests PRIVATE cxx_std_20)

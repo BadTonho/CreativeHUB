@@ -1,5 +1,9 @@
 # UI Boundary
 
+## Background Generator
+
+The Edit Inspector discovers Background nodes on video/image/composition graphs. One node shows RGBA controls directly; several show a node-ID selector. Choosing a node is transient; accepting color commits one graph edit, while Cancel changes nothing. Fusion shares the same data. See [Background Generator](../BACKGROUND_GENERATOR.md).
+
 ## Fusion masks v1
 
 Fusion Add Node includes Rectangle Mask and Ellipse Mask. Gold Mask and blue Image ports have distinct labels and connection types. The Inspector supplies center, dimensions, rotation, Soft Edge and Invert; five geometry rows have keyframe controls. VIEW shows grayscale coverage with no drag/resize handles. See [Fusion Masks](../FUSION_MASKS.md).

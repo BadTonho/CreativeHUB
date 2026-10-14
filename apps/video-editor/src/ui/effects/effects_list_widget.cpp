@@ -10,21 +10,8 @@
 #include <QListWidgetItem>
 
 #include <algorithm>
-
-namespace {
-
-bool isDraggableEffect(const QString& effect_id) {
-    const auto utf8 = effect_id.toUtf8();
-    return creative_suite::effects::findDefinition(
-               std::string_view(utf8.constData(), static_cast<std::size_t>(utf8.size()))) != nullptr ||
-        effect_id == QStringLiteral("text.text") ||
-        effect_id == QStringLiteral("video.adjustment_clip") ||
-        effect_id == QStringLiteral("video.fusion_composition") ||
-        effect_id == QStringLiteral("transitions.cross_dissolve") ||
-        effect_id == QStringLiteral("transitions.fade_to_black");
-}
-
-}  // namespace
+#include <QMenu>
+#include <QMessageBox>
 
 EffectsListWidget::EffectsListWidget(QWidget* parent)
     : QListWidget(parent) {
@@ -42,11 +29,24 @@ EffectsListWidget::EffectsListWidget(QWidget* parent)
         auto* item = new QListWidgetItem(effect.name, this);
         item->setData(Qt::UserRole, effect.id);
         item->setData(Qt::UserRole + 1, effect.category_id);
-        if (!isDraggableEffect(effect.id)) {
+        if (!effects::isDraggable(effect.id)) {
             item->setFlags(item->flags() & ~Qt::ItemIsDragEnabled);
         }
     }
 
+    setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this,&QWidget::customContextMenuRequested,this,[this](QPoint position) {
+        auto* entry = itemAt(position);
+        if (!entry) return;
+        const auto id=entry->data(Qt::UserRole).toString();
+        if (!effects::isDraggable(id)) return;
+        const bool saved=effects::favoriteIds().contains(id);
+        QMenu menu(this);
+        auto* toggle=menu.addAction(saved ? "Remove from Favorites" : "Add to Favorites");
+        if (menu.exec(viewport()->mapToGlobal(position))!=toggle) return;
+        if (effects::setFavorite(id,!saved)) emit favoritesChanged();
+        else QMessageBox::warning(this,"Favorites","The favorites could not be saved.");
+    });
     updateVisibility();
 }
 
@@ -84,7 +84,7 @@ QMimeData* EffectsListWidget::mimeData(
         return nullptr;
     }
     const auto effect_id = items.front()->data(Qt::UserRole).toString();
-    if (!isDraggableEffect(effect_id)) return nullptr;
+    if (!effects::isDraggable(effect_id)) return nullptr;
 
     return ui::createEffectIdMimeData(effect_id);
 }
@@ -92,8 +92,7 @@ QMimeData* EffectsListWidget::mimeData(
 void EffectsListWidget::updateVisibility() {
     for (int index = 0; index < count(); ++index) {
         auto* item = this->item(index);
-        const bool visible = category_id_ == QStringLiteral("all") ||
-            item->data(Qt::UserRole + 1).toString() == category_id_;
+        const bool visible = effects::categoryContains(category_id_, item->data(Qt::UserRole + 1).toString());
         item->setHidden(!visible);
     }
     clearSelection();

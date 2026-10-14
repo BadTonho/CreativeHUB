@@ -948,6 +948,12 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     throwJson(ProjectErrorCode::InvalidTimeline, project_path,
                               "A generated clip cannot contain primary media or clip text fields.");
                 }
+                if (clip_object.contains("display_name")) {
+                    if (version < composition_name_format_version || clip.kind != timeline::ClipKind::FusionComposition ||
+                        !clip_object.value("display_name").isString())
+                        throwJson(ProjectErrorCode::InvalidValue, project_path, "Composition display names require project format version 29.");
+                    clip.display_name = clip_object.value("display_name").toString().toUtf8().toStdString();
+                }
                 if (version >= linked_image_format_version &&
                     clip_object.contains("image_editor_variant")) {
                     clip.image_editor_variant = parseLinkedImageReference(

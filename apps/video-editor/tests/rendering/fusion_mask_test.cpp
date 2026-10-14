@@ -151,8 +151,11 @@ void editingAndPersistence(const QString& directory) {
     project::AutosaveManager autosave(QFileInfo(directory+"/autosave").filesystemFilePath(),"mask-test"); autosave.saveSnapshot(document,5);
     CS_TEST_CHECK(project::load(autosave.unsavedSnapshots()[0].path)==document);
     QFile file(QString::fromStdWString(path.wstring())); CS_TEST_CHECK(file.open(QIODevice::ReadOnly));
-    auto root=QJsonDocument::fromJson(file.readAll()).object();file.close(); CS_TEST_CHECK(root["version"].toInt()==28);
-    for (int version : {27,29}) {
+    auto root=QJsonDocument::fromJson(file.readAll()).object();file.close(); CS_TEST_CHECK(root["version"].toInt()==project::current_format_version);
+    root.insert("version",28);
+    CS_TEST_CHECK(file.open(QIODevice::WriteOnly|QIODevice::Truncate));file.write(QJsonDocument(root).toJson());file.close();
+    CS_TEST_CHECK(project::load(path)==document); // v28 mask graphs retain their previous result
+    for (int version : {27,30}) {
         root.insert("version",version);CS_TEST_CHECK(file.open(QIODevice::WriteOnly|QIODevice::Truncate));file.write(QJsonDocument(root).toJson());file.close();
         bool rejected=false;try{(void)project::load(path);}catch(const project::ProjectError&){rejected=true;}CS_TEST_CHECK(rejected);
     }

@@ -577,6 +577,10 @@ void EditWorkspaceController::handleTimelineEffectDrop(
         static_cast<void>(addEffectToClip(clip_id, effect_id));
         return;
     }
+    if (effect_id == QStringLiteral("video.background")) {
+        addBackgroundGeneratorAt(track_id, timeline_frame);
+        return;
+    }
     if (effect_id == QStringLiteral("video.fusion_composition")) {
         addFusionCompositionClipAt(track_id, timeline_frame);
         return;
@@ -1780,6 +1784,7 @@ void EditWorkspaceController::updateInspector() {
     const timeline::TimelineClip* selected_clip = enabled
         ? &timeline_model_.tracks()[location->track_index].clips[location->clip_index]
         : nullptr;
+    refreshBackgroundInspector(transition_enabled ? nullptr : selected_clip);
     const bool effects_enabled = selected_clip != nullptr && !transition_enabled &&
         timeline::supportsClipEffects(selected_clip->kind);
     publishEffectTargetAvailability(effects_enabled);

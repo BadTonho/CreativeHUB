@@ -1,5 +1,9 @@
 # Video Editor Roadmap
 
+## Background Generator
+
+Implemented for pending 0.1.1: an opaque-white Background preset under Video > Generators, RGBA editing from Edit/Fusion, persisted composition names in CSP v29 and Hub backup support. Gradients, color animation and further generators remain later work. See [the guide](BACKGROUND_GENERATOR.md).
+
 ## Fusion masks v1
 
 Rectangle/Ellipse masks are implemented for the pending 0.1.1 release, with typed ports, Inspector geometry, five animated properties, shared CPU/GPU evaluation and CSP v28 / Hub recovery. Viewer handles, polygon masks, combinations and tracking remain later work. See [Fusion Masks](FUSION_MASKS.md).

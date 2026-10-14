@@ -1,5 +1,9 @@
 # Current Scope and Non-goals
 
+## Background Generator
+
+The Edit Background generator and shared RGBA Inspector are implemented for pending 0.1.1. It reuses Fusion Composition and adds optional names in CSP v29. Color stays static; existing transform/opacity animation remains available. See [Background Generator](../BACKGROUND_GENERATOR.md).
+
 ## Fusion masks v1
 
 Rectangle/Ellipse masks are implemented for ordinary video/image graphs and Fusion Compositions, with Inspector-only editing, five geometry curves, typed connections and CSP v28 persistence. Advanced mask authoring, tracking, combinations and Adjustment graphs remain out of scope. See [Fusion Masks](../FUSION_MASKS.md).
@@ -46,7 +50,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 28, with versions 1 through 27
+- versioned `.csp` persistence through version 29, with versions 1 through 28
   readable, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio/adjustment clip kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
@@ -117,7 +121,7 @@ effect to the Timeline stack. Merge combines its background and foreground with
 straight-alpha source-over. The graph output replaces the clip image before
 its existing Inspector effect stack and Timeline transform/keyframes.
 
-Graph animation was introduced in `.csp` version 22 and is retained in version 28.
+Graph animation was introduced in `.csp` version 22 and is retained in version 29.
 Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its

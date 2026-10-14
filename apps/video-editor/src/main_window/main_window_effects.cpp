@@ -22,5 +22,6 @@ QWidget* MainWindow::createEffectsPanel() {
 
 QWidget* MainWindow::createEffectsFavorites() {
     effects_favorites_ = new EffectsFavoritesWidget;
+    connect(effects_list_, &EffectsListWidget::favoritesChanged, effects_favorites_, &EffectsFavoritesWidget::refresh);
     return effects_favorites_;
 }

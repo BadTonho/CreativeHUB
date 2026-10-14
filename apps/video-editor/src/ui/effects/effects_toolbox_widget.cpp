@@ -14,7 +14,7 @@ EffectsToolboxWidget::EffectsToolboxWidget(QWidget* parent)
     setMinimumWidth(20);
 
     for (const auto& category : effects::categories()) {
-        auto* item = new QListWidgetItem(category.name, this);
+        auto* item = new QListWidgetItem(category.parent_id.isEmpty() ? category.name : QStringLiteral("    ") + category.name, this);
         item->setData(Qt::UserRole, category.id);
     }
 
