@@ -55,6 +55,17 @@ target_link_libraries(creative-suite-composition PUBLIC
 )
 target_compile_features(creative-suite-composition PUBLIC cxx_std_20)
 
+if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
+    find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui)
+    add_library(creative-suite-composition-exchange STATIC
+        composition-exchange/src/document.cpp composition-exchange/src/raster.cpp)
+    add_library(creative-suite::composition-exchange ALIAS creative-suite-composition-exchange)
+    target_include_directories(creative-suite-composition-exchange PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/composition-exchange/include)
+    target_link_libraries(creative-suite-composition-exchange PUBLIC
+        creative-suite::animation creative-suite::effects Qt6::Core Qt6::Gui)
+endif()
+
 if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_IMAGE_EDITOR)
     find_package(Qt6 CONFIG REQUIRED COMPONENTS Gui OpenGL)
     add_library(creative-suite-composition-opengl STATIC

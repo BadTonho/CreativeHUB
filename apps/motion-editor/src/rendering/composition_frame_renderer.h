@@ -100,6 +100,8 @@ private:
              std::unique_ptr<creative_suite::media::VideoPlaybackSession>> video_sessions_;
     struct CachedContentFrame {
         model::LayerContent content;
+        std::optional<creative_suite::composition_exchange::Presentation> presentation;
+        model::CanvasSize canvas{};
         creative_suite::media::RgbaFramePtr frame;
     };
     std::map<model::LayerId, CachedContentFrame> content_frames_;

@@ -4,6 +4,7 @@ set(REFERENCE_VIDEO "${PROJECT_SOURCE_DIR}/prototypes/testdata/reference.mkv")
 find_package(Threads REQUIRED)
 
 link_libraries(
+    creative-suite::composition-exchange
     creative-suite::animation
     creative-suite::composition
     creative-suite::effects

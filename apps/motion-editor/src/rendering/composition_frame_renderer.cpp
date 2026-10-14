@@ -1,3 +1,4 @@
+#include <creative_suite/composition_exchange/raster.h>
 #include "composition_frame_renderer.h"
 #include "layer_content_renderer.h"
 #include "layer_effect_processor.h"
@@ -211,6 +212,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     const bool try_gpu_effects = gpu_composition_enabled_ &&
         !gpu_composition_disabled_after_failure_;
     std::set<model::LayerId> active_content_ids;
+    std::uint64_t portable_raster_bytes = 0;
     composition_layers.reserve(request.layers.size());
     owned_frames.reserve(request.layers.size());
     composition_layer_ids.reserve(request.layers.size());
@@ -242,9 +244,12 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                                   "Video layer has invalid source timing metadata");
                 continue;
             }
-            const auto mapped_source_frame = model::sourceFrameForTimelineFrame(
-                layer.local_frame, layer.source_start_frame, layer.source_frame_rate,
-                request.frame_rate, layer.source_frame_count);
+            auto presentation = layer.presentation.value_or(creative_suite::composition_exchange::Presentation{});
+            presentation.visible = true; // Active layer visibility belongs to the document snapshot.
+            presentation.start = 0; presentation.duration = 0; presentation.source_start = layer.source_start_frame;
+            const auto mapped_source_frame = layer.presentation ? creative_suite::composition_exchange::sourceFrame(presentation, layer.local_frame, layer.source_frame_rate, layer.source_frame_count, request.frame_rate.asDouble()) : model::sourceFrameForTimelineFrame(
+                layer.local_frame, layer.source_start_frame, layer.source_frame_rate, request.frame_rate, layer.source_frame_count);
+            if (layer.presentation && !mapped_source_frame) continue;
             if (!mapped_source_frame.has_value()) {
                 if (fail_on_media_error) {
                     throw std::runtime_error("Timeline position cannot be represented as a source frame: " +
@@ -342,11 +347,15 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                    layer.kind == model::LayerKind::Shape) {
             active_content_ids.insert(layer.id);
             auto cached = content_frames_.find(layer.id);
-            if (cached == content_frames_.end() || cached->second.content != layer.content) {
+            if (cached == content_frames_.end() || cached->second.content != layer.content || cached->second.presentation != layer.presentation || cached->second.canvas != request.canvas_size) {
                 StageTimer raster_timer(
                     record_preview_metrics_,
                     diagnostics::PreviewTimingStage::TextShapeRasterization);
-                const auto rasterized = rasterizeLayerContent(layer.content);
+                auto rasterized = rasterizeLayerContent(layer.content);
+                if (layer.presentation && layer.presentation->profile == creative_suite::composition_exchange::Profile::FusionCanvas && layer.kind == model::LayerKind::Text) {
+                    const auto& t = std::get<model::TextLayerContent>(layer.content);
+                    rasterized = creative_suite::composition_exchange::textFrame({t.text,t.font_family,t.font_size_pixels,int(t.alignment),t.color}, *layer.presentation, request.canvas_size.width, request.canvas_size.height);
+                }
                 if (!rasterized.has_value()) {
                     if (fail_on_media_error) {
                         throw std::runtime_error("Text or shape content could not be rasterized for layer " +
@@ -363,7 +372,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 cached = content_frames_.insert_or_assign(
                     layer.id,
                     CachedContentFrame{
-                        layer.content,
+                        layer.content, layer.presentation, request.canvas_size,
                         std::make_shared<const creative_suite::media::RgbaFrame>(
                             *rasterized)}).first;
             }
@@ -373,6 +382,13 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         }
 
         if (frame == nullptr) continue;
+        const bool fusion_presentation = layer.presentation && layer.presentation->profile == creative_suite::composition_exchange::Profile::FusionCanvas;
+        if (fusion_presentation) {
+            portable_raster_bytes += std::uint64_t(request.canvas_size.width)*request.canvas_size.height*4;
+            if (portable_raster_bytes > 256ULL*1024*1024)
+                throw creative_suite::composition_exchange::Error("Interchange source preparation exceeds the 256 MiB frame budget.");
+            frame = std::make_shared<const creative_suite::media::RgbaFrame>(creative_suite::composition_exchange::fit(*frame,request.canvas_size.width,request.canvas_size.height, layer.kind == model::LayerKind::Text, should_cancel));
+        }
         std::vector<creative_suite::effects::ColorAdjustmentParameters> gpu_adjustments;
         std::vector<creative_suite::composition::GpuCompositionEffect> gpu_effects;
         const bool has_enabled_effects = hasEnabledLayerEffects(layer.effects);

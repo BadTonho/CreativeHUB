@@ -128,10 +128,33 @@ void testBatchImporterPartialFailuresAndCancellation()
 
 } // namespace
 
+void testPreparedCatalogCommit() {
+    namespace media = creative_suite::media;
+    const auto root = std::filesystem::temp_directory_path();
+    media::MediaLibrary library;
+    auto original=importedItem(root/"prepared-existing.mkv");
+    const auto* original_pixels=original.first_frame.rgba_pixels.data();
+    require(library.addOnline(std::move(original.metadata),std::move(original.first_frame)) == media::MediaMutationResult::Changed,"seed prepared catalog");
+    auto next=importedItem(root/"prepared-next.mkv");
+    const auto* next_pixels=next.first_frame.rgba_pixels.data();
+    std::vector<media::MediaItem> batch;batch.push_back(std::move(next));
+    require(library.mergePrepared(std::move(batch)) == media::MediaMutationResult::Changed,"prepared catalog commit");
+    require(library.items()[0].first_frame.rgba_pixels.data()==original_pixels &&
+        library.items()[1].first_frame.rgba_pixels.data()==next_pixels,"prepared commits must retain pixel owners without copying");
+    auto valid=importedItem(root/"prepared-third.mkv");
+    auto invalid=importedItem(root/"prepared-invalid.mkv");invalid.bin_path="../invalid";
+    std::vector<media::MediaItem> invalid_batch;invalid_batch.push_back(std::move(valid));invalid_batch.push_back(std::move(invalid));
+    require(library.mergePrepared(std::move(invalid_batch)) == media::MediaMutationResult::InvalidBin && library.size()==2,
+        "invalid prepared batch must leave the catalog unchanged");
+    std::vector<media::MediaItem> duplicates;duplicates.push_back(importedItem(root/"prepared-next.mkv"));
+    require(library.mergePrepared(std::move(duplicates)) == media::MediaMutationResult::NoChange && library.size()==2,"duplicate prepared sources");
+}
+
 int main()
 {
     try {
         testCatalogOperations();
+        testPreparedCatalogCommit();
         testBatchImporterPartialFailuresAndCancellation();
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

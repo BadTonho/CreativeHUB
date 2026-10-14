@@ -280,6 +280,8 @@ private:
     void applyTimelineEditResult(
         const application::TimelineEditResult& result,
         bool stop_playback = true);
+    void importCompositionInterchange();
+    void exportCompositionInterchange();
     void updateHistoryActions();
     void updateTimelineState();
     void requestTimelineAudioWaveforms();

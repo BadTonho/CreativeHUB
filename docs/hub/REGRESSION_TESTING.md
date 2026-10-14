@@ -1,5 +1,7 @@
 # Hub Regression Testing
 
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v30/Motion v7 presentation records and path rebasing) and `hub-backup-manager-test` (future v31/v8 rejection). See [interchange](../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+
 ## Background Generator backup verification
 
 `hub-backup-format-test` produces CSP v29 with a named Background composition,

@@ -12,6 +12,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/diagnostics/performance_metrics.h
     src/export/motion_video_export.cpp
     src/export/motion_video_export.h
+    src/model/composition_interchange.cpp
     src/model/composition_document.cpp
     src/model/composition_document.h
     src/model/motion_project_data.h
@@ -39,6 +40,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/viewer/composition_viewer.h
     src/application/history/composition_history.cpp
     src/application/history/composition_history.h
+    src/ui/main_window/main_window_interchange.cpp
     src/ui/main_window/main_window.cpp
     src/ui/main_window/main_window.h
     src/ui/main_window/main_window_documents.cpp
@@ -87,6 +89,7 @@ target_include_directories(creative-suite-motion-editor-core PUBLIC
     ${CMAKE_SOURCE_DIR}/libs/motion-handoff/include
 )
 target_link_libraries(creative-suite-motion-editor-core PUBLIC
+    creative-suite::composition-exchange
     creative-suite::animation
     creative-suite::composition
     creative-suite::composition-opengl

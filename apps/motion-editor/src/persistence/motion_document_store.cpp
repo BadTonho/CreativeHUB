@@ -464,6 +464,9 @@ void validateDocument(const MotionProjectData& document,
         }
     }
 
+    if (document.composition.duration < 0 || document.composition.duration >= (std::int64_t(1) << 50) || document.composition.name.size() > static_cast<std::size_t>(kMaximumStringBytes))
+        fail(MotionDocumentErrorCode::InvalidValue, path, QStringLiteral("Invalid composition name or duration."));
+
     if (document.composition.canvas_size.width <= 0 ||
         document.composition.canvas_size.height <= 0) {
         fail(MotionDocumentErrorCode::InvalidValue, path,
@@ -602,6 +605,7 @@ QJsonObject writeLayer(const CompositionLayer& layer,
     object.insert(QStringLiteral("id"), encodedUInt64(layer.id));
     object.insert(QStringLiteral("kind"), layerKindName(layer.kind));
     object.insert(QStringLiteral("name"), stringFromUtf8(layer.name));
+    if (layer.presentation) object.insert("presentation", creative_suite::composition_exchange::presentationJson(*layer.presentation));
     object.insert(QStringLiteral("source_path"), layer.source_path.empty()
         ? QString{} : storedPath(document_path, layer.source_path));
     if (layer.linked_image.has_value()) {
@@ -722,6 +726,11 @@ CompositionLayer parseLayer(const QJsonValue& value,
     }
     const auto object = value.toObject();
     CompositionLayer layer{};
+    if (object.contains("presentation")) {
+        if (document_version < 7 || !object.value("presentation").isObject())
+            fail(MotionDocumentErrorCode::InvalidValue, document_path, QStringLiteral("Presentation metadata requires format version 7."));
+        layer.presentation = creative_suite::composition_exchange::parsePresentation(object.value("presentation").toObject());
+    }
     layer.id = requiredUInt64(object, "id", document_path);
     layer.kind = parseLayerKind(requiredString(object, "kind", document_path), document_path);
     layer.name = requiredString(object, "name", document_path).toUtf8().toStdString();
@@ -791,7 +800,7 @@ CompositionLayer parseLayer(const QJsonValue& value,
         text.text = requiredString(content, "text", document_path).toUtf8().toStdString();
         text.font_family = requiredString(content, "font_family", document_path)
             .toUtf8().toStdString();
-        text.font_size_pixels = requiredInt(content, "font_size_pixels", document_path);
+        text.font_size_pixels = document_version >= 7 ? requiredNumber(content, "font_size_pixels", document_path) : requiredInt(content, "font_size_pixels", document_path);
         text.color = parseColor(content.value(QStringLiteral("color")), document_path);
         text.alignment = parseTextAlignment(
             requiredString(content, "alignment", document_path), document_path);
@@ -840,6 +849,11 @@ MotionProjectData parseDocument(const QJsonObject& root,
         }
     }
     const auto composition = requiredObject(root, "composition", document_path);
+    if (version >= 7) {
+        result.composition.name = requiredString(composition, "name", document_path).toUtf8().toStdString();
+        result.composition.duration = requiredInt64(composition, "duration", document_path);
+        if (result.composition.duration < 0) fail(MotionDocumentErrorCode::InvalidValue, document_path, QStringLiteral("Invalid composition duration."));
+    }
     const auto canvas = requiredObject(composition, "canvas", document_path);
     result.composition.canvas_size.width = requiredInt(canvas, "width", document_path);
     result.composition.canvas_size.height = requiredInt(canvas, "height", document_path);
@@ -920,6 +934,8 @@ QJsonObject encodeDocument(const MotionProjectData& document,
     root.insert(QStringLiteral("revision"), encodedInt64(document.document_revision));
 
     QJsonObject composition;
+    composition.insert("name", stringFromUtf8(document.composition.name));
+    composition.insert("duration", encodedInt64(document.composition.duration));
     QJsonObject canvas;
     canvas.insert(QStringLiteral("width"), document.composition.canvas_size.width);
     canvas.insert(QStringLiteral("height"), document.composition.canvas_size.height);

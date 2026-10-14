@@ -108,6 +108,7 @@ GraphValidation validate(const NodeGraph& graph) {
     std::size_t output_count = 0;
     NodeId maximum_id = 0;
     for (const auto& node : graph.nodes) {
+        if (node.presentation && !creative_suite::composition_exchange::validPresentation(*node.presentation)) return {GraphError::InvalidParameter, node.id};
         if (!isVisualNode(node.type) && !isMaskNode(node.type)) return {GraphError::InvalidParameter, node.id};
         if (node.id == 0 || node.id > static_cast<NodeId>(
                 std::numeric_limits<std::int64_t>::max()) ||

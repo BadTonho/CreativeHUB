@@ -204,6 +204,13 @@ void testVideoDocuments(const QString& root) {
     const auto producerPath = QDir(QFileInfo(assets).absolutePath()).filePath("producer.csp");
     project::save(fsPath(producerPath), document);
     const auto encoded = QJsonDocument::fromJson(readBytes(producerPath)).object();
+    if (QDir::isAbsolutePath(encoded.value("media").toArray().first().toObject().value("path").toString())) {
+        std::error_code error;
+        const auto relative = std::filesystem::relative(document.media.front().source_path, fsPath(producerPath).parent_path(), error);
+        std::cerr << "Producer " << producerPath.toStdString() << " source " << document.media.front().source_path.generic_string()
+            << " encoded " << encoded.value("media").toArray().first().toObject().value("path").toString().toStdString()
+            << " relative " << relative.generic_string() << " error " << error.message() << '\n';
+    }
     CS_TEST_CHECK(!QDir::isAbsolutePath(encoded.value("media").toArray().first().toObject().value("path").toString()));
 
     for (int version = 1; version <= project::current_format_version; ++version) {
@@ -263,6 +270,9 @@ void testVideoDocuments(const QString& root) {
     composition.display_name = "Background";
     composition.node_graph = fusion::nodes::makeCompositionGraph();
     composition.node_graph->nodes[0].background_color = {12, 34, 56, 78};
+    composition.node_graph->nodes[0].presentation = creative_suite::composition_exchange::Presentation{};
+    composition.node_graph->nodes[0].presentation->name = "Interchange background";
+    composition.node_graph->nodes[0].presentation->offset = -12;
     fusion::nodes::Node text; text.id = 3; text.type = fusion::nodes::NodeType::Text;
     text.text.content = "Backup composition";
     fusion::nodes::Node input; input.id = 4; input.source_path = fsPath(still); input.source_is_still = true;
@@ -327,6 +337,16 @@ void testMotionDocuments(const QString& root) {
         CS_TEST_CHECK(std::filesystem::exists(after.layers.front().source_path));
     }
     CS_TEST_CHECK(readBytes(source) == "original image bytes");
+    project.layers.front().presentation = creative_suite::composition_exchange::Presentation{};
+    project.layers.front().presentation->name = "Interchange image";
+    project.layers.front().presentation->offset = -7;
+    project.composition.name = "Interchange";
+    project.composition.duration = 180;
+    const auto interchange_path = QDir(QFileInfo(assets).absolutePath()).filePath("interchange.motion");
+    Store::save(fsPath(interchange_path), project);
+    const auto interchange_backup = backup(QDir(root).filePath("motion-interchange-v7"), interchange_path);
+    CS_TEST_CHECK(Store::load(fsPath(interchange_backup.vault)) == project);
+    CS_TEST_CHECK(Store::load(fsPath(interchange_backup.restored)) == project);
 }
 #endif
 

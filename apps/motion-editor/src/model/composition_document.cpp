@@ -142,7 +142,7 @@ bool validLayer(const CompositionLayer& layer) noexcept
     using creative_suite::animation::validTransform;
     using creative_suite::animation::validTransformKeyframes;
 
-    if (layer.id == 0 || !validLayerKind(layer.kind) || layer.timeline_start_frame < 0 ||
+    if ((layer.presentation && !creative_suite::composition_exchange::validPresentation(*layer.presentation)) || layer.id == 0 || !validLayerKind(layer.kind) || layer.timeline_start_frame < 0 ||
         layer.duration_frames < 0 ||
         layer.duration_frames > std::numeric_limits<std::int64_t>::max() -
             layer.timeline_start_frame ||
@@ -165,7 +165,7 @@ bool validLayer(const CompositionLayer& layer) noexcept
         (layer.maximum_timeline_duration_frames <= 0 ||
          layer.duration_frames > layer.maximum_timeline_duration_frames ||
          layer.source_frame_count <= 0 || layer.source_frame_rate <= 0.0 ||
-         layer.source_start_frame >= layer.source_frame_count)) {
+         (!layer.presentation && layer.source_start_frame >= layer.source_frame_count))) {
         return false;
     }
 
@@ -615,6 +615,13 @@ bool CompositionDocument::setTextLayerContent(
     if (layer == nullptr || layer->kind != LayerKind::Text ||
         !validTextContent(content)) {
         return false;
+    }
+    const auto& previous = std::get<TextLayerContent>(layer->content);
+    if (layer->presentation && layer->presentation->profile == creative_suite::composition_exchange::Profile::FusionCanvas &&
+        (previous.box_width != content.box_width || previous.box_height != content.box_height)) {
+        layer->presentation->profile = creative_suite::composition_exchange::Profile::MotionLayer;
+        layer->presentation->text_width = content.box_width;
+        layer->presentation->text_height = content.box_height;
     }
     layer->content = content;
     return true;

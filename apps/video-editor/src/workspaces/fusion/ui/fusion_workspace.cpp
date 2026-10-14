@@ -547,6 +547,13 @@ void FusionWorkspace::refreshInspector() {
             });
         return control;
     };
+    if (node->presentation && (node->type == fusion::nodes::NodeType::Input ||
+        node->type == fusion::nodes::NodeType::Text || node->type == fusion::nodes::NodeType::Background)) {
+        auto* visible = new QCheckBox(node_properties_);
+        visible->setObjectName("fusionSourceVisible");
+        visible->setChecked(node->presentation->visible);
+        layout->addRow("Visible", visible);
+    }
     if (fusion::nodes::isMaskNode(node->type)) {
         static const char* labels[]{"Center X (%)","Center Y (%)","Width (%)","Height (%)","Rotation (degrees)"};
         const auto evaluated=fusion::nodes::evaluateMask(node->mask,node->mask_keyframes,local_frame_);
@@ -661,6 +668,10 @@ void FusionWorkspace::refreshInspector() {
         add_transform("fusionTransformOpacity", "Opacity",
             timeline::TransformProperty::Opacity, 0.0, 1.0, 0.05);
     } else if (node->type == fusion::nodes::NodeType::Color) {
+        auto* enabled = new QCheckBox(node_properties_);
+        enabled->setObjectName("fusionColorEnabled");
+        enabled->setChecked(node->color.enabled);
+        layout->addRow("Enabled", enabled);
         spin("fusionColorBrightness", "Brightness", node->color.brightness, -100.0, 100.0, 1.0);
         spin("fusionColorContrast", "Contrast %", node->color.contrast_percent, 0.0, 200.0, 1.0);
         spin("fusionColorSaturation", "Saturation %", node->color.saturation_percent, 0.0, 200.0, 1.0);
@@ -706,6 +717,8 @@ void FusionWorkspace::refreshInspector() {
         auto found = std::find_if(candidate.nodes.begin(), candidate.nodes.end(),
             [node_id](const auto& value) { return value.id == node_id; });
         if (found == candidate.nodes.end()) return;
+        if (auto* visible = node_properties_->findChild<QCheckBox*>("fusionSourceVisible"); visible && found->presentation)
+            found->presentation->visible = visible->isChecked();
         if (fusion::nodes::isMaskNode(found->type)) {
             const auto frame=std::clamp<std::int64_t>(local_frame_,0,std::max<std::int64_t>(0,clip_duration_frames_-1));
             for (std::size_t i=0; i<5; ++i) {
@@ -754,6 +767,7 @@ void FusionWorkspace::refreshInspector() {
             apply_property(timeline::TransformProperty::Opacity,
                 node_properties_->findChild<QDoubleSpinBox*>("fusionTransformOpacity"));
         } else if (found->type == fusion::nodes::NodeType::Color) {
+            found->color.enabled = node_properties_->findChild<QCheckBox*>("fusionColorEnabled")->isChecked();
             found->color.brightness = node_properties_->findChild<QDoubleSpinBox*>("fusionColorBrightness")->value();
             found->color.contrast_percent = node_properties_->findChild<QDoubleSpinBox*>("fusionColorContrast")->value();
             found->color.saturation_percent = node_properties_->findChild<QDoubleSpinBox*>("fusionColorSaturation")->value();

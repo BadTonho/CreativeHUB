@@ -71,6 +71,8 @@ public:
     void selectBackgroundNode(int index);
     void chooseBackgroundColor();
     void addFusionCompositionClipAt(timeline::TrackId track_id, qint64 timeline_frame);
+    [[nodiscard]] application::TimelineEditResult insertPreparedComposition(
+        application::AddFusionCompositionCommand command);
     void addAdjustmentClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void addTextClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void promptAddVideoTrack(QWidget* dialog_parent);

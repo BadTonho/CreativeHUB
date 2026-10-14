@@ -1,5 +1,7 @@
 # Keyboard Shortcuts
 
+File > Import Composition Interchange... and Export Composition Interchange... have no default shortcuts. See [workflow](../COMPOSITION_INTERCHANGE.md).
+
 ## Fusion catalog creation
 
 Effects and Favorites add Fusion nodes by drag or double click. These actions have no default shortcut; graph creation uses the existing Undo/Redo commands. The Add Node selector/button has been removed.

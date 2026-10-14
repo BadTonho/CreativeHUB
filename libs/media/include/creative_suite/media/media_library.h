@@ -55,6 +55,9 @@ public:
         std::string display_name = {},
         std::string bin_path = std::string(default_bin),
         MediaKind kind = MediaKind::Video);
+    // Transactional append of worker-prepared online media. Invalid batches
+    // leave the catalog unchanged. Pixel owners move; existing frames are not copied.
+    MediaMutationResult mergePrepared(std::vector<MediaItem> prepared);
     MediaMutationResult restore(
         std::size_t index,
         VideoMetadata metadata,

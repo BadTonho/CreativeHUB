@@ -17,6 +17,7 @@ endif()
 set(MAIN_EDITOR_CORE_SOURCES
     src/main_window/main_window.cpp
     src/main_window/main_window.h
+    src/application/composition_interchange.cpp
     src/application/editor_session.cpp
     src/application/editor_session.h
     src/application/media_controller.cpp
@@ -39,6 +40,7 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/fusion/nodes/ui/node_canvas.h
     src/main_window/main_window_support.cpp
     src/main_window/main_window_support.h
+    src/main_window/main_window_interchange.cpp
     src/main_window/main_window_workspace.cpp
     src/main_window/main_window_effects.cpp
     src/main_window/main_window_project.cpp
@@ -208,6 +210,7 @@ target_compile_definitions(creative-suite-main-editor PRIVATE
     CREATIVE_SUITE_APP_VERSION="${CREATIVE_SUITE_VERSION_VIDEO_EDITOR}")
 
 target_link_libraries(creative-suite-main-editor-core PUBLIC
+    creative-suite::composition-exchange
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets

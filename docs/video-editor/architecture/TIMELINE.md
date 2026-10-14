@@ -1,5 +1,7 @@
 # Timeline Boundary
 
+Import Composition Interchange inserts a generated Fusion Composition at the selected video-track playhead in one undoable command. Source activity uses the original composition clock across cuts/trims; FPS changes rescale presentation frame coordinates. See [interchange](../../COMPOSITION_INTERCHANGE.md).
+
 ## Background Generator
 
 Background creates a five-second, opaque-white Fusion Composition named Background through one command/history entry. Existing generated-duration, transitions, attributes, splits, trims, FPS conversion and independent graph duplication apply. The name survives these edits and persistence. See [Background Generator](../BACKGROUND_GENERATOR.md).

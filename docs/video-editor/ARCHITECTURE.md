@@ -1,5 +1,7 @@
 # Application Architecture
 
+[Composition interchange](../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is now v30.
+
 ## Workspace Effects catalog
 
 The app-owned Effects catalog centralizes workspace availability and creation actions for Toolbox, list, Favorites, Functions and drop validation. Fusion node creation uses the existing graph edit/history path; no rendering or CSP v29 change is needed. See [the catalog contract](architecture/EFFECTS.md#workspace-catalog).

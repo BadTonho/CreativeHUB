@@ -119,6 +119,9 @@ struct AddFusionCompositionCommand {
     timeline::TrackId track_id = 0;
     std::int64_t timeline_start_frame = 0;
     std::int64_t duration_frames = 0;
+    std::optional<fusion::nodes::NodeGraph> graph;
+    std::string display_name;
+    std::vector<media::MediaItem> media;
 };
 
 struct DuplicateAdjustmentClipCommand { timeline::ClipId clip_id = 0; };
@@ -234,7 +237,7 @@ public:
     [[nodiscard]] TimelineEditResult execute(const AddMediaClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddMediaClipsCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddTextClipCommand& command);
-    [[nodiscard]] TimelineEditResult execute(const AddFusionCompositionCommand& command);
+    [[nodiscard]] TimelineEditResult execute(AddFusionCompositionCommand command);
     [[nodiscard]] TimelineEditResult execute(const AddBackgroundGeneratorCommand& command);
     [[nodiscard]] TimelineEditResult execute(const DuplicateFusionCompositionCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddAdjustmentClipCommand& command);

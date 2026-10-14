@@ -1,5 +1,7 @@
 # Motion Studio Roadmap
 
+The first [editable composition interchange](../COMPOSITION_INTERCHANGE.md) transfers compatible layer stacks to Fusion and back. Unsupported masks, blur and group processing require later work. Native menu/platform acceptance remains separate from automated coverage.
+
 ## Shared composition mask-operation regression
 
 The shared engine adds straight-RGBA ApplyMask/MaskedBlend for Video Editor

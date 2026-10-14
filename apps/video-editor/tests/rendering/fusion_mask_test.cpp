@@ -155,7 +155,7 @@ void editingAndPersistence(const QString& directory) {
     root.insert("version",28);
     CS_TEST_CHECK(file.open(QIODevice::WriteOnly|QIODevice::Truncate));file.write(QJsonDocument(root).toJson());file.close();
     CS_TEST_CHECK(project::load(path)==document); // v28 mask graphs retain their previous result
-    for (int version : {27,30}) {
+    for (int version : {27,project::current_format_version+1}) {
         root.insert("version",version);CS_TEST_CHECK(file.open(QIODevice::WriteOnly|QIODevice::Truncate));file.write(QJsonDocument(root).toJson());file.close();
         bool rejected=false;try{(void)project::load(path);}catch(const project::ProjectError&){rejected=true;}CS_TEST_CHECK(rejected);
     }

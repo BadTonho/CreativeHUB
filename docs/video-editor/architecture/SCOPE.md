@@ -1,5 +1,7 @@
 # Current Scope and Non-goals
 
+The first [editable Fusion/Motion interchange](../../COMPOSITION_INTERCHANGE.md) covers a compatible layer subset. Unsupported graph structures are explicitly refused; arbitrary graphs and linked editable synchronization remain outside this version.
+
 ## Workspace Effects catalog
 
 The Effects catalog filters tools by Edit/Fusion and replaces the Fusion Add Node selector/button. Node creation uses drag or double click, preserves graph history, and keeps Output mandatory. No new graph types, shortcuts, rendering engine or project format are introduced. See [the catalog contract](EFFECTS.md#workspace-catalog).

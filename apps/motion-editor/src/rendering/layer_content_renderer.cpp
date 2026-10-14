@@ -70,7 +70,7 @@ std::optional<QImage> rasterizeText(const model::TextLayerContent& content)
 
     const QString text = fromUtf8(content.text);
     QFont font(fromUtf8(content.font_family));
-    font.setPixelSize(content.font_size_pixels);
+    font.setPixelSize(static_cast<int>(content.font_size_pixels));
 
     int flags = Qt::TextWordWrap | Qt::AlignVCenter;
     switch (content.alignment) {

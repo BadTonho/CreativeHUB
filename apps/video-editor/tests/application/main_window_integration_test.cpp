@@ -270,6 +270,9 @@ public:
         };
         {
             MainWindow window;
+            require(window.findChild<QAction*>("importCompositionInterchangeAction") &&
+                        window.findChild<QAction*>("exportCompositionInterchangeAction"),
+                    "Composition interchange File commands are missing.");
             restore(window, snapshot, project_path);
             require(manager.validSnapshotsForProject(project_path).size() == 1 &&
                         project::load(project_path).timeline_zoom == 1.0,

@@ -550,7 +550,7 @@ model::MotionProjectData MainWindow::projectData() const
     if (!document_) throw std::logic_error("There is no open Motion Studio composition");
     model::MotionProjectData snapshot;
     snapshot.document_revision = document_revision_;
-    snapshot.composition = {document_->canvasSize(), document_->frameRate()};
+    snapshot.composition = {document_->canvasSize(), document_->frameRate(), document_->interchange_name, document_->interchange_duration};
     snapshot.layers = document_->layers();
     if (media_pool_ != nullptr) {
         snapshot.bins = media_pool_->library().bins();
@@ -731,6 +731,8 @@ void MainWindow::finishOpen(std::uint64_t generation,
                                     : std::string{}}});
                 }
             }
+            if (!restored && recovered && recovery_snapshot_path.empty())
+                throw std::runtime_error("Composition interchange media could not be prepared: " + pathForLog(media.source_path));
             if (!restored) {
                 (void)staged_library.addOffline(media.source_path, media.display_name,
                                                 media.bin_path, media.kind);
@@ -763,6 +765,8 @@ void MainWindow::finishOpen(std::uint64_t generation,
         composition_history_.clear();
         active_transform_edit_.reset();
         document_.emplace(std::move(staged_document));
+        document_->interchange_name = project.composition.name;
+        document_->interchange_duration = project.composition.duration;
         document_path_ = path.empty()
             ? std::nullopt
             : std::optional<std::filesystem::path>(
@@ -793,10 +797,10 @@ void MainWindow::finishOpen(std::uint64_t generation,
         } else {
             recovered_untitled_snapshot_path_.reset();
         }
-        if (recovered && !document_path_.has_value())
+        if (recovered && !document_path_.has_value() && !recovery_snapshot_path.empty())
             recovered_untitled_snapshot_path_ = recovery_snapshot_path;
         startup_handoff_requested_ = false;
-        if (recovered) {
+        if (recovered && !recovery_snapshot_path.empty()) {
             last_autosaved_data_ = projectData();
         }
         statusBar()->showMessage(offline_count == 0

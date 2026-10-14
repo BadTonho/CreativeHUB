@@ -2701,7 +2701,9 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeFusionNodePreview(
             continue;
         }
         if (graph_input->video_session == nullptr) continue;
-        const long double source_index = (static_cast<long double>(local_frame) + spec.composition_input_offset_frames) *
+        const auto mapped = node.presentation ? creative_suite::composition_exchange::sourceFrame(*node.presentation, rendering::graphFrameClock(local_frame, spec.composition_input_offset_frames), graph_input->frame_rate, node.source_frame_count, timeline_frame_rate_.asDouble()) : std::optional<std::int64_t>{};
+        if (node.presentation && !mapped) continue;
+        const long double source_index = mapped ? static_cast<long double>(*mapped) : (static_cast<long double>(local_frame) + spec.composition_input_offset_frames) *
             graph_input->frame_rate / spec.timeline_frame_rate.asDouble();
         if (source_index < 0.0L ||
             (node.source_frame_count > 0 &&
@@ -2716,7 +2718,7 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeFusionNodePreview(
     const bool independent = spec.kind == timeline::ClipKind::FusionComposition;
     const int width = independent ? composition_canvas_width_ : selected_clip_frame->width;
     const int height = independent ? composition_canvas_height_ : selected_clip_frame->height;
-    rendering::prepareGraphFrames(graph, inputs, width, height, independent, should_cancel);
+    rendering::prepareGraphFrames(graph, inputs, width, height, independent, should_cancel, rendering::graphFrameClock(local_frame, spec.composition_input_offset_frames));
     return fusion::nodes::evaluate(graph, inputs, target_node,
         fusion::nodes::EvaluationContext{local_frame, graphGpuBackend(), nullptr, should_cancel, nullptr, nullptr, {}, independent ? width : 0, independent ? height : 0});
 }
@@ -2934,7 +2936,9 @@ PlaybackWorker::decodeCompositionLayers(
                     if (graph_input->still_frame != nullptr)
                         inputs.emplace(node.id, graph_input->still_frame);
                 } else if (graph_input->video_session != nullptr) {
-                    const long double source_index = (static_cast<long double>(request.local_frame) + spec.composition_input_offset_frames) *
+                    const auto mapped = node.presentation ? creative_suite::composition_exchange::sourceFrame(*node.presentation, rendering::graphFrameClock(request.local_frame, spec.composition_input_offset_frames), graph_input->frame_rate, node.source_frame_count, timeline_frame_rate_.asDouble()) : std::optional<std::int64_t>{};
+                    if (node.presentation && !mapped) continue;
+                    const long double source_index = mapped ? static_cast<long double>(*mapped) : (static_cast<long double>(request.local_frame) + spec.composition_input_offset_frames) *
                         graph_input->frame_rate / timeline_frame_rate_.asDouble();
                     if (source_index >= 0.0L &&
                         (node.source_frame_count <= 0 ||
@@ -2960,7 +2964,7 @@ PlaybackWorker::decodeCompositionLayers(
             const bool independent = spec.kind == timeline::ClipKind::FusionComposition;
             const int graph_width = independent ? composition_canvas_width_ : frame->width;
             const int graph_height = independent ? composition_canvas_height_ : frame->height;
-            rendering::prepareGraphFrames(*spec.node_graph, inputs, graph_width, graph_height, independent, should_cancel);
+            rendering::prepareGraphFrames(*spec.node_graph, inputs, graph_width, graph_height, independent, should_cancel, rendering::graphFrameClock(request.local_frame, spec.composition_input_offset_frames));
             creative_suite::composition::OpenGlCompositionTimings graph_timings;
             const auto evaluated = fusion::nodes::evaluateFrame(
                 *spec.node_graph, inputs,

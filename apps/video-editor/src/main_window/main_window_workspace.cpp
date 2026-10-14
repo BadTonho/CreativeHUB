@@ -753,6 +753,17 @@ void MainWindow::createMenus() {
 
     auto* file_menu = menuBar()->addMenu("&File");
     file_menu->setObjectName(QStringLiteral("fileMenu"));
+    auto* import_interchange = file_menu->addAction("Import Composition Interchange...");
+    import_interchange->setObjectName("importCompositionInterchangeAction");
+    connect(import_interchange, &QAction::triggered, this, &MainWindow::importCompositionInterchange);
+    auto* export_interchange = file_menu->addAction("Export Composition Interchange...");
+    export_interchange->setObjectName("exportCompositionInterchangeAction");
+    disableDuringProjectLoad(import_interchange);
+    disableDuringProjectLoad(export_interchange);
+    register_menu_action(import_interchange, settings::ShortcutScope::Application);
+    register_menu_action(export_interchange, settings::ShortcutScope::Application);
+    connect(export_interchange, &QAction::triggered, this, &MainWindow::exportCompositionInterchange);
+    file_menu->addSeparator();
     new_project_action_ = file_menu->addAction("&New Project");
     register_menu_action(new_project_action_, settings::ShortcutScope::Application);
     disableDuringProjectLoad(new_project_action_);

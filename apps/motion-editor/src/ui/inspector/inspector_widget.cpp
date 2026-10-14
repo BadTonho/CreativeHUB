@@ -191,7 +191,7 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     controls_.text_font_field = new QFontComboBox(controls_.text_content_page);
     controls_.text_font_field->setObjectName(QStringLiteral("motion-text-font-family"));
     text_form->addRow(QStringLiteral("Font"), controls_.text_font_field);
-    controls_.text_font_size_field = new QSpinBox(controls_.text_content_page);
+    controls_.text_font_size_field = new QDoubleSpinBox(controls_.text_content_page);
     controls_.text_font_size_field->setObjectName(QStringLiteral("motion-text-font-size"));
     controls_.text_font_size_field->setRange(1, 4096);
     controls_.text_font_size_field->setSuffix(QStringLiteral(" px"));
@@ -423,7 +423,11 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
             this, [this](const QFont&) { emit layerContentEdited(); });
     connect(controls_.text_alignment_field, qOverload<int>(&QComboBox::currentIndexChanged),
             this, [this](int) { emit layerContentEdited(); });
-    for (auto* field : {controls_.text_font_size_field, controls_.text_box_width_field,
+    connect(controls_.text_font_size_field, &QDoubleSpinBox::valueChanged, this,
+        [this](double) { emit layerContentEdited(); });
+    connect(controls_.text_font_size_field, &QDoubleSpinBox::editingFinished,
+        this, &InspectorWidget::layerContentEditFinished);
+    for (auto* field : {controls_.text_box_width_field,
                         controls_.text_box_height_field, controls_.shape_width_field,
                         controls_.shape_height_field, controls_.shape_stroke_width_field}) {
         connect(field, &QSpinBox::valueChanged, this,

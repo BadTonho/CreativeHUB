@@ -1,5 +1,7 @@
 # Project Document and Persistence
 
+CSP v30 adds optional per-node `presentation` metadata for [composition interchange](../../COMPOSITION_INTERCHANGE.md). Readers reject these fields in older versions; legacy nodes retain their existing defaults. Saving, autosave and recovery share the native serializer.
+
 ## Composition names (version 29)
 
 Fusion Composition clips may store UTF-8 `display_name`. Background presets use
@@ -46,12 +48,12 @@ retain it, and project-rate conversion leaves this absolute time unchanged.
 Version 24 links migrate with zero offset, matching their previous initial
 playback. Older readers reject v25 instead of silently restarting split renders.
 
-The current root uses `version: 29`. Versions 1 through 28 remain readable.
+The current root uses `version: 30`. Versions 1 through 29 remain readable.
 Version 24 adds optional Motion Studio links to Media Pool items and Timeline
 clips, retaining the previous Image Editor link fields. A Motion link stores
 its ID, editable document, published output, original source, source kind, and
 export profile. Paths use the same relative-within-project rules. Versions
-1–23 open without Motion links. Ordinary saves write version 29; references to
+1–23 open without Motion links. Ordinary saves write version 30; references to
 older field versions below describe when those fields were introduced.
 Version 20 introduced optional Fusion node graphs on visual Timeline clips;
 version 21 adds existing video effects as graph nodes; version 22 adds local

@@ -416,7 +416,9 @@ std::optional<media::VideoFrame> composeFrame(
                         inputs.emplace(node.id,
                             std::make_shared<const media::VideoFrame>(*source->still));
                     } else if (source->video != nullptr) {
-                        const long double frame_value = (static_cast<long double>(local_frame) + clip.composition_input_offset_frames) *
+                        const auto mapped = node.presentation ? creative_suite::composition_exchange::sourceFrame(*node.presentation, rendering::graphFrameClock(local_frame, clip.composition_input_offset_frames), source->frame_rate, node.source_frame_count, timeline_frame_rate.asDouble()) : std::optional<std::int64_t>{};
+                        if (node.presentation && !mapped) continue;
+                        const long double frame_value = mapped ? static_cast<long double>(*mapped) : (static_cast<long double>(local_frame) + clip.composition_input_offset_frames) *
                             source->frame_rate / timeline_frame_rate.asDouble();
                         if (frame_value >= 0.0L &&
                             (node.source_frame_count <= 0 ||
@@ -443,7 +445,7 @@ std::optional<media::VideoFrame> composeFrame(
                 const int graph_width = independent ? canvas_width : source_frame->width;
                 const int graph_height = independent ? canvas_height : source_frame->height;
                 rendering::prepareGraphFrames(*clip.node_graph, inputs, graph_width, graph_height, independent,
-                    [&canceled] { return canceled.load(); });
+                    [&canceled] { return canceled.load(); }, rendering::graphFrameClock(local_frame, clip.composition_input_offset_frames));
                 creative_suite::composition::OpenGlCompositionTimings graph_timings;
                 const auto evaluated = [&] {
                     detail::ExportTimedScope graph_scope(metrics.graph_nanoseconds);

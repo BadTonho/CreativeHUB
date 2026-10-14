@@ -1,4 +1,5 @@
 #include "node_graph_evaluator.h"
+#include <creative_suite/composition_exchange/raster.h>
 #include "mask_rasterizer.h"
 
 #include <creative_suite/effects/effects.h>
@@ -160,9 +161,14 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
         } else if (node->type == NodeType::Transform) {
             operation.kind = OpenGlImageOperationKind::Transform;
             operation.transform = timeline::evaluateTransform(node->transform, node->transform_keyframes, context.local_frame);
+            if (node->presentation && node->presentation->profile == creative_suite::composition_exchange::Profile::MotionLayer) {
+                operation.output_width = width; operation.output_height = height;
+                if (node->presentation->text_width == 0)
+                    operation.transform.scale *= std::min(double(width)/operation.background.width(), double(height)/operation.background.height());
+            }
         } else if (node->type == NodeType::Color) {
             operation.kind = OpenGlImageOperationKind::Color;
-            operation.colors.push_back({node->color.brightness, node->color.contrast_percent, node->color.saturation_percent});
+            if (node->color.enabled) operation.colors.push_back({node->color.brightness, node->color.contrast_percent, node->color.saturation_percent});
         } else if (node->type == NodeType::Effect) {
             auto effect = node->effect;
             for (const auto& parameter : node->effect_parameter_keyframes) {
@@ -394,12 +400,13 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
             ? transparent() : media::VideoFrame{};
         const auto& background = input != values.end() ? input->second : empty_input;
         if (node->type == NodeType::Transform) {
-            values.emplace(id, transformFrame(background,
-                timeline::evaluateTransform(node->transform,
-                    node->transform_keyframes, context.local_frame)));
+            const auto transform = timeline::evaluateTransform(node->transform, node->transform_keyframes, context.local_frame);
+            if (node->presentation && node->presentation->profile == creative_suite::composition_exchange::Profile::MotionLayer)
+                values.emplace(id, creative_suite::composition_exchange::transformFrame(background, canvas_width, canvas_height, transform, node->presentation->profile, node->presentation->text_width > 0, context.should_cancel));
+            else values.emplace(id, transformFrame(background, transform));
         } else if (node->type == NodeType::Color) {
             auto frame = background;
-            if (creative_suite::effects::applyColorAdjustment(frame,
+            if (node->color.enabled && creative_suite::effects::applyColorAdjustment(frame,
                 {node->color.brightness, node->color.contrast_percent,
                  node->color.saturation_percent}) !=
                     creative_suite::effects::ProcessingResult::Completed)

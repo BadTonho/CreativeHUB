@@ -349,6 +349,9 @@ void testMotionShortcutSettings()
     QTemporaryDir recovery_directory;
     require(recovery_directory.isValid(), "shortcut test recovery directory is available");
     MainWindow window(nullptr, pathFromQString(recovery_directory.path()), "shortcut-tests");
+    require(window.findChild<QAction*>("importCompositionInterchangeAction") &&
+                window.findChild<QAction*>("exportCompositionInterchangeAction"),
+            "composition interchange File commands exist");
     auto* create_action = action(window, "motion-new-composition-action");
     auto* open_action = action(window, "motion-open-composition-action");
     auto* save_action = action(window, "motion-save-composition-action");
@@ -1161,12 +1164,12 @@ void testNativeTextAndShapeLayers()
             "creating text opens its content inspector");
 
     auto* text_field = findWidget<QTextEdit>(&window, "motion-text-content");
-    auto* text_size = findWidget<QSpinBox>(&window, "motion-text-font-size");
+    auto* text_size = findWidget<QDoubleSpinBox>(&window, "motion-text-font-size");
     auto* text_alignment = findWidget<QComboBox>(&window, "motion-text-alignment");
     auto* text_box_width = findWidget<QSpinBox>(&window, "motion-text-box-width");
     auto* text_box_height = findWidget<QSpinBox>(&window, "motion-text-box-height");
     text_field->setPlainText(QStringLiteral("Hello\nMotion Studio"));
-    text_size->setValue(72);
+    text_size->setValue(72.5);
     text_alignment->setCurrentIndex(text_alignment->findData(
         static_cast<int>(motion::model::TextAlignment::Right)));
     text_box_width->setValue(500);
@@ -1175,7 +1178,7 @@ void testNativeTextAndShapeLayers()
     QApplication::sendEvent(text_field, &text_focus_out);
     const auto edited_text = std::get<motion::model::TextLayerContent>(
         window.compositionDocument()->layers().front().content);
-    require(edited_text.text == "Hello\nMotion Studio" && edited_text.font_size_pixels == 72 &&
+    require(edited_text.text == "Hello\nMotion Studio" && edited_text.font_size_pixels == 72.5 &&
                 edited_text.alignment == motion::model::TextAlignment::Right &&
                 edited_text.box_width == 500 && edited_text.box_height == 200 &&
                 action(window, "motion-undo-action")->isEnabled() && window.isWindowModified(),

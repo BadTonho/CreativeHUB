@@ -3,6 +3,7 @@
 #include "timeline/timeline_transform.h"
 #include "timeline/text_style.h"
 #include <creative_suite/effects/effects.h>
+#include <creative_suite/composition_exchange/document.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -20,6 +21,7 @@ struct ColorParameters {
     double brightness = 0.0;
     double contrast_percent = 100.0;
     double saturation_percent = 100.0;
+    bool enabled = true;
     friend bool operator==(const ColorParameters&, const ColorParameters&) = default;
 };
 
@@ -68,6 +70,7 @@ struct Node {
     timeline::TextStyle text;
     MaskParameters mask;
     MaskKeyframes mask_keyframes;
+    std::optional<creative_suite::composition_exchange::Presentation> presentation;
     friend bool operator==(const Node&, const Node&) = default;
 };
 

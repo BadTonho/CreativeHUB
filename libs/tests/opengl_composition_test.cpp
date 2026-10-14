@@ -95,6 +95,29 @@ void parity(OpenGlFrameCompositor& gpu) {
     }
 
     auto opaque = fixture(16, 12, false);
+    {
+        OpenGlImageOperation transform;
+        transform.kind = OpenGlImageOperationKind::Transform;
+        transform.background = {&opaque};
+        transform.output_width = 30;
+        transform.output_height = 20;
+        transform.transform.position_x = .6;
+        transform.transform.opacity = .5;
+        transform.transform.scale = std::min(30.0 / opaque.width, 20.0 / opaque.height);
+        auto output = gpu.processImage(transform);
+        require(output.status == OpenGlCompositionStatus::Complete && output.frame,
+            "Project-canvas image transform failed.");
+        auto actual = gpu.readback(output.frame);
+        require(actual.frame && actual.frame->width == 30 && actual.frame->height == 20,
+            "Project-canvas transform lost output geometry.");
+        const auto* center = actual.frame->rgba_pixels.data() + 10 * actual.frame->stride + 18 * 4;
+        const auto* source = opaque.rgba_pixels.data() + 6 * opaque.stride + 8 * 4;
+        require(center[0] == source[0] && center[1] == source[1] &&
+            center[2] == source[2] && center[3] == 128,
+            "Project-canvas transform lost source geometry or alpha.");
+        require(actual.frame->rgba_pixels[3] == 0,
+            "Project-canvas transform did not retain transparent exposed areas.");
+    }
     auto alpha = fixture(13, 7, true);
     auto padding = fixture(9, 11, true, 12);
     auto odd_padding = fixture(11, 9, true, 3);

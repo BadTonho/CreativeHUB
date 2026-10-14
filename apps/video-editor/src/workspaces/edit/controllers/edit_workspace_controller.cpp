@@ -1744,6 +1744,23 @@ void EditWorkspaceController::publishCommittedEdit(
         result, stop_playback, refresh_composition, status_message);
 }
 
+application::TimelineEditResult EditWorkspaceController::insertPreparedComposition(
+    application::AddFusionCompositionCommand command) {
+    collapseTimelineSelectionToPrimary();
+    const auto result = command_service_.execute(std::move(command));
+    publishResult(result);
+    if (!result.changed()) {
+        emit statusMessageRequested(result.reason == application::EditReason::Overlap
+            ? QStringLiteral("A clip already occupies that range.")
+            : QStringLiteral("The composition could not be inserted on this track."));
+        return result;
+    }
+    publishCommittedEdit(result, false, true, QStringLiteral("Composition imported."));
+    if (playback_available_)
+        emit renderCompositionFrameRequested(timelinePlayheadFrame(), playback_frame_index_);
+    return result;
+}
+
 void EditWorkspaceController::updateInspector() {
     bool transition_enabled = false;
     const timeline::TimelineTransition* selected_transition = nullptr;

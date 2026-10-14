@@ -1,5 +1,7 @@
 # Cross-Application Compatibility Proposal
 
+Editable Fusion/Motion interchange is documented in [Composition interchange](COMPOSITION_INTERCHANGE.md). CSP v30 and Motion v7 carry portable presentation metadata; linked Motion publication remains a separate workflow.
+
 ## Named Background compositions
 
 CSP v29 adds optional Fusion Composition display names for the Edit Background

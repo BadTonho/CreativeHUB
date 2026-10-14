@@ -1,5 +1,7 @@
 # Editor Session and Timeline Commands
 
+The AddFusionComposition command accepts a validated graph, display name and prepared media for atomic interchange insertion. Timeline collisions leave the staged timeline/catalog unapplied. See [interchange](../../COMPOSITION_INTERCHANGE.md).
+
 ## Background Generator
 
 AddBackgroundGeneratorCommand stages a white Background → Output composition named Background and publishes one insertion/history entry. Color changes reuse SetClipNodeGraphCommand. Node selection and canceled dialogs are presentation-only. DuplicateFusionCompositionCommand preserves the name with an independent graph. See [Background Generator](../BACKGROUND_GENERATOR.md).

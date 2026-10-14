@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cctype>
 #include <system_error>
+#include <type_traits>
+#include <climits>
 
 namespace creative_suite::media {
 namespace {
@@ -100,6 +102,34 @@ MediaMutationResult MediaLibrary::addOnline(
     items_.push_back({std::move(metadata), std::move(first_frame),
                       std::move(display_name), std::move(bin_path), false});
     path_index_.emplace(items_.back().metadata.source_path, items_.size() - 1);
+    return MediaMutationResult::Changed;
+}
+
+MediaMutationResult MediaLibrary::mergePrepared(std::vector<MediaItem> prepared) {
+    static_assert(std::is_nothrow_move_constructible_v<MediaItem>);
+    if (prepared.empty()) return MediaMutationResult::NoChange;
+    MediaLibrary staged;
+    staged.bins_ = bins_;
+    staged.items_.reserve(prepared.size());
+    for (auto& item : prepared) {
+        if (item.metadata.source_path.empty() || !item.metadata.source_path.is_absolute() || item.offline ||
+            (item.metadata.kind != MediaKind::Image && item.metadata.kind != MediaKind::Video))
+            return MediaMutationResult::InvalidIndex;
+        if (contains(item.metadata.source_path)) continue;
+        const auto& frame = item.first_frame;
+        if (frame.width <= 0 || frame.width > INT_MAX/4 || frame.height <= 0 || frame.stride < frame.width*4 ||
+            std::uint64_t(frame.stride)*frame.height > frame.rgba_pixels.size()) return MediaMutationResult::InvalidIndex;
+        const auto result = staged.addOnline(std::move(item.metadata),std::move(item.first_frame),
+            std::move(item.display_name),std::move(item.bin_path));
+        if (result != MediaMutationResult::Changed && result != MediaMutationResult::Duplicate) return result;
+    }
+    if (staged.items_.empty()) return MediaMutationResult::NoChange;
+    auto merged_index = path_index_;
+    for (const auto& [path,index] : staged.path_index_) merged_index.emplace(path,index+items_.size());
+    items_.reserve(items_.size()+staged.items_.size());
+    for (auto& item : staged.items_) items_.push_back(std::move(item));
+    path_index_.swap(merged_index);
+    bins_.swap(staged.bins_);
     return MediaMutationResult::Changed;
 }
 

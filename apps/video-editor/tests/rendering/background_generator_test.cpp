@@ -75,8 +75,8 @@ void modelAndPersistence(const QString& directory) {
     project::AutosaveManager autosave(path(directory+"/autosave"),"background-test");autosave.saveSnapshot(document,5);
     CS_TEST_CHECK(project::load(autosave.unsavedSnapshots()[0].path)==document);
     QFile file(QString::fromStdWString(filename.wstring()));CS_TEST_CHECK(file.open(QIODevice::ReadOnly));
-    auto root=QJsonDocument::fromJson(file.readAll()).object();file.close();CS_TEST_CHECK(root["version"].toInt()==29);
-    for (int version : {28,30}) {
+    auto root=QJsonDocument::fromJson(file.readAll()).object();file.close();CS_TEST_CHECK(root["version"].toInt()==project::current_format_version);
+    for (int version : {28,project::current_format_version+1}) {
         root.insert("version",version);CS_TEST_CHECK(file.open(QIODevice::WriteOnly|QIODevice::Truncate));file.write(QJsonDocument(root).toJson());file.close();
         bool rejected=false;try{(void)project::load(filename);}catch(const project::ProjectError&){rejected=true;}CS_TEST_CHECK(rejected);
     }

@@ -171,6 +171,11 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid Fusion node identifier.");
         fusion::nodes::Node node;
+        if (node_object.contains("presentation")) {
+            if (version < 30 || !node_object.value("presentation").isObject())
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Presentation metadata requires project format 30.");
+            node.presentation = creative_suite::composition_exchange::parsePresentation(node_object.value("presentation").toObject());
+        }
         node.id = static_cast<fusion::nodes::NodeId>(id.toInteger());
         node.type = parseNodeType(node_object.value("type"), project_path);
         if (fusion::nodes::isMaskNode(node.type) || node_object.contains("mask") || node_object.contains("mask_keyframes")) {
@@ -253,6 +258,11 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
         node.transform.rotation_degrees = transform.value("rotation").toDouble(0.0);
         node.transform.opacity = transform.value("opacity").toDouble(1.0);
         const auto color = node_object.value("color").toObject();
+        if (color.contains("enabled")) {
+            if (version < 30 || !color.value("enabled").isBool())
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Color enable state requires project format 30.");
+            node.color.enabled = color.value("enabled").toBool();
+        }
         node.color.brightness = color.value("brightness").toDouble(0.0);
         node.color.contrast_percent = color.value("contrast").toDouble(100.0);
         node.color.saturation_percent = color.value("saturation").toDouble(100.0);

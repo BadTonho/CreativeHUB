@@ -112,6 +112,7 @@ QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
         QJsonObject value;
         value.insert("id", static_cast<qint64>(node.id));
         value.insert("type", nodeTypeName(node.type));
+        if (node.presentation) value.insert("presentation", creative_suite::composition_exchange::presentationJson(*node.presentation));
         if (node.type == fusion::nodes::NodeType::Background)
             value.insert("background_color", QJsonObject{{"r", node.background_color[0]}, {"g", node.background_color[1]}, {"b", node.background_color[2]}, {"a", node.background_color[3]}});
         if (node.type == fusion::nodes::NodeType::Text) value.insert("text", textStyleJson(node.text));
@@ -155,6 +156,7 @@ QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
         color.insert("brightness", node.color.brightness);
         color.insert("contrast", node.color.contrast_percent);
         color.insert("saturation", node.color.saturation_percent);
+        if (!node.color.enabled) color.insert("enabled", false);
         value.insert("color", color);
         if (node.type == fusion::nodes::NodeType::Effect) {
             QJsonObject effect;

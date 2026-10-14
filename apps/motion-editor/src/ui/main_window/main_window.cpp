@@ -66,6 +66,13 @@ MainWindow::MainWindow(QWidget* parent,
     setCentralWidget(empty_state_container);
 
     QMenu* file_menu = menuBar()->addMenu(QStringLiteral("File"));
+    auto* import_interchange = file_menu->addAction("Import Composition Interchange...");
+    import_interchange->setObjectName("importCompositionInterchangeAction");
+    connect(import_interchange, &QAction::triggered, this, &MainWindow::importCompositionInterchange);
+    auto* export_interchange = file_menu->addAction("Export Composition Interchange...");
+    export_interchange->setObjectName("exportCompositionInterchangeAction");
+    connect(export_interchange, &QAction::triggered, this, &MainWindow::exportCompositionInterchange);
+    file_menu->addSeparator();
     new_composition_action_ = file_menu->addAction(QStringLiteral("New Composition..."));
     new_composition_action_->setObjectName(QStringLiteral("motion-new-composition-action"));
     new_composition_action_->setShortcut(QKeySequence::New);

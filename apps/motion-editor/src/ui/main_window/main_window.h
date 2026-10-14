@@ -123,6 +123,8 @@ private:
     void cleanupCurrentUnsavedSnapshots(const char* operation) noexcept;
     void cleanupRecoveredUnsavedSnapshot(const char* operation) noexcept;
     void openMedia();
+    void importCompositionInterchange();
+    void exportCompositionInterchange();
     void updateMediaDetails();
     void refreshTimeline();
     void selectLayer(model::LayerId id);

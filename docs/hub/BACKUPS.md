@@ -1,5 +1,7 @@
 # Hub Project Backups
 
+Editable composition interchange advances supported native backups to CSP v30 and Motion v7. Optional presentation metadata is retained unchanged and existing media/Input paths are rebased. Future CSP v31 and Motion v8 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
+
 ## Video Editor v29 Background presets
 
 Named Fusion Compositions retain optional `display_name`, including Background

@@ -77,6 +77,7 @@ void MainWindow::requestPreview(bool playback_tick)
         snapshot.local_frame = frame - layer.timeline_start_frame;
         snapshot.source_frame_count = layer.source_frame_count;
         snapshot.source_start_frame = layer.source_start_frame;
+        snapshot.presentation = layer.presentation;
         snapshot.source_frame_rate = layer.source_frame_rate;
         snapshot.transform = layer.transform;
         snapshot.keyframes = layer.keyframes;

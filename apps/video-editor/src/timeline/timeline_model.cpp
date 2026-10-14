@@ -1,4 +1,5 @@
 #include "timeline_model.h"
+#include "timeline_curve_slice.h"
 
 #include "../media/still_image_decoder.h"
 
@@ -575,6 +576,14 @@ bool rescaleNodeGraphKeyframes(
     if (duration_frames <= 0) return false;
     const auto maximum_frame = duration_frames - 1;
     for (auto& node : graph->nodes) {
+        if (node.presentation) {
+            for (auto* frame : {&node.presentation->start, &node.presentation->duration, &node.presentation->offset}) {
+                const auto absolute = rescaleTimelineFrame(std::abs(*frame), source_rate, target_rate);
+                if (!absolute) return false;
+                *frame = *frame < 0 ? -*absolute : *absolute;
+            }
+            if (!creative_suite::composition_exchange::validPresentation(*node.presentation)) return false;
+        }
         for (auto& keys : node.mask_keyframes)
             if (!rescaleKeyframes(keys,source_rate,target_rate,maximum_frame) ||
                 !creative_suite::animation::validScalarKeyframes(keys)) return false;
@@ -921,6 +930,22 @@ std::vector<AudioGainKeyframe> sliceAudioGainEnvelope(
 }
 
 } // namespace
+
+TransformKeyframes sliceTransformCurves(const Transform2D& base, const TransformKeyframes& keys,
+    std::int64_t start, std::int64_t duration, Transform2D& new_base) {
+    if (start == 0) {
+        bool bounded = true;
+        for (const auto property : {TransformProperty::PositionX, TransformProperty::PositionY,
+             TransformProperty::Scale, TransformProperty::Rotation, TransformProperty::Opacity})
+            for (const auto& key : keyframesFor(keys, property))
+                bounded = bounded && key.frame >= 0 && key.frame < duration;
+        if (bounded) { new_base = base; return keys; }
+    }
+    TimelineClip source;
+    source.transform = base;
+    source.keyframes = keys;
+    return reframeAdjustmentKeyframes(source, start, duration, new_base);
+}
 
 ClipAttributeCompatibility clipAttributeCompatibility(
     const TimelineClipAttributes& source,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <creative_suite/animation/animation.h>
+#include <creative_suite/composition_exchange/document.h>
 #include <creative_suite/media/video_metadata.h>
 
 #include <array>
@@ -52,6 +53,8 @@ struct FrameRate {
 struct CompositionSettings {
     CanvasSize canvas_size;
     FrameRate frame_rate;
+    std::string name = "Composition";
+    std::int64_t duration = 0;
 
     friend bool operator==(const CompositionSettings&, const CompositionSettings&) = default;
 };
@@ -74,7 +77,7 @@ enum class TextAlignment : std::uint8_t {
 struct TextLayerContent {
     std::string text = "Text";
     std::string font_family = "Sans Serif";
-    int font_size_pixels = 48;
+    double font_size_pixels = 48;
     ColorRgba color{255, 255, 255, 255};
     TextAlignment alignment = TextAlignment::Center;
     int box_width = 1;
@@ -154,6 +157,7 @@ struct CompositionLayer {
     creative_suite::animation::TransformKeyframes keyframes;
     LayerContent content;
     std::vector<LayerEffect> effects;
+    std::optional<creative_suite::composition_exchange::Presentation> presentation;
 
     friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
@@ -171,6 +175,8 @@ enum class AddMediaLayerResult {
 // explicitly required; the composition has no fixed end frame.
 class CompositionDocument {
 public:
+    std::string interchange_name = "Composition";
+    std::int64_t interchange_duration = 0;
     CompositionDocument(
         int canvas_width,
         int canvas_height,

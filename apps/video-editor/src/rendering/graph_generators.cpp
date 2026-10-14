@@ -1,3 +1,4 @@
+#include <creative_suite/composition_exchange/raster.h>
 #include "graph_generators.h"
 #include "text_renderer.h"
 #include <algorithm>
@@ -32,15 +33,46 @@ media::VideoFrame fit(const media::VideoFrame& source, int width, int height, bo
 }
 }
 void prepareGraphFrames(const fusion::nodes::NodeGraph& graph, fusion::nodes::InputFrames& inputs,
-    int width, int height, bool independent, const std::function<bool()>& canceled) {
+    int width, int height, bool independent, const std::function<bool()>& canceled, std::int64_t clock) {
+    const bool portable = std::any_of(graph.nodes.begin(), graph.nodes.end(),
+        [](const auto& node) { return node.presentation.has_value(); });
+    if (portable) {
+        const auto active = [clock](const auto& node) {
+            return !node.presentation || (node.presentation->visible && clock >= node.presentation->start &&
+                (node.presentation->duration == 0 || static_cast<long double>(clock)-node.presentation->start < node.presentation->duration));
+        };
+        std::uint64_t bytes = 0;
+        for (auto it=inputs.begin(); it!=inputs.end();) {
+            const auto* node = fusion::nodes::findNode(graph,it->first);
+            if (node && !active(*node)) { it=inputs.erase(it); continue; }
+            if (it->second) bytes += independent && (!node || !node->presentation || node->presentation->profile == creative_suite::composition_exchange::Profile::FusionCanvas)
+                ? std::uint64_t(width)*height*4 : it->second->rgba_pixels.size();
+            ++it;
+        }
+        for (const auto& node : graph.nodes) {
+            if (!active(node)) continue;
+            if (node.type == fusion::nodes::NodeType::Background || node.type == fusion::nodes::NodeType::Text) {
+                const bool boxed = node.type == fusion::nodes::NodeType::Text && node.presentation && node.presentation->profile == creative_suite::composition_exchange::Profile::MotionLayer;
+                bytes += boxed ? std::uint64_t(node.presentation->text_width)*node.presentation->text_height*4 : std::uint64_t(width)*height*4;
+            }
+        }
+        if (canceled && canceled()) return;
+        if (width <= 0 || height <= 0 || bytes > 256ULL*1024*1024)
+            throw std::runtime_error("Interchange source preparation exceeds the 256 MiB frame budget.");
+    }
     if (independent) for (auto& [id, frame] : inputs) {
         if (canceled && canceled()) return;
+        const auto* node = fusion::nodes::findNode(graph,id);
+        if (node && node->presentation && node->presentation->profile == creative_suite::composition_exchange::Profile::MotionLayer) continue;
         if (frame && frame->width > 0 && frame->height > 0 &&
             (frame->width != width || frame->height != height))
-            frame = std::make_shared<const media::VideoFrame>(fit(*frame, width, height, false, canceled));
+            frame = std::make_shared<const media::VideoFrame>(portable
+                ? creative_suite::composition_exchange::fit(*frame, width, height, false, canceled)
+                : fit(*frame, width, height, false, canceled));
     }
     for (const auto& node : graph.nodes) {
         if (canceled && canceled()) return;
+        if (node.presentation && (!node.presentation->visible || clock < node.presentation->start || (node.presentation->duration > 0 && static_cast<long double>(clock)-node.presentation->start >= node.presentation->duration))) { inputs.erase(node.id); continue; }
         if (node.type == fusion::nodes::NodeType::Background) {
             auto frame = canvas(width, height);
             for (int y = 0; y < height; ++y) {
@@ -51,9 +83,9 @@ void prepareGraphFrames(const fusion::nodes::NodeGraph& graph, fusion::nodes::In
             }
             inputs[node.id] = std::make_shared<const media::VideoFrame>(std::move(frame));
         } else if (node.type == fusion::nodes::NodeType::Text) {
-            auto text = renderText(node.text, width, height);
+            auto text = node.presentation ? std::optional<media::VideoFrame>(creative_suite::composition_exchange::textFrame({node.text.content,node.text.font_family,node.text.font_size_pixels,int(node.text.alignment),node.text.color}, *node.presentation,width,height)) : renderText(node.text, width, height);
             if (!text) throw std::runtime_error("A Fusion Text node could not be rasterized.");
-            inputs[node.id] = std::make_shared<const media::VideoFrame>(fit(*text, width, height, true, canceled));
+            inputs[node.id] = std::make_shared<const media::VideoFrame>(node.presentation && node.presentation->profile == creative_suite::composition_exchange::Profile::MotionLayer ? std::move(*text) : fit(*text, width, height, true, canceled));
         }
     }
 }

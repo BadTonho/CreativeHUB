@@ -56,7 +56,7 @@ private:
         QWidget* shape_content_page = nullptr;
         QTextEdit* text_content_field = nullptr;
         QFontComboBox* text_font_field = nullptr;
-        QSpinBox* text_font_size_field = nullptr;
+        QDoubleSpinBox* text_font_size_field = nullptr;
         QPushButton* text_color_button = nullptr;
         QComboBox* text_alignment_field = nullptr;
         QSpinBox* text_box_width_field = nullptr;

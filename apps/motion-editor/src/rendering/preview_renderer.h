@@ -36,6 +36,7 @@ struct PreviewLayerSnapshot {
     model::LayerContent content;
     std::vector<model::LayerEffect> effects;
     creative_suite::media::RgbaFramePtr still_frame;
+    std::optional<creative_suite::composition_exchange::Presentation> presentation;
 };
 
 struct PreviewRequest {

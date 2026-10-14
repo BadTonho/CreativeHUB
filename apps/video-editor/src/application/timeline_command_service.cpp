@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <utility>
+#include <unordered_set>
 
 namespace application {
 namespace {
@@ -1192,16 +1193,43 @@ TimelineEditResult TimelineCommandService::execute(const DuplicateAdjustmentClip
     return output;
 }
 
-TimelineEditResult TimelineCommandService::execute(const AddFusionCompositionCommand& command) {
+TimelineEditResult TimelineCommandService::execute(AddFusionCompositionCommand command) {
     const auto track = session_.timeline_.locateTrack(command.track_id);
     if (!track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
     const auto next_clip_id = session_.timeline_.snapshot().next_clip_id;
-    auto before = session_.captureEditState();
-    const auto added = session_.timeline_.addFusionComposition(
+    if (command.graph && (!fusion::nodes::validate(*command.graph) ||
+        !fusion::nodes::validKeyframeRange(*command.graph, command.duration_frames)))
+        return result(EditStatus::Rejected, EditReason::InvalidValue);
+    auto staged = session_.timeline_;
+    std::unordered_set<std::filesystem::path> prepared_paths;
+    for (const auto& item : command.media)
+        prepared_paths.insert(media::MediaLibrary::canonicalPath(item.metadata.source_path));
+    if (command.graph) {
+        for (const auto& node : command.graph->nodes) {
+            if (node.type != fusion::nodes::NodeType::Input) continue;
+            if (node.source_path.empty() || (!prepared_paths.contains(node.source_path) &&
+                !session_.media_library_.contains(node.source_path)))
+                return result(EditStatus::Rejected, EditReason::MediaNotFound);
+        }
+    }
+    const auto added = staged.addFusionComposition(
         *track, command.timeline_start_frame, command.duration_frames);
     if (added != timeline::AddClipResult::Added) {
         return result(EditStatus::Rejected, reasonForAdd(added));
     }
+    if (command.graph) {
+        auto snapshot = staged.snapshot();
+        const auto where = staged.locateClip(next_clip_id);
+        auto& clip = snapshot.tracks[where->track_index].clips[where->clip_index];
+        clip.node_graph = std::move(command.graph);
+        if (!command.display_name.empty()) clip.display_name = command.display_name;
+        staged.restore(std::move(snapshot));
+    }
+    auto before = session_.captureEditState();
+    const auto merged = session_.media_library_.mergePrepared(std::move(command.media));
+    if (merged != media::MediaMutationResult::Changed && merged != media::MediaMutationResult::NoChange)
+        return result(EditStatus::Rejected, EditReason::InvalidValue);
+    session_.timeline_ = std::move(staged);
     recordSuccessfulEdit(std::move(before));
     const auto location = session_.timeline_.locateClip(next_clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);

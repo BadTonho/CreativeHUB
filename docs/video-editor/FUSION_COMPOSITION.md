@@ -1,5 +1,7 @@
 # Fusion Composition
 
+[Editable composition interchange](../COMPOSITION_INTERCHANGE.md) transfers compatible Fusion compositions to Motion layers and back through `.cscomp` files. CSP v30 preserves imported presentation semantics.
+
 The [Background Generator](BACKGROUND_GENERATOR.md) in Edit creates an opaque-white
 preset of this clip. Both workspaces edit the same Background node colors; normal
 Fusion Composition and the Fusion catalog Background node defaults remain transparent. CSP v29 optionally

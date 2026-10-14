@@ -1,5 +1,7 @@
 # Regression Testing
 
+[Composition interchange](../COMPOSITION_INTERCHANGE.md): automated coverage is registered as `creative-suite-composition-interchange` in application tests (both editors required). Native menu, font and platform acceptance checks are documented there and remain pending until recorded.
+
 ## Functions icon cards
 
 **Automated coverage present:** `tests/settings/shortcut_manager_test.cpp`

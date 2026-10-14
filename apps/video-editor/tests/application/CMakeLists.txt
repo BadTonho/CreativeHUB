@@ -63,3 +63,20 @@ add_creative_suite_test(
 )
 
 preserve_video_editor_test_working_directory()
+
+if(BUILD_MOTION_EDITOR)
+    add_executable(creative-suite-composition-interchange-tests composition_interchange_test.cpp)
+    target_link_libraries(creative-suite-composition-interchange-tests PRIVATE
+        creative-suite-main-editor-core creative-suite-motion-editor-core)
+    copy_ffmpeg_test_runtime(creative-suite-composition-interchange-tests)
+    deploy_qt_test_runtime(creative-suite-composition-interchange-tests)
+    add_creative_suite_test(NAME creative-suite-composition-interchange
+        COMMAND creative-suite-composition-interchange-tests
+            "${PROJECT_SOURCE_DIR}/prototypes/testdata/reference.mkv")
+    set_tests_properties(creative-suite-composition-interchange PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
+    if(WIN32)
+        set_tests_properties(creative-suite-composition-interchange PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=windows;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
+    endif()
+endif()

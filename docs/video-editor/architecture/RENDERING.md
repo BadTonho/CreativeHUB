@@ -1,5 +1,7 @@
 # Rendering Boundary
 
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) preserves source raster domains, text layout and source clocks. Imported Motion Transform operations can target the project canvas while retaining intrinsic inputs. Preview, node VIEW and export prepare the same source windows; GPU image operations accept optional output dimensions.
+
 ## Background Generator
 
 The Edit Background preset feeds the existing graph generator preparer and evaluator. RGBA, clip opacity, effects, transforms, masks and underlying tracks use the same Preview/Viewer/export processing as other Fusion Compositions. No rendering engine or pixel contract changes. See [Background Generator](../BACKGROUND_GENERATOR.md).

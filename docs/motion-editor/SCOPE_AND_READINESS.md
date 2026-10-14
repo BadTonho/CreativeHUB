@@ -1,5 +1,7 @@
 # Motion Studio Scope and Readiness
 
+[Editable composition interchange](../COMPOSITION_INTERCHANGE.md) adds independent `.cscomp` import/export and Motion native schema v7. Automated coverage: `creative-suite-composition-interchange` plus native document, preview/export and Hub backup suites. Manual/platform acceptance is tracked in the interchange guide.
+
 Shared video decoding honors tagged YUV matrices and full/limited range before
 RGBA8 composition. Decoder changes require the Motion preview/export consumer
 gate and the shared tagged-color tests indexed in

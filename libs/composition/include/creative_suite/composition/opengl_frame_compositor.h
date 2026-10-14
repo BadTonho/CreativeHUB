@@ -117,6 +117,9 @@ struct OpenGlImageOperation {
     animation::Transform2D transform;
     std::vector<effects::ColorAdjustmentParameters> colors;
     OpenGlImageInput mask;
+    // Optional canvas for an intrinsic source transformed into a composition.
+    // Zero preserves the source-sized legacy image-operation contract.
+    int output_width = 0, output_height = 0;
 };
 
 // Optional raster contract: top-down ARGB32 premultiplied content and ARGB32

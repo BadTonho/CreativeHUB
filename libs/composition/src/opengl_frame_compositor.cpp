@@ -747,7 +747,8 @@ void main() {
         const OpenGlFrameCompositor::CancellationPredicate& cancel, OpenGlCompositionTimings& measured) {
         if (!selected_output || !selected_output->bind() || !image_program->bind())
             return result(OpenGlCompositionStatus::Failed, "bind-image-output", "Cannot bind the image operation target.");
-        const auto width = operation.background.width(), height = operation.background.height();
+        const auto width = operation.output_width > 0 ? operation.output_width : operation.background.width();
+        const auto height = operation.output_height > 0 ? operation.output_height : operation.background.height();
         if (!bounded(width, height, texture_limit) || operation.colors.size() > 256 ||
             !animation::validTransform(operation.transform))
             return result(OpenGlCompositionStatus::Unsupported, "check-image-operation", "Image geometry or effects exceed the supported contract.");
@@ -1032,10 +1033,14 @@ OpenGlCompositionResult OpenGlFrameCompositor::copyToNative(const OpenGlTextureF
 
 OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
     const OpenGlImageOperation& operation, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    if (operation.output_width < 0 || operation.output_height < 0 ||
+        ((operation.output_width == 0) != (operation.output_height == 0)) ||
+        (operation.output_width > 0 && operation.kind != OpenGlImageOperationKind::Transform))
+        return {OpenGlCompositionStatus::Unsupported, {}, "image-output-geometry", "Explicit output dimensions require a Transform and a complete positive canvas."};
     auto& p = *impl_;
     struct Guard { Impl& p; ~Guard() { p.image_operation = nullptr; } } guard{p};
     p.image_operation = &operation;
-    return composeTexture(operation.background.width(), operation.background.height(), {}, cancel, timings);
+    return composeTexture(operation.output_width > 0 ? operation.output_width : operation.background.width(), operation.output_height > 0 ? operation.output_height : operation.background.height(), {}, cancel, timings);
 }
 
 OpenGlCompositionResult OpenGlFrameCompositor::compose(int width, int height,
