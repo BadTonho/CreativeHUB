@@ -3020,6 +3020,28 @@ public:
                     adjustment_window.timeline_model_.clipCount(0) == 1 && !adjustment_window.project_dirty_,
                     "Adjustment Undo must restore the saved document and dirty state.");
         }
+        {
+            MainWindow composition_window;
+            auto* controller = composition_window.edit_workspace_->controller();
+            controller->setPlaybackPresentation(false, false, true);
+            const auto track_id = composition_window.timeline_model_.tracks()[0].track_id;
+            controller->handleTimelineEffectDrop("video.fusion_composition", track_id, 0);
+            require(composition_window.project_dirty_ &&
+                    composition_window.timeline_model_.tracks()[0].clips[0].kind == timeline::ClipKind::FusionComposition &&
+                    composition_window.edit_workspace_->ui().clip_effects_controls->isEnabled(),
+                    "Fusion Composition insertion must dirty the real document and enable its Inspector.");
+            require(composition_window.saveProjectTo(directory / "fusion-ui.csp", "save") &&
+                    !composition_window.project_dirty_, "Fusion Composition save did not establish a clean document.");
+            controller->addEffectToSelectedClip("video.grayscale");
+            require(composition_window.project_dirty_, "Fusion Composition effects must dirty the real document.");
+            auto* duplicate = editAction(composition_window, "edit.duplicate_fusion_composition");
+            require(duplicate && duplicate->isEnabled(), "Fusion Composition duplication is unavailable in Edit.");
+            duplicate->trigger();
+            require(composition_window.timeline_model_.clipCount(0) == 2 &&
+                    controller->undo().changed() && controller->undo().changed() &&
+                    composition_window.timeline_model_.clipCount(0) == 1 && !composition_window.project_dirty_,
+                    "Fusion Composition Undo must restore the saved document and dirty state.");
+        }
 
         std::error_code cleanup_error;
         std::filesystem::remove_all(directory, cleanup_error);

@@ -940,7 +940,7 @@ void MainWindow::flushPreviewPerformanceMetrics() {
         const auto& clip = timeline_model_.tracks()[
             *active_timeline_track_index_cache_].clips[*active_timeline_clip_index_cache_];
         if (timeline::isGeneratedClipKind(clip.kind)) {
-            context[source_kind_index].second = clip.kind == timeline::ClipKind::Adjustment ? "adjustment" : "text";
+            context[source_kind_index].second = clip.kind == timeline::ClipKind::Adjustment ? "adjustment" : clip.kind == timeline::ClipKind::FusionComposition ? "fusion_composition" : "text";
         } else {
             context[source_kind_index].second = clip.kind == timeline::ClipKind::Image
                 ? "image" : "video";

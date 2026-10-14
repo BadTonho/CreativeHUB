@@ -1,5 +1,16 @@
 # UI Boundary
 
+## Fusion Composition workflow
+
+Drag Fusion Composition from Effects > Video to a free video-track range.
+Its teal block selects the normal Inspector and composed Timeline Preview;
+entering Fusion edits its graph. Add Node offers Background and Text alongside
+the existing nodes. Generator colors include alpha; Text content/font/size/
+alignment are committed with Apply Text. Independent Input offers Transparent
+instead of Selected Timeline clip. Edit > Duplicate Fusion Composition has no
+default shortcut. See [Fusion Composition](../FUSION_COMPOSITION.md).
+
+
 Status: provisional.
 
 Qt 6 Widgets owns the Video Editor window, menus, actions, dialogs, dock

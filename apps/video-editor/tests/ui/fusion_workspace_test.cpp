@@ -658,7 +658,7 @@ int runFusionWorkspaceTest() {
     brightness_key->click();
     animated_brightness = fusion::nodes::findNode(edited, animated_brightness_id);
     require(animated_brightness && edit_count == 22 &&
-                animated_brightness->effect_parameter_keyframes.front().keyframes.empty(),
+                animated_brightness->effect_parameter_keyframes.empty(),
             "The Brightness diamond did not remove the keyframe at the current frame.");
 
     const auto preview_requests_before_reentry = preview_request_count;

@@ -1,5 +1,16 @@
 # Video Editor Roadmap
 
+## Fusion Composition v1
+
+The pending 0.1.1 implementation adds independent Fusion Composition clips,
+Background/Text generators, generated-duration editing/history, shared
+preview/export graph evaluation, CSP v27 recovery and Hub backup compatibility.
+See [the feature guide](FUSION_COMPOSITION.md). Nested compositions, masks, 3D,
+graph audio and animation of generator properties remain outside this version.
+Automated checks accompany implementation; native graphical and macOS/Linux
+acceptance are tracked separately.
+
+
 Current application version: **Beta 0.1.0**.
 
 This roadmap tracks the Video Editor through its foundation exit gate. It
@@ -15,7 +26,7 @@ Effects > Video, existing effects and keyframed transforms on the composition of
 lower tracks, opacity as adjustment strength, generated-duration editing and
 history, shared preview/export stages and per-frame CPU routing. `.csp` v26 and
 Hub backups preserve the new kind; versions 1–25 remain readable. Application
-versions remain unchanged. Fusion on adjustments, independent compositions,
+versions remain unchanged. Fusion on adjustments,
 new filters and explicit track targeting remain later work. Automated coverage
 and performance evidence are indexed in [Regression Testing](REGRESSION_TESTING.md);
 graphical and cross-platform runtime acceptance are separate pending gates.

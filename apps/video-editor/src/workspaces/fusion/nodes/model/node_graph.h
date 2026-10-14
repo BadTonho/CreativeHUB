@@ -1,6 +1,7 @@
 #pragma once
 
 #include "timeline/timeline_transform.h"
+#include "timeline/text_style.h"
 #include <creative_suite/effects/effects.h>
 
 #include <cstdint>
@@ -13,7 +14,7 @@ namespace fusion::nodes {
 
 using NodeId = std::uint64_t;
 
-enum class NodeType { Input, Transform, Color, Merge, Output, Effect };
+enum class NodeType { Input, Transform, Color, Merge, Output, Effect, Background, Text };
 
 struct ColorParameters {
     double brightness = 0.0;
@@ -45,6 +46,8 @@ struct Node {
     ColorParameters color;
     creative_suite::effects::EffectInstance effect;
     std::vector<EffectParameterKeyframes> effect_parameter_keyframes;
+    std::array<std::uint8_t, 4> background_color{0, 0, 0, 0};
+    timeline::TextStyle text;
     friend bool operator==(const Node&, const Node&) = default;
 };
 
@@ -78,6 +81,7 @@ struct GraphValidation {
 };
 
 [[nodiscard]] NodeGraph makePassthroughGraph();
+[[nodiscard]] NodeGraph makeCompositionGraph();
 [[nodiscard]] GraphValidation validate(const NodeGraph& graph);
 [[nodiscard]] bool validKeyframeRange(
     const NodeGraph& graph, std::int64_t duration_frames) noexcept;

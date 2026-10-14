@@ -1,5 +1,15 @@
 # Editor Session and Timeline Commands
 
+## Fusion composition commands
+
+`AddFusionCompositionCommand` and `DuplicateFusionCompositionCommand` publish
+one transactional history entry with stable IDs and playback invalidation.
+Duplication copies graph/curves and `composition_input_offset_frames` by value.
+Generated duration editing and graph changes participate in session dirty state,
+Undo/Redo and persistence without a primary-media lookup. See
+[Fusion Composition](../FUSION_COMPOSITION.md).
+
+
 Status: **provisional**. This document describes the current application
 boundary for session state and timeline commands. Project/media lifecycle is
 described in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md);

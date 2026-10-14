@@ -488,6 +488,78 @@ void EditWorkspaceController::addAdjustmentClipAt(
     }
 }
 
+void EditWorkspaceController::duplicateSelectedFusionCompositionClip() {
+    if (!active_timeline_clip_id_ || playback_is_loading_) return;
+    try {
+        const auto result = execute(application::DuplicateFusionCompositionCommand{*active_timeline_clip_id_});
+        if (result.changed()) publishCommittedEdit(result, true, true, QStringLiteral("Fusion Composition duplicated."));
+        else emit statusMessageRequested(QStringLiteral("No free range is available immediately after this Fusion Composition."));
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(logging::Level::Error, "timeline", "duplicate_fusion_composition", error.what(),
+            {{"clip_id", std::to_string(*active_timeline_clip_id_)}});
+        emit statusMessageRequested(QStringLiteral("Could not duplicate the Fusion Composition."));
+    }
+}
+
+void EditWorkspaceController::addFusionCompositionClipAt(
+    timeline::TrackId track_id,
+    qint64 timeline_frame) {
+    const auto track_index = timeline_model_.locateTrack(track_id);
+    if (!track_index.has_value() || timeline_frame < 0) {
+        emit statusMessageRequested(
+            QStringLiteral("No video track is available for a Fusion Composition."));
+        return;
+    }
+
+    const double frame_rate = timeline_model_.frameRate().asDouble();
+    const auto duration_frames = std::max<std::int64_t>(
+        1, static_cast<std::int64_t>(std::ceil(frame_rate * 5.0)));
+    try {
+        const auto result = execute(application::AddFusionCompositionCommand{
+            track_id, timeline_frame, duration_frames});
+        if (!result.changed()) {
+            if (result.reason == application::EditReason::Overlap) {
+                emit statusMessageRequested(
+                    QStringLiteral("A clip already occupies that range."));
+            } else {
+                emit statusMessageRequested(
+                    QStringLiteral("The Fusion Composition could not be added."));
+            }
+            return;
+        }
+
+        publishCommittedEdit(
+            result, false, true, QStringLiteral("Fusion Composition added."));
+        if (playback_available_ && result.selection.active_clip_id.has_value()) {
+            const auto location = timeline_model_.locateClip(
+                *result.selection.active_clip_id);
+            if (location.has_value() &&
+                timeline_model_.tracks()[location->track_index]
+                    .clips[location->clip_index].kind == timeline::ClipKind::FusionComposition) {
+                emit renderCompositionFrameRequested(
+                    timelinePlayheadFrame(), playback_frame_index_);
+                return;
+            }
+        }
+        if (canPlaybackSelectedMedia()) {
+            emit seekActiveClipRequested(playback_frame_index_);
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "add_fusion_composition",
+            error.what(),
+            {{"track_id", std::to_string(track_id)},
+             {"timeline_frame", std::to_string(timeline_frame)}});
+        emit statusMessageRequested(
+            QStringLiteral("Could not add the Fusion Composition."));
+        emit warningMessageRequested(
+            QStringLiteral("Timeline error"),
+            QStringLiteral("The Fusion Composition could not be added."));
+    }
+}
+
 void EditWorkspaceController::handleTimelineEffectDrop(
     const QString& effect_id,
     timeline::TrackId track_id,
@@ -503,6 +575,10 @@ void EditWorkspaceController::handleTimelineEffectDrop(
         const auto clip_id = timeline_model_.tracks()[location->track_index]
             .clips[location->clip_index].clip_id;
         static_cast<void>(addEffectToClip(clip_id, effect_id));
+        return;
+    }
+    if (effect_id == QStringLiteral("video.fusion_composition")) {
+        addFusionCompositionClipAt(track_id, timeline_frame);
         return;
     }
     if (effect_id == QStringLiteral("video.adjustment_clip")) {
@@ -1873,7 +1949,7 @@ void EditWorkspaceController::updateInspector() {
             if (button != nullptr) {
                 const QSignalBlocker blocker(button);
                 button->setChecked(false);
-                button->setText(QStringLiteral("◇"));
+                button->setText(QStringLiteral("â—‡"));
                 button->setToolTip(QStringLiteral("Select a clip to edit keyframes"));
             }
         }
@@ -1981,7 +2057,7 @@ void EditWorkspaceController::updateInspector() {
                     });
                 const QSignalBlocker blocker(ui_.transform_keys[index]);
                 ui_.transform_keys[index]->setChecked(has_key);
-                ui_.transform_keys[index]->setText(has_key ? QStringLiteral("◆") : QStringLiteral("◇"));
+                ui_.transform_keys[index]->setText(has_key ? QStringLiteral("â—†") : QStringLiteral("â—‡"));
                 ui_.transform_keys[index]->setToolTip(
                     has_key ? QStringLiteral("Remove keyframe at the current frame")
                             : QStringLiteral("Add keyframe at the current frame"));
@@ -1992,7 +2068,7 @@ void EditWorkspaceController::updateInspector() {
             if (button != nullptr) {
                 const QSignalBlocker blocker(button);
                 button->setChecked(false);
-                button->setText(QStringLiteral("◇"));
+                button->setText(QStringLiteral("â—‡"));
                 button->setToolTip(QStringLiteral("Add keyframe at the current frame"));
             }
         }

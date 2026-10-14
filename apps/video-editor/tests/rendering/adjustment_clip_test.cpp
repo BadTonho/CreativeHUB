@@ -281,7 +281,7 @@ void editingAndPersistence(const QString& directory) {
     QFile file(QString::fromStdWString(path.wstring()));
     CS_TEST_CHECK(file.open(QIODevice::ReadOnly));
     auto root = QJsonDocument::fromJson(file.readAll()).object(); file.close();
-    CS_TEST_CHECK(root.value("version").toInt() == 26);
+    CS_TEST_CHECK(root.value("version").toInt() == 27);
     const auto record = root.value("timeline").toObject().value("tracks").toArray()[0].toObject().value("clips").toArray()[0].toObject();
     CS_TEST_CHECK(!record.contains("source") && !record.contains("text") && !record.contains("source_duration_frames"));
     root.insert("version", 25);

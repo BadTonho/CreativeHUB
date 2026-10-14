@@ -4,6 +4,10 @@
 #include <creative_suite/effects/effects.h>
 
 #include <QCheckBox>
+#include <QColorDialog>
+#include <QFontComboBox>
+#include <QLineEdit>
+#include <QPlainTextEdit>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -116,6 +120,8 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     add_type->addItem("Transform", static_cast<int>(fusion::nodes::NodeType::Transform));
     add_type->addItem("Color", static_cast<int>(fusion::nodes::NodeType::Color));
     add_type->addItem("Merge", static_cast<int>(fusion::nodes::NodeType::Merge));
+    add_type->addItem("Background", static_cast<int>(fusion::nodes::NodeType::Background));
+    add_type->addItem("Text", static_cast<int>(fusion::nodes::NodeType::Text));
     auto* add_button = new QPushButton("Add Node", toolbar);
     add_button->setObjectName("fusionAddNodeButton");
     auto* grid_button = new QPushButton("Grid", toolbar);
@@ -329,7 +335,7 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     inspector_title->setObjectName("fusionInspectorTitle");
     inspector_title->setStyleSheet("font-weight: 600; font-size: 14px;");
     inspector_layout->addWidget(inspector_title);
-    auto* status = new QLabel("Select a video or image clip in the Timeline.", inspector_content);
+    auto* status = new QLabel("Select a video, image, or Fusion Composition clip in the Timeline.", inspector_content);
     status->setObjectName("fusionNodeStatus");
     status->setWordWrap(true);
     status->setStyleSheet("color: #9aa4b2;");
@@ -351,8 +357,8 @@ void FusionWorkspace::setSelection(const timeline::TimelineClip* clip,
     const auto previous_clip_id = clip_id_;
     const auto previous_node_id = selected_node_id_;
     const auto previous_preview_node_id = preview_node_id_;
-    clip_id_ = clip != nullptr && (clip->kind == timeline::ClipKind::Video ||
-        clip->kind == timeline::ClipKind::Image) ? clip->clip_id : 0;
+    independent_composition_ = clip && clip->kind == timeline::ClipKind::FusionComposition;
+    clip_id_ = clip && timeline::supportsNodeGraph(clip->kind) ? clip->clip_id : 0;
     clip_timeline_start_frame_ = clip_id_ != 0 ? clip->timeline_start_frame : 0;
     clip_duration_frames_ = clip_id_ != 0 ? clip->timeline_duration_frames : 0;
     local_frame_ = clip_id_ == previous_clip_id
@@ -360,7 +366,7 @@ void FusionWorkspace::setSelection(const timeline::TimelineClip* clip,
             std::max<std::int64_t>(0, clip_duration_frames_ - 1))
         : 0;
     graph_ = clip_id_ == 0 ? fusion::nodes::NodeGraph{}
-        : clip->node_graph.value_or(fusion::nodes::makePassthroughGraph());
+        : clip->node_graph.value_or(independent_composition_ ? fusion::nodes::makeCompositionGraph() : fusion::nodes::makePassthroughGraph());
     media_choices_ = std::move(media_choices);
     selected_node_id_ = clip_id_ != 0 && clip_id_ == previous_clip_id &&
         fusion::nodes::findNode(graph_, previous_node_id) != nullptr
@@ -429,7 +435,7 @@ void FusionWorkspace::setMediaChoices(std::vector<MediaChoice> media_choices) {
 
     const QSignalBlocker blocker(source);
     source->clear();
-    source->addItem("Selected Timeline clip", -1);
+    source->addItem(independent_composition_ ? "Transparent" : "Selected Timeline clip", -1);
     int selected = -1;
     for (std::size_t index = 0; index < media_choices_.size(); ++index) {
         const auto& choice = media_choices_[index];
@@ -463,7 +469,7 @@ void FusionWorkspace::refreshInspector() {
     while (layout->rowCount() > 0) layout->removeRow(0);
     const auto* node = fusion::nodes::findNode(graph_, selected_node_id_);
     if (clip_id_ == 0) {
-        status->setText("Select a video or image clip in the Timeline.");
+        status->setText("Select a video, image, or Fusion Composition clip in the Timeline.");
         node_properties_->setEnabled(false);
         return;
     }
@@ -500,7 +506,7 @@ void FusionWorkspace::refreshInspector() {
         control->setSingleStep(step);
         control->setDecimals(3);
         control->setValue(value);
-        auto* key = new QPushButton(keyed ? QStringLiteral("◆") : QStringLiteral("◇"), row);
+        auto* key = new QPushButton(keyed ? QStringLiteral("â—†") : QStringLiteral("â—‡"), row);
         key->setObjectName(name + QStringLiteral("Keyframe"));
         key->setCheckable(true);
         key->setChecked(keyed);
@@ -521,10 +527,44 @@ void FusionWorkspace::refreshInspector() {
             });
         return control;
     };
+    if (node->type == fusion::nodes::NodeType::Background || node->type == fusion::nodes::NodeType::Text) {
+        const auto node_id = node->id;
+        auto* color = new QPushButton("Choose RGBA color", node_properties_);
+        color->setObjectName("fusionGeneratorColor");
+        layout->addRow("Color", color);
+        connect(color, &QPushButton::clicked, this, [this, node_id] {
+            const auto* current = fusion::nodes::findNode(graph_, node_id);
+            if (!current) return;
+            const auto rgba = current->type == fusion::nodes::NodeType::Background ? current->background_color : current->text.color;
+            const auto chosen = QColorDialog::getColor(QColor(rgba[0], rgba[1], rgba[2], rgba[3]), inspector_panel_, "Generator color", QColorDialog::ShowAlphaChannel);
+            if (!chosen.isValid()) return;
+            auto candidate = graph_; auto* target = findMutableNode(candidate, node_id);
+            const std::array<std::uint8_t, 4> value{static_cast<std::uint8_t>(chosen.red()), static_cast<std::uint8_t>(chosen.green()), static_cast<std::uint8_t>(chosen.blue()), static_cast<std::uint8_t>(chosen.alpha())};
+            if (target->type == fusion::nodes::NodeType::Background) target->background_color = value; else target->text.color = value;
+            commitGraph(std::move(candidate), "Generator color updated.");
+        });
+        if (node->type == fusion::nodes::NodeType::Text) {
+            auto* content = new QPlainTextEdit(node_properties_); content->setObjectName("fusionTextContent");
+            content->setPlainText(QString::fromUtf8(node->text.content.data(), static_cast<qsizetype>(node->text.content.size())));
+            content->setMaximumHeight(100); layout->addRow("Text", content);
+            // Apply together so graph refresh does not interrupt text entry.
+            auto* text_apply = new QPushButton("Apply Text", node_properties_); text_apply->setObjectName("fusionApplyText"); layout->addRow(text_apply);
+            auto* font = new QFontComboBox(node_properties_); font->setObjectName("fusionTextFont"); font->setCurrentFont(QFont(QString::fromUtf8(node->text.font_family.c_str()))); layout->addRow("Font", font);
+            auto* size = new QDoubleSpinBox(node_properties_); size->setObjectName("fusionTextSize"); size->setRange(1, 512); size->setValue(node->text.font_size_pixels); layout->addRow("Size", size);
+            auto* alignment = new QComboBox(node_properties_); alignment->setObjectName("fusionTextAlignment"); alignment->addItems({"Left", "Center", "Right"}); alignment->setCurrentIndex(static_cast<int>(node->text.alignment)); layout->addRow("Alignment", alignment);
+            connect(text_apply, &QPushButton::clicked, this, [this, node_id, content, font, size, alignment] {
+                auto candidate = graph_; auto* target = findMutableNode(candidate, node_id); if (!target) return;
+                target->text.content = content->toPlainText().toUtf8().toStdString();
+                target->text.font_family = font->currentFont().family().toUtf8().toStdString();
+                target->text.font_size_pixels = size->value(); target->text.alignment = static_cast<timeline::TextAlignment>(alignment->currentIndex());
+                commitGraph(std::move(candidate), "Text updated.");
+            });
+        }
+    }
     if (node->type == fusion::nodes::NodeType::Input) {
         auto* source = new QComboBox(node_properties_);
         source->setObjectName("fusionInputMediaSource");
-        source->addItem("Selected Timeline clip", -1);
+        source->addItem(independent_composition_ ? "Transparent" : "Selected Timeline clip", -1);
         for (std::size_t i = 0; i < media_choices_.size(); ++i)
             source->addItem(media_choices_[i].label, static_cast<int>(i));
         int selected = -1;
@@ -753,7 +793,7 @@ void FusionWorkspace::refreshAnimatedControls() {
         if (button == nullptr) return;
         const QSignalBlocker blocker(button);
         button->setChecked(keyed);
-        button->setText(keyed ? QStringLiteral("◆") : QStringLiteral("◇"));
+        button->setText(keyed ? QStringLiteral("â—†") : QStringLiteral("â—‡"));
         button->setToolTip(keyed
             ? QStringLiteral("Remove keyframe at the current frame")
             : QStringLiteral("Add keyframe at the current frame"));

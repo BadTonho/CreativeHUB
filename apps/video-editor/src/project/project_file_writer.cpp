@@ -68,8 +68,26 @@ const char* nodeTypeName(fusion::nodes::NodeType type) {
     case fusion::nodes::NodeType::Merge: return "merge";
     case fusion::nodes::NodeType::Output: return "output";
     case fusion::nodes::NodeType::Effect: return "effect";
+    case fusion::nodes::NodeType::Background: return "background";
+    case fusion::nodes::NodeType::Text: return "text";
     }
     return "input";
+}
+
+void writeCurveEasing(QJsonObject& object, const timeline::Keyframe& key) {
+    if (key.interpolation != creative_suite::animation::InterpolationMode::CubicBezier) return;
+    object.insert("interpolation", "cubic_bezier");
+    object.insert("easing", QJsonArray{key.easing.x1, key.easing.y1, key.easing.x2, key.easing.y2});
+}
+
+QJsonObject textStyleJson(const timeline::TextStyle& text) {
+    QJsonObject value;
+    value.insert("content", QString::fromUtf8(text.content.data(), static_cast<qsizetype>(text.content.size())));
+    value.insert("font_family", QString::fromUtf8(text.font_family.data(), static_cast<qsizetype>(text.font_family.size())));
+    value.insert("font_size_pixels", text.font_size_pixels);
+    value.insert("color", QJsonObject{{"r", text.color[0]}, {"g", text.color[1]}, {"b", text.color[2]}, {"a", text.color[3]}});
+    value.insert("alignment", text.alignment == timeline::TextAlignment::Left ? "left" : text.alignment == timeline::TextAlignment::Right ? "right" : "center");
+    return value;
 }
 
 QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
@@ -80,6 +98,7 @@ QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
             QJsonObject item;
             item.insert("frame", static_cast<qint64>(keyframe.frame));
             item.insert("value", keyframe.value);
+            writeCurveEasing(item, keyframe);
             output.append(item);
         }
         return output;
@@ -91,6 +110,9 @@ QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
         QJsonObject value;
         value.insert("id", static_cast<qint64>(node.id));
         value.insert("type", nodeTypeName(node.type));
+        if (node.type == fusion::nodes::NodeType::Background)
+            value.insert("background_color", QJsonObject{{"r", node.background_color[0]}, {"g", node.background_color[1]}, {"b", node.background_color[2]}, {"a", node.background_color[3]}});
+        if (node.type == fusion::nodes::NodeType::Text) value.insert("text", textStyleJson(node.text));
         value.insert("x", node.x);
         value.insert("y", node.y);
         if (!node.source_path.empty())
@@ -242,12 +264,14 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         for (const auto& clip : track_source.clips) {
             QJsonObject item;
             item.insert("clip_id", static_cast<qint64>(clip.clip_id));
-            const char* clip_kind = clip.kind == timeline::ClipKind::Adjustment
+            const char* clip_kind = clip.kind == timeline::ClipKind::FusionComposition ? "fusion_composition" : clip.kind == timeline::ClipKind::Adjustment
                 ? "adjustment" : clip.kind == timeline::ClipKind::Text
                 ? "text"
                 : clip.kind == timeline::ClipKind::Image ? "image"
                 : clip.kind == timeline::ClipKind::Audio ? "audio" : "video";
             item.insert("kind", clip_kind);
+            if (clip.kind == timeline::ClipKind::FusionComposition)
+                item.insert("composition_input_offset_frames", static_cast<qint64>(clip.composition_input_offset_frames));
             if (clip.image_editor_variant.has_value()) {
                 item.insert("image_editor_variant",
                             linkedImageJson(project_path, *clip.image_editor_variant));
@@ -255,23 +279,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             if (timeline::isMediaClipKind(clip.kind)) {
                 item.insert("source", storedPath(project_path, clip.source_path));
             } else if (clip.kind == timeline::ClipKind::Text) {
-                QJsonObject text;
-                text.insert("content", QString::fromUtf8(
-                    clip.text.content.data(), static_cast<int>(clip.text.content.size())));
-                text.insert("font_family", QString::fromUtf8(
-                    clip.text.font_family.data(), static_cast<int>(clip.text.font_family.size())));
-                text.insert("font_size_pixels", clip.text.font_size_pixels);
-                QJsonObject color;
-                color.insert("r", clip.text.color[0]);
-                color.insert("g", clip.text.color[1]);
-                color.insert("b", clip.text.color[2]);
-                color.insert("a", clip.text.color[3]);
-                text.insert("color", color);
-                const char* alignment = "center";
-                if (clip.text.alignment == timeline::TextAlignment::Left) alignment = "left";
-                else if (clip.text.alignment == timeline::TextAlignment::Right) alignment = "right";
-                text.insert("alignment", alignment);
-                item.insert("text", text);
+                item.insert("text", textStyleJson(clip.text));
             }
             item.insert("timeline_start_frame", static_cast<qint64>(clip.timeline_start_frame));
             if (clip.kind != timeline::ClipKind::Audio) {
@@ -295,10 +303,12 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 item.insert("linked_clip_id",
                             static_cast<qint64>(*clip.linked_clip_id));
             }
-            item.insert("audio_extracted", clip.audio_extracted);
-            item.insert("audio_companion_pending", clip.audio_companion_pending);
-            item.insert("audio_gain", clip.audio_gain);
-            item.insert("audio_muted", clip.audio_muted);
+            if (clip.kind != timeline::ClipKind::FusionComposition) {
+                item.insert("audio_extracted", clip.audio_extracted);
+                item.insert("audio_companion_pending", clip.audio_companion_pending);
+                item.insert("audio_gain", clip.audio_gain);
+                item.insert("audio_muted", clip.audio_muted);
+            }
             if (clip.kind == timeline::ClipKind::Audio) {
                 QJsonArray audio_gain_keyframes;
                 for (const auto& keyframe : clip.audio_gain_keyframes) {
@@ -352,6 +362,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                     QJsonObject item;
                     item.insert("frame", static_cast<qint64>(keyframe.frame));
                     item.insert("value", keyframe.value);
+            writeCurveEasing(item, keyframe);
                     output.append(item);
                 }
                 return output;

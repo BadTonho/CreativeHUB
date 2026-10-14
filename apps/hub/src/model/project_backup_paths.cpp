@@ -109,7 +109,7 @@ public:
 
     bool videoClips(QJsonObject& owner) {
         return array(owner, "clips", [this](QJsonObject& clip) {
-            return (clip.value("kind") == "text" || clip.value("kind") == "adjustment" || paths(clip, {"source"})) && videoLinks(clip, true) &&
+            return (clip.value("kind") == "text" || clip.value("kind") == "adjustment" || clip.value("kind") == "fusion_composition" || paths(clip, {"source"})) && videoLinks(clip, true) &&
                 (version < 20 || child(clip, "node_graph", [this](QJsonObject& graph) {
                     return array(graph, "nodes", [this](QJsonObject& node) {
                         return node.value("type") != "input" || paths(node, {"source"});
@@ -167,7 +167,7 @@ bool prepareProjectBackup(const QByteArray& original, const QString& originalPat
         return true;
     }
     const int version = root.value("version").toInt(-1);
-    const int maximum = image ? 16 : video ? 26 : 6;
+    const int maximum = image ? 16 : video ? 27 : 6;
     if (version < 1 || version > maximum)
         return fail(QStringLiteral("A versão %1 do formato '%2' não é suportada para backup.").arg(version).arg(format));
     const QFileInfo source(originalPath);

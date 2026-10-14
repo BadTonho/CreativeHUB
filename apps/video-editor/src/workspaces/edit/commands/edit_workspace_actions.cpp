@@ -93,6 +93,9 @@ EditWorkspaceActions::EditWorkspaceActions(
     connect(duplicate_adjustment_action_, &QAction::triggered,
         &controller_, &EditWorkspaceController::duplicateSelectedAdjustmentClip);
 
+    duplicate_fusion_action_ = createMenuAction(QStringLiteral("Duplicate Fusion Composition"), QStringLiteral("edit.duplicate_fusion_composition"));
+    connect(duplicate_fusion_action_, &QAction::triggered, &controller_, &EditWorkspaceController::duplicateSelectedFusionCompositionClip);
+
     auto* split_clip_action = createMenuAction(
         QStringLiteral("Split Clip at Playhead"),
         QStringLiteral("edit.split_clip"),
@@ -315,6 +318,8 @@ void EditWorkspaceActions::refreshAvailability() {
                             media::MediaLibrary::canonicalPath(clip.source_path);
                 });
     }
+    duplicate_fusion_action_->setEnabled(can_edit_timeline &&
+        session.timeline().tracks()[location->track_index].clips[location->clip_index].kind == timeline::ClipKind::FusionComposition);
     duplicate_adjustment_action_->setEnabled(can_edit_timeline &&
         session.timeline().tracks()[location->track_index].clips[location->clip_index].kind == timeline::ClipKind::Adjustment);
     delete_clip_action_->setEnabled(can_delete);

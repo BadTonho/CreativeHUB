@@ -74,6 +74,7 @@ private:
     std::int64_t clip_duration_frames_ = 0;
     std::int64_t local_frame_ = 0;
     bool active_ = false;
+    bool independent_composition_ = false;
     bool refreshing_ = false;
     void publishPreviewTarget();
     void refreshCanvas();

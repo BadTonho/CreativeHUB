@@ -1,5 +1,15 @@
 # Timeline Boundary
 
+## Fusion Composition clips
+
+Fusion Composition is a teal generated video-track clip with no primary source.
+It starts at five seconds and supports source-independent duration edits,
+transitions and independent duplication through Edit. Clip and graph curves
+remain continuous across splits/trims; an independent input-time offset keeps
+videos from restarting. Audio tracks and same-track collisions without an
+explicit transition are refused. See [Fusion Composition](../FUSION_COMPOSITION.md).
+
+
 Status: provisional.
 
 The application-local TimelineModel uses standard C++ types. It stores ordered

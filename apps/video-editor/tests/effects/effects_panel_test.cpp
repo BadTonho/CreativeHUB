@@ -42,11 +42,11 @@ int main(int argc, char* argv[]) {
                 "Text category is missing.");
         require(toolbox.currentCategoryId() == "all",
                 "Effects Toolbox must initially select All.");
-        require(effects_list.count() == 9,
+        require(effects_list.count() == 10,
                 "Effects list must contain all visual filters and existing tools.");
         require(effects_list.categoryId() == "all",
                 "Effects list must initially show All.");
-        require(effects_list.visibleEffectCount() == 9,
+        require(effects_list.visibleEffectCount() == 10,
                 "All category must show every effect.");
         require(effects_list.item(0)->data(Qt::UserRole).toString() ==
                     "video.grayscale",
@@ -84,6 +84,7 @@ int main(int argc, char* argv[]) {
                     "A draggable effect has invalid MIME data.");
             delete mime;
         };
+        verifyDragMime("Fusion Composition", QByteArrayLiteral("video.fusion_composition"));
         verifyDragMime("Adjustment Clip", QByteArrayLiteral("video.adjustment_clip"));
         verifyDragMime("Text", QByteArrayLiteral("text.text"));
         verifyDragMime("Grayscale", QByteArrayLiteral("video.grayscale"));
@@ -113,7 +114,7 @@ int main(int argc, char* argv[]) {
         effects_list.setCategory(toolbox.currentCategoryId());
         require(effects_list.categoryId() == "video",
                 "Effects list category did not change to Video.");
-        require(effects_list.visibleEffectCount() == 5,
+        require(effects_list.visibleEffectCount() == 6,
                 "Video category must show the four visual filters.");
 
         effects_list.setCategory("audio");
@@ -127,12 +128,12 @@ int main(int argc, char* argv[]) {
                 "Text category must show one effect.");
         effects_list.setCategory("unknown");
         require(effects_list.categoryId() == "all" &&
-                    effects_list.visibleEffectCount() == 9,
+                    effects_list.visibleEffectCount() == 10,
                 "Unknown categories must fall back to All.");
 
         require(effects::categories().size() == 5,
                 "Shared effect catalog contains unimplemented categories.");
-        require(effects::definitions().size() == 9,
+        require(effects::definitions().size() == 10,
                 "The Effects catalog must retain existing tools alongside visual filters.");
         return 0;
     } catch (const std::exception& error) {

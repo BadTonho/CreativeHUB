@@ -93,10 +93,10 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
         for (const auto& edge : graph.connections)
             if (edge.to == id && required.insert(edge.from).second) pending.push_back(edge.from);
     }
-    int width = 0, height = 0;
+    int width = context.canvas_width, height = context.canvas_height;
     const auto select = [&](bool selected, bool only_required) {
         for (const auto& node : graph.nodes) {
-            if (node.type != NodeType::Input || (only_required && !required.contains(node.id)) ||
+            if ((node.type != NodeType::Input && node.type != NodeType::Background && node.type != NodeType::Text) || (only_required && !required.contains(node.id)) ||
                 (selected && !node.source_path.empty())) continue;
             const auto input = inputs.find(node.id);
             const auto native = context.native_inputs ? context.native_inputs->find(node.id) : NativeInputFrames::const_iterator{};
@@ -109,7 +109,7 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
         }
         return false;
     };
-    if (!select(true, true) && !select(true, false) && !select(false, true)) (void)select(false, false);
+    if ((width <= 0 || height <= 0) && !select(true, true) && !select(true, false) && !select(false, true)) (void)select(false, false);
     if (width <= 0 || height <= 0) return {};
     const media::VideoFrame transparent{width, height, width * 4,
         std::vector<std::uint8_t>(static_cast<std::size_t>(width) * height * 4)};
@@ -128,7 +128,7 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
         };
         OpenGlImageOperation operation;
         operation.background = input(0);
-        if (node->type == NodeType::Input) {
+        if ((node->type == NodeType::Input || node->type == NodeType::Background || node->type == NodeType::Text)) {
             const auto found = inputs.find(id);
             operation.background = {found != inputs.end() && usable(found->second) ? found->second.get() : &transparent};
             if (context.native_inputs) {
@@ -279,10 +279,10 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
                 pending.push_back(edge.from);
         }
     }
-    int canvas_width = 0, canvas_height = 0;
+    int canvas_width = context.canvas_width, canvas_height = context.canvas_height;
     const auto selectCanvas = [&](bool selected_clip_only, bool required_only) {
         for (const auto& node : graph.nodes) {
-            if (node.type != NodeType::Input ||
+            if ((node.type != NodeType::Input && node.type != NodeType::Background && node.type != NodeType::Text) ||
                 (required_only && !required.contains(node.id)) ||
                 (selected_clip_only && !node.source_path.empty())) continue;
             const auto found = inputs.find(node.id);
@@ -293,7 +293,7 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
         }
         return false;
     };
-    if (!selectCanvas(true, true) && !selectCanvas(true, false) &&
+    if ((canvas_width <= 0 || canvas_height <= 0) && !selectCanvas(true, true) && !selectCanvas(true, false) &&
         !selectCanvas(false, true)) {
         static_cast<void>(selectCanvas(false, false));
     }
@@ -308,7 +308,7 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
         if (!required.contains(id)) continue;
         const auto* node = findNode(graph, id);
         if (!node) return std::nullopt;
-        if (node->type == NodeType::Input) {
+        if ((node->type == NodeType::Input || node->type == NodeType::Background || node->type == NodeType::Text)) {
             const auto found = inputs.find(id);
             if (found != inputs.end() && usable(found->second)) values.emplace(id, *found->second);
             else values.emplace(id, transparent()); // Missing / ended sources are transparent.

@@ -1,5 +1,8 @@
 # Application Architecture
 
+Independent generated Fusion clips and generator-node ownership are described in
+[Fusion Composition](FUSION_COMPOSITION.md).
+
 Status: **provisional**. This file is the architecture index and cross-cutting
 overview for the project. Detailed responsibilities are separated by domain
 under `docs/video-editor/architecture/` so each document can remain focused and current.

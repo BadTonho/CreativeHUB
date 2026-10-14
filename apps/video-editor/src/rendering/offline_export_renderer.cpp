@@ -1,4 +1,5 @@
 #include "rendering/adjustment_composition.h"
+#include "rendering/graph_generators.h"
 #include "rendering/offline_export_renderer.h"
 #include "rendering/export_composition.h"
 
@@ -337,7 +338,9 @@ std::optional<media::VideoFrame> composeFrame(
             creative_suite::media::NativeVideoFramePtr native_frame;
             creative_suite::composition::OpenGlTextureFramePtr graph_texture;
             std::int64_t source_frame_index = 0;
-            if (clip.kind == timeline::ClipKind::Text) {
+            if (clip.kind == timeline::ClipKind::FusionComposition) {
+                // The graph supplies the complete visual layer; there is no primary source.
+            } else if (clip.kind == timeline::ClipKind::Text) {
                 if (!render_clip.text.has_value()) {
                     auto text = rendering::renderText(
                         clip.text,
@@ -413,14 +416,13 @@ std::optional<media::VideoFrame> composeFrame(
                         inputs.emplace(node.id,
                             std::make_shared<const media::VideoFrame>(*source->still));
                     } else if (source->video != nullptr) {
-                        const long double frame_value = static_cast<long double>(local_frame) *
+                        const long double frame_value = (static_cast<long double>(local_frame) + clip.composition_input_offset_frames) *
                             source->frame_rate / timeline_frame_rate.asDouble();
                         if (frame_value >= 0.0L &&
                             (node.source_frame_count <= 0 ||
                              frame_value < static_cast<long double>(node.source_frame_count)) &&
-                            frame_value <= static_cast<long double>(
-                                std::numeric_limits<std::int64_t>::max())) {
-                            if (compositor.nativeDelivery()) {
+                            frame_value < std::ldexp(1.0L, 63)) {
+                            if (compositor.nativeDelivery() && clip.kind != timeline::ClipKind::FusionComposition) {
                                 const auto decoded = source->video->decodeFrameAtNative(
                                     static_cast<std::int64_t>(frame_value), [&canceled] { return canceled.load(); });
                                 if (decoded && decoded->native) {
@@ -437,6 +439,11 @@ std::optional<media::VideoFrame> composeFrame(
                         }
                     }
                 }
+                const bool independent = clip.kind == timeline::ClipKind::FusionComposition;
+                const int graph_width = independent ? canvas_width : source_frame->width;
+                const int graph_height = independent ? canvas_height : source_frame->height;
+                rendering::prepareGraphFrames(*clip.node_graph, inputs, graph_width, graph_height, independent,
+                    [&canceled] { return canceled.load(); });
                 creative_suite::composition::OpenGlCompositionTimings graph_timings;
                 const auto evaluated = [&] {
                     detail::ExportTimedScope graph_scope(metrics.graph_nanoseconds);
@@ -450,7 +457,7 @@ std::optional<media::VideoFrame> composeFrame(
                             const auto recovered = found->second.first->decode_frame_at(found->second.second,
                                 [&canceled] { return canceled.load(); });
                             return recovered ? *recovered : media::VideoFramePtr{};
-                        }});
+                        }, independent ? graph_width : 0, independent ? graph_height : 0});
                 }();
                 metrics.native_video_imports += graph_timings.native_video_imports;
                 metrics.native_conversion_nanoseconds += graph_timings.native_video_conversion_nanoseconds;
@@ -459,6 +466,7 @@ std::optional<media::VideoFrame> composeFrame(
                 metrics.draw_submission_nanoseconds += graph_timings.draw_submission_nanoseconds;
                 if (auto* graph_backend = compositor.graphBackend())
                     metrics.graph_peak_gpu_bytes = std::max(metrics.graph_peak_gpu_bytes, graph_backend->resourceUsage().peak_known_bytes);
+                checkCanceled(canceled);
                 if (!evaluated.has_value())
                     throw std::runtime_error("The Fusion node graph did not produce a frame.");
                 graph_texture = evaluated->texture; native_frame.reset();
@@ -621,20 +629,22 @@ std::vector<RenderClip> prepareClips(
             entry.track = &track;
             entry.track_index = track_index;
             entry.clip_index = clip_index;
-            if (timeline::isGeneratedClipKind(clip.kind)) {
+            if (timeline::isGeneratedClipKind(clip.kind) && clip.kind != timeline::ClipKind::FusionComposition) {
                 clips.push_back(std::move(entry));
                 continue;
             }
             const auto path = clipPath(document, clip);
             entry.visual_path = path;
-            if (path.empty()) {
+            if (path.empty() && clip.kind != timeline::ClipKind::FusionComposition) {
                 throw std::runtime_error("A timeline clip has no source path.");
             }
             std::error_code error;
-            if (!std::filesystem::is_regular_file(path, error) || error) {
+            if (clip.kind != timeline::ClipKind::FusionComposition && (!std::filesystem::is_regular_file(path, error) || error)) {
                 throw std::runtime_error("Media is offline or unreadable: " + pathUtf8(path));
             }
-            if (clip.kind == timeline::ClipKind::Image) {
+            if (clip.kind == timeline::ClipKind::FusionComposition) {
+                entry.source_fps = timeline_fps;
+            } else if (clip.kind == timeline::ClipKind::Image) {
                 entry.source_fps = media::kStillImageFrameRate;
                 entry.still = media::StillImageDecoder{}.decode_first_frame(path);
             } else if (clip.kind == timeline::ClipKind::Audio) {

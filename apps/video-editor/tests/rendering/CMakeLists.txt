@@ -1,3 +1,11 @@
+add_executable(creative-suite-main-editor-fusion-composition-tests fusion_composition_test.cpp)
+target_link_libraries(creative-suite-main-editor-fusion-composition-tests PRIVATE creative-suite-main-editor-core)
+target_compile_features(creative-suite-main-editor-fusion-composition-tests PRIVATE cxx_std_20)
+copy_ffmpeg_test_runtime(creative-suite-main-editor-fusion-composition-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-fusion-composition-tests)
+add_creative_suite_test(NAME creative-suite-main-editor-fusion-composition COMMAND creative-suite-main-editor-fusion-composition-tests)
+set_tests_properties(creative-suite-main-editor-fusion-composition PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1")
+
 add_executable(creative-suite-main-editor-adjustment-tests adjustment_clip_test.cpp)
 target_link_libraries(creative-suite-main-editor-adjustment-tests PRIVATE creative-suite-main-editor-core)
 target_compile_features(creative-suite-main-editor-adjustment-tests PRIVATE cxx_std_20)

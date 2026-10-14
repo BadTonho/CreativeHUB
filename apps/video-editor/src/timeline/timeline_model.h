@@ -3,6 +3,7 @@
 #include "../media/video_metadata.h"
 #include "timeline_frame_rate.h"
 #include "timeline_transform.h"
+#include "text_style.h"
 #include "workspaces/fusion/nodes/model/node_graph.h"
 #include <creative_suite/effects/effects.h>
 
@@ -33,14 +34,19 @@ enum class ClipKind {
     Text,
     Audio,
     Adjustment,
+    FusionComposition,
 };
 
 [[nodiscard]] constexpr bool isGeneratedClipKind(ClipKind kind) noexcept {
-    return kind == ClipKind::Text || kind == ClipKind::Adjustment;
+    return kind == ClipKind::Text || kind == ClipKind::Adjustment || kind == ClipKind::FusionComposition;
 }
 
 [[nodiscard]] constexpr bool supportsClipEffects(ClipKind kind) noexcept {
-    return kind == ClipKind::Video || kind == ClipKind::Image || kind == ClipKind::Adjustment;
+    return kind == ClipKind::Video || kind == ClipKind::Image || kind == ClipKind::Adjustment || kind == ClipKind::FusionComposition;
+}
+
+[[nodiscard]] constexpr bool supportsNodeGraph(ClipKind kind) noexcept {
+    return kind == ClipKind::Video || kind == ClipKind::Image || kind == ClipKind::FusionComposition;
 }
 
 enum class TrackKind {
@@ -67,22 +73,6 @@ enum class TransitionKind {
     return kind == TransitionKind::CrossDissolve ||
         kind == TransitionKind::AudioCrossfade;
 }
-
-enum class TextAlignment {
-    Left,
-    Center,
-    Right,
-};
-
-struct TextStyle {
-    std::string content = "Text";
-    std::string font_family = "Sans Serif";
-    double font_size_pixels = 48.0;
-    std::array<std::uint8_t, 4> color{255, 255, 255, 255};
-    TextAlignment alignment = TextAlignment::Center;
-
-    friend bool operator==(const TextStyle&, const TextStyle&) = default;
-};
 
 struct AudioGainKeyframe {
     std::int64_t frame = 0;
@@ -143,6 +133,7 @@ struct TimelineClip {
     std::optional<ClipId> linked_clip_id;
     bool audio_extracted = false;
     bool audio_companion_pending = false;
+    std::int64_t composition_input_offset_frames = 0;
 
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
@@ -361,6 +352,8 @@ public:
     AddClipResult addAdjustmentClip(
         std::size_t track_index, std::int64_t timeline_start_frame,
         std::int64_t duration_frames);
+    AddClipResult addFusionComposition(std::size_t track_index,
+        std::int64_t timeline_start_frame, std::int64_t duration_frames);
     AddClipResult addTextClip(
         std::size_t track_index,
         std::int64_t timeline_start_frame,

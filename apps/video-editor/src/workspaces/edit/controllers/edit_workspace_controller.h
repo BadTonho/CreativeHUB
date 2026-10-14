@@ -66,6 +66,8 @@ public:
         std::int64_t timeline_frame,
         std::optional<timeline::TrackKind> create_track_kind = std::nullopt);
     void duplicateSelectedAdjustmentClip();
+    void duplicateSelectedFusionCompositionClip();
+    void addFusionCompositionClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void addAdjustmentClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void addTextClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void promptAddVideoTrack(QWidget* dialog_parent);

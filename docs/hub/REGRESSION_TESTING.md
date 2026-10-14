@@ -1,9 +1,21 @@
 # Hub Regression Testing
 
-The Video Editor v26 producer/consumer backup gate includes adjustment clips
+## Fusion Composition backup coverage
+
+`hub-backup-format-test` creates CSP v27 with Background, Text, an external Input
+and a signed composition offset. Snapshot and relocated restore are reopened by
+the Video Editor reader and compared to the normalized producer document.
+`hub-backup-manager-test` rejects future v28. Manual/native restore acceptance
+remains separate from the automated format contract.
+Both backup tests passed in the 2026-10-14 Windows Debug gate; the canonical
+Hub application was rebuilt and its v27 consumer contract passed through the
+Video Editor reader.
+
+
+The Video Editor v27 producer/consumer backup gate includes Fusion Composition and adjustment clips
 and the nonzero Motion publication positions introduced in v25.
 Run `hub-backup-format-test` for snapshot/restoration
-round-trips and `hub-backup-manager-test` for rejection of future v27 documents.
+round-trips and `hub-backup-manager-test` for rejection of future v28 documents.
 
 This guide indexes behavior owned by the Hub. Shared update behavior and the
 release contract are documented in [`../WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md).

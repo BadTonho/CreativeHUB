@@ -33,6 +33,8 @@ namespace {
 QString title(NodeType type) {
     switch (type) {
     case NodeType::Input: return QStringLiteral("Input");
+    case NodeType::Background: return QStringLiteral("Background");
+    case NodeType::Text: return QStringLiteral("Text");
     case NodeType::Transform: return QStringLiteral("Transform");
     case NodeType::Color: return QStringLiteral("Color");
     case NodeType::Merge: return QStringLiteral("Merge");
@@ -295,7 +297,7 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         };
         constexpr int input_port = 1;
         constexpr int output_port = 2;
-        if (node.type != NodeType::Input) {
+        if (node.type != NodeType::Input && node.type != NodeType::Background && node.type != NodeType::Text) {
             const auto count = node.type == NodeType::Merge ? 2 : 1;
             for (int input = 0; input < count; ++input) {
                 const auto y = inputPortY(node.type, static_cast<std::uint8_t>(input));

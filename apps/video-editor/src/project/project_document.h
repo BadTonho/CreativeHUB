@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 26;
+inline constexpr int current_format_version = 27;
+inline constexpr int fusion_composition_format_version = 27;
 inline constexpr int adjustment_clip_format_version = 26;
 inline constexpr int motion_render_offset_format_version = 25;
 inline constexpr int linked_motion_format_version = 24;
@@ -73,6 +74,7 @@ struct ProjectClip {
     std::optional<timeline::ClipId> linked_clip_id;
     bool audio_extracted = false;
     bool audio_companion_pending = false;
+    std::int64_t composition_input_offset_frames = 0;
 
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
 };

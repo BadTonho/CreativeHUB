@@ -55,6 +55,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.audio_gain_keyframes = clip.audio_gain_keyframes;
             project_clip.effects = clip.effects;
             project_clip.node_graph = clip.node_graph;
+            project_clip.composition_input_offset_frames = clip.composition_input_offset_frames;
             project_clip.transform = clip.transform;
             project_clip.keyframes = clip.keyframes;
             project_clip.kind = clip.kind;

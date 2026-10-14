@@ -258,6 +258,23 @@ void testVideoDocuments(const QString& root) {
     CS_TEST_CHECK(restored == saved);
     CS_TEST_CHECK(restored.timeline_tracks.front().clips.front().source_path.empty());
     CS_TEST_CHECK(restored.timeline_tracks.front().clips.front().keyframes == adjustment.keyframes);
+    auto composition = adjustment;
+    composition.kind = timeline::ClipKind::FusionComposition;
+    composition.node_graph = fusion::nodes::makeCompositionGraph();
+    composition.node_graph->nodes[0].background_color = {12, 34, 56, 78};
+    fusion::nodes::Node text; text.id = 3; text.type = fusion::nodes::NodeType::Text;
+    text.text.content = "Backup composition";
+    fusion::nodes::Node input; input.id = 4; input.source_path = fsPath(still); input.source_is_still = true;
+    composition.node_graph->nodes.push_back(text); composition.node_graph->nodes.push_back(input);
+    composition.node_graph->next_id = 5;
+    composition.composition_input_offset_frames = -15;
+    document.timeline_tracks.front().clips = {composition};
+    const auto fusion_path = QDir(QFileInfo(assets).absolutePath()).filePath("fusion.csp");
+    project::save(fsPath(fusion_path), document);
+    const auto fusion_saved = project::load(fsPath(fusion_path));
+    const auto fusion_backup = backup(QDir(root).filePath("video-fusion-v27"), fusion_path);
+    CS_TEST_CHECK(project::load(fsPath(fusion_backup.vault)) == fusion_saved);
+    CS_TEST_CHECK(project::load(fsPath(fusion_backup.restored)) == fusion_saved);
 }
 #endif
 

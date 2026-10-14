@@ -1,5 +1,13 @@
 # Keyboard Shortcuts
 
+## Fusion Composition commands
+
+Fusion compositions reuse the existing split, delete, Copy/Paste Attributes and
+Undo/Redo shortcuts. **Edit > Duplicate Fusion Composition** has no default
+shortcut. Creation is a drag from Effects > Video; open the Fusion workspace to
+edit its graph. Background/Text add no keyboard shortcuts.
+
+
 This document lists the user-facing shortcuts implemented by the Video Editor.
 It must change in the same commit as any shortcut change.
 

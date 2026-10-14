@@ -120,9 +120,28 @@ fusion::nodes::NodeType parseNodeType(const QJsonValue& value,
     if (name == QLatin1String("merge")) return fusion::nodes::NodeType::Merge;
     if (name == QLatin1String("output")) return fusion::nodes::NodeType::Output;
     if (name == QLatin1String("effect")) return fusion::nodes::NodeType::Effect;
+    if (name == QLatin1String("background")) return fusion::nodes::NodeType::Background;
+    if (name == QLatin1String("text")) return fusion::nodes::NodeType::Text;
     throwJson(ProjectErrorCode::InvalidValue, project_path,
               "Project JSON contains an unsupported Fusion node type.");
 }
+
+timeline::Keyframe readCurveEasing(timeline::Keyframe key, const QJsonObject& object,
+    int version, const std::filesystem::path& project_path) {
+    if (version < fusion_composition_format_version || !object.contains("interpolation")) return key;
+    if (object.value("interpolation") != "cubic_bezier" || !object.value("easing").isArray())
+        throwJson(ProjectErrorCode::InvalidValue, project_path, "Invalid keyframe interpolation.");
+    const auto points = object.value("easing").toArray();
+    if (points.size() != 4 || std::any_of(points.begin(), points.end(), [](const auto& value) { return !value.isDouble(); }))
+        throwJson(ProjectErrorCode::InvalidValue, project_path, "Invalid keyframe easing points.");
+    key.interpolation = creative_suite::animation::InterpolationMode::CubicBezier;
+    key.easing = {points[0].toDouble(), points[1].toDouble(), points[2].toDouble(), points[3].toDouble()};
+    if (!creative_suite::animation::validCubicBezierEasing(key.easing))
+        throwJson(ProjectErrorCode::InvalidValue, project_path, "Invalid keyframe easing curve.");
+    return key;
+}
+
+timeline::TextStyle parseTextStyle(const QJsonObject&, const std::filesystem::path&);
 
 fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
                                         const std::filesystem::path& project_path,
@@ -152,6 +171,18 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
         fusion::nodes::Node node;
         node.id = static_cast<fusion::nodes::NodeId>(id.toInteger());
         node.type = parseNodeType(node_object.value("type"), project_path);
+        if (node.type == fusion::nodes::NodeType::Background || node.type == fusion::nodes::NodeType::Text) {
+            if (version < fusion_composition_format_version)
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Generator nodes require project format version 27.");
+            if (node.type == fusion::nodes::NodeType::Text) node.text = parseTextStyle(node_object, project_path);
+            else {
+                if (!node_object.value("background_color").isObject())
+                    throwJson(ProjectErrorCode::InvalidValue, project_path, "Missing Background color.");
+                QJsonObject style; style.insert("content", ""); style.insert("color", node_object.value("background_color"));
+                QJsonObject owner; owner.insert("text", style);
+                node.background_color = parseTextStyle(owner, project_path).color;
+            }
+        }
         if (node.type == fusion::nodes::NodeType::Effect) {
             if (version < effect_node_format_version)
                 throwJson(ProjectErrorCode::InvalidValue, project_path,
@@ -228,7 +259,7 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
                         !std::isfinite(numeric.toDouble()))
                         throwJson(ProjectErrorCode::InvalidValue, project_path,
                                   "A Fusion node contains an invalid animation keyframe value.");
-                    output.push_back({frame, numeric.toDouble()});
+                    output.push_back(readCurveEasing({frame, numeric.toDouble()}, key, version, project_path));
                 }
             };
             const auto transform_keys_value =
@@ -298,7 +329,8 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
             static_cast<fusion::nodes::NodeId>(to.toInteger()),
             static_cast<std::uint8_t>(input.toInteger())});
     }
-    if (!fusion::nodes::validate(graph))
+    if ((version < fusion_composition_format_version && std::none_of(graph.nodes.begin(), graph.nodes.end(),
+            [](const auto& node) { return node.type == fusion::nodes::NodeType::Input; })) || !fusion::nodes::validate(graph))
         throwJson(ProjectErrorCode::InvalidValue, project_path,
                   "Project JSON contains an invalid or cyclic Fusion graph.");
     return graph;
@@ -854,6 +886,8 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         clip.kind = timeline::ClipKind::Video;
                     } else if (kind.toString() == QLatin1String("image")) {
                         clip.kind = timeline::ClipKind::Image;
+                    } else if (version >= fusion_composition_format_version && kind.toString() == QLatin1String("fusion_composition")) {
+                        clip.kind = timeline::ClipKind::FusionComposition;
                     } else if (version >= adjustment_clip_format_version &&
                                kind.toString() == QLatin1String("adjustment")) {
                         clip.kind = timeline::ClipKind::Adjustment;
@@ -866,18 +900,32 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported clip kind.");
                     }
                 }
+                if (clip.kind == timeline::ClipKind::FusionComposition &&
+                    (clip_object.contains("audio_gain") || clip_object.contains("audio_muted") ||
+                     clip_object.contains("audio_extracted") || clip_object.contains("audio_companion_pending") ||
+                     clip_object.contains("linked_clip_id") || clip_object.contains("source_duration_migration_pending")))
+                    throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Unexpected audio or source metadata on a Fusion composition.");
+                if (clip_object.contains("composition_input_offset_frames")) {
+                    if (version < fusion_composition_format_version || clip.kind != timeline::ClipKind::FusionComposition)
+                        throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Unexpected composition input offset.");
+                    const auto offset = clip_object.value("composition_input_offset_frames");
+                    if (!offset.isDouble() || !std::isfinite(offset.toDouble()) || std::trunc(offset.toDouble()) != offset.toDouble() ||
+                        offset.toDouble() != static_cast<double>(offset.toInteger()))
+                        throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Invalid composition input offset.");
+                    clip.composition_input_offset_frames = offset.toInteger();
+                }
                 if (timeline::isMediaClipKind(clip.kind)) {
                     clip.source_path = resolvedPath(
                         project_path, requiredString(clip_object, "source", project_path));
                 } else if (clip.kind == timeline::ClipKind::Text) {
                     clip.text = parseTextStyle(clip_object, project_path);
-                } else if (clip.kind == timeline::ClipKind::Adjustment &&
+                } else if ((clip.kind == timeline::ClipKind::Adjustment || clip.kind == timeline::ClipKind::FusionComposition) &&
                            (clip_object.contains("source") || clip_object.contains("text") ||
                             clip_object.contains("source_duration_frames") ||
                             clip_object.contains("source_start_time_us") ||
                             clip_object.contains("source_duration_time_us"))) {
                     throwJson(ProjectErrorCode::InvalidTimeline, project_path,
-                              "An adjustment clip cannot contain media or text fields.");
+                              "A generated clip cannot contain primary media or clip text fields.");
                 }
                 if (version >= linked_image_format_version &&
                     clip_object.contains("image_editor_variant")) {
@@ -1001,7 +1049,7 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     clip.node_graph = parseNodeGraph(
                         clip_object.value("node_graph"), project_path, version);
                 }
-                if (version >= audio_companion_format_version) {
+                if (version >= audio_companion_format_version && clip.kind != timeline::ClipKind::FusionComposition) {
                     if (clip_object.contains("linked_clip_id")) {
                         const auto linked_id = clip_object.value("linked_clip_id");
                         if (!linked_id.isDouble() ||
@@ -1065,7 +1113,7 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                             if (!numeric.isDouble() || !timeline::validKeyframeValue(property, numeric.toDouble())) {
                                 throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid keyframe value.");
                             }
-                            output.push_back({frame, numeric.toDouble()});
+                            output.push_back(readCurveEasing({frame, numeric.toDouble()}, keyframe_object, version, project_path));
                         }
                     };
                     parse_keyframes("position_x", timeline::TransformProperty::PositionX, clip.keyframes.position_x);

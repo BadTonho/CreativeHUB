@@ -108,6 +108,13 @@ struct AddTextClipCommand {
     double frame_rate = 30.0;
 };
 
+struct DuplicateFusionCompositionCommand { timeline::ClipId clip_id = 0; };
+struct AddFusionCompositionCommand {
+    timeline::TrackId track_id = 0;
+    std::int64_t timeline_start_frame = 0;
+    std::int64_t duration_frames = 0;
+};
+
 struct DuplicateAdjustmentClipCommand { timeline::ClipId clip_id = 0; };
 
 struct AddAdjustmentClipCommand {
@@ -221,6 +228,8 @@ public:
     [[nodiscard]] TimelineEditResult execute(const AddMediaClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddMediaClipsCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddTextClipCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const AddFusionCompositionCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const DuplicateFusionCompositionCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddAdjustmentClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const DuplicateAdjustmentClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddTransitionCommand& command);

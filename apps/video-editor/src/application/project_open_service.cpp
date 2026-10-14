@@ -669,10 +669,10 @@ ProjectOpenResult ProjectOpenService::prepare(
                 }
                 current_clip_index = clip_index;
                 const auto& project_clip = project_track.clips[clip_index];
-                if (project_clip.kind == timeline::ClipKind::Adjustment) {
+                if (project_clip.kind == timeline::ClipKind::Adjustment || project_clip.kind == timeline::ClipKind::FusionComposition) {
                     timeline::TimelineClip adjustment;
-                    adjustment.kind = timeline::ClipKind::Adjustment;
-                    adjustment.display_name = "Adjustment Clip";
+                    adjustment.kind = project_clip.kind;
+                    adjustment.display_name = project_clip.kind == timeline::ClipKind::FusionComposition ? "Fusion Composition" : "Adjustment Clip";
                     adjustment.clip_id = project_clip.clip_id;
                     adjustment.track_id = track_id;
                     adjustment.timeline_start_frame = project_clip.timeline_start_frame;
@@ -684,6 +684,8 @@ ProjectOpenResult ProjectOpenService::prepare(
                     adjustment.transform = project_clip.transform;
                     adjustment.keyframes = project_clip.keyframes;
                     adjustment.effects = project_clip.effects;
+                    adjustment.node_graph = project_clip.node_graph;
+                    adjustment.composition_input_offset_frames = project_clip.composition_input_offset_frames;
                     next_clip_id = std::max(next_clip_id, project_clip.clip_id + 1);
                     snapshot.tracks.back().clips.push_back(std::move(adjustment));
                     continue;

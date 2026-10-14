@@ -749,12 +749,42 @@ TransformKeyframes reframeAdjustmentKeyframes(
     return result;
 }
 
+bool shiftCompositionOffset(TimelineClip& clip, std::int64_t delta) {
+    if ((delta > 0 && clip.composition_input_offset_frames > std::numeric_limits<std::int64_t>::max() - delta) ||
+        (delta < 0 && clip.composition_input_offset_frames < std::numeric_limits<std::int64_t>::min() - delta)) return false;
+    clip.composition_input_offset_frames += delta;
+    return true;
+}
+void reframeFusionGraph(std::optional<fusion::nodes::NodeGraph>& graph, std::int64_t delta, std::int64_t duration) {
+    if (!graph) return;
+    for (auto& node : graph->nodes) {
+        if (node.type == fusion::nodes::NodeType::Transform) {
+            TimelineClip source; source.transform = node.transform; source.keyframes = node.transform_keyframes;
+            node.transform_keyframes = reframeAdjustmentKeyframes(source, delta, duration, node.transform);
+        }
+        for (auto& parameter : node.effect_parameter_keyframes) {
+            const auto keys = parameter.keyframes;
+            const auto base = creative_suite::effects::parameterValue(node.effect, parameter.parameter_id);
+            const auto value = [&](std::int64_t frame) { return creative_suite::animation::evaluateScalar(base, keys, frame); };
+            parameter.keyframes = {{0, value(delta)}};
+            for (const auto& key : keys) if (key.frame > delta &&
+                (delta >= 0 || key.frame <= std::numeric_limits<std::int64_t>::max() + delta)) {
+                const auto shifted = key.frame - delta;
+                if (shifted < duration) { auto copy = key; copy.frame = shifted; parameter.keyframes.push_back(copy); }
+            }
+            if (parameter.keyframes.back().frame != duration - 1)
+                parameter.keyframes.push_back({duration - 1, value(delta + duration - 1)});
+            static_cast<void>(creative_suite::effects::setParameterValue(node.effect, parameter.parameter_id, value(delta)));
+        }
+    }
+}
+
 TransformKeyframes reframeKeyframes(
     const TimelineClip& old_clip,
     std::int64_t new_timeline_start_frame,
     std::int64_t new_duration_frames,
     Transform2D& new_transform) {
-    if (old_clip.kind == ClipKind::Adjustment)
+    if (old_clip.kind == ClipKind::Adjustment || old_clip.kind == ClipKind::FusionComposition)
         return reframeAdjustmentKeyframes(old_clip, new_timeline_start_frame, new_duration_frames, new_transform);
     const auto start_delta = new_timeline_start_frame - old_clip.timeline_start_frame;
     const auto old_anchor_frame = std::max<std::int64_t>(0, start_delta);
@@ -813,6 +843,7 @@ TransformKeyframes reframeKeyframes(
 
 bool sameOverlapClass(const TimelineClip& left, const TimelineClip& right) noexcept {
     return left.kind == ClipKind::Adjustment || right.kind == ClipKind::Adjustment ||
+        left.kind == ClipKind::FusionComposition || right.kind == ClipKind::FusionComposition ||
         left.kind == right.kind ||
         (isFrameTimedMediaClipKind(left.kind) &&
          isFrameTimedMediaClipKind(right.kind));
@@ -894,17 +925,7 @@ bool TimelineModel::validAudioGain(double gain) noexcept {
 }
 
 bool TimelineModel::validTextStyle(const TextStyle& text) noexcept {
-    if (text.font_family.empty() || !std::isfinite(text.font_size_pixels) ||
-        text.font_size_pixels <= 0.0 || text.font_size_pixels > 512.0) {
-        return false;
-    }
-    switch (text.alignment) {
-    case TextAlignment::Left:
-    case TextAlignment::Center:
-    case TextAlignment::Right:
-        return true;
-    }
-    return false;
+    return timeline::isValidTextStyle(text);
 }
 
 bool TimelineModel::validTransitionKind(TransitionKind kind) noexcept {
@@ -954,6 +975,7 @@ bool TimelineModel::overlapsSameKind(
     const bool same_visual_media_kind = isFrameTimedMediaClipKind(left.kind) &&
         isFrameTimedMediaClipKind(kind);
     return (left.kind == ClipKind::Adjustment || kind == ClipKind::Adjustment ||
+            left.kind == ClipKind::FusionComposition || kind == ClipKind::FusionComposition ||
             left.kind == kind || same_visual_media_kind) &&
         overlaps(left, start_frame, duration_frames);
 }
@@ -1254,7 +1276,11 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
             original, begin_local,
             begin_local + preview.clip.timeline_duration_frames);
     }
-    if (original.kind == ClipKind::Adjustment) {
+    if (original.kind == ClipKind::FusionComposition) {
+        if (!shiftCompositionOffset(preview.clip, preview.clip.timeline_start_frame - original.timeline_start_frame)) return std::nullopt;
+        reframeFusionGraph(preview.clip.node_graph, preview.clip.timeline_start_frame - original.timeline_start_frame, preview.clip.timeline_duration_frames);
+    }
+    if (original.kind == ClipKind::Adjustment || original.kind == ClipKind::FusionComposition) {
         preview.clip.source_start_frame = 0;
         preview.clip.source_duration_frames = 0;
         preview.clip.frame_count = preview.clip.timeline_duration_frames;
@@ -1327,7 +1353,11 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
                 neighbor.source_duration_frames = original_source_end - *source_start;
             }
         }
-        if (neighbor.kind == ClipKind::Adjustment) {
+        if (neighbor.kind == ClipKind::FusionComposition) {
+            if (!shiftCompositionOffset(neighbor, neighbor.timeline_start_frame - original_neighbor.timeline_start_frame)) return std::nullopt;
+            reframeFusionGraph(neighbor.node_graph, neighbor.timeline_start_frame - original_neighbor.timeline_start_frame, neighbor.timeline_duration_frames);
+        }
+        if (neighbor.kind == ClipKind::Adjustment || neighbor.kind == ClipKind::FusionComposition) {
             neighbor.source_start_frame = 0;
             neighbor.source_duration_frames = 0;
             neighbor.frame_count = neighbor.timeline_duration_frames;
@@ -1748,6 +1778,20 @@ AddClipResult TimelineModel::addAdjustmentClip(
     return AddClipResult::Added;
 }
 
+AddClipResult TimelineModel::addFusionComposition(std::size_t track_index,
+    std::int64_t start, std::int64_t duration) {
+    auto graph = fusion::nodes::makeCompositionGraph();
+    std::string display_name = "Fusion Composition";
+    const auto result = addAdjustmentClip(track_index, start, duration);
+    if (result != AddClipResult::Added) return result;
+    auto& clips = tracks_[track_index].clips;
+    const auto found = std::find_if(clips.begin(), clips.end(), [&](const auto& clip) { return clip.clip_id == next_clip_id_ - 1; });
+    found->kind = ClipKind::FusionComposition;
+    found->display_name = std::move(display_name);
+    found->node_graph = std::move(graph);
+    return result;
+}
+
 AddClipResult TimelineModel::addTextClip(
     std::size_t track_index,
     std::int64_t timeline_start_frame,
@@ -1896,6 +1940,7 @@ SplitClipResult TimelineModel::splitClip(
     }
     const auto original_transform = clip.transform;
     TimelineClip right = clip;
+    if (clip.kind == ClipKind::FusionComposition && !shiftCompositionOffset(right, local_frame)) return SplitClipResult::InvalidBoundary;
     if (!shiftMotionRender(right.motion_link, local_frame, frame_rate_)) return SplitClipResult::InvalidBoundary;
     right.clip_id = next_clip_id_++;
     if (clip.kind == ClipKind::Audio) {
@@ -1912,7 +1957,10 @@ SplitClipResult TimelineModel::splitClip(
     }
     right.timeline_start_frame += local_frame;
     right.timeline_duration_frames -= local_frame;
-    if (clip.node_graph.has_value()) {
+    if (clip.kind == ClipKind::FusionComposition) {
+        reframeFusionGraph(right.node_graph, local_frame, right.timeline_duration_frames);
+        reframeFusionGraph(clip.node_graph, 0, local_frame);
+    } else if (clip.node_graph.has_value()) {
         splitNodeGraphKeyframes(
             *clip.node_graph, *right.node_graph, local_frame);
     }
@@ -1920,7 +1968,7 @@ SplitClipResult TimelineModel::splitClip(
         right.source_duration_frames = source_duration - source_offset;
         clip.source_duration_frames = source_offset;
     }
-    if (clip.kind == ClipKind::Adjustment) {
+    if (clip.kind == ClipKind::Adjustment || clip.kind == ClipKind::FusionComposition) {
         right.keyframes = reframeKeyframes(clip, right.timeline_start_frame,
             right.timeline_duration_frames, right.transform);
         auto left_transform = clip.transform;
@@ -2061,9 +2109,7 @@ std::optional<RippleDeleteOutcome> TimelineModel::rippleDeleteClip(ClipId clip_i
                                       moving_clip.timeline_start_frame);
         const auto& track = staged.tracks_[moving_track_index];
         for (const auto& obstacle : track.clips) {
-            const bool same_overlap_class = obstacle.kind == moving_clip.kind ||
-                (isFrameTimedMediaClipKind(obstacle.kind) &&
-                 isFrameTimedMediaClipKind(moving_clip.kind));
+            const bool same_overlap_class = sameOverlapClass(obstacle, moving_clip);
             if (obstacle.clip_id == moving_clip.clip_id ||
                 moving_ids.contains(obstacle.clip_id) ||
                 obstacle.timeline_start_frame > moving_clip.timeline_start_frame ||
@@ -2282,7 +2328,7 @@ TrimClipResult TimelineModel::trimClip(
         removeInvalidTransitions(*track);
         return TrimClipResult::Trimmed;
     }
-    if (clip.kind == ClipKind::Adjustment) {
+    if (clip.kind == ClipKind::Adjustment || clip.kind == ClipKind::FusionComposition) {
         if (new_source_start_frame != 0 || new_duration_frames <= 0 ||
             clip.timeline_start_frame > std::numeric_limits<std::int64_t>::max() - new_duration_frames)
             return TrimClipResult::InvalidRange;
@@ -2291,11 +2337,14 @@ TrimClipResult TimelineModel::trimClip(
                 return TrimClipResult::InvalidRange;
         auto transformed = clip.transform;
         auto curves = reframeKeyframes(clip, clip.timeline_start_frame, new_duration_frames, transformed);
+        if (clip.kind == ClipKind::FusionComposition)
+            reframeFusionGraph(clip.node_graph, 0, new_duration_frames);
         clip.transform = transformed;
         clip.keyframes = std::move(curves);
         clip.timeline_duration_frames = new_duration_frames;
         clip.frame_count = new_duration_frames;
         clip.duration_seconds = static_cast<double>(new_duration_frames) / frame_rate_.asDouble();
+        removeInvalidTransitions(*track);
         return TrimClipResult::Trimmed;
     }
     const auto old_source_duration = sourceDurationForClip(clip, frame_rate_);
@@ -2688,6 +2737,13 @@ std::optional<TimelineModel::Snapshot> TimelineModel::rescaleSnapshotFrameRate(
                 return std::nullopt;
             }
 
+            if (clip.kind == ClipKind::FusionComposition) {
+                const long double offset = static_cast<long double>(clip.composition_input_offset_frames) *
+                    target_frame_rate.numerator * source_rate.denominator /
+                    (static_cast<long double>(target_frame_rate.denominator) * source_rate.numerator);
+                if (!std::isfinite(offset) || std::round(offset) >= std::ldexp(1.0L, 63) || std::round(offset) < -std::ldexp(1.0L, 63)) return std::nullopt;
+                clip.composition_input_offset_frames = static_cast<std::int64_t>(std::round(offset));
+            }
             if (isGeneratedClipKind(clip.kind)) {
                 clip.duration_seconds = static_cast<double>(
                     static_cast<long double>(clip.timeline_duration_frames) *
@@ -2748,6 +2804,8 @@ std::optional<TimelineModel::Snapshot> TimelineModel::rescaleSnapshotFrameRate(
                 const auto& second = track.clips[right];
                 if (second.timeline_start_frame >= first_end) continue;
                 if (first.kind == ClipKind::Adjustment || second.kind == ClipKind::Adjustment ||
+                    ((first.kind == ClipKind::FusionComposition || second.kind == ClipKind::FusionComposition) &&
+                     !hasPermittedOverlapTransition(track, left, right)) ||
                     (first.kind == ClipKind::Text && second.kind == ClipKind::Text) ||
                     (first.kind == ClipKind::Audio && second.kind == ClipKind::Audio &&
                      !hasPermittedOverlapTransition(track, left, right))) {
@@ -3018,7 +3076,7 @@ AudioParameterResult TimelineModel::setClipAudio(
     }
     if (!validAudioGain(gain)) return AudioParameterResult::InvalidValue;
     auto& clip = track->clips[clip_index];
-    if (clip.kind == ClipKind::Adjustment && (gain != 1.0 || muted))
+    if ((clip.kind == ClipKind::Adjustment || clip.kind == ClipKind::FusionComposition) && (gain != 1.0 || muted))
         return AudioParameterResult::InvalidValue;
     if (clip.audio_gain == gain && clip.audio_muted == muted) {
         return AudioParameterResult::NoChange;
@@ -3199,9 +3257,10 @@ NodeGraphMutationResult TimelineModel::setClipNodeGraph(
         return NodeGraphMutationResult::InvalidIndex;
     }
     auto& clip = track->clips[clip_index];
-    if (clip.kind != ClipKind::Video && clip.kind != ClipKind::Image) {
+    if (!supportsNodeGraph(clip.kind)) {
         return NodeGraphMutationResult::IncompatibleClip;
     }
+    if (clip.kind == ClipKind::FusionComposition && !graph) return NodeGraphMutationResult::InvalidValue;
     if (graph.has_value() &&
         (!fusion::nodes::validate(*graph) ||
          !fusion::nodes::validKeyframeRange(

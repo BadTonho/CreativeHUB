@@ -1,5 +1,13 @@
 # Cross-Application Compatibility Proposal
 
+## Fusion Composition backups
+
+CSP v27 is owned by the Video Editor. The Hub backup adapter preserves independent
+Fusion graphs and Background/Text generators without inventing a primary media
+path; external Input paths use the existing relocation contract. The shared
+Motion/Image document formats and application versions are unchanged.
+
+
 **Status:** Provisional. This document records a direction to validate, not a
 final format, API, implementation commitment, or change in application
 priorities.

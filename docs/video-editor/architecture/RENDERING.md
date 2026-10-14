@@ -1,5 +1,17 @@
 # Rendering Boundary
 
+## Independent graph sources
+
+`rendering/graph_generators` prepares Background/Text RGBA frames on the worker
+and fits independent media inputs to a transparent project canvas. Optional
+explicit dimensions in `EvaluationContext` support source-free graphs; zero
+retains legacy inference. Preview, node Viewer and export use the same preparer
+and evaluator. Independent input videos add the persisted project-frame offset
+before sampling; negative/past-end times are transparent. Output remains a
+normal layer before clip effects/transform and any higher adjustment stage.
+See [Fusion Composition](../FUSION_COMPOSITION.md).
+
+
 Status: **provisional**.
 
 The [experimental pipeline](../GPU_PIPELINE.md) extends composition to ordered

@@ -1,4 +1,5 @@
 #include "playback/playback_worker.h"
+#include "rendering/graph_generators.h"
 #include "rendering/preview_performance_metrics.h"
 #include "logging/logger.h"
 #include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
@@ -56,6 +57,22 @@ void fusionParity(OpenGlFrameCompositor& gpu) {
             if (std::abs(int(cpu->rgba_pixels[i]) - int(output->rgba_pixels[i])) > (i % 4 == 3 ? 0 : 2))
                 throw std::runtime_error("Fusion GPU intermediate alpha or RGB parity failed at byte " + std::to_string(i));
     }
+    auto generated = makeCompositionGraph(); generated.nodes[0].background_color = {70, 80, 90, 128};
+    Node text; text.id = 3; text.type = NodeType::Text; text.text.content = "Fusion";
+    Node merge; merge.id = 4; merge.type = NodeType::Merge;
+    generated.nodes.push_back(text); generated.nodes.push_back(merge); generated.next_id = 5;
+    generated.connections = {{1, 4, 0}, {3, 4, 1}, {4, 2, 0}};
+    InputFrames generators; rendering::prepareGraphFrames(generated, generators, 320, 180, true);
+    EvaluationContext cpu_context; cpu_context.canvas_width = 320; cpu_context.canvas_height = 180;
+    auto gpu_context = cpu_context; bool generated_gpu_used = false;
+    gpu_context.gpu = &gpu; gpu_context.gpu_used = &generated_gpu_used;
+    const auto generated_cpu = evaluate(generated, generators, cpu_context);
+    const auto generated_gpu = evaluate(generated, generators, gpu_context);
+    if (!generated_cpu || !generated_gpu || !generated_gpu_used)
+        throw std::runtime_error("Fusion generators did not execute the native GPU graph.");
+    for (std::size_t byte = 0; byte < generated_cpu->rgba_pixels.size(); ++byte)
+        if (std::abs(int(generated_cpu->rgba_pixels[byte]) - int(generated_gpu->rgba_pixels[byte])) > 2)
+            throw std::runtime_error("Fusion generator CPU/GPU parity failed.");
     bool used = false;
     const auto cancelled = evaluate(graph, inputs, EvaluationContext{0, &gpu, &used, [] { return true; }});
     if (cancelled || used) throw std::runtime_error("A cancelled Fusion GPU graph published a frame.");

@@ -1,5 +1,41 @@
 # Regression Testing
 
+## Fusion Composition verification
+
+The registered `creative-suite-main-editor-fusion-composition` test in
+`tests/rendering/fusion_composition_test.cpp` covers source-free creation,
+Background/Text/transparent Output, static text controls and font fallback,
+proportional input fitting and straight-alpha Merge. It exercises insertion,
+rejection of audio/collisions, Inspector and Functions effects, attribute paste,
+duplication by value, movement/reordering, curves through split/trim, FPS
+conversion, history, generated duration, persistence/open and autosave. Real Qt
+drops and the Fusion workspace operate without a primary media selection.
+
+Worker/export fixtures compare complete RGBA frames before encoding for solid
+Background, Text, input-video offsets (including negative time and EOF), a
+transparent composition below an adjustment and overlapping visual transitions.
+Node Viewer and canceled export are included. The GPU Timeline regression adds
+Background/Text/Merge parity through the native graph backend and requires that
+GPU work actually occurred. The main-window test checks insertion/effects dirty
+state, save and undo to the saved baseline. `hub-backup-format-test` preserves
+generator data, graph input paths and signed offsets through relocated restore;
+`hub-backup-manager-test` rejects future v28. Existing graph, timeline, playback,
+project, autosave, Inspector, adjustment and export gates remain relevant.
+
+CSP v27 also round-trips optional cubic Bezier easing for clip/node curves;
+legacy versions retain their previous interpolation-reading behavior. Generator
+properties remain static, while existing Transform/Brightness animations apply.
+
+Reproducible native check (pending, separate from implementation): drag Fusion
+Composition from Effects > Video, enter Fusion, set a Background color/alpha,
+add Text, change its font/size and Apply Text, connect through Merge to Output,
+and select VIEW on each node. Return to Edit, change clip opacity and animate
+Transform; split/trim an input video and verify no restart. Add a transition and
+an upper Adjustment Clip, export, save/reopen and restore a Hub backup. Record
+OS/GPU/driver/font details. Native UI, accelerated encoder and macOS/Linux
+acceptance remain separate from automated coverage.
+
+
 The [Windows/NVIDIA pipeline](GPU_PIPELINE.md) adds native codec verification
 (`creative-suite-hardware-video-pipeline-tests --require-hardware`), ordered clip
 effect parity in the shared OpenGL test, and transparent Fusion graph parity in
@@ -20,6 +56,28 @@ The required policy for every current and future application is in
 [`../REGRESSION_POLICY.md`](../REGRESSION_POLICY.md). Every implemented rule
 should have either an automated test or a documented manual validation step
 before the related change is considered complete.
+
+### Windows Debug result, 2026-10-14
+
+The Video Editor and Hub canonical Debug applications and affected test targets
+built successfully. All 25 selected CTest entries passed in the final state:
+24 passed in the broad run; Fusion workspace passed after correcting a test
+that accessed the erased last Brightness curve. That removal implementation is
+unchanged from the previous commit. The final expanded Fusion Composition test
+also passed (7.64 seconds), including legacy-node gating and signed time limits.
+The native GPU Timeline gate passed with Background/Text/Merge parity and no
+skip; preview/export RGBA comparisons use the software FFV1 export fixture.
+This does not establish hardware encoder or native UI/platform acceptance.
+
+Verified runnable application outputs (America/Sao_Paulo, UTC-03:00):
+
+- `build/apps/video-editor/Debug/creative-suite-video-editor.exe`, modified
+  2026-10-13 23:57:13, 10,049,024 bytes.
+- `build/apps/hub/Debug/creative-suite-hub.exe`, modified
+  2026-10-13 23:45:40, 2,305,024 bytes.
+
+Application versions remain unchanged. No installers, commits or pushes were
+created. Documentation links and `git diff --check` were checked separately.
 
 ## Adjustment Clip verification
 

@@ -155,13 +155,16 @@ void validateDocument(const ProjectDocument& document,
     }
 
     auto validate_clip = [&project_path](const ProjectClip& clip) {
-        if (clip.kind == timeline::ClipKind::Adjustment &&
+        if ((clip.kind == timeline::ClipKind::Adjustment || clip.kind == timeline::ClipKind::FusionComposition) &&
             (!clip.source_path.empty() || clip.source_start_frame != 0 ||
              clip.source_duration_frames != 0 || clip.linked_clip_id ||
              clip.audio_companion_pending || clip.audio_extracted || clip.audio_gain != 1.0 ||
              clip.audio_muted || clip.source_start_time_us != 0 || clip.source_duration_time_us != 0))
             throwJson(ProjectErrorCode::InvalidTimeline, project_path,
                       "An adjustment clip cannot reference media or audio.");
+        if ((clip.kind != timeline::ClipKind::FusionComposition && clip.composition_input_offset_frames != 0) ||
+            (clip.kind == timeline::ClipKind::FusionComposition && (!clip.node_graph || clip.source_duration_migration_pending || clip.text != timeline::TextStyle{})))
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Invalid Fusion composition timing or graph.");
         if (timeline::isMediaClipKind(clip.kind) && clip.source_path.empty()) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains a media clip without a source.");
         }
@@ -212,8 +215,7 @@ void validateDocument(const ProjectDocument& document,
                       "Project JSON contains an invalid effect stack for this clip.");
         }
         if (clip.node_graph.has_value() &&
-            ((clip.kind != timeline::ClipKind::Video &&
-              clip.kind != timeline::ClipKind::Image) ||
+            (!timeline::supportsNodeGraph(clip.kind) ||
              !fusion::nodes::validate(*clip.node_graph) ||
              !fusion::nodes::validKeyframeRange(
                  *clip.node_graph, clip.duration_frames))) {
@@ -408,8 +410,11 @@ void validateDocument(const ProjectDocument& document,
                                 transition.from_clip_index == left &&
                                 transition.to_clip_index == right;
                         });
+                const bool fusion_crossfade_pair = std::any_of(track.transitions.begin(), track.transitions.end(),
+                    [left, right](const ProjectTransition& transition) { return transition.kind == timeline::TransitionKind::CrossDissolve && transition.from_clip_index == left && transition.to_clip_index == right; });
                 if (overlap &&
                     (first.kind == timeline::ClipKind::Adjustment || second.kind == timeline::ClipKind::Adjustment ||
+                     ((first.kind == timeline::ClipKind::FusionComposition || second.kind == timeline::ClipKind::FusionComposition) && !fusion_crossfade_pair) ||
                      (first.kind == timeline::ClipKind::Text &&
                       second.kind == timeline::ClipKind::Text) ||
                      (first.kind == timeline::ClipKind::Audio &&

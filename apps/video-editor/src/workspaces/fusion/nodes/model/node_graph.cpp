@@ -21,7 +21,9 @@ std::uint8_t inputCount(NodeType type) noexcept {
     case NodeType::Effect:
     case NodeType::Output: return 1;
     case NodeType::Merge: return 2;
-    case NodeType::Input: return 0;
+    case NodeType::Input:
+    case NodeType::Background:
+    case NodeType::Text: return 0;
     }
     return 0;
 }
@@ -70,19 +72,25 @@ NodeGraph makePassthroughGraph() {
     return graph;
 }
 
+NodeGraph makeCompositionGraph() {
+    auto graph = makePassthroughGraph();
+    graph.nodes.front().type = NodeType::Background;
+    return graph;
+}
+
 const Node* findNode(const NodeGraph& graph, NodeId id) noexcept { return find(graph, id); }
 bool isVisualNode(NodeType type) noexcept {
     return type == NodeType::Input || type == NodeType::Transform ||
         type == NodeType::Color || type == NodeType::Merge ||
-        type == NodeType::Output || type == NodeType::Effect;
+        type == NodeType::Output || type == NodeType::Effect || type == NodeType::Background || type == NodeType::Text;
 }
 
 GraphValidation validate(const NodeGraph& graph) {
     std::unordered_map<NodeId, const Node*> by_id;
-    std::unordered_set<NodeId> inputs;
     std::size_t output_count = 0;
     NodeId maximum_id = 0;
     for (const auto& node : graph.nodes) {
+        if (!isVisualNode(node.type)) return {GraphError::InvalidParameter, node.id};
         if (node.id == 0 || node.id > static_cast<NodeId>(
                 std::numeric_limits<std::int64_t>::max()) ||
             !by_id.emplace(node.id, &node).second)
@@ -109,7 +117,8 @@ GraphValidation validate(const NodeGraph& graph) {
             (node.type != NodeType::Effect &&
              !node.effect_parameter_keyframes.empty()))
             return {GraphError::InvalidParameter, node.id};
-        if (node.type == NodeType::Input) inputs.insert(node.id);
+        if (node.type == NodeType::Text && !timeline::isValidTextStyle(node.text))
+            return {GraphError::InvalidParameter, node.id};
         if (node.type == NodeType::Output) ++output_count;
         if (node.type == NodeType::Effect &&
             (!creative_suite::effects::isValid(node.effect) ||
@@ -120,7 +129,6 @@ GraphValidation validate(const NodeGraph& graph) {
         graph.next_id > static_cast<NodeId>(
             std::numeric_limits<std::int64_t>::max()))
         return {GraphError::InvalidParameter, graph.next_id};
-    if (inputs.empty()) return {GraphError::MissingInput, 0};
     if (output_count == 0) return {GraphError::MissingOutput, 0};
     if (output_count > 1) return {GraphError::MultipleOutputs, 0};
 

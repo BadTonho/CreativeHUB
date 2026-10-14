@@ -93,6 +93,7 @@ struct CompositionLayerSpec {
     std::optional<fusion::nodes::NodeId> fusion_preview_node_id;
     QString linked_render_path;
     qint64 linked_render_start_time_us = 0;
+    qint64 composition_input_offset_frames = 0;
 };
 
 struct CompositionTransitionSpec {

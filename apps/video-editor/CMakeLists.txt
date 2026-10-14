@@ -60,6 +60,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/rendering/opengl_preview_surface.h
     src/rendering/frame_compositor.cpp
     src/rendering/frame_compositor.h
+    src/rendering/graph_generators.cpp
+    src/rendering/graph_generators.h
     src/rendering/adjustment_composition.cpp
     src/rendering/adjustment_composition.h
     src/rendering/offline_export_renderer.cpp

@@ -240,8 +240,7 @@ void PlaybackController::refreshComposition() {
             std::optional<fusion::nodes::NodeId> fusion_preview_node_id;
             if (fusion_node_preview_target_.has_value() &&
                 fusion_node_preview_target_->clip_id == clip.clip_id &&
-                (clip.kind == timeline::ClipKind::Video ||
-                 clip.kind == timeline::ClipKind::Image)) {
+                timeline::supportsNodeGraph(clip.kind)) {
                 if (!node_graph.has_value())
                     node_graph = fusion::nodes::makePassthroughGraph();
                 if (fusion::nodes::findNode(*node_graph,
@@ -287,7 +286,8 @@ void PlaybackController::refreshComposition() {
                 clip.motion_link.has_value()
                     ? pathToQString(clip.motion_link->published_output_path)
                     : QString(),
-                clip.motion_link.has_value() ? clip.motion_link->render_start_time_us : 0});
+                clip.motion_link.has_value() ? clip.motion_link->render_start_time_us : 0,
+                clip.composition_input_offset_frames});
         }
 
         for (const auto& transition : track.transitions) {
@@ -352,8 +352,7 @@ void PlaybackController::setFusionNodePreviewTarget(
         } else {
             const auto& clip = session_.timeline().tracks()[location->track_index]
                 .clips[location->clip_index];
-            if (clip.kind != timeline::ClipKind::Video &&
-                clip.kind != timeline::ClipKind::Image) {
+            if (!timeline::supportsNodeGraph(clip.kind)) {
                 target.reset();
             } else {
                 const auto graph = clip.node_graph.value_or(

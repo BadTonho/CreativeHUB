@@ -25,6 +25,9 @@ struct EvaluationContext {
     // Borrowed for this evaluation. Applications recover the same input index
     // through their decoder session, including software reopen on device loss.
     std::function<media::VideoFramePtr(NodeId)> recover_native_input;
+    // Explicit canvas for independent compositions; zero retains legacy inference.
+    int canvas_width = 0;
+    int canvas_height = 0;
 };
 
 struct EvaluatedGraphFrame {

@@ -1,4 +1,5 @@
 #include "rendering/adjustment_composition.h"
+#include "rendering/graph_generators.h"
 #include "playback_worker.h"
 #include "media/video_probe.h"
 #include <QOpenGLContext>
@@ -1301,6 +1302,9 @@ void PlaybackWorker::renderCompositionFrame(
                     break;
                 case timeline::ClipKind::Text:
                     layer.kind = rendering::SlowFrameLayerKind::Text;
+                    break;
+                case timeline::ClipKind::FusionComposition:
+                    layer.kind = rendering::SlowFrameLayerKind::Image;
                     break;
                 case timeline::ClipKind::Audio:
                 case timeline::ClipKind::Adjustment:
@@ -2662,7 +2666,7 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeFusionNodePreview(
         if (decoded.has_value()) selected_clip_frame = *decoded;
     }
     if (should_cancel()) return std::nullopt;
-    if (selected_clip_frame == nullptr)
+    if (selected_clip_frame == nullptr && spec.kind != timeline::ClipKind::FusionComposition)
         throw media::MediaError("The selected clip frame for Fusion preview is unavailable.");
 
     const auto& graph = *spec.node_graph;
@@ -2697,22 +2701,24 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeFusionNodePreview(
             continue;
         }
         if (graph_input->video_session == nullptr) continue;
-        const long double source_index = static_cast<long double>(local_frame) *
+        const long double source_index = (static_cast<long double>(local_frame) + spec.composition_input_offset_frames) *
             graph_input->frame_rate / spec.timeline_frame_rate.asDouble();
         if (source_index < 0.0L ||
             (node.source_frame_count > 0 &&
              source_index >= static_cast<long double>(node.source_frame_count)) ||
-            source_index > static_cast<long double>(
-                std::numeric_limits<std::int64_t>::max())) continue;
+            source_index >= std::ldexp(1.0L, 63)) continue;
         const auto decoded = graph_input->video_session->decode_frame_at(
             static_cast<std::int64_t>(source_index), should_cancel);
         if (decoded.has_value() && *decoded != nullptr)
             inputs.emplace(node.id, *decoded);
     }
     if (should_cancel()) return std::nullopt;
-    return fusion::nodes::evaluate(
-        graph, inputs, target_node,
-        fusion::nodes::EvaluationContext{local_frame, graphGpuBackend(), nullptr, should_cancel});
+    const bool independent = spec.kind == timeline::ClipKind::FusionComposition;
+    const int width = independent ? composition_canvas_width_ : selected_clip_frame->width;
+    const int height = independent ? composition_canvas_height_ : selected_clip_frame->height;
+    rendering::prepareGraphFrames(graph, inputs, width, height, independent, should_cancel);
+    return fusion::nodes::evaluate(graph, inputs, target_node,
+        fusion::nodes::EvaluationContext{local_frame, graphGpuBackend(), nullptr, should_cancel, nullptr, nullptr, {}, independent ? width : 0, independent ? height : 0});
 }
 
 std::optional<std::vector<PlaybackWorker::DecodedCompositionLayer>>
@@ -2904,7 +2910,7 @@ PlaybackWorker::decodeCompositionLayers(
                 frame = *decoded;
             }
         }
-        if (frame == nullptr) continue;
+        if (frame == nullptr && spec.kind != timeline::ClipKind::FusionComposition) continue;
         if (spec.node_graph.has_value()) {
             fusion::nodes::InputFrames inputs;
             fusion::nodes::NativeInputFrames native_inputs;
@@ -2928,14 +2934,13 @@ PlaybackWorker::decodeCompositionLayers(
                     if (graph_input->still_frame != nullptr)
                         inputs.emplace(node.id, graph_input->still_frame);
                 } else if (graph_input->video_session != nullptr) {
-                    const long double source_index = static_cast<long double>(request.local_frame) *
+                    const long double source_index = (static_cast<long double>(request.local_frame) + spec.composition_input_offset_frames) *
                         graph_input->frame_rate / timeline_frame_rate_.asDouble();
                     if (source_index >= 0.0L &&
                         (node.source_frame_count <= 0 ||
                          source_index < static_cast<long double>(node.source_frame_count)) &&
-                        source_index <= static_cast<long double>(
-                            std::numeric_limits<std::int64_t>::max())) {
-                        if (hardware_decoding_enabled_ && graphGpuBackend()) {
+                        source_index < std::ldexp(1.0L, 63)) {
+                        if (hardware_decoding_enabled_ && graphGpuBackend() && spec.kind != timeline::ClipKind::FusionComposition) {
                             const auto decoded = graph_input->video_session->decodeFrameAtNative(
                                 static_cast<std::int64_t>(source_index), should_cancel);
                             if (decoded && decoded->native) {
@@ -2952,6 +2957,10 @@ PlaybackWorker::decodeCompositionLayers(
                     }
                 }
             }
+            const bool independent = spec.kind == timeline::ClipKind::FusionComposition;
+            const int graph_width = independent ? composition_canvas_width_ : frame->width;
+            const int graph_height = independent ? composition_canvas_height_ : frame->height;
+            rendering::prepareGraphFrames(*spec.node_graph, inputs, graph_width, graph_height, independent, should_cancel);
             creative_suite::composition::OpenGlCompositionTimings graph_timings;
             const auto evaluated = fusion::nodes::evaluateFrame(
                 *spec.node_graph, inputs,
@@ -2961,8 +2970,9 @@ PlaybackWorker::decodeCompositionLayers(
                         if (found == recovery_inputs.end() || !found->second.first) return {};
                         const auto recovered = found->second.first->decode_frame_at(found->second.second, should_cancel);
                         return recovered ? *recovered : media::VideoFramePtr{};
-                    }});
+                    }, independent ? graph_width : 0, independent ? graph_height : 0});
             rendering::PreviewPerformanceMetrics::instance().recordGpuCompositionWork(graph_timings);
+            if (should_cancel && should_cancel()) return std::nullopt;
             if (!evaluated.has_value())
                 throw media::MediaError("The Fusion node graph did not produce a frame.");
             if (evaluated->rgba) frame = std::make_shared<const media::VideoFrame>(*evaluated->rgba);

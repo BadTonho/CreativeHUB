@@ -1192,6 +1192,66 @@ TimelineEditResult TimelineCommandService::execute(const DuplicateAdjustmentClip
     return output;
 }
 
+TimelineEditResult TimelineCommandService::execute(const AddFusionCompositionCommand& command) {
+    const auto track = session_.timeline_.locateTrack(command.track_id);
+    if (!track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto next_clip_id = session_.timeline_.snapshot().next_clip_id;
+    auto before = session_.captureEditState();
+    const auto added = session_.timeline_.addFusionComposition(
+        *track, command.timeline_start_frame, command.duration_frames);
+    if (added != timeline::AddClipResult::Added) {
+        return result(EditStatus::Rejected, reasonForAdd(added));
+    }
+    recordSuccessfulEdit(std::move(before));
+    const auto location = session_.timeline_.locateClip(next_clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    selectClip(*location);
+    session_.playhead_frame_ = 0;
+    session_.preserved_playhead_frame_.reset();
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {command.track_id};
+    output.affected_clip_ids = {next_clip_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const DuplicateFusionCompositionCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto original = session_.timeline_.tracks()[location->track_index].clips[location->clip_index];
+    if (original.kind != timeline::ClipKind::FusionComposition)
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    if (original.timeline_start_frame > std::numeric_limits<std::int64_t>::max() - original.timeline_duration_frames)
+        return result(EditStatus::Rejected, EditReason::InvalidRange);
+    auto staged_timeline = session_.timeline_;
+    const auto new_id = staged_timeline.snapshot().next_clip_id;
+    const auto added = staged_timeline.addFusionComposition(location->track_index,
+        original.timeline_start_frame + original.timeline_duration_frames, original.timeline_duration_frames);
+    if (added != timeline::AddClipResult::Added)
+        return result(EditStatus::Rejected, reasonForAdd(added));
+    const auto copied = staged_timeline.locateClip(new_id);
+    if (!copied) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    auto snapshot = staged_timeline.snapshot();
+    auto& duplicate = snapshot.tracks[copied->track_index].clips[copied->clip_index];
+    duplicate.effects = original.effects;
+    duplicate.transform = original.transform;
+    duplicate.keyframes = original.keyframes;
+    duplicate.node_graph = original.node_graph;
+    duplicate.composition_input_offset_frames = original.composition_input_offset_frames;
+    staged_timeline.restore(std::move(snapshot));
+    auto before = session_.captureEditState();
+    session_.timeline_ = std::move(staged_timeline);
+    recordSuccessfulEdit(std::move(before));
+    selectClip(*copied);
+    session_.playhead_frame_ = 0;
+    session_.preserved_playhead_frame_.reset();
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {original.track_id};
+    output.affected_clip_ids = {new_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
 TimelineEditResult TimelineCommandService::execute(const AddTransitionCommand& command) {
     const auto track = session_.timeline_.locateTrack(command.track_id);
     const auto from = session_.timeline_.locateClip(command.from_clip_id);

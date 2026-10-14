@@ -1,5 +1,14 @@
 # Shared Visual Effects Contract
 
+## Fusion generators
+
+Effects > Video includes the `video.fusion_composition` generator. Its clip
+supports the existing effect stack and Functions. Fusion also offers Background
+and Text generator nodes, distinct from the Color correction node. See
+[Fusion Composition](../FUSION_COMPOSITION.md) for static generator controls
+and the existing node animation boundary.
+
+
 Status: provisional.
 
 `libs/effects` provides a shared CPU visual-processing API used by the
