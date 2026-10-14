@@ -116,7 +116,7 @@ public:
     void showPasteCopiedClipAttributesDialog(QWidget* dialog_parent);
     [[nodiscard]] application::TimelineEditResult applyCopiedClipAttributes(
         const timeline::ClipAttributeOptions& options);
-    void addEffectToSelectedClip(const QString& effect_id);
+    bool addEffectToSelectedClip(const QString& effect_id);
     void applyFusionNodeGraph(
         timeline::ClipId clip_id, const fusion::nodes::NodeGraph& graph);
     void selectClipEffect(int index);

@@ -5,6 +5,8 @@
 #include "ui/effects/effects_toolbox_widget.h"
 #include "ui/workspace/workspace_host.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
+#include "ui/functions/function_palette.h"
+#include "workspaces/edit/ui/edit_workspace.h"
 
 QWidget* MainWindow::createEffectsToolbox() {
     effects_toolbox_ = new EffectsToolboxWidget;
@@ -49,4 +51,10 @@ void MainWindow::refreshEffectsContext() {
          fusion_workspace_->selectedClipId() != 0);
     effects_list_->setEnabled(enabled);
     effects_favorites_->setEnabled(enabled);
+    if (function_palette_ != nullptr) {
+        const bool target_available = workspace == effects::Workspace::Fusion
+            ? enabled : workspace == effects::Workspace::Edit && edit_workspace_ &&
+                edit_workspace_->controller()->selectedClipSupportsEffects();
+        function_palette_->setContext(workspace, target_available);
+    }
 }

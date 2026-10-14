@@ -37,9 +37,43 @@ MIME with the same copy semantics. Background and Text retain `video.background`
 and `text.text`, resolving to the workspace's action. Both drop destinations
 validate compatibility; unknown IDs and Fusion-only timeline drops are refused.
 Creation reuses graph commands, dirty tracking, playback invalidation and
-Undo/Redo. Functions remains the existing four-filter picker. No shortcut,
-rendering or CSP v29 format change is introduced.
+Undo/Redo. Functions shares this catalog and its workspace actions as described
+below. No shortcut, rendering or CSP v29 format change is introduced.
 
+
+## Functions
+
+`Shift+Space` opens the searchable, non-modal Functions palette. The list reads
+`effects::definitions()` and uses the same workspace availability/actions and
+copy-only effect-ID MIME as Effects; it has no separate list of supported IDs.
+Search remains available without a compatible selection and retains its query
+when context changes while the window is open. Render closes/disables Functions.
+
+| Workspace / item | Add, Enter or double click | Drag |
+| --- | --- | --- |
+| Edit visual filter | Apply to the compatible selected clip | Existing compatible Timeline target |
+| Edit Background, Text, Adjustment Clip, Fusion Composition | Disabled; show `Drag this item to the timeline.` | Create at the chosen Timeline position |
+| Edit transition | Disabled; same drag hint | Existing compatible cut |
+| Edit Gain | Unavailable | Unavailable |
+| Fusion available catalog entry | Create a disconnected node at a free visible position and select it | Create at the chosen graph position; visual filters retain image-cable insertion |
+
+Fusion requires a compatible selected clip for both activation and drag. Edit
+filters require a compatible selected clip for activation, while dragging can
+choose another existing target; generators remain draggable without selection.
+Hidden, unavailable and query-filtered entries cannot produce drag MIME.
+Background retains opaque-white clip defaults in Edit and transparent node
+defaults in Fusion. Input/Text/mask defaults and typed-port rules are unchanged.
+
+`FunctionPalette::setContext` synchronizes workspace/target availability;
+`setAddHandler` installs a synchronous bool-returning edit callback. MainWindow
+routes Fusion to `addCatalogNode` and Edit visual filters to
+`addEffectToSelectedClip`, whose bool reports the existing command result.
+The palette closes only on successful activation or accepted drop. Refused
+activation and canceled/rejected drops keep it open; nested activation is
+blocked. Cancel, Escape, outside clicks, title close, shortcut toggling and drag
+deactivation protection retain their existing lifecycle. Creation uses normal
+history/dirty-state updates; technical errors retain existing diagnostic
+boundaries and normal refusals do not log errors.
 
 ## Background Generator
 

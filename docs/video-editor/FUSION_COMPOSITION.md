@@ -67,7 +67,7 @@ past EOF are transparent. Clip/node curves remain clip-local and are sliced
 without restarting the sampled animation. Duplication copies the offset and
 graph by value, so later edits are independent.
 
-## Creating nodes from Effects
+## Creating nodes from Effects and Functions
 
 The Node Editor toolbar contains Grid settings. Use the Effects dock to create
 nodes: Video lists the four filters; Video > Generators lists Background; Text
@@ -83,6 +83,11 @@ and is not an addable catalog entry. Each creation is one Undo/Redo operation.
 Edit-only timeline tools are hidden in Fusion; Fusion-only nodes are hidden in
 Edit, including their favorites, without deleting saved favorites. Background
 from this Fusion catalog starts transparent; the Edit generator starts white.
+Functions (Shift+Space) searches the same workspace catalog. In Fusion, Add,
+Enter and double click create a disconnected node through the same graph edit;
+dragging chooses its position. In Edit, Functions applies clip filters and
+inserts generators/Text/transitions only by dragging. It closes on success and
+stays open after a refused action or canceled/rejected drop.
 See [the catalog contract](architecture/EFFECTS.md#workspace-catalog).
 
 ## Persistence and boundaries

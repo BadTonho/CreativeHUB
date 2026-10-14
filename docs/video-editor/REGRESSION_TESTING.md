@@ -1,5 +1,41 @@
 # Regression Testing
 
+## Functions workspace catalog
+
+| Behavior | Automated coverage |
+| --- | --- |
+| Complete catalog, workspace/query updates, unchanged Shift+Space lifecycle, per-item Add/drag rules, actual MIME, Add/Enter/double click, failure/cancel/success dismissal and Render unavailability | `tests/settings/shortcut_manager_test.cpp` (`creative-suite-main-editor-shortcut-manager`) |
+| Fusion activation creates graph nodes rather than clip effects; Text/mask selection; Edit filters; Functions Background MIME reaching graph/Timeline with transparent/white defaults; document dirty state and Undo/Redo | `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`) |
+| Selected clip filter reports success/failure without history mutation on refusal | `tests/ui/edit_workspace_controller_test.cpp` (`creative-suite-main-editor-edit-workspace-controller`) |
+
+Registrations: [settings/Functions](../../apps/video-editor/tests/settings/CMakeLists.txt),
+[application](../../apps/video-editor/tests/application/CMakeLists.txt) and
+[UI](../../apps/video-editor/tests/ui/CMakeLists.txt). Existing Effects, Fusion
+workspace, Timeline widget, composition, Background and Adjustment regressions
+protect the shared catalog and destinations. **Automated coverage present; native
+Windows interaction and macOS/Linux graphical acceptance pending.**
+
+Windows Debug verification (2026-10-14): all 10 affected CTest entries passed,
+including the final MainWindow and shortcut/Functions reruns. Video Editor and
+required test targets compiled successfully. The canonical executable was
+verified at `build/apps/video-editor/Debug/creative-suite-video-editor.exe`,
+modified 2026-10-14 15:47:41 UTC. CSP remains v29; application version metadata,
+Hub and other application executables are unchanged. Native graphical/platform
+acceptance remains pending as described below.
+
+Native manual check: open Functions with Shift+Space in Edit, search every
+generator/Text/transition, confirm the drag hint and disabled Add, and drag to a
+free compatible track/cut. Refuse a collision and confirm the picker stays open;
+accept a drop and confirm it closes. Verify Gain is unavailable. In Fusion,
+search and add every core/generator/mask/effect node using Add, Enter from search
+and list, double click and drag. Confirm Inspector selection, image-cable filter
+insertion, mask-cable refusal, correct Background defaults and one-step graph
+Undo/Redo without changing the clip effect stack. Clear selection and verify
+search remains usable while Fusion Add/drag are disabled. Check query filtering
+after workspace changes, Cancel/Escape/outside clicks, successful versus refused
+actions, and unchanged normal Space playback. No schema migration is involved.
+
+
 ## Workspace Effects catalog
 
 | Behavior | Automated coverage |
@@ -471,7 +507,7 @@ hardware and drivers. No percentage target is set from this measurement.
 | Render queue model | Default-off per-job GPU settings and independent snapshots/tooltips; runtime container/encoder compatibility filtering; stable job IDs and status/progress/error roles; project-document snapshot isolation; append, remove, and reorder behavior; retry reset; structure locking during execution; invalid operation rejection; and a new session starting with an empty queue |
 | Offline Render export | CPU default and per-job experimental GPU composition at configured output dimensions, independent of Playback Preview Quality; persisted Timeline-to-source mapping followed by Timeline-to-output FPS conversion, including a 24 fps Timeline at 60 fps output with a trimmed 30 fps video source; moving outgoing and incoming Cross Dissolve frames with the incoming clip continuing from local frame D; embedded video audio hard-cut at a visual transition; independent audio crossfade matching the Preview mixer with gain, mute, and envelope; black gaps and black frames through an independent audio tail; text clips and transform keyframes; output file reopen and stream validation; embedded and independent audio mixing with clip/track gain and mute; linked video audio companion export at the same RMS as embedded-only playback to catch double mixing; mixed-source audio-disabled output; monotonic progress; cancellation and failure preserving an existing destination and cleaning temporary files; ordered queue continuation after failure; cancellation leaving later jobs unstarted; and no change to the project snapshot. The current Windows development Release encoder, muxer, and image-reader inventory is documented in [MEDIA_CAPABILITIES_WINDOWS_RELEASE.md](MEDIA_CAPABILITIES_WINDOWS_RELEASE.md); package export compatibility and licensing checks remain release gates. |
 | Edit workspace controller | Shared-session clip selection and playhead state; typed playback, media-drop, and seek requests; track creation, renaming, reordering, and removal; media and text insertion, automatic Audio N track creation/reuse and Undo/Redo; clip movement, nudge, split, trim, delete, and clear; Audio Crossfade add/update/remove commands with ripple and Undo/Redo; Inspector transition type and duration commands; command-result, committed-edit, and history signals; rejected and no-op edits; occupied positions; offline or unregistered media; and unchanged project state for rejected commands |
-| Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, non-modal floating visual-filter picker, search/list/Add/Cancel controls, copy-only drag and shared effect MIME for the four visual filters, disabled Add without a compatible selection, applying through Add and Enter, remaining open during drag deactivation, staying open after a canceled/rejected drag, closing after an accepted node drop, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
+| Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, non-modal floating workspace catalog, search/list/Add/Cancel controls, per-item activation/drag rules and shared Effects MIME, disabled Add without a compatible selection, applying through Add and Enter, remaining open during drag deactivation, staying open after a canceled/rejected drag, closing after an accepted node drop, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
 | Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, audio/video drop target compatibility and same-Audio-track overlap rejection, linked Audio context-menu action and stable clip-ID request, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade and Volume tools, volume-point insertion and drag values, mutually exclusive tools, non-audio clip exclusion, edge-hover resize cursor and reset behavior, live left/right edge extension previews and trim-on-release, distinct rolling-center and one-sided shared-cut handles while preserving junction selection on click, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment in Together mode and pointer-targeted independent mode, equal-delta behavior, per-group 30-180-pixel limits and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
 | System memory details | Offscreen non-modal dialog, System Memory and Video Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
@@ -882,11 +918,14 @@ in the running Video Editor after UI or integration changes:
   must update dirty state and support Undo/Redo;
 - Functions window: press Shift + Space with focus in the Timeline, Media
   Browser, and Preview, in both Edit and Fusion, and confirm the non-modal
-  `Functions` filter picker opens centered over the editor and receives focus.
+  `Functions` workspace catalog opens centered over the editor and receives focus.
   Search for each visual filter and confirm the list updates. With no compatible
   selected clip, confirm search stays available and Add is disabled. Select a
   video or image clip, reopen Functions, and confirm Add becomes available;
-  apply one filter with Add and another with Enter. Confirm Cancel closes the
+  in Edit apply one filter with Add and another with Enter; in Fusion verify
+  Add/Enter/double click create graph nodes. Verify Edit generators/Text/transitions
+  show their drag-only hint and remain available for dragging without selection.
+  Confirm Cancel closes the
   picker without editing, while outside clicks still reach their target and
   close Functions. Verify Escape, the title-bar close button, and Shift + Space
   while focused all close it. Space alone still controls playback. Opening,

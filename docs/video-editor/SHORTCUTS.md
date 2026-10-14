@@ -29,7 +29,7 @@ It must change in the same commit as any shortcut change.
 | Alt + 2 | Switch to Fusion | All workspaces |
 | Alt + 3 | Switch to Render | All workspaces |
 | Space | Play or pause the selected timeline media | Edit and Fusion |
-| Shift + Space | Open or close the Functions filter picker | Edit and Fusion |
+| Shift + Space | Open or close the workspace-aware Functions catalog | Edit and Fusion |
 | Left Arrow | Previous frame, crossing a clip boundary when applicable | Edit and Fusion |
 | Right Arrow | Next frame, crossing a clip boundary when applicable | Edit and Fusion |
 | Ctrl + Left | Nudge the active clip one frame left when valid | Edit |
@@ -62,9 +62,14 @@ remain available in Render.
 In the Selection tool, Ctrl + click adds/removes clips for Paste Attributes;
 normal click returns to a single selected clip.
 
-The Functions filter picker searches visual effects. Press Enter or choose Add
-to apply the selected filter to a selected video or image clip; with no
-compatible selection, browsing remains available and Add is disabled.
+Functions searches the Effects catalog for the current workspace. Enter in the
+search/list, Add or double click creates a node in Fusion or applies a visual
+filter to the selected compatible clip in Edit. Edit generators, Text and
+transitions are drag-only; Add stays disabled and shows a drag instruction.
+Gain remains unavailable. Search stays usable without selection; Fusion also
+disables drag without a compatible clip. Only a successful action/drop closes
+the palette. The Shift+Space binding and existing Undo/Redo shortcuts are
+unchanged. See [Functions](architecture/EFFECTS.md#functions).
 
 `Edit > Copy Attributes` stores the primary selected clip's editable attributes
 in memory until another clip is copied or the editor closes. In the Selection

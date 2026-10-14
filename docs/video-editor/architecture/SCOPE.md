@@ -121,8 +121,9 @@ canvas as effect nodes; each reuses the existing parameter values and enabled
 state. Dropping onto a cable inserts the effect into the connection, while
 dropping onto empty canvas adds a disconnected node. The Functions picker stays
 open during a drag, closes after an accepted node drop, and remains open after
-a canceled or rejected drop; its Add and Enter actions continue to apply the
-effect to the Timeline stack. Merge combines its background and foreground with
+a canceled or rejected drop. Its workspace-aware Add/Enter/double-click actions
+create graph nodes in Fusion and apply clip filters in Edit. Edit generators,
+Text and transitions are drag-only, and Gain remains unavailable. Merge combines its background and foreground with
 straight-alpha source-over. The graph output replaces the clip image before
 its existing Inspector effect stack and Timeline transform/keyframes.
 

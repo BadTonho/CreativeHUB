@@ -570,14 +570,19 @@ void MainWindow::createWorkspace() {
         [this](ui::WorkspacePageId page) { handleWorkspacePageChanged(page); });
 
     function_palette_ = new ui::FunctionPalette(this, *shortcut_manager_);
-    connect(function_palette_, &ui::FunctionPalette::effectAddRequested,
-            edit_workspace_->controller(),
-            &ui::EditWorkspaceController::addEffectToSelectedClip);
+    function_palette_->setAddHandler([this](const QString& id) {
+        if (!workspace_host_) return false;
+        if (workspace_host_->currentPage() == ui::WorkspacePageId::Fusion)
+            return fusion_workspace_ && fusion_workspace_->addCatalogNode(id);
+        if (workspace_host_->currentPage() == ui::WorkspacePageId::Edit &&
+            effects::actionFor(id, effects::Workspace::Edit) == effects::Action::VisualEffect)
+            return edit_workspace_->controller()->addEffectToSelectedClip(id);
+        return false;
+    });
     connect(edit_workspace_->controller(),
             &ui::EditWorkspaceController::effectTargetAvailabilityChanged,
-            function_palette_, &ui::FunctionPalette::setEffectTargetAvailable);
-    function_palette_->setEffectTargetAvailable(
-        edit_workspace_->controller()->selectedClipSupportsEffects());
+            this, [this](bool) { refreshEffectsContext(); });
+    refreshEffectsContext();
 
     setWorkspacePage(ui::WorkspacePageId::Edit);
 }

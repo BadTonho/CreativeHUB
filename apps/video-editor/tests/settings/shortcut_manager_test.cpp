@@ -11,6 +11,9 @@
 #include <QKeySequence>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QLabel>
+#include <QAbstractItemModel>
+#include <memory>
 #include <QMetaObject>
 #include <QMimeData>
 #include <QMainWindow>
@@ -105,7 +108,7 @@ void verifyFunctionPalette(QSettings& settings) {
     auto* functions_add = palette.dialog()->findChild<QPushButton*>(
         QStringLiteral("functionsAddButton"));
     require(palette.dialog()->layout() != nullptr && functions_search != nullptr &&
-                functions_list != nullptr && functions_list->count() == 4 &&
+                functions_list != nullptr && functions_list->count() == effects::definitions().size() &&
                 functions_add != nullptr,
             "Functions must provide effect search, list, and Add controls.");
     require(functions_list->dragEnabled() &&
@@ -121,7 +124,7 @@ void verifyFunctionPalette(QSettings& settings) {
         require(item->data(Qt::UserRole).toString() == fusion_effect_ids[index] &&
                     item->flags().testFlag(Qt::ItemIsDragEnabled),
                 "Functions must expose the four draggable Fusion visual effects.");
-        auto* mime = ui::createEffectIdMimeData(fusion_effect_ids[index]);
+        auto* mime = functions_list->model()->mimeData({functions_list->indexFromItem(item)});
         require(mime->hasFormat(ui::kEffectIdMimeType) &&
                     mime->data(ui::kEffectIdMimeType) ==
                         fusion_effect_ids[index].toUtf8(),
@@ -131,7 +134,7 @@ void verifyFunctionPalette(QSettings& settings) {
     require(!functions_add->isEnabled(),
             "Add must be disabled without a compatible selected clip.");
     functions_search->setText(QStringLiteral("contrast"));
-    require(functions_list->count() == 4 &&
+    require(functions_list->count() == effects::definitions().size() &&
                 functions_list->item(0)->isHidden() &&
                 functions_list->item(1)->isHidden() &&
                 !functions_list->item(2)->isHidden() &&
@@ -160,13 +163,11 @@ void verifyFunctionPalette(QSettings& settings) {
 
     QString added_effect_id;
     int added_effect_requests = 0;
-    QObject::connect(
-        &palette,
-        &ui::FunctionPalette::effectAddRequested,
-        [&added_effect_id, &added_effect_requests](const QString& effect_id) {
-            added_effect_id = effect_id;
-            ++added_effect_requests;
-        });
+    palette.setAddHandler([&](const QString& effect_id) {
+        added_effect_id = effect_id;
+        ++added_effect_requests;
+        return true;
+    });
 
     main_window.show();
     main_window.raise();
@@ -357,6 +358,114 @@ void verifyFunctionPalette(QSettings& settings) {
             "Space must continue to trigger the regular playback action.");
 
     settings.clear();
+}
+
+void verifyFunctionCatalog() {
+    QMainWindow owner;
+    settings::ShortcutManager shortcuts;
+    ui::FunctionPalette palette(&owner, shortcuts);
+    int additions = 0;
+    QString added;
+    bool accept = true;
+    palette.setAddHandler([&](const QString& id) {
+        ++additions;
+        added = id;
+        return accept;
+    });
+    auto* list = palette.dialog()->findChild<QListWidget*>("functionsEffectList");
+    auto* search = palette.dialog()->findChild<QLineEdit*>("functionsEffectSearch");
+    auto* add = palette.dialog()->findChild<QPushButton*>("functionsAddButton");
+    auto* hint = palette.dialog()->findChild<QLabel*>("functionsEntryHint");
+    const auto visibleCount = [&] {
+        int count = 0;
+        for (int i = 0; i < list->count(); ++i) if (!list->item(i)->isHidden()) ++count;
+        return count;
+    };
+    const auto findId = [&](const QString& id) -> QListWidgetItem* {
+        for (int i = 0; i < list->count(); ++i)
+            if (list->item(i)->data(Qt::UserRole).toString() == id) return list->item(i);
+        throw std::runtime_error("A Functions catalog entry is missing.");
+    };
+    const auto hasMime = [&](QListWidgetItem* item) {
+        std::unique_ptr<QMimeData> mime(list->model()->mimeData({list->indexFromItem(item)}));
+        return mime && mime->data(ui::kEffectIdMimeType) == item->data(Qt::UserRole).toString().toUtf8();
+    };
+    require(visibleCount() == 11, "Functions must initially show the complete Edit catalog.");
+    palette.setContext(effects::Workspace::Edit, true);
+    for (const auto* id : {"video.background", "video.adjustment_clip", "video.fusion_composition", "text.text",
+                           "transitions.cross_dissolve", "transitions.fade_to_black"}) {
+        auto* item = findId(id);
+        list->setCurrentItem(item);
+        require(!add->isEnabled() && hint->text() == "Drag this item to the timeline." && hasMime(item),
+                "Edit generators/Text/transitions must be drag-only with an explanatory hint.");
+        add->click(); list->itemDoubleClicked(item); sendKey(search, Qt::Key_Return);
+        require(additions == 0, "Drag-only entries must not activate through Add/Enter/double click.");
+    }
+    list->setCurrentItem(findId("audio.gain"));
+    require(!add->isEnabled() && !hasMime(list->currentItem()), "Gain must remain unavailable.");
+    palette.setContext(effects::Workspace::Edit, false);
+    list->setCurrentItem(findId("video.background"));
+    require(hasMime(list->currentItem()), "Edit generators must remain draggable without a selected clip.");
+    require(!hasMime(findId("fusion.rectangle_mask")), "Edit must reject stale Fusion-only MIME.");
+    palette.setContext(effects::Workspace::Fusion, false);
+    require(visibleCount() == 12 && search->isEnabled(), "Fusion must show its catalog without requiring a selection to search.");
+    for (int i = 0; i < list->count(); ++i) if (!list->item(i)->isHidden()) {
+        list->setCurrentRow(i);
+        require(!add->isEnabled() && !hasMime(list->item(i)), "Unselected Fusion must refuse creation and drag.");
+    }
+    palette.setContext(effects::Workspace::Fusion, true);
+    for (int i = 0; i < list->count(); ++i) if (!list->item(i)->isHidden()) {
+        list->setCurrentRow(i);
+        require(add->isEnabled() && hasMime(list->item(i)), "Every available Fusion entry must support Add and drag.");
+    }
+    require(!hasMime(findId("video.adjustment_clip")), "Fusion must reject stale Edit-only MIME.");
+    search->setText("MASK");
+    require(visibleCount() == 2, "Functions search must include both masks, ignoring case.");
+    palette.setContext(effects::Workspace::Edit, true);
+    require(search->text() == "MASK" && visibleCount() == 0 && !add->isEnabled(),
+            "Context updates must retain the query and refuse unavailable matches.");
+    palette.setContext(effects::Workspace::Fusion, true);
+    require(visibleCount() == 2 && add->isEnabled(), "Switching back must restore matching Fusion entries.");
+    search->setText("no matching entry");
+    require(visibleCount() == 0 && !add->isEnabled(), "No search results must disable Add.");
+    search->setText("Ellipse Mask");
+    owner.show(); owner.activateWindow(); palette.toggle();
+    accept = false;
+    QTest::mouseClick(add, Qt::LeftButton);
+    processDeferredDeletes();
+    require(palette.dialog() && palette.dialog()->isVisible() && additions == 1 && added == "fusion.ellipse_mask",
+            "An unsuccessful add must keep Functions open.");
+    accept = true;
+    const auto point = list->visualItemRect(list->currentItem()).center();
+    QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+    QTest::mouseDClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+    processDeferredDeletes();
+    require(!palette.dialog() && additions == 2, "Successful double click must close Functions.");
+    palette.setContext(effects::Workspace::Fusion, true); palette.toggle();
+    list = palette.dialog()->findChild<QListWidget*>("functionsEffectList");
+    search = palette.dialog()->findChild<QLineEdit*>("functionsEffectSearch");
+    search->setText("Background"); sendKey(search, Qt::Key_Return);
+    processDeferredDeletes();
+    require(!palette.dialog() && additions == 3 && added == "video.background", "Fusion Enter must activate a generator node.");
+    palette.toggle();
+    list = palette.dialog()->findChild<QListWidget*>("functionsEffectList");
+    search = palette.dialog()->findChild<QLineEdit*>("functionsEffectSearch");
+    add = palette.dialog()->findChild<QPushButton*>("functionsAddButton");
+    search->setText("Background");
+    palette.setContext(effects::Workspace::Edit, true);
+    require(palette.dialog()->isVisible() && search->text() == "Background" && !add->isEnabled(),
+            "An open palette must immediately switch Background to its Edit drag-only action.");
+    palette.setContext(effects::Workspace::Fusion, true);
+    require(add->isEnabled(), "Switching an open palette back to Fusion must restore node creation.");
+    search->setText("Transform");
+    list->setFocus(); sendKey(list, Qt::Key_Return);
+    processDeferredDeletes();
+    require(!palette.dialog() && additions == 4 && added == "fusion.transform",
+            "Enter from the Functions list must create the selected node and close on success.");
+    palette.toggle(); palette.setContext(effects::Workspace::None, false);
+    processDeferredDeletes();
+    require(!palette.dialog(), "Entering Render must close Functions.");
+    palette.toggle(); require(!palette.dialog(), "Functions must remain unavailable in Render.");
 }
 
 } // namespace
@@ -643,6 +752,7 @@ int main(int argc, char* argv[]) {
                 "Conflicting stored preferences must restore a valid default and persist the repair.");
 
         verifyFunctionPalette(settings);
+        verifyFunctionCatalog();
         settings.clear();
         return 0;
     } catch (const std::exception& error) {

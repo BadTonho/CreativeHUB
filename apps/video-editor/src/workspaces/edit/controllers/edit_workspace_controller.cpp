@@ -898,18 +898,18 @@ bool EditWorkspaceController::addEffectToClip(
     }
 }
 
-void EditWorkspaceController::addEffectToSelectedClip(const QString& effect_id) {
+bool EditWorkspaceController::addEffectToSelectedClip(const QString& effect_id) {
     if (!selectedClipSupportsEffects()) {
         emit statusMessageRequested(
             QStringLiteral("Select a video, image, or adjustment clip to add an effect."));
-        return;
+        return false;
     }
     const auto location = selectedTimelineClipLocation();
-    if (!location.has_value()) return;
-    static_cast<void>(addEffectToClip(
+    if (!location.has_value()) return false;
+    return addEffectToClip(
         timeline_model_.tracks()[location->track_index]
             .clips[location->clip_index].clip_id,
-        effect_id));
+        effect_id);
 }
 
 void EditWorkspaceController::selectClipEffect(int index) {

@@ -1,7 +1,10 @@
 # Background Generator
 
 Drag **Effects > Video > Generators > Background** onto a free video-track range.
-The generator starts as opaque white for five seconds, rounded up to project
+Alternatively, search Background in Functions (Shift+Space) while in Edit and
+drag it onto the Timeline; Add/Enter/double click are disabled for this preset.
+In Fusion, Functions creates the transparent Background node through Add, Enter,
+double click or drag. This Edit preset starts as opaque white for five seconds, rounded up to project
 frames. It creates a source-free Fusion Composition named **Background**, with
 the existing **Background → Output** graph. Video includes its Generators
 subcategory; All also lists the generator. Right-click to Add to Favorites or

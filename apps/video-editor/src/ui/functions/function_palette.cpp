@@ -3,8 +3,6 @@
 #include "settings/shortcut_manager.h"
 #include "ui/media_browser/media_drag_mime.h"
 
-#include <creative_suite/effects/effects.h>
-
 #include <QAction>
 #include <QAbstractItemView>
 #include <QApplication>
@@ -13,18 +11,19 @@
 #include <QDrag>
 #include <QEvent>
 #include <QKeySequence>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMouseEvent>
 #include <QPoint>
 #include <QPushButton>
+#include <QScopedValueRollback>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <functional>
-#include <string_view>
 #include <utility>
 
 namespace ui {
@@ -45,15 +44,21 @@ public:
     }
 
     QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override {
-        if (items.size() != 1 || items.front() == nullptr) return nullptr;
+        if (items.size() != 1 || items.front() == nullptr || items.front()->isHidden()) return nullptr;
         const auto effect_id = items.front()->data(Qt::UserRole).toString();
-        const auto effect_bytes = effect_id.toUtf8();
-        const std::string_view effect_key(
-            effect_bytes.constData(), static_cast<std::size_t>(effect_bytes.size()));
-        if (creative_suite::effects::findDefinition(effect_key) == nullptr) {
-            return nullptr;
-        }
+        if (!canDrag(effect_id)) return nullptr;
         return createEffectIdMimeData(effect_id);
+    }
+
+    void setContext(effects::Workspace workspace, bool target_available) {
+        workspace_ = workspace;
+        target_available_ = target_available;
+        for (int index = 0; index < count(); ++index) {
+            auto* entry = item(index);
+            entry->setFlags(canDrag(entry->data(Qt::UserRole).toString())
+                ? entry->flags() | Qt::ItemIsDragEnabled
+                : entry->flags() & ~Qt::ItemIsDragEnabled);
+        }
     }
 
 protected:
@@ -72,7 +77,13 @@ protected:
     }
 
 private:
+    bool canDrag(const QString& id) const {
+        return effects::isDraggable(id, workspace_) &&
+            (workspace_ != effects::Workspace::Fusion || target_available_);
+    }
     DragStateHandler drag_state_handler_;
+    effects::Workspace workspace_ = effects::Workspace::Edit;
+    bool target_available_ = false;
 };
 
 }  // namespace
@@ -117,6 +128,7 @@ QAction* FunctionPalette::toggleAction() const noexcept {
 }
 
 void FunctionPalette::toggle() {
+    if (workspace_ == effects::Workspace::None) return;
     if (dialog_ != nullptr && dialog_->isVisible()) {
         closeDialog(true);
         return;
@@ -138,48 +150,97 @@ void FunctionPalette::toggle() {
 }
 
 void FunctionPalette::setEffectTargetAvailable(bool available) {
-    if (effect_target_available_ == available) return;
-    effect_target_available_ = available;
+    setContext(workspace_, available);
+}
+
+void FunctionPalette::setContext(effects::Workspace workspace, bool target_available) {
+    const bool changed = workspace_ != workspace;
+    workspace_ = workspace;
+    effect_target_available_ = target_available;
+    if (effect_list_ != nullptr) {
+        static_cast<FunctionEffectListWidget*>(effect_list_)->setContext(workspace, target_available);
+        if (changed) filterEffects(search_ == nullptr ? QString{} : search_->text());
+    }
     updateAddEnabled();
+    if (workspace == effects::Workspace::None && dialog_ && dialog_->isVisible()) closeDialog(false);
+}
+
+void FunctionPalette::setAddHandler(std::function<bool(const QString&)> handler) {
+    add_handler_ = std::move(handler);
+    updateAddEnabled();
+}
+
+bool FunctionPalette::canAddCurrentEffect() const {
+    if (adding_ || !add_handler_ || !effect_target_available_ || !effect_list_) return false;
+    const auto* item = effect_list_->currentItem();
+    if (item == nullptr || item->isHidden()) return false;
+    const auto id = item->data(Qt::UserRole).toString();
+    return workspace_ == effects::Workspace::Fusion
+        ? effects::isDraggable(id, workspace_)
+        : effects::actionFor(id, workspace_) == effects::Action::VisualEffect;
 }
 
 void FunctionPalette::updateAddEnabled() {
     if (add_button_ == nullptr || effect_list_ == nullptr) return;
-    add_button_->setEnabled(effect_target_available_ &&
-        effect_list_->currentItem() != nullptr &&
-        !effect_list_->currentItem()->isHidden());
+    add_button_->setEnabled(canAddCurrentEffect());
+    if (entry_hint_ == nullptr) return;
+    QString hint;
+    const auto* item = effect_list_->currentItem();
+    if (item != nullptr && !item->isHidden()) {
+        const auto id = item->data(Qt::UserRole).toString();
+        if (!effects::isDraggable(id, workspace_)) hint = "This item is not available.";
+        else if (workspace_ == effects::Workspace::Edit &&
+                 effects::actionFor(id, workspace_) != effects::Action::VisualEffect)
+            hint = "Drag this item to the timeline.";
+        else if (!effect_target_available_) hint = "Select a compatible clip to add this item.";
+    }
+    entry_hint_->setText(hint);
+    entry_hint_->setVisible(!hint.isEmpty());
 }
 
 void FunctionPalette::filterEffects(const QString& query) {
     if (effect_list_ == nullptr) return;
     QListWidgetItem* first_visible = nullptr;
+    auto* previous = effect_list_->currentItem();
     for (int index = 0; index < effect_list_->count(); ++index) {
         auto* item = effect_list_->item(index);
-        const bool visible = item->text().contains(query, Qt::CaseInsensitive);
+        const bool visible = effects::isAvailable(item->data(Qt::UserRole).toString(), workspace_) &&
+            item->text().contains(query, Qt::CaseInsensitive);
         item->setHidden(!visible);
         if (visible && first_visible == nullptr) first_visible = item;
     }
-    if (first_visible != nullptr) effect_list_->setCurrentItem(first_visible);
+    if (previous != nullptr && !previous->isHidden()) effect_list_->setCurrentItem(previous);
+    else if (first_visible != nullptr) effect_list_->setCurrentItem(first_visible);
     else effect_list_->setCurrentRow(-1);
     updateAddEnabled();
 }
 
 void FunctionPalette::addCurrentEffect() {
-    if (!effect_target_available_ || effect_list_ == nullptr ||
-        effect_list_->currentItem() == nullptr ||
-        effect_list_->currentItem()->isHidden()) return;
+    if (!canAddCurrentEffect()) return;
     const auto effect_id = effect_list_->currentItem()->data(Qt::UserRole).toString();
-    if (effect_id.isEmpty()) return;
-    emit effectAddRequested(effect_id);
-    closeDialog(true);
+    const QPointer<QDialog> active_dialog = dialog_;
+    bool accepted = false;
+    {
+        const QScopedValueRollback<bool> guard(adding_, true);
+        accepted = add_handler_(effect_id);
+    }
+    if (accepted && dialog_ == active_dialog) closeDialog(true);
+    else updateAddEnabled();
 }
 
 bool FunctionPalette::eventFilter(QObject* watched, QEvent* event) {
     if (dialog_ == nullptr || !dialog_->isVisible()) {
         return QObject::eventFilter(watched, event);
     }
-    if (effect_drag_in_progress_) {
+    if (effect_drag_in_progress_ || adding_) {
         return QObject::eventFilter(watched, event);
+    }
+    if (watched == effect_list_ && event->type() == QEvent::KeyPress) {
+        const auto* key = static_cast<QKeyEvent*>(event);
+        if (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) {
+            addCurrentEffect();
+            return true;
+        }
     }
 
     if (watched == dialog_ && event->type() == QEvent::WindowDeactivate) {
@@ -254,26 +315,26 @@ void FunctionPalette::createDialog() {
     layout->setSpacing(7);
     search_ = new QLineEdit(dialog_);
     search_->setObjectName(QStringLiteral("functionsEffectSearch"));
-    search_->setPlaceholderText(QStringLiteral("Search effects"));
+    search_->setPlaceholderText(QStringLiteral("Search effects, generators and nodes"));
     layout->addWidget(search_);
     effect_list_ = new FunctionEffectListWidget(dialog_,
         [this](bool in_progress, bool drop_accepted) {
             onEffectDragStateChanged(in_progress, drop_accepted);
         });
     effect_list_->setObjectName(QStringLiteral("functionsEffectList"));
-    for (const auto& effect : creative_suite::effects::builtInEffects()) {
-        auto* item = new QListWidgetItem(
-            QString::fromUtf8(effect.name.data(),
-                              static_cast<qsizetype>(effect.name.size())),
-            effect_list_);
-        item->setData(Qt::UserRole,
-            QString::fromUtf8(effect.id.data(),
-                              static_cast<qsizetype>(effect.id.size())));
+    for (const auto& effect : effects::definitions()) {
+        auto* item = new QListWidgetItem(effect.name, effect_list_);
+        item->setData(Qt::UserRole, effect.id);
     }
     layout->addWidget(effect_list_, 1);
+    entry_hint_ = new QLabel(dialog_);
+    entry_hint_->setObjectName("functionsEntryHint");
+    entry_hint_->setWordWrap(true);
+    layout->addWidget(entry_hint_);
     auto* buttons = new QHBoxLayout;
     buttons->addStretch();
     auto* cancel_button = new QPushButton(QStringLiteral("Cancel"), dialog_);
+    cancel_button->setAutoDefault(false);
     cancel_button->setObjectName(QStringLiteral("functionsCancelButton"));
     add_button_ = new QPushButton(QStringLiteral("Add"), dialog_);
     add_button_->setObjectName(QStringLiteral("functionsAddButton"));
@@ -292,8 +353,8 @@ void FunctionPalette::createDialog() {
             this, &FunctionPalette::addCurrentEffect);
     connect(cancel_button, &QPushButton::clicked,
             this, [this]() { closeDialog(true); });
-    if (effect_list_->count() > 0) effect_list_->setCurrentRow(0);
-    updateAddEnabled();
+    static_cast<FunctionEffectListWidget*>(effect_list_)->setContext(workspace_, effect_target_available_);
+    filterEffects(QString{});
     connect(
         dialog_,
         &QDialog::rejected,
@@ -304,6 +365,7 @@ void FunctionPalette::createDialog() {
             search_ = nullptr;
             effect_list_ = nullptr;
             add_button_ = nullptr;
+            entry_hint_ = nullptr;
             if (!suppress_owner_focus_restore_) restoreOwnerFocus();
             suppress_owner_focus_restore_ = false;
         });

@@ -2,6 +2,8 @@
 #include "main_window/main_window_support.h"
 
 #include "ui/preview/preview_widget.h"
+#include "ui/functions/function_palette.h"
+#include "ui/media_browser/media_drag_mime.h"
 #include "ui/effects/effects_list_widget.h"
 #include "ui/effects/effects_toolbox_widget.h"
 #include "ui/effects/effects_favorites_widget.h"
@@ -3045,6 +3047,108 @@ public:
                     controller->undo().changed() && controller->undo().changed() &&
                     composition_window.timeline_model_.clipCount(0) == 1 && !composition_window.project_dirty_,
                     "Fusion Composition Undo must restore the saved document and dirty state.");
+        }
+
+        {
+            MainWindow functions_window;
+            auto* controller = functions_window.edit_workspace_->controller();
+            controller->setPlaybackPresentation(false, false, true);
+            const auto track = functions_window.timeline_model_.tracks()[0].track_id;
+            controller->handleTimelineEffectDrop("video.fusion_composition", track, 0);
+            require(functions_window.saveProjectTo(directory / "functions-ui.csp", "save") && !functions_window.project_dirty_,
+                    "Functions test could not establish a clean composition baseline.");
+            auto* palette = functions_window.function_palette_;
+            const auto openQuery = [&](const QString& query) -> QDialog* {
+                palette->toggle();
+                auto* dialog = palette->dialog();
+                require(dialog && dialog->isVisible(), "Functions did not open.");
+                dialog->findChild<QLineEdit*>("functionsEffectSearch")->setText(query);
+                return dialog;
+            };
+            const auto graphSize = [&] { return functions_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.size(); };
+            setWorkspacePageImmediately(functions_window, ui::WorkspacePageId::Fusion);
+            auto* dialog = openQuery("Grayscale");
+            auto* add = dialog->findChild<QPushButton*>("functionsAddButton");
+            require(add && add->isEnabled(), "Fusion filter creation should be available in Functions.");
+            add->click();
+            require(!palette->dialog() && graphSize() == 3 && functions_window.project_dirty_ &&
+                    functions_window.timeline_model_.tracks()[0].clips[0].effects.empty() &&
+                    functions_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.back().type == fusion::nodes::NodeType::Effect,
+                    "Fusion Functions Add must create a graph node without applying an Edit clip effect.");
+            require(controller->undo().changed() && graphSize() == 2 && !functions_window.project_dirty_,
+                    "Functions node Undo must restore the clean saved graph.");
+            require(controller->redo().changed() && graphSize() == 3 && functions_window.project_dirty_,
+                    "Functions node Redo must restore the edited graph.");
+            require(controller->undo().changed(), "Functions node reset failed.");
+            dialog = openQuery("Text");
+            sendShortcutKey(dialog->findChild<QLineEdit*>("functionsEffectSearch"), Qt::Key_Return, Qt::NoModifier);
+            require(!palette->dialog() && graphSize() == 3 &&
+                    functions_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.back().type == fusion::nodes::NodeType::Text,
+                    "Fusion Functions Enter must create a Text node.");
+            require(controller->undo().changed(), "Functions Text reset failed.");
+            dialog = openQuery("Rectangle Mask");
+            auto* list = dialog->findChild<QListWidget*>("functionsEffectList");
+            list->itemDoubleClicked(list->currentItem());
+            require(!palette->dialog() && graphSize() == 3 &&
+                    functions_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.back().type == fusion::nodes::NodeType::RectangleMask &&
+                    functions_window.fusion_workspace_->selectedNodeId() == functions_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.back().id,
+                    "Fusion Functions double click must create and select a mask node.");
+            require(controller->undo().changed(), "Functions mask reset failed.");
+            dialog = openQuery("Background");
+            list = dialog->findChild<QListWidget*>("functionsEffectList");
+            std::unique_ptr<QMimeData> fusion_mime(list->model()->mimeData({list->indexFromItem(list->currentItem())}));
+            require(fusion_mime && fusion_mime->data(ui::kEffectIdMimeType) == "video.background", "Functions generator MIME is incorrect.");
+            auto* canvas = functions_window.fusion_workspace_->nodeEditorPanel()->findChild<fusion::nodes::NodeCanvas*>();
+            const QPoint point(150, 200);
+            require(QMetaObject::invokeMethod(palette, "onEffectDragStateChanged", Qt::DirectConnection,
+                    Q_ARG(bool, true), Q_ARG(bool, false)), "Functions drag could not start.");
+            QDragEnterEvent fusion_enter(point, Qt::CopyAction, fusion_mime.get(), Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(canvas->viewport(), &fusion_enter);
+            QDropEvent fusion_drop(QPointF(point), Qt::CopyAction, fusion_mime.get(), Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(canvas->viewport(), &fusion_drop);
+            require(fusion_drop.isAccepted() && graphSize() == 3 &&
+                    functions_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.back().background_color[3] == 0,
+                    "Functions Background drop must create the transparent Fusion node.");
+            require(QMetaObject::invokeMethod(palette, "onEffectDragStateChanged", Qt::DirectConnection,
+                    Q_ARG(bool, false), Q_ARG(bool, true)) && !palette->dialog(), "Accepted Fusion drop must close Functions.");
+            require(controller->undo().changed() && !functions_window.project_dirty_, "Functions Background reset failed.");
+            setWorkspacePageImmediately(functions_window, ui::WorkspacePageId::Edit);
+            dialog = openQuery("Brightness");
+            dialog->findChild<QPushButton*>("functionsAddButton")->click();
+            require(!palette->dialog() && graphSize() == 2 &&
+                    functions_window.timeline_model_.tracks()[0].clips[0].effects.size() == 1,
+                    "Edit Functions Add must apply a clip filter without editing its graph.");
+            require(controller->undo().changed() && !functions_window.project_dirty_, "Functions Edit filter Undo failed.");
+            dialog = openQuery("Background");
+            list = dialog->findChild<QListWidget*>("functionsEffectList");
+            add = dialog->findChild<QPushButton*>("functionsAddButton");
+            require(!add->isEnabled() && dialog->findChild<QLabel*>("functionsEntryHint")->text() == "Drag this item to the timeline.",
+                    "Edit Functions generator must explain its drag-only behavior.");
+            list->itemDoubleClicked(list->currentItem());
+            sendShortcutKey(dialog->findChild<QLineEdit*>("functionsEffectSearch"), Qt::Key_Return, Qt::NoModifier);
+            require(palette->dialog() && functions_window.timeline_model_.clipCount(0) == 1 && !functions_window.project_dirty_,
+                    "Edit generator Add/Enter/double click must not create a clip or close Functions.");
+            std::unique_ptr<QMimeData> edit_mime(list->model()->mimeData({list->indexFromItem(list->currentItem())}));
+            auto* timeline = functions_window.edit_workspace_->ui().timeline;
+            timeline->resize(1000, 350); timeline->setZoomFactor(3);
+            require(functions_window.saveProjectTo(directory / "functions-ui.csp", "save") && !functions_window.project_dirty_,
+                    "Functions drag test could not save its updated Timeline zoom baseline.");
+            const QPointF position(timeline->contentXForFrame(200), timeline->trackBounds(0).center().y());
+            require(QMetaObject::invokeMethod(palette, "onEffectDragStateChanged", Qt::DirectConnection,
+                    Q_ARG(bool, true), Q_ARG(bool, false)), "Functions timeline drag could not start.");
+            QDragEnterEvent enter(position.toPoint(), Qt::CopyAction, edit_mime.get(), Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(timeline, &enter);
+            QDragMoveEvent move(position.toPoint(), Qt::CopyAction, edit_mime.get(), Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(timeline, &move);
+            QDropEvent drop(position, Qt::CopyAction, edit_mime.get(), Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(timeline, &drop);
+            require(drop.isAccepted() && functions_window.timeline_model_.clipCount(0) == 2 && functions_window.project_dirty_ &&
+                    functions_window.timeline_model_.tracks()[0].clips[1].display_name == "Background" &&
+                    functions_window.timeline_model_.tracks()[0].clips[1].node_graph->nodes[0].background_color[3] == 255,
+                    "Functions Edit Background drag must create the opaque-white clip preset.");
+            require(QMetaObject::invokeMethod(palette, "onEffectDragStateChanged", Qt::DirectConnection,
+                    Q_ARG(bool, false), Q_ARG(bool, true)) && !palette->dialog(), "Accepted timeline drop must close Functions.");
+            require(controller->undo().changed() && !functions_window.project_dirty_, "Functions generator Undo failed.");
         }
 
         {

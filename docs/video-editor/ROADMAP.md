@@ -1,5 +1,10 @@
 # Video Editor Roadmap
 
+## Workspace-aware Functions
+
+Implemented for pending 0.1.1: Functions shares the Effects catalog, creates graph nodes in Fusion through Add/Enter/double click, applies filters in Edit, and offers Edit generators/Text/transitions by drag only. Successful actions/drop close it; refusal and canceled drops preserve it. See [the contract](architecture/EFFECTS.md#functions).
+
+
 ## Workspace Effects catalog
 
 Implemented for pending 0.1.1: Effects is the workspace-filtered node creation catalog, replacing the Add Node selector/button. Fusion supports drag and double-click creation from the list and Favorites; exclusive tools stay in their workspace. See [the catalog contract](architecture/EFFECTS.md#workspace-catalog).

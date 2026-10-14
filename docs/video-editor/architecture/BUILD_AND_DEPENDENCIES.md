@@ -1,5 +1,14 @@
 # Build and Dependencies
 
+## Functions catalog
+
+The standalone shortcut-manager/Functions regression target now compiles the
+existing effects catalog and links the existing diagnostics library. Functions
+adds no package or rendering dependency. Build Video Editor Debug and affected
+shortcut, application, Edit controller, Effects and Fusion/Timeline tests; no
+Hub or other application executable is needed.
+
+
 ## Workspace Effects catalog
 
 The standalone timeline-widget regression target now compiles the existing

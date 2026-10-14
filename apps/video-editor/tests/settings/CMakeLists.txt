@@ -73,6 +73,7 @@ add_executable(creative-suite-main-editor-shortcut-manager-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/effects/effects_catalog.cpp
 )
 
 target_include_directories(creative-suite-main-editor-shortcut-manager-tests PRIVATE
@@ -83,6 +84,7 @@ target_link_libraries(creative-suite-main-editor-shortcut-manager-tests PRIVATE
     Qt6::Widgets
     Qt6::Test
     creative-suite::shortcuts
+    creative-suite::diagnostics
 )
 
 target_compile_features(creative-suite-main-editor-shortcut-manager-tests PRIVATE cxx_std_20)

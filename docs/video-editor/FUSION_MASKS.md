@@ -1,5 +1,9 @@
 # Fusion Masks
 
+Functions (Shift+Space) also lists both masks while in Fusion. Search their names
+and use Add, Enter, double click or drag to create a node. A compatible selected
+clip is required; masks are hidden from Functions in Edit.
+
 Rectangle Mask and Ellipse Mask are available in Effects > Fusion > Masks while in Fusion for video,
 image and independent Fusion Composition graphs. Edit geometry in the Inspector
 and press Apply Settings. The Viewer has no geometry handles. VIEW on a mask

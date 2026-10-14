@@ -381,22 +381,22 @@ separate settings groups and app-owned dialogs. Their dialogs apply shortcut
 batches only after acceptance; cancelling preserves the active bindings.
 
 `Shift + Space` opens and closes the non-modal floating `Functions` window.
-The 420x360 filter picker is centered over the Video Editor. It offers search
-across the four visual filters and an `Add`/`Cancel` action row. With no
-selected video, image or adjustment clip, search remains enabled and `Add` is disabled.
-`Add` or Enter applies the selected filter and closes the picker; Cancel closes
-it without editing the Timeline. Functions is an additional quick-access path
-and does not replace the Effects dock. Both Effects and Functions can drag
-Grayscale, Brightness, Contrast, or Saturation into the Fusion node canvas.
-Functions stays open during a drag, closes after a node is successfully added,
-and remains open after a canceled or rejected drop. A click outside it, loss of
-window activation, Escape, the title-bar close button, or Shift + Space closes
-and destroys it when no drag is active; the next shortcut press creates a fresh
-window. Outside clicks continue to the clicked control. The shortcut uses
-`WindowShortcut` context and remains available while the floating window is
-focused. It is registered in `ShortcutManager` and can be customized in
-`Settings > Shortcuts`. Opening, searching, or canceling does not change
-project or Timeline state.
+The resizable 420x360 palette is centered over the Video Editor and searches the
+same workspace-aware catalog as Effects. Add, Enter (search or list), and double
+click create a graph node in Fusion; in Edit they apply visual filters to the
+compatible selected clip. Edit generators, Text and transitions are drag-only,
+with Add disabled and `Drag this item to the timeline.` displayed. Gain remains
+unavailable. Search remains enabled without a selection; Fusion activation and
+drag require a compatible clip. Workspace updates refilter the current query.
+See [the Functions contract](EFFECTS.md#functions).
+
+Functions stays open during a drag, closes after a successful activation or
+accepted drop, and remains open after refusal/cancellation. Cancel, an outside
+click, loss of activation, Escape, the title-bar close button or Shift+Space
+closes it when no drag/add is active. Outside clicks continue to their target;
+opening, browsing and canceling do not edit the project. The next shortcut press
+creates a fresh window. The `WindowShortcut` binding remains available while
+Functions is focused and can be customized in Settings > Shortcuts.
 
 The `Help > System` action opens a modal diagnostic dialog showing the Video
 Editor version (`Beta 0.1.0`) and the full path of the running executable.
@@ -774,7 +774,7 @@ keyboard shortcut is introduced for text creation or editing.
 
 Video and image clips may carry an ordered stack of `Grayscale`, `Brightness`,
 `Contrast`, and `Saturation` filters. Both the Effects dock's drag gesture and
-Functions' `Add`/Enter action target compatible visual clips. Filters may be
+Functions' `Add`/Enter action in Edit target compatible visual clips. Filters may be
 repeated, and their stack order is editable in the Inspector. Each instance can
 be disabled without losing its position or parameters; Preview and export skip
 disabled instances in the same shared processor. Toggling, parameter edits,
@@ -889,7 +889,8 @@ Brightness, Contrast, or Saturation from either the Effects panel or the
 Functions window onto the canvas to add its node. Dropping onto a connection
 splits the cable and inserts the effect; dropping elsewhere creates a
 disconnected node. Its Inspector shows the effect's existing enabled state and
-parameter controls. The Functions window closes only after the canvas accepts
+parameter controls. Functions activation uses the active workspace: Add/Enter/double click create a
+disconnected node in Fusion. The Functions window closes only after the canvas accepts
 the new node. Audio effects, text, and transitions are not graph nodes. To
 connect nodes, drag an output port onto an input port; drag a connected input
 port or cable to empty canvas space to remove it. Releasing an output on

@@ -154,7 +154,12 @@ void run() {
             "Selecting a video clip did not enable visual filters.");
     media_drop_controller.handleTimelineEffectDrop(
         QStringLiteral("video.grayscale"), media_drop_track, 12);
-    media_drop_controller.addEffectToSelectedClip(QStringLiteral("video.brightness"));
+    require(media_drop_controller.addEffectToSelectedClip(QStringLiteral("video.brightness")),
+            "Functions filter insertion must report a successful edit.");
+    const auto history_before_invalid_effect = media_drop_commands.undoCount();
+    require(!media_drop_controller.addEffectToSelectedClip(QStringLiteral("unknown")) &&
+                media_drop_commands.undoCount() == history_before_invalid_effect,
+            "Rejected Functions filter insertion must report failure without changing history.");
     auto effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
     require(effect_stack.size() == 2 &&
                 effect_stack[0].id == "video.grayscale" &&
