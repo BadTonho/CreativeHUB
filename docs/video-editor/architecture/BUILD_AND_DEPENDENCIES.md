@@ -2,6 +2,11 @@
 
 ## Functions catalog
 
+Functions card/icon painting is isolated in `function_palette_item_delegate`.
+The application and shortcut regression target compile this Qt Widgets/Gui helper.
+Its icons are original vector primitives painted with QPainter/QIconEngine;
+there are no external icon assets, SVG plugins or new dependencies.
+
 The standalone shortcut-manager/Functions regression target now compiles the
 existing effects catalog and links the existing diagnostics library. Functions
 adds no package or rendering dependency. Build Video Editor Debug and affected

@@ -1,5 +1,35 @@
 # Regression Testing
 
+## Functions icon cards
+
+**Automated coverage present:** `tests/settings/shortcut_manager_test.cpp`
+(`creative-suite-main-editor-shortcut-manager`, registered in
+[settings tests](../../apps/video-editor/tests/settings/CMakeLists.txt)) checks
+icons for every catalog entry at normal/high density, card row sizing, spacing,
+full-name tooltips and distinct normal/hover/focus-selection rendering in light
+and dark palettes. Existing Functions lifecycle/search/keyboard/drag regressions
+and MainWindow activation/drop/history integration remain part of the gate.
+
+Windows Debug verification (2026-10-14): the shortcut/Functions and MainWindow
+CTest entries passed. Edit, Fusion and compact-window offscreen snapshots were
+visually inspected, using an installed font for the headless Windows preview.
+The canonical `build/apps/video-editor/Debug/creative-suite-video-editor.exe`
+was rebuilt and verified at 2026-10-14 16:04:05 UTC. This does not establish native
+display/driver or macOS/Linux acceptance.
+
+For reproducible offscreen snapshots, run the Debug shortcut-manager test binary
+with `--functions-preview-dir <output-directory> [font-file]` and
+`QT_QPA_PLATFORM=offscreen`. An installed font can be supplied explicitly when
+the headless font database has no system fonts; the font is never copied into
+the project.
+It writes Edit, Fusion and compact-window PNGs without changing user settings.
+Native manual check (pending): open Functions in Edit/Fusion, hover/select cards,
+resize and scroll, check icon/text alignment and elided-name tooltips, and use
+arrow keys, Enter, double click and drag. Repeat at native display scaling and
+in dark/light themes; native macOS/Linux acceptance remains pending. No project
+format, application version or rendering-engine change is involved.
+
+
 ## Functions workspace catalog
 
 | Behavior | Automated coverage |

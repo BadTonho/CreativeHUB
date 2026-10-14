@@ -46,6 +46,10 @@ below. No shortcut, rendering or CSP v29 format change is introduced.
 `Shift+Space` opens the searchable, non-modal Functions palette. The list reads
 `effects::definitions()` and uses the same workspace availability/actions and
 copy-only effect-ID MIME as Effects; it has no separate list of supported IDs.
+Entries use spaced, rounded cards with scalable leading icons and distinct
+hover/selection states. Full names remain in the model and tooltips even when
+elided visually. The resizable palette starts at 420x480 logical pixels and
+keeps the existing activation, keyboard and drag contracts.
 Search remains available without a compatible selection and retains its query
 when context changes while the window is open. Render closes/disables Functions.
 

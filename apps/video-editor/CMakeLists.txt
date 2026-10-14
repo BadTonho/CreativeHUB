@@ -155,6 +155,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/ui/effects/effects_list_widget.h
     src/ui/functions/function_palette.cpp
     src/ui/functions/function_palette.h
+    src/ui/functions/function_palette_item_delegate.cpp
+    src/ui/functions/function_palette_item_delegate.h
     src/ui/system/system_memory_details_dialog.cpp
     src/ui/system/system_memory_details_dialog.h
     src/ui/system/system_memory_indicator.cpp

@@ -73,6 +73,8 @@ add_executable(creative-suite-main-editor-shortcut-manager-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette_item_delegate.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette_item_delegate.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/effects/effects_catalog.cpp
 )
 

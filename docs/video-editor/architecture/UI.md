@@ -381,13 +381,20 @@ separate settings groups and app-owned dialogs. Their dialogs apply shortcut
 batches only after acceptance; cancelling preserves the active bindings.
 
 `Shift + Space` opens and closes the non-modal floating `Functions` window.
-The resizable 420x360 palette is centered over the Video Editor and searches the
+The resizable 420x480 palette is centered over the Video Editor and searches the
 same workspace-aware catalog as Effects. Add, Enter (search or list), and double
 click create a graph node in Fusion; in Edit they apply visual filters to the
 compatible selected clip. Edit generators, Text and transitions are drag-only,
 with Add disabled and `Drag this item to the timeline.` displayed. Gain remains
 unavailable. Search remains enabled without a selection; Fusion activation and
 drag require a compatible clip. Workspace updates refilter the current query.
+Entries are full-width rounded cards with a 28-pixel vector icon before the
+name, 44-pixel logical row height and spacing between rows. Hover and keyboard
+selection have distinct borders/fills in dark and light palettes. Gain remains
+visually muted. Names elide at narrow widths with full-name tooltips; the list
+scrolls vertically without horizontal scrolling. Cards are painted by a Qt item
+delegate, retaining native list accessibility and interactions without per-row
+widgets or external image assets.
 See [the Functions contract](EFFECTS.md#functions).
 
 Functions stays open during a drag, closes after a successful activation or

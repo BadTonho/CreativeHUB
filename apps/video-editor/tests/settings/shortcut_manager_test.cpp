@@ -12,6 +12,13 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QLabel>
+#include <QImage>
+#include <QPainter>
+#include <QStyleOptionViewItem>
+#include <QDir>
+#include <QScrollBar>
+#include <QLayout>
+#include <QFontDatabase>
 #include <QAbstractItemModel>
 #include <memory>
 #include <QMetaObject>
@@ -96,7 +103,7 @@ void verifyFunctionPalette(QSettings& settings) {
             "Functions window must be non-modal.");
     require(palette.dialog()->windowFlags().testFlag(Qt::Tool),
             "Functions window must use a floating tool-window flag.");
-    require(palette.dialog()->size() == QSize(420, 360),
+    require(palette.dialog()->size() == QSize(420, 480),
             "Functions window initial size is incorrect.");
     require(palette.dialog()->minimumSize() !=
                 palette.dialog()->maximumSize(),
@@ -468,6 +475,73 @@ void verifyFunctionCatalog() {
     palette.toggle(); require(!palette.dialog(), "Functions must remain unavailable in Render.");
 }
 
+void verifyFunctionCards(const QString& preview_directory = {}) {
+    QMainWindow owner;
+    settings::ShortcutManager shortcuts;
+    ui::FunctionPalette palette(&owner, shortcuts);
+    palette.setAddHandler([](const QString&) { return true; });
+    palette.setContext(effects::Workspace::Edit, true);
+    auto* list = palette.dialog()->findChild<QListWidget*>("functionsEffectList");
+    require(list && list->iconSize() == QSize(28, 28) && list->spacing() > 0 &&
+            list->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff,
+            "Functions cards must have leading icons, spacing and no horizontal scroll.");
+    for (int i = 0; i < list->count(); ++i) {
+        const auto* item = list->item(i);
+        require(!item->icon().isNull() && item->toolTip() == item->text(),
+                "Every Functions card must expose its icon and full name.");
+        for (const auto size : {QSize(28, 28), QSize(56, 56)}) {
+            const auto image = item->icon().pixmap(size, 1.0).toImage();
+            require(!image.isNull() && image.size() == size, "Functions icon must render at normal and high pixel density.");
+            bool has_glyph = false;
+            for (int y = 0; y < image.height(); ++y) for (int x = 0; x < image.width(); ++x)
+                has_glyph = has_glyph || image.pixelColor(x, y).alpha() > 150;
+            require(has_glyph, "Functions icon rendered only an empty badge.");
+        }
+    }
+    auto* delegate = list->itemDelegate();
+    const auto index = list->indexFromItem(list->item(0));
+    QStyleOptionViewItem option;
+    option.font = list->font(); option.fontMetrics = QFontMetrics(option.font);
+    option.rect = QRect(0, 0, 320, delegate->sizeHint(option, index).height());
+    require(option.rect.height() >= 40, "Functions cards must provide room for icons and text.");
+    for (const auto dark : {false, true}) {
+        option.palette.setColor(QPalette::Base, dark ? QColor("#24272e") : QColor("#ffffff"));
+        const auto render = [&](QStyle::State state, int scale) {
+            QImage image(option.rect.size() * scale, QImage::Format_ARGB32_Premultiplied);
+            image.setDevicePixelRatio(scale); image.fill(Qt::transparent);
+            QPainter painter(&image); option.state = state;
+            delegate->paint(&painter, option, index); return image;
+        };
+        const auto normal = render(QStyle::State_Enabled, 1);
+        const auto hover = render(QStyle::State_Enabled | QStyle::State_MouseOver, 1);
+        const auto selected = render(QStyle::State_Enabled | QStyle::State_Selected | QStyle::State_HasFocus, 1);
+        require(normal != hover && normal != selected && hover != selected,
+                "Functions cards must distinguish normal, hover and keyboard selection in both palettes.");
+        require(!render(QStyle::State_Enabled | QStyle::State_Selected, 2).isNull(),
+                "High-density card painting failed.");
+    }
+    if (!preview_directory.isEmpty()) {
+        require(QDir().mkpath(preview_directory), "Cannot create Functions preview directory.");
+        QPalette dark = palette.dialog()->palette();
+        dark.setColor(QPalette::Window, QColor("#25282f"));
+        dark.setColor(QPalette::WindowText, QColor("#e6eaf1"));
+        dark.setColor(QPalette::Base, QColor("#24272e"));
+        dark.setColor(QPalette::Text, QColor("#e6eaf1"));
+        dark.setColor(QPalette::PlaceholderText, QColor("#929baa"));
+        dark.setColor(QPalette::Button, QColor("#343a44"));
+        dark.setColor(QPalette::ButtonText, QColor("#e6eaf1"));
+        dark.setColor(QPalette::Highlight, QColor("#477db5"));
+        palette.dialog()->setPalette(dark);
+        palette.dialog()->ensurePolished(); palette.dialog()->layout()->activate();
+        require(palette.dialog()->grab().save(preview_directory + "/functions-edit.png"), "Cannot save Edit Functions preview.");
+        palette.setContext(effects::Workspace::Fusion, true);
+        list->scrollToBottom();
+        require(palette.dialog()->grab().save(preview_directory + "/functions-fusion.png"), "Cannot save Fusion Functions preview.");
+        palette.dialog()->resize(320, 300); palette.dialog()->layout()->activate();
+        require(palette.dialog()->grab().save(preview_directory + "/functions-compact.png"), "Cannot save compact Functions preview.");
+    }
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -751,6 +825,19 @@ int main(int argc, char* argv[]) {
                         QStringLiteral("Ctrl+K"),
                 "Conflicting stored preferences must restore a valid default and persist the repair.");
 
+        if ((argc == 3 || argc == 4) && QString::fromLocal8Bit(argv[1]) == "--functions-preview-dir") {
+            QApplication::setStyle("Fusion");
+            if (argc == 4) {
+                const auto font_id = QFontDatabase::addApplicationFont(QString::fromLocal8Bit(argv[3]));
+                require(font_id >= 0, "Cannot load the optional preview font.");
+                const auto families = QFontDatabase::applicationFontFamilies(font_id);
+                require(!families.isEmpty(), "The preview font has no usable family.");
+                QApplication::setFont(QFont(families.front(), 9));
+            }
+            verifyFunctionCards(QString::fromLocal8Bit(argv[2]));
+            return 0;
+        }
+        verifyFunctionCards();
         verifyFunctionPalette(settings);
         verifyFunctionCatalog();
         settings.clear();

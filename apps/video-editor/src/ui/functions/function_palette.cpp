@@ -1,4 +1,5 @@
 #include "ui/functions/function_palette.h"
+#include "ui/functions/function_palette_item_delegate.h"
 
 #include "settings/shortcut_manager.h"
 #include "ui/media_browser/media_drag_mime.h"
@@ -38,6 +39,13 @@ public:
         setSelectionMode(QAbstractItemView::SingleSelection);
         setSelectionBehavior(QAbstractItemView::SelectRows);
         setUniformItemSizes(true);
+        setItemDelegate(new FunctionPaletteItemDelegate(this));
+        setIconSize(QSize(28, 28));
+        setSpacing(2);
+        setMouseTracking(true);
+        setTextElideMode(Qt::ElideRight);
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
         setDragEnabled(true);
         setDragDropMode(QAbstractItemView::DragOnly);
         setDefaultDropAction(Qt::CopyAction);
@@ -308,7 +316,7 @@ void FunctionPalette::createDialog() {
     dialog_->setWindowModality(Qt::NonModal);
     dialog_->setModal(false);
     dialog_->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog_->resize(420, 360);
+    dialog_->resize(420, 480);
     dialog_->addAction(toggle_action_);
     auto* layout = new QVBoxLayout(dialog_);
     layout->setContentsMargins(10, 10, 10, 10);
@@ -325,6 +333,8 @@ void FunctionPalette::createDialog() {
     for (const auto& effect : effects::definitions()) {
         auto* item = new QListWidgetItem(effect.name, effect_list_);
         item->setData(Qt::UserRole, effect.id);
+        item->setIcon(functionPaletteIcon(effect.id));
+        item->setToolTip(effect.name);
     }
     layout->addWidget(effect_list_, 1);
     entry_hint_ = new QLabel(dialog_);

@@ -2,7 +2,7 @@
 
 ## Workspace-aware Functions
 
-Implemented for pending 0.1.1: Functions shares the Effects catalog, creates graph nodes in Fusion through Add/Enter/double click, applies filters in Edit, and offers Edit generators/Text/transitions by drag only. Successful actions/drop close it; refusal and canceled drops preserve it. See [the contract](architecture/EFFECTS.md#functions).
+Implemented for pending 0.1.1: Functions shares the Effects catalog, creates graph nodes in Fusion through Add/Enter/double click, applies filters in Edit, and offers Edit generators/Text/transitions by drag only. Entries now use spaced icon cards with scalable vector artwork and hover/selection states. Successful actions/drop close it; refusal and canceled drops preserve it. See [the contract](architecture/EFFECTS.md#functions).
 
 
 ## Workspace Effects catalog

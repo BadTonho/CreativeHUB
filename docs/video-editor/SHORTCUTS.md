@@ -62,7 +62,9 @@ remain available in Render.
 In the Selection tool, Ctrl + click adds/removes clips for Paste Attributes;
 normal click returns to a single selected clip.
 
-Functions searches the Effects catalog for the current workspace. Enter in the
+Functions presents the Effects catalog for the current workspace as icon cards.
+Arrow keys navigate the cards; search, Enter, double click and drag keep their
+existing behavior. Enter in the
 search/list, Add or double click creates a node in Fusion or applies a visual
 filter to the selected compatible clip in Edit. Edit generators, Text and
 transitions are drag-only; Add stays disabled and shows a drag instruction.
