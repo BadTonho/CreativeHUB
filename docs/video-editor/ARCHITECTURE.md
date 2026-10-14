@@ -1,5 +1,9 @@
 # Application Architecture
 
+## Fusion masks v1
+
+Fusion mask geometry, scalar animation and coverage caching are Video Editor owned. The existing shared composition engine supplies CPU/OpenGL ApplyMask and MaskedBlend; image intermediates remain on their device. See [Fusion Masks](FUSION_MASKS.md).
+
 Independent generated Fusion clips and generator-node ownership are described in
 [Fusion Composition](FUSION_COMPOSITION.md).
 

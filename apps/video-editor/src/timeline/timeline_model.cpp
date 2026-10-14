@@ -458,16 +458,22 @@ void preserveTransformCurveAnchor(
     }
 }
 
+void reframeMaskNode(fusion::nodes::Node&, std::int64_t delta, std::int64_t duration);
+
 void splitNodeGraphKeyframes(
     fusion::nodes::NodeGraph& left,
     fusion::nodes::NodeGraph& right,
-    std::int64_t split_frame) {
+    std::int64_t split_frame, std::int64_t right_duration) {
     for (auto& left_node : left.nodes) {
         auto right_node = std::find_if(right.nodes.begin(), right.nodes.end(),
             [&left_node](const fusion::nodes::Node& node) {
                 return node.id == left_node.id;
             });
         if (right_node == right.nodes.end()) continue;
+        if (fusion::nodes::isMaskNode(left_node.type)) {
+            reframeMaskNode(*right_node,split_frame,right_duration);
+            reframeMaskNode(left_node,0,split_frame);
+        }
 
         if (left_node.type == fusion::nodes::NodeType::Transform) {
             const auto old_base = left_node.transform;
@@ -533,6 +539,7 @@ void trimNodeGraphKeyframes(
     std::int64_t new_duration_frames) {
     if (!graph.has_value()) return;
     for (auto& node : graph->nodes) {
+        if (fusion::nodes::isMaskNode(node.type)) reframeMaskNode(node,new_start_frame-old_start_frame,new_duration_frames);
         if (node.type == fusion::nodes::NodeType::Transform) {
             const auto old_base = node.transform;
             const auto old_keyframes = node.transform_keyframes;
@@ -568,6 +575,9 @@ bool rescaleNodeGraphKeyframes(
     if (duration_frames <= 0) return false;
     const auto maximum_frame = duration_frames - 1;
     for (auto& node : graph->nodes) {
+        for (auto& keys : node.mask_keyframes)
+            if (!rescaleKeyframes(keys,source_rate,target_rate,maximum_frame) ||
+                !creative_suite::animation::validScalarKeyframes(keys)) return false;
         if (node.type == fusion::nodes::NodeType::Transform &&
             !rescaleTransformKeyframes(node.transform_keyframes,
                 source_rate, target_rate, duration_frames)) return false;
@@ -670,7 +680,7 @@ std::optional<std::int64_t> shiftedSourceStart(
     return std::nullopt;
 }
 
-// Slice generated adjustment curves without changing the sampled animation.
+// Slice generated and mask curves without changing the sampled animation.
 // De Casteljau subdivision retains the easing on partial Bezier segments.
 struct CurvePoint { double x, y; };
 CurvePoint mixCurvePoint(CurvePoint a, CurvePoint b, double t) {
@@ -694,20 +704,12 @@ double curveParameterAtX(const CurveSegment& curve, double x) {
     }
     return (low + high) * 0.5;
 }
-TransformKeyframes reframeAdjustmentKeyframes(
-    const TimelineClip& old_clip, std::int64_t new_start,
-    std::int64_t duration, Transform2D& new_transform) {
-    const auto delta = new_start - old_clip.timeline_start_frame;
-    new_transform = evaluateTransform(old_clip.transform, old_clip.keyframes, delta);
-    TransformKeyframes result;
-    for (const auto property : {TransformProperty::PositionX, TransformProperty::PositionY,
-            TransformProperty::Scale, TransformProperty::Rotation, TransformProperty::Opacity}) {
-        const auto& source = keyframesFor(old_clip.keyframes, property);
-        if (source.empty()) continue;
-        auto& output = mutableTransformKeyframes(result, property);
-        const auto valueAt = [&](std::int64_t frame) {
-            return evaluateProperty(old_clip.transform, old_clip.keyframes, property, frame);
-        };
+template<class Evaluate>
+creative_suite::animation::ScalarKeyframes reframeScalarCurve(
+    const creative_suite::animation::ScalarKeyframes& source,
+    std::int64_t delta, std::int64_t duration, Evaluate valueAt) {
+    if (source.empty()) return {};
+    creative_suite::animation::ScalarKeyframes output;
         output.push_back({0, valueAt(delta)});
         for (const auto& key : source) {
             // Comparison in source coordinates avoids overflowing a shifted key.
@@ -745,8 +747,40 @@ TransformKeyframes reframeAdjustmentKeyframes(
                 std::clamp((curve[2].x - curve[0].x) / dx, 0.0, 1.0),
                 std::clamp((curve[2].y - curve[0].y) / dy, 0.0, 1.0)};
         }
+    return output;
+}
+TransformKeyframes reframeAdjustmentKeyframes(
+    const TimelineClip& old_clip, std::int64_t new_start,
+    std::int64_t duration, Transform2D& new_transform) {
+    const auto delta = new_start - old_clip.timeline_start_frame;
+    new_transform = evaluateTransform(old_clip.transform, old_clip.keyframes, delta);
+    TransformKeyframes result;
+    for (const auto property : {TransformProperty::PositionX, TransformProperty::PositionY,
+            TransformProperty::Scale, TransformProperty::Rotation, TransformProperty::Opacity}) {
+        const auto& source = keyframesFor(old_clip.keyframes, property);
+        if (source.empty()) continue;
+        auto& output = mutableTransformKeyframes(result, property);
+        const auto valueAt = [&](std::int64_t frame) {
+            return evaluateProperty(old_clip.transform, old_clip.keyframes, property, frame);
+        };
+        output = reframeScalarCurve(source,delta,duration,valueAt);
     }
     return result;
+}
+
+void reframeMaskNode(fusion::nodes::Node& node, std::int64_t delta, std::int64_t duration) {
+    const auto base=node.mask;
+    for (std::size_t i=0;i<5;++i) {
+        const auto value=creative_suite::animation::evaluateScalar(fusion::nodes::maskValue(base,i),node.mask_keyframes[i],delta);
+        node.mask_keyframes[i]=reframeScalarCurve(node.mask_keyframes[i],delta,duration,
+            [&](std::int64_t frame) { return creative_suite::animation::evaluateScalar(fusion::nodes::maskValue(base,i),node.mask_keyframes[i],frame); });
+        fusion::nodes::setMaskValue(node.mask,i,value);
+    }
+}
+
+void reframeGraphMasks(std::optional<fusion::nodes::NodeGraph>& graph, std::int64_t delta, std::int64_t duration) {
+    if (graph) for (auto& node : graph->nodes)
+        if (fusion::nodes::isMaskNode(node.type)) reframeMaskNode(node,delta,duration);
 }
 
 bool shiftCompositionOffset(TimelineClip& clip, std::int64_t delta) {
@@ -758,6 +792,7 @@ bool shiftCompositionOffset(TimelineClip& clip, std::int64_t delta) {
 void reframeFusionGraph(std::optional<fusion::nodes::NodeGraph>& graph, std::int64_t delta, std::int64_t duration) {
     if (!graph) return;
     for (auto& node : graph->nodes) {
+        if (fusion::nodes::isMaskNode(node.type)) reframeMaskNode(node,delta,duration);
         if (node.type == fusion::nodes::NodeType::Transform) {
             TimelineClip source; source.transform = node.transform; source.keyframes = node.transform_keyframes;
             node.transform_keyframes = reframeAdjustmentKeyframes(source, delta, duration, node.transform);
@@ -1279,7 +1314,7 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
     if (original.kind == ClipKind::FusionComposition) {
         if (!shiftCompositionOffset(preview.clip, preview.clip.timeline_start_frame - original.timeline_start_frame)) return std::nullopt;
         reframeFusionGraph(preview.clip.node_graph, preview.clip.timeline_start_frame - original.timeline_start_frame, preview.clip.timeline_duration_frames);
-    }
+    } else reframeGraphMasks(preview.clip.node_graph,preview.clip.timeline_start_frame-original.timeline_start_frame,preview.clip.timeline_duration_frames);
     if (original.kind == ClipKind::Adjustment || original.kind == ClipKind::FusionComposition) {
         preview.clip.source_start_frame = 0;
         preview.clip.source_duration_frames = 0;
@@ -1356,7 +1391,7 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
         if (neighbor.kind == ClipKind::FusionComposition) {
             if (!shiftCompositionOffset(neighbor, neighbor.timeline_start_frame - original_neighbor.timeline_start_frame)) return std::nullopt;
             reframeFusionGraph(neighbor.node_graph, neighbor.timeline_start_frame - original_neighbor.timeline_start_frame, neighbor.timeline_duration_frames);
-        }
+        } else reframeGraphMasks(neighbor.node_graph,neighbor.timeline_start_frame-original_neighbor.timeline_start_frame,neighbor.timeline_duration_frames);
         if (neighbor.kind == ClipKind::Adjustment || neighbor.kind == ClipKind::FusionComposition) {
             neighbor.source_start_frame = 0;
             neighbor.source_duration_frames = 0;
@@ -1962,7 +1997,7 @@ SplitClipResult TimelineModel::splitClip(
         reframeFusionGraph(clip.node_graph, 0, local_frame);
     } else if (clip.node_graph.has_value()) {
         splitNodeGraphKeyframes(
-            *clip.node_graph, *right.node_graph, local_frame);
+            *clip.node_graph, *right.node_graph, local_frame, right.timeline_duration_frames);
     }
     if (clip.kind == ClipKind::Video) {
         right.source_duration_frames = source_duration - source_offset;

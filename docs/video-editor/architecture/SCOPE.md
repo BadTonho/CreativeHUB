@@ -1,5 +1,9 @@
 # Current Scope and Non-goals
 
+## Fusion masks v1
+
+Rectangle/Ellipse masks are implemented for ordinary video/image graphs and Fusion Compositions, with Inspector-only editing, five geometry curves, typed connections and CSP v28 persistence. Advanced mask authoring, tracking, combinations and Adjustment graphs remain out of scope. See [Fusion Masks](../FUSION_MASKS.md).
+
 ## Independent Fusion compositions
 
 Fusion Composition adds a generated video-track clip with its own graph and
@@ -42,7 +46,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 27, with versions 1 through 26
+- versioned `.csp` persistence through version 28, with versions 1 through 27
   readable, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio/adjustment clip kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
@@ -113,14 +117,14 @@ effect to the Timeline stack. Merge combines its background and foreground with
 straight-alpha source-over. The graph output replaces the clip image before
 its existing Inspector effect stack and Timeline transform/keyframes.
 
-Graph animation was introduced in `.csp` version 22 and is retained in version 27.
+Graph animation was introduced in `.csp` version 22 and is retained in version 28.
 Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its
 duration. Preview and export evaluate the same graph at the clip-local frame;
 keyframes are adjusted when the clip is split, trimmed, or converted to another
 frame rate. Graph editing participates in Timeline Undo/Redo. This phase does
-not add graph animation to Color or other effect parameters, text, audio, masks,
+not add graph animation to Color or other effect parameters, text, audio, advanced masks,
 effects beyond the four existing video effects, or nested compositions.
 Clip-level Motion Studio handoff is a separate implemented workflow.
 
@@ -169,14 +173,14 @@ composition, including its other tracks, clip effects, and transforms.
   file export;
 - image sequences, SRT import, automatic captions, rich text, and animated text
   content;
-- advanced compositing, easing, masks, 3D layers, and
+- advanced compositing, advanced easing/masks, 3D layers, and
   transition effects beyond the essential pair;
 - advanced ripple editing, automatic gap management, or history covering every
   project subsystem;
 - thumbnails, proxies, complete relinking, and project-size-independent
   performance guarantees;
 - animation of Color and other effect parameters beyond Transform/Brightness,
-  masks, nested compositions, and advanced Fusion
+  advanced masks, nested compositions, and advanced Fusion
   processing beyond the initial visual graph nodes;
 - nested Motion Studio composition editing and Rust integration.
 

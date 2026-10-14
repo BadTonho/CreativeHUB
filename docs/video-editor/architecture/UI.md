@@ -1,5 +1,9 @@
 # UI Boundary
 
+## Fusion masks v1
+
+Fusion Add Node includes Rectangle Mask and Ellipse Mask. Gold Mask and blue Image ports have distinct labels and connection types. The Inspector supplies center, dimensions, rotation, Soft Edge and Invert; five geometry rows have keyframe controls. VIEW shows grayscale coverage with no drag/resize handles. See [Fusion Masks](../FUSION_MASKS.md).
+
 ## Fusion Composition workflow
 
 Drag Fusion Composition from Effects > Video to a free video-track range.

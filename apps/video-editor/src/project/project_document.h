@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 27;
+inline constexpr int current_format_version = 28;
+inline constexpr int fusion_masks_format_version = 28;
 inline constexpr int fusion_composition_format_version = 27;
 inline constexpr int adjustment_clip_format_version = 26;
 inline constexpr int motion_render_offset_format_version = 25;

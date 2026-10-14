@@ -1,5 +1,39 @@
 # Regression Testing
 
+## Fusion masks verification
+
+| Behavior | Automated gate |
+| --- | --- |
+| Typed ports, replacement/fanout, property bounds, rotated rectangle/ellipse coverage, inversion, softness, zero/large/off-canvas geometry, bounded cache and cancellation | `creative-suite-main-editor-fusion-mask` |
+| Generator/Input/Output alpha, masked Transform/Color/Effect and Merge, transparent-edge blending and mask VIEW | `creative-suite-main-editor-fusion-mask`, `creative-suite-composition`, `creative-suite-composition-opengl` |
+| Inspector creation/apply/keyframe/remove, transient VIEW, independent duplication/history, Bezier split/trim continuity for ordinary clips/compositions, FPS, v28 save/open/autosave and v27/29 rejection | `creative-suite-main-editor-fusion-mask` |
+| Animated masks in complete Preview/export RGBA frames before encoding; existing transitions, adjustments, internal video offsets, text and cancellation | `creative-suite-main-editor-fusion-composition` |
+| Native GPU mask receiver and VIEW parity; bounded mask graph CPU recovery; existing direct presentation, device recovery and no-mask graphs | `creative-suite-main-editor-gpu-timeline`, `creative-suite-composition-opengl` |
+| Hub relocation/restoration with mask curves/connections, generators and external Input paths; legacy versions and future-version rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
+
+Windows Debug evidence (2026-10-14): the 33 selected registered tests passed,
+including native mask CPU/GPU and pre-encoding Preview/export parity, with no
+skips. Video Editor and Hub compiled in their canonical Debug output directories.
+The final Video Editor executable is
+`C:\Users\Admin\Desktop\ProjetosCode\AdobeShoppee\build\apps\video-editor\Debug\creative-suite-video-editor.exe`,
+modified at 2026-10-14 00:41:57 UTC−03:00 (03:41:57 UTC), 10,145,792 bytes.
+Hub Debug was modified at 00:25:49 UTC−03:00, 2,305,024 bytes. No installers,
+application version changes, commits or pushes are part of this delivery.
+
+Shared composition consumers remain covered by Motion preview/GPU/export and
+Image interactive/GPU raster tests. Existing graph, project, Inspector,
+Timeline, playback, recovery and adjustment suites remain regression gates.
+
+Native graphical acceptance is pending: in a video/image and an independent
+composition graph, add both masks; connect/reconnect their gold outputs to Mask
+inputs, refuse an Image-to-Mask cable, animate the five geometry fields, inspect
+VIEW and then return to Output. Confirm Undo/Redo and saved dirty state after
+creation/settings/connections/removal, and compare playback/export with a
+transparent title, differently sized media, a Merge and an adjustment above.
+Repeat split, left/right trim, FPS conversion and independent duplication.
+Viewer geometry cannot be dragged. Native macOS/Linux, font/driver variation
+and representative small/medium/heavy performance acceptance remain pending.
+
 ## Fusion Composition verification
 
 The registered `creative-suite-main-editor-fusion-composition` test in
@@ -19,7 +53,7 @@ Background/Text/Merge parity through the native graph backend and requires that
 GPU work actually occurred. The main-window test checks insertion/effects dirty
 state, save and undo to the saved baseline. `hub-backup-format-test` preserves
 generator data, graph input paths and signed offsets through relocated restore;
-`hub-backup-manager-test` rejects future v28. Existing graph, timeline, playback,
+`hub-backup-manager-test` rejects future v29. Existing graph, timeline, playback,
 project, autosave, Inspector, adjustment and export gates remain relevant.
 
 CSP v27 also round-trips optional cubic Bezier easing for clip/node curves;

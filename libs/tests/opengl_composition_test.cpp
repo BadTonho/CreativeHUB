@@ -72,6 +72,28 @@ void compare(OpenGlFrameCompositor& gpu, int width, int height,
         name + ": on-demand texture readback differs from RGBA composition");
 }
 void parity(OpenGlFrameCompositor& gpu) {
+    // Generic mask operations accept coverage uploaded separately and retain
+    // resident image intermediates until the caller explicitly requests RGBA.
+    auto original=fixture(16,12,true), processed=fixture(16,12,true), mask=fixture(16,12,false);
+    for (std::size_t i=0;i<processed.rgba_pixels.size();i+=4) {
+        processed.rgba_pixels[i]=255-processed.rgba_pixels[i];
+        mask.rgba_pixels[i]=static_cast<std::uint8_t>((i/4)%3==0 ? 0 : (i/4)%3==1 ? 128 : 255);
+    }
+    for (const auto kind : {OpenGlImageOperationKind::ApplyMask,OpenGlImageOperationKind::MaskedBlend}) {
+        auto cpu=processed;
+        require(kind==OpenGlImageOperationKind::ApplyMask ? applyMask(cpu,mask) : maskedBlend(original,cpu,mask),"CPU mask operation failed.");
+        OpenGlImageOperation copy;copy.background={&processed};
+        auto resident=gpu.processImage(copy);require(bool(resident.frame),"Mask fixture upload failed.");
+        OpenGlImageOperation operation;operation.kind=kind;operation.mask={&mask};
+        operation.background=kind==OpenGlImageOperationKind::ApplyMask ? OpenGlImageInput{nullptr,resident.frame} : OpenGlImageInput{&original};
+        if (kind==OpenGlImageOperationKind::MaskedBlend) operation.foreground={nullptr,resident.frame};
+        OpenGlCompositionTimings measured;auto output=gpu.processImage(operation,{},&measured);
+        require(output.status==OpenGlCompositionStatus::Complete && output.frame && measured.readback_bytes==0,"Mask operation downloaded its intermediate.");
+        auto rgba=gpu.readback(output.frame);require(rgba.frame && rgba.frame->rgba_pixels==cpu.rgba_pixels,"Shared mask CPU/GPU parity failed.");
+        mask.width=15;
+        auto invalid=gpu.processImage(operation);require(invalid.status==OpenGlCompositionStatus::Unsupported,"Mismatched mask geometry accepted.");mask.width=16;
+    }
+
     auto opaque = fixture(16, 12, false);
     auto alpha = fixture(13, 7, true);
     auto padding = fixture(9, 11, true, 12);

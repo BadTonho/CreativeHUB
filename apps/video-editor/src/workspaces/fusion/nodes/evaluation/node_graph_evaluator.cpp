@@ -1,4 +1,5 @@
 #include "node_graph_evaluator.h"
+#include "mask_rasterizer.h"
 
 #include <creative_suite/effects/effects.h>
 #include <creative_suite/diagnostics/logger.h>
@@ -81,6 +82,19 @@ media::VideoFrame mergeFrames(const media::VideoFrame& background,
     return result;
 }
 
+media::VideoFramePtr maskCoverage(MaskRasterCache& cache, const Node& node,
+    int width, int height, const EvaluationContext& context) {
+    auto frame=cache.coverage(node.type,evaluateMask(node.mask,node.mask_keyframes,context.local_frame),
+        width,height,context.should_cancel);
+    if (!frame && !(context.should_cancel && context.should_cancel()))
+        creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
+            "fusion-mask","raster-coverage","Mask coverage exceeds the supported geometry or 64 MiB buffer limit.",
+            {{"node_id",std::to_string(node.id)},{"width",std::to_string(width)},
+             {"height",std::to_string(height)},{"local_frame",std::to_string(context.local_frame)},
+             {"error_code","resource-limit"}});
+    return frame;
+}
+
 creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& graph, const InputFrames& inputs,
     NodeId target, EvaluationContext context) {
     using namespace creative_suite::composition;
@@ -113,6 +127,7 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
     if (width <= 0 || height <= 0) return {};
     const media::VideoFrame transparent{width, height, width * 4,
         std::vector<std::uint8_t>(static_cast<std::size_t>(width) * height * 4)};
+    MaskRasterCache mask_cache;
     std::unordered_map<NodeId, OpenGlTextureFramePtr> values;
     std::unordered_map<NodeId, unsigned> remaining;
     for (const auto& edge : graph.connections) if (required.contains(edge.to)) ++remaining[edge.from];
@@ -121,6 +136,7 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
         if (context.should_cancel && context.should_cancel()) return {};
         const auto* node = findNode(graph, id);
         if (!node) return {};
+        if (isMaskNode(node->type) && id!=target) continue;
         const auto input = [&](std::uint8_t port) {
             const auto* edge = incoming(graph, id, port);
             const auto found = edge ? values.find(edge->from) : values.end();
@@ -128,6 +144,12 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
         };
         OpenGlImageOperation operation;
         operation.background = input(0);
+        media::VideoFramePtr mask_view;
+        if (isMaskNode(node->type)) {
+            mask_view=maskCoverage(mask_cache,*node,width,height,context);
+            if (!mask_view) return {};
+            operation.background={mask_view.get()};
+        }
         if ((node->type == NodeType::Input || node->type == NodeType::Background || node->type == NodeType::Text)) {
             const auto found = inputs.find(id);
             operation.background = {found != inputs.end() && usable(found->second) ? found->second.get() : &transparent};
@@ -181,6 +203,41 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
                 return {};
             }
             values.emplace(id, std::move(rendered.frame));
+        }
+        if (const auto* edge=incoming(graph,id,2)) {
+            const auto* mask_node=findNode(graph,edge->from);
+            const auto original=operation.background;
+            const auto& processed=values.at(id);
+            auto coverage=maskCoverage(mask_cache,*mask_node,processed->width(),processed->height(),context);
+            if (!coverage) return {};
+            // Foreground has already been consumed by Merge; release its last
+            // lease before reserving the masked result in the bounded pool.
+            if (const auto* foreground=incoming(graph,id,1); foreground && remaining[foreground->from]==1 && foreground->from!=target)
+                values.erase(foreground->from);
+            operation.foreground={};
+            OpenGlImageOperation masked;
+            masked.mask={coverage.get()};
+            const bool blend=node->type==NodeType::Transform || node->type==NodeType::Color ||
+                node->type==NodeType::Effect || node->type==NodeType::Merge;
+            masked.kind=blend ? OpenGlImageOperationKind::MaskedBlend : OpenGlImageOperationKind::ApplyMask;
+            masked.background=blend ? original : OpenGlImageInput{nullptr,processed};
+            if (blend) masked.foreground={nullptr,processed};
+            OpenGlCompositionTimings measured;
+            auto result=context.gpu->processImage(masked,context.should_cancel,&measured);
+            if (context.gpu_timings) {
+                context.gpu_timings->uploaded_bytes+=measured.uploaded_bytes;
+                context.gpu_timings->uploaded_layers+=measured.uploaded_layers;
+                context.gpu_timings->upload_nanoseconds+=measured.upload_nanoseconds;
+                context.gpu_timings->draw_submission_nanoseconds+=measured.draw_submission_nanoseconds;
+            }
+            if (result.status!=OpenGlCompositionStatus::Complete || !result.frame) {
+                if (result.status!=OpenGlCompositionStatus::Cancelled)
+                    creative_suite::diagnostics::Logger::instance().log(result.status==OpenGlCompositionStatus::Failed ? creative_suite::diagnostics::Level::Error : creative_suite::diagnostics::Level::Warning,
+                        "fusion-gpu",result.operation,result.cause,{{"node_id",std::to_string(id)},
+                        {"error_code",std::to_string(result.error_code)},{"fallback","complete-cpu-graph"}});
+                return {};
+            }
+            values[id]=std::move(result.frame);
         }
         // Release intermediates after their last required edge, including
         // branched inputs and Output aliases, before allocating the next node.
@@ -302,16 +359,33 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
         return media::VideoFrame{canvas_width, canvas_height, canvas_width * 4,
             std::vector<std::uint8_t>(static_cast<std::size_t>(canvas_width) * canvas_height * 4, 0)};
     };
+    MaskRasterCache mask_cache;
     std::unordered_map<NodeId, media::VideoFrame> values;
+    std::unordered_map<NodeId,unsigned> remaining;
+    for (const auto& edge : graph.connections) if (required.contains(edge.to)) ++remaining[edge.from];
     for (const auto id : *order) {
         if (context.should_cancel && context.should_cancel()) return std::nullopt;
         if (!required.contains(id)) continue;
         const auto* node = findNode(graph, id);
         if (!node) return std::nullopt;
+        if (isMaskNode(node->type)) {
+            if (id==target_node) {
+                auto mask=maskCoverage(mask_cache,*node,canvas_width,canvas_height,context);
+                if (!mask) return std::nullopt;
+                values.emplace(id,*mask);
+            }
+            continue;
+        }
         if ((node->type == NodeType::Input || node->type == NodeType::Background || node->type == NodeType::Text)) {
             const auto found = inputs.find(id);
             if (found != inputs.end() && usable(found->second)) values.emplace(id, *found->second);
             else values.emplace(id, transparent()); // Missing / ended sources are transparent.
+            if (const auto* edge=incoming(graph,id,2)) {
+                const auto* mask=findNode(graph,edge->from);
+                auto& frame=values.at(id);
+                auto coverage=maskCoverage(mask_cache,*mask,frame.width,frame.height,context);
+                if (!coverage || !creative_suite::composition::applyMask(frame,*coverage,context.should_cancel)) return std::nullopt;
+            }
             continue;
         }
         const auto* first = incoming(graph, id, 0);
@@ -360,6 +434,17 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
         } else if (node->type == NodeType::Output) {
             values.emplace(id, background);
         }
+        if (const auto* edge=incoming(graph,id,2)) {
+            const auto* mask=findNode(graph,edge->from);
+            auto& frame=values.at(id);
+            auto coverage=maskCoverage(mask_cache,*mask,frame.width,frame.height,context);
+            if (!coverage) return std::nullopt;
+            const bool blend=node->type!=NodeType::Output;
+            if (!(blend ? creative_suite::composition::maskedBlend(background,frame,*coverage,context.should_cancel)
+                : creative_suite::composition::applyMask(frame,*coverage,context.should_cancel))) return std::nullopt;
+        }
+        for (const auto& edge : graph.connections)
+            if (edge.to==id && --remaining[edge.from]==0 && edge.from!=target_node) values.erase(edge.from);
     }
     const auto found = values.find(target_node);
     return found == values.end() ? std::nullopt : std::optional<media::VideoFrame>{found->second};

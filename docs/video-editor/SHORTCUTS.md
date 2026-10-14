@@ -1,5 +1,9 @@
 # Keyboard Shortcuts
 
+## Fusion masks v1
+
+Fusion Add Node includes Rectangle Mask and Ellipse Mask. Properties are edited in the Inspector; VIEW previews coverage without a document edit. These commands have no default shortcut. Existing Undo/Redo applies to mask graph edits. See [Fusion Masks](FUSION_MASKS.md).
+
 ## Fusion Composition commands
 
 Fusion compositions reuse the existing split, delete, Copy/Paste Attributes and

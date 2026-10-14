@@ -1,5 +1,9 @@
 # Timeline Boundary
 
+## Fusion masks v1
+
+Video/image graphs and Fusion Compositions may own Rectangle/Ellipse masks. Splits and trims preserve their five scalar curves, including subdivided Bezier easing; FPS conversion rescales their key times. Graph copies remain independent. Composition input offsets are preserved. See [Fusion Masks](../FUSION_MASKS.md).
+
 ## Fusion Composition clips
 
 Fusion Composition is a teal generated video-track clip with no primary source.

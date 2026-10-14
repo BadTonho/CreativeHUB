@@ -48,6 +48,18 @@ int main() {
     using namespace creative_suite;
 
     try {
+        auto original=frame(3,1,{255,0,0,0, 100,20,40,128, 7,8,9,255});
+        auto processed=frame(3,1,{0,0,255,255, 30,40,50,180, 99,88,77,0});
+        const auto processed_source=processed;
+        auto mask=frame(3,1,{128,128,128,255, 0,0,0,255, 255,255,255,255});
+        require(composition::maskedBlend(original,processed,mask),"CPU MaskedBlend rejected valid inputs.");
+        require(pixelEquals(processed,0,0,0,0,255,128),"Premultiplied mask blending introduced a transparent halo.");
+        require(pixelEquals(processed,1,0,100,20,40,128) && pixelEquals(processed,2,0,99,88,77,0),"Mask blend endpoints changed RGBA bytes.");
+        processed=processed_source; require(composition::applyMask(processed,mask),"CPU ApplyMask failed.");
+        require(pixelEquals(processed,0,0,0,0,255,128) && pixelEquals(processed,1,0,30,40,50,0),"ApplyMask changed straight RGB or alpha coverage.");
+        require(!composition::applyMask(processed,mask,[]{return true;}),"Cancelled ApplyMask completed.");
+        mask.height=2; require(!composition::maskedBlend(original,processed,mask),"Invalid mask dimensions were accepted.");
+
         const auto empty = composition::FrameCompositor::compose(3, 2, {});
         require(empty.has_value() && empty->width == 3 && empty->height == 2 &&
                     empty->stride == 12,

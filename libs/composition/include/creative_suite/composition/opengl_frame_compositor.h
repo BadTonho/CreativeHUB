@@ -109,13 +109,14 @@ struct OpenGlImageInput {
     [[nodiscard]] int width() const noexcept;
     [[nodiscard]] int height() const noexcept;
 };
-enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge };
+enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge, ApplyMask, MaskedBlend };
 struct OpenGlImageOperation {
     OpenGlImageOperationKind kind = OpenGlImageOperationKind::Copy;
     OpenGlImageInput background;
     OpenGlImageInput foreground;
     animation::Transform2D transform;
     std::vector<effects::ColorAdjustmentParameters> colors;
+    OpenGlImageInput mask;
 };
 
 // Optional raster contract: top-down ARGB32 premultiplied content and ARGB32

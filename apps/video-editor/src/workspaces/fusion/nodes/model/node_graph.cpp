@@ -14,19 +14,6 @@ const Node* find(const NodeGraph& graph, NodeId id) noexcept {
         [id](const Node& node) { return node.id == id; });
     return it == graph.nodes.end() ? nullptr : &*it;
 }
-std::uint8_t inputCount(NodeType type) noexcept {
-    switch (type) {
-    case NodeType::Transform:
-    case NodeType::Color:
-    case NodeType::Effect:
-    case NodeType::Output: return 1;
-    case NodeType::Merge: return 2;
-    case NodeType::Input:
-    case NodeType::Background:
-    case NodeType::Text: return 0;
-    }
-    return 0;
-}
 
 bool hasTransformKeyframes(const timeline::TransformKeyframes& keyframes) noexcept {
     return !keyframes.position_x.empty() || !keyframes.position_y.empty() ||
@@ -63,6 +50,37 @@ bool validEffectParameterKeyframes(const Node& node) noexcept {
 }
 }
 
+bool isMaskNode(NodeType type) noexcept {
+    return type == NodeType::RectangleMask || type == NodeType::EllipseMask;
+}
+std::optional<PortKind> outputPort(NodeType type) noexcept {
+    if (type == NodeType::Output) return std::nullopt;
+    return isMaskNode(type) ? PortKind::Mask : PortKind::Image;
+}
+std::vector<InputPort> inputPorts(NodeType type) {
+    if (isMaskNode(type)) return {};
+    std::vector<InputPort> ports;
+    if (type == NodeType::Merge) ports = {{0, PortKind::Image, "Background"}, {1, PortKind::Image, "Foreground"}};
+    else if (type != NodeType::Input && type != NodeType::Background && type != NodeType::Text)
+        ports.push_back({0, PortKind::Image, "Image"});
+    ports.push_back({2, PortKind::Mask, "Mask"});
+    return ports;
+}
+double maskValue(const MaskParameters& p, std::size_t i) noexcept {
+    switch (i) { case 0: return p.center_x; case 1: return p.center_y; case 2: return p.width;
+        case 3: return p.height; default: return p.rotation; }
+}
+void setMaskValue(MaskParameters& p, std::size_t i, double v) noexcept {
+    switch (i) { case 0: p.center_x=v; break; case 1: p.center_y=v; break; case 2: p.width=v; break;
+        case 3: p.height=v; break; default: p.rotation=v; break; }
+}
+MaskParameters evaluateMask(const MaskParameters& base, const MaskKeyframes& keys, std::int64_t frame) {
+    auto p = base;
+    for (std::size_t i=0; i<5; ++i) setMaskValue(p, i,
+        creative_suite::animation::evaluateScalar(maskValue(base,i),keys[i],frame));
+    return p;
+}
+
 NodeGraph makePassthroughGraph() {
     NodeGraph graph;
     graph.nodes = {{1, NodeType::Input, 80.0, 120.0},
@@ -90,7 +108,7 @@ GraphValidation validate(const NodeGraph& graph) {
     std::size_t output_count = 0;
     NodeId maximum_id = 0;
     for (const auto& node : graph.nodes) {
-        if (!isVisualNode(node.type)) return {GraphError::InvalidParameter, node.id};
+        if (!isVisualNode(node.type) && !isMaskNode(node.type)) return {GraphError::InvalidParameter, node.id};
         if (node.id == 0 || node.id > static_cast<NodeId>(
                 std::numeric_limits<std::int64_t>::max()) ||
             !by_id.emplace(node.id, &node).second)
@@ -117,6 +135,18 @@ GraphValidation validate(const NodeGraph& graph) {
             (node.type != NodeType::Effect &&
              !node.effect_parameter_keyframes.empty()))
             return {GraphError::InvalidParameter, node.id};
+        for (std::size_t i=0; i<5; ++i) {
+            const double lo = i<2 ? -2.0 : i<4 ? 0.0 : -3600.0;
+            const double hi = i<2 ? 3.0 : i<4 ? 4.0 : 3600.0;
+            const auto v = maskValue(node.mask,i);
+            if (!std::isfinite(v) || v<lo || v>hi ||
+                !creative_suite::animation::validScalarKeyframes(node.mask_keyframes[i]) ||
+                (!isMaskNode(node.type) && !node.mask_keyframes[i].empty())) return {GraphError::InvalidParameter,node.id};
+            for (const auto& key : node.mask_keyframes[i])
+                if (key.value<lo || key.value>hi) return {GraphError::InvalidParameter,node.id};
+        }
+        if (!std::isfinite(node.mask.soft_edge) || node.mask.soft_edge<0 || node.mask.soft_edge>1)
+            return {GraphError::InvalidParameter,node.id};
         if (node.type == NodeType::Text && !timeline::isValidTextStyle(node.text))
             return {GraphError::InvalidParameter, node.id};
         if (node.type == NodeType::Output) ++output_count;
@@ -139,8 +169,10 @@ GraphValidation validate(const NodeGraph& graph) {
             return {GraphError::InvalidConnection, edge.to};
         if (from->second->type == NodeType::Output)
             return {GraphError::InvalidConnection, edge.from};
-        const auto count = inputCount(to->second->type);
-        if (edge.input >= count) return {GraphError::IncompatibleInput, edge.to};
+        const auto ports = inputPorts(to->second->type);
+        const auto port = std::find_if(ports.begin(),ports.end(),[&](const auto& p){ return p.index==edge.input; });
+        if (port==ports.end() || outputPort(from->second->type)!=port->kind)
+            return {GraphError::IncompatibleInput,edge.to};
         if (!occupied.emplace(edge.to, edge.input).second)
             return {GraphError::InputAlreadyConnected, edge.to};
     }
@@ -158,6 +190,7 @@ bool validKeyframeRange(const NodeGraph& graph,
             });
     };
     for (const auto& node : graph.nodes) {
+        for (const auto& keys : node.mask_keyframes) if (!valid_range(keys)) return false;
         if (node.type == NodeType::Transform) {
             for (const auto property : {timeline::TransformProperty::PositionX,
                                         timeline::TransformProperty::PositionY,
@@ -178,8 +211,9 @@ bool validKeyframeRange(const NodeGraph& graph,
 std::optional<NodeGraph> connect(const NodeGraph& graph, NodeId from, NodeId to,
                                  std::uint8_t input) {
     if (!find(graph, from) || !find(graph, to) || from == to) return std::nullopt;
-    const auto count = inputCount(find(graph, to)->type);
-    if (input >= count) return std::nullopt;
+    const auto ports = inputPorts(find(graph,to)->type);
+    const auto port = std::find_if(ports.begin(),ports.end(),[&](const auto& p){return p.index==input;});
+    if (port==ports.end() || outputPort(find(graph,from)->type)!=port->kind) return std::nullopt;
     NodeGraph candidate = graph;
     candidate.connections.erase(std::remove_if(candidate.connections.begin(),
         candidate.connections.end(), [to, input](const Connection& edge) {

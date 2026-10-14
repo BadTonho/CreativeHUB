@@ -35,6 +35,8 @@ QString title(NodeType type) {
     case NodeType::Input: return QStringLiteral("Input");
     case NodeType::Background: return QStringLiteral("Background");
     case NodeType::Text: return QStringLiteral("Text");
+    case NodeType::RectangleMask: return QStringLiteral("Rectangle Mask");
+    case NodeType::EllipseMask: return QStringLiteral("Ellipse Mask");
     case NodeType::Transform: return QStringLiteral("Transform");
     case NodeType::Color: return QStringLiteral("Color");
     case NodeType::Merge: return QStringLiteral("Merge");
@@ -62,6 +64,7 @@ QString effectIdFromMime(const QMimeData* mime) {
 }
 
 double inputPortY(NodeType type, std::uint8_t input) {
+    if (input == 2) return 0.0;
     if (type == NodeType::Merge) return input == 0 ? 42.0 : 80.0;
     return 47.0;
 }
@@ -280,13 +283,13 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         const auto add_port = [this, item, &node](double x, double y,
                                                   int kind, std::uint8_t input) {
             auto* port = scene_->addEllipse(QRectF(-5, -5, 10, 10),
-                QPen(QColor("#c7d2e0"), 1.0), QBrush(QColor("#438fca")));
+                QPen(QColor("#c7d2e0"), 1.0), QBrush(QColor((kind==1 && input==2) || (kind==2 && isMaskNode(node.type)) ? "#d1aa52" : "#438fca")));
             port->setParentItem(item);
             port->setPos(x, y);
             port->setData(0, QVariant::fromValue<qulonglong>(node.id));
             port->setData(1, kind);
             port->setData(2, static_cast<int>(input));
-            port->setToolTip(kind == 2
+            port->setToolTip((kind==1 && input==2) || (kind==2 && isMaskNode(node.type)) ? QStringLiteral("Mask coverage (Mask connections only)") : kind == 2
                 ? QStringLiteral("Drag from this output to a node input.")
                 : node.type == NodeType::Merge && input == 0
                     ? QStringLiteral("Merge background input.")
@@ -297,23 +300,22 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         };
         constexpr int input_port = 1;
         constexpr int output_port = 2;
-        if (node.type != NodeType::Input && node.type != NodeType::Background && node.type != NodeType::Text) {
-            const auto count = node.type == NodeType::Merge ? 2 : 1;
-            for (int input = 0; input < count; ++input) {
-                const auto y = inputPortY(node.type, static_cast<std::uint8_t>(input));
-                add_port(0, y, input_port, static_cast<std::uint8_t>(input));
-                if (node.type == NodeType::Merge) {
-                    auto* input_label = scene_->addText(input == 0
-                        ? QStringLiteral("BG") : QStringLiteral("FG"));
-                    input_label->setDefaultTextColor(QColor("#9aa4b2"));
-                    input_label->setFont(QFont(QStringLiteral("Segoe UI"), 7));
-                    input_label->setParentItem(item);
-                    input_label->setPos(10, y - 10);
-                }
-            }
+        for (const auto& port : inputPorts(node.type)) {
+            const auto y=inputPortY(node.type,port.index);
+            add_port(port.index==2 ? 105 : 0,y,input_port,port.index);
+            auto* port_label=scene_->addText(QString::fromLatin1(port.label));
+            port_label->setDefaultTextColor(QColor(port.kind==PortKind::Mask ? "#d1aa52" : "#9aa4b2"));
+            port_label->setFont(QFont(QStringLiteral("Segoe UI"),7));
+            port_label->setParentItem(item);
+            port_label->setPos(port.index==2 ? 112 : 10,port.index==2 ? -20 : y-10);
         }
-        if (node.type != NodeType::Output)
-            add_port(210, outputPortY(node.type), output_port, 0);
+        if (outputPort(node.type)) {
+            add_port(210,outputPortY(node.type),output_port,0);
+            auto* port_label=scene_->addText(isMaskNode(node.type) ? "Mask" : "Image");
+            port_label->setDefaultTextColor(QColor(isMaskNode(node.type) ? "#d1aa52" : "#9aa4b2"));
+            port_label->setFont(QFont(QStringLiteral("Segoe UI"),7)); port_label->setParentItem(item);
+            port_label->setPos(165,outputPortY(node.type)-10);
+        }
         items.emplace(node.id, item);
     }
     for (const auto& edge : graph.connections) {
@@ -323,8 +325,8 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         const auto* to_node = findNode(graph, edge.to);
         if (from_node == nullptr || to_node == nullptr) continue;
         const auto start = from->second->pos() + QPointF(210, outputPortY(from_node->type));
-        const auto end = to->second->pos() + QPointF(0, inputPortY(to_node->type, edge.input));
-        auto* line = scene_->addLine(QLineF(start, end), QPen(QColor("#66b5ff"), 2.0));
+        const auto end = to->second->pos() + QPointF(edge.input==2 ? 105 : 0, inputPortY(to_node->type, edge.input));
+        auto* line = scene_->addLine(QLineF(start, end), QPen(QColor(edge.input==2 ? "#d1aa52" : "#66b5ff"), 2.0));
         line->setData(0, QVariant::fromValue<qulonglong>(edge.to));
         line->setData(1, 3);
         line->setData(2, static_cast<int>(edge.input));

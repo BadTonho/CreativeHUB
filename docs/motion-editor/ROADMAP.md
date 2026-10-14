@@ -1,5 +1,13 @@
 # Motion Studio Roadmap
 
+## Shared composition mask-operation regression
+
+The shared engine adds straight-RGBA ApplyMask/MaskedBlend for Video Editor
+Fusion masks. Existing application rendering semantics and formats are unchanged.
+The Windows Debug consumer gate includes Image interactive/GPU raster and Motion
+preview/GPU composition/export, plus shared composition CPU/OpenGL tests.
+Native macOS/Linux acceptance remains separate and pending.
+
 Current application version: **Beta 0.1.0**.
 
 Status: **2D MVP product scope approved; implementation is substantially

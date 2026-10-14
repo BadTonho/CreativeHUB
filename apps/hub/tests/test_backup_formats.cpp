@@ -266,13 +266,17 @@ void testVideoDocuments(const QString& root) {
     text.text.content = "Backup composition";
     fusion::nodes::Node input; input.id = 4; input.source_path = fsPath(still); input.source_is_still = true;
     composition.node_graph->nodes.push_back(text); composition.node_graph->nodes.push_back(input);
-    composition.node_graph->next_id = 5;
+    fusion::nodes::Node mask; mask.id=5;mask.type=fusion::nodes::NodeType::EllipseMask;
+    mask.mask.invert=true;mask.mask.soft_edge=0.25;
+    mask.mask_keyframes[0]={{0,0.2,creative_suite::animation::InterpolationMode::CubicBezier,{0.1,0.6,0.8,0.95}},{59,0.8}};
+    composition.node_graph->nodes.push_back(mask); composition.node_graph->connections.push_back({5,2,2});
+    composition.node_graph->next_id = 6;
     composition.composition_input_offset_frames = -15;
     document.timeline_tracks.front().clips = {composition};
     const auto fusion_path = QDir(QFileInfo(assets).absolutePath()).filePath("fusion.csp");
     project::save(fsPath(fusion_path), document);
     const auto fusion_saved = project::load(fsPath(fusion_path));
-    const auto fusion_backup = backup(QDir(root).filePath("video-fusion-v27"), fusion_path);
+    const auto fusion_backup = backup(QDir(root).filePath("video-fusion-mask-v28"), fusion_path);
     CS_TEST_CHECK(project::load(fsPath(fusion_backup.vault)) == fusion_saved);
     CS_TEST_CHECK(project::load(fsPath(fusion_backup.restored)) == fusion_saved);
 }

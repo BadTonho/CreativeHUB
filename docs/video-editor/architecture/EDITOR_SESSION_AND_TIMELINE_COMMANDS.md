@@ -1,5 +1,9 @@
 # Editor Session and Timeline Commands
 
+## Fusion masks v1
+
+Mask creation, Inspector settings, keyframes, typed reconnection and removal are graph replacements through SetClipNodeGraphCommand, preserving existing selection, dirty state and Undo/Redo. Invalid connections are expected no-ops. No shortcut or new timeline command is introduced. See [Fusion Masks](../FUSION_MASKS.md).
+
 ## Fusion composition commands
 
 `AddFusionCompositionCommand` and `DuplicateFusionCompositionCommand` publish

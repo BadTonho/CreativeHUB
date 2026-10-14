@@ -1,5 +1,13 @@
 # Image Editor Roadmap
 
+## Shared composition mask-operation regression
+
+The shared engine adds straight-RGBA ApplyMask/MaskedBlend for Video Editor
+Fusion masks. Existing application rendering semantics and formats are unchanged.
+The Windows Debug consumer gate includes Image interactive/GPU raster and Motion
+preview/GPU composition/export, plus shared composition CPU/OpenGL tests.
+Native macOS/Linux acceptance remains separate and pending.
+
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
 RGBA Eyedropper, and regression coverage implemented; manual text validation,

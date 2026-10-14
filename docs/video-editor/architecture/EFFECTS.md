@@ -1,5 +1,9 @@
 # Shared Visual Effects Contract
 
+## Fusion masks v1
+
+Optional typed Mask input 2 limits Effect/Color/Transform processing through premultiplied blending with the original. Merge attenuates foreground contribution; generators/Input/Output multiply alpha. No mask preserves existing behavior. See [Fusion Masks](../FUSION_MASKS.md).
+
 ## Fusion generators
 
 Effects > Video includes the `video.fusion_composition` generator. Its clip

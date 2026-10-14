@@ -1,5 +1,14 @@
 # Cross-Application Compatibility Proposal
 
+## Fusion mask contracts
+
+Video Editor owns CSP v28 mask geometry/animation and typed graph connections.
+Hub preserves these fields and composition offsets while relocating external
+Input paths; its supported upper bound is 28, rejecting future 29. Shared
+composition ApplyMask/MaskedBlend uses straight RGBA with premultiplied blending.
+Video Preview/export plus shared OpenGL, Image raster and Motion GPU/export
+consumer regressions cover the affected boundary without changing their formats.
+
 ## Fusion Composition backups
 
 CSP v27 is owned by the Video Editor. The Hub backup adapter preserves independent

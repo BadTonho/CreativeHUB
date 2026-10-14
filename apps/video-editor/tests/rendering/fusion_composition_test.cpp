@@ -158,7 +158,7 @@ void editing(const QString& directory) {
     QFile file(QString::fromStdWString(filename.wstring())); CS_TEST_CHECK(file.open(QIODevice::ReadOnly));
     auto root = QJsonDocument::fromJson(file.readAll()).object(); file.close();
     const auto record = root["timeline"].toObject()["tracks"].toArray()[0].toObject()["clips"].toArray()[0].toObject();
-    CS_TEST_CHECK(root["version"].toInt() == 27 && !record.contains("source") && !record.contains("text") && !record.contains("audio_gain"));
+    CS_TEST_CHECK(root["version"].toInt() == project::current_format_version && !record.contains("source") && !record.contains("text") && !record.contains("audio_gain"));
     root.insert("version", 26); CS_TEST_CHECK(file.open(QIODevice::WriteOnly | QIODevice::Truncate)); file.write(QJsonDocument(root).toJson()); file.close();
     bool rejected = false; try { (void)project::load(filename); } catch (const project::ProjectError&) { rejected = true; } CS_TEST_CHECK(rejected);
     // New generator tags also require v27 on ordinary video clips.
@@ -259,6 +259,15 @@ void workerAndExport(const QString& directory) {
         rendering::OfflineExportOptions options;
         options.prepared_frame_callback = [&](const auto& frame, std::int64_t index) {
             output.reset(); worker.renderCompositionFrame(index, index, revision);
+            if (!output || output->rgba_pixels!=frame.rgba_pixels) {
+                std::cerr<<"Preview/export mismatch: revision="<<revision<<" frame="<<index<<" export="<<frame.width<<"x"<<frame.height;
+                if (output) {
+                    std::cerr<<" preview="<<output->width<<"x"<<output->height;
+                    for (std::size_t byte=0;byte<std::min(output->rgba_pixels.size(),frame.rgba_pixels.size());++byte)
+                        if (output->rgba_pixels[byte]!=frame.rgba_pixels[byte]) {std::cerr<<" byte="<<byte<<" preview_value="<<int(output->rgba_pixels[byte])<<" export_value="<<int(frame.rgba_pixels[byte]);break;}
+                }
+                std::cerr<<'\n';
+            }
             CS_TEST_CHECK(output && output->rgba_pixels == frame.rgba_pixels); ++prepared;
         };
         rendering::OfflineExportRenderer::render(job, cancel, {}, options);
@@ -266,16 +275,25 @@ void workerAndExport(const QString& directory) {
     compare(1); CS_TEST_CHECK(prepared == 4 && output->rgba_pixels[0] == 180);
     spec.node_graph->nodes[0].type = NodeType::Text; spec.node_graph->nodes[0].text.content = "Title";
     job.project_snapshot.timeline_tracks[0].clips[0].node_graph = spec.node_graph; compare(2);
+    // Masked graph output must match worker Preview and export before encoding.
+    for (const auto type : {NodeType::RectangleMask,NodeType::EllipseMask}) {
+        spec.node_graph=coloredGraph({180,40,20,180});
+        Node mask; mask.id=3; mask.type=type; mask.mask.rotation=33; mask.mask.soft_edge=0.15;
+        mask.mask_keyframes[0]={{0,0.3},{3,0.7}}; spec.node_graph->nodes.push_back(mask);
+        spec.node_graph->next_id=4;spec.node_graph->connections.push_back({3,2,2});
+        job.project_snapshot.timeline_tracks[0].clips[0].node_graph=spec.node_graph;
+        compare(type==NodeType::RectangleMask ? 3 : 4);
+    }
     // Videos keep their sampled time after a split/trim; negative times and EOF are transparent.
     auto input_graph = makePassthroughGraph(); input_graph.nodes[0].source_path = source_path;
     input_graph.nodes[0].source_frame_rate = 30; input_graph.nodes[0].source_frame_count = 12;
     spec.node_graph = input_graph; spec.composition_input_offset_frames = 3;
     job.project_snapshot.media.push_back({source_path, "Input", "Unsorted", false, media::MediaKind::Video});
     auto& persisted = job.project_snapshot.timeline_tracks[0].clips[0]; persisted.node_graph = input_graph; persisted.composition_input_offset_frames = 3;
-    compare(3); CS_TEST_CHECK(output->rgba_pixels[std::size_t(135) * output->stride + 240 * 4] >= 85);
-    spec.composition_input_offset_frames = -4; persisted.composition_input_offset_frames = -4; compare(4);
+    compare(5); CS_TEST_CHECK(output->rgba_pixels[std::size_t(135) * output->stride + 240 * 4] >= 85);
+    spec.composition_input_offset_frames = -4; persisted.composition_input_offset_frames = -4; compare(6);
     CS_TEST_CHECK(output->rgba_pixels[std::size_t(135) * output->stride + 240 * 4] == 0);
-    spec.composition_input_offset_frames = 12; persisted.composition_input_offset_frames = 12; compare(5);
+    spec.composition_input_offset_frames = 12; persisted.composition_input_offset_frames = 12; compare(7);
     CS_TEST_CHECK(output->rgba_pixels[std::size_t(135) * output->stride + 240 * 4] == 0);
     // Transparent Fusion output blends with lower tracks and an upper adjustment.
     spec.node_graph = coloredGraph({180, 40, 20, 128}); spec.composition_input_offset_frames = 0; spec.track_index = 1;

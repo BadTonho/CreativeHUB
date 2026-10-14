@@ -122,6 +122,8 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     add_type->addItem("Merge", static_cast<int>(fusion::nodes::NodeType::Merge));
     add_type->addItem("Background", static_cast<int>(fusion::nodes::NodeType::Background));
     add_type->addItem("Text", static_cast<int>(fusion::nodes::NodeType::Text));
+    add_type->addItem("Rectangle Mask", static_cast<int>(fusion::nodes::NodeType::RectangleMask));
+    add_type->addItem("Ellipse Mask", static_cast<int>(fusion::nodes::NodeType::EllipseMask));
     auto* add_button = new QPushButton("Add Node", toolbar);
     add_button->setObjectName("fusionAddNodeButton");
     auto* grid_button = new QPushButton("Grid", toolbar);
@@ -270,7 +272,7 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     node_canvas->setEffectDropRequestedHandler(
         [this](const QString& effect_id, const QPointF& position,
                std::optional<fusion::nodes::Connection> cable) {
-            if (clip_id_ == 0) return false;
+            if (clip_id_ == 0 || (cable && cable->input==2)) return false;
             const auto effect_bytes = effect_id.toUtf8();
             const std::string effect_key(effect_bytes.constData(),
                                          static_cast<std::size_t>(effect_bytes.size()));
@@ -527,6 +529,29 @@ void FusionWorkspace::refreshInspector() {
             });
         return control;
     };
+    if (fusion::nodes::isMaskNode(node->type)) {
+        static const char* labels[]{"Center X (%)","Center Y (%)","Width (%)","Height (%)","Rotation (degrees)"};
+        const auto evaluated=fusion::nodes::evaluateMask(node->mask,node->mask_keyframes,local_frame_);
+        for (std::size_t i=0; i<5; ++i) {
+            const auto name=QStringLiteral("fusionMask%1").arg(i);
+            animatedSpin(name,QString::fromLatin1(labels[i]),fusion::nodes::maskValue(evaluated,i)*(i<4 ? 100 : 1),
+                i<2 ? -200 : i<4 ? 0 : -3600, i<2 ? 300 : i<4 ? 400 : 3600,1,
+                hasKeyAtFrame(node->mask_keyframes[i],local_frame_),[this,id=node->id,i] {
+                    auto candidate=graph_; auto* n=findMutableNode(candidate,id);
+                    if (!n || local_frame_<0 || local_frame_>=clip_duration_frames_) return;
+                    auto& keys=n->mask_keyframes[i];
+                    const auto value=creative_suite::animation::evaluateScalar(fusion::nodes::maskValue(n->mask,i),keys,local_frame_);
+                    if (hasKeyAtFrame(keys,local_frame_)) {
+                        static_cast<void>(creative_suite::animation::removeKeyframe(keys,local_frame_));
+                        if (keys.empty()) fusion::nodes::setMaskValue(n->mask,i,value);
+                    } else static_cast<void>(creative_suite::animation::setKeyframe(keys,local_frame_,value));
+                    commitGraph(std::move(candidate),QStringLiteral("Mask keyframe updated."));
+                });
+        }
+        spin("fusionMaskSoftEdge","Soft Edge (%)",node->mask.soft_edge*100,0,100,1);
+        auto* invert=new QCheckBox("Invert",node_properties_); invert->setObjectName("fusionMaskInvert");
+        invert->setChecked(node->mask.invert); layout->addRow(invert);
+    }
     if (node->type == fusion::nodes::NodeType::Background || node->type == fusion::nodes::NodeType::Text) {
         const auto node_id = node->id;
         auto* color = new QPushButton("Choose RGBA color", node_properties_);
@@ -663,7 +688,16 @@ void FusionWorkspace::refreshInspector() {
         auto found = std::find_if(candidate.nodes.begin(), candidate.nodes.end(),
             [node_id](const auto& value) { return value.id == node_id; });
         if (found == candidate.nodes.end()) return;
-        if (found->type == fusion::nodes::NodeType::Transform) {
+        if (fusion::nodes::isMaskNode(found->type)) {
+            const auto frame=std::clamp<std::int64_t>(local_frame_,0,std::max<std::int64_t>(0,clip_duration_frames_-1));
+            for (std::size_t i=0; i<5; ++i) {
+                const auto value=node_properties_->findChild<QDoubleSpinBox*>(QStringLiteral("fusionMask%1").arg(i))->value()/(i<4 ? 100 : 1);
+                if (found->mask_keyframes[i].empty()) fusion::nodes::setMaskValue(found->mask,i,value);
+                else static_cast<void>(creative_suite::animation::setKeyframe(found->mask_keyframes[i],frame,value));
+            }
+            found->mask.soft_edge=node_properties_->findChild<QDoubleSpinBox*>("fusionMaskSoftEdge")->value()/100;
+            found->mask.invert=node_properties_->findChild<QCheckBox*>("fusionMaskInvert")->isChecked();
+        } else if (found->type == fusion::nodes::NodeType::Transform) {
             const auto frame = std::clamp<std::int64_t>(local_frame_, 0,
                 std::max<std::int64_t>(0, clip_duration_frames_ - 1));
             const auto apply_property = [found, frame](
@@ -798,6 +832,15 @@ void FusionWorkspace::refreshAnimatedControls() {
             ? QStringLiteral("Remove keyframe at the current frame")
             : QStringLiteral("Add keyframe at the current frame"));
     };
+    if (fusion::nodes::isMaskNode(node->type)) {
+        const auto p=fusion::nodes::evaluateMask(node->mask,node->mask_keyframes,local_frame_);
+        for (std::size_t i=0;i<5;++i) {
+            const auto name=QStringLiteral("fusionMask%1").arg(i);
+            set_value(name,fusion::nodes::maskValue(p,i)*(i<4 ? 100 : 1));
+            set_key_button(name,hasKeyAtFrame(node->mask_keyframes[i],local_frame_));
+        }
+        return;
+    }
     if (node->type == fusion::nodes::NodeType::Transform) {
         const std::array<std::pair<QString, timeline::TransformProperty>, 5> properties{{
             {QStringLiteral("fusionTransformX"), timeline::TransformProperty::PositionX},

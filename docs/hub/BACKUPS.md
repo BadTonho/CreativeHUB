@@ -1,10 +1,18 @@
 # Hub Project Backups
 
+## Video Editor v28 masks
+
+The backup adapter preserves Rectangle/Ellipse node types, geometry, curves and
+Mask input 2 alongside generators and composition input offsets. Masks carry no
+media references; external Input paths continue to be rewritten on snapshot and
+restore. Supported Video Editor schemas are 1–28; future v29 is rejected.
+The Video Editor reader reopens restored fixtures in `hub-backup-format-test`.
+
 ## Video Editor v27 compositions
 
 Fusion Composition clips have no primary source. Backup preserves Background/
 Text data, graph curves and the signed input-time offset, while external Input
-paths are relocated through the existing node path adapter. Video formats 1–27
+paths are relocated through the existing node path adapter. Video formats 1–28
 are accepted; future versions are rejected. Producer/consumer round trips use
 the actual Video Editor writer and reader.
 
@@ -34,13 +42,13 @@ producer/consumer regression coverage when supported schemas gain path fields.
 | Format identifier | Supported versions | References rewritten |
 | --- | --- | --- |
 | `creative-suite-image-document` | 1–16 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
-| `creative-suite.main-editor` | 1–27 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
+| `creative-suite.main-editor` | 1–28 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
 | `creative-suite.motion-studio` | 1–6 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
 
 Video v26 adjustment clips have no source path. Their duration, effects and
 transform curves are preserved by backup and restoration. They do not cause
 media lookup or path rewriting. Versions 1–25 remain accepted, and versions
-newer than 27 are rejected until their reference contracts are supported.
+newer than 28 are rejected until their reference contracts are supported.
 
 Image paths use the original document directory. Video and Motion paths use
 the weakly canonical original document location, matching their readers.

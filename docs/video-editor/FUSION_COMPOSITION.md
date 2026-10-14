@@ -13,7 +13,7 @@ Select it in Edit to preview the Timeline and edit the normal Inspector effects,
 transform and keyframes. Open Fusion to edit its graph; leaving Fusion restores
 Timeline composition. Node VIEW controls remain temporary viewer state.
 
-Add Background, Text, Input, Transform, Color or Merge with Add Node. Existing
+Add Background, Text, Input, Transform, Color, Merge, Rectangle Mask or Ellipse Mask with Add Node. Existing
 Effects/Functions filter drops create effect nodes. Background has static RGBA
 color; its default alpha is zero. Text reuses the normal text renderer with
 content, font, pixel size, alignment and RGBA color. Set these properties and
@@ -67,13 +67,14 @@ graph by value, so later edits are independent.
 CSP v27 adds `kind: "fusion_composition"`, its required node graph and the input
 offset. Primary source fields remain absent/zero, and clip text/audio properties
 are not serialized. Node types `background` and `text` own their generator data.
-The reader accepts them only in v27. Versions 1–26 retain their previous graph
+The reader accepts them in v27 and later. Versions 1–26 retain their previous graph
 validation and rendering contracts; older readers reject the new root version.
 Autosave/recovery rebuild the generated clip without looking up a primary file.
-Hub v27 backups preserve generators and relocate external Input paths through
+Hub v28 backups preserve generators and masks and relocate external Input paths through
 the Video Editor reader/writer contract.
 
-This version excludes nested compositions, graph audio, masks, 3D and animated
+[Fusion Masks](FUSION_MASKS.md) adds Inspector-edited Rectangle/Ellipse nodes in CSP v28.
+This version excludes nested compositions, graph audio, advanced masks, 3D and animated
 Background/Text properties. Application version metadata remains unchanged.
 See [regression testing](REGRESSION_TESTING.md) for automated coverage and the
 separate native/platform acceptance status.

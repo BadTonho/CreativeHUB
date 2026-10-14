@@ -11,6 +11,49 @@
 
 namespace creative_suite::composition {
 namespace {
+bool maskFrameValid(const media::RgbaFrame& f) {
+    return f.width>0 && f.height>0 && f.width<=16384 && f.height<=16384 &&
+        f.stride>=f.width*4 && f.rgba_pixels.size()>=static_cast<std::size_t>(f.stride)*f.height;
+}
+bool maskSameSize(const media::RgbaFrame& a, const media::RgbaFrame& b) {
+    return maskFrameValid(a) && maskFrameValid(b) && a.width==b.width && a.height==b.height;
+}
+}
+bool applyMask(media::RgbaFrame& frame, const media::RgbaFrame& mask, const std::function<bool()>& cancel) {
+    if (!maskSameSize(frame,mask)) return false;
+    for (int y=0; y<frame.height; ++y) {
+        if (cancel && cancel()) return false;
+        for (int x=0; x<frame.width; ++x) {
+            const auto f=static_cast<std::size_t>(y)*frame.stride+x*4;
+            const auto m=static_cast<std::size_t>(y)*mask.stride+x*4;
+            frame.rgba_pixels[f+3]=static_cast<std::uint8_t>((unsigned(frame.rgba_pixels[f+3])*mask.rgba_pixels[m]+127)/255);
+        }
+    }
+    return true;
+}
+bool maskedBlend(const media::RgbaFrame& original, media::RgbaFrame& processed,
+    const media::RgbaFrame& mask, const std::function<bool()>& cancel) {
+    if (!maskSameSize(original,processed) || !maskSameSize(processed,mask)) return false;
+    for (int y=0; y<processed.height; ++y) {
+        if (cancel && cancel()) return false;
+        for (int x=0; x<processed.width; ++x) {
+            const auto o=static_cast<std::size_t>(y)*original.stride+x*4;
+            const auto p=static_cast<std::size_t>(y)*processed.stride+x*4;
+            const auto m=mask.rgba_pixels[static_cast<std::size_t>(y)*mask.stride+x*4];
+            if (m==255) continue;
+            if (m==0) { std::copy_n(original.rgba_pixels.data()+o,4,processed.rgba_pixels.data()+p); continue; }
+            const unsigned oa=original.rgba_pixels[o+3]*(255-m), pa=processed.rgba_pixels[p+3]*m;
+            const unsigned alpha=oa+pa;
+            for (int channel=0; channel<3; ++channel)
+                processed.rgba_pixels[p+channel]=alpha ? static_cast<std::uint8_t>(
+                    (original.rgba_pixels[o+channel]*oa+processed.rgba_pixels[p+channel]*pa+alpha/2)/alpha) : 0;
+            processed.rgba_pixels[p+3]=static_cast<std::uint8_t>((alpha+127)/255);
+        }
+    }
+    return true;
+}
+
+namespace {
 
 struct Color {
     double red = 0.0;

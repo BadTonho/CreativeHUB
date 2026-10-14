@@ -122,6 +122,8 @@ fusion::nodes::NodeType parseNodeType(const QJsonValue& value,
     if (name == QLatin1String("effect")) return fusion::nodes::NodeType::Effect;
     if (name == QLatin1String("background")) return fusion::nodes::NodeType::Background;
     if (name == QLatin1String("text")) return fusion::nodes::NodeType::Text;
+    if (name == QLatin1String("rectangle_mask")) return fusion::nodes::NodeType::RectangleMask;
+    if (name == QLatin1String("ellipse_mask")) return fusion::nodes::NodeType::EllipseMask;
     throwJson(ProjectErrorCode::InvalidValue, project_path,
               "Project JSON contains an unsupported Fusion node type.");
 }
@@ -171,6 +173,19 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
         fusion::nodes::Node node;
         node.id = static_cast<fusion::nodes::NodeId>(id.toInteger());
         node.type = parseNodeType(node_object.value("type"), project_path);
+        if (fusion::nodes::isMaskNode(node.type) || node_object.contains("mask") || node_object.contains("mask_keyframes")) {
+            if (version<fusion_masks_format_version || !fusion::nodes::isMaskNode(node.type) || !node_object.value("mask").isObject())
+                throwJson(ProjectErrorCode::InvalidValue,project_path,"Mask data requires a mask node in project format 28.");
+            const auto mask=node_object.value("mask").toObject();
+            const char* names[]{"center_x","center_y","width","height","rotation"};
+            for (std::size_t i=0;i<5;++i) {
+                if (!mask.value(names[i]).isDouble()) throwJson(ProjectErrorCode::InvalidValue,project_path,"Invalid mask geometry.");
+                fusion::nodes::setMaskValue(node.mask,i,mask.value(names[i]).toDouble());
+            }
+            if (!mask.value("soft_edge").isDouble() || !mask.value("invert").isBool())
+                throwJson(ProjectErrorCode::InvalidValue,project_path,"Invalid static mask properties.");
+            node.mask.soft_edge=mask.value("soft_edge").toDouble(); node.mask.invert=mask.value("invert").toBool();
+        }
         if (node.type == fusion::nodes::NodeType::Background || node.type == fusion::nodes::NodeType::Text) {
             if (version < fusion_composition_format_version)
                 throwJson(ProjectErrorCode::InvalidValue, project_path, "Generator nodes require project format version 27.");
@@ -262,6 +277,12 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
                     output.push_back(readCurveEasing({frame, numeric.toDouble()}, key, version, project_path));
                 }
             };
+            if (node_object.contains("mask_keyframes")) {
+                if (!node_object.value("mask_keyframes").isObject()) throwJson(ProjectErrorCode::InvalidValue,project_path,"Invalid mask curves.");
+                const auto curves=node_object.value("mask_keyframes").toObject();
+                const char* names[]{"center_x","center_y","width","height","rotation"};
+                for (std::size_t i=0;i<5;++i) parse_scalar_keyframes(curves.value(names[i]),node.mask_keyframes[i]);
+            }
             const auto transform_keys_value =
                 node_object.value("transform_keyframes");
             if (!transform_keys_value.isUndefined()) {
@@ -322,7 +343,7 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
         const auto from = edge.value("from"), to = edge.value("to"), input = edge.value("input");
         if (!from.isDouble() || !to.isDouble() || !input.isDouble() ||
             from.toInteger() <= 0 || to.toInteger() <= 0 ||
-            input.toInteger() < 0 || input.toInteger() > 1)
+            input.toInteger() < 0 || input.toInteger() > (version>=fusion_masks_format_version ? 2 : 1))
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid Fusion connection endpoint.");
         graph.connections.push_back({static_cast<fusion::nodes::NodeId>(from.toInteger()),

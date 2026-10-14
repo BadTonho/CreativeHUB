@@ -70,6 +70,8 @@ const char* nodeTypeName(fusion::nodes::NodeType type) {
     case fusion::nodes::NodeType::Effect: return "effect";
     case fusion::nodes::NodeType::Background: return "background";
     case fusion::nodes::NodeType::Text: return "text";
+    case fusion::nodes::NodeType::RectangleMask: return "rectangle_mask";
+    case fusion::nodes::NodeType::EllipseMask: return "ellipse_mask";
     }
     return "input";
 }
@@ -113,6 +115,16 @@ QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
         if (node.type == fusion::nodes::NodeType::Background)
             value.insert("background_color", QJsonObject{{"r", node.background_color[0]}, {"g", node.background_color[1]}, {"b", node.background_color[2]}, {"a", node.background_color[3]}});
         if (node.type == fusion::nodes::NodeType::Text) value.insert("text", textStyleJson(node.text));
+        if (fusion::nodes::isMaskNode(node.type)) {
+            QJsonObject mask, curves;
+            const char* names[]{"center_x","center_y","width","height","rotation"};
+            for (std::size_t i=0;i<5;++i) {
+                mask.insert(names[i],fusion::nodes::maskValue(node.mask,i));
+                curves.insert(names[i],write_keyframes(node.mask_keyframes[i]));
+            }
+            mask.insert("soft_edge",node.mask.soft_edge); mask.insert("invert",node.mask.invert);
+            value.insert("mask",mask); value.insert("mask_keyframes",curves);
+        }
         value.insert("x", node.x);
         value.insert("y", node.y);
         if (!node.source_path.empty())

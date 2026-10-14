@@ -25,7 +25,7 @@
 
 using namespace creative_suite::composition;
 namespace {
-void fusionParity(OpenGlFrameCompositor& gpu) {
+void fusionParity(OpenGlFrameCompositor& gpu, QOffscreenSurface* surface) {
     using namespace fusion::nodes;
     auto source = std::make_shared<media::VideoFrame>(media::VideoFrame{37, 23, 148, std::vector<std::uint8_t>(148 * 23)});
     for (std::size_t i = 0; i < source->rgba_pixels.size(); ++i)
@@ -73,6 +73,36 @@ void fusionParity(OpenGlFrameCompositor& gpu) {
     for (std::size_t byte = 0; byte < generated_cpu->rgba_pixels.size(); ++byte)
         if (std::abs(int(generated_cpu->rgba_pixels[byte]) - int(generated_gpu->rgba_pixels[byte])) > 2)
             throw std::runtime_error("Fusion generator CPU/GPU parity failed.");
+    for (const auto mask_type : {NodeType::RectangleMask,NodeType::EllipseMask})
+    for (const auto receiver : {NodeType::Input,NodeType::Output,NodeType::Transform,NodeType::Color,NodeType::Effect,NodeType::Merge}) {
+        auto masked=makePassthroughGraph(); Node mask;mask.id=3;mask.type=mask_type;
+        mask.mask.rotation=31;mask.mask.soft_edge=0.2;mask.mask.invert=receiver==NodeType::Transform;
+        masked.nodes.push_back(mask);masked.next_id=4;
+        if (receiver==NodeType::Input || receiver==NodeType::Output) masked.connections.push_back({3,receiver==NodeType::Input ? 1ULL : 2ULL,2});
+        else {
+            Node n;n.id=4;n.type=receiver;n.color.brightness=27;n.transform.position_x=0.75;
+            n.effect=creative_suite::effects::makeDefaultInstance("video.grayscale");
+            masked.nodes.push_back(n);masked.next_id=5;masked.connections={{1,4,0},{4,2,0},{3,4,2}};
+            if (receiver==NodeType::Merge) {Node fg;fg.id=5;masked.nodes.push_back(fg);masked.next_id=6;masked.connections.push_back({5,4,1});}
+        }
+        InputFrames frames{{1,source},{5,foreground}};
+        bool used=false; const auto cpu=evaluate(masked,frames,EvaluationContext{9});
+        const auto output=evaluate(masked,frames,EvaluationContext{9,&gpu,&used});
+        if (!cpu || !output || !used) throw std::runtime_error("Masked graph did not execute the native GPU receiver " + std::to_string(int(receiver)));
+        for (std::size_t i=0;i<cpu->rgba_pixels.size();++i)
+            if (std::abs(int(cpu->rgba_pixels[i])-int(output->rgba_pixels[i]))>2)
+                throw std::runtime_error("Mask CPU/GPU parity failed at byte "+std::to_string(i));
+        auto viewed=evaluate(masked,frames,3,EvaluationContext{9,&gpu,&used});
+        if (!viewed || !used) throw std::runtime_error("Mask VIEW did not execute on GPU.");
+    }
+    auto limited_graph=makePassthroughGraph();Node limited_mask;limited_mask.id=3;limited_mask.type=NodeType::RectangleMask;
+    limited_graph.nodes.push_back(limited_mask);limited_graph.next_id=4;limited_graph.connections.push_back({3,2,2});
+    auto budget=std::make_shared<OpenGlTexturePoolBudget>(64ULL*1024*1024,1);
+    OpenGlFrameCompositor limited_gpu(surface,OpenGlPrecisionPolicy::Automatic,nullptr,budget);
+    bool limited_used=true;auto fallback=evaluate(limited_graph,inputs,EvaluationContext{0,&limited_gpu,&limited_used});
+    auto reference=evaluate(limited_graph,inputs);
+    if (!fallback || !reference || limited_used || fallback->rgba_pixels!=reference->rgba_pixels)
+        throw std::runtime_error("Bounded masked graph did not recover the complete CPU result.");
     bool used = false;
     const auto cancelled = evaluate(graph, inputs, EvaluationContext{0, &gpu, &used, [] { return true; }});
     if (cancelled || used) throw std::runtime_error("A cancelled Fusion GPU graph published a frame.");
@@ -310,7 +340,7 @@ int main(int argc, char** argv) {
                     "Native toggle interrupted playback.");
                 directWorker(surface.get(), image, incoming, text, published, refreshed);
                 OpenGlFrameCompositor graph_gpu(surface.get());
-                fusionParity(graph_gpu);
+                fusionParity(graph_gpu,surface.get());
                 metrics.setEnabled(false);
             } catch (...) { failure = std::current_exception(); }
         }));

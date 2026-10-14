@@ -5,6 +5,7 @@
 #include <creative_suite/media/video_frame.h>
 
 #include <cstddef>
+#include <functional>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -12,6 +13,14 @@
 #include <vector>
 
 namespace creative_suite::composition {
+
+// In-place straight RGBA operations. Coverage is the red channel at identical
+// dimensions. Blend uses premultiplied alpha; zero/full coverage preserves bytes.
+// False means invalid geometry or cancellation; partial results must be discarded.
+[[nodiscard]] bool applyMask(media::RgbaFrame&, const media::RgbaFrame&,
+    const std::function<bool()>& cancel = {});
+[[nodiscard]] bool maskedBlend(const media::RgbaFrame& original, media::RgbaFrame& processed,
+    const media::RgbaFrame& coverage, const std::function<bool()>& cancel = {});
 
 class OpenGlTextureFrame;
 

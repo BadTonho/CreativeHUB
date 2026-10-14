@@ -116,6 +116,8 @@ void main() {
 constexpr char image_fragment_shader[] = R"GLSL(
 uniform sampler2D background_image;
 uniform sampler2D foreground_image;
+uniform sampler2D mask_image;
+uniform bool mask_bottom_left;
 uniform bool background_bottom_left;
 uniform bool foreground_bottom_left;
 uniform int operation;
@@ -158,6 +160,21 @@ void main() {
             float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
             color.rgb = floor(clamp(vec3(luma) + (rgb - vec3(luma)) * p.z, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
         }
+        return;
+    }
+    if (operation == 4 || operation == 5) {
+        ivec2 mp = pixel;
+        if (mask_bottom_left) mp.y = textureSize(mask_image,0).y-1-mp.y;
+        int coverage = int(floor(texelFetch(mask_image,mp,0).r*255.0+0.5));
+        ivec4 bg=ivec4(floor(color*255.0+0.5));
+        if (operation == 4) { color.a=float((bg.a*coverage+127)/255)/255.0; return; }
+        if (coverage==0) return;
+        ivec4 fg=ivec4(floor(foreground(pixel)*255.0+0.5));
+        if (coverage==255) { color=vec4(fg)/255.0; return; }
+        int ba=bg.a*(255-coverage), fa=fg.a*coverage, alpha=ba+fa;
+        ivec3 numerator=bg.rgb*ba+fg.rgb*fa;
+        ivec3 rgb=alpha==0 ? ivec3(0) : (numerator+ivec3(alpha/2))/alpha;
+        color=vec4(vec3(rgb),float((alpha+127)/255))/255.0;
         return;
     }
     if (operation == 3) {
@@ -329,8 +346,8 @@ struct OpenGlFrameCompositor::Impl {
     std::unordered_map<std::string, RasterTexture> raster_textures;
     std::unique_ptr<QOpenGLFramebufferObject> raster_scratch[2];
     std::uint64_t raster_reserved = 0, raster_clock = 0;
-    GLuint image_textures[2]{};
-    std::uint64_t image_texture_bytes[2]{};
+    GLuint image_textures[3]{};
+    std::uint64_t image_texture_bytes[3]{};
     std::unique_ptr<detail::WindowsVideoInterop> video_interop;
     std::unique_ptr<QOpenGLFramebufferObject> output;
     std::unique_ptr<QOpenGLFramebufferObject> effect_scratch;
@@ -405,7 +422,7 @@ struct OpenGlFrameCompositor::Impl {
             program.reset();
             effect_program.reset();
             image_program.reset();
-            gl->glDeleteTextures(2, image_textures);
+            gl->glDeleteTextures(3, image_textures);
             if (effect_source_fbo) gl->glDeleteFramebuffers(1, &effect_source_fbo);
             if (texture) gl->glDeleteTextures(1, &texture);
             if (vao) gl->glDeleteVertexArrays(1, &vao);
@@ -482,7 +499,7 @@ struct OpenGlFrameCompositor::Impl {
         if (!image_program->addShaderFromSourceCode(QOpenGLShader::Vertex, vertex_shader) ||
             !image_program->addShaderFromSourceCode(QOpenGLShader::Fragment, image_fragment) || !image_program->link())
             return result(OpenGlCompositionStatus::Failed, "compile-image-shaders", image_program->log().toStdString());
-        gl->glGenTextures(2, image_textures);
+        gl->glGenTextures(3, image_textures);
         gl->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &texture_limit);
         gl->glGenTextures(1, &texture);
         gl->glGenFramebuffers(1, &effect_source_fbo);
@@ -770,17 +787,23 @@ void main() {
                 if (!input.rgba || !usable(CompositionLayer{input.rgba}) ||
                     !bounded(input.width(), input.height(), texture_limit))
                     return result(OpenGlCompositionStatus::Unsupported, "check-image-input", "Image operation requires a valid source.");
+                const auto bytes=static_cast<std::uint64_t>(input.width())*input.height()*4;
+                if (slot==2 && bytes>budget->impl_->byte_limit)
+                    return result(OpenGlCompositionStatus::Unsupported,"check-mask-budget","Coverage exceeds the bounded mask upload budget.");
                 const auto started = Clock::now();
                 gl->glBindTexture(GL_TEXTURE_2D, image_textures[slot]);
                 gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, input.width(), input.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                image_texture_bytes[slot]=bytes;
+                rememberResourcePeak();
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
                 gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 gl->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-                for (int y = 0; y < input.height(); ++y)
+                for (int y = 0; y < input.height(); ++y) {
+                    if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
                     gl->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y, input.width(), 1, GL_RGBA, GL_UNSIGNED_BYTE,
                         input.rgba->rgba_pixels.data() + static_cast<std::size_t>(y) * input.rgba->stride);
-                image_texture_bytes[slot] = static_cast<std::uint64_t>(input.width()) * input.height() * 4;
+                }
                 measured.uploaded_bytes += image_texture_bytes[slot];
                 ++measured.uploaded_layers;
                 measured.upload_nanoseconds += elapsed(started);
@@ -794,9 +817,17 @@ void main() {
             ~InteropGuard() { if (adapter) (void)adapter->end(); }
         } interop_guard{operation.background.native ? video_interop.get() : nullptr};
         if (bound.status != OpenGlCompositionStatus::Complete) return bound;
-        if (operation.kind == OpenGlImageOperationKind::Merge) {
+        if (operation.kind == OpenGlImageOperationKind::Merge || operation.kind == OpenGlImageOperationKind::MaskedBlend) {
             bound = bind(operation.foreground, 1);
             if (bound.status != OpenGlCompositionStatus::Complete) return bound;
+        }
+        if (operation.kind == OpenGlImageOperationKind::ApplyMask || operation.kind == OpenGlImageOperationKind::MaskedBlend) {
+            if (operation.mask.width()!=width || operation.mask.height()!=height ||
+                (operation.kind==OpenGlImageOperationKind::MaskedBlend &&
+                 (operation.foreground.width()!=width || operation.foreground.height()!=height)))
+                return result(OpenGlCompositionStatus::Unsupported,"check-mask-geometry","Mask dimensions must match the receiver.");
+            bound=bind(operation.mask,2);
+            if (bound.status!=OpenGlCompositionStatus::Complete) return bound;
         }
         const auto started = Clock::now();
         gl->glViewport(0, 0, width, height);
@@ -806,6 +837,8 @@ void main() {
         gl->glBindVertexArray(vao);
         image_program->setUniformValue("background_image", 0);
         image_program->setUniformValue("foreground_image", 1);
+        image_program->setUniformValue("mask_image", 2);
+        image_program->setUniformValue("mask_bottom_left", bool(operation.mask.texture));
         image_program->setUniformValue("background_bottom_left", bool(operation.background.texture));
         image_program->setUniformValue("foreground_bottom_left", bool(operation.foreground.texture));
         image_program->setUniformValue("operation", static_cast<int>(operation.kind));
@@ -909,7 +942,7 @@ void main() {
     }
     OpenGlResourceUsage resources() const noexcept {
         std::uint64_t bytes = static_cast<std::uint64_t>(source_width) * source_height * 4;
-        bytes += image_texture_bytes[0] + image_texture_bytes[1];
+        bytes += image_texture_bytes[0] + image_texture_bytes[1] + image_texture_bytes[2];
         if (video_interop) bytes += video_interop->reservedBytes();
         if (output && output->isValid()) bytes += static_cast<std::uint64_t>(output->width()) * output->height() * 4;
         for (const auto& target : targets) if (target.output && target.output->isValid()) bytes += target.bytes;

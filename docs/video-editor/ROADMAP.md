@@ -1,11 +1,15 @@
 # Video Editor Roadmap
 
+## Fusion masks v1
+
+Rectangle/Ellipse masks are implemented for the pending 0.1.1 release, with typed ports, Inspector geometry, five animated properties, shared CPU/GPU evaluation and CSP v28 / Hub recovery. Viewer handles, polygon masks, combinations and tracking remain later work. See [Fusion Masks](FUSION_MASKS.md).
+
 ## Fusion Composition v1
 
 The pending 0.1.1 implementation adds independent Fusion Composition clips,
 Background/Text generators, generated-duration editing/history, shared
 preview/export graph evaluation, CSP v27 recovery and Hub backup compatibility.
-See [the feature guide](FUSION_COMPOSITION.md). Nested compositions, masks, 3D,
+See [the feature guide](FUSION_COMPOSITION.md). Nested compositions, advanced masks, 3D,
 graph audio and animation of generator properties remain outside this version.
 Automated checks accompany implementation; native graphical and macOS/Linux
 acceptance are tracked separately.
@@ -167,7 +171,7 @@ through 18 continue opening as 16:9, and their stored or migrated Timeline FPS
 behavior remains unchanged.
 
 Waveforms, recording, advanced audio mixing, automatic captions, advanced color
-grading, masks, 3D layers, proxies,
+grading, advanced masks, 3D layers, proxies,
 advanced compositing, plugins, and full Fusion processing remain outside the
 foundation. Continue evaluating these only as later milestones.
 
@@ -396,7 +400,7 @@ performance measurements, and Video Editor stability as the decision criteria.
   Preview/export mixing.
 - [ ] Expand audio editing with recording, audio-only file export, track
   automation, and advanced mixing as user workflows require.
-- [ ] Add masks and more advanced compositing.
+- [-] Rectangle/Ellipse masks implemented; advanced mask authoring and compositing remain pending.
 - [ ] Add proxies, incremental rendering, and broader cache workflows where
   measurements show a need.
 - [ ] Profile representative projects and address measured performance and
