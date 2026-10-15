@@ -1,4 +1,5 @@
 #include "storage_page.h"
+#include <QCoreApplication>
 #include "../../model/storage_manager.h"
 #include "../../model/activity_manager.h"
 #include "../../diagnostics/hub_logger.h"
@@ -18,11 +19,11 @@ namespace creative_suite::hub {
 namespace {
 
 QString friendlyDirName(const QString& path) {
-    if (path.contains(QStringLiteral("video-editor"))) return QStringLiteral("Cache do Video Editor (previews & proxies)");
-    if (path.contains(QStringLiteral("image-editor"))) return QStringLiteral("Cache do Image Editor (camadas & buffers)");
-    if (path.contains(QStringLiteral("motion-editor"))) return QStringLiteral("Cache do Motion Studio (render & efeitos)");
-    if (path.contains(QStringLiteral("creative-suite"))) return QStringLiteral("Cache Principal da Suíte");
-    return QStringLiteral("Cache de Dados Locais");
+    if (path.contains(QStringLiteral("video-editor"))) return QCoreApplication::translate("StoragePage", "Video Editor cache (previews and proxies)");
+    if (path.contains(QStringLiteral("image-editor"))) return QCoreApplication::translate("StoragePage", "Image Editor cache (layers and buffers)");
+    if (path.contains(QStringLiteral("motion-editor"))) return QCoreApplication::translate("StoragePage", "Motion Studio cache (rendering and effects)");
+    if (path.contains(QStringLiteral("creative-suite"))) return QCoreApplication::translate("StoragePage", "Suite cache");
+    return QCoreApplication::translate("StoragePage", "Local data cache");
 }
 
 } // namespace
@@ -57,11 +58,11 @@ void StoragePage::setupUi() {
     mainLayout->setSpacing(16);
 
     // Title & Subtitle
-    auto* titleLabel = new QLabel(QStringLiteral("Armazenamento & Cache"), scrollContainer);
+    auto* titleLabel = new QLabel(QCoreApplication::translate("StoragePage", "Storage & Cache"), scrollContainer);
     titleLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"));
     mainLayout->addWidget(titleLabel);
 
-    auto* subLabel = new QLabel(QStringLiteral("Gerencie o espaço em disco ocupado pela suíte criativa e limpe caches temporários com segurança."), scrollContainer);
+    auto* subLabel = new QLabel(QCoreApplication::translate("StoragePage", "Manage disk space used by the Creative Suite and safely clear temporary caches."), scrollContainer);
     subLabel->setWordWrap(true);
     subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #888888; background: transparent; margin-bottom: 4px;"));
     mainLayout->addWidget(subLabel);
@@ -79,18 +80,18 @@ void StoragePage::setupUi() {
     auto* overviewLayout = new QVBoxLayout(overviewCard);
     overviewLayout->setSpacing(14);
 
-    auto* sectionTitle = new QLabel(QStringLiteral("ESPAÇO OCUPADO EM CACHE"), overviewCard);
+    auto* sectionTitle = new QLabel(QCoreApplication::translate("StoragePage", "CACHE USAGE"), overviewCard);
     sectionTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 1.2px; background: transparent;"));
     overviewLayout->addWidget(sectionTitle);
 
     auto* sizeRow = new QHBoxLayout();
     sizeRow->setSpacing(12);
 
-    auto* labelDesc = new QLabel(QStringLiteral("Tamanho total acumulado:"), overviewCard);
+    auto* labelDesc = new QLabel(QCoreApplication::translate("StoragePage", "Total size:"), overviewCard);
     labelDesc->setStyleSheet(QStringLiteral("color: #aaaaaa; font-size: 13px; background: transparent;"));
     sizeRow->addWidget(labelDesc);
 
-    m_totalSizeLabel = new QLabel(QStringLiteral("Calculando..."), overviewCard);
+    m_totalSizeLabel = new QLabel(QCoreApplication::translate("StoragePage", "Calculating..."), overviewCard);
     m_totalSizeLabel->setStyleSheet(QStringLiteral("color: #ffffff; font-size: 18px; font-weight: 800; background: transparent;"));
     sizeRow->addWidget(m_totalSizeLabel);
     sizeRow->addStretch();
@@ -99,14 +100,14 @@ void StoragePage::setupUi() {
     auto* actionsRow = new QHBoxLayout();
     actionsRow->setSpacing(12);
 
-    auto* clearBtn = new QPushButton(QStringLiteral("Limpar Cache Seguro"), overviewCard);
+    auto* clearBtn = new QPushButton(QCoreApplication::translate("StoragePage", "Safely Clear Cache"), overviewCard);
     clearBtn->setFixedHeight(36);
     clearBtn->setCursor(Qt::PointingHandCursor);
     clearBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(clearBtn, &QPushButton::clicked, this, &StoragePage::onClearCache);
     actionsRow->addWidget(clearBtn);
 
-    auto* openFolderBtn = new QPushButton(QStringLiteral("Abrir Pasta de Cache"), overviewCard);
+    auto* openFolderBtn = new QPushButton(QCoreApplication::translate("StoragePage", "Open Cache Folder"), overviewCard);
     openFolderBtn->setFixedHeight(36);
     openFolderBtn->setCursor(Qt::PointingHandCursor);
     openFolderBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
@@ -136,7 +137,7 @@ void StoragePage::setupUi() {
     auto* breakdownCardLayout = new QVBoxLayout(breakdownCard);
     breakdownCardLayout->setSpacing(12);
 
-    auto* breakdownHeader = new QLabel(QStringLiteral("DIRETÓRIOS DE CACHE DA SUÍTE"), breakdownCard);
+    auto* breakdownHeader = new QLabel(QCoreApplication::translate("StoragePage", "SUITE CACHE DIRECTORIES"), breakdownCard);
     breakdownHeader->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 1.2px; background: transparent;"));
     breakdownCardLayout->addWidget(breakdownHeader);
 
@@ -159,13 +160,12 @@ void StoragePage::setupUi() {
     auto* tipLayout = new QVBoxLayout(tipCard);
     tipLayout->setSpacing(6);
 
-    auto* tipTitle = new QLabel(QStringLiteral("COMO O CACHE FUNCIONA"), tipCard);
+    auto* tipTitle = new QLabel(QCoreApplication::translate("StoragePage", "HOW THE CACHE WORKS"), tipCard);
     tipTitle->setStyleSheet(QStringLiteral("font-size: 10px; font-weight: 800; color: #666666; letter-spacing: 1.0px; background: transparent;"));
     tipLayout->addWidget(tipTitle);
 
     auto* tipText = new QLabel(
-        QStringLiteral("A limpeza de cache elimina apenas arquivos temporários de renderização, formas de onda de áudio e pré-visualizações. "
-                       "Seus projetos salvos, arquivos de mídia originais e configurações permanecem 100% preservados."),
+        QCoreApplication::translate("StoragePage", "Clearing the cache removes only temporary render files, audio waveforms, and previews. Saved projects, original media, and settings remain untouched."),
         tipCard
     );
     tipText->setWordWrap(true);
@@ -229,11 +229,11 @@ void StoragePage::refreshStorageInfo() {
 void StoragePage::onClearCache() {
     QMessageBox confirm(this);
     confirm.setIcon(QMessageBox::Question);
-    confirm.setWindowTitle(QStringLiteral("Limpar Cache da Suíte"));
-    confirm.setText(QStringLiteral("Deseja realmente limpar todos os arquivos de cache e pré-visualizações temporárias da suíte criativa?"));
-    confirm.setInformativeText(QStringLiteral("Seus projetos e mídias originais não serão alterados."));
-    auto* okBtn = confirm.addButton(QStringLiteral("Limpar Cache"), QMessageBox::AcceptRole);
-    confirm.addButton(QStringLiteral("Cancelar"), QMessageBox::RejectRole);
+    confirm.setWindowTitle(QCoreApplication::translate("StoragePage", "Clear Suite Cache"));
+    confirm.setText(QCoreApplication::translate("StoragePage", "Are you sure you want to clear all cache files and temporary previews for the Creative Suite?"));
+    confirm.setInformativeText(QCoreApplication::translate("StoragePage", "Your projects and original media will not be changed."));
+    auto* okBtn = confirm.addButton(QCoreApplication::translate("StoragePage", "Clear Cache"), QMessageBox::AcceptRole);
+    confirm.addButton(QCoreApplication::translate("StoragePage", "Cancel"), QMessageBox::RejectRole);
     confirm.exec();
 
     if (confirm.clickedButton() != okBtn) {
@@ -248,16 +248,16 @@ void StoragePage::onClearCache() {
     QString title;
     QString message;
     if (result.succeeded()) {
-        title = result.removed_entries > 0 ? QStringLiteral("Cache Liberado") : QStringLiteral("Cache já vazio");
+        title = result.removed_entries > 0 ? QCoreApplication::translate("StoragePage", "Cache Cleared") : QCoreApplication::translate("StoragePage", "Cache already empty");
         message = result.removed_entries > 0
-            ? QStringLiteral("Cache limpo com sucesso. Foram liberados %1.").arg(removed)
-            : QStringLiteral("O cache já estava vazio. Nenhum arquivo foi removido.");
+            ? QCoreApplication::translate("StoragePage", "Cache cleared successfully. %1 freed.").arg(removed)
+            : QCoreApplication::translate("StoragePage", "The cache was already empty. No files were removed.");
     } else {
-        title = result.removed_entries > 0 ? QStringLiteral("Limpeza parcial do cache") : QStringLiteral("Falha na limpeza do cache");
+        title = result.removed_entries > 0 ? QCoreApplication::translate("StoragePage", "Partial Cache Cleanup") : QCoreApplication::translate("StoragePage", "Cache Cleanup Failed");
         const QString residue = result.remaining_size_known
-            ? QStringLiteral("%1 permanecem em cache.").arg(remaining)
-            : QStringLiteral("Pelo menos %1 permanecem em cache; não foi possível medir todos os arquivos.").arg(remaining);
-        message = QStringLiteral("%1. Foram liberados %2. %3 Algumas entradas não puderam ser limpas. Feche os editores e tente novamente. Consulte o log para os detalhes.")
+            ? QCoreApplication::translate("StoragePage", "%1 remain in the cache.").arg(remaining)
+            : QCoreApplication::translate("StoragePage", "At least %1 remain in the cache; not all files could be measured.").arg(remaining);
+        message = QCoreApplication::translate("StoragePage", "%1. %2 freed. %3 Some items could not be removed. Close the editors and try again. See the log for details.")
             .arg(title, removed, residue);
     }
     if (m_statusNote) {

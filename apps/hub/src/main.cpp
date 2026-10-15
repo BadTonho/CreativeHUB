@@ -1,5 +1,6 @@
 #include "ui/main_window.h"
 #include "diagnostics/hub_logger.h"
+#include <creative_suite/translations/translation_runtime.h>
 #ifdef Q_OS_WIN
 #include <creative_suite/updater/update_service.h>
 #endif
@@ -18,6 +19,9 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationName(QStringLiteral("CreativeSuiteHub"));
     QCoreApplication::setApplicationVersion(QStringLiteral(CREATIVE_SUITE_APP_VERSION));
     app.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
+    creative_suite::translations::TranslationRuntime translations;
+    static_cast<void>(translations.installForApplication(
+        app, QStringLiteral("hub"), QStringLiteral(":/translations/hub/pt_BR.qm")));
 
     creative_suite::hub::HubLogger::instance().logInfo(
         QStringLiteral("Application"),
@@ -26,6 +30,7 @@ int main(int argc, char* argv[]) {
     );
 
     creative_suite::hub::MainWindow mainWindow;
+    mainWindow.startTranslationUpdateCheck();
 #ifdef Q_OS_WIN
     creative_suite::updater::markApplicationStartupHealthy(QStringLiteral("hub"));
 #endif

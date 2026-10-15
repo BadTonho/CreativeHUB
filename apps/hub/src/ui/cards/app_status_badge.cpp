@@ -1,4 +1,5 @@
 #include "app_status_badge.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 
 #include <QHBoxLayout>
@@ -33,7 +34,7 @@ void AppStatusBadge::updateAppearance() {
 
     switch (m_status) {
         case AppStatus::Installed:
-            text = m_versionInfo.isEmpty() ? QStringLiteral("● Instalado")
+            text = m_versionInfo.isEmpty() ? QCoreApplication::translate("AppStatusBadge", "● Installed")
                                            : QStringLiteral("● v%1").arg(m_versionInfo);
             bgColor = QColor(0x1e, 0x1e, 0x1e);
             textColor = QColor(0xff, 0xff, 0xff);
@@ -41,22 +42,22 @@ void AppStatusBadge::updateAppearance() {
             break;
 
         case AppStatus::UpdateAvailable:
-            text = m_versionInfo.isEmpty() ? QStringLiteral("● Atualização")
-                                           : QStringLiteral("● Nova v%1").arg(m_versionInfo);
+            text = m_versionInfo.isEmpty() ? QCoreApplication::translate("AppStatusBadge", "● Update available")
+                                           : QCoreApplication::translate("AppStatusBadge", "● New v%1").arg(m_versionInfo);
             bgColor = QColor(0x26, 0x26, 0x26);
             textColor = QColor(0xff, 0xff, 0xff);
             borderColor = QColor(0x3e, 0x3e, 0x3e);
             break;
 
         case AppStatus::Downloading:
-            text = QStringLiteral("● Baixando...");
+            text = QCoreApplication::translate("AppStatusBadge", "● Downloading...");
             bgColor = QColor(0x22, 0x22, 0x22);
             textColor = QColor(0xee, 0xee, 0xee);
             borderColor = QColor(0x38, 0x38, 0x38);
             break;
 
         case AppStatus::Installing:
-            text = QStringLiteral("● Instalando...");
+            text = QCoreApplication::translate("AppStatusBadge", "● Installing...");
             bgColor = QColor(0x22, 0x22, 0x22);
             textColor = QColor(0xee, 0xee, 0xee);
             borderColor = QColor(0x38, 0x38, 0x38);
@@ -64,7 +65,7 @@ void AppStatusBadge::updateAppearance() {
 
         case AppStatus::NotInstalled:
         default:
-            text = QStringLiteral("○ Disponível");
+            text = QCoreApplication::translate("AppStatusBadge", "○ Available");
             bgColor = QColor(0x16, 0x16, 0x16);
             textColor = QColor(0x88, 0x88, 0x88);
             borderColor = QColor(0x28, 0x28, 0x28);

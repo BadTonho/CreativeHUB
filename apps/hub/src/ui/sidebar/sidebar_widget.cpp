@@ -1,4 +1,5 @@
 #include "sidebar_widget.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 
 #include <QVBoxLayout>
@@ -23,7 +24,7 @@ SidebarWidget::SidebarWidget(QWidget* parent)
     layout->setContentsMargins(12, 18, 12, 16);
     layout->setSpacing(6);
 
-    auto* sectionLabel = new QLabel(QStringLiteral("BIBLIOTECA"), this);
+    auto* sectionLabel = new QLabel(QCoreApplication::translate("SidebarWidget", "LIBRARY"), this);
     sectionLabel->setStyleSheet(QStringLiteral(
         "color: #555555;"
         "font-size: 10px;"
@@ -35,9 +36,9 @@ SidebarWidget::SidebarWidget(QWidget* parent)
     ));
     layout->addWidget(sectionLabel);
 
-    auto* allAppsBtn = new SidebarButton(QStringLiteral("Todos os Aplicativos"), this);
-    auto* projectsBtn = new SidebarButton(QStringLiteral("Projetos"), this);
-    auto* updatesBtn = new SidebarButton(QStringLiteral("Atualizações"), this);
+    auto* allAppsBtn = new SidebarButton(QCoreApplication::translate("SidebarWidget", "All Apps"), SidebarButton::Icon::Applications, this);
+    auto* projectsBtn = new SidebarButton(QCoreApplication::translate("SidebarWidget", "Projects"), SidebarButton::Icon::Projects, this);
+    auto* updatesBtn = new SidebarButton(QCoreApplication::translate("SidebarWidget", "Updates"), SidebarButton::Icon::Updates, this);
 
     m_buttons.push_back(allAppsBtn); // 0
     m_buttons.push_back(projectsBtn); // 1
@@ -52,7 +53,7 @@ SidebarWidget::SidebarWidget(QWidget* parent)
 
     layout->addSpacing(10);
 
-    auto* toolsLabel = new QLabel(QStringLiteral("SISTEMA & DADOS"), this);
+    auto* toolsLabel = new QLabel(QCoreApplication::translate("SidebarWidget", "SYSTEM & DATA"), this);
     toolsLabel->setStyleSheet(QStringLiteral(
         "color: #555555;"
         "font-size: 10px;"
@@ -65,9 +66,9 @@ SidebarWidget::SidebarWidget(QWidget* parent)
     ));
     layout->addWidget(toolsLabel);
 
-    auto* storageBtn = new SidebarButton(QStringLiteral("Armazenamento"), this);
-    auto* backupsBtn = new SidebarButton(QStringLiteral("Backups"), this);
-    auto* settingsBtn = new SidebarButton(QStringLiteral("Configurações"), this);
+    auto* storageBtn = new SidebarButton(QCoreApplication::translate("SidebarWidget", "Storage"), SidebarButton::Icon::Storage, this);
+    auto* backupsBtn = new SidebarButton(QCoreApplication::translate("SidebarWidget", "Backups"), SidebarButton::Icon::Backups, this);
+    auto* settingsBtn = new SidebarButton(QCoreApplication::translate("SidebarWidget", "Settings"), SidebarButton::Icon::Settings, this);
 
     m_buttons.push_back(storageBtn); // 3
     m_buttons.push_back(backupsBtn); // 4
@@ -104,7 +105,7 @@ SidebarWidget::SidebarWidget(QWidget* parent)
 #define CREATIVE_SUITE_VERSION_HUB "0.1.0"
 #endif
     auto* versionLabel = new QLabel(
-        QStringLiteral("Hub v%1 • Ativo").arg(QStringLiteral(CREATIVE_SUITE_VERSION_HUB)), footerCard);
+        QCoreApplication::translate("SidebarWidget", "Hub v%1 • Active").arg(QStringLiteral(CREATIVE_SUITE_VERSION_HUB)), footerCard);
     versionLabel->setStyleSheet(QStringLiteral(
         "color: #888888;"
         "font-size: 11px;"

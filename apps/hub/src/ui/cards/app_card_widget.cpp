@@ -1,4 +1,5 @@
 #include "app_card_widget.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
 
@@ -172,7 +173,7 @@ void AppCardWidget::updateVisuals() {
 
     switch (m_appInfo.status()) {
         case AppStatus::Installed:
-            m_actionButton->setText(QStringLiteral("Abrir"));
+            m_actionButton->setText(QCoreApplication::translate("AppCardWidget", "Open"));
             m_actionButton->setStyleSheet(QStringLiteral(
                 "QPushButton {"
                 "   background-color: #202020;"
@@ -192,7 +193,7 @@ void AppCardWidget::updateVisuals() {
             break;
 
         case AppStatus::UpdateAvailable:
-            m_actionButton->setText(QStringLiteral("Atualizar"));
+            m_actionButton->setText(QCoreApplication::translate("AppCardWidget", "Update"));
             m_actionButton->setStyleSheet(QStringLiteral(
                 "QPushButton {"
                 "   background-color: #ffffff;"
@@ -212,14 +213,14 @@ void AppCardWidget::updateVisuals() {
 
         case AppStatus::Downloading:
         case AppStatus::Installing:
-            m_actionButton->setText(QStringLiteral("Instalando..."));
+            m_actionButton->setText(QCoreApplication::translate("AppCardWidget", "Installing..."));
             m_actionButton->setEnabled(false);
             m_progressBar->setVisible(true);
             break;
 
         case AppStatus::NotInstalled:
         default:
-            m_actionButton->setText(QStringLiteral("Baixar"));
+            m_actionButton->setText(QCoreApplication::translate("AppCardWidget", "Download"));
             m_actionButton->setStyleSheet(QStringLiteral(
                 "QPushButton {"
                 "   background-color: #ffffff;"

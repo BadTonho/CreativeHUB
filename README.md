@@ -48,6 +48,7 @@ The central desktop management console and launcher for the entire creative ecos
 - **App Launcher & Discovery:** Scans the workstation for installed suite applications, verifies operational health, and launches editors with appropriate launch profiles.
 - **Unified Recent Projects:** Aggregates recent documents across all editors (`.csp`, `.cimg`, `.motion`), with thumbnail previews, app badges, and direct project opening.
 - **Resilient Per-App Updates:** Inspects release catalogs, validates cryptographic signatures and SHA-256 integrity, schedules background updates per application, and provides automated rollback protection if an installation or launch fails.
+- **Updatable Interface Translations:** The Hub can download verified Qt translation catalogs from the repository; the Hub's first Brazilian Portuguese catalog can be corrected without rebuilding the application. See the [translation and catalog guide](docs/TRANSLATIONS_AND_LANGUAGE_PACKS.md).
 - **Project Backup Vault:** Automatically or manually captures timestamped project snapshots to prevent accidental data loss.
 - **Safe Storage Manager:** Analyzes disk space used by temporary render files and media caches across the suite, providing one-click safe cleanup without touching user project files.
 - See the [Hub scope and readiness](docs/hub/SCOPE_AND_READINESS.md), [regression documentation](docs/hub/validation/REGRESSION_TESTING.md), and [Windows update contract](docs/WINDOWS_UPDATES.md).

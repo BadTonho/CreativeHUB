@@ -1,5 +1,6 @@
 #include "app_catalog.h"
 
+#include <QCoreApplication>
 #include <algorithm>
 
 namespace creative_suite::hub {
@@ -16,19 +17,19 @@ void AppCatalog::populateDefaultApps() {
     m_apps.emplace_back(
         QStringLiteral("video-editor"),
         QStringLiteral("Video Editor"),
-        QStringLiteral("Edição audiovisual e pós-produção"),
-        QStringLiteral("Um editor de vídeo completo e ágil, com linha do tempo multitrilha, mixagem de áudio, aceleração por GPU opcional, transições, sobreposição de texto e exportação para formatos comuns."),
+        QCoreApplication::translate("AppCatalog", "Video editing and post-production"),
+        QCoreApplication::translate("AppCatalog", "A fast, full-featured video editor with a multitrack timeline, audio mixing, optional GPU acceleration, transitions, text overlays, and export to common formats."),
         QStringLiteral(""),
         QStringLiteral(CREATIVE_SUITE_VERSION_VIDEO_EDITOR),
         QStringLiteral("creative-suite-video-editor.exe"),
         QStringLiteral(":/icons/video-editor.png"),
         AppStatus::NotInstalled,
         QStringList{
-            QStringLiteral("Linha do tempo multitrilha com suporte fluido a vídeo e áudio"),
-            QStringLiteral("Efeitos de transição, transformações de camada e keyframes"),
-            QStringLiteral("Mixagem e monitoramento de canais de áudio com scrubbing responsivo"),
-            QStringLiteral("Aceleração opcional por GPU na linha do tempo e exportação em até 4K UHD"),
-            QStringLiteral("Salvamento automático, histórico resiliente e recuperação de projetos")
+            QCoreApplication::translate("AppCatalog", "Smooth multitrack video and audio timeline"),
+            QCoreApplication::translate("AppCatalog", "Transition effects, layer transforms, and keyframes"),
+            QCoreApplication::translate("AppCatalog", "Audio mixing and channel monitoring with responsive scrubbing"),
+            QCoreApplication::translate("AppCatalog", "Optional GPU acceleration for the timeline and exports up to 4K UHD"),
+            QCoreApplication::translate("AppCatalog", "Autosave, resilient history, and project recovery")
         },
         QStringLiteral(".csp (Creative Suite Project)")
     );
@@ -36,19 +37,19 @@ void AppCatalog::populateDefaultApps() {
     m_apps.emplace_back(
         QStringLiteral("image-editor"),
         QStringLiteral("Image Editor"),
-        QStringLiteral("Edição de imagens e gráficos em camadas"),
-        QStringLiteral("Aplicativo de edição raster focada em manipulação de camadas, grupos, ferramentas de seleção inteligente, desenho de formas geométricas e suporte a camadas de imagens vinculadas."),
+        QCoreApplication::translate("AppCatalog", "Layered image and graphics editing"),
+        QCoreApplication::translate("AppCatalog", "A raster editor focused on layers, groups, smart selection tools, geometric shapes, and linked image layers."),
         QStringLiteral(""),
         QStringLiteral(CREATIVE_SUITE_VERSION_IMAGE_EDITOR),
         QStringLiteral("creative-suite-image-editor.exe"),
         QStringLiteral(":/icons/image-editor.png"),
         AppStatus::NotInstalled,
         QStringList{
-            QStringLiteral("Pintura digital e edição raster organizada em camadas e grupos"),
-            QStringLiteral("Máscaras ajustáveis com suporte a imagens vinculadas"),
-            QStringLiteral("Ferramentas de seleção de objetos, formas vetoriais e texto"),
-            QStringLiteral("Histórico bounded de desfazer/refazer com alta performance"),
-            QStringLiteral("Exportação otimizada em formatos PNG e JPEG de alta qualidade")
+            QCoreApplication::translate("AppCatalog", "Digital painting and raster editing with layers and groups"),
+            QCoreApplication::translate("AppCatalog", "Adjustable masks with support for linked images"),
+            QCoreApplication::translate("AppCatalog", "Object selection, vector shapes, and text tools"),
+            QCoreApplication::translate("AppCatalog", "High-performance undo and redo history"),
+            QCoreApplication::translate("AppCatalog", "Optimized export to high-quality PNG and JPEG")
         },
         QStringLiteral(".cimg (Creative Suite Image Document)")
     );
@@ -56,19 +57,19 @@ void AppCatalog::populateDefaultApps() {
     m_apps.emplace_back(
         QStringLiteral("motion-editor"),
         QStringLiteral("Motion Studio"),
-        QStringLiteral("Motion design e animação gráfica"),
-        QStringLiteral("Ambiente especializado para motion design e composição avançada, combinando animação por keyframes, curvas Bezier precisas (Graph Editor), máscaras e exportação acelerada."),
+        QCoreApplication::translate("AppCatalog", "Motion design and graphic animation"),
+        QCoreApplication::translate("AppCatalog", "A workspace for motion design and advanced compositing, with keyframe animation, precise Bezier curves (Graph Editor), masks, and accelerated export."),
         QStringLiteral(""),
         QStringLiteral(CREATIVE_SUITE_VERSION_MOTION_EDITOR),
         QStringLiteral("creative-suite-motion-editor.exe"),
         QStringLiteral(":/icons/motion-studio.png"),
         AppStatus::NotInstalled,
         QStringList{
-            QStringLiteral("Composição dinâmica em camadas com suporte a mídias e formas"),
-            QStringLiteral("Editor de curvas Bezier (Graph Editor) para controle fino de interpolação"),
-            QStringLiteral("Efeitos encadeados de desfoque gaussiano e ajustes de cor"),
-            QStringLiteral("Exportação de vídeo renderizado com alta fidelidade visual"),
-            QStringLiteral("Estrutura independente e nativa compartilhando o núcleo da suíte")
+            QCoreApplication::translate("AppCatalog", "Dynamic layered compositions with media and shapes"),
+            QCoreApplication::translate("AppCatalog", "Bezier curve editor (Graph Editor) for precise interpolation control"),
+            QCoreApplication::translate("AppCatalog", "Chained Gaussian blur and color adjustment effects"),
+            QCoreApplication::translate("AppCatalog", "High-fidelity rendered video export"),
+            QCoreApplication::translate("AppCatalog", "Independent native application built on the shared suite core")
         },
         QStringLiteral(".motion (Creative Suite Motion File)")
     );

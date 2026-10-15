@@ -1,4 +1,5 @@
 #include "main_window.h"
+#include <QCoreApplication>
 #include "dialogs/app_details_dialog.h"
 #include "theme/hub_palette.h"
 #include "theme/hub_style.h"
@@ -19,6 +20,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QFileInfo>
+#include <QLocale>
 
 namespace creative_suite::hub {
 
@@ -51,6 +53,37 @@ MainWindow::MainWindow(UpdateDependencies dependencies, QWidget* parent)
     setMinimumSize(800, 520);
 
     setStyleSheet(HubStyle::globalStyleSheet());
+
+    m_translationUpdateService = new creative_suite::translations::TranslationUpdateService(
+        creative_suite::translations::TranslationUpdateService::defaultConfig(), this);
+    connect(m_translationUpdateService,
+            &creative_suite::translations::TranslationUpdateService::operationFailed,
+            this, [](const QString& operation, const QString& application_id, const QString& cause) {
+        HubLogger::instance().logWarning(
+            QStringLiteral("Translations"), operation, cause, application_id);
+    });
+    connect(m_translationUpdateService,
+            &creative_suite::translations::TranslationUpdateService::stateChanged,
+            this, [this](creative_suite::translations::TranslationUpdateState state) {
+        if (!m_updatesPage) return;
+        if (state == creative_suite::translations::TranslationUpdateState::Checking ||
+            state == creative_suite::translations::TranslationUpdateState::Downloading) {
+            m_updatesPage->setTranslationStatus(tr("Checking translation files…"), true);
+        }
+    });
+    connect(m_translationUpdateService,
+            &creative_suite::translations::TranslationUpdateService::finished,
+            this, [this](int installed_count, bool had_errors) {
+        if (had_errors) {
+            m_updatesPage->setTranslationStatus(
+                tr("Could not check all translation files. See the Hub log."));
+        } else if (installed_count > 0) {
+            m_updatesPage->setTranslationStatus(
+                tr("Translation files downloaded. Restart the affected app to use them."));
+        } else {
+            m_updatesPage->setTranslationStatus(tr("Translation files are up to date."));
+        }
+    });
 
     setupUi();
     scanInstalledApps();
@@ -116,6 +149,8 @@ void MainWindow::setupUi() {
     m_updatesPage = new UpdatesPage(&m_catalog, this);
     connect(m_updatesPage, &UpdatesPage::appDetailsRequested, this, &MainWindow::onShowAppDetails);
     connect(m_updatesPage, &UpdatesPage::checkUpdatesRequested, this, &MainWindow::onRefreshApps);
+    connect(m_updatesPage, &UpdatesPage::checkTranslationUpdatesRequested,
+            this, &MainWindow::onCheckTranslationUpdates);
     connect(m_updatesPage, &UpdatesPage::updateAppRequested, this, &MainWindow::onDownloadApp);
     m_pagesStack->addWidget(m_updatesPage);
 
@@ -274,7 +309,7 @@ void MainWindow::configureUpdateServices() {
                         QStringLiteral("install_update"),
                         QStringLiteral("The registered application version is invalid."),
                         config.app_id + QStringLiteral(": ") + config.current_version);
-                    statusBar()->showMessage(QStringLiteral("Não foi possível verificar a versão instalada."), 8000);
+                    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not verify the installed version."), 8000);
                     return;
                 }
                 if (*comparison <= 0) {
@@ -289,7 +324,7 @@ void MainWindow::configureUpdateServices() {
                 return;
             }
             m_catalog.updateAppStatus(entry.app_id, AppStatus::Installing);
-            statusBar()->showMessage(QStringLiteral("O instalador de %1 foi iniciado.")
+            statusBar()->showMessage(QCoreApplication::translate("MainWindow", "The %1 installer has started.")
                                      .arg(config.app_name), 8000);
             QTimer::singleShot(5000, this, &MainWindow::scanInstalledApps);
         });
@@ -317,22 +352,22 @@ void MainWindow::configureUpdateServices() {
 
             QMessageBox recovery(this);
             recovery.setIcon(QMessageBox::Warning);
-            recovery.setWindowTitle(QStringLiteral("Verifique a atualização"));
-            recovery.setText(QStringLiteral("O %1 foi atualizado recentemente, mas ainda não confirmou a inicialização. Ele está abrindo corretamente?")
+            recovery.setWindowTitle(QCoreApplication::translate("MainWindow", "Confirm the update"));
+            recovery.setText(QCoreApplication::translate("MainWindow", "%1 was recently updated but has not confirmed startup yet. Is it opening correctly?")
                              .arg(app.name()));
-            auto* restore = recovery.addButton(QStringLiteral("Restaurar versão anterior"),
+            auto* restore = recovery.addButton(QCoreApplication::translate("MainWindow", "Restore Previous Version"),
                                                QMessageBox::AcceptRole);
-            auto* working = recovery.addButton(QStringLiteral("Está funcionando"),
+            auto* working = recovery.addButton(QCoreApplication::translate("MainWindow", "It works"),
                                                QMessageBox::RejectRole);
             recovery.exec();
             if (recovery.clickedButton() == restore) {
                 QString error;
                 if (creative_suite::updater::restorePreviousVersion(app.id(), &error)) {
                     onRefreshApps();
-                    QMessageBox::information(this, QStringLiteral("Versão restaurada"),
-                        QStringLiteral("A versão anterior do %1 foi restaurada.").arg(app.name()));
+                    QMessageBox::information(this, QCoreApplication::translate("MainWindow", "Version Restored"),
+                        QCoreApplication::translate("MainWindow", "The previous version of %1 was restored.").arg(app.name()));
                 } else {
-                    QMessageBox::warning(this, QStringLiteral("Não foi possível restaurar"), error);
+                    QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not restore"), error);
                 }
             } else if (recovery.clickedButton() == working) {
                 creative_suite::updater::markApplicationStartupHealthy(app.id());
@@ -373,6 +408,22 @@ void MainWindow::onRefreshApps() {
 #endif
 }
 
+void MainWindow::startTranslationUpdateCheck() {
+    QTimer::singleShot(0, this, &MainWindow::onCheckTranslationUpdates);
+}
+
+void MainWindow::onCheckTranslationUpdates() {
+    const QString locale = creative_suite::translations::translationLocaleFor(QLocale::system());
+    if (locale.isEmpty()) {
+        m_updatesPage->setTranslationStatus(
+            tr("Your system language uses the English source text."));
+        return;
+    }
+    if (!m_translationUpdateService->checkForUpdates(locale)) {
+        m_updatesPage->setTranslationStatus(tr("A translation check is already running."));
+    }
+}
+
 void MainWindow::onOpenApp(const QString& appId) {
     auto appOpt = m_catalog.findApp(appId);
     if (!appOpt.has_value()) {
@@ -384,14 +435,14 @@ void MainWindow::onOpenApp(const QString& appId) {
     if (!success) {
         QMessageBox::warning(
             this,
-            QStringLiteral("Aplicativo não encontrado"),
-            QStringLiteral("Não foi possível encontrar ou executar o arquivo '%1'. Certifique-se de que o aplicativo foi compilado.")
+            QCoreApplication::translate("MainWindow", "Application not found"),
+            QCoreApplication::translate("MainWindow", "Could not find or launch the file '%1'. Make sure the application has been built.")
                 .arg(app.executableName())
         );
     } else {
         ActivityManager::instance().addActivity(
-            QStringLiteral("Aplicativo Aberto"),
-            QStringLiteral("O %1 foi iniciado com sucesso.").arg(app.name()),
+            QCoreApplication::translate("MainWindow", "Application Opened"),
+            QCoreApplication::translate("MainWindow", "%1 started successfully.").arg(app.name()),
             QStringLiteral("system")
         );
     }
@@ -406,8 +457,8 @@ void MainWindow::onOpenProject(const QString& filePath, const QString& appId) {
     HubLogger::instance().logInfo(
         QStringLiteral("MainWindow"),
         QStringLiteral("onOpenProject"),
-        QStringLiteral("Abrindo projeto"),
-        QStringLiteral("%1 (%2)").arg(filePath, targetAppId)
+        QCoreApplication::translate("MainWindow", "Opening project"),
+        QCoreApplication::translate("MainWindow", "%1 (%2)").arg(filePath, targetAppId)
     );
 
     auto appOpt = m_catalog.findApp(targetAppId);
@@ -417,15 +468,15 @@ void MainWindow::onOpenProject(const QString& filePath, const QString& appId) {
         if (!success) {
             QMessageBox::warning(
                 this,
-                QStringLiteral("Aplicativo não encontrado"),
-                QStringLiteral("Não foi possível encontrar ou executar o aplicativo '%1' para abrir o projeto '%2'. Certifique-se de que o aplicativo foi compilado.")
+                QCoreApplication::translate("MainWindow", "Application not found"),
+                QCoreApplication::translate("MainWindow", "Could not find or launch '%1' to open project '%2'. Make sure the application has been built.")
                     .arg(app.name(), filePath)
             );
         } else {
             m_recentProjectsManager.addOrUpdateProject(filePath, targetAppId);
             ActivityManager::instance().addActivity(
-                QStringLiteral("Projeto Aberto"),
-                QStringLiteral("Projeto '%1' aberto no %2.").arg(QFileInfo(filePath).fileName(), app.name()),
+                QCoreApplication::translate("MainWindow", "Project Opened"),
+                QCoreApplication::translate("MainWindow", "Project '%1' opened in %2.").arg(QFileInfo(filePath).fileName(), app.name()),
                 QStringLiteral("project")
             );
             if (m_projectsPage) {
@@ -438,8 +489,8 @@ void MainWindow::onOpenProject(const QString& filePath, const QString& appId) {
         if (opened) {
             m_recentProjectsManager.addOrUpdateProject(filePath, targetAppId);
             ActivityManager::instance().addActivity(
-                QStringLiteral("Projeto Aberto"),
-                QStringLiteral("Projeto '%1' aberto no sistema.").arg(QFileInfo(filePath).fileName()),
+                QCoreApplication::translate("MainWindow", "Project Opened"),
+                QCoreApplication::translate("MainWindow", "Project '%1' opened on this system.").arg(QFileInfo(filePath).fileName()),
                 QStringLiteral("project")
             );
             if (m_projectsPage) {
@@ -448,8 +499,8 @@ void MainWindow::onOpenProject(const QString& filePath, const QString& appId) {
         } else {
             QMessageBox::warning(
                 this,
-                QStringLiteral("Não foi possível abrir o projeto"),
-                QStringLiteral("Não há nenhum aplicativo associado para abrir o arquivo '%1'.").arg(filePath)
+                QCoreApplication::translate("MainWindow", "Could not open project"),
+                QCoreApplication::translate("MainWindow", "No application is associated with file '%1'.").arg(filePath)
             );
         }
     }
@@ -459,7 +510,7 @@ void MainWindow::onNewProject(const QString& appId) {
     HubLogger::instance().logInfo(
         QStringLiteral("MainWindow"),
         QStringLiteral("onNewProject"),
-        QStringLiteral("Criando novo projeto no aplicativo"),
+        QCoreApplication::translate("MainWindow", "Creating a new project in the application"),
         appId
     );
     onOpenApp(appId);
@@ -469,7 +520,7 @@ void MainWindow::onDownloadApp(const QString& appId) {
 #ifdef Q_OS_WIN
     auto* service = m_updateServices.value(appId, nullptr);
     if (!service || !m_updateRuntime) {
-        statusBar()->showMessage(QStringLiteral("O atualizador não está disponível para este aplicativo."), 8000);
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "The updater is not available for this application."), 8000);
         return;
     }
     scanInstalledApps();
@@ -481,7 +532,7 @@ void MainWindow::onDownloadApp(const QString& appId) {
     dialog.exec();
 #else
     Q_UNUSED(appId);
-    statusBar()->showMessage(QStringLiteral("A instalação pelo Hub estará disponível nesta plataforma em uma etapa futura."), 8000);
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Hub-based installation will be available on this platform in a future update."), 8000);
 #endif
 }
 

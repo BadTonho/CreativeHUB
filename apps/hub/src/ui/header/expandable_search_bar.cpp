@@ -1,4 +1,5 @@
 #include "expandable_search_bar.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 
 #include <QHBoxLayout>
@@ -88,7 +89,7 @@ void ExpandableSearchBar::setupUi() {
 
     // Text field (initially hidden/compact)
     m_lineEdit = new QLineEdit(this);
-    m_lineEdit->setPlaceholderText(QStringLiteral("Buscar aplicativos..."));
+    m_lineEdit->setPlaceholderText(QCoreApplication::translate("ExpandableSearchBar", "Search apps..."));
     m_lineEdit->setVisible(false);
     m_lineEdit->installEventFilter(this);
     m_lineEdit->setStyleSheet(QStringLiteral(

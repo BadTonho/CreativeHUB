@@ -204,6 +204,7 @@ add_executable(creative-suite-main-editor
 
 target_link_libraries(creative-suite-main-editor PRIVATE
     creative-suite-main-editor-core
+    creative-suite::translations
 )
 target_link_libraries(creative-suite-main-editor PRIVATE creative-suite::updater)
 target_compile_definitions(creative-suite-main-editor PRIVATE

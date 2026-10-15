@@ -3,7 +3,7 @@ include(GNUInstallDirs)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets LinguistTools)
 
 add_library(creative-suite-hub-core STATIC
     src/model/app_status.h
@@ -79,6 +79,8 @@ target_link_libraries(creative-suite-hub-core PUBLIC
     Qt6::Gui
     Qt6::Widgets
     creative-suite::updater
+    creative-suite::translations
+    creative-suite::translation-updater
 )
 target_compile_definitions(creative-suite-hub-core PRIVATE
     CREATIVE_SUITE_VERSION_HUB="${CREATIVE_SUITE_VERSION_HUB}"
@@ -91,11 +93,45 @@ target_compile_features(creative-suite-hub-core PUBLIC cxx_std_20)
 add_executable(creative-suite-hub
     src/main.cpp
     resources/hub_resources.qrc
+    resources/translations.qrc
 )
 
 target_link_libraries(creative-suite-hub PRIVATE
     creative-suite-hub-core
     Qt6::Widgets
+)
+
+set(HUB_TRANSLATION_TS "${CMAKE_SOURCE_DIR}/languages/hub/pt_BR.ts")
+set(HUB_TRANSLATION_QM "${CMAKE_SOURCE_DIR}/languages/hub/pt_BR.qm")
+set(HUB_GENERATED_TRANSLATION_QM "${CMAKE_CURRENT_BINARY_DIR}/translations/hub/pt_BR.qm")
+add_custom_command(
+    OUTPUT "${HUB_GENERATED_TRANSLATION_QM}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/translations/hub"
+    COMMAND "$<TARGET_FILE:Qt6::lrelease>" "${HUB_TRANSLATION_TS}"
+            -qm "${HUB_GENERATED_TRANSLATION_QM}"
+    DEPENDS "${HUB_TRANSLATION_TS}"
+    VERBATIM
+)
+add_custom_target(creative-suite-hub-translation-catalog
+    COMMAND "${CMAKE_COMMAND}" -E compare_files
+            "${HUB_GENERATED_TRANSLATION_QM}" "${HUB_TRANSLATION_QM}"
+    DEPENDS "${HUB_GENERATED_TRANSLATION_QM}" "${HUB_TRANSLATION_QM}"
+    COMMENT "Checking that the tracked Hub catalog matches its TS source"
+    VERBATIM
+)
+add_dependencies(creative-suite-hub creative-suite-hub-translation-catalog)
+
+file(GLOB_RECURSE HUB_TRANSLATION_INPUTS CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/model/app_catalog.cpp"
+)
+add_custom_target(update-hub-translations
+    COMMAND "$<TARGET_FILE:Qt6::lupdate>" -no-obsolete ${HUB_TRANSLATION_INPUTS}
+            -ts "${HUB_TRANSLATION_TS}"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT "Updating the Hub translation source"
+    VERBATIM
 )
 
 target_compile_features(creative-suite-hub PRIVATE cxx_std_20)

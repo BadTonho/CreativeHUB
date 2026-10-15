@@ -1,4 +1,5 @@
 #include "apps_page.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 
 #include <QVBoxLayout>
@@ -48,13 +49,13 @@ void AppsPage::setupUi() {
     auto* titleCol = new QVBoxLayout();
     titleCol->setSpacing(4);
 
-    auto* titleLabel = new QLabel(QStringLiteral("Aplicativos da Suíte"), scrollContainer);
+    auto* titleLabel = new QLabel(QCoreApplication::translate("AppsPage", "Suite applications"), scrollContainer);
     titleLabel->setStyleSheet(QStringLiteral(
         "font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"
     ));
     titleCol->addWidget(titleLabel);
 
-    auto* subLabel = new QLabel(QStringLiteral("Gerencie, abra e atualize seus aplicativos de criação."), scrollContainer);
+    auto* subLabel = new QLabel(QCoreApplication::translate("AppsPage", "Manage, launch, and update your creative apps."), scrollContainer);
     subLabel->setWordWrap(true);
     subLabel->setStyleSheet(QStringLiteral(
         "font-size: 13px; color: #888888; background: transparent;"
@@ -68,9 +69,9 @@ void AppsPage::setupUi() {
     filterRow->setSpacing(8);
 
     const QStringList filterNames = {
-        QStringLiteral("Todos"),
-        QStringLiteral("Instalados"),
-        QStringLiteral("Disponíveis")
+        QCoreApplication::translate("AppsPage", "All"),
+        QCoreApplication::translate("AppsPage", "Installed"),
+        QCoreApplication::translate("AppsPage", "Available")
     };
 
     for (int i = 0; i < filterNames.size(); ++i) {

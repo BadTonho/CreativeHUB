@@ -1,4 +1,5 @@
 #include "image_editor_window.h"
+#include <creative_suite/translations/translation_runtime.h>
 #ifdef Q_OS_WIN
 #include <creative_suite/updater/update_service.h>
 #endif
@@ -24,6 +25,10 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
     QCoreApplication::setApplicationName(QStringLiteral("Image Editor"));
     QApplication::setApplicationVersion(QStringLiteral(CREATIVE_SUITE_APP_VERSION));
+    creative_suite::translations::TranslationRuntime translations;
+    static_cast<void>(translations.installForApplication(
+        application, QStringLiteral("image-editor"),
+        QStringLiteral(":/translations/image-editor/pt_BR.qm")));
 
     QCommandLineParser parser;
     parser.addHelpOption();

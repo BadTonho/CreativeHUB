@@ -4,6 +4,7 @@
 
 | Behavior | Automated verification |
 | --- | --- |
+| Startup loads the system-selected downloaded/bundled Qt catalog before the editor window | Shared `creative-suite-translations` covers locale selection, load precedence, and English source fallback; app integration is in `apps/video-editor/src/main.cpp`. Native startup checks are pending in [translation acceptance](../../TRANSLATIONS_AND_LANGUAGE_PACKS.md#regression-and-acceptance). |
 | Radius/alpha/padding/border reference, executor and cancellation | `creative-suite-effects` |
 | Effects/Favorites/Functions availability, search/Add/Enter/MIME, selection and typed cable insertion/refusal | `creative-suite-main-editor-effects-panel`, `creative-suite-main-editor-shortcut-manager`, `creative-suite-main-editor-fusion-workspace`, `creative-suite-blur-interchange` |
 | Ordered Color/Blur stages, masks, text/media profiles, source windows, GPU/CPU recovery, history, duplication, cuts/trims/FPS, v1–v3/v31/v8 and recovery | `creative-suite-blur-interchange`, `creative-suite-composition-interchange`, `creative-suite-mask-interchange` |

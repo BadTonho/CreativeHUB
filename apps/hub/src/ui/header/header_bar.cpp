@@ -1,4 +1,5 @@
 #include "header_bar.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 #include "../popups/activity_popup.h"
 #include "../../model/activity_manager.h"
@@ -107,7 +108,7 @@ HeaderBar::HeaderBar(QWidget* parent)
     m_bellButton = new QPushButton(this);
     m_bellButton->setFixedSize(36, 36);
     m_bellButton->setCursor(Qt::PointingHandCursor);
-    m_bellButton->setToolTip(QStringLiteral("Central de Atividades e Notificações"));
+    m_bellButton->setToolTip(QCoreApplication::translate("HeaderBar", "Activity and notifications"));
     m_bellButton->setStyleSheet(QStringLiteral(
         "QPushButton {"
         "   background-color: #1a1a1a;"

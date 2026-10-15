@@ -1,4 +1,5 @@
 #include "backups_page.h"
+#include <QCoreApplication>
 #include "../../model/backup_manager.h"
 #include "../../model/storage_manager.h"
 #include "../theme/hub_style.h"
@@ -42,11 +43,11 @@ void BackupsPage::setupUi() {
     mainLayout->setSpacing(16);
 
     // Title & Subtitle
-    auto* titleLabel = new QLabel(QStringLiteral("Cofre de Backups"), scrollContainer);
+    auto* titleLabel = new QLabel(QCoreApplication::translate("BackupsPage", "Backup Vault"), scrollContainer);
     titleLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"));
     mainLayout->addWidget(titleLabel);
 
-    auto* subLabel = new QLabel(QStringLiteral("Histórico completo de snapshots e cópias de segurança geradas para seus projetos da suíte criativa."), scrollContainer);
+    auto* subLabel = new QLabel(QCoreApplication::translate("BackupsPage", "Full history of snapshots and backups created for your Creative Suite projects."), scrollContainer);
     subLabel->setWordWrap(true);
     subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #888888; background: transparent; margin-bottom: 4px;"));
     mainLayout->addWidget(subLabel);
@@ -64,7 +65,7 @@ void BackupsPage::setupUi() {
     auto* configLayout = new QVBoxLayout(configCard);
     configLayout->setSpacing(12);
 
-    auto* sectionTitle = new QLabel(QStringLiteral("DIRETÓRIO DO COFRE DE BACKUPS"), configCard);
+    auto* sectionTitle = new QLabel(QCoreApplication::translate("BackupsPage", "BACKUP VAULT DIRECTORY"), configCard);
     sectionTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 1.2px; background: transparent;"));
     configLayout->addWidget(sectionTitle);
 
@@ -77,14 +78,14 @@ void BackupsPage::setupUi() {
     m_pathEdit->setStyleSheet(HubStyle::searchInputStyle());
     pathRow->addWidget(m_pathEdit, 1);
 
-    auto* changeFolderBtn = new QPushButton(QStringLiteral("Alterar Pasta"), configCard);
+    auto* changeFolderBtn = new QPushButton(QCoreApplication::translate("BackupsPage", "Change Folder"), configCard);
     changeFolderBtn->setFixedHeight(36);
     changeFolderBtn->setCursor(Qt::PointingHandCursor);
     changeFolderBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(changeFolderBtn, &QPushButton::clicked, this, &BackupsPage::onBrowseBackupFolder);
     pathRow->addWidget(changeFolderBtn);
 
-    auto* openFolderBtn = new QPushButton(QStringLiteral("Abrir Pasta"), configCard);
+    auto* openFolderBtn = new QPushButton(QCoreApplication::translate("BackupsPage", "Open Folder"), configCard);
     openFolderBtn->setFixedHeight(36);
     openFolderBtn->setCursor(Qt::PointingHandCursor);
     openFolderBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
@@ -112,7 +113,7 @@ void BackupsPage::setupUi() {
     auto* listCardLayout = new QVBoxLayout(listCard);
     listCardLayout->setSpacing(12);
 
-    auto* listHeader = new QLabel(QStringLiteral("BACKUPS SALVOS RECENTEMENTE"), listCard);
+    auto* listHeader = new QLabel(QCoreApplication::translate("BackupsPage", "RECENT BACKUPS"), listCard);
     listHeader->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 1.2px; background: transparent;"));
     listCardLayout->addWidget(listHeader);
 
@@ -125,7 +126,7 @@ void BackupsPage::setupUi() {
     emptyLayout->setContentsMargins(10, 30, 10, 30);
     emptyLayout->setAlignment(Qt::AlignCenter);
 
-    auto* emptyLabel = new QLabel(QStringLiteral("Nenhum backup encontrado no cofre.\nVocê pode criar cópias instantâneas a qualquer momento na aba Projetos."), m_emptyWidget);
+    auto* emptyLabel = new QLabel(QCoreApplication::translate("BackupsPage", "No backups were found in the vault.\nYou can create snapshots anytime from the Projects page."), m_emptyWidget);
     emptyLabel->setAlignment(Qt::AlignCenter);
     emptyLabel->setStyleSheet(QStringLiteral("color: #555555; font-size: 13px; line-height: 1.5; background: transparent;"));
     emptyLayout->addWidget(emptyLabel);
@@ -147,7 +148,7 @@ void BackupsPage::refreshBackupsList() {
     const qint64 bytes = BackupManager::instance().totalBackupsSize();
 
     if (m_statsLabel) {
-        m_statsLabel->setText(QStringLiteral("%1 cópias de segurança salvas • %2 ocupados no disco")
+        m_statsLabel->setText(QCoreApplication::translate("BackupsPage", "%1 backups saved • %2 used on disk")
             .arg(QString::number(count), StorageManager::formatBytes(bytes)));
     }
     if (m_pathEdit) {
@@ -189,12 +190,12 @@ void BackupsPage::refreshBackupsList() {
             col->addWidget(title);
 
             const QString origin = b.originalFilePath.isEmpty()
-                ? QStringLiteral("%1 — origem desconhecida").arg(QFileInfo(b.backupFilePath).fileName())
+                ? QCoreApplication::translate("BackupsPage", "%1 — unknown source").arg(QFileInfo(b.backupFilePath).fileName())
                 : b.originalFilePath;
             auto* fileLabel = new QLabel(origin, row);
             fileLabel->setTextFormat(Qt::PlainText);
             fileLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-            fileLabel->setToolTip(QStringLiteral("%1\nBackup: %2").arg(origin, b.backupFilePath));
+            fileLabel->setToolTip(QCoreApplication::translate("BackupsPage", "%1\nBackup: %2").arg(origin, b.backupFilePath));
             fileLabel->setStyleSheet(QStringLiteral("color: #777777; font-size: 11px; background: transparent; border: none;"));
             col->addWidget(fileLabel);
 
@@ -208,7 +209,7 @@ void BackupsPage::refreshBackupsList() {
             sizeLabel->setStyleSheet(QStringLiteral("color: #aaaaaa; font-size: 12px; font-weight: 600; background: transparent; border: none;"));
             rowLayout->addWidget(sizeLabel);
 
-            auto* openBtn = new QPushButton(QStringLiteral("Ver Arquivo"), row);
+            auto* openBtn = new QPushButton(QCoreApplication::translate("BackupsPage", "Show File"), row);
             openBtn->setFixedHeight(28);
             openBtn->setCursor(Qt::PointingHandCursor);
             openBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
@@ -226,7 +227,7 @@ void BackupsPage::refreshBackupsList() {
 void BackupsPage::onBrowseBackupFolder() {
     const QString dir = QFileDialog::getExistingDirectory(
         this,
-        QStringLiteral("Selecionar pasta do cofre de backups"),
+        QCoreApplication::translate("BackupsPage", "Select backup vault folder"),
         m_pathEdit ? m_pathEdit->text() : BackupManager::instance().backupDirectory()
     );
     if (!dir.isEmpty()) {

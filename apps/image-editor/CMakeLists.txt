@@ -146,6 +146,7 @@ target_include_directories(creative-suite-image-editor PRIVATE
 
 target_link_libraries(creative-suite-image-editor PRIVATE
     creative-suite-image-editor-rendering
+    creative-suite::translations
     creative-suite::shortcuts
     creative-suite::updater
     creative-suite::system-monitor

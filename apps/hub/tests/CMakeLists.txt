@@ -59,7 +59,10 @@ target_link_libraries(hub-storage-manager-test PRIVATE creative-suite-hub-core Q
 target_compile_features(hub-storage-manager-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-storage-manager-test COMMAND hub-storage-manager-test)
 
-add_executable(hub-storage-page-test test_storage_page.cpp)
+add_executable(hub-storage-page-test
+    test_storage_page.cpp
+    ../resources/translations.qrc
+)
 target_link_libraries(hub-storage-page-test PRIVATE creative-suite-hub-core Qt6::Widgets)
 target_compile_features(hub-storage-page-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-storage-page-test COMMAND hub-storage-page-test)
@@ -74,7 +77,10 @@ target_link_libraries(hub-backup-manager-test PRIVATE creative-suite-hub-core Qt
 target_compile_features(hub-backup-manager-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-backup-manager-test COMMAND hub-backup-manager-test)
 
-add_executable(hub-backups-page-test test_backups_page.cpp)
+add_executable(hub-backups-page-test
+    test_backups_page.cpp
+    ../resources/translations.qrc
+)
 target_link_libraries(hub-backups-page-test PRIVATE creative-suite-hub-core Qt6::Widgets)
 target_compile_features(hub-backups-page-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-backups-page-test COMMAND hub-backups-page-test)

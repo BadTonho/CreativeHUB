@@ -2,6 +2,7 @@
 #include "../src/model/storage_manager.h"
 #include "../src/model/activity_manager.h"
 #include "../src/diagnostics/hub_logger.h"
+#include <creative_suite/translations/translation_runtime.h>
 #include "../../../cmake/test_support/test_check.h"
 
 #include <QApplication>
@@ -10,6 +11,7 @@
 #include <QFile>
 #include <QLabel>
 #include <QMessageBox>
+#include <QLocale>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -60,6 +62,11 @@ int main(int argc, char* argv[]) {
     QStandardPaths::setTestModeEnabled(true);
     QTemporaryDir root;
     CS_TEST_CHECK(root.isValid());
+    creative_suite::translations::TranslationRuntime translations;
+    const auto translationResult = translations.installForApplication(
+        application, QStringLiteral("hub"), QStringLiteral(":/translations/hub/pt_BR.qm"),
+        QLocale(QStringLiteral("pt_BR")), root.path());
+    CS_TEST_CHECK(translationResult.bundled_loaded);
     HubLogger::instance().setLogFilePath(root.filePath("hub.log"));
     ActivityManager::instance().setStoragePath(root.filePath("activities.json"));
     ActivityManager::instance().clear();

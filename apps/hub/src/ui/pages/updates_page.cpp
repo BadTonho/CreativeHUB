@@ -1,4 +1,5 @@
 #include "updates_page.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
 
@@ -46,11 +47,11 @@ void UpdatesPage::setupUi() {
     auto* titleCol = new QVBoxLayout();
     titleCol->setSpacing(4);
 
-    auto* titleLabel = new QLabel(QStringLiteral("Atualizações Disponíveis"), scrollContainer);
+    auto* titleLabel = new QLabel(QCoreApplication::translate("UpdatesPage", "Available Updates"), scrollContainer);
     titleLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"));
     titleCol->addWidget(titleLabel);
 
-    auto* subLabel = new QLabel(QStringLiteral("Mantenha seus aplicativos sempre na versão mais estável, rápida e com novos recursos."), scrollContainer);
+    auto* subLabel = new QLabel(QCoreApplication::translate("UpdatesPage", "Keep your apps up to date with stable releases, performance improvements, and new features."), scrollContainer);
     subLabel->setWordWrap(true);
     subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #8e8e9e; background: transparent;"));
     titleCol->addWidget(subLabel);
@@ -58,13 +59,28 @@ void UpdatesPage::setupUi() {
     headerRow->addLayout(titleCol);
     headerRow->addStretch();
 
-    m_checkUpdatesButton = new QPushButton(QStringLiteral("Verificar Atualizações"), scrollContainer);
+    m_checkUpdatesButton = new QPushButton(QCoreApplication::translate("UpdatesPage", "Check for Updates"), scrollContainer);
     m_checkUpdatesButton->setStyleSheet(HubStyle::secondaryButtonStyle());
     m_checkUpdatesButton->setCursor(Qt::PointingHandCursor);
     connect(m_checkUpdatesButton, &QPushButton::clicked, this, &UpdatesPage::checkUpdatesRequested);
     headerRow->addWidget(m_checkUpdatesButton);
 
     mainLayout->addLayout(headerRow);
+
+    auto* translationsRow = new QHBoxLayout();
+    auto* translationsLabel = new QLabel(tr("Application language files"), scrollContainer);
+    translationsLabel->setStyleSheet(QStringLiteral("color: #d0d0d0; font-size: 13px; background: transparent;"));
+    translationsRow->addWidget(translationsLabel);
+    m_translationStatusLabel = new QLabel(tr("Uses the language selected by your system."), scrollContainer);
+    m_translationStatusLabel->setStyleSheet(QStringLiteral("color: #8e8e9e; font-size: 12px; background: transparent;"));
+    translationsRow->addWidget(m_translationStatusLabel, 1);
+    m_checkTranslationsButton = new QPushButton(tr("Check language files"), scrollContainer);
+    m_checkTranslationsButton->setStyleSheet(HubStyle::secondaryButtonStyle());
+    m_checkTranslationsButton->setCursor(Qt::PointingHandCursor);
+    connect(m_checkTranslationsButton, &QPushButton::clicked,
+            this, &UpdatesPage::checkTranslationUpdatesRequested);
+    translationsRow->addWidget(m_checkTranslationsButton);
+    mainLayout->addLayout(translationsRow);
 
     m_contentLayout = new QGridLayout();
     m_contentLayout->setSpacing(20);
@@ -82,7 +98,7 @@ void UpdatesPage::setupUi() {
         "border: 1px solid #262626;"
         "border-radius: 14px;"
     ));
-    m_emptyStateLabel->setText(QStringLiteral("✓ Tudo atualizado!\nSeus aplicativos estão na versão mais recente, estável e rápida."));
+    m_emptyStateLabel->setText(QCoreApplication::translate("UpdatesPage", "✓ Everything is up to date!\nYour apps are running the latest stable versions."));
     m_contentLayout->addWidget(m_emptyStateLabel, 0, 0, 1, 3);
 
     mainLayout->addLayout(m_contentLayout);
@@ -142,6 +158,17 @@ void UpdatesPage::refreshUpdates() {
 
     const bool hasUpdates = (updateIndex > 0);
     m_emptyStateLabel->setVisible(!hasUpdates);
+}
+
+void UpdatesPage::setTranslationStatus(const QString& message, bool checking) {
+    if (m_translationStatusLabel) {
+        m_translationStatusLabel->setText(message);
+    }
+    if (m_checkTranslationsButton) {
+        m_checkTranslationsButton->setEnabled(!checking);
+        m_checkTranslationsButton->setText(
+            checking ? tr("Checking…") : tr("Check language files"));
+    }
 }
 
 } // namespace creative_suite::hub

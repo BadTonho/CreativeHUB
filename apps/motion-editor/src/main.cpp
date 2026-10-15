@@ -1,4 +1,5 @@
 #include "ui/main_window/main_window.h"
+#include <creative_suite/translations/translation_runtime.h>
 #ifdef Q_OS_WIN
 #include <creative_suite/updater/update_service.h>
 #endif
@@ -32,6 +33,10 @@ int main(int argc, char* argv[])
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
     QCoreApplication::setApplicationName(QStringLiteral("Motion Studio"));
     QCoreApplication::setApplicationVersion(QStringLiteral(CREATIVE_SUITE_APP_VERSION));
+    creative_suite::translations::TranslationRuntime translations;
+    static_cast<void>(translations.installForApplication(
+        application, QStringLiteral("motion-editor"),
+        QStringLiteral(":/translations/motion-editor/pt_BR.qm")));
     motion::ui::MainWindow window;
 #ifdef Q_OS_WIN
     creative_suite::updater::UpdateCenter updater(

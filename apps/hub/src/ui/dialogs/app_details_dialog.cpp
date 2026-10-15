@@ -1,4 +1,5 @@
 #include "app_details_dialog.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
 #include "../cards/app_status_badge.h"
@@ -63,7 +64,7 @@ AppDetailsDialog::AppDetailsDialog(const AppInfo& app, QWidget* parent)
     : QDialog(parent)
     , m_app(app)
 {
-    setWindowTitle(QStringLiteral("Detalhes - %1").arg(app.name()));
+    setWindowTitle(QCoreApplication::translate("AppDetailsDialog", "Details - %1").arg(app.name()));
     resize(580, 520);
     setMinimumSize(480, 440);
 
@@ -116,14 +117,14 @@ void AppDetailsDialog::setupUi() {
     actionBtn->setFixedSize(110, 36);
     if (m_app.isInstalled()) {
         if (m_app.hasUpdate()) {
-            actionBtn->setText(QStringLiteral("Atualizar"));
+            actionBtn->setText(QCoreApplication::translate("AppDetailsDialog", "Update"));
             actionBtn->setStyleSheet(HubStyle::primaryButtonStyle());
         } else {
-            actionBtn->setText(QStringLiteral("Abrir"));
+            actionBtn->setText(QCoreApplication::translate("AppDetailsDialog", "Open"));
             actionBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
         }
     } else {
-        actionBtn->setText(QStringLiteral("Baixar"));
+        actionBtn->setText(QCoreApplication::translate("AppDetailsDialog", "Download"));
         actionBtn->setStyleSheet(HubStyle::primaryButtonStyle());
     }
 
@@ -154,7 +155,7 @@ void AppDetailsDialog::setupUi() {
     contentLayout->setSpacing(16);
 
     // Description section
-    auto* descTitle = new QLabel(QStringLiteral("SOBRE O APLICATIVO"), contentWidget);
+    auto* descTitle = new QLabel(QCoreApplication::translate("AppDetailsDialog", "ABOUT THIS APP"), contentWidget);
     descTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px;"));
     contentLayout->addWidget(descTitle);
 
@@ -165,7 +166,7 @@ void AppDetailsDialog::setupUi() {
 
     // Key Features section
     if (!m_app.features().isEmpty()) {
-        auto* featTitle = new QLabel(QStringLiteral("PRINCIPAIS RECURSOS"), contentWidget);
+        auto* featTitle = new QLabel(QCoreApplication::translate("AppDetailsDialog", "KEY FEATURES"), contentWidget);
         featTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px; margin-top: 6px;"));
         contentLayout->addWidget(featTitle);
 
@@ -187,7 +188,7 @@ void AppDetailsDialog::setupUi() {
     }
 
     // Technical specs section
-    auto* techTitle = new QLabel(QStringLiteral("INFORMAÇÕES TÉCNICAS"), contentWidget);
+    auto* techTitle = new QLabel(QCoreApplication::translate("AppDetailsDialog", "TECHNICAL INFORMATION"), contentWidget);
     techTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px; margin-top: 6px;"));
     contentLayout->addWidget(techTitle);
 
@@ -202,12 +203,12 @@ void AppDetailsDialog::setupUi() {
     techLayout->setSpacing(6);
 
     if (!m_app.projectFormat().isEmpty()) {
-        auto* formatLabel = new QLabel(QStringLiteral("<b>Formato nativo de projeto:</b> %1").arg(m_app.projectFormat()), techCard);
+        auto* formatLabel = new QLabel(QCoreApplication::translate("AppDetailsDialog", "<b>Native project format:</b> %1").arg(m_app.projectFormat()), techCard);
         formatLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0b0;"));
         techLayout->addWidget(formatLabel);
     }
 
-    auto* exeLabel = new QLabel(QStringLiteral("<b>Arquivo executável:</b> %1").arg(m_app.executableName()), techCard);
+    auto* exeLabel = new QLabel(QCoreApplication::translate("AppDetailsDialog", "<b>Executable file:</b> %1").arg(m_app.executableName()), techCard);
     exeLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #b0b0b0;"));
     techLayout->addWidget(exeLabel);
 
@@ -221,7 +222,7 @@ void AppDetailsDialog::setupUi() {
     auto* bottomRow = new QHBoxLayout();
     bottomRow->addStretch();
 
-    auto* closeBtn = new QPushButton(QStringLiteral("Fechar"), this);
+    auto* closeBtn = new QPushButton(QCoreApplication::translate("AppDetailsDialog", "Close"), this);
     closeBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
     bottomRow->addWidget(closeBtn);

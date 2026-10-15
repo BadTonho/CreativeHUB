@@ -1,4 +1,5 @@
 #include "projects_page.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
 #include "../../model/backup_manager.h"
@@ -9,6 +10,7 @@
 #include <QPainter>
 #include <QDateTime>
 #include <QMessageBox>
+#include <QStringList>
 #include <QTimer>
 
 namespace creative_suite::hub {
@@ -50,7 +52,7 @@ QString appDisplayName(const QString& appId) {
     if (appId == QStringLiteral("video-editor")) return QStringLiteral("Video Editor");
     if (appId == QStringLiteral("image-editor")) return QStringLiteral("Image Editor");
     if (appId == QStringLiteral("motion-editor")) return QStringLiteral("Motion Studio");
-    return QStringLiteral("Projeto da Suíte");
+    return QCoreApplication::translate("ProjectsPage", "Suite project");
 }
 
 } // namespace
@@ -95,32 +97,32 @@ void ProjectsPage::setupUi() {
     auto* titleCol = new QVBoxLayout();
     titleCol->setSpacing(4);
 
-    auto* titleLabel = new QLabel(QStringLiteral("Projetos Recentes"), scrollContainer);
+    auto* titleLabel = new QLabel(QCoreApplication::translate("ProjectsPage", "Recent Projects"), scrollContainer);
     titleLabel->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #ffffff; background: transparent;"));
     titleCol->addWidget(titleLabel);
 
-    auto* subLabel = new QLabel(QStringLiteral("Acesse rapidamente seus trabalhos do Video Editor, Image Editor e Motion Studio."), scrollContainer);
+    auto* subLabel = new QLabel(QCoreApplication::translate("ProjectsPage", "Quickly access your work in Video Editor, Image Editor, and Motion Studio."), scrollContainer);
     subLabel->setWordWrap(true);
     subLabel->setStyleSheet(QStringLiteral("font-size: 13px; color: #888888; background: transparent;"));
     titleCol->addWidget(subLabel);
 
     headerRow->addLayout(titleCol, 1);
 
-    auto* openBackupsBtn = new QPushButton(QStringLiteral("Cofre de Backups"), scrollContainer);
+    auto* openBackupsBtn = new QPushButton(QCoreApplication::translate("ProjectsPage", "Backup Vault"), scrollContainer);
     openBackupsBtn->setCursor(Qt::PointingHandCursor);
     openBackupsBtn->setFixedHeight(36);
     openBackupsBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(openBackupsBtn, &QPushButton::clicked, this, &ProjectsPage::onOpenBackupFolder);
     headerRow->addWidget(openBackupsBtn);
 
-    auto* openProjectBtn = new QPushButton(QStringLiteral("Abrir Projeto..."), scrollContainer);
+    auto* openProjectBtn = new QPushButton(QCoreApplication::translate("ProjectsPage", "Open Project..."), scrollContainer);
     openProjectBtn->setCursor(Qt::PointingHandCursor);
     openProjectBtn->setFixedHeight(36);
     openProjectBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(openProjectBtn, &QPushButton::clicked, this, &ProjectsPage::onBrowseAndOpenProject);
     headerRow->addWidget(openProjectBtn);
 
-    auto* newProjectBtn = new QPushButton(QStringLiteral("+ Novo Projeto"), scrollContainer);
+    auto* newProjectBtn = new QPushButton(QCoreApplication::translate("ProjectsPage", "+ New Project"), scrollContainer);
     newProjectBtn->setCursor(Qt::PointingHandCursor);
     newProjectBtn->setFixedHeight(36);
     newProjectBtn->setStyleSheet(HubStyle::primaryButtonStyle());
@@ -134,9 +136,9 @@ void ProjectsPage::setupUi() {
     controlsRow->setSpacing(10);
 
     const QStringList filterNames = {
-        QStringLiteral("Todos"),
-        QStringLiteral("Vídeo"),
-        QStringLiteral("Imagem"),
+        QCoreApplication::translate("ProjectsPage", "All"),
+        QCoreApplication::translate("ProjectsPage", "Video"),
+        QCoreApplication::translate("ProjectsPage", "Image"),
         QStringLiteral("Motion")
     };
 
@@ -154,7 +156,7 @@ void ProjectsPage::setupUi() {
     controlsRow->addStretch();
 
     m_searchEdit = new QLineEdit(scrollContainer);
-    m_searchEdit->setPlaceholderText(QStringLiteral("Filtrar projetos..."));
+    m_searchEdit->setPlaceholderText(QCoreApplication::translate("ProjectsPage", "Filter projects..."));
     m_searchEdit->setFixedWidth(220);
     m_searchEdit->setFixedHeight(32);
     m_searchEdit->setStyleSheet(HubStyle::searchInputStyle());
@@ -176,7 +178,7 @@ void ProjectsPage::setupUi() {
     emptyLayout->setAlignment(Qt::AlignCenter);
 
     m_emptyStateLabel = new QLabel(
-        QStringLiteral("✦ Nenhum projeto recente encontrado.\nComece criando um novo projeto ou abrindo um arquivo existente da suíte."),
+        QCoreApplication::translate("ProjectsPage", "✦ No recent projects found.\nStart by creating a project or opening an existing file from the suite."),
         m_emptyStateWidget
     );
     m_emptyStateLabel->setAlignment(Qt::AlignCenter);
@@ -189,14 +191,14 @@ void ProjectsPage::setupUi() {
     emptyActionsRow->setSpacing(12);
     emptyActionsRow->addStretch();
 
-    auto* emptyOpenBtn = new QPushButton(QStringLiteral("Abrir Projeto Existente..."), m_emptyStateWidget);
+    auto* emptyOpenBtn = new QPushButton(QCoreApplication::translate("ProjectsPage", "Open Existing Project..."), m_emptyStateWidget);
     emptyOpenBtn->setCursor(Qt::PointingHandCursor);
     emptyOpenBtn->setFixedHeight(36);
     emptyOpenBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(emptyOpenBtn, &QPushButton::clicked, this, &ProjectsPage::onBrowseAndOpenProject);
     emptyActionsRow->addWidget(emptyOpenBtn);
 
-    auto* emptyNewBtn = new QPushButton(QStringLiteral("+ Criar Novo Projeto"), m_emptyStateWidget);
+    auto* emptyNewBtn = new QPushButton(QCoreApplication::translate("ProjectsPage", "+ Create New Project"), m_emptyStateWidget);
     emptyNewBtn->setCursor(Qt::PointingHandCursor);
     emptyNewBtn->setFixedHeight(36);
     emptyNewBtn->setStyleSheet(HubStyle::primaryButtonStyle());
@@ -283,11 +285,10 @@ QWidget* ProjectsPage::createProjectCard(const RecentProject& project) {
         layout->addWidget(dateLabel);
     }
 
-    // "Backup" button
-    auto* backupBtn = new QPushButton(QStringLiteral("Backup"), card);
+    auto* backupBtn = new QPushButton(QCoreApplication::translate("ProjectsPage", "Create Backup"), card);
     backupBtn->setCursor(Qt::PointingHandCursor);
     backupBtn->setFixedHeight(30);
-    backupBtn->setToolTip(QStringLiteral("Criar cópia de segurança com data e hora no cofre de backups"));
+    backupBtn->setToolTip(QCoreApplication::translate("ProjectsPage", "Create a timestamped backup in the backup vault"));
     backupBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(backupBtn, &QPushButton::clicked, this, [this, project, backupBtn]() {
         onBackupProject(project.filePath, backupBtn);
@@ -295,7 +296,7 @@ QWidget* ProjectsPage::createProjectCard(const RecentProject& project) {
     layout->addWidget(backupBtn);
 
     // "Abrir" button
-    auto* openBtn = new QPushButton(QStringLiteral("Abrir"), card);
+    auto* openBtn = new QPushButton(QCoreApplication::translate("ProjectsPage", "Open"), card);
     openBtn->setCursor(Qt::PointingHandCursor);
     openBtn->setFixedHeight(30);
     openBtn->setStyleSheet(HubStyle::primaryButtonStyle());
@@ -308,7 +309,7 @@ QWidget* ProjectsPage::createProjectCard(const RecentProject& project) {
     auto* removeBtn = new QPushButton(QStringLiteral("✕"), card);
     removeBtn->setCursor(Qt::PointingHandCursor);
     removeBtn->setFixedSize(28, 28);
-    removeBtn->setToolTip(QStringLiteral("Remover dos recentes"));
+    removeBtn->setToolTip(QCoreApplication::translate("ProjectsPage", "Remove from recent projects"));
     removeBtn->setStyleSheet(QStringLiteral(
         "QPushButton { background: transparent; color: #666666; border: none; font-size: 12px; border-radius: 6px; }"
         "QPushButton:hover { background-color: #262626; color: #ffffff; }"
@@ -414,17 +415,18 @@ void ProjectsPage::onSearchTextChanged(const QString& text) {
 }
 
 void ProjectsPage::onBrowseAndOpenProject() {
-    const QString filter = QStringLiteral(
-        "Todos os Projetos da Suíte (*.csp *.csve *.cimg *.csie *.motion *.csme);;"
-        "Projetos de Vídeo (*.csp *.csve);;"
-        "Projetos de Imagem (*.cimg *.csie);;"
-        "Projetos de Motion (*.motion *.csme);;"
-        "Todos os Arquivos (*.*)"
-    );
+    const QStringList filters{
+        QCoreApplication::translate("ProjectsPage", "All Suite Projects") + QStringLiteral(" (*.csp *.csve *.cimg *.csie *.motion *.csme)"),
+        QCoreApplication::translate("ProjectsPage", "Video Projects") + QStringLiteral(" (*.csp *.csve)"),
+        QCoreApplication::translate("ProjectsPage", "Image Projects") + QStringLiteral(" (*.cimg *.csie)"),
+        QCoreApplication::translate("ProjectsPage", "Motion Projects") + QStringLiteral(" (*.motion *.csme)"),
+        QCoreApplication::translate("ProjectsPage", "All Files") + QStringLiteral(" (*.*)")
+    };
+    const QString filter = filters.join(QStringLiteral(";;"));
 
     const QString selectedFile = QFileDialog::getOpenFileName(
         this,
-        QStringLiteral("Abrir Projeto da Creative Suite"),
+        QCoreApplication::translate("ProjectsPage", "Open Creative Suite Project"),
         QString(),
         filter
     );
@@ -470,17 +472,17 @@ void ProjectsPage::onNewProjectMenu() {
         "}"
     ));
 
-    auto* videoAction = menu->addAction(QStringLiteral("🎬 Novo no Video Editor"));
+    auto* videoAction = menu->addAction(QCoreApplication::translate("ProjectsPage", "🎬 New in Video Editor"));
     connect(videoAction, &QAction::triggered, this, [this]() {
         emit newProjectRequested(QStringLiteral("video-editor"));
     });
 
-    auto* imageAction = menu->addAction(QStringLiteral("🎨 Novo no Image Editor"));
+    auto* imageAction = menu->addAction(QCoreApplication::translate("ProjectsPage", "🎨 New in Image Editor"));
     connect(imageAction, &QAction::triggered, this, [this]() {
         emit newProjectRequested(QStringLiteral("image-editor"));
     });
 
-    auto* motionAction = menu->addAction(QStringLiteral("✨ Novo no Motion Studio"));
+    auto* motionAction = menu->addAction(QCoreApplication::translate("ProjectsPage", "✨ New in Motion Studio"));
     connect(motionAction, &QAction::triggered, this, [this]() {
         emit newProjectRequested(QStringLiteral("motion-editor"));
     });
@@ -499,11 +501,11 @@ void ProjectsPage::onBackupProject(const QString& filePath, QPushButton* trigger
 
     if (success) {
         if (triggerBtn) {
-            triggerBtn->setText(QStringLiteral("✓ Salvo"));
+            triggerBtn->setText(QCoreApplication::translate("ProjectsPage", "✓ Saved"));
             triggerBtn->setEnabled(false);
             QTimer::singleShot(2500, triggerBtn, [triggerBtn]() {
                 if (triggerBtn) {
-                    triggerBtn->setText(QStringLiteral("Backup"));
+                    triggerBtn->setText(QCoreApplication::translate("ProjectsPage", "Create Backup"));
                     triggerBtn->setEnabled(true);
                 }
             });
@@ -511,8 +513,8 @@ void ProjectsPage::onBackupProject(const QString& filePath, QPushButton* trigger
     } else {
         QMessageBox::warning(
             this,
-            QStringLiteral("Falha no Backup"),
-            QStringLiteral("Não foi possível gerar a cópia de segurança:\n%1").arg(outError)
+            QCoreApplication::translate("ProjectsPage", "Backup Failed"),
+            QCoreApplication::translate("ProjectsPage", "Could not create the backup:\n%1").arg(outError)
         );
     }
 }

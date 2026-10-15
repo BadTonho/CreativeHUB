@@ -1,6 +1,7 @@
 #include "main_window/main_window.h"
 
 #include "logging/logger.h"
+#include <creative_suite/translations/translation_runtime.h>
 #ifdef Q_OS_WIN
 #include <creative_suite/updater/update_service.h>
 #endif
@@ -75,6 +76,11 @@ int main(int argc, char* argv[]) {
         QApplication::setOrganizationName("Creative Suite");
         QApplication::setApplicationName("Video Editor");
         QApplication::setApplicationVersion(CREATIVE_SUITE_APP_VERSION);
+
+        creative_suite::translations::TranslationRuntime translations;
+        static_cast<void>(translations.installForApplication(
+            application, QStringLiteral("video-editor"),
+            QStringLiteral(":/translations/video-editor/pt_BR.qm")));
 
         MainWindow window;
 #ifdef Q_OS_WIN

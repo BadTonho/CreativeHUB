@@ -1,4 +1,5 @@
 #include "activity_popup.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 
 #include <QHBoxLayout>
@@ -15,9 +16,9 @@ QString formatTimestamp(const QDateTime& dt) {
     const auto now = QDateTime::currentDateTime();
     const qint64 secs = dt.secsTo(now);
 
-    if (secs < 60) return QStringLiteral("Agora há pouco");
-    if (secs < 3600) return QStringLiteral("há %1 min").arg(secs / 60);
-    if (secs < 86400) return QStringLiteral("há %1 h").arg(secs / 3600);
+    if (secs < 60) return QCoreApplication::translate("ActivityPopup", "Just now");
+    if (secs < 3600) return QCoreApplication::translate("ActivityPopup", "%1 min ago").arg(secs / 60);
+    if (secs < 86400) return QCoreApplication::translate("ActivityPopup", "%1 hr ago").arg(secs / 3600);
     return dt.toString(QStringLiteral("dd/MM/yyyy HH:mm"));
 }
 
@@ -66,7 +67,7 @@ void ActivityPopup::setupUi() {
     headerLayout->setContentsMargins(0, 0, 0, 0);
     headerLayout->setSpacing(8);
 
-    auto* titleLabel = new QLabel(QStringLiteral("ATIVIDADES"), container);
+    auto* titleLabel = new QLabel(QCoreApplication::translate("ActivityPopup", "ACTIVITY"), container);
     titleLabel->setStyleSheet(QStringLiteral(
         "font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 1.2px; background: transparent; border: none;"
     ));
@@ -86,7 +87,7 @@ void ActivityPopup::setupUi() {
 
     headerLayout->addStretch();
 
-    auto* markReadBtn = new QPushButton(QStringLiteral("Marcar lidas"), container);
+    auto* markReadBtn = new QPushButton(QCoreApplication::translate("ActivityPopup", "Mark as read"), container);
     markReadBtn->setStyleSheet(QStringLiteral(
         "QPushButton {"
         "   background: transparent;"
@@ -104,7 +105,7 @@ void ActivityPopup::setupUi() {
     connect(markReadBtn, &QPushButton::clicked, this, &ActivityPopup::onMarkAllRead);
     headerLayout->addWidget(markReadBtn);
 
-    auto* clearBtn = new QPushButton(QStringLiteral("Limpar"), container);
+    auto* clearBtn = new QPushButton(QCoreApplication::translate("ActivityPopup", "Clear"), container);
     clearBtn->setStyleSheet(QStringLiteral(
         "QPushButton {"
         "   background: transparent;"
@@ -147,7 +148,7 @@ void ActivityPopup::setupUi() {
     emptyLayout->setContentsMargins(10, 40, 10, 40);
     emptyLayout->setAlignment(Qt::AlignCenter);
 
-    auto* emptyLabel = new QLabel(QStringLiteral("Nenhuma atividade recente registrada."), m_emptyWidget);
+    auto* emptyLabel = new QLabel(QCoreApplication::translate("ActivityPopup", "No recent activity."), m_emptyWidget);
     emptyLabel->setStyleSheet(QStringLiteral("color: #555555; font-size: 12px; background: transparent; border: none;"));
     emptyLabel->setAlignment(Qt::AlignCenter);
     emptyLayout->addWidget(emptyLabel);

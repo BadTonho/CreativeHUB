@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "translations": [
+    {
+      "application": "hub",
+      "locale": "pt_BR",
+      "path": "hub/pt_BR.qm",
+      "size_bytes": 27729,
+      "sha256": "f58d4c3a5c2969a41c8c01bf09dcd9c6b19ac2a7e0abf9ef550080b8303bdbb3"
+    }
+  ]
+}

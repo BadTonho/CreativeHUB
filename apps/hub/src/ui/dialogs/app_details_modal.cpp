@@ -1,4 +1,5 @@
 #include "app_details_modal.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
 
@@ -156,7 +157,7 @@ void AppDetailsModal::setupUi() {
     contentLayout->setSpacing(14);
 
     // About section
-    auto* aboutTitle = new QLabel(QStringLiteral("SOBRE O APLICATIVO"), scrollContent);
+    auto* aboutTitle = new QLabel(QCoreApplication::translate("AppDetailsModal", "ABOUT THIS APP"), scrollContent);
     aboutTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px;"));
     contentLayout->addWidget(aboutTitle);
 
@@ -166,7 +167,7 @@ void AppDetailsModal::setupUi() {
     contentLayout->addWidget(m_descText);
 
     // Features section
-    auto* featTitle = new QLabel(QStringLiteral("PRINCIPAIS RECURSOS"), scrollContent);
+    auto* featTitle = new QLabel(QCoreApplication::translate("AppDetailsModal", "KEY FEATURES"), scrollContent);
     featTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px; margin-top: 4px;"));
     contentLayout->addWidget(featTitle);
 
@@ -175,7 +176,7 @@ void AppDetailsModal::setupUi() {
     contentLayout->addLayout(m_featuresLayout);
 
     // Technical specifications
-    auto* techTitle = new QLabel(QStringLiteral("INFORMAÇÕES TÉCNICAS"), scrollContent);
+    auto* techTitle = new QLabel(QCoreApplication::translate("AppDetailsModal", "TECHNICAL INFORMATION"), scrollContent);
     techTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px; margin-top: 4px;"));
     contentLayout->addWidget(techTitle);
 
@@ -203,7 +204,7 @@ void AppDetailsModal::setupUi() {
     auto* changelogHeaderRow = new QHBoxLayout();
     changelogHeaderRow->setContentsMargins(0, 4, 0, 0);
 
-    auto* changelogTitle = new QLabel(QStringLiteral("NOTAS DE VERSÃO"), scrollContent);
+    auto* changelogTitle = new QLabel(QCoreApplication::translate("AppDetailsModal", "RELEASE NOTES"), scrollContent);
     changelogTitle->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 700; color: #707070; letter-spacing: 0.5px;"));
     changelogHeaderRow->addWidget(changelogTitle);
     changelogHeaderRow->addStretch();
@@ -303,7 +304,7 @@ void AppDetailsModal::setupUi() {
     auto* bottomRow = new QHBoxLayout();
     bottomRow->addStretch();
 
-    m_closeBottomButton = new QPushButton(QStringLiteral("Fechar"), m_cardFrame);
+    m_closeBottomButton = new QPushButton(QCoreApplication::translate("AppDetailsModal", "Close"), m_cardFrame);
     m_closeBottomButton->setStyleSheet(HubStyle::secondaryButtonStyle());
     connect(m_closeBottomButton, &QPushButton::clicked, this, &AppDetailsModal::closeWithAnimation);
     bottomRow->addWidget(m_closeBottomButton);
@@ -368,7 +369,7 @@ void AppDetailsModal::loadChangelogForVersion(const QString& version) {
         m_changelogBrowser->setVisible(false);
         if (m_emptyChangelogLabel) {
             m_emptyChangelogLabel->setText(
-                QStringLiteral("Não foi possível carregar as notas da versão %1.").arg(version));
+                QCoreApplication::translate("AppDetailsModal", "Could not load the release notes for version %1.").arg(version));
             m_emptyChangelogLabel->setVisible(true);
         }
     }
@@ -473,14 +474,14 @@ void AppDetailsModal::updateVisuals() {
     // Action button text and style (monochrome)
     if (m_app.isInstalled()) {
         if (m_app.hasUpdate()) {
-            m_actionButton->setText(QStringLiteral("Atualizar"));
+            m_actionButton->setText(QCoreApplication::translate("AppDetailsModal", "Update"));
             m_actionButton->setStyleSheet(HubStyle::primaryButtonStyle());
         } else {
-            m_actionButton->setText(QStringLiteral("Abrir"));
+            m_actionButton->setText(QCoreApplication::translate("AppDetailsModal", "Open"));
             m_actionButton->setStyleSheet(HubStyle::secondaryButtonStyle());
         }
     } else {
-        m_actionButton->setText(QStringLiteral("Baixar"));
+        m_actionButton->setText(QCoreApplication::translate("AppDetailsModal", "Download"));
         m_actionButton->setStyleSheet(HubStyle::primaryButtonStyle());
     }
 
@@ -507,13 +508,13 @@ void AppDetailsModal::updateVisuals() {
     }
 
     if (!m_app.projectFormat().isEmpty()) {
-        m_formatLabel->setText(QStringLiteral("<b>Formato nativo de projeto:</b> %1").arg(m_app.projectFormat()));
+        m_formatLabel->setText(QCoreApplication::translate("AppDetailsModal", "<b>Native project format:</b> %1").arg(m_app.projectFormat()));
         m_formatLabel->setVisible(true);
     } else {
         m_formatLabel->setVisible(false);
     }
 
-    m_exeLabel->setText(QStringLiteral("<b>Arquivo executável:</b> %1").arg(m_app.executableName()));
+    m_exeLabel->setText(QCoreApplication::translate("AppDetailsModal", "<b>Executable file:</b> %1").arg(m_app.executableName()));
 
     // Populate changelog section
     const QStringList versions = m_changelogReader.availableVersions(m_app.id());
@@ -570,7 +571,7 @@ void AppDetailsModal::updateVisuals() {
         }
         if (m_emptyChangelogLabel) {
             m_emptyChangelogLabel->setText(
-                QStringLiteral("Nenhuma nota de versão registrada para o %1 ainda. As notas de lançamento serão disponibilizadas aqui conforme novas versões forem lançadas.")
+                QCoreApplication::translate("AppDetailsModal", "No release notes are available for %1 yet. They will appear here as new versions are published.")
                 .arg(m_app.name()));
             m_emptyChangelogLabel->setVisible(true);
         }

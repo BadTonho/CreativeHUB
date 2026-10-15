@@ -1,4 +1,5 @@
 #include "download_progress_bar.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 
 #include <QVBoxLayout>
@@ -41,7 +42,7 @@ DownloadProgressBar::DownloadProgressBar(QWidget* parent)
 
     metaLayout->addStretch();
 
-    m_cancelButton = new QPushButton(QStringLiteral("Cancelar"), this);
+    m_cancelButton = new QPushButton(QCoreApplication::translate("DownloadProgressBar", "Cancel"), this);
     m_cancelButton->setStyleSheet(QStringLiteral(R"(
         QPushButton {
             background: transparent;

@@ -116,6 +116,7 @@ add_executable(creative-suite-motion-editor
 )
 target_link_libraries(creative-suite-motion-editor PRIVATE
     creative-suite-motion-editor-core
+    creative-suite::translations
     creative-suite::updater
     Qt6::Widgets
 )

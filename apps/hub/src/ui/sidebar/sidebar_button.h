@@ -9,7 +9,8 @@ class SidebarButton : public QPushButton {
     Q_OBJECT
 
 public:
-    explicit SidebarButton(const QString& title, QWidget* parent = nullptr);
+    enum class Icon { Applications, Projects, Updates, Storage, Backups, Settings };
+    explicit SidebarButton(const QString& title, Icon icon, QWidget* parent = nullptr);
 
     void setActive(bool active);
     [[nodiscard]] bool isActive() const noexcept { return m_active; }
@@ -21,7 +22,7 @@ private:
 
     bool m_active{false};
     int m_badgeCount{0};
-    QString m_title;
+    Icon m_icon;
     QLabel* m_badgeLabel{nullptr};
 };
 

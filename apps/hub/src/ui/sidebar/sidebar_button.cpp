@@ -1,4 +1,5 @@
 #include "sidebar_button.h"
+#include <QCoreApplication>
 #include "../theme/hub_palette.h"
 
 #include <QHBoxLayout>
@@ -138,9 +139,9 @@ QIcon createSettingsIcon(const QColor& color) {
 
 } // namespace
 
-SidebarButton::SidebarButton(const QString& title, QWidget* parent)
+SidebarButton::SidebarButton(const QString& title, Icon icon, QWidget* parent)
     : QPushButton(parent)
-    , m_title(title)
+    , m_icon(icon)
 {
     setFixedHeight(42);
     setCursor(Qt::PointingHandCursor);
@@ -186,18 +187,13 @@ void SidebarButton::setBadgeCount(int count) {
 void SidebarButton::updateVisuals() {
     QColor iconColor = m_active ? QColor(0xff, 0xff, 0xff) : QColor(0x88, 0x88, 0x88);
 
-    if (m_title.contains(QStringLiteral("Aplicativos"))) {
-        setIcon(createAppsIcon(iconColor));
-    } else if (m_title.contains(QStringLiteral("Projetos"))) {
-        setIcon(createProjectsIcon(iconColor));
-    } else if (m_title.contains(QStringLiteral("Atualizações"))) {
-        setIcon(createUpdatesIcon(iconColor));
-    } else if (m_title.contains(QStringLiteral("Armazenamento")) || m_title.contains(QStringLiteral("Cache"))) {
-        setIcon(createStorageIcon(iconColor));
-    } else if (m_title.contains(QStringLiteral("Backups")) || m_title.contains(QStringLiteral("Cofre"))) {
-        setIcon(createBackupsIcon(iconColor));
-    } else if (m_title.contains(QStringLiteral("Configurações"))) {
-        setIcon(createSettingsIcon(iconColor));
+    switch (m_icon) {
+    case Icon::Applications: setIcon(createAppsIcon(iconColor)); break;
+    case Icon::Projects: setIcon(createProjectsIcon(iconColor)); break;
+    case Icon::Updates: setIcon(createUpdatesIcon(iconColor)); break;
+    case Icon::Storage: setIcon(createStorageIcon(iconColor)); break;
+    case Icon::Backups: setIcon(createBackupsIcon(iconColor)); break;
+    case Icon::Settings: setIcon(createSettingsIcon(iconColor)); break;
     }
 
     if (m_active) {

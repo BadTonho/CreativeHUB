@@ -155,6 +155,7 @@ readiness checks remain in this roadmap and
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
+| Startup loads the system-selected downloaded/bundled Qt catalog before the editor window | Shared `creative-suite-translations` covers locale selection, load precedence, and English source fallback; app integration is in `apps/motion-editor/src/main.cpp` | Startup-before-window code path is present. Native Windows/macOS/Linux startup and locale checks remain pending in [translation acceptance](../TRANSLATIONS_AND_LANGUAGE_PACKS.md#regression-and-acceptance). |
 | Hub snapshot references and restoration across versions 1–8 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Motion persistence producer and consumer | Automated coverage present for Media Pool, layer sources, linked-image sidecars, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
 | Composition model, validation, layer data, and timing | `composition_document_test.cpp` (`creative-suite-motion-editor-document`) | Pending manual composition and supported-layer checks remain part of MVP acceptance. |
 | Undo/Redo and edit history | `composition_history_test.cpp` (`creative-suite-motion-editor-history`) | Pending manual validation: confirm interactive edit sequences during the broader Windows UI checklist. |

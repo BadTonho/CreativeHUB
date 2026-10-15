@@ -23,7 +23,11 @@ public:
 signals:
     void appDetailsRequested(const QString& appId, const QRect& originRect = QRect());
     void checkUpdatesRequested();
+    void checkTranslationUpdatesRequested();
     void updateAppRequested(const QString& appId);
+
+public slots:
+    void setTranslationStatus(const QString& message, bool checking = false);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -36,6 +40,8 @@ private:
     QGridLayout* m_contentLayout{nullptr};
     QLabel* m_emptyStateLabel{nullptr};
     QPushButton* m_checkUpdatesButton{nullptr};
+    QLabel* m_translationStatusLabel{nullptr};
+    QPushButton* m_checkTranslationsButton{nullptr};
     std::vector<AppCardWidget*> m_updateCards;
 };
 

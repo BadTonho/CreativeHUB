@@ -17,6 +17,7 @@
 #include <QHash>
 #include <QStackedWidget>
 #include <creative_suite/updater/update_service.h>
+#include <creative_suite/translations/translation_update_service.h>
 
 namespace creative_suite::updater {
 class UpdateRuntime;
@@ -38,6 +39,7 @@ public:
     };
     explicit MainWindow(QWidget* parent = nullptr);
     explicit MainWindow(UpdateDependencies dependencies, QWidget* parent = nullptr);
+    void startTranslationUpdateCheck();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -50,6 +52,7 @@ private slots:
     void onDownloadApp(const QString& appId);
     void onCancelDownload(const QString& appId);
     void onRefreshApps();
+    void onCheckTranslationUpdates();
 
 private:
     void setupUi();
@@ -75,6 +78,7 @@ private:
     AppDetailsModal* m_detailsModal{nullptr};
 
     creative_suite::updater::UpdateRuntime* m_updateRuntime{nullptr};
+    creative_suite::translations::TranslationUpdateService* m_translationUpdateService{nullptr};
     QHash<QString, creative_suite::updater::UpdateService*> m_updateServices;
 };
 
