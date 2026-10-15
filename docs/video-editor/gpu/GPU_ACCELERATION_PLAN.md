@@ -19,9 +19,9 @@ delivers shared textures when supported, retaining RGBA readback as fallback.
 Export defaults to CPU and offers independent per-job GPU composition through
 Render > Video. Its RGBA readback path supports 1080p, 1440p and 4K UHD; see
 [the export contract](GPU_EXPORT.md) and [results](GPU_EXPORT_RESULTS.md).
-See [the rendering boundary](architecture/RENDERING.md).
+See [the rendering boundary](../architecture/RENDERING.md).
 
-The [Motion Studio plan](../motion-editor/GPU_ACCELERATION_PLAN.md) will adopt
+The [Motion Studio plan](../../motion-editor/GPU_ACCELERATION_PLAN.md) will adopt
 this shared backend through its existing layer-preparation boundary after its
 relevant contracts are covered.
 Keep timeline scheduling, source timing, decoding, transitions, audio, history,
@@ -65,7 +65,7 @@ Exact rotated nearest sampling additionally requires the optional
 `ARB_gpu_shader_fp64` and `ARB_gpu_shader5` extensions. Without them, rotated
 requests use CPU; unrotated requests keep the OpenGL 3.2 Core lookup path.
 The native suite exercises both automatic and core-only capability policies.
-See [precision and limits](architecture/RENDERING.md#timeline-composition).
+See [precision and limits](../architecture/RENDERING.md#timeline-composition).
 
 **Exit:** a covered optional timeline backend preserves CPU composition
 semantics; initialization/limits/context-loss cases have a defined fallback.
@@ -155,7 +155,7 @@ regressions pass, and transfer/encode costs are included in performance results.
   after publication. Invalidate dependent CPU/GPU caches on media replacement
   so preview and export use the updated asset.
 - Verify both producer and consumer for changes to shared APIs or published
-  media. Use the dedicated [Image Editor plan](../image-editor/GPU_ACCELERATION_PLAN.md)
+  media. Use the dedicated [Image Editor plan](../../image-editor/GPU_ACCELERATION_PLAN.md)
   for its rendering work; preserve existing `.cimg`/`.csp` boundaries.
 
 **Exit:** added capabilities have explicit product contracts and producer/
@@ -200,7 +200,7 @@ choice or new package is accepted by this documentation.
 
 Extend the existing shared compositor, transform/text, playback/transition/
 audio, native OpenGL presentation, metrics, render queue/export, and main-window
-linked-image checks listed in [REGRESSION_TESTING.md](REGRESSION_TESTING.md).
+linked-image checks listed in [REGRESSION_TESTING.md](../validation/REGRESSION_TESTING.md).
 `creative-suite-composition-opengl` compares CPU/GPU with exact alpha and geometry
 and at most two RGB levels of rounding difference. It covers order, transparency,
 aspect fit, transforms, text rasters, edge clipping, padded strides, empty canvas,
@@ -215,7 +215,7 @@ Manually compare CPU/GPU at clip boundaries and transition frames, rapidly seek,
 change quality while playing, activate media, refresh a linked PNG, export/cancel
 queued jobs, and close/reopen projects during rendering. Record audio sync,
 freshness, appearance, output preservation, and resource cleanup on each OS.
-Follow the repository [regression policy](../REGRESSION_POLICY.md).
+Follow the repository [regression policy](../../REGRESSION_POLICY.md).
 
 ## Resuming and delivery record
 
@@ -226,8 +226,8 @@ evidence, unresolved issues, and the next stage here.
 
 - 2026-10-02: documentation saved; implementation and GPU composition acceptance
   remain planned. Existing GPU presentation remains in place. Coordinate shared
-  work with the [Motion Studio](../motion-editor/GPU_ACCELERATION_PLAN.md) and
-  [Image Editor](../image-editor/GPU_ACCELERATION_PLAN.md) plans.
+  work with the [Motion Studio](../../motion-editor/GPU_ACCELERATION_PLAN.md) and
+  [Image Editor](../../image-editor/GPU_ACCELERATION_PLAN.md) plans.
 
 - 2026-10-02: Stage 1 code added with Video Editor as first consumer. Windows
   native parity and timeline/PNG checks passed on NVIDIA GTX 1660 SUPER, OpenGL

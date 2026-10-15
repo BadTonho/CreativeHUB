@@ -196,8 +196,8 @@ post-group-cache report remain unchanged for historical comparison.
 ## Shared Video Editor stage 2 delivery
 
 Video Editor remains the first consumer. Its experimental backend now supports
-[direct texture delivery](../video-editor/GPU_TEXTURE_DELIVERY.md), public Qt
+[direct texture delivery](../video-editor/gpu/GPU_TEXTURE_DELIVERY.md), public Qt
 global sharing, a three-target/64 MiB reservation budget including retired targets,
 producer/consumer fences and asynchronous RGBA recovery. This application remains
 on its current CPU renderer; adoption requires its own rendering, alpha, lifecycle,
-export and regression contracts. See [native evidence and remaining platform gates](../video-editor/GPU_COMPOSITION_RESULTS.md).
+export and regression contracts. See [native evidence and remaining platform gates](../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).

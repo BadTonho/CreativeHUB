@@ -7,7 +7,7 @@ playback boundary and its regression coverage.
 The worker replaces video resources, cancels stale preroll, and clears composed
 frames. The controller advances the delivery epoch and recomposes paused output;
 audio and source/timeline clocks retain existing ownership. See
-[the pipeline contract](../GPU_PIPELINE.md) for codec eligibility and recovery.
+[the pipeline contract](../gpu/GPU_PIPELINE.md) for codec eligibility and recovery.
 
 ## Ownership
 
@@ -51,7 +51,7 @@ for request limits, precision requirements, cancellation and retry semantics.
 The controller/settings/main-window tests also cover live preference forwarding,
 paused refresh, playback continuity, persistence and project-state preservation.
 The native GPU timeline test covers real worker activation/toggle/shutdown;
-follow the [GPU manual checklist](../GPU_COMPOSITION_RESULTS.md#reproducible-manual-checklist)
+follow the [GPU manual checklist](../gpu/GPU_COMPOSITION_RESULTS.md#reproducible-manual-checklist)
 for platform, visual and physical audio checks.
 
 ## Manual validation
@@ -71,4 +71,4 @@ epoch. `PlaybackDeliveryEpochEvent` updates the viewer before accepted deliverie
 `recoverPreviewFrame` queues retained-frame readback or latest-position CPU
 recomposition, preserving playback/audio. MainWindow releases preview leases and
 the controller clears its mailbox before worker join and offscreen-surface
-destruction. See [GPU_TEXTURE_DELIVERY.md](../GPU_TEXTURE_DELIVERY.md).
+destruction. See [GPU_TEXTURE_DELIVERY.md](../gpu/GPU_TEXTURE_DELIVERY.md).

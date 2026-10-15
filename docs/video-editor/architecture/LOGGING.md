@@ -59,7 +59,7 @@ audio, finalization, total wall time and transfer bytes. Allocation peaks descri
 known source/output buffers and textures, not process memory or actual driver VRAM.
 Schema 2 additionally distinguishes native encoded frames, native video imports,
 conversion wall time, hardware/software decoded frames, and decoded-frame
-downloads. See [the field definitions](../GPU_EXPORT.md#export-diagnostics-schema-2).
+downloads. See [the field definitions](../gpu/GPU_EXPORT.md#export-diagnostics-schema-2).
 Preview aggregate/slow schema 9 gains additive native import/conversion counters;
 delivery schema 3 retains its meaning. `media/decode_acceleration_summary` records
 each requested hardware session's effective backend, transfer/cache bytes, and

@@ -11,11 +11,11 @@ the selected new clip starts at local frame zero. See
 
 ## Background Generator
 
-AddBackgroundGeneratorCommand stages a white Background → Output composition named Background and publishes one insertion/history entry. Color changes reuse SetClipNodeGraphCommand. Node selection and canceled dialogs are presentation-only. DuplicateFusionCompositionCommand preserves the name with an independent graph. See [Background Generator](../BACKGROUND_GENERATOR.md).
+AddBackgroundGeneratorCommand stages a white Background → Output composition named Background and publishes one insertion/history entry. Color changes reuse SetClipNodeGraphCommand. Node selection and canceled dialogs are presentation-only. DuplicateFusionCompositionCommand preserves the name with an independent graph. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks v1
 
-Mask creation, Inspector settings, keyframes, typed reconnection and removal are graph replacements through SetClipNodeGraphCommand, preserving existing selection, dirty state and Undo/Redo. Invalid connections are expected no-ops. No shortcut or new timeline command is introduced. See [Fusion Masks](../FUSION_MASKS.md).
+Mask creation, Inspector settings, keyframes, typed reconnection and removal are graph replacements through SetClipNodeGraphCommand, preserving existing selection, dirty state and Undo/Redo. Invalid connections are expected no-ops. No shortcut or new timeline command is introduced. See [Fusion Masks](../features/FUSION_MASKS.md).
 
 ## Fusion composition commands
 
@@ -24,7 +24,7 @@ one transactional history entry with stable IDs and playback invalidation.
 Duplication copies graph/curves and `composition_input_offset_frames` by value.
 Generated duration editing and graph changes participate in session dirty state,
 Undo/Redo and persistence without a primary-media lookup. See
-[Fusion Composition](../FUSION_COMPOSITION.md).
+[Fusion Composition](../features/FUSION_COMPOSITION.md).
 
 
 Status: **provisional**. This document describes the current application

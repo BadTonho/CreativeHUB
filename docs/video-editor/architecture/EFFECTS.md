@@ -81,18 +81,18 @@ boundaries and normal refusals do not log errors.
 
 ## Background Generator
 
-Video has a Generators child category containing Background; parent filtering includes descendants. Background uses `video.background` drag MIME and creates a clip. All and local Favorites expose it too. Favorites persist known draggable catalog IDs and can be removed through context menus. See [Background Generator](../BACKGROUND_GENERATOR.md).
+Video has a Generators child category containing Background; parent filtering includes descendants. Background uses `video.background` drag MIME and creates a clip. All and local Favorites expose it too. Favorites persist known draggable catalog IDs and can be removed through context menus. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks v1
 
-Optional typed Mask input 2 limits Effect/Color/Transform processing through premultiplied blending with the original. Merge attenuates foreground contribution; generators/Input/Output multiply alpha. No mask preserves existing behavior. See [Fusion Masks](../FUSION_MASKS.md).
+Optional typed Mask input 2 limits Effect/Color/Transform processing through premultiplied blending with the original. Merge attenuates foreground contribution; generators/Input/Output multiply alpha. No mask preserves existing behavior. See [Fusion Masks](../features/FUSION_MASKS.md).
 
 ## Fusion generators
 
 Effects > Video includes the `video.fusion_composition` generator. Its clip
 supports the existing effect stack and Functions. Fusion also offers Background
 and Text generator nodes, distinct from the Color correction node. See
-[Fusion Composition](../FUSION_COMPOSITION.md) for static generator controls
+[Fusion Composition](../features/FUSION_COMPOSITION.md) for static generator controls
 and the existing node animation boundary.
 
 
@@ -179,4 +179,4 @@ frames, fused Color Adjustment compatibility, and cancellation. Motion Studio co
 pixel parity, cancellation, and timing. Video Editor boundary coverage lives
 in the project, Timeline command, Preview, offline export, Effects dock,
 Functions, and Timeline widget tests. The manual acceptance checklist is in
-[`../REGRESSION_TESTING.md`](../REGRESSION_TESTING.md#manual-ui-validation).
+[`../REGRESSION_TESTING.md`](../validation/REGRESSION_TESTING.md#manual-ui-validation).

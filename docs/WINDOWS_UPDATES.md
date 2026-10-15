@@ -209,7 +209,7 @@ Automated coverage is registered in `libs/updater/tests/CMakeLists.txt`:
   are never written and no installers or editor processes run.
 
 Required manual Windows checks are indexed in the [Hub](hub/REGRESSION_TESTING.md),
-[Video Editor](video-editor/REGRESSION_TESTING.md),
+[Video Editor](video-editor/validation/REGRESSION_TESTING.md),
 [Image Editor](image-editor/MANUAL_VALIDATION.md), and
 [Motion Studio](motion-editor/ROADMAP.md) guides. They cover a clean install to
 a chosen directory, updating into that same directory, preserving user data,

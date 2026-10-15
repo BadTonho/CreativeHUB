@@ -128,7 +128,7 @@ project, codec, GPU or operating system.
 
 ## Regression and remaining validation
 
-The [regression index](REGRESSION_TESTING.md) maps deterministic fault/UI/queue
+The [regression index](../validation/REGRESSION_TESTING.md) maps deterministic fault/UI/queue
 tests and native GPU tests. CPU/GPU pre-encoding comparisons require exact alpha
 and geometry, with at most two RGB levels of rounding difference. The native
 export target requires effective GPU composition rather than silently accepting

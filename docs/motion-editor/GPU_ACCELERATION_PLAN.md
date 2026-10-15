@@ -14,17 +14,17 @@ experimental preview and offline export integration. Preview and export stacks
 containing Color Adjustment and Gaussian Blur can use the GPU. Motion's export
 reads the composed frame back to RGBA for the existing CPU encoder. Motion
 reuses the shared adapter and does not create another composition engine. See
-[Video Editor's delivery](../video-editor/GPU_ACCELERATION_PLAN.md).
+[Video Editor's delivery](../video-editor/gpu/GPU_ACCELERATION_PLAN.md).
 
 ## Current evidence and priorities
 
 The shared adapter's native Windows parity/measurements are recorded in
-[Video Editor results](../video-editor/GPU_COMPOSITION_RESULTS.md). They do not
+[Video Editor results](../video-editor/gpu/GPU_COMPOSITION_RESULTS.md). They do not
 approve Motion effects, its viewer/export lifecycle, or macOS/Linux drivers.
-Video Editor's [export contract](../video-editor/GPU_EXPORT.md) now covers isolated
+Video Editor's [export contract](../video-editor/gpu/GPU_EXPORT.md) now covers isolated
 per-job worker resources, CPU fallback and separate schema-1 metrics. Shared RGBA
 and direct paths use two 16 KiB axis lookup buffers for UHD/portrait 4K. Its
-[export measurements](../video-editor/GPU_EXPORT_RESULTS.md) are additional reuse
+[export measurements](../video-editor/gpu/GPU_EXPORT_RESULTS.md) are additional reuse
 evidence; Motion Studio GPU effects and export remain experimental, with GPU
 effects and export limited to opt-in operation.
 
@@ -212,7 +212,7 @@ direct preview implementation is separate from performance and platform acceptan
 
 - Integrate the shared compositor into Video Editor after its own regression
   and performance checks, following its
-  [dedicated stages](../video-editor/GPU_ACCELERATION_PLAN.md). Keep Video Editor
+  [dedicated stages](../video-editor/gpu/GPU_ACCELERATION_PLAN.md). Keep Video Editor
   stability as a priority.
 - Audit Image Editor composition, masks, transforms, and editable operations
   before adapting this backend to that application's different output contract;
@@ -323,7 +323,7 @@ coverage does not establish platform acceptance by itself.
 ## Shared Video Editor stage 2 delivery
 
 Video Editor remains the first consumer. Its experimental backend now supports
-[direct texture delivery](../video-editor/GPU_TEXTURE_DELIVERY.md), public Qt
+[direct texture delivery](../video-editor/gpu/GPU_TEXTURE_DELIVERY.md), public Qt
 global sharing, a three-target/64 MiB reservation budget including retired targets,
 producer/consumer fences and asynchronous RGBA recovery. Motion adoption is now implemented experimentally through its own viewer and
-worker contracts; native platform and performance acceptance remain separate. See [native evidence and remaining platform gates](../video-editor/GPU_COMPOSITION_RESULTS.md).
+worker contracts; native platform and performance acceptance remain separate. See [native evidence and remaining platform gates](../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).

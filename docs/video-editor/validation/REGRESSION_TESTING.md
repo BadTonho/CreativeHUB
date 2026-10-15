@@ -1,19 +1,19 @@
 # Regression Testing
 
-[Shape-mask interchange](../COMPOSITION_INTERCHANGE.md) adds editable shared
+[Shape-mask interchange](../../COMPOSITION_INTERCHANGE.md) adds editable shared
 Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
 curve slicing are shared; native Motion advances to v8 while CSP stays v30.
 Automated coverage: `creative-suite-mask-interchange`, shared composition/
 OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
 Native UI and platform acceptance remain separately pending.
 
-[Composition interchange](../COMPOSITION_INTERCHANGE.md): automated coverage is registered as `creative-suite-composition-interchange` in application tests (both editors required). Native menu, font and platform acceptance checks are documented there and remain pending until recorded.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md): automated coverage is registered as `creative-suite-composition-interchange` in application tests (both editors required). Native menu, font and platform acceptance checks are documented there and remain pending until recorded.
 
 ## Functions icon cards
 
 **Automated coverage present:** `tests/settings/shortcut_manager_test.cpp`
 (`creative-suite-main-editor-shortcut-manager`, registered in
-[settings tests](../../apps/video-editor/tests/settings/CMakeLists.txt)) checks
+[settings tests](../../../apps/video-editor/tests/settings/CMakeLists.txt)) checks
 icons for every catalog entry at normal/high density, card row sizing, spacing,
 full-name tooltips and distinct normal/hover/focus-selection rendering in light
 and dark palettes. Existing Functions lifecycle/search/keyboard/drag regressions
@@ -47,9 +47,9 @@ format, application version or rendering-engine change is involved.
 | Fusion activation creates graph nodes rather than clip effects; Text/mask selection; Edit filters; Functions Background MIME reaching graph/Timeline with transparent/white defaults; document dirty state and Undo/Redo | `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`) |
 | Selected clip filter reports success/failure without history mutation on refusal | `tests/ui/edit_workspace_controller_test.cpp` (`creative-suite-main-editor-edit-workspace-controller`) |
 
-Registrations: [settings/Functions](../../apps/video-editor/tests/settings/CMakeLists.txt),
-[application](../../apps/video-editor/tests/application/CMakeLists.txt) and
-[UI](../../apps/video-editor/tests/ui/CMakeLists.txt). Existing Effects, Fusion
+Registrations: [settings/Functions](../../../apps/video-editor/tests/settings/CMakeLists.txt),
+[application](../../../apps/video-editor/tests/application/CMakeLists.txt) and
+[UI](../../../apps/video-editor/tests/ui/CMakeLists.txt). Existing Effects, Fusion
 workspace, Timeline widget, composition, Background and Adjustment regressions
 protect the shared catalog and destinations. **Automated coverage present; native
 Windows interaction and macOS/Linux graphical acceptance pending.**
@@ -85,11 +85,11 @@ actions, and unchanged normal Space playback. No schema migration is involved.
 | Refused Fusion-only/unknown timeline MIME; retained Edit effect/text/transition drops | `tests/timeline/timeline_widget_test.cpp` (`creative-suite-main-editor-timeline-widget`) |
 | Text/Input and mask Inspector after catalog creation; existing evaluation, history and persistence | `creative-suite-main-editor-fusion-composition`, `creative-suite-main-editor-fusion-mask`, `creative-suite-main-editor-background-generator` |
 
-Registrations: [effects](../../apps/video-editor/tests/effects/CMakeLists.txt),
-[UI](../../apps/video-editor/tests/ui/CMakeLists.txt),
-[application](../../apps/video-editor/tests/application/CMakeLists.txt),
-[timeline](../../apps/video-editor/tests/timeline/CMakeLists.txt), and
-[rendering](../../apps/video-editor/tests/rendering/CMakeLists.txt).
+Registrations: [effects](../../../apps/video-editor/tests/effects/CMakeLists.txt),
+[UI](../../../apps/video-editor/tests/ui/CMakeLists.txt),
+[application](../../../apps/video-editor/tests/application/CMakeLists.txt),
+[timeline](../../../apps/video-editor/tests/timeline/CMakeLists.txt), and
+[rendering](../../../apps/video-editor/tests/rendering/CMakeLists.txt).
 
 **Automated coverage present.** Windows Debug verification (2026-10-14):
 all 11 focused CTest entries passed (catalog, MainWindow, project, generators,
@@ -101,7 +101,7 @@ schema, application version, Hub or other application changes were required.
 
 Native graphical check (pending): select a video/image/composition and enter
 Fusion. Confirm the Node Editor shows Grid with no Add Node selector/button;
-check the category mapping in [Effects](architecture/EFFECTS.md#workspace-catalog).
+check the category mapping in [Effects](../architecture/EFFECTS.md#workspace-catalog).
 Drag every new entry to the graph, then double-click list and favorite entries;
 confirm selection, free placement, editing and one-step Undo/Redo. Filter drops
 split image cables and refuse mask cables; other node drops stay disconnected.
@@ -223,7 +223,7 @@ OS/GPU/driver/font details. Native UI, accelerated encoder and macOS/Linux
 acceptance remain separate from automated coverage.
 
 
-The [Windows/NVIDIA pipeline](GPU_PIPELINE.md) adds native codec verification
+The [Windows/NVIDIA pipeline](../gpu/GPU_PIPELINE.md) adds native codec verification
 (`creative-suite-hardware-video-pipeline-tests --require-hardware`), ordered clip
 effect parity in the shared OpenGL test, and transparent Fusion graph parity in
 `creative-suite-main-editor-gpu-timeline`. Acceptance requires actual native
@@ -240,7 +240,7 @@ verification operations; production transfer counters are asserted separately.
 
 This document defines detailed regression coverage for the Video Editor.
 The required policy for every current and future application is in
-[`../REGRESSION_POLICY.md`](../REGRESSION_POLICY.md). Every implemented rule
+[`../REGRESSION_POLICY.md`](../../REGRESSION_POLICY.md). Every implemented rule
 should have either an automated test or a documented manual validation step
 before the related change is considered complete.
 
@@ -522,7 +522,7 @@ hardware and drivers. No percentage target is set from this measurement.
 
 | Area | Test coverage |
 | --- | --- |
-| Windows updates | `libs/updater/tests/release_catalog_test.cpp` (`updater-catalog-test`), `update_service_test.cpp` (`updater-service-test`), and `update_runtime_test.cpp` (`updater-runtime-test`) cover catalog validation, versions, invalid hashes, network failures, download resume/cancellation, pending schema-1 recovery, independent editor waits, self-update shutdown, and per-app launch failures. | Run the Windows update checklist in [WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md): update only Video Editor, reuse the selected directory, preserve user data, and verify rollback. **Pending packaged-installer validation.** |
+| Windows updates | `libs/updater/tests/release_catalog_test.cpp` (`updater-catalog-test`), `update_service_test.cpp` (`updater-service-test`), and `update_runtime_test.cpp` (`updater-runtime-test`) cover catalog validation, versions, invalid hashes, network failures, download resume/cancellation, pending schema-1 recovery, independent editor waits, self-update shutdown, and per-app launch failures. | Run the Windows update checklist in [WINDOWS_UPDATES.md](../../WINDOWS_UPDATES.md): update only Video Editor, reuse the selected directory, preserve user data, and verify rollback. **Pending packaged-installer validation.** |
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | `tests/media/video_decoder_test.cpp` (`creative-suite-main-editor-video-decoder-errors`) covers missing files, invalid inputs, reference metadata, frame dimensions, generated WAV metadata and audio-only import, content-based image recognition with absent/wrong extensions, runtime-readable image formats, WebP/TIFF FFmpeg fallback when their decoder is available and Qt lacks a plugin, single-frame GIF, multi-frame rejection without an error log, RGBA transparency, and 150-frame defaults. `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`) checks the generated Open Media patterns against runtime Qt formats and available WebP/TIFF decoders. |
 | Playback session | Sequential frames, forward catch-up and random seeks without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, cache-hit preservation of an aligned decoder position and seek-free sequential continuation, rejected-seek sequential fallback, optimized random seeking, EOF, segment limits |
@@ -574,16 +574,16 @@ hardware and drivers. No percentage target is set from this measurement.
 
 The table above describes assertions; this index links each behavior group to
 the test source that protects it. Video Editor test targets are registered by
-[`apps/video-editor/tests/CMakeLists.txt`](../../apps/video-editor/tests/CMakeLists.txt)
+[`apps/video-editor/tests/CMakeLists.txt`](../../../apps/video-editor/tests/CMakeLists.txt)
 and its subdirectories; shared-library tests are registered in
-[`libs/tests/CMakeLists.txt`](../../libs/tests/CMakeLists.txt) and
-[`libs/media/tests/CMakeLists.txt`](../../libs/media/tests/CMakeLists.txt).
+[`libs/tests/CMakeLists.txt`](../../../libs/tests/CMakeLists.txt) and
+[`libs/media/tests/CMakeLists.txt`](../../../libs/media/tests/CMakeLists.txt).
 
 | Behavior group | Automated evidence | Manual evidence and open validation |
 | --- | --- | --- |
-| Hub snapshot references and restoration across versions 1–24 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Video persistence producer and consumer | Automated coverage present for media, clip sources, Fusion inputs, Image/Motion links, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
+| Hub snapshot references and restoration across versions 1–24 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Video persistence producer and consumer | Automated coverage present for media, clip sources, Fusion inputs, Image/Motion links, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../../hub/BACKUPS.md). |
 | MSVC Debug test diagnostics | Root `CMakeLists.txt` (`creative-suite-msvc-runtime-diagnostics`); `cmake/test_support/msvc_runtime_diagnostics.cpp`, `msvc_runtime_diagnostics_probe.cpp`, and `verify_msvc_runtime_diagnostics.cmake` | The Windows-only Debug probe validates RTC and CRT failure details and nonzero exits without a modal dialog. The local 2026-10-01 run passed; Release does not register this Debug-specific probe. |
-| Shared animation, composition, media assets, encoding, and shortcuts | `libs/tests/animation_test.cpp`, `composition_test.cpp`, `shortcuts_test.cpp`; `libs/media/tests/media_assets_test.cpp`, `video_encoder_test.cpp` | Encoder exception message and error-code access are asserted; the [roadmap](ROADMAP.md) tracks cross-platform runtime, codec availability, and packaged dependency checks. |
+| Shared animation, composition, media assets, encoding, and shortcuts | `libs/tests/animation_test.cpp`, `composition_test.cpp`, `shortcuts_test.cpp`; `libs/media/tests/media_assets_test.cpp`, `video_encoder_test.cpp` | Encoder exception message and error-code access are asserted; the [roadmap](../ROADMAP.md) tracks cross-platform runtime, codec availability, and packaged dependency checks. |
 | Logging and system metrics | `tests/logging/logger_test.cpp`; `tests/system/system_memory_usage_test.cpp`, `system_memory_details_dialog_test.cpp`, `performance_usage_test.cpp` | The manual checklist documents checking the app log folder and platform resource values; runtime and platform results remain pending. |
 | Media import, probing, decode, and Media Pool | `tests/media/video_decoder_test.cpp` (`creative-suite-main-editor-video-decoder-errors`), `media_library_test.cpp`; `tests/application/application_media_services_test.cpp`; `tests/ui/media_browser_list_widget_test.cpp`, `media_browser_bin_tree_widget_test.cpp`; `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`) | Automated coverage checks image content despite absent/wrong extensions, dynamic Open Media patterns, static GIF acceptance, multi-frame rejection without an error entry, and WebP/TIFF fallback when the matching FFmpeg decoder is available without a Qt reader. External-drop tests dispatch through the actual Media Browser list and bin-tree viewports, preserve ordered local paths with spaces and Unicode, reject folders and remote URLs, route imports to the selected or dropped-on bin, and keep internal drags unchanged. Windows Explorer file-drop acceptance for video, audio, image, and bin drops was confirmed on 2026-10-07. The maintainer confirmed static-image import, Preview, and save/reopen against the rebuilt Windows Release executable on 2026-10-07; the one-frame and multi-frame edge cases have automated coverage. See the [manual checklist](#manual-ui-validation). |
 | Project data, validation, migration, autosave, and recovery | `tests/project/project_file_test.cpp`, `autosave_manager_test.cpp`; `tests/application/main_window_integration_test.cpp` | The owner reports repeatedly migrating the same long-lived `.csp` project as persisted-format versions advance. Save/reopen and invalid-project preservation worked; reopening through recovery after forgetting to save has restored the project every time it was needed. Representative project-size and detailed failure workflows remain pending. |
@@ -591,13 +591,13 @@ and its subdirectories; shared-library tests are registered in
 | Timeline model, commands, geometry, gestures, and widgets | `tests/timeline/timeline_model_test.cpp`, `timeline_command_service_test.cpp` (`creative-suite-main-editor-timeline-command-service`), `timeline_geometry_test.cpp`, `timeline_interaction_controller_test.cpp`, `timeline_trim_gesture_test.cpp`, `timeline_widget_test.cpp` (`creative-suite-main-editor-timeline-widget`), `timeline_end_buttons_test.cpp`; `tests/ui/edit_workspace_controller_test.cpp` (`creative-suite-main-editor-edit-workspace-controller`); `tests/settings/settings_dialog_test.cpp` (`creative-suite-main-editor-settings-dialog`); `tests/application/main_window_integration_test.cpp` | Automated coverage exercises fixed 50/50 default pane allocation, Video bottom and Audio top alignment at the divider, independent Video/Audio scrolling and wheel routing, separate Video/Audio row-height changes that preserve boundary anchors when possible, Together-mode shared deltas with unequal saved heights, independent pointer-targeted changes including an empty group, mode-switch synchronization, per-group clamping, model-order reflow at the 30-pixel minimum, compact header clipping between rows, and continued equal Video/Audio movement by the divider after reflow; it also covers divider movement from the left, center, and right, unchanged row heights and relative positions, resize cursor and grip rendering, 20/80 split bounds, scrolled-row selection and typed empty-group drops. Command coverage checks first-track creation, incompatible-drop rollback, linked audio companions, and one-step Undo/Redo; controller coverage checks same-group reordering and group boundaries; settings coverage checks the default, persistence, invalid-value fallback, and bounds for the shared divider ratio. External file-drop tests dispatch through the production scroll viewport and Timeline event filter, capture local URLs, target group or track and frame, and verify ordered import and placement. Context-menu tests cover Open in Fusion for video and image clips, preserve Image Editor and Unlink Audio actions, exclude Fusion from linked audio companions, and verify stable clip IDs. Automated Ripple Delete coverage checks video, audio, and text tracks, linked companions, collision stops, blocker preservation, transitions, Undo/Redo, shortcut customization, text-field cut routing, and the unchanged Delete gap behavior. Manual validation in Edit and read-only Render, including few tracks, many tracks, an empty group, compact rows, linked divider movement after resizing, grip visibility, independent scrolling, and persisted divider restoration, is documented below and remains pending.
 | Playback, seeking, frame stepping, transitions, and audio | `tests/playback/video_playback_test.cpp`, `playback_worker_test.cpp`, `playback_controller_test.cpp`, `playback_deadline_scheduler_test.cpp`, `frame_step_navigation_test.cpp`, `timeline_audio_mix_test.cpp`, `audio_playback_test.cpp`, `audio_waveform_test.cpp` | Waveform extraction covers mono/stereo source metadata, distinct left/right peaks, combined Mono peaks, opposite-phase content, cancellation, invalid media, cache reuse, signature invalidation, and the 64 MiB limit. Mixer tests verify per-sample linear envelope gain alongside static clip/track gain and mute. Timeline widget coverage checks waveform and curve rendering, audio-only clips, and excludes visual clips. Driver/audio-device behavior and the approved reference workload remain in the broader manual matrix. |
 | Rendering, transforms, text, and preview metrics | `tests/rendering/transform_compositor_test.cpp`, `text_compositor_test.cpp`, `preview_performance_metrics_test.cpp`; `tests/ui/preview_widget_test.cpp`, `opengl_preview_test.cpp` (`creative-suite-main-editor-opengl-preview`) | The native OpenGL integration test checks framebuffer output and CPU fallback on a valid context; it skips only if the platform cannot create a valid context. Real-driver visual and platform checks remain manual. |
-| Experimental GPU timeline composition | `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`); `tests/rendering/gpu_timeline_composition_test.cpp` (`creative-suite-main-editor-gpu-timeline`); worker/controller/settings/metrics/main-window tests | Automated coverage present: native CPU/GPU parity with exact alpha/geometry and RGB tolerance 2, worker lifecycle, limits/cancel/failure/fallback/retry, settings persistence/live toggle/cache, transitions/keyframes/text/quality/playback and masked PNG producer/refresh. Stage 2 adds direct/RGBA parity, cross-thread lease returns, pool/retiring budget, Busy retries, direct cache/recovery, texture orientation/grayscale/resize and zero final-frame transfers. Windows native results and remaining human/platform checks: [GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md). Unavailable contexts skip; skips do not approve drivers. |
-| Experimental GPU offline export | `tests/ui/render_export_test.cpp` (`creative-suite-main-editor-render-export`, `creative-suite-main-editor-gpu-export`); `render_queue_model_test.cpp`; `tests/application/main_window_integration_test.cpp`; `libs/tests/opengl_composition_test.cpp` | Per-job default/snapshots/tooltips/nonmodal warning, CPU/GPU mixed queue, retry, injected limits/failures/malformed results/callback faults, cancellation/close and previous-output preservation; native pre-encoding CPU/GPU parity at 1080p/1440p/UHD/portrait 4K with exact alpha/geometry and RGB tolerance 2; RGBA/direct lookup coverage; decoded lossless output, text/keyframes/transitions/rates/trims/audio and masked linked PNG republication. Available native contexts must compose on GPU; unavailable-context skips do not approve drivers. [GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md) records builds, tests, repeated measurements and pending human/platform acceptance. |
-| GPU effects/decoding/encoding | No implementation in this stage | Planned, not implemented. [GPU_ACCELERATION_PLAN.md](GPU_ACCELERATION_PLAN.md) records follow-up gates. |
-| Effects, workspace, settings, shortcuts, and main-window flows | `libs/tests/effects_test.cpp`; `tests/effects/effects_panel_test.cpp`; `tests/settings/settings_dialog_test.cpp`, `shortcut_manager_test.cpp`; `tests/timeline/timeline_widget_test.cpp`, `timeline_command_service_test.cpp`; `tests/playback/playback_worker_test.cpp`; `tests/ui/render_export_test.cpp`; `tests/ui/workspace_page_switch_test.cpp`, `edit_workspace_controller_test.cpp`; `tests/application/main_window_integration_test.cpp`; `tests/project/project_file_test.cpp` | `EditWorkspaceActions` owns Edit-only Timeline commands, handlers, shortcut registration, and availability; the integration test checks action ownership, menu scopes, existing Delete/Ripple/Split/Copy/Paste and nudge assignments, text-field routing, Timeline preference persistence, and command disable/restore during project loading. `MainWindow` mounts these actions and forwards global loading/playback state. The [manual UI checklist](#manual-ui-validation) documents the Release-build interaction checks; cross-platform release checks remain open in the [roadmap](ROADMAP.md). |
+| Experimental GPU timeline composition | `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`); `tests/rendering/gpu_timeline_composition_test.cpp` (`creative-suite-main-editor-gpu-timeline`); worker/controller/settings/metrics/main-window tests | Automated coverage present: native CPU/GPU parity with exact alpha/geometry and RGB tolerance 2, worker lifecycle, limits/cancel/failure/fallback/retry, settings persistence/live toggle/cache, transitions/keyframes/text/quality/playback and masked PNG producer/refresh. Stage 2 adds direct/RGBA parity, cross-thread lease returns, pool/retiring budget, Busy retries, direct cache/recovery, texture orientation/grayscale/resize and zero final-frame transfers. Windows native results and remaining human/platform checks: [GPU_COMPOSITION_RESULTS.md](../gpu/GPU_COMPOSITION_RESULTS.md). Unavailable contexts skip; skips do not approve drivers. |
+| Experimental GPU offline export | `tests/ui/render_export_test.cpp` (`creative-suite-main-editor-render-export`, `creative-suite-main-editor-gpu-export`); `render_queue_model_test.cpp`; `tests/application/main_window_integration_test.cpp`; `libs/tests/opengl_composition_test.cpp` | Per-job default/snapshots/tooltips/nonmodal warning, CPU/GPU mixed queue, retry, injected limits/failures/malformed results/callback faults, cancellation/close and previous-output preservation; native pre-encoding CPU/GPU parity at 1080p/1440p/UHD/portrait 4K with exact alpha/geometry and RGB tolerance 2; RGBA/direct lookup coverage; decoded lossless output, text/keyframes/transitions/rates/trims/audio and masked linked PNG republication. Available native contexts must compose on GPU; unavailable-context skips do not approve drivers. [GPU_EXPORT_RESULTS.md](../gpu/GPU_EXPORT_RESULTS.md) records builds, tests, repeated measurements and pending human/platform acceptance. |
+| GPU effects/decoding/encoding | No implementation in this stage | Planned, not implemented. [GPU_ACCELERATION_PLAN.md](../gpu/GPU_ACCELERATION_PLAN.md) records follow-up gates. |
+| Effects, workspace, settings, shortcuts, and main-window flows | `libs/tests/effects_test.cpp`; `tests/effects/effects_panel_test.cpp`; `tests/settings/settings_dialog_test.cpp`, `shortcut_manager_test.cpp`; `tests/timeline/timeline_widget_test.cpp`, `timeline_command_service_test.cpp`; `tests/playback/playback_worker_test.cpp`; `tests/ui/render_export_test.cpp`; `tests/ui/workspace_page_switch_test.cpp`, `edit_workspace_controller_test.cpp`; `tests/application/main_window_integration_test.cpp`; `tests/project/project_file_test.cpp` | `EditWorkspaceActions` owns Edit-only Timeline commands, handlers, shortcut registration, and availability; the integration test checks action ownership, menu scopes, existing Delete/Ripple/Split/Copy/Paste and nudge assignments, text-field routing, Timeline preference persistence, and command disable/restore during project loading. `MainWindow` mounts these actions and forwards global loading/playback state. The [manual UI checklist](#manual-ui-validation) documents the Release-build interaction checks; cross-platform release checks remain open in the [roadmap](../ROADMAP.md). |
 | Timeline dock minimum sizing | `tests/ui/timeline_dock_resize_test.cpp` (`creative-suite-main-editor-timeline-dock-resize`), registered in `tests/ui/CMakeLists.txt`, exercises the real MainWindow dock and separator mouse events. | Automated coverage checks resizing to approximately half the former compact minimum, keeping playback controls inside the dock while permitting clipped track content, maximum-height rows and scrolling after re-expansion, horizontal scrolling at the smaller minimum, no empty center column, side-dock show/float/redock transitions, Edit/Fusion/Render switches, and compact layout restoration after reopening. Manual Release check: drag the separator above the entire Timeline down to approximately 128 logical pixels on Windows; confirm track content can disappear while controls remain accessible, then expand and check both groups, scrolling, row-height preferences, and project state. Hide or float the other docks and repeat; restore them and confirm no blank central column remains. **Automated coverage present; manual check documented, pending (P2).** |
 | Render queue and export | `tests/ui/render_queue_model_test.cpp`, `render_export_test.cpp`, `workspace_page_switch_test.cpp`; `tests/application/main_window_integration_test.cpp`; `libs/media/tests/video_encoder_test.cpp` | `RenderWorkspace` owns queue commands and continues rendering immutable job snapshots when the active workspace changes; the integration test waits for queued jobs to finish after switching Render → Edit → Fusion. Accepted application close routes cancellation through the workspace and verifies the canceled destination is not published. Existing queue/export coverage checks cancel, worker completion, output preservation, cleanup, retry, and project independence. See the manual UI checklist for switching workspaces, returning to Cancel, and closing during a queue. Manual encoder/profile, audio, rendered-appearance, and Explorer-style acceptance remains pending. |
-| Image Editor linked media | `tests/project/project_file_test.cpp`, `tests/application/application_media_services_test.cpp`, `tests/application/main_window_integration_test.cpp`, `tests/timeline/timeline_widget_test.cpp`; producer-side checks in `apps/image-editor/tests/image_editor_ui_test.cpp`, `image_editor_mask_ui_test.cpp`, and `image_editor_raster_ui_test.cpp`; the main-window consumer generates a real PNG from a linked raster image and layer mask in `.cimg` v11 via the Image Editor core when both apps are enabled and asserts retained alpha after refresh. The `.csp` contract is unchanged. | Full two-app validation is listed in [`docs/image-editor/MANUAL_VALIDATION.md`](../image-editor/MANUAL_VALIDATION.md); acceptance of remaining linked-image scenarios is pending. |
+| Image Editor linked media | `tests/project/project_file_test.cpp`, `tests/application/application_media_services_test.cpp`, `tests/application/main_window_integration_test.cpp`, `tests/timeline/timeline_widget_test.cpp`; producer-side checks in `apps/image-editor/tests/image_editor_ui_test.cpp`, `image_editor_mask_ui_test.cpp`, and `image_editor_raster_ui_test.cpp`; the main-window consumer generates a real PNG from a linked raster image and layer mask in `.cimg` v11 via the Image Editor core when both apps are enabled and asserts retained alpha after refresh. The `.csp` contract is unchanged. | Full two-app validation is listed in [`docs/image-editor/MANUAL_VALIDATION.md`](../../image-editor/MANUAL_VALIDATION.md); acceptance of remaining linked-image scenarios is pending. |
 | Motion Studio linked compositions | `tests/project/project_file_test.cpp` covers `.csp` v24 Media Pool and Timeline links plus v23 compatibility; `tests/timeline/timeline_model_test.cpp` covers retaining source, position, duration, and original audio state when linking; `tests/application/application_media_services_test.cpp` and `tests/media/media_library_test.cpp` cover a new linked Media Pool item and refreshed video presentation. Motion producer-side `.motion` source-in mapping, preview/export, migration, and versioned handoff-request cases are in `apps/motion-editor/tests/composition_document_test.cpp`, `preview_renderer_test.cpp`, `motion_video_export_test.cpp`, and `motion_document_store_test.cpp`. | Manual two-app validation remains required: create links from a video clip and from image/video Media Pool items, save multiple Motion revisions, confirm only the linked output refreshes, reopen the `.csp`, test publication cancel/failure and missing document/render recovery, test concurrent Motion writers, and confirm Save As becomes independent. See [Motion linked-composition manual check](#motion-studio-linked-composition-manual-check). |
 
 | Timeline track header context menu | `tests/timeline/timeline_widget_test.cpp`; `tests/ui/edit_workspace_controller_test.cpp` | Fixed-header Video/Audio requests survive horizontal and independent vertical scrolling without changing selection; clicks outside the header do not request the menu. Target-ID controller checks cover rename, same-group reorder and boundaries, removing an empty track, and blocking an occupied track without history changes. Manual menu order, cancellation, Edit-menu retention, and clip/transition context menus are listed in the Timeline UI checklist below. |
@@ -1546,7 +1546,7 @@ step. Try dropping a folder or a remote URL and confirm it is rejected.
 
 ## Experimental GPU timeline checklist
 
-Follow [GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md#reproducible-manual-checklist)
+Follow [GPU_COMPOSITION_RESULTS.md](../gpu/GPU_COMPOSITION_RESULTS.md#reproducible-manual-checklist)
 for opt-in persistence, paused/live toggle, rapid navigation, quality, physical
 audio synchronization, linked masked PNG refresh, CPU fallback/retry, shutdown,
 and independence from presentation disabling. Native Windows automation is
@@ -1573,7 +1573,7 @@ recorded separately from pending human checks and macOS/Linux acceptance.
 - Run focused/shared tests in Debug and Release and the complete Release suite.
   Native context skips are not driver acceptance. For physical audio, rapid seeks,
   resizing, toggles, linked PNG refresh and close with pending resources on each
-  platform, follow [the manual checklist](GPU_COMPOSITION_RESULTS.md#reproducible-manual-checklist).
+  platform, follow [the manual checklist](../gpu/GPU_COMPOSITION_RESULTS.md#reproducible-manual-checklist).
 
 
 ## Experimental GPU export checklist
@@ -1585,7 +1585,7 @@ CPU/GPU pre-encoding comparisons through UHD/portrait 4K. Shared direct delivery
 also exercises the expanded lookup buffers. The native target requires actual GPU
 work when a context is available; a skip is not driver acceptance.
 
-Follow [GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md#manual-acceptance-checklist)
+Follow [GPU_EXPORT_RESULTS.md](../gpu/GPU_EXPORT_RESULTS.md#manual-acceptance-checklist)
 for session/snapshot/accessibility, output/audio, PNG producer/consumer, fallback,
 shutdown and platform checks. It records measured results separately from pending
 human acceptance. Export metrics use schema 2; preview schemas remain 9/3
@@ -1815,7 +1815,7 @@ The native video-pipeline executable also accepts `--native-hevc`, `--benchmark`
 (30 full-resolution frames, three tracks, 1080p/1440p/4K, same NVENC codec for
 CPU/native comparisons), and `--stress 900` (15-minute paced offscreen preview).
 All require actual hardware, native transfers, and no fallback. See
-[the pipeline acceptance record](GPU_PIPELINE.md) for the additional explicit
+[the pipeline acceptance record](../gpu/GPU_PIPELINE.md) for the additional explicit
 hardware-encoder probe and pending native platform/physical timing gates.
 
 Hardware-decode controls are covered by `settings_dialog_test.cpp` (default,
@@ -1855,4 +1855,4 @@ registered CTest entries in 118.19 seconds, including the shared libraries and
 their Video Editor, Image Editor, Motion Studio, and Hub consumers. Explicit
 H.264 and HEVC native pipeline checks also passed after the final relink.
 Native encoder, performance, prolonged preview, and pending physical/platform
-acceptance are recorded separately in [GPU_PIPELINE.md](GPU_PIPELINE.md).
+acceptance are recorded separately in [GPU_PIPELINE.md](../gpu/GPU_PIPELINE.md).

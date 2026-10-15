@@ -9,11 +9,11 @@ The Effects catalog filters tools by Edit/Fusion and replaces the Fusion Add Nod
 
 ## Background Generator
 
-The Edit Background generator and shared RGBA Inspector are implemented for pending 0.1.1. It reuses Fusion Composition and adds optional names in CSP v29. Color stays static; existing transform/opacity animation remains available. See [Background Generator](../BACKGROUND_GENERATOR.md).
+The Edit Background generator and shared RGBA Inspector are implemented for pending 0.1.1. It reuses Fusion Composition and adds optional names in CSP v29. Color stays static; existing transform/opacity animation remains available. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks v1
 
-Rectangle/Ellipse masks are implemented for ordinary video/image graphs and Fusion Compositions, with Inspector-only editing, five geometry curves, typed connections and CSP v28 persistence. Advanced mask authoring, tracking, combinations and Adjustment graphs remain out of scope. See [Fusion Masks](../FUSION_MASKS.md).
+Rectangle/Ellipse masks are implemented for ordinary video/image graphs and Fusion Compositions, with Inspector-only editing, five geometry curves, typed connections and CSP v28 persistence. Advanced mask authoring, tracking, combinations and Adjustment graphs remain out of scope. See [Fusion Masks](../features/FUSION_MASKS.md).
 
 ## Independent Fusion compositions
 
@@ -21,7 +21,7 @@ Fusion Composition adds a generated video-track clip with its own graph and
 Background/Text nodes, also available on ordinary visual graphs. It supports
 normal Inspector effects, transforms, history and visual transitions. CSP v27
 and Hub backups retain its graph and input clock. See
-[the complete boundary](../FUSION_COMPOSITION.md).
+[the complete boundary](../features/FUSION_COMPOSITION.md).
 
 
 Status: the current implementation and approved foundation direction are
@@ -200,7 +200,7 @@ The implemented GPU and handoff paths retain separate release-acceptance gates.
 Native macOS/Linux devices and codecs, representative physical display/audio
 checks, and packaged runtimes remain pending. Windows synthetic regression
 results do not establish those acceptance statuses; see
-[GPU pipeline evidence](../GPU_PIPELINE.md) and
+[GPU pipeline evidence](../gpu/GPU_PIPELINE.md) and
 [cross-application contracts](../../CROSS_APPLICATION_COMPATIBILITY.md).
 
 The Video Editor owns its project format, timeline policy, and UI. It also uses

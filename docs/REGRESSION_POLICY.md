@@ -179,7 +179,7 @@ only from repeatable measurements on the reference PC and additional systems.
 ## Application Test Guides
 
 - [Creative Suite Hub regression testing](hub/REGRESSION_TESTING.md)
-- [Video Editor regression testing](video-editor/REGRESSION_TESTING.md)
+- [Video Editor regression testing](video-editor/validation/REGRESSION_TESTING.md)
 - [Image Editor roadmap and coverage index](image-editor/ROADMAP.md), with the
   detailed [manual validation checklist](image-editor/MANUAL_VALIDATION.md)
 - [Motion Studio roadmap and coverage index](motion-editor/ROADMAP.md)

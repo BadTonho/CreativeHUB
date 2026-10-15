@@ -309,7 +309,7 @@ document-version constant while retaining older migration fixtures. The Magic
 Wand UI geometry-limit fixture uses alternating connected spans that exceed the
 path limit after adjacent equal spans are merged. Document versions and application behavior retain
 their existing contracts. Its execution result is tracked with the shared
-[Windows/NVIDIA pipeline evidence](../../video-editor/GPU_PIPELINE.md).
+[Windows/NVIDIA pipeline evidence](../../video-editor/gpu/GPU_PIPELINE.md).
 
 
 ## Historical implementation and verification note

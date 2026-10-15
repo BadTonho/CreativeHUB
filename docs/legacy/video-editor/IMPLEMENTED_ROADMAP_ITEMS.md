@@ -79,7 +79,7 @@ This archive is historical context; current behavior and compatibility contracts
   honor the selected or target bin and fall back to Unsorted when no concrete
   bin is selected; ordered Timeline batches import
   asynchronously and place as one Undo/Redo edit. Windows Explorer validation
-  passed on 2026-10-07; see [Regression Testing](../../video-editor/REGRESSION_TESTING.md).
+  passed on 2026-10-07; see [Regression Testing](../../video-editor/validation/REGRESSION_TESTING.md).
 
 - [x] Multi-track timeline with absolute positions, gaps, cross-track overlap,
   clip selection and movement, split, trim, delete, and bounded Undo/Redo.
@@ -115,7 +115,7 @@ This archive is historical context; current behavior and compatibility contracts
 
 - [x] Automated regression coverage for current media, playback, timeline,
   project, logging, and UI boundaries, plus a documented manual validation
-  matrix. See [Regression Testing](../../video-editor/REGRESSION_TESTING.md).
+  matrix. See [Regression Testing](../../video-editor/validation/REGRESSION_TESTING.md).
 
 - [x] Document the application module boundaries and the CPU
   composition/Qt OpenGL presentation split. Current shared-library boundaries
@@ -159,7 +159,7 @@ This archive is historical context; current behavior and compatibility contracts
   source tree and CMake: Edit, Fusion (including `workspaces/fusion/nodes/`),
   Render, shared rendering contracts, shortcut scopes, and regression indexes
   are aligned. The focused Release test/build evidence is recorded in
-  [Regression Testing](../../video-editor/REGRESSION_TESTING.md). Manual menu/shortcut and Edit
+  [Regression Testing](../../video-editor/validation/REGRESSION_TESTING.md). Manual menu/shortcut and Edit
   command checks, Fusion preview checks, and Render queue checks remain pending.
 
 ## Video Editor Roadmap / 3. Video Editor foundation completion gates
@@ -167,7 +167,7 @@ This archive is historical context; current behavior and compatibility contracts
 - [x] Inventory the current Windows development Release runtime: FFmpeg
   demuxers, video/audio decoders, muxers/encoders, Qt image-reader formats, and
   license constraints are recorded in
-  [Windows Release Media Capability Inventory](../../video-editor/MEDIA_CAPABILITIES_WINDOWS_RELEASE.md).
+  [Windows Release Media Capability Inventory](../../video-editor/validation/MEDIA_CAPABILITIES_WINDOWS_RELEASE.md).
   The inventory is not an application-level allow-list; revalidate each final
   distribution package and platform before making release capability claims.
 
@@ -240,7 +240,7 @@ This archive is historical context; current behavior and compatibility contracts
 - [x] Add independent per-job experimental GPU offline export through 4K, with
   readback, CPU fallback, transactional output and separate export metrics.
   Broader platform/driver/codec and human acceptance remain pending; see
-  [GPU_EXPORT_RESULTS.md](../../video-editor/GPU_EXPORT_RESULTS.md).
+  [GPU_EXPORT_RESULTS.md](../../video-editor/gpu/GPU_EXPORT_RESULTS.md).
 
 
 ## Historical implementation and verification note

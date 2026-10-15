@@ -24,7 +24,7 @@ statuses. Consult the application documents for scope, progress, and evidence:
 | Application | ID | Responsibility | Scope and validation |
 | --- | --- | --- | --- |
 | Hub | `hub` | Application launching, project management, backups, storage, and per-app updates. | [Distribution plan](docs/PRODUCT_DISTRIBUTION.md), [regression guide](docs/hub/REGRESSION_TESTING.md) |
-| Video Editor | `video-editor` | Timeline editing, media organization, color, audio, text, basic motion, and export. | [Roadmap](docs/video-editor/ROADMAP.md), [architecture](docs/video-editor/ARCHITECTURE.md) |
+| Video Editor | `video-editor` | Timeline editing, media organization, color, audio, text, basic motion, and export. | [Roadmap](docs/video-editor/ROADMAP.md), [architecture](docs/video-editor/architecture/ARCHITECTURE.md) |
 | Image Editor | `image-editor` | Layered raster editing, selections, masks, text, and image export. | [Scope](docs/image-editor/SCOPE.md), [roadmap](docs/image-editor/ROADMAP.md) |
 | Motion Studio | `motion-editor` | Motion design, animation curves, and advanced compositing. | [Scope and readiness](docs/motion-editor/SCOPE_AND_READINESS.md), [roadmap](docs/motion-editor/ROADMAP.md) |
 
@@ -95,7 +95,7 @@ the affected workload before making an important decision. Do not record a
 provisional choice as final or reopen the full comparison for routine work.
 
 Consult [build and dependencies](docs/video-editor/architecture/BUILD_AND_DEPENDENCIES.md)
-and the [archived comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md)
+and the [archived comparison](docs/video-editor/decisions/TECHNICAL_PROTOTYPE_COMPARISON.md)
 for current constraints and the historical validation protocol.
 
 ## 6. Interface and Performance

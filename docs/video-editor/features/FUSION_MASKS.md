@@ -66,10 +66,10 @@ formats. Versions 1–27 remain readable; Hub backups accept v28, preserve masks
 and relocate only external Input/media paths. Current Hub backups also accept v30 presentation data and composition names and reject future v31.
 
 Direct Viewer editing, pen/polygon masks, mask combinations, tracking and masks
-on Adjustment Clips remain outside this delivery. See [regression testing](REGRESSION_TESTING.md)
+on Adjustment Clips remain outside this delivery. See [regression testing](../validation/REGRESSION_TESTING.md)
 for automated evidence and separate pending native/platform acceptance.
 
-[Editable interchange](../COMPOSITION_INTERCHANGE.md) v2 now transfers source,
+[Editable interchange](../../COMPOSITION_INTERCHANGE.md) v2 now transfers source,
 Color/Effect and Transform masks to Motion with shared identities. Merge and
 Output masks remain valid inside Fusion but are refused by this interchange
 version. The native CSP schema remains 30.

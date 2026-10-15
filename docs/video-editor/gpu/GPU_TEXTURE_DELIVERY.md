@@ -106,7 +106,7 @@ times, not GPU execution queries; Qt `frameSwapped` is a presentation boundary,
 not a measurement of physical display scanout. Memory counters describe reservations,
 not driver-measured GPU memory.
 
-See [regression coverage](REGRESSION_TESTING.md) and [native results and remaining
+See [regression coverage](../validation/REGRESSION_TESTING.md) and [native results and remaining
 manual/platform checks](GPU_COMPOSITION_RESULTS.md). Successful context creation or
 a skipped graphical test does not approve a driver. Motion Studio and Image Editor
 adoption, GPU effects and decode/encode remain later stages. Offline export now

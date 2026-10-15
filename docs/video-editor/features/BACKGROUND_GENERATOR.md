@@ -51,5 +51,5 @@ Generators. Favorites use bounded catalog IDs in settings, not project data;
 unavailable IDs are ignored and persistence failures are logged before feedback.
 No new engine, clip kind, dependency, application version or keyboard shortcut
 is added. Gradients, animated colors and additional generators are out of scope.
-See [regression testing](REGRESSION_TESTING.md) for coverage and pending native
+See [regression testing](../validation/REGRESSION_TESTING.md) for coverage and pending native
 platform acceptance.

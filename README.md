@@ -60,7 +60,7 @@ A full-featured multitrack non-linear audiovisual editor (NLE) tailored for stor
 - **Transformations & Keyframing:** Spatial keyframing for position, scale, rotation, and opacity transitions.
 - **Audio Mixing:** Multi-channel playback, volume envelopes, and track level controls.
 - **4K UHD Export Engine:** Configurable FFmpeg container and encoder pipelines with independent per-job CPU or GPU compositing.
-- See the [Video Editor roadmap](docs/video-editor/ROADMAP.md) and [architecture guide](docs/video-editor/ARCHITECTURE.md).
+- See the [Video Editor roadmap](docs/video-editor/ROADMAP.md) and [architecture guide](docs/video-editor/architecture/ARCHITECTURE.md).
 
 #### 3. Image Editor (`image-editor`)
 A responsive raster canvas optimized for asset creation, photo manipulation, and graphics design:
@@ -202,15 +202,16 @@ Before contributing, please read the repository guidelines in [`AGENTS.md`](AGEN
 
 | Category | Guide | Description |
 | :--- | :--- | :--- |
-| **Architecture** | [Video Editor Architecture](docs/video-editor/ARCHITECTURE.md) | Video Editor modules and subsystem architecture. |
+| **Architecture** | [Video Editor Architecture](docs/video-editor/architecture/ARCHITECTURE.md) | Video Editor modules and subsystem architecture. |
 | | [Cross-Application Compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared contracts, linked-document handoffs, and extraction criteria. |
 | | [Product & Distribution Architecture](docs/PRODUCT_DISTRIBUTION.md) | CreativeHub architecture, app recovery, and release strategies *(Portuguese planning doc)*. |
 | | [Windows Update Contract](docs/WINDOWS_UPDATES.md) | Update catalog format, verification, staging, and rollback mechanics. |
 | **Video Editor** | [Video Editor Roadmap](docs/video-editor/ROADMAP.md) | Milestones, stabilization, and release criteria. |
+| | [Video Editor Documentation Index](docs/video-editor/README.md) | Organized links to scope, architecture, feature guides, validation, and technical notes. |
 | | [Keyboard Shortcuts](docs/video-editor/SHORTCUTS.md) | User-facing keyboard shortcut directory. |
-| | [GPU Acceleration Plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | OpenGL composition pipeline, textures, and export integration. |
-| | [GPU Export Pipeline](docs/video-editor/GPU_EXPORT.md) | Resource management and independent export metrics. |
-| | [Direct GPU Preview Delivery](docs/video-editor/GPU_TEXTURE_DELIVERY.md) | Shared contexts, texture leases, fences, and diagnostics. |
+| | [GPU Acceleration Plan](docs/video-editor/gpu/GPU_ACCELERATION_PLAN.md) | OpenGL composition pipeline, textures, and export integration. |
+| | [GPU Export Pipeline](docs/video-editor/gpu/GPU_EXPORT.md) | Resource management and independent export metrics. |
+| | [Direct GPU Preview Delivery](docs/video-editor/gpu/GPU_TEXTURE_DELIVERY.md) | Shared contexts, texture leases, fences, and diagnostics. |
 | **Image Editor** | [Image Editor Scope](docs/image-editor/SCOPE.md) | Layer workflow, selection tools, and acceptance criteria. |
 | | [Image Editor Roadmap](docs/image-editor/ROADMAP.md) | Development roadmap and platform validation milestones. |
 | **Motion Studio** | [Motion Studio Scope & Readiness](docs/motion-editor/SCOPE_AND_READINESS.md) | Standalone MVP boundary, capability ownership, and format migration. |
@@ -218,7 +219,7 @@ Before contributing, please read the repository guidelines in [`AGENTS.md`](AGEN
 | | [Motion Studio Reuse Plan](docs/motion-editor/REUSE_PLAN.md) | Reusable library boundaries vs application-owned components. |
 | | [Motion Studio Roadmap](docs/motion-editor/ROADMAP.md) | Technical milestones and export evolution. |
 | **Quality & Tests** | [Regression Prevention Policy](docs/REGRESSION_POLICY.md) | Universal test coverage mandates for all suite components. |
-| | [Video Editor Regression Tests](docs/video-editor/REGRESSION_TESTING.md) | Verification index and manual testing checklists. |
+| | [Video Editor Regression Tests](docs/video-editor/validation/REGRESSION_TESTING.md) | Verification index and manual testing checklists. |
 | | [CreativeHub Regression Tests](docs/hub/REGRESSION_TESTING.md) | CreativeHub verification index, catalog tests, and update flows. |
 
 ---

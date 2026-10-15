@@ -12,11 +12,11 @@ selection through the existing selection-presentation signal.
 
 ## Background Generator
 
-The Edit Inspector discovers Background nodes on video/image/composition graphs. One node shows RGBA controls directly; several show a node-ID selector. Choosing a node is transient; accepting color commits one graph edit, while Cancel changes nothing. Fusion shares the same data. See [Background Generator](../BACKGROUND_GENERATOR.md).
+The Edit Inspector discovers Background nodes on video/image/composition graphs. One node shows RGBA controls directly; several show a node-ID selector. Choosing a node is transient; accepting color commits one graph edit, while Cancel changes nothing. Fusion shares the same data. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks v1
 
-In Fusion, Effects > Fusion > Masks contains Rectangle Mask and Ellipse Mask. Gold Mask and blue Image ports have distinct labels and connection types. The Inspector supplies center, dimensions, rotation, Soft Edge and Invert; five geometry rows have keyframe controls. VIEW shows grayscale coverage with no drag/resize handles. See [Fusion Masks](../FUSION_MASKS.md).
+In Fusion, Effects > Fusion > Masks contains Rectangle Mask and Ellipse Mask. Gold Mask and blue Image ports have distinct labels and connection types. The Inspector supplies center, dimensions, rotation, Soft Edge and Invert; five geometry rows have keyframe controls. VIEW shows grayscale coverage with no drag/resize handles. See [Fusion Masks](../features/FUSION_MASKS.md).
 
 ## Fusion Composition workflow
 
@@ -26,7 +26,7 @@ entering Fusion edits its graph. The Effects catalog offers Background and Text 
 the existing nodes. Generator colors include alpha; Text content/font/size/
 alignment are committed with Apply Text. Independent Input offers Transparent
 instead of Selected Timeline clip. Edit > Duplicate Fusion Composition has no
-default shortcut. See [Fusion Composition](../FUSION_COMPOSITION.md).
+default shortcut. See [Fusion Composition](../features/FUSION_COMPOSITION.md).
 
 
 Status: provisional.
@@ -61,7 +61,7 @@ disabled by default and persisted globally. It applies immediately through the
 playback controller, recomposes a paused Timeline frame and keeps playback
 running. It automatically enables direct texture delivery when sharing is
 available, with RGBA and CPU fallbacks. No additional UI setting is required.
-See [the delivery contract](../GPU_TEXTURE_DELIVERY.md). This preview preference
+See [the delivery contract](../gpu/GPU_TEXTURE_DELIVERY.md). This preview preference
 does not change export settings or project data. See
 [the composition boundary](RENDERING.md#timeline-composition).
 
@@ -70,7 +70,7 @@ preference, off by default. It requests compatible hardware decoding and preserv
 software recovery. Render has an independent **Use hardware video decoding
 (Experimental)** checkbox captured in each item. Hardware encoders display
 **Hardware, Experimental** in the export selector and are never chosen implicitly
-as the initial encoder. See [the pipeline contract](../GPU_PIPELINE.md).
+as the initial encoder. See [the pipeline contract](../gpu/GPU_PIPELINE.md).
 
 Render > Video independently offers **Use GPU for export (Experimental)** with
 an accessible description of composition acceleration and automatic CPU fallback.
@@ -80,7 +80,7 @@ changing the panel never changes prepared items, history or dirty state. Queue
 tooltips show the requested composition mode. A fallback warning appears in the
 Video panel for five seconds, without a modal dialog or stopping the queue.
 This choice is not stored in `QSettings`; retry preserves the item's snapshot.
-See [the export contract](../GPU_EXPORT.md).
+See [the export contract](../gpu/GPU_EXPORT.md).
 
 ## Media Browser and projects
 

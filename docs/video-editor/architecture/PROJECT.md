@@ -9,7 +9,7 @@ this field while retaining `kind: "fusion_composition"` and the existing graph.
 Missing/empty names reconstruct Fusion Composition. Custom names on other clip
 kinds or in older root versions are refused. Mapping, opening, autosave and
 recovery preserve names, node data and input offsets. Hub supports v30 and
-rejects future v31. See [Background Generator](../BACKGROUND_GENERATOR.md).
+rejects future v31. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks (version 28)
 
@@ -20,7 +20,7 @@ frame/value/interpolation/easing representation. Mask connections use input 2;
 image input indices remain unchanged. Mask data is accepted only in v28 and
 later. Versions 1–27 retain their previous reader behavior. Generated composition
 input offsets, autosave and recovery remain intact. Hub supports v30 and rejects
-future v31. See [Fusion Masks](../FUSION_MASKS.md).
+future v31. See [Fusion Masks](../features/FUSION_MASKS.md).
 
 ## Fusion Composition and generators (version 27)
 
@@ -36,7 +36,7 @@ with the existing text-style fields in its `text` object. New kinds/nodes requir
 v27. Legacy graph validation still requires Input in versions 1–26. Current
 graphs may have generators or a disconnected Output without media. Hub accepts
 v29 and rewrites only external Input/media references. See
-[Fusion Composition](../FUSION_COMPOSITION.md) for time slicing and recovery.
+[Fusion Composition](../features/FUSION_COMPOSITION.md) for time slicing and recovery.
 
 
 Status: provisional.

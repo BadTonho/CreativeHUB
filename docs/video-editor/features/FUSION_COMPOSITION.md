@@ -1,13 +1,13 @@
 # Fusion Composition
 
-[Shape-mask interchange](../COMPOSITION_INTERCHANGE.md) adds editable shared
+[Shape-mask interchange](../../COMPOSITION_INTERCHANGE.md) adds editable shared
 Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
 curve slicing are shared; native Motion advances to v8 while CSP stays v30.
 Automated coverage: `creative-suite-mask-interchange`, shared composition/
 OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
 Native UI and platform acceptance remain separately pending.
 
-[Editable composition interchange](../COMPOSITION_INTERCHANGE.md) transfers compatible Fusion compositions to Motion layers and back through `.cscomp` files. CSP v30 preserves imported presentation semantics.
+[Editable composition interchange](../../COMPOSITION_INTERCHANGE.md) transfers compatible Fusion compositions to Motion layers and back through `.cscomp` files. CSP v30 preserves imported presentation semantics.
 
 The [Background Generator](BACKGROUND_GENERATOR.md) in Edit creates an opaque-white
 preset of this clip. Both workspaces edit the same Background node colors; normal
@@ -97,7 +97,7 @@ Enter and double click create a disconnected node through the same graph edit;
 dragging chooses its position. In Edit, Functions applies clip filters and
 inserts generators/Text/transitions only by dragging. It closes on success and
 stays open after a refused action or canceled/rejected drop.
-See [the catalog contract](architecture/EFFECTS.md#workspace-catalog).
+See [the catalog contract](../architecture/EFFECTS.md#workspace-catalog).
 
 ## Persistence and boundaries
 
@@ -113,5 +113,5 @@ the Video Editor reader/writer contract.
 [Fusion Masks](FUSION_MASKS.md) adds Inspector-edited Rectangle/Ellipse nodes in CSP v28.
 This version excludes nested compositions, graph audio, advanced masks, 3D and animated
 Background/Text properties. Application version metadata remains unchanged.
-See [regression testing](REGRESSION_TESTING.md) for automated coverage and the
+See [regression testing](../validation/REGRESSION_TESTING.md) for automated coverage and the
 separate native/platform acceptance status.

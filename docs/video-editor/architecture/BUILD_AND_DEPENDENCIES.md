@@ -40,7 +40,7 @@ FFmpeg through `ffmpeg`, with conditional Windows x64 `nvcodec`, `amf`, and `qsv
 and Linux x86/x64 `nvcodec`, `vaapi`, and `qsv` in both manifests. These add
 pinned open-source hardware integration dependencies without the CUDA toolkit
 or vendor driver. FFmpeg's LGPL switches remain unchanged;
-runtime acceptance is separate. See [the pipeline contract](../GPU_PIPELINE.md).
+runtime acceptance is separate. See [the pipeline contract](../gpu/GPU_PIPELINE.md).
 The Image Editor also uses the `qtimageformats`
 add-on so its WebP and TIFF image I/O plugins can be deployed. The Video Editor
 uses the FFmpeg `AVFORMAT`, `AVCODEC`,
@@ -109,7 +109,7 @@ by the chosen configuration.
 
 The current Windows development Release media capabilities and runtime
 licensing notes are recorded in the
-[Windows Release Media Capability Inventory](../MEDIA_CAPABILITIES_WINDOWS_RELEASE.md).
+[Windows Release Media Capability Inventory](../validation/MEDIA_CAPABILITIES_WINDOWS_RELEASE.md).
 That snapshot is not a distribution manifest; repeat it against the actual
 package for each target platform before release.
 

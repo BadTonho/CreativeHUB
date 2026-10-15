@@ -217,7 +217,7 @@ handlers de Copy/Delete; não é um sexto escopo de binding.
 testes demonstram reutilização entre workspaces, rejeição de conflitos,
 prioridade de contexto e persistência das preferências. O teste manual de
 alternância entre telas está documentado em
-[`REGRESSION_TESTING.md`](../REGRESSION_TESTING.md) e ainda precisa ser feito.
+[`REGRESSION_TESTING.md`](../validation/REGRESSION_TESTING.md) e ainda precisa ser feito.
 
 ### Etapa 4 — Estabelecer os limites entre workspaces e estrutura principal
 

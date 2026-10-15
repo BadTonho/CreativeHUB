@@ -51,7 +51,7 @@ available export choices and filter them for stream compatibility.
 Hardware choices are labeled experimental and are excluded from automatic
 default encoder selection. H.264/HEVC NVENC and D3D11 decode/native transfers
 have explicit reference-device tests; AMF/QSV registry entries remain pending
-native validation. See [the pipeline evidence](GPU_PIPELINE.md).
+native validation. See [the pipeline evidence](../gpu/GPU_PIPELINE.md).
 
 ## Qt image reading
 

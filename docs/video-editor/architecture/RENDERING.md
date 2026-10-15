@@ -11,11 +11,11 @@ Native UI and platform acceptance remain separately pending.
 
 ## Background Generator
 
-The Edit Background preset feeds the existing graph generator preparer and evaluator. RGBA, clip opacity, effects, transforms, masks and underlying tracks use the same Preview/Viewer/export processing as other Fusion Compositions. No rendering engine or pixel contract changes. See [Background Generator](../BACKGROUND_GENERATOR.md).
+The Edit Background preset feeds the existing graph generator preparer and evaluator. RGBA, clip opacity, effects, transforms, masks and underlying tracks use the same Preview/Viewer/export processing as other Fusion Compositions. No rendering engine or pixel contract changes. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks v1
 
-Preview, node VIEW and export share the application mask rasterizer (fixed 2×2 coverage, signed-distance smoothstep). A per-evaluation four-entry / 64 MiB cache avoids animated history. GPU ApplyMask/MaskedBlend upload coverage in a third texture slot without image readback; shared resource accounting, cancellation and full CPU recovery remain in force. See [Fusion Masks](../FUSION_MASKS.md).
+Preview, node VIEW and export share the application mask rasterizer (fixed 2×2 coverage, signed-distance smoothstep). A per-evaluation four-entry / 64 MiB cache avoids animated history. GPU ApplyMask/MaskedBlend upload coverage in a third texture slot without image readback; shared resource accounting, cancellation and full CPU recovery remain in force. See [Fusion Masks](../features/FUSION_MASKS.md).
 
 ## Independent graph sources
 
@@ -26,12 +26,12 @@ retains legacy inference. Preview, node Viewer and export use the same preparer
 and evaluator. Independent input videos add the persisted project-frame offset
 before sampling; negative/past-end times are transparent. Output remains a
 normal layer before clip effects/transform and any higher adjustment stage.
-See [Fusion Composition](../FUSION_COMPOSITION.md).
+See [Fusion Composition](../features/FUSION_COMPOSITION.md).
 
 
 Status: **provisional**.
 
-The [experimental pipeline](../GPU_PIPELINE.md) extends composition to ordered
+The [experimental pipeline](../gpu/GPU_PIPELINE.md) extends composition to ordered
 built-in clip effects and transparent Fusion intermediates. Preview/export submit
 unprocessed `effect_stack` sources through the shared boundary; CPU recovery
 applies them once. Native decoding and NVENC have separate opt-ins and gates.
@@ -171,7 +171,7 @@ application. `OfflineExportOptions::prepared_frame_callback` optionally observes
 a borrowed RGBA frame synchronously on the export worker before encoding, for
 diagnostics and pixel parity checks; native-only frames are omitted, and callback
 exceptions follow the export error boundary. Small/medium/heavy synthetic timing evidence and remaining native
-acceptance are recorded in [REGRESSION_TESTING.md](../REGRESSION_TESTING.md).
+acceptance are recorded in [REGRESSION_TESTING.md](../validation/REGRESSION_TESTING.md).
 
 
 ## Composition pipeline and bounded caches
@@ -558,7 +558,7 @@ immutable shared frame payload as CPU. Cancellation publishes no partial frame;
 seek/generation/revision/quality/delivery-epoch checks discard obsolete results.
 Normal shared-texture delivery avoids both output readback and viewer upload.
 The RGBA path remains available for unsupported sharing/limits and recovery.
-See [the direct delivery contract](../GPU_TEXTURE_DELIVERY.md) for leases, fences,
+See [the direct delivery contract](../gpu/GPU_TEXTURE_DELIVERY.md) for leases, fences,
 Busy retries, shared reservations and context cleanup.
 
 Technical failures latch CPU fallback for the activation session. Off/on retries;
@@ -568,7 +568,7 @@ message. Fallback does not emit a playback error or stop the audio clock. If CPU
 also fails, existing playback error handling retains the previous valid preview.
 Motion Studio remains on CPU; it can adopt the shared adapter later. Offline
 export defaults to CPU and independently offers per-job GPU composition with
-RGBA readback. See the [staged GPU plan](../GPU_ACCELERATION_PLAN.md).
+RGBA readback. See the [staged GPU plan](../gpu/GPU_ACCELERATION_PLAN.md).
 
 The Video Editor and Motion Studio use the shared, Qt-independent CPU
 compositor in `libs/composition/` for layer transforms and RGBA frame blending.
@@ -699,7 +699,7 @@ Unsupported composition uses CPU for that frame. Technical failure uses CPU
 for that frame and the remainder of the item; retry creates a fresh backend.
 Fallback reuses prepared layers, logs detailed context before one brief nonmodal
 warning per item, and never drops output frames. Cancellation retains its existing
-transactional behavior. [GPU_EXPORT.md](../GPU_EXPORT.md) documents this contract
+transactional behavior. [GPU_EXPORT.md](../gpu/GPU_EXPORT.md) documents this contract
 and the independent export diagnostics schema 2; preview schemas remain 9/3
 with additive native video import/conversion counters.
 
@@ -730,4 +730,4 @@ attempts, fallback, producer/consumer fence submission and viewer wait submissio
 3 records `gpu_texture_accepted`, `preview_to_gpu_texture_acceptance` and
 `gpu_texture_acceptance_to_draw` independently of upload. Normal direct frames
 have zero readback bytes, zero viewer upload bytes and no upload delivery stage.
-See [GPU_TEXTURE_DELIVERY.md](../GPU_TEXTURE_DELIVERY.md).
+See [GPU_TEXTURE_DELIVERY.md](../gpu/GPU_TEXTURE_DELIVERY.md).

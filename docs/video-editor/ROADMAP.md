@@ -4,6 +4,8 @@ Current application version: **Beta 0.1.0**. This roadmap tracks open work,
 release gates, and pending validation. Completed implementation checklists are
 archived in [legacy documentation](../legacy/video-editor/IMPLEMENTED_ROADMAP_ITEMS.md).
 
+See the [documentation index](README.md) for the organized references by topic.
+
 ## Documentation map
 
 | Question | Canonical document |
@@ -11,7 +13,7 @@ archived in [legacy documentation](../legacy/video-editor/IMPLEMENTED_ROADMAP_IT
 | What works in the application today? | [Current scope](architecture/SCOPE.md) |
 | How do the native project and effects contracts work? | [Project format](architecture/PROJECT.md), [effects](architecture/EFFECTS.md), and the feature guides below |
 | What is implemented, planned, or gated? | This roadmap |
-| Which automated and manual checks cover the behavior? | [Regression Testing](REGRESSION_TESTING.md) and its linked manual/platform evidence |
+| Which automated and manual checks cover the behavior? | [Regression Testing](validation/REGRESSION_TESTING.md) and its linked manual/platform evidence |
 | How do supported cross-application workflows behave? | [Composition interchange](../COMPOSITION_INTERCHANGE.md) and [cross-application compatibility](../CROSS_APPLICATION_COMPATIBILITY.md) |
 
 Editable Fusion/Motion composition interchange uses independent `.cscomp` files
@@ -20,9 +22,9 @@ work; see [contract and acceptance](../COMPOSITION_INTERCHANGE.md).
 
 The implemented 0.1.1 features and their completed checks are archived in the
 linked history. Current behavior is described in [Effects](architecture/EFFECTS.md),
-[Background Generator](BACKGROUND_GENERATOR.md), [Fusion Masks](FUSION_MASKS.md),
-[Fusion Composition](FUSION_COMPOSITION.md), and the
-[Regression Testing guide](REGRESSION_TESTING.md). Release acceptance and
+[Background Generator](features/BACKGROUND_GENERATOR.md), [Fusion Masks](features/FUSION_MASKS.md),
+[Fusion Composition](features/FUSION_COMPOSITION.md), and the
+[Regression Testing guide](validation/REGRESSION_TESTING.md). Release acceptance and
 platform validation remain tracked below and in those guides.
 
 ## Current direction
@@ -60,9 +62,9 @@ platform validation remain tracked below and in those guides.
 
 ## GPU acceleration planning
 
-The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records the implemented
+The [GPU acceleration plan](gpu/GPU_ACCELERATION_PLAN.md) records the implemented
 optional timeline composition, direct delivery and offline export stages, followed
-by the [native visual pipeline](GPU_PIPELINE.md) and platform acceptance.
+by the [native visual pipeline](gpu/GPU_PIPELINE.md) and platform acceptance.
 Video Editor and Motion Studio consume the shared compositor; Image Editor
 uses shared deterministic composition and image handoff contracts.
 
@@ -71,8 +73,8 @@ texture presentation has RGBA and CPU fallbacks. Export has its own per-job choi
 in Render > Video, with explicit recovery when native operations are unavailable.
 Experimental D3D11 decoding, built-in effects/Fusion, native NVENC, and additional
 hardware encoder discovery extend these stages; their device acceptance is
-recorded separately in [GPU_PIPELINE.md](GPU_PIPELINE.md). See the
-[delivery contract](GPU_TEXTURE_DELIVERY.md) and [export contract](GPU_EXPORT.md).
+recorded separately in [GPU_PIPELINE.md](gpu/GPU_PIPELINE.md). See the
+[delivery contract](gpu/GPU_TEXTURE_DELIVERY.md) and [export contract](gpu/GPU_EXPORT.md).
 The Windows/NVIDIA implementation passed explicit H.264/HEVC native integration
 and the final 101-test Windows regression gate on 2026-10-10. Hardware options
 remain disabled by default; human timing and other native platforms are pending.
@@ -80,8 +82,8 @@ The 15-minute offscreen run completed 27,000 native GPU frames without fallback
 or readback. Its recorded latency spikes keep smooth physical 30 fps playback
 acceptance pending; see the pipeline's prolonged-run statistics.
 Native parity/benchmark and build/test evidence is recorded in
-[GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md) and
-[GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md). Further OS/driver and
+[GPU_COMPOSITION_RESULTS.md](gpu/GPU_COMPOSITION_RESULTS.md) and
+[GPU_EXPORT_RESULTS.md](gpu/GPU_EXPORT_RESULTS.md). Further OS/driver and
 human audio/visual acceptance remain pending; formats and versions are unchanged.
 
 ## Status legend
@@ -105,7 +107,7 @@ human audio/visual acceptance remain pending; formats and versions are unchanged
   checks of node indicators, animated playback, save/reopen, Undo/Redo, and
   Timeline restoration remain pending until performed in the Release build. See
   [Current Scope](architecture/SCOPE.md),
-  [Project Persistence](architecture/PROJECT.md), and [Regression Testing](REGRESSION_TESTING.md).
+  [Project Persistence](architecture/PROJECT.md), and [Regression Testing](validation/REGRESSION_TESTING.md).
 See [Current Scope and Non-goals](architecture/SCOPE.md) for implemented
 behavior and deferred scope, and [Project Document and Persistence](architecture/PROJECT.md)
 for the active `.csp` schema and migrations.
@@ -227,7 +229,7 @@ performance, licensing, and maintenance cost.
 - Keep the Rust prototype archived. Reopen a Rust comparison only if a concrete
   technical need makes Rust a primary candidate again. A final language
   decision would require the cross-platform prototype evidence described in
-  [Technical Prototype Comparison](TECHNICAL_PROTOTYPE_COMPARISON.md).
+  [Technical Prototype Comparison](decisions/TECHNICAL_PROTOTYPE_COMPARISON.md).
 - Native crash dumps, translations, and broader contributor materials should
   be prioritized against release needs and maintainer capacity.
 - Do not set delivery dates until product scope, platform packaging, and

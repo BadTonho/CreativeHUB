@@ -123,7 +123,7 @@ Editor is its first consumer, behind a global experimental preference; Motion
 Studio adoption remains planned and Image Editor requires its own transparent
 output contract. The CPU compositor remains Qt independent. This adds no native
 format or handoff change. Native tests compare masked PNG producer output and
-consumer refresh through the Video worker. See [delivery evidence](video-editor/GPU_COMPOSITION_RESULTS.md).
+consumer refresh through the Video worker. See [delivery evidence](video-editor/gpu/GPU_COMPOSITION_RESULTS.md).
 
 These APIs remain provisional and should continue to gain focused tests for
 their shared behavior and each consumer boundary. In particular, new

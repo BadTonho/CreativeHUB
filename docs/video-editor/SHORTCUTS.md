@@ -8,11 +8,11 @@ Effects and Favorites add Fusion nodes by drag or double click. These actions ha
 
 ## Background Generator
 
-Background is inserted by dragging from Effects > Video > Generators or Favorites. Color selection has no default shortcut. Existing Undo/Redo and Fusion Composition editing commands apply. See [Background Generator](BACKGROUND_GENERATOR.md).
+Background is inserted by dragging from Effects > Video > Generators or Favorites. Color selection has no default shortcut. Existing Undo/Redo and Fusion Composition editing commands apply. See [Background Generator](features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks v1
 
-In Fusion, Effects > Fusion > Masks contains Rectangle Mask and Ellipse Mask. Properties are edited in the Inspector; VIEW previews coverage without a document edit. These commands have no default shortcut. Existing Undo/Redo applies to mask graph edits. See [Fusion Masks](FUSION_MASKS.md).
+In Fusion, Effects > Fusion > Masks contains Rectangle Mask and Ellipse Mask. Properties are edited in the Inspector; VIEW previews coverage without a document edit. These commands have no default shortcut. Existing Undo/Redo applies to mask graph edits. See [Fusion Masks](features/FUSION_MASKS.md).
 
 ## Fusion Composition commands
 
