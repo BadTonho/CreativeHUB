@@ -143,7 +143,7 @@ or installer/distribution acceptance is claimed.
 ## Executable delivery
 
 Canonical direct-launch executable:
-`C:\Users\Admin\Desktop\ProjetosCode\AdobeShoppee\build\apps\image-editor\Release\creative-suite-image-editor.exe`.
+`build/apps/image-editor/Release/creative-suite-image-editor.exe`.
 Debug is built in the corresponding `Debug` directory. Both outputs are generated
 by the canonical build; neither is copied from an auxiliary tree. The isolated
 image/raster configuration builds and links without FFmpeg. Unified builds deploy

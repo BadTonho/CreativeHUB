@@ -1,4 +1,4 @@
-# Motion Studio Direct GPU Preview — Windows Results, 2026-10-10
+# Motion Studio Direct GPU Preview ï¿½ Windows Results, 2026-10-10
 
 ## Environment and workload
 
@@ -45,7 +45,7 @@ Compared with GPU RGBA, direct delivery reduces median average request-to-paint
 latency by **29.9% at 30 fps** and **22.9% at 60 fps**. Each individual trial
 also has lower average latency with direct delivery. All direct runs sustain the
 requested rate without coalescing, stale results, busy drops or GPU failures.
-CPU preview delivers 6.6–8.2 fps in this deliberately full-frame blur workload.
+CPU preview delivers 6.6ï¿½8.2 fps in this deliberately full-frame blur workload.
 These measurements accept direct delivery as an improvement on this reference
 system and composition. GPU remains experimental and default off.
 
@@ -53,7 +53,7 @@ At 30 fps, GPU RGBA reads back 2,488,320,000 bytes per measured interval;
 direct delivery reads back **zero** and performs **zero viewer texture uploads**.
 Input upload remains 3,090,000,000 bytes. At 60 fps, direct upload is
 6,180,000,000 bytes with zero readback. Output pool reservations peak at
-16,588,800–24,883,200 bytes (15.82–23.73 MiB), below 64 MiB; occupied targets
+16,588,800ï¿½24,883,200 bytes (15.82ï¿½23.73 MiB), below 64 MiB; occupied targets
 peak at two, below the three-target limit.
 
 ## Individual runs

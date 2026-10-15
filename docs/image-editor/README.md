@@ -22,7 +22,3 @@ This directory groups the current scope, implementation contracts, feature deliv
 - [Group thumbnail cache results](performance/performance-after-group-thumbnail-cache-windows-2026-10-06.json)
 - [Layer raster cache results](performance/performance-after-layer-raster-cache-windows-2026-10-06.json)
 - [Performance baseline](performance/performance-baseline-windows-2026-10-06.json) and [updated baseline](performance/performance-baseline-windows-2026-10-06-v2.json)
-
-## Exploratory notes
-
-[`ideas/ideia.md`](ideas/ideia.md) contains provisional owner-only product notes. They are not approved requirements or release commitments.

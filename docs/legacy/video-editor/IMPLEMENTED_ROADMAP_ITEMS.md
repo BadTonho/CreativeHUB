@@ -143,7 +143,7 @@ This archive is historical context; current behavior and compatibility contracts
   completion after switching to Edit and Fusion, and shutdown cancellation.
   Manual checks for switching, returning to Cancel, and closing during a queue
   remain pending in the Release build. See
-  [Workspace Modularization](../../video-editor/architecture/WORKSPACE_MODULARIZATION_PLAN.md).
+  the owner-only Workspace Modularization planning notes, retained outside the public documentation.
 
 - [x] Consolidate Edit, Fusion, and Render under `src/workspaces/`: Edit has
   `commands/`, `controllers/`, and `ui/`; Fusion has `ui/` and

@@ -9,7 +9,7 @@ The app-owned Effects catalog centralizes workspace availability and creation ac
 
 ## Background Generator
 
-The Background generator is an Edit preset of the existing Fusion Composition model and renderer. Its Inspector edits existing graph nodes, and v29 persists optional composition names. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
+The Background generator is an Edit preset of the existing Fusion Composition model and renderer. Its Inspector edits existing graph nodes; optional composition names were introduced in schema v29, and the current schema is v30. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks v1
 
@@ -26,10 +26,8 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 
 | Area | Document | Responsibility |
 | --- | --- | --- |
-| Product distribution | [Product and Distribution Architecture (Portuguese planning document)](../../PRODUCT_DISTRIBUTION.md) | Provisional boundaries for the editors, future Hub, integrated and standalone recovery, and GitHub-based releases |
 | Repository | [Repository Structure](REPOSITORY_STRUCTURE.md) | Applications, modules, shared libraries, and folder boundaries |
 | UI | [UI Boundary](UI.md) | Qt Widgets, desktop interaction, and UI-only responsibilities |
-| Workspaces | [Workspace Modularization Plan (Portuguese maintainer planning document)](WORKSPACE_MODULARIZATION_PLAN.md) | Provisional staged plan for workspace-owned functions and shortcuts |
 | Media | [Media Boundary](MEDIA.md) | FFmpeg probing, decoding, playback sessions, and ownership |
 | Timeline | [Timeline Boundary](TIMELINE.md) | Timeline model, visual timeline, seeking, and media insertion |
 | Rendering | [Rendering Boundary](RENDERING.md) | CPU default, shared experimental GPU preview/export, texture delivery, 4K geometry and resource ownership |

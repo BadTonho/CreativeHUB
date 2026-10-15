@@ -20,7 +20,7 @@ Detailed subsystem contracts and design notes are listed below; see the [archite
 - [Playback controller](architecture/PLAYBACK_CONTROLLER.md), [rendering](architecture/RENDERING.md), and [effects](architecture/EFFECTS.md)
 - [UI](architecture/UI.md), [media browser](architecture/MEDIA_BROWSER.md), and [timeline widget boundary](architecture/TIMELINE_WIDGET_BOUNDARY.md)
 - [Editor session and timeline commands](architecture/EDITOR_SESSION_AND_TIMELINE_COMMANDS.md), [project and media controllers](architecture/PROJECT_AND_MEDIA_CONTROLLERS.md), and [logging](architecture/LOGGING.md)
-- [Build and dependencies](architecture/BUILD_AND_DEPENDENCIES.md), [repository structure](architecture/REPOSITORY_STRUCTURE.md), [timeline audit](architecture/TIMELINE_AUDIT.md), and [workspace modularization plan](architecture/WORKSPACE_MODULARIZATION_PLAN.md)
+- [Build and dependencies](architecture/BUILD_AND_DEPENDENCIES.md), [repository structure](architecture/REPOSITORY_STRUCTURE.md), [historical timeline audit](architecture/TIMELINE_AUDIT.md)
 
 ## Feature guides
 
@@ -47,10 +47,3 @@ Detailed subsystem contracts and design notes are listed below; see the [archite
 
 - [Technical prototype comparison](decisions/TECHNICAL_PROTOTYPE_COMPARISON.md)
 - [Future Rust implementation proposal](decisions/FUTURE_RUST_IMPLEMENTATION.md)
-
-## Exploratory notes
-
-The notes below are provisional, owner-only planning. They do not define approved product scope or release commitments.
-
-- [Ideias para o produto](ideas/ideia.md)
-- [Early creative suite product ideas](ideas/IDEIA_SUITE_CRIATIVA.md)

@@ -57,7 +57,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 29, with versions 1 through 28
+- versioned `.csp` persistence through version 30, with versions 1 through 29
   readable, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio/adjustment clip kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
@@ -129,7 +129,7 @@ Text and transitions are drag-only, and Gain remains unavailable. Merge combines
 straight-alpha source-over. The graph output replaces the clip image before
 its existing Inspector effect stack and Timeline transform/keyframes.
 
-Graph animation was introduced in `.csp` version 22 and is retained in version 29.
+Graph animation was introduced in `.csp` version 22 and is retained in version 30.
 Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its

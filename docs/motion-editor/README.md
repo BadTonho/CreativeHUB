@@ -8,6 +8,7 @@ This directory groups approved scope and open work with the native format, featu
 | --- | --- |
 | MVP scope and current readiness | [Scope and readiness](SCOPE_AND_READINESS.md) |
 | Planned work and feature-to-verification index | [Roadmap](ROADMAP.md) |
+| Keyboard shortcuts | [Shortcuts](SHORTCUTS.md) |
 | Native document schema and migrations | [Document format](architecture/FORMAT.md) |
 | Shared-library ownership and reuse boundaries | [Reuse plan](architecture/REUSE_PLAN.md) |
 
@@ -22,7 +23,3 @@ This directory groups approved scope and open work with the native format, featu
 - [Direct texture preview contract](gpu/GPU_TEXTURE_PREVIEW.md)
 - [Windows preview results, 2026-10-10](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
 - [Windows performance results, 2026-10-07](performance/PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md)
-
-## Planning history
-
-The [file reorganization analysis](planning/FILE_REORGANIZATION_ANALYSIS.pt-BR.md) is a provisional, owner-only note recording completed source-tree organization work.

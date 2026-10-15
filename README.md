@@ -50,7 +50,7 @@ The central desktop management console and launcher for the entire creative ecos
 - **Resilient Per-App Updates:** Inspects release catalogs, validates cryptographic signatures and SHA-256 integrity, schedules background updates per application, and provides automated rollback protection if an installation or launch fails.
 - **Project Backup Vault:** Automatically or manually captures timestamped project snapshots to prevent accidental data loss.
 - **Safe Storage Manager:** Analyzes disk space used by temporary render files and media caches across the suite, providing one-click safe cleanup without touching user project files.
-- See the [Hub regression documentation](docs/hub/validation/REGRESSION_TESTING.md) and [product distribution architecture](docs/PRODUCT_DISTRIBUTION.md).
+- See the [Hub scope and readiness](docs/hub/SCOPE_AND_READINESS.md), [regression documentation](docs/hub/validation/REGRESSION_TESTING.md), and [Windows update contract](docs/WINDOWS_UPDATES.md).
 
 #### 2. Video Editor (`video-editor`)
 A full-featured multitrack non-linear audiovisual editor (NLE) tailored for storytelling and rapid assembly:
@@ -198,15 +198,15 @@ ctest --test-dir build -C Release --output-on-failure
 
 ## Documentation Directory
 
-Before contributing, please read the repository guidelines in [`AGENTS.md`](AGENTS.md).
+Before contributing, read the [contributor guide](CONTRIBUTING.md) and repository guidelines in [`AGENTS.md`](AGENTS.md).
 
 | Category | Guide | Description |
 | :--- | :--- | :--- |
 | **Architecture** | [Video Editor Architecture](docs/video-editor/architecture/ARCHITECTURE.md) | Video Editor modules and subsystem architecture. |
 | | [Cross-Application Compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared contracts, linked-document handoffs, and extraction criteria. |
-| | [Product & Distribution Architecture](docs/PRODUCT_DISTRIBUTION.md) | CreativeHub architecture, app recovery, and release strategies *(Portuguese planning doc)*. |
 | | [Windows Update Contract](docs/WINDOWS_UPDATES.md) | Update catalog format, verification, staging, and rollback mechanics. |
-| **Hub** | [Hub Documentation Index](docs/hub/README.md) | Backup, storage, distribution, and validation references. |
+| **Hub** | [Hub Documentation Index](docs/hub/README.md) | Scope, backup, storage, updates, and validation references. |
+| | [Hub Scope and Readiness](docs/hub/SCOPE_AND_READINESS.md) | Responsibilities, implementation evidence, and acceptance status. |
 | | [Hub Regression Tests](docs/hub/validation/REGRESSION_TESTING.md) | Verification index and pending native checks. |
 | **Video Editor** | [Video Editor Roadmap](docs/video-editor/ROADMAP.md) | Milestones, stabilization, and release criteria. |
 | | [Video Editor Documentation Index](docs/video-editor/README.md) | Organized links to scope, architecture, feature guides, validation, and technical notes. |

@@ -1,9 +1,11 @@
 # Video Editor Timeline Audit
 
-**Status:** Active investigation notes; last reconciled on 2026-10-02. The
+**Status:** Historical static-review notes, last reconciled on 2026-10-02. The
 performance observations below are code-level hypotheses or dated log samples,
 not a current benchmark. Recheck them against fresh code and measurements
 before starting an optimization.
+
+For newer project-wide findings and corrections, see the [2026-10-12 audit](../validation/AUDIT_2026-10-12.md) and the [current roadmap](../ROADMAP.md). This file is retained as historical context; its open questions are not an active investigation queue.
 
 ## Confirmed corrections
 
