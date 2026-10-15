@@ -6,14 +6,15 @@
 #include <QMouseEvent>
 #include <QSizePolicy>
 #include <Qt>
+#include <QCoreApplication>
 
 SystemMemoryIndicator::SystemMemoryIndicator(QWidget* parent)
     : QLabel(parent) {
     setStyleSheet("color: #9aa4b2;");
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     setCursor(Qt::PointingHandCursor);
-    setToolTip("Open detailed Video Editor memory usage.");
-    setAccessibleName("Video Editor memory usage");
+    setToolTip(QCoreApplication::translate("SystemMemoryIndicator", "Open detailed Video Editor memory usage."));
+    setAccessibleName(QCoreApplication::translate("SystemMemoryIndicator", "Video Editor memory usage"));
 
     connect(
         &refresh_timer_,

@@ -1,5 +1,6 @@
 #include "workspaces/render/queue/render_queue_model.h"
 
+#include <QCoreApplication>
 #include <QStringList>
 
 #include <algorithm>
@@ -13,6 +14,19 @@ using rendering::RenderJobStatus;
 
 QString renderJobStatusName(RenderJobStatus status) {
     switch (status) {
+    case RenderJobStatus::Prepared: return QCoreApplication::translate("RenderQueueModel", "Prepared");
+    case RenderJobStatus::Rendering: return QCoreApplication::translate("RenderQueueModel", "Rendering");
+    case RenderJobStatus::Completed: return QCoreApplication::translate("RenderQueueModel", "Completed");
+    case RenderJobStatus::Failed: return QCoreApplication::translate("RenderQueueModel", "Failed");
+    case RenderJobStatus::Canceled: return QCoreApplication::translate("RenderQueueModel", "Canceled");
+    }
+    return QCoreApplication::translate("RenderQueueModel", "Unknown");
+}
+
+namespace {
+
+QString renderJobStatusValue(RenderJobStatus status) {
+    switch (status) {
     case RenderJobStatus::Prepared: return QStringLiteral("Prepared");
     case RenderJobStatus::Rendering: return QStringLiteral("Rendering");
     case RenderJobStatus::Completed: return QStringLiteral("Completed");
@@ -21,6 +35,8 @@ QString renderJobStatusName(RenderJobStatus status) {
     }
     return QStringLiteral("Unknown");
 }
+
+}  // namespace
 
 RenderQueueModel::RenderQueueModel(QObject* parent)
     : QAbstractListModel(parent) {}
@@ -34,7 +50,7 @@ QVariant RenderQueueModel::data(const QModelIndex& index, int role) const {
     if (job == nullptr) return {};
 
     if (role == Qt::DisplayRole) {
-        auto label = QStringLiteral("%1  |  %2  |  %3 × %4 @ %5 fps  |  %6")
+        auto label = QCoreApplication::translate("RenderQueueModel", "%1  |  %2  |  %3 × %4 @ %5 fps  |  %6")
             .arg(job->display_name, job->settings.container_name)
             .arg(job->settings.width)
             .arg(job->settings.height)
@@ -46,25 +62,26 @@ QVariant RenderQueueModel::data(const QModelIndex& index, int role) const {
         return label;
     }
     if (role == Qt::ToolTipRole) {
-        return QStringLiteral(
-                   "%1\nOutput: %2\nVideo: %3\nAudio: %4%5\nComposition: %6")
+        return QCoreApplication::translate(
+                   "RenderQueueModel", "%1\nOutput: %2\nVideo: %3\nAudio: %4%5\nComposition: %6")
             .arg(renderJobStatusName(job->status))
             .arg(job->settings.output_path,
                  job->settings.video_encoder_name,
                  job->settings.export_audio
                      ? job->settings.audio_encoder_name
-                     : QStringLiteral("Disabled"),
+                     : QCoreApplication::translate("RenderQueueModel", "Disabled"),
                  job->error_message.isEmpty()
                      ? QString{}
-                     : QStringLiteral("\nError: ") + job->error_message)
-            .arg(job->settings.gpu_composition_enabled ? QStringLiteral("GPU requested (Experimental)")
-                                                       : QStringLiteral("CPU"));
+                     : QCoreApplication::translate("RenderQueueModel", "\nError: ") + job->error_message)
+            .arg(job->settings.gpu_composition_enabled
+                     ? QCoreApplication::translate("RenderQueueModel", "GPU requested (Experimental)")
+                     : QCoreApplication::translate("RenderQueueModel", "CPU"));
     }
     if (role == Qt::UserRole) {
         return QVariant::fromValue<qulonglong>(job->id);
     }
     if (role == Qt::UserRole + 1) {
-        return renderJobStatusName(job->status);
+        return renderJobStatusValue(job->status);
     }
     if (role == Qt::UserRole + 2) {
         return job->progress_percent;

@@ -3,7 +3,7 @@ include(GNUInstallDirs)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets OpenGL OpenGLWidgets)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets OpenGL OpenGLWidgets LinguistTools)
 find_package(Qt6 CONFIG QUIET COMPONENTS Multimedia)
 find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWRESAMPLE SWSCALE)
 
@@ -200,6 +200,7 @@ add_library(creative-suite-main-editor-core STATIC
 add_executable(creative-suite-main-editor
     src/main.cpp
     resources/app_icon.qrc
+    resources/translations.qrc
 )
 
 target_link_libraries(creative-suite-main-editor PRIVATE
@@ -209,6 +210,39 @@ target_link_libraries(creative-suite-main-editor PRIVATE
 target_link_libraries(creative-suite-main-editor PRIVATE creative-suite::updater)
 target_compile_definitions(creative-suite-main-editor PRIVATE
     CREATIVE_SUITE_APP_VERSION="${CREATIVE_SUITE_VERSION_VIDEO_EDITOR}")
+
+set(VIDEO_EDITOR_TRANSLATION_TS "${CMAKE_SOURCE_DIR}/languages/video-editor/pt_BR.ts")
+set(VIDEO_EDITOR_TRANSLATION_QM "${CMAKE_SOURCE_DIR}/languages/video-editor/pt_BR.qm")
+set(VIDEO_EDITOR_GENERATED_TRANSLATION_QM
+    "${CMAKE_CURRENT_BINARY_DIR}/translations/video-editor/pt_BR.qm")
+add_custom_command(
+    OUTPUT "${VIDEO_EDITOR_GENERATED_TRANSLATION_QM}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/translations/video-editor"
+    COMMAND "$<TARGET_FILE:Qt6::lrelease>" "${VIDEO_EDITOR_TRANSLATION_TS}"
+            -qm "${VIDEO_EDITOR_GENERATED_TRANSLATION_QM}"
+    DEPENDS "${VIDEO_EDITOR_TRANSLATION_TS}"
+    VERBATIM
+)
+add_custom_target(creative-suite-video-editor-translation-catalog
+    COMMAND "${CMAKE_COMMAND}" -E compare_files
+            "${VIDEO_EDITOR_GENERATED_TRANSLATION_QM}"
+            "${VIDEO_EDITOR_TRANSLATION_QM}"
+    DEPENDS "${VIDEO_EDITOR_GENERATED_TRANSLATION_QM}"
+            "${VIDEO_EDITOR_TRANSLATION_QM}"
+    COMMENT "Checking that the tracked Video Editor catalog matches its TS source"
+    VERBATIM
+)
+add_dependencies(creative-suite-main-editor creative-suite-video-editor-translation-catalog)
+
+add_custom_target(update-video-editor-translations
+    COMMAND "$<TARGET_FILE:Qt6::lupdate>" -no-obsolete -target-language pt_BR
+            ${MAIN_EDITOR_CORE_SOURCES}
+            -ts "${VIDEO_EDITOR_TRANSLATION_TS}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Updating the Video Editor translation source"
+    VERBATIM
+)
 
 target_link_libraries(creative-suite-main-editor-core PUBLIC
     creative-suite::composition-exchange

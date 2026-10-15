@@ -329,7 +329,7 @@ void RenderWorkspace::createSettingsPanel() {
     auto* panel_layout = new QVBoxLayout(settings_panel_);
     panel_layout->setContentsMargins(0, 0, 8, 0);
 
-    auto* heading = new QLabel(QStringLiteral("Render Settings"), settings_panel_);
+    auto* heading = new QLabel(QCoreApplication::translate("RenderWorkspace", "Render Settings"), settings_panel_);
     QFont heading_font = heading->font();
     heading_font.setBold(true);
     heading_font.setPointSize(heading_font.pointSize() + 1);
@@ -350,7 +350,7 @@ void RenderWorkspace::createSettingsPanel() {
     auto* content_layout = new QVBoxLayout(content);
     content_layout->setContentsMargins(0, 0, 8, 0);
 
-    auto* output_group = new QGroupBox(QStringLiteral("Output"), content);
+    auto* output_group = new QGroupBox(QCoreApplication::translate("RenderWorkspace", "Output"), content);
     output_group->setObjectName("renderOutputSettingsGroup");
     output_group->setMinimumWidth(0);
     output_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -366,30 +366,29 @@ void RenderWorkspace::createSettingsPanel() {
     output_path_->setObjectName("renderOutputPath");
     output_path_->setMinimumWidth(0);
     output_path_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    output_path_->setPlaceholderText(QStringLiteral("Choose an output file"));
-    output_path_->setAccessibleName(QStringLiteral("Render output file"));
-    auto* browse_button = new QPushButton(QStringLiteral("Browse…"), output_path_row);
+    output_path_->setPlaceholderText(QCoreApplication::translate("RenderWorkspace", "Choose an output file"));
+    output_path_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Render output file"));
+    auto* browse_button = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Browse…"), output_path_row);
     browse_button->setObjectName("renderBrowseOutputButton");
-    browse_button->setAccessibleName(QStringLiteral("Choose render output file"));
+    browse_button->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Choose render output file"));
     output_path_layout->addWidget(output_path_, 1);
     output_path_layout->addWidget(browse_button);
-    output_form->addRow(QStringLiteral("File"), output_path_row);
+    output_form->addRow(QCoreApplication::translate("RenderWorkspace", "File"), output_path_row);
 
     container_combo_ = new QComboBox(output_group);
     container_combo_->setObjectName("renderContainerCombo");
-    container_combo_->setAccessibleName(QStringLiteral("Output container"));
+    container_combo_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Output container"));
     configureCompactCombo(container_combo_);
-    output_form->addRow(QStringLiteral("Container"), container_combo_);
+    output_form->addRow(QCoreApplication::translate("RenderWorkspace", "Container"), container_combo_);
     capability_warning_ = new QLabel(output_group);
     capability_warning_->setObjectName("renderCapabilitiesWarning");
     capability_warning_->setWordWrap(true);
-    capability_warning_->setText(QStringLiteral(
-        "This FFmpeg build does not expose a compatible video output format."));
+    capability_warning_->setText(QCoreApplication::translate("RenderWorkspace", "This FFmpeg build does not expose a compatible video output format."));
     capability_warning_->hide();
     output_form->addRow(capability_warning_);
     content_layout->addWidget(output_group);
 
-    auto* video_group = new QGroupBox(QStringLiteral("Video"), content);
+    auto* video_group = new QGroupBox(QCoreApplication::translate("RenderWorkspace", "Video"), content);
     video_group->setObjectName("renderVideoSettingsGroup");
     video_group->setMinimumWidth(0);
     video_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -398,52 +397,52 @@ void RenderWorkspace::createSettingsPanel() {
 
     video_encoder_combo_ = new QComboBox(video_group);
     video_encoder_combo_->setObjectName("renderVideoEncoderCombo");
-    video_encoder_combo_->setAccessibleName(QStringLiteral("Video encoder"));
+    video_encoder_combo_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Video encoder"));
     configureCompactCombo(video_encoder_combo_);
-    video_form->addRow(QStringLiteral("Encoder"), video_encoder_combo_);
+    video_form->addRow(QCoreApplication::translate("RenderWorkspace", "Encoder"), video_encoder_combo_);
 
     resolution_combo_ = new QComboBox(video_group);
     resolution_combo_->setObjectName("renderResolutionCombo");
-    resolution_combo_->setAccessibleName(QStringLiteral("Output resolution"));
+    resolution_combo_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Output resolution"));
     configureCompactCombo(resolution_combo_);
     rebuildResolutionOptions(QSize(project_width_, project_height_), true);
-    video_form->addRow(QStringLiteral("Resolution"), resolution_combo_);
+    video_form->addRow(QCoreApplication::translate("RenderWorkspace", "Resolution"), resolution_combo_);
 
     custom_width_ = new QSpinBox(video_group);
     custom_width_->setObjectName("renderCustomWidth");
     custom_width_->setRange(1, 16384);
     custom_width_->setValue(project_width_);
     custom_width_->setSuffix(QStringLiteral(" px"));
-    video_form->addRow(QStringLiteral("Custom width"), custom_width_);
+    video_form->addRow(QCoreApplication::translate("RenderWorkspace", "Custom width"), custom_width_);
     custom_height_ = new QSpinBox(video_group);
     custom_height_->setObjectName("renderCustomHeight");
     custom_height_->setRange(1, 16384);
     custom_height_->setValue(project_height_);
     custom_height_->setSuffix(QStringLiteral(" px"));
-    video_form->addRow(QStringLiteral("Custom height"), custom_height_);
+    video_form->addRow(QCoreApplication::translate("RenderWorkspace", "Custom height"), custom_height_);
 
     frame_rate_spin_ = new QDoubleSpinBox(video_group);
     frame_rate_spin_->setObjectName("renderFrameRate");
-    frame_rate_spin_->setAccessibleName(QStringLiteral("Output frame rate"));
+    frame_rate_spin_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Output frame rate"));
     frame_rate_spin_->setRange(0.001, 1000.0);
     frame_rate_spin_->setDecimals(3);
     frame_rate_spin_->setSingleStep(0.001);
     frame_rate_spin_->setSuffix(QStringLiteral(" fps"));
-    video_form->addRow(QStringLiteral("Frame rate"), frame_rate_spin_);
+    video_form->addRow(QCoreApplication::translate("RenderWorkspace", "Frame rate"), frame_rate_spin_);
 
     quality_preset_combo_ = new QComboBox(video_group);
     quality_preset_combo_->setObjectName("renderQualityPresetCombo");
     configureCompactCombo(quality_preset_combo_);
-    quality_preset_combo_->addItem(QStringLiteral("Low"),
+    quality_preset_combo_->addItem(QCoreApplication::translate("RenderWorkspace", "Low"),
                                    static_cast<int>(RenderQualityPreset::Low));
-    quality_preset_combo_->addItem(QStringLiteral("Standard"),
+    quality_preset_combo_->addItem(QCoreApplication::translate("RenderWorkspace", "Standard"),
                                    static_cast<int>(RenderQualityPreset::Standard));
-    quality_preset_combo_->addItem(QStringLiteral("High"),
+    quality_preset_combo_->addItem(QCoreApplication::translate("RenderWorkspace", "High"),
                                    static_cast<int>(RenderQualityPreset::High));
-    quality_preset_combo_->addItem(QStringLiteral("Custom"),
+    quality_preset_combo_->addItem(QCoreApplication::translate("RenderWorkspace", "Custom"),
                                    static_cast<int>(RenderQualityPreset::Custom));
     quality_preset_combo_->setCurrentIndex(1);
-    video_form->addRow(QStringLiteral("Quality profile"), quality_preset_combo_);
+    video_form->addRow(QCoreApplication::translate("RenderWorkspace", "Quality profile"), quality_preset_combo_);
 
     video_bitrate_spin_ = new QDoubleSpinBox(video_group);
     video_bitrate_spin_->setObjectName("renderVideoBitrate");
@@ -451,19 +450,19 @@ void RenderWorkspace::createSettingsPanel() {
     video_bitrate_spin_->setDecimals(1);
     video_bitrate_spin_->setSingleStep(0.5);
     video_bitrate_spin_->setSuffix(QStringLiteral(" Mbps"));
-    video_form->addRow(QStringLiteral("Video bitrate"), video_bitrate_spin_);
-    gpu_composition_check_ = new QCheckBox(QStringLiteral("Use GPU for export (Experimental)"), video_group);
+    video_form->addRow(QCoreApplication::translate("RenderWorkspace", "Video bitrate"), video_bitrate_spin_);
+    gpu_composition_check_ = new QCheckBox(QCoreApplication::translate("RenderWorkspace", "Use GPU for export (Experimental)"), video_group);
     gpu_composition_check_->setObjectName("renderGpuCompositionCheck");
-    gpu_composition_check_->setAccessibleName(QStringLiteral("Use GPU for export (Experimental)"));
+    gpu_composition_check_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Use GPU for export (Experimental)"));
     const auto gpu_description = QStringLiteral(
         "Accelerates supported effects, Fusion graphs, and layer composition for this queued export. Uses CPU automatically when needed. "
         "The selected video encoder is unchanged.");
     gpu_composition_check_->setAccessibleDescription(gpu_description);
     gpu_composition_check_->setToolTip(gpu_description);
     video_form->addRow(gpu_composition_check_);
-    hardware_decoding_check_ = new QCheckBox(QStringLiteral("Use hardware video decoding (Experimental)"), video_group);
+    hardware_decoding_check_ = new QCheckBox(QCoreApplication::translate("RenderWorkspace", "Use hardware video decoding (Experimental)"), video_group);
     hardware_decoding_check_->setObjectName("renderHardwareDecodingCheck");
-    hardware_decoding_check_->setToolTip(QStringLiteral("Accelerates supported video sources for this queued export. Uses CPU automatically when needed."));
+    hardware_decoding_check_->setToolTip(QCoreApplication::translate("RenderWorkspace", "Accelerates supported video sources for this queued export. Uses CPU automatically when needed."));
     video_form->addRow(hardware_decoding_check_);
     gpu_warning_ = new QLabel(video_group);
     gpu_warning_->setObjectName("renderGpuWarning");
@@ -475,12 +474,12 @@ void RenderWorkspace::createSettingsPanel() {
     connect(gpu_warning_timer_, &QTimer::timeout, gpu_warning_, &QWidget::hide);
     content_layout->addWidget(video_group);
 
-    auto* audio_group = new QGroupBox(QStringLiteral("Audio"), content);
+    auto* audio_group = new QGroupBox(QCoreApplication::translate("RenderWorkspace", "Audio"), content);
     audio_group->setObjectName("renderAudioSettingsGroup");
     audio_group->setMinimumWidth(0);
     audio_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* audio_layout = new QVBoxLayout(audio_group);
-    export_audio_check_ = new QCheckBox(QStringLiteral("Export audio"), audio_group);
+    export_audio_check_ = new QCheckBox(QCoreApplication::translate("RenderWorkspace", "Export audio"), audio_group);
     export_audio_check_->setObjectName("renderExportAudioCheck");
     audio_layout->addWidget(export_audio_check_);
     auto* audio_form_widget = new QWidget(audio_group);
@@ -489,24 +488,24 @@ void RenderWorkspace::createSettingsPanel() {
     audio_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     audio_encoder_combo_ = new QComboBox(audio_form_widget);
     audio_encoder_combo_->setObjectName("renderAudioEncoderCombo");
-    audio_encoder_combo_->setAccessibleName(QStringLiteral("Audio encoder"));
+    audio_encoder_combo_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Audio encoder"));
     configureCompactCombo(audio_encoder_combo_);
-    audio_form->addRow(QStringLiteral("Encoder"), audio_encoder_combo_);
+    audio_form->addRow(QCoreApplication::translate("RenderWorkspace", "Encoder"), audio_encoder_combo_);
     audio_bitrate_spin_ = new QSpinBox(audio_form_widget);
     audio_bitrate_spin_->setObjectName("renderAudioBitrate");
     audio_bitrate_spin_->setRange(8, 1024);
     audio_bitrate_spin_->setSingleStep(16);
     audio_bitrate_spin_->setSuffix(QStringLiteral(" kbps"));
-    audio_form->addRow(QStringLiteral("Audio bitrate"), audio_bitrate_spin_);
+    audio_form->addRow(QCoreApplication::translate("RenderWorkspace", "Audio bitrate"), audio_bitrate_spin_);
     audio_layout->addWidget(audio_form_widget);
     content_layout->addWidget(audio_group);
     content_layout->addStretch(1);
 
     settings_scroll_area_->setWidget(content);
 
-    add_job_button_ = new QPushButton(QStringLiteral("Add to Queue"), settings_panel_);
+    add_job_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Add to Queue"), settings_panel_);
     add_job_button_->setObjectName("renderAddToQueueButton");
-    add_job_button_->setAccessibleName(QStringLiteral("Add render job to queue"));
+    add_job_button_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Add render job to queue"));
     panel_layout->addWidget(add_job_button_);
 
     const std::array<QWidget*, 5> combo_controls{
@@ -598,7 +597,7 @@ void RenderWorkspace::createQueuePanel() {
     auto* layout = new QVBoxLayout(queue_panel_);
     layout->setContentsMargins(8, 0, 0, 0);
 
-    auto* heading = new QLabel(QStringLiteral("Render Queue"), queue_panel_);
+    auto* heading = new QLabel(QCoreApplication::translate("RenderWorkspace", "Render Queue"), queue_panel_);
     QFont heading_font = heading->font();
     heading_font.setBold(true);
     heading_font.setPointSize(heading_font.pointSize() + 1);
@@ -606,7 +605,7 @@ void RenderWorkspace::createQueuePanel() {
     layout->addWidget(heading);
 
     empty_queue_label_ = new QLabel(
-        QStringLiteral("No jobs in the queue. Configure an output in Render Settings and add it to the queue."),
+        QCoreApplication::translate("RenderWorkspace", "No jobs in the queue. Configure an output in Render Settings and add it to the queue."),
         queue_panel_);
     empty_queue_label_->setObjectName("renderQueueEmptyLabel");
     empty_queue_label_->setWordWrap(true);
@@ -614,7 +613,7 @@ void RenderWorkspace::createQueuePanel() {
 
     queue_view_ = new QListView(queue_panel_);
     queue_view_->setObjectName("renderQueueList");
-    queue_view_->setAccessibleName(QStringLiteral("Prepared render jobs"));
+    queue_view_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Prepared render jobs"));
     queue_view_->setModel(queue_model_);
     queue_view_->setSelectionMode(QAbstractItemView::SingleSelection);
     queue_view_->setUniformItemSizes(false);
@@ -623,12 +622,12 @@ void RenderWorkspace::createQueuePanel() {
     auto* run_actions = new QWidget(queue_panel_);
     auto* run_layout = new QHBoxLayout(run_actions);
     run_layout->setContentsMargins(0, 0, 0, 0);
-    start_queue_button_ = new QPushButton(QStringLiteral("Start Queue"), run_actions);
+    start_queue_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Start Queue"), run_actions);
     start_queue_button_->setObjectName("renderStartQueueButton");
-    start_queue_button_->setAccessibleName(QStringLiteral("Start render queue"));
-    cancel_queue_button_ = new QPushButton(QStringLiteral("Cancel"), run_actions);
+    start_queue_button_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Start render queue"));
+    cancel_queue_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Cancel"), run_actions);
     cancel_queue_button_->setObjectName("renderCancelQueueButton");
-    cancel_queue_button_->setAccessibleName(QStringLiteral("Cancel current render queue"));
+    cancel_queue_button_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Cancel current render queue"));
     run_layout->addWidget(start_queue_button_);
     run_layout->addWidget(cancel_queue_button_);
     run_layout->addStretch(1);
@@ -637,11 +636,11 @@ void RenderWorkspace::createQueuePanel() {
     auto* queue_actions = new QWidget(queue_panel_);
     auto* action_layout = new QHBoxLayout(queue_actions);
     action_layout->setContentsMargins(0, 0, 0, 0);
-    remove_job_button_ = new QPushButton(QStringLiteral("Remove"), queue_actions);
+    remove_job_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Remove"), queue_actions);
     remove_job_button_->setObjectName("renderRemoveQueueJobButton");
-    move_job_up_button_ = new QPushButton(QStringLiteral("Move Up"), queue_actions);
+    move_job_up_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Move Up"), queue_actions);
     move_job_up_button_->setObjectName("renderMoveQueueJobUpButton");
-    move_job_down_button_ = new QPushButton(QStringLiteral("Move Down"), queue_actions);
+    move_job_down_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Move Down"), queue_actions);
     move_job_down_button_->setObjectName("renderMoveQueueJobDownButton");
     action_layout->addWidget(remove_job_button_);
     action_layout->addStretch(1);
@@ -684,7 +683,7 @@ void RenderWorkspace::createPreviewPanel() {
     panel_layout->setContentsMargins(8, 0, 8, 0);
     panel_layout->setSpacing(6);
 
-    auto* heading = new QLabel(QStringLiteral("Preview"), preview_panel_);
+    auto* heading = new QLabel(QCoreApplication::translate("RenderWorkspace", "Preview"), preview_panel_);
     QFont heading_font = heading->font();
     heading_font.setBold(true);
     heading_font.setPointSize(heading_font.pointSize() + 1);
@@ -787,7 +786,7 @@ void RenderWorkspace::updateEncoderOptions() {
     if (!audio_available) {
         export_audio_check_->setChecked(false);
         export_audio_check_->setToolTip(
-            QStringLiteral("No compatible audio encoder is available for this container."));
+            QCoreApplication::translate("RenderWorkspace", "No compatible audio encoder is available for this container."));
     } else {
         export_audio_check_->setChecked(true);
         export_audio_check_->setToolTip({});
@@ -811,7 +810,7 @@ void RenderWorkspace::rebuildResolutionOptions(
     const QSignalBlocker blocker(resolution_combo_);
     resolution_combo_->clear();
     resolution_combo_->addItem(
-        QStringLiteral("Project (%1 × %2)").arg(project_width_).arg(project_height_),
+        QCoreApplication::translate("RenderWorkspace", "Project (%1 × %2)").arg(project_width_).arg(project_height_),
         QSize(project_width_, project_height_));
     const std::vector<QSize> common_resolutions{
         QSize(1280, 720), QSize(1920, 1080), QSize(1080, 1920),
@@ -822,11 +821,11 @@ void RenderWorkspace::rebuildResolutionOptions(
             continue;
         }
         resolution_combo_->addItem(
-            QStringLiteral("%1 × %2").arg(resolution.width()).arg(resolution.height()),
+            QCoreApplication::translate("RenderWorkspace", "%1 × %2").arg(resolution.width()).arg(resolution.height()),
             resolution);
     }
     const int custom_index = resolution_combo_->count();
-    resolution_combo_->addItem(QStringLiteral("Custom dimensions"), QVariant{});
+    resolution_combo_->addItem(QCoreApplication::translate("RenderWorkspace", "Custom dimensions"), QVariant{});
 
     int selected_index = use_project_resolution ? 0 : -1;
     if (selected_index < 0 && preferred_resolution.isValid()) {
@@ -951,8 +950,8 @@ void RenderWorkspace::startQueue() {
         const auto normalized = normalizedOutputPath(job->settings.output_path);
         if (targets.end() != std::find(targets.begin(), targets.end(), normalized)) {
             QMessageBox::warning(
-                central_page_, QStringLiteral("Duplicate output paths"),
-                QStringLiteral("Two or more queue jobs use the same output file. Change the paths before starting the queue."));
+                central_page_, QCoreApplication::translate("RenderWorkspace", "Duplicate output paths"),
+                QCoreApplication::translate("RenderWorkspace", "Two or more queue jobs use the same output file. Change the paths before starting the queue."));
             return;
         }
         targets.push_back(normalized);
@@ -972,8 +971,8 @@ void RenderWorkspace::startQueue() {
     }
     if (!invalid_outputs.empty()) {
         QMessageBox::warning(
-            central_page_, QStringLiteral("Invalid output folder"),
-            QStringLiteral("The output folder is unavailable for: %1")
+            central_page_, QCoreApplication::translate("RenderWorkspace", "Invalid output folder"),
+            QCoreApplication::translate("RenderWorkspace", "The output folder is unavailable for: %1")
                 .arg(invalid_outputs.join(QStringLiteral("\n"))));
         return;
     }
@@ -983,8 +982,8 @@ void RenderWorkspace::startQueue() {
     }
     if (!existing_outputs.empty()) {
         const auto answer = QMessageBox::question(
-            central_page_, QStringLiteral("Replace existing files?"),
-            QStringLiteral("The following output files already exist. Replace them after each job completes?\n\n%1")
+            central_page_, QCoreApplication::translate("RenderWorkspace", "Replace existing files?"),
+            QCoreApplication::translate("RenderWorkspace", "The following output files already exist. Replace them after each job completes?\n\n%1")
                 .arg(existing_outputs.join(QStringLiteral("\n"))),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No);
@@ -1027,10 +1026,13 @@ void RenderWorkspace::handleQueueFinished(bool canceled) {
     if (queue_model_ != nullptr) queue_model_->setLocked(false);
     updateQueueActions();
     if (!failed_job_names_.empty()) {
+        const int failed_job_count = static_cast<int>(failed_job_names_.size());
         QMessageBox::warning(
-            central_page_, QStringLiteral("Render queue finished with errors"),
-            QStringLiteral("%1 render job(s) failed. See the queue rows and application log for details.")
-                .arg(failed_job_names_.size()));
+            central_page_, QCoreApplication::translate("RenderWorkspace", "Render queue finished with errors"),
+            QCoreApplication::translate(
+                "RenderWorkspace",
+                "%n render job(s) failed. See the queue rows and application log for details.",
+                nullptr, failed_job_count));
     }
     Q_UNUSED(canceled);
 }
@@ -1101,7 +1103,7 @@ void RenderWorkspace::browseOutputPath() {
     const auto& container = containers_[static_cast<std::size_t>(index)];
     const auto path = QFileDialog::getSaveFileName(
         central_page_,
-        QStringLiteral("Choose Render Output"),
+        QCoreApplication::translate("RenderWorkspace", "Choose Render Output"),
         output_path_->text(),
         extensionFilter(container));
     if (path.isEmpty()) return;

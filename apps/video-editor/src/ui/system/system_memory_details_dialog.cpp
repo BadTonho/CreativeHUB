@@ -7,11 +7,12 @@
 #include <QLabel>
 #include <QSizePolicy>
 #include <QVBoxLayout>
+#include <QCoreApplication>
 
 namespace {
 
 QLabel* createValueLabel(QWidget* parent) {
-    auto* label = new QLabel("N/A", parent);
+    auto* label = new QLabel(QCoreApplication::translate("SystemMemoryDetailsDialog", "N/A"), parent);
     label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     return label;
@@ -21,28 +22,28 @@ QLabel* createValueLabel(QWidget* parent) {
 
 SystemMemoryDetailsDialog::SystemMemoryDetailsDialog(QWidget* parent)
     : QDialog(parent) {
-    setWindowTitle("Memory Usage");
+    setWindowTitle(QCoreApplication::translate("SystemMemoryDetailsDialog", "Memory Usage"));
     setModal(false);
     setWindowModality(Qt::NonModal);
     resize(420, 250);
 
     auto* layout = new QVBoxLayout(this);
 
-    auto* system_group = new QGroupBox("System Memory", this);
+    auto* system_group = new QGroupBox(QCoreApplication::translate("SystemMemoryDetailsDialog", "System Memory"), this);
     auto* system_layout = new QFormLayout(system_group);
     system_total_value_ = createValueLabel(system_group);
     system_used_value_ = createValueLabel(system_group);
     system_available_value_ = createValueLabel(system_group);
-    system_layout->addRow("Total", system_total_value_);
-    system_layout->addRow("Used", system_used_value_);
-    system_layout->addRow("Available", system_available_value_);
+    system_layout->addRow(QCoreApplication::translate("SystemMemoryDetailsDialog", "Total"), system_total_value_);
+    system_layout->addRow(QCoreApplication::translate("SystemMemoryDetailsDialog", "Used"), system_used_value_);
+    system_layout->addRow(QCoreApplication::translate("SystemMemoryDetailsDialog", "Available"), system_available_value_);
 
-    auto* process_group = new QGroupBox("Video Editor", this);
+    auto* process_group = new QGroupBox(QCoreApplication::translate("SystemMemoryDetailsDialog", "Video Editor"), this);
     auto* process_layout = new QFormLayout(process_group);
     process_working_set_value_ = createValueLabel(process_group);
     process_private_usage_value_ = createValueLabel(process_group);
-    process_layout->addRow("Working Set", process_working_set_value_);
-    process_layout->addRow("Private Usage", process_private_usage_value_);
+    process_layout->addRow(QCoreApplication::translate("SystemMemoryDetailsDialog", "Working Set"), process_working_set_value_);
+    process_layout->addRow(QCoreApplication::translate("SystemMemoryDetailsDialog", "Private Usage"), process_private_usage_value_);
 
     layout->addWidget(system_group);
     layout->addWidget(process_group);

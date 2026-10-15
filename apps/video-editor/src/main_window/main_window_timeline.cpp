@@ -64,6 +64,7 @@
 #include <system_error>
 #include <unordered_set>
 #include <utility>
+#include <QCoreApplication>
 
 
 using namespace main_window_detail;
@@ -81,7 +82,7 @@ void MainWindow::applyMonitorVolumePercent(int percent) {
     }
     if (editUi().monitor_volume_indicator != nullptr) {
         editUi().monitor_volume_indicator->setText(
-            QString::number(normalized) + "%");
+            QString::number(normalized) + QStringLiteral("%"));
     }
     if (playback_controller_ != nullptr) {
         playback_controller_->setMonitorVolume(static_cast<double>(normalized) / 100.0);
@@ -559,12 +560,12 @@ void MainWindow::handleMediaDropAt(
             });
         if (media == media_items_.end()) {
             statusBar()->showMessage(
-                "Import this media before adding it to the timeline.");
+                QCoreApplication::translate("MainWindow", "Import this media before adding it to the timeline."));
             return;
         }
         if (media->offline) {
             statusBar()->showMessage(
-                "Offline media cannot be added to the timeline.");
+                QCoreApplication::translate("MainWindow", "Offline media cannot be added to the timeline."));
             return;
         }
         const auto result = edit_workspace_->controller()->addMediaClip(
@@ -583,11 +584,11 @@ void MainWindow::handleMediaDropAt(
             {{"path", source_text},
              {"track_id", std::to_string(track_id)},
              {"timeline_frame", std::to_string(timeline_frame)}});
-        statusBar()->showMessage("Could not add dropped media to the timeline.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not add dropped media to the timeline."));
         QMessageBox::warning(
             this,
-            "Could not add media",
-            "The dropped media could not be added to the timeline.");
+            QCoreApplication::translate("MainWindow", "Could not add media"),
+            QCoreApplication::translate("MainWindow", "The dropped media could not be added to the timeline."));
     }
 }
 
@@ -605,12 +606,12 @@ void MainWindow::handleMediaGroupDropAt(
             });
         if (media == media_items_.end()) {
             statusBar()->showMessage(
-                "Import this media before adding it to the timeline.");
+                QCoreApplication::translate("MainWindow", "Import this media before adding it to the timeline."));
             return;
         }
         if (media->offline) {
             statusBar()->showMessage(
-                "Offline media cannot be added to the timeline.");
+                QCoreApplication::translate("MainWindow", "Offline media cannot be added to the timeline."));
             return;
         }
         const auto result = edit_workspace_->controller()->addMediaClips(
@@ -625,6 +626,6 @@ void MainWindow::handleMediaGroupDropAt(
             error.what(), {{"source_path", source_path.toStdString()},
                            {"timeline_frame", std::to_string(timeline_frame)}});
         statusBar()->showMessage(
-            "The media could not be added to the Timeline.");
+            QCoreApplication::translate("MainWindow", "The media could not be added to the Timeline."));
     }
 }

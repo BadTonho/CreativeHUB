@@ -10,6 +10,7 @@
 #include <QSignalBlocker>
 
 #include <utility>
+#include <QCoreApplication>
 
 namespace ui {
 
@@ -138,7 +139,7 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
     workspace_host_->setPage(page);
     if (docks_.timeline != nullptr) {
         docks_.timeline->setWindowTitle(
-            page == WorkspacePageId::Fusion ? "Node Editor" : "Timeline");
+            page == WorkspacePageId::Fusion ? QCoreApplication::translate("WorkspaceTransitionController", "Node Editor") : QCoreApplication::translate("WorkspaceTransitionController", "Timeline"));
     }
 
     if (leaving_render && has_render_dock_visibility_snapshot_) {

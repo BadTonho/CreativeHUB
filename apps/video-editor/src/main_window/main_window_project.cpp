@@ -62,6 +62,7 @@
 #include <stdexcept>
 #include <system_error>
 #include <utility>
+#include <QCoreApplication>
 
 
 using namespace main_window_detail;
@@ -78,7 +79,7 @@ std::optional<NewProjectConfiguration> chooseNewProjectConfiguration(
     QWidget* parent) {
     QDialog dialog(parent);
     dialog.setObjectName(QStringLiteral("newProjectDialog"));
-    dialog.setWindowTitle(QStringLiteral("New Project"));
+    dialog.setWindowTitle(QCoreApplication::translate("MainWindow", "New Project"));
     dialog.setModal(true);
 
     auto* layout = new QVBoxLayout(&dialog);
@@ -87,20 +88,24 @@ std::optional<NewProjectConfiguration> chooseNewProjectConfiguration(
     canvas_combo->setObjectName(QStringLiteral("newProjectCanvasCombo"));
     canvas_combo->addItem(QStringLiteral("16:9 — 1920 × 1080"), QSize(1920, 1080));
     canvas_combo->addItem(QStringLiteral("9:16 — 1080 × 1920"), QSize(1080, 1920));
-    form->addRow(QStringLiteral("Canvas"), canvas_combo);
+    form->addRow(QCoreApplication::translate("MainWindow", "Canvas"), canvas_combo);
 
     auto* frame_rate_combo = new QComboBox(&dialog);
     frame_rate_combo->setObjectName(QStringLiteral("newProjectFrameRateCombo"));
     for (const int rate : {24, 25, 30, 48, 50, 60}) {
         frame_rate_combo->addItem(
-            QStringLiteral("%1 fps").arg(rate), rate);
+            QCoreApplication::translate("MainWindow", "%1 fps").arg(rate), rate);
     }
     frame_rate_combo->setCurrentIndex(2);
-    form->addRow(QStringLiteral("Frame rate"), frame_rate_combo);
+    form->addRow(QCoreApplication::translate("MainWindow", "Frame rate"), frame_rate_combo);
     layout->addLayout(form);
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Ok)->setText(
+        QCoreApplication::translate("MainWindow", "Create"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(
+        QCoreApplication::translate("MainWindow", "Cancel"));
     buttons->button(QDialogButtonBox::Ok)->setObjectName(
         QStringLiteral("newProjectCreateButton"));
     QObject::connect(buttons, &QDialogButtonBox::accepted,
@@ -143,7 +148,7 @@ std::optional<NewProjectConfiguration> chooseProjectSettings(
     timeline::FrameRate current_frame_rate) {
     QDialog dialog(parent);
     dialog.setObjectName(QStringLiteral("projectSettingsDialog"));
-    dialog.setWindowTitle(QStringLiteral("Project Settings"));
+    dialog.setWindowTitle(QCoreApplication::translate("MainWindow", "Project Settings"));
     dialog.setModal(true);
 
     auto* layout = new QVBoxLayout(&dialog);
@@ -156,7 +161,7 @@ std::optional<NewProjectConfiguration> chooseProjectSettings(
             current_canvas_height == 1920
         ? 1 : 0;
     canvas_combo->setCurrentIndex(current_canvas_index);
-    form->addRow(QStringLiteral("Canvas"), canvas_combo);
+    form->addRow(QCoreApplication::translate("MainWindow", "Canvas"), canvas_combo);
 
     auto* frame_rate_combo = new QComboBox(&dialog);
     frame_rate_combo->setObjectName(QStringLiteral("projectSettingsFrameRateCombo"));
@@ -166,7 +171,7 @@ std::optional<NewProjectConfiguration> chooseProjectSettings(
     for (const auto rate : standard_rates) {
         const int index = frame_rate_combo->count();
         frame_rate_combo->addItem(
-            QStringLiteral("%1 fps").arg(rate.numerator), frameRateData(rate));
+            QCoreApplication::translate("MainWindow", "%1 fps").arg(rate.numerator), frameRateData(rate));
         if (timeline::reducedFrameRate(current_frame_rate) == rate) {
             selected_rate_index = index;
         }
@@ -174,7 +179,7 @@ std::optional<NewProjectConfiguration> chooseProjectSettings(
     if (selected_rate_index < 0 && timeline::validFrameRate(current_frame_rate)) {
         current_frame_rate = timeline::reducedFrameRate(current_frame_rate);
         frame_rate_combo->addItem(
-            QStringLiteral("Current — %1 fps (%2/%3)")
+            QCoreApplication::translate("MainWindow", "Current — %1 fps (%2/%3)")
                 .arg(current_frame_rate.asDouble(), 0, 'f', 3)
                 .arg(current_frame_rate.numerator)
                 .arg(current_frame_rate.denominator),
@@ -182,9 +187,9 @@ std::optional<NewProjectConfiguration> chooseProjectSettings(
         selected_rate_index = frame_rate_combo->count() - 1;
     }
     frame_rate_combo->setCurrentIndex(selected_rate_index);
-    form->addRow(QStringLiteral("Frame rate"), frame_rate_combo);
+    form->addRow(QCoreApplication::translate("MainWindow", "Frame rate"), frame_rate_combo);
     auto* hint = new QLabel(
-        QStringLiteral("Frame rate changes preserve timeline time. Clip transforms are kept when the canvas changes."),
+        QCoreApplication::translate("MainWindow", "Frame rate changes preserve timeline time. Clip transforms are kept when the canvas changes."),
         &dialog);
     hint->setWordWrap(true);
     layout->addLayout(form);
@@ -192,7 +197,9 @@ std::optional<NewProjectConfiguration> chooseProjectSettings(
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Apply"));
+    buttons->button(QDialogButtonBox::Ok)->setText(QCoreApplication::translate("MainWindow", "Apply"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(
+        QCoreApplication::translate("MainWindow", "Cancel"));
     buttons->button(QDialogButtonBox::Ok)->setObjectName(
         QStringLiteral("projectSettingsApplyButton"));
     QObject::connect(buttons, &QDialogButtonBox::accepted,
@@ -357,8 +364,8 @@ void MainWindow::deleteAutosaveSnapshot(const QString& snapshot_path) {
     if (snapshot_path.isEmpty()) return;
     const auto result = QMessageBox::question(
         this,
-        "Delete Autosave Snapshot",
-        "Delete the selected recovery snapshot?",
+        QCoreApplication::translate("MainWindow", "Delete Autosave Snapshot"),
+        QCoreApplication::translate("MainWindow", "Delete the selected recovery snapshot?"),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (result != QMessageBox::Yes) return;
@@ -366,7 +373,7 @@ void MainWindow::deleteAutosaveSnapshot(const QString& snapshot_path) {
     const auto path = QFileInfo(snapshot_path).filesystemFilePath();
     try {
         project_controller_.removeSnapshot(path);
-        statusBar()->showMessage("Autosave snapshot deleted.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Autosave snapshot deleted."));
     } catch (const project::ProjectError& error) {
         logging::Logger::instance().log(
             logging::Level::Warning,
@@ -375,7 +382,7 @@ void MainWindow::deleteAutosaveSnapshot(const QString& snapshot_path) {
             error.what(),
             {{"snapshot_path", pathToUtf8(path)},
              {"cause", error.what()}});
-        statusBar()->showMessage("Could not delete autosave snapshot.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not delete autosave snapshot."));
     }
 }
 
@@ -392,7 +399,7 @@ void MainWindow::openAutosaveFolder(const QString& folder_path) {
         "autosave_open_folder",
         "The recovery folder could not be opened.",
         {{"folder_path", pathToUtf8(path)}});
-    statusBar()->showMessage("Could not open autosave folder.");
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not open autosave folder."));
 }
 
 void MainWindow::updateProjectDirtyState() {
@@ -406,7 +413,7 @@ void MainWindow::updateProjectDirtyState() {
             : timeline::kDefaultTrackRowHeight};
     static_cast<void>(project_controller_.updateDirtyState(presentation));
 
-    setWindowTitle(project_dirty_ ? "Video Editor *" : "Video Editor");
+    setWindowTitle(project_dirty_ ? QCoreApplication::translate("MainWindow", "Video Editor *") : QCoreApplication::translate("MainWindow", "Video Editor"));
     if (save_project_action_ != nullptr) {
         save_project_action_->setEnabled(!project_path_.has_value() || project_dirty_);
     }
@@ -438,8 +445,8 @@ bool MainWindow::saveProjectTo(
             operation,
             result.cause,
             context);
-        QMessageBox::warning(this, "Could not save project", fromUtf8(result.cause));
-        statusBar()->showMessage("Could not save project.");
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not save project"), fromUtf8(result.cause));
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not save project."));
         return false;
     }
     cleanupRestoredAutosave();
@@ -457,8 +464,8 @@ bool MainWindow::saveProjectTo(
     }
     updateProjectDirtyState();
     statusBar()->showMessage(std::string_view(operation) == "save_as"
-        ? "Project saved as."
-        : "Project saved.");
+        ? QCoreApplication::translate("MainWindow", "Project saved as.")
+        : QCoreApplication::translate("MainWindow", "Project saved."));
     return true;
 }
 
@@ -476,9 +483,9 @@ void MainWindow::saveProjectAs() {
         : QString();
     QString selected_path = QFileDialog::getSaveFileName(
         this,
-        "Save Project As",
+        QCoreApplication::translate("MainWindow", "Save Project As"),
         initial_path,
-        "Creative Suite Project (*.csp);;All Files (*)");
+        QCoreApplication::translate("MainWindow", "Creative Suite Project (*.csp);;All Files (*)"));
     if (selected_path.isEmpty()) return;
 
     if (!selected_path.endsWith(".csp", Qt::CaseInsensitive)) {
@@ -494,12 +501,12 @@ bool MainWindow::confirmProjectChange() {
 
     QMessageBox prompt(this);
     prompt.setIcon(QMessageBox::Warning);
-    prompt.setWindowTitle("Unsaved Changes");
-    prompt.setText("The current project has unsaved changes.");
-    prompt.setInformativeText("Do you want to save the project before continuing?");
-    auto* save_button = prompt.addButton("Save", QMessageBox::AcceptRole);
-    auto* discard_button = prompt.addButton("Discard", QMessageBox::DestructiveRole);
-    auto* cancel_button = prompt.addButton("Cancel", QMessageBox::RejectRole);
+    prompt.setWindowTitle(QCoreApplication::translate("MainWindow", "Unsaved Changes"));
+    prompt.setText(QCoreApplication::translate("MainWindow", "The current project has unsaved changes."));
+    prompt.setInformativeText(QCoreApplication::translate("MainWindow", "Do you want to save the project before continuing?"));
+    auto* save_button = prompt.addButton(QCoreApplication::translate("MainWindow", "Save"), QMessageBox::AcceptRole);
+    auto* discard_button = prompt.addButton(QCoreApplication::translate("MainWindow", "Discard"), QMessageBox::DestructiveRole);
+    auto* cancel_button = prompt.addButton(QCoreApplication::translate("MainWindow", "Cancel"), QMessageBox::RejectRole);
     prompt.setDefaultButton(save_button);
     prompt.exec();
 
@@ -579,7 +586,7 @@ void MainWindow::newProject() {
             configuration->canvas_width,
             configuration->canvas_height,
             configuration->frame_rate);
-        statusBar()->showMessage("New project created.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "New project created."));
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error,
@@ -589,8 +596,8 @@ void MainWindow::newProject() {
             {{"project_path", project_path_.has_value()
                     ? pathToUtf8(*project_path_)
                     : ""}});
-        QMessageBox::warning(this, "Could not create project", "The new project could not be created.");
-        statusBar()->showMessage("Could not create project.");
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not create project"), QCoreApplication::translate("MainWindow", "The new project could not be created."));
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not create project."));
     }
 }
 
@@ -610,10 +617,10 @@ void MainWindow::showProjectSettingsDialog() {
     if (result.status == application::EditStatus::NoChange) return;
     if (!result.changed()) {
         statusBar()->showMessage(
-            "Project settings could not be applied to the current Timeline.");
+            QCoreApplication::translate("MainWindow", "Project settings could not be applied to the current Timeline."));
         QMessageBox::warning(
-            this, QStringLiteral("Could not apply Project Settings"),
-            QStringLiteral("The selected frame rate would make a clip or transition invalid."));
+            this, QCoreApplication::translate("MainWindow", "Could not apply Project Settings"),
+            QCoreApplication::translate("MainWindow", "The selected frame rate would make a clip or transition invalid."));
         return;
     }
 
@@ -622,15 +629,15 @@ void MainWindow::showProjectSettingsDialog() {
     if (timeline_model_.hasClip()) refreshPlaybackComposition();
     updatePlaybackControls();
     updatePlaybackStatus();
-    statusBar()->showMessage(QStringLiteral("Project settings updated."));
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Project settings updated."));
 }
 
 void MainWindow::openProject() {
     const QString selected_file = QFileDialog::getOpenFileName(
         this,
-        "Open Project",
+        QCoreApplication::translate("MainWindow", "Open Project"),
         QString(),
-        "Creative Suite Project (*.csp);;All Files (*)");
+        QCoreApplication::translate("MainWindow", "Creative Suite Project (*.csp);;All Files (*)"));
     if (selected_file.isEmpty()) return;
 
     if (!confirmProjectChange()) return;
@@ -695,8 +702,8 @@ bool MainWindow::openProjectPath(
     setProjectLoadingState(true);
 
     auto* progress = new QProgressDialog(
-        "Preparing project…", "Cancel", 0, 0, this);
-    progress->setWindowTitle("Open Project");
+        QCoreApplication::translate("MainWindow", "Preparing project…"), QCoreApplication::translate("MainWindow", "Cancel"), 0, 0, this);
+    progress->setWindowTitle(QCoreApplication::translate("MainWindow", "Open Project"));
     progress->setWindowModality(Qt::NonModal);
     progress->setAutoClose(false);
     progress->setAutoReset(false);
@@ -704,7 +711,7 @@ bool MainWindow::openProjectPath(
     const auto cancel = project_load_cancel_;
     connect(progress, &QProgressDialog::canceled, this, [cancel, progress]() {
         cancel->store(true, std::memory_order_relaxed);
-        progress->setLabelText("Cancelling project preparation…");
+        progress->setLabelText(QCoreApplication::translate("MainWindow", "Cancelling project preparation…"));
         progress->setCancelButton(nullptr);
     });
     project_load_progress_ = progress;
@@ -738,7 +745,7 @@ bool MainWindow::openProjectPath(
                             guard->project_load_progress_->setValue(
                                 static_cast<int>(completed));
                             guard->project_load_progress_->setLabelText(
-                                QString("Preparing %1 of %2: %3")
+                                QString(QCoreApplication::translate("MainWindow", "Preparing %1 of %2: %3"))
                                     .arg(completed + 1).arg(total)
                                     .arg(fromUtf8(path_text)));
                         },
@@ -755,7 +762,7 @@ bool MainWindow::openProjectPath(
                 },
                 Qt::QueuedConnection);
         }));
-    statusBar()->showMessage("Preparing project in the background...");
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Preparing project in the background..."));
     return true;
 }
 
@@ -817,7 +824,7 @@ void MainWindow::finishProjectOpen(
         if (!succeeded) requestTimelineAudioWaveforms();
     };
     if (project_generation != project_generation_) {
-        statusBar()->showMessage("Project opening result was superseded.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Project opening result was superseded."));
         finish_callback(false);
         return;
     }
@@ -837,7 +844,7 @@ void MainWindow::finishProjectOpen(
     }
 
     if (result.status == application::ProjectOpenStatus::Cancelled) {
-        statusBar()->showMessage("Project opening cancelled. The current project is unchanged.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Project opening cancelled. The current project is unchanged."));
         finish_callback(false);
         return;
     }
@@ -869,15 +876,15 @@ void MainWindow::finishProjectOpen(
             "open",
             issue.cause,
             context);
-        QMessageBox::warning(this, "Could not open project", fromUtf8(issue.cause));
-        statusBar()->showMessage("Could not open project. The current project is unchanged.");
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not open project"), fromUtf8(issue.cause));
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not open project. The current project is unchanged."));
         finish_callback(false);
         return;
     }
 
     try {
         applyLoadedProject(std::move(*result.prepared));
-        statusBar()->showMessage("Project opened.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Project opened."));
         finish_callback(true);
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -887,8 +894,8 @@ void MainWindow::finishProjectOpen(
             error.what(),
             {{"project_path", pathToUtf8(active_project_source_path_)},
              {"cause", error.what()}});
-        QMessageBox::warning(this, "Could not open project", "The prepared project could not be applied.");
-        statusBar()->showMessage("Could not open project.");
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not open project"), QCoreApplication::translate("MainWindow", "The prepared project could not be applied."));
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not open project."));
         finish_callback(false);
     }
 }

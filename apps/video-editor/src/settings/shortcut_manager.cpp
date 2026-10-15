@@ -3,6 +3,7 @@
 #include <creative_suite/shortcuts/shortcut_manager.h>
 
 #include <QAction>
+#include <QCoreApplication>
 
 #include <algorithm>
 #include <memory>
@@ -121,8 +122,8 @@ bool ShortcutManager::setShortcut(
 
     if (const auto* conflict = conflictingEntry(id, entry->scope, sequence)) {
         if (conflict_message != nullptr) {
-            *conflict_message = QStringLiteral(
-                "The shortcut is already assigned to \"%1\" (%2).")
+            *conflict_message = QCoreApplication::translate(
+                "ShortcutManager", "The shortcut is already assigned to \"%1\" (%2).")
                 .arg(conflict->label, conflict->availability);
         }
         return false;
@@ -149,8 +150,8 @@ bool ShortcutManager::resetShortcut(
     if (const auto* conflict = conflictingEntry(
             id, entry->scope, entry->default_sequence)) {
         if (conflict_message != nullptr) {
-            *conflict_message = QStringLiteral(
-                "The default shortcut conflicts with \"%1\" (%2).")
+            *conflict_message = QCoreApplication::translate(
+                "ShortcutManager", "The default shortcut conflicts with \"%1\" (%2).")
                 .arg(conflict->label, conflict->availability);
         }
         return false;
@@ -190,13 +191,13 @@ QKeySequence ShortcutManager::shortcut(const QString& id) const {
 
 QString ShortcutManager::scopeLabel(ShortcutScope scope) {
     switch (scope) {
-    case ShortcutScope::Application: return QStringLiteral("Application");
-    case ShortcutScope::Shared: return QStringLiteral("Shared");
-    case ShortcutScope::Edit: return QStringLiteral("Edit");
-    case ShortcutScope::Fusion: return QStringLiteral("Fusion");
-    case ShortcutScope::Render: return QStringLiteral("Render");
+    case ShortcutScope::Application: return QCoreApplication::translate("ShortcutManager", "Application");
+    case ShortcutScope::Shared: return QCoreApplication::translate("ShortcutManager", "Shared");
+    case ShortcutScope::Edit: return QCoreApplication::translate("ShortcutManager", "Edit");
+    case ShortcutScope::Fusion: return QCoreApplication::translate("ShortcutManager", "Fusion");
+    case ShortcutScope::Render: return QCoreApplication::translate("ShortcutManager", "Render");
     }
-    return QStringLiteral("Other");
+    return QCoreApplication::translate("ShortcutManager", "Other");
 }
 
 ShortcutEntry* ShortcutManager::findEntry(const QString& id) noexcept {

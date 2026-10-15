@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <QCoreApplication>
 
 namespace timeline {
 
@@ -26,8 +27,8 @@ TimelineTrackHeaderOverlay::TimelineTrackHeaderOverlay(
 
     playhead_timecode_ = new QLabel(this);
     playhead_timecode_->setObjectName(QStringLiteral("timelinePlayheadTimecode"));
-    playhead_timecode_->setAccessibleName(QStringLiteral("Timeline playhead timecode"));
-    playhead_timecode_->setToolTip(QStringLiteral("Current global Timeline time"));
+    playhead_timecode_->setAccessibleName(QCoreApplication::translate("TimelineTrackHeaderOverlay", "Timeline playhead timecode"));
+    playhead_timecode_->setToolTip(QCoreApplication::translate("TimelineTrackHeaderOverlay", "Current global Timeline time"));
     playhead_timecode_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     playhead_timecode_->setFont(QFont(playhead_timecode_->font().family(), 8));
     playhead_timecode_->setStyleSheet(
@@ -36,12 +37,12 @@ TimelineTrackHeaderOverlay::TimelineTrackHeaderOverlay(
     if (parent != nullptr && timeline_ != nullptr) {
         video_scroll_bar_ = new QScrollBar(Qt::Vertical, parent);
         video_scroll_bar_->setObjectName(QStringLiteral("videoTrackScrollBar"));
-        video_scroll_bar_->setAccessibleName(QStringLiteral("Video tracks scroll"));
-        video_scroll_bar_->setToolTip(QStringLiteral("Scroll video tracks"));
+        video_scroll_bar_->setAccessibleName(QCoreApplication::translate("TimelineTrackHeaderOverlay", "Video tracks scroll"));
+        video_scroll_bar_->setToolTip(QCoreApplication::translate("TimelineTrackHeaderOverlay", "Scroll video tracks"));
         audio_scroll_bar_ = new QScrollBar(Qt::Vertical, parent);
         audio_scroll_bar_->setObjectName(QStringLiteral("audioTrackScrollBar"));
-        audio_scroll_bar_->setAccessibleName(QStringLiteral("Audio tracks scroll"));
-        audio_scroll_bar_->setToolTip(QStringLiteral("Scroll audio tracks"));
+        audio_scroll_bar_->setAccessibleName(QCoreApplication::translate("TimelineTrackHeaderOverlay", "Audio tracks scroll"));
+        audio_scroll_bar_->setToolTip(QCoreApplication::translate("TimelineTrackHeaderOverlay", "Scroll audio tracks"));
         connect(video_scroll_bar_, &QScrollBar::valueChanged,
                 timeline_, [timeline](int value) {
                     timeline->setTrackScrollOffset(TrackKind::Video, value);

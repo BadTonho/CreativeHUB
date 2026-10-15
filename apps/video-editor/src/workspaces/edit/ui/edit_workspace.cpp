@@ -42,6 +42,7 @@
 #include <cmath>
 #include <iterator>
 #include <utility>
+#include <QCoreApplication>
 
 namespace ui {
 
@@ -226,7 +227,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     effects_page_layout->setContentsMargins(12, 12, 12, 12);
     effects_page_layout->setSpacing(8);
     ui_.effect_selection_hint = new QLabel(
-        "Select a video, image, or adjustment clip to view and edit its effects.", effects_page);
+        QCoreApplication::translate("EditWorkspace", "Select a video, image, or adjustment clip to view and edit its effects."), effects_page);
     ui_.effect_selection_hint->setWordWrap(true);
     ui_.effect_selection_hint->setStyleSheet("color: #9aa4b2;");
     effects_page_layout->addWidget(ui_.effect_selection_hint);
@@ -234,12 +235,12 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(8);
 
-    auto* title = new QLabel("Transform", inspector_page);
+    auto* title = new QLabel(QCoreApplication::translate("EditWorkspace", "Transform"), inspector_page);
     title->setStyleSheet("font-weight: 600; font-size: 14px;");
     layout->addWidget(title);
 
     auto* description = new QLabel(
-        "Values are normalized to the project canvas.", inspector_page);
+        QCoreApplication::translate("EditWorkspace", "Values are normalized to the project canvas."), inspector_page);
     description->setWordWrap(true);
     description->setStyleSheet("color: #9aa4b2;");
     layout->addWidget(description);
@@ -261,7 +262,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         spin->setEnabled(false);
         spin->setFixedWidth(82);
         ui_.transform_spins[static_cast<std::size_t>(index)] = spin;
-        auto* key = new QPushButton("◇", row);
+        auto* key = new QPushButton(QStringLiteral("◇"), row);
         key->setCheckable(true);
         auto* slider = new QSlider(Qt::Horizontal, row);
         slider->setRange(0, transform_slider_resolution);
@@ -272,7 +273,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         slider->setPageStep(100);
         slider->setTracking(true);
         slider->setEnabled(false);
-        slider->setToolTip(QString("Adjust %1").arg(labels[index]));
+        slider->setToolTip(QString(QCoreApplication::translate("EditWorkspace", "Adjust %1")).arg(labels[index]));
         slider->setStyleSheet(
             "QSlider::groove:horizontal { height: 4px; background: #303844; "
             "border-radius: 2px; }"
@@ -288,7 +289,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         key->setStyleSheet(
             "QPushButton { font-size: 16px; font-weight: 600; padding: 0px; }"
             "QPushButton:checked { color: #171a20; background: #e8b94f; }");
-        key->setToolTip("Add keyframe at the current frame");
+        key->setToolTip(QCoreApplication::translate("EditWorkspace", "Add keyframe at the current frame"));
         ui_.transform_keys[static_cast<std::size_t>(index)] = key;
         row_layout->addWidget(slider, 1);
         row_layout->addWidget(spin);
@@ -315,14 +316,14 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         });
     }
     layout->addLayout(form);
-    ui_.background_controls = new QGroupBox("Background", inspector_page);
+    ui_.background_controls = new QGroupBox(QCoreApplication::translate("EditWorkspace", "Background"), inspector_page);
     ui_.background_controls->setObjectName("editBackgroundControls");
     auto* background_layout = new QVBoxLayout(ui_.background_controls);
     ui_.background_nodes = new QComboBox(ui_.background_controls);
     ui_.background_nodes->setObjectName("editBackgroundNodes");
     ui_.background_sample = new QLabel(ui_.background_controls);
     ui_.background_sample->setObjectName("editBackgroundSample");
-    ui_.background_color = new QPushButton("Choose RGBA Color", ui_.background_controls);
+    ui_.background_color = new QPushButton(QCoreApplication::translate("EditWorkspace", "Choose RGBA Color"), ui_.background_controls);
     ui_.background_color->setObjectName("editBackgroundColor");
     background_layout->addWidget(ui_.background_nodes);
     background_layout->addWidget(ui_.background_sample);
@@ -335,7 +336,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         &EditWorkspaceController::chooseBackgroundColor);
 
 
-    ui_.clip_effects_controls = new QGroupBox("Clip Effects", effects_page);
+    ui_.clip_effects_controls = new QGroupBox(QCoreApplication::translate("EditWorkspace", "Clip Effects"), effects_page);
     auto* effects_layout = new QVBoxLayout(ui_.clip_effects_controls);
     effects_layout->setContentsMargins(8, 8, 8, 8);
     effects_layout->setSpacing(5);
@@ -345,9 +346,9 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     ui_.clip_effects_list->setMaximumHeight(100);
     effects_layout->addWidget(ui_.clip_effects_list);
     auto* effect_actions = new QHBoxLayout;
-    ui_.clip_effect_up = new QPushButton("Up", ui_.clip_effects_controls);
-    ui_.clip_effect_down = new QPushButton("Down", ui_.clip_effects_controls);
-    ui_.clip_effect_remove = new QPushButton("Remove", ui_.clip_effects_controls);
+    ui_.clip_effect_up = new QPushButton(QCoreApplication::translate("EditWorkspace", "Up"), ui_.clip_effects_controls);
+    ui_.clip_effect_down = new QPushButton(QCoreApplication::translate("EditWorkspace", "Down"), ui_.clip_effects_controls);
+    ui_.clip_effect_remove = new QPushButton(QCoreApplication::translate("EditWorkspace", "Remove"), ui_.clip_effects_controls);
     effect_actions->addWidget(ui_.clip_effect_up);
     effect_actions->addWidget(ui_.clip_effect_down);
     effect_actions->addWidget(ui_.clip_effect_remove);
@@ -355,7 +356,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     auto* effect_parameter_row = new QWidget(ui_.clip_effects_controls);
     auto* effect_parameter_layout = new QHBoxLayout(effect_parameter_row);
     effect_parameter_layout->setContentsMargins(0, 0, 0, 0);
-    ui_.clip_effect_parameter_label = new QLabel("Parameter", effect_parameter_row);
+    ui_.clip_effect_parameter_label = new QLabel(QCoreApplication::translate("EditWorkspace", "Parameter"), effect_parameter_row);
     ui_.clip_effect_parameter_slider = new QSlider(Qt::Horizontal, effect_parameter_row);
     ui_.clip_effect_parameter_value = new QDoubleSpinBox(effect_parameter_row);
     ui_.clip_effect_parameter_value->setFixedWidth(74);
@@ -373,11 +374,11 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     auto* text_layout = new QVBoxLayout(ui_.text_controls);
     text_layout->setContentsMargins(0, 8, 0, 0);
     text_layout->setSpacing(6);
-    auto* text_title = new QLabel("Text", ui_.text_controls);
+    auto* text_title = new QLabel(QCoreApplication::translate("EditWorkspace", "Text"), ui_.text_controls);
     text_title->setStyleSheet("font-weight: 600;");
     text_layout->addWidget(text_title);
     ui_.text_content = new QPlainTextEdit(ui_.text_controls);
-    ui_.text_content->setPlaceholderText("Text content");
+    ui_.text_content->setPlaceholderText(QCoreApplication::translate("EditWorkspace", "Text content"));
     ui_.text_content->setFixedHeight(70);
     text_layout->addWidget(ui_.text_content);
 
@@ -386,15 +387,15 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     ui_.text_font_size = new QSpinBox(ui_.text_controls);
     ui_.text_font_size->setRange(1, 512);
     ui_.text_font_size->setValue(48);
-    ui_.text_color = new QPushButton("Color", ui_.text_controls);
+    ui_.text_color = new QPushButton(QCoreApplication::translate("EditWorkspace", "Color"), ui_.text_controls);
     ui_.text_alignment = new QComboBox(ui_.text_controls);
-    ui_.text_alignment->addItems({"Left", "Center", "Right"});
-    text_form->addRow("Font", ui_.text_font);
-    text_form->addRow("Size", ui_.text_font_size);
-    text_form->addRow("Color", ui_.text_color);
-    text_form->addRow("Alignment", ui_.text_alignment);
+    ui_.text_alignment->addItems({QCoreApplication::translate("EditWorkspace", "Left"), QCoreApplication::translate("EditWorkspace", "Center"), QCoreApplication::translate("EditWorkspace", "Right")});
+    text_form->addRow(QCoreApplication::translate("EditWorkspace", "Font"), ui_.text_font);
+    text_form->addRow(QCoreApplication::translate("EditWorkspace", "Size"), ui_.text_font_size);
+    text_form->addRow(QCoreApplication::translate("EditWorkspace", "Color"), ui_.text_color);
+    text_form->addRow(QCoreApplication::translate("EditWorkspace", "Alignment"), ui_.text_alignment);
     text_layout->addLayout(text_form);
-    ui_.apply_text = new QPushButton("Apply Text", ui_.text_controls);
+    ui_.apply_text = new QPushButton(QCoreApplication::translate("EditWorkspace", "Apply Text"), ui_.text_controls);
     text_layout->addWidget(ui_.apply_text);
     layout->addWidget(ui_.text_controls);
 
@@ -402,24 +403,24 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     auto* transition_layout = new QVBoxLayout(ui_.transition_controls);
     transition_layout->setContentsMargins(0, 8, 0, 0);
     transition_layout->setSpacing(6);
-    auto* transition_title = new QLabel("Transition", ui_.transition_controls);
+    auto* transition_title = new QLabel(QCoreApplication::translate("EditWorkspace", "Transition"), ui_.transition_controls);
     transition_title->setStyleSheet("font-weight: 600;");
     transition_layout->addWidget(transition_title);
     auto* transition_form = new QFormLayout;
     ui_.transition_type = new QComboBox(ui_.transition_controls);
-    ui_.transition_type->addItem("Cross Dissolve", 0);
-    ui_.transition_type->addItem("Fade to Black", 1);
-    ui_.transition_type->addItem("Audio Crossfade", 2);
+    ui_.transition_type->addItem(QCoreApplication::translate("EditWorkspace", "Cross Dissolve"), 0);
+    ui_.transition_type->addItem(QCoreApplication::translate("EditWorkspace", "Fade to Black"), 1);
+    ui_.transition_type->addItem(QCoreApplication::translate("EditWorkspace", "Audio Crossfade"), 2);
     ui_.transition_duration = new QSpinBox(ui_.transition_controls);
     ui_.transition_duration->setRange(1, 1);
     ui_.transition_duration->setSuffix(" frames");
-    transition_form->addRow("Type", ui_.transition_type);
-    transition_form->addRow("Duration", ui_.transition_duration);
+    transition_form->addRow(QCoreApplication::translate("EditWorkspace", "Type"), ui_.transition_type);
+    transition_form->addRow(QCoreApplication::translate("EditWorkspace", "Duration"), ui_.transition_duration);
     transition_layout->addLayout(transition_form);
     ui_.apply_transition = new QPushButton(
-        "Apply Transition", ui_.transition_controls);
+        QCoreApplication::translate("EditWorkspace", "Apply Transition"), ui_.transition_controls);
     ui_.remove_transition = new QPushButton(
-        "Remove Transition", ui_.transition_controls);
+        QCoreApplication::translate("EditWorkspace", "Remove Transition"), ui_.transition_controls);
     transition_layout->addWidget(ui_.apply_transition);
     transition_layout->addWidget(ui_.remove_transition);
     ui_.transition_controls->setVisible(false);
@@ -430,30 +431,30 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     audio_layout->setContentsMargins(12, 12, 12, 12);
     audio_layout->setSpacing(8);
 
-    auto* clip_audio_group = new QGroupBox("Clip", audio_page);
+    auto* clip_audio_group = new QGroupBox(QCoreApplication::translate("EditWorkspace", "Clip"), audio_page);
     auto* clip_audio_layout = new QFormLayout(clip_audio_group);
     ui_.clip_volume = new QSlider(Qt::Horizontal, clip_audio_group);
     ui_.clip_volume->setRange(0, 200);
     ui_.clip_volume->setValue(100);
-    ui_.clip_volume->setToolTip("Active clip volume (0% to 200%)");
+    ui_.clip_volume->setToolTip(QCoreApplication::translate("EditWorkspace", "Active clip volume (0% to 200%)"));
     ui_.clip_volume->setEnabled(false);
-    ui_.clip_mute = new QCheckBox("Mute clip", clip_audio_group);
+    ui_.clip_mute = new QCheckBox(QCoreApplication::translate("EditWorkspace", "Mute clip"), clip_audio_group);
     ui_.clip_mute->setEnabled(false);
-    clip_audio_layout->addRow("Volume", ui_.clip_volume);
-    clip_audio_layout->addRow("Mute", ui_.clip_mute);
+    clip_audio_layout->addRow(QCoreApplication::translate("EditWorkspace", "Volume"), ui_.clip_volume);
+    clip_audio_layout->addRow(QCoreApplication::translate("EditWorkspace", "Mute"), ui_.clip_mute);
     audio_layout->addWidget(clip_audio_group);
 
-    auto* track_audio_group = new QGroupBox("Track", audio_page);
+    auto* track_audio_group = new QGroupBox(QCoreApplication::translate("EditWorkspace", "Track"), audio_page);
     auto* track_audio_layout = new QFormLayout(track_audio_group);
     ui_.track_volume = new QSlider(Qt::Horizontal, track_audio_group);
     ui_.track_volume->setRange(0, 200);
     ui_.track_volume->setValue(100);
-    ui_.track_volume->setToolTip("Active track volume (0% to 200%)");
+    ui_.track_volume->setToolTip(QCoreApplication::translate("EditWorkspace", "Active track volume (0% to 200%)"));
     ui_.track_volume->setEnabled(false);
-    ui_.track_mute = new QCheckBox("Mute track", track_audio_group);
+    ui_.track_mute = new QCheckBox(QCoreApplication::translate("EditWorkspace", "Mute track"), track_audio_group);
     ui_.track_mute->setEnabled(false);
-    track_audio_layout->addRow("Volume", ui_.track_volume);
-    track_audio_layout->addRow("Mute", ui_.track_mute);
+    track_audio_layout->addRow(QCoreApplication::translate("EditWorkspace", "Volume"), ui_.track_volume);
+    track_audio_layout->addRow(QCoreApplication::translate("EditWorkspace", "Mute"), ui_.track_mute);
     audio_layout->addWidget(track_audio_group);
     audio_layout->addStretch();
 
@@ -461,17 +462,17 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         createInspectorScrollArea(
             inspector_page, QStringLiteral("editInspectorScrollArea"),
             ui_.inspector_tabs),
-        "Inspector");
+        QCoreApplication::translate("EditWorkspace", "Inspector"));
     ui_.inspector_tabs->addTab(
         createInspectorScrollArea(
             audio_page, QStringLiteral("audioInspectorScrollArea"),
             ui_.inspector_tabs),
-        "Audio");
+        QCoreApplication::translate("EditWorkspace", "Audio"));
     ui_.inspector_tabs->addTab(
         createInspectorScrollArea(
             effects_page, QStringLiteral("effectsInspectorScrollArea"),
             ui_.inspector_tabs),
-        "Effects");
+        QCoreApplication::translate("EditWorkspace", "Effects"));
     outer_layout->addWidget(ui_.inspector_tabs);
 
     QSettings settings;
@@ -554,7 +555,7 @@ void EditWorkspace::createTimelineControls(
     auto* controls = new QHBoxLayout(ui_.timeline_controls);
     controls->setSpacing(6);
 
-    auto* playback_label = new QLabel("Playback", container);
+    auto* playback_label = new QLabel(QCoreApplication::translate("EditWorkspace", "Playback"), container);
     playback_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
     controls->addWidget(playback_label);
 
@@ -573,7 +574,7 @@ void EditWorkspace::createTimelineControls(
     ui_.previous_frame->setFixedSize(32, 28);
     ui_.play_pause->setFixedSize(32, 28);
     ui_.next_frame->setFixedSize(32, 28);
-    ui_.clear_timeline = new QPushButton("Clear Timeline", container);
+    ui_.clear_timeline = new QPushButton(QCoreApplication::translate("EditWorkspace", "Clear Timeline"), container);
     ui_.selection_tool = new QPushButton(container);
     ui_.razor_tool = new QPushButton(container);
     ui_.volume_tool = new QPushButton(container);
@@ -602,7 +603,7 @@ void EditWorkspace::createTimelineControls(
     controls->addWidget(ui_.play_pause);
     controls->addWidget(ui_.next_frame);
     controls->addSpacing(6);
-    auto* monitor_volume_label = new QLabel("Volume", container);
+    auto* monitor_volume_label = new QLabel(QCoreApplication::translate("EditWorkspace", "Volume"), container);
     monitor_volume_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
     ui_.monitor_volume = new QSlider(Qt::Horizontal, container);
     ui_.monitor_volume_indicator = new QLabel(container);
@@ -615,8 +616,8 @@ void EditWorkspace::createTimelineControls(
     ui_.monitor_volume->setPageStep(10);
     ui_.monitor_volume->setFixedWidth(96);
     ui_.monitor_volume->setToolTip(
-        "Editor monitoring volume (0% to 200%)");
-    ui_.monitor_volume->setAccessibleName("Monitor Volume");
+        QCoreApplication::translate("EditWorkspace", "Editor monitoring volume (0% to 200%)"));
+    ui_.monitor_volume->setAccessibleName(QCoreApplication::translate("EditWorkspace", "Monitor Volume"));
     ui_.monitor_volume_indicator->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     ui_.monitor_volume_indicator->setMinimumWidth(42);
     ui_.monitor_volume_indicator->setStyleSheet("color: #9aa4b2;");
@@ -629,7 +630,7 @@ void EditWorkspace::createTimelineControls(
     auto* zoom_control = new QWidget(container);
     auto* zoom_layout = new QVBoxLayout(zoom_control);
     auto* zoom_slider = new QSlider(Qt::Horizontal, zoom_control);
-    auto* zoom_indicator = new QLabel("100%", zoom_control);
+    auto* zoom_indicator = new QLabel(QCoreApplication::translate("EditWorkspace", "100%"), zoom_control);
     zoom_layout->setContentsMargins(0, 0, 0, 0);
     zoom_layout->setSpacing(0);
     zoom_control->setFixedWidth(92);
@@ -639,7 +640,7 @@ void EditWorkspace::createTimelineControls(
     zoom_slider->setFixedWidth(92);
     zoom_slider->setSingleStep(1);
     zoom_slider->setPageStep(1);
-    zoom_slider->setToolTip("Timeline zoom level");
+    zoom_slider->setToolTip(QCoreApplication::translate("EditWorkspace", "Timeline zoom level"));
     zoom_slider->setStyleSheet(
         "QSlider::groove:horizontal { height: 2px; background: #3b4553; }"
         "QSlider::sub-page:horizontal { height: 2px; background: #8b98aa; }"
@@ -648,7 +649,7 @@ void EditWorkspace::createTimelineControls(
         "margin: -4px 0; border-radius: 5px; background: #ffffff; }");
     zoom_indicator->setAlignment(Qt::AlignCenter);
     zoom_indicator->setFixedWidth(92);
-    zoom_indicator->setToolTip("Current timeline zoom");
+    zoom_indicator->setToolTip(QCoreApplication::translate("EditWorkspace", "Current timeline zoom"));
     zoom_layout->addWidget(zoom_indicator);
     zoom_layout->addWidget(zoom_slider);
     controls->addWidget(zoom_control);
@@ -660,25 +661,25 @@ void EditWorkspace::createTimelineControls(
     controls->addWidget(ui_.monitor_volume_indicator);
     layout->addWidget(ui_.timeline_controls);
 
-    ui_.previous_frame->setToolTip("Step one frame backward");
-    ui_.play_pause->setToolTip("Play or pause the active clip");
-    ui_.next_frame->setToolTip("Step one frame forward");
-    ui_.previous_frame->setAccessibleName("Previous Frame");
-    ui_.play_pause->setAccessibleName("Play or Pause");
-    ui_.next_frame->setAccessibleName("Next Frame");
+    ui_.previous_frame->setToolTip(QCoreApplication::translate("EditWorkspace", "Step one frame backward"));
+    ui_.play_pause->setToolTip(QCoreApplication::translate("EditWorkspace", "Play or pause the active clip"));
+    ui_.next_frame->setToolTip(QCoreApplication::translate("EditWorkspace", "Step one frame forward"));
+    ui_.previous_frame->setAccessibleName(QCoreApplication::translate("EditWorkspace", "Previous Frame"));
+    ui_.play_pause->setAccessibleName(QCoreApplication::translate("EditWorkspace", "Play or Pause"));
+    ui_.next_frame->setAccessibleName(QCoreApplication::translate("EditWorkspace", "Next Frame"));
     monitor_volume_label->setToolTip(
-        "Volume heard during editor playback; does not modify the project.");
-    ui_.clear_timeline->setToolTip("Remove all clips from every track");
-    ui_.selection_tool->setToolTip("Select and move timeline clips");
-    ui_.selection_tool->setAccessibleName("Selection Tool");
-    ui_.razor_tool->setToolTip("Split a clip where you click");
-    ui_.razor_tool->setAccessibleName("Blade Tool");
+        QCoreApplication::translate("EditWorkspace", "Volume heard during editor playback; does not modify the project."));
+    ui_.clear_timeline->setToolTip(QCoreApplication::translate("EditWorkspace", "Remove all clips from every track"));
+    ui_.selection_tool->setToolTip(QCoreApplication::translate("EditWorkspace", "Select and move timeline clips"));
+    ui_.selection_tool->setAccessibleName(QCoreApplication::translate("EditWorkspace", "Selection Tool"));
+    ui_.razor_tool->setToolTip(QCoreApplication::translate("EditWorkspace", "Split a clip where you click"));
+    ui_.razor_tool->setAccessibleName(QCoreApplication::translate("EditWorkspace", "Blade Tool"));
     ui_.volume_tool->setToolTip(
-        "Edit per-clip audio volume points (0% to 200%)");
-    ui_.volume_tool->setAccessibleName("Volume Tool");
+        QCoreApplication::translate("EditWorkspace", "Edit per-clip audio volume points (0% to 200%)"));
+    ui_.volume_tool->setAccessibleName(QCoreApplication::translate("EditWorkspace", "Volume Tool"));
     ui_.snap->setToolTip(
-        "Toggle magnetic snapping for clips and media drops");
-    ui_.snap->setAccessibleName("Magnetic Snap");
+        QCoreApplication::translate("EditWorkspace", "Toggle magnetic snapping for clips and media drops"));
+    ui_.snap->setAccessibleName(QCoreApplication::translate("EditWorkspace", "Magnetic Snap"));
 }
 
 
@@ -733,11 +734,11 @@ void EditWorkspace::showTrackContextMenu(
     if (ui_.timeline == nullptr) return;
     QMenu menu(ui_.timeline);
     menu.setObjectName(QStringLiteral("timelineTrackContextMenu"));
-    auto* add_video_track = menu.addAction(QStringLiteral("Add Video Track"));
-    auto* rename_track = menu.addAction(QStringLiteral("Rename Track"));
-    auto* move_track_up = menu.addAction(QStringLiteral("Track Up"));
-    auto* move_track_down = menu.addAction(QStringLiteral("Track Down"));
-    auto* remove_track = menu.addAction(QStringLiteral("Remove Track"));
+    auto* add_video_track = menu.addAction(QCoreApplication::translate("EditWorkspace", "Add Video Track"));
+    auto* rename_track = menu.addAction(QCoreApplication::translate("EditWorkspace", "Rename Track"));
+    auto* move_track_up = menu.addAction(QCoreApplication::translate("EditWorkspace", "Track Up"));
+    auto* move_track_down = menu.addAction(QCoreApplication::translate("EditWorkspace", "Track Down"));
+    auto* remove_track = menu.addAction(QCoreApplication::translate("EditWorkspace", "Remove Track"));
 
     auto* dialog_parent = command_dialog_parent_ != nullptr
         ? command_dialog_parent_ : ui_.timeline;
@@ -777,7 +778,7 @@ void EditWorkspace::createWorkspaceFooter(QWidget* parent) {
     status_layout->setContentsMargins(0, 0, 0, 0);
     status_layout->setSpacing(12);
 
-    ui_.playback_status = new QLabel("No media selected.", status_group);
+    ui_.playback_status = new QLabel(QCoreApplication::translate("EditWorkspace", "No media selected."), status_group);
     ui_.playback_status->setStyleSheet("color: #9aa4b2;");
     ui_.playback_status->setSizePolicy(
         QSizePolicy::Preferred,

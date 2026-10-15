@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/translations">
+        <file alias="video-editor/pt_BR.qm">../../../languages/video-editor/pt_BR.qm</file>
+    </qresource>
+</RCC>

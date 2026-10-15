@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <functional>
 #include <utility>
+#include <QCoreApplication>
 
 namespace ui {
 namespace {
@@ -124,7 +125,7 @@ FusionWorkspace::FusionWorkspace(QObject* parent) : QObject(parent) {}
 void FusionWorkspace::createPanels(QWidget* parent) {
     if (viewer_title_ != nullptr || parent == nullptr) return;
 
-    auto* viewer_title = new QLabel("Viewer", parent);
+    auto* viewer_title = new QLabel(QCoreApplication::translate("FusionWorkspace", "Viewer"), parent);
     viewer_title->setObjectName("workspaceViewerTitle");
     viewer_title->setContentsMargins(8, 5, 8, 5);
     viewer_title->setStyleSheet(
@@ -141,10 +142,10 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     auto* toolbar = new QWidget(node_editor_panel_);
     auto* toolbar_layout = new QHBoxLayout(toolbar);
     toolbar_layout->setContentsMargins(8, 6, 8, 6);
-    auto* grid_button = new QPushButton("Grid", toolbar);
+    auto* grid_button = new QPushButton(QCoreApplication::translate("FusionWorkspace", "Grid"), toolbar);
     grid_button->setObjectName("fusionGridSettingsButton");
-    grid_button->setToolTip("Adjust the Node Editor background grid.");
-    grid_button->setAccessibleName("Grid Settings");
+    grid_button->setToolTip(QCoreApplication::translate("FusionWorkspace", "Adjust the Node Editor background grid."));
+    grid_button->setAccessibleName(QCoreApplication::translate("FusionWorkspace", "Grid Settings"));
     toolbar_layout->addWidget(grid_button);
     toolbar_layout->addStretch(1);
     node_layout->addWidget(toolbar);
@@ -159,17 +160,17 @@ void FusionWorkspace::createPanels(QWidget* parent) {
 
     auto* grid_dialog = new QDialog(node_editor_panel_, Qt::Tool);
     grid_dialog->setObjectName("fusionGridSettingsDialog");
-    grid_dialog->setWindowTitle("Grid Settings");
+    grid_dialog->setWindowTitle(QCoreApplication::translate("FusionWorkspace", "Grid Settings"));
     grid_dialog->setWindowModality(Qt::NonModal);
     auto* grid_layout = new QVBoxLayout(grid_dialog);
     auto* grid_form = new QFormLayout;
-    auto* grid_visible = new QCheckBox("Show grid", grid_dialog);
+    auto* grid_visible = new QCheckBox(QCoreApplication::translate("FusionWorkspace", "Show grid"), grid_dialog);
     grid_visible->setObjectName("fusionGridVisible");
     auto* grid_style = new QComboBox(grid_dialog);
     grid_style->setObjectName("fusionGridStyle");
-    grid_style->addItem("Lines", static_cast<int>(
+    grid_style->addItem(QCoreApplication::translate("FusionWorkspace", "Lines"), static_cast<int>(
         fusion::nodes::BackgroundGridStyle::Lines));
-    grid_style->addItem("Dots", static_cast<int>(
+    grid_style->addItem(QCoreApplication::translate("FusionWorkspace", "Dots"), static_cast<int>(
         fusion::nodes::BackgroundGridStyle::Dots));
     auto* spacing_slider = new QSlider(Qt::Horizontal, grid_dialog);
     spacing_slider->setObjectName("fusionGridSpacing");
@@ -198,14 +199,16 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     spacing_slider->setValue(initial_grid.spacing);
     intensity_slider->setValue(initial_grid.intensity_percent);
     spacing_value->setText(QString::number(initial_grid.spacing));
-    intensity_value->setText(QStringLiteral("%1%").arg(
+    intensity_value->setText(QCoreApplication::translate("FusionWorkspace", "%1%").arg(
         initial_grid.intensity_percent));
     grid_form->addRow(QString(), grid_visible);
-    grid_form->addRow("Style", grid_style);
-    grid_form->addRow("Spacing", spacing_row);
-    grid_form->addRow("Intensity", intensity_row);
+    grid_form->addRow(QCoreApplication::translate("FusionWorkspace", "Style"), grid_style);
+    grid_form->addRow(QCoreApplication::translate("FusionWorkspace", "Spacing"), spacing_row);
+    grid_form->addRow(QCoreApplication::translate("FusionWorkspace", "Intensity"), intensity_row);
     grid_layout->addLayout(grid_form);
     auto* grid_buttons = new QDialogButtonBox(QDialogButtonBox::Close, grid_dialog);
+    grid_buttons->button(QDialogButtonBox::Close)->setText(
+        QCoreApplication::translate("FusionWorkspace", "Close"));
     grid_layout->addWidget(grid_buttons);
     QObject::connect(grid_buttons, &QDialogButtonBox::rejected,
                      grid_dialog, &QDialog::hide);
@@ -219,7 +222,7 @@ void FusionWorkspace::createPanels(QWidget* parent) {
         settings.spacing = spacing_slider->value();
         settings.intensity_percent = intensity_slider->value();
         spacing_value->setText(QString::number(settings.spacing));
-        intensity_value->setText(QStringLiteral("%1%").arg(
+        intensity_value->setText(QCoreApplication::translate("FusionWorkspace", "%1%").arg(
             settings.intensity_percent));
         node_canvas->setBackgroundGridSettings(settings);
     };
@@ -266,7 +269,7 @@ void FusionWorkspace::createPanels(QWidget* parent) {
             auto candidate = fusion::nodes::connect(graph_, from, to, input);
             if (!candidate) {
                 if (status) status->setText(
-                    "Connection rejected: the ports are incompatible or the link creates a cycle.");
+                    QCoreApplication::translate("FusionWorkspace", "Connection rejected: the ports are incompatible or the link creates a cycle."));
                 return;
             }
             commitGraph(std::move(*candidate), QStringLiteral("Nodes connected."));
@@ -277,7 +280,7 @@ void FusionWorkspace::createPanels(QWidget* parent) {
             auto candidate = fusion::nodes::disconnect(graph_, to, input);
             if (!candidate) {
                 if (status) status->setText(
-                    "This connection cannot be removed while keeping the graph valid.");
+                    QCoreApplication::translate("FusionWorkspace", "This connection cannot be removed while keeping the graph valid."));
                 return;
             }
             commitGraph(std::move(*candidate), QStringLiteral("Connection removed."));
@@ -306,11 +309,11 @@ void FusionWorkspace::createPanels(QWidget* parent) {
     auto* inspector_layout = new QVBoxLayout(inspector_content);
     inspector_layout->setContentsMargins(12, 12, 12, 12);
     inspector_layout->setSpacing(8);
-    auto* inspector_title = new QLabel("Fusion Inspector", inspector_content);
+    auto* inspector_title = new QLabel(QCoreApplication::translate("FusionWorkspace", "Fusion Inspector"), inspector_content);
     inspector_title->setObjectName("fusionInspectorTitle");
     inspector_title->setStyleSheet("font-weight: 600; font-size: 14px;");
     inspector_layout->addWidget(inspector_title);
-    auto* status = new QLabel("Select a video, image, or Fusion Composition clip in the Timeline.", inspector_content);
+    auto* status = new QLabel(QCoreApplication::translate("FusionWorkspace", "Select a video, image, or Fusion Composition clip in the Timeline."), inspector_content);
     status->setObjectName("fusionNodeStatus");
     status->setWordWrap(true);
     status->setStyleSheet("color: #9aa4b2;");
@@ -363,7 +366,7 @@ bool FusionWorkspace::createCatalogNode(
     if (!fusion::nodes::validate(candidate) ||
         !fusion::nodes::validKeyframeRange(candidate, clip_duration_frames_)) {
         if (auto* label = inspector_panel_->findChild<QLabel*>("fusionNodeStatus"))
-            label->setText("Node creation rejected: the graph would be invalid.");
+            label->setText(QCoreApplication::translate("FusionWorkspace", "Node creation rejected: the graph would be invalid."));
         return false;
     }
     selected_node_id_ = node_id;
@@ -456,7 +459,7 @@ void FusionWorkspace::setMediaChoices(std::vector<MediaChoice> media_choices) {
 
     const QSignalBlocker blocker(source);
     source->clear();
-    source->addItem(independent_composition_ ? "Transparent" : "Selected Timeline clip", -1);
+    source->addItem(independent_composition_ ? QCoreApplication::translate("FusionWorkspace", "Transparent") : QCoreApplication::translate("FusionWorkspace", "Selected Timeline clip"), -1);
     int selected = -1;
     for (std::size_t index = 0; index < media_choices_.size(); ++index) {
         const auto& choice = media_choices_[index];
@@ -464,7 +467,7 @@ void FusionWorkspace::setMediaChoices(std::vector<MediaChoice> media_choices) {
         if (choice.path == node->source_path) selected = static_cast<int>(index);
     }
     if (!node->source_path.empty() && selected < 0) {
-        source->addItem(QStringLiteral("Unavailable media source"), -2);
+        source->addItem(QCoreApplication::translate("FusionWorkspace", "Unavailable media source"), -2);
         selected = source->count() - 1;
     }
     source->setCurrentIndex(std::max(0, source->findData(selected)));
@@ -490,17 +493,17 @@ void FusionWorkspace::refreshInspector() {
     while (layout->rowCount() > 0) layout->removeRow(0);
     const auto* node = fusion::nodes::findNode(graph_, selected_node_id_);
     if (clip_id_ == 0) {
-        status->setText("Select a video, image, or Fusion Composition clip in the Timeline.");
+        status->setText(QCoreApplication::translate("FusionWorkspace", "Select a video, image, or Fusion Composition clip in the Timeline."));
         node_properties_->setEnabled(false);
         return;
     }
-    status->setText(node ? QStringLiteral("Selected node #%1").arg(node->id)
-                         : QStringLiteral("Select a node to edit its settings."));
+    status->setText(node ? QCoreApplication::translate("FusionWorkspace", "Selected node #%1").arg(node->id)
+                         : QCoreApplication::translate("FusionWorkspace", "Select a node to edit its settings."));
     node_properties_->setEnabled(node != nullptr);
     if (node == nullptr) return;
-    auto* apply = new QPushButton("Apply Settings", node_properties_);
+    auto* apply = new QPushButton(QCoreApplication::translate("FusionWorkspace", "Apply Settings"), node_properties_);
     apply->setObjectName("fusionApplyNodeSettingsButton");
-    auto* remove = new QPushButton("Remove Node", node_properties_);
+    auto* remove = new QPushButton(QCoreApplication::translate("FusionWorkspace", "Remove Node"), node_properties_);
     remove->setObjectName("fusionRemoveNodeButton");
     auto spin = [this, layout](const QString& name, const QString& label, double value,
                                double minimum, double maximum, double step) {
@@ -536,8 +539,8 @@ void FusionWorkspace::refreshInspector() {
             "QPushButton { font-size: 16px; font-weight: 600; padding: 0px; }"
             "QPushButton:checked { color: #171a20; background: #e8b94f; }");
         key->setToolTip(keyed
-            ? QStringLiteral("Remove keyframe at the current frame")
-            : QStringLiteral("Add keyframe at the current frame"));
+            ? QCoreApplication::translate("FusionWorkspace", "Remove keyframe at the current frame")
+            : QCoreApplication::translate("FusionWorkspace", "Add keyframe at the current frame"));
         row_layout->addWidget(control, 1);
         row_layout->addWidget(key);
         layout->addRow(label, row);
@@ -553,7 +556,7 @@ void FusionWorkspace::refreshInspector() {
         auto* visible = new QCheckBox(node_properties_);
         visible->setObjectName("fusionSourceVisible");
         visible->setChecked(node->presentation->visible);
-        layout->addRow("Visible", visible);
+        layout->addRow(QCoreApplication::translate("FusionWorkspace", "Visible"), visible);
     }
     if (fusion::nodes::isMaskNode(node->type)) {
         static const char* labels[]{"Center X (%)","Center Y (%)","Width (%)","Height (%)","Rotation (degrees)"};
@@ -575,19 +578,19 @@ void FusionWorkspace::refreshInspector() {
                 });
         }
         spin("fusionMaskSoftEdge","Soft Edge (%)",node->mask.soft_edge*100,0,100,1);
-        auto* invert=new QCheckBox("Invert",node_properties_); invert->setObjectName("fusionMaskInvert");
+        auto* invert=new QCheckBox(QCoreApplication::translate("FusionWorkspace", "Invert"),node_properties_); invert->setObjectName("fusionMaskInvert");
         invert->setChecked(node->mask.invert); layout->addRow(invert);
     }
     if (node->type == fusion::nodes::NodeType::Background || node->type == fusion::nodes::NodeType::Text) {
         const auto node_id = node->id;
-        auto* color = new QPushButton("Choose RGBA color", node_properties_);
+        auto* color = new QPushButton(QCoreApplication::translate("FusionWorkspace", "Choose RGBA color"), node_properties_);
         color->setObjectName("fusionGeneratorColor");
-        layout->addRow("Color", color);
+        layout->addRow(QCoreApplication::translate("FusionWorkspace", "Color"), color);
         connect(color, &QPushButton::clicked, this, [this, node_id] {
             const auto* current = fusion::nodes::findNode(graph_, node_id);
             if (!current) return;
             const auto rgba = current->type == fusion::nodes::NodeType::Background ? current->background_color : current->text.color;
-            const auto chosen = QColorDialog::getColor(QColor(rgba[0], rgba[1], rgba[2], rgba[3]), inspector_panel_, "Generator color", QColorDialog::ShowAlphaChannel);
+            const auto chosen = QColorDialog::getColor(QColor(rgba[0], rgba[1], rgba[2], rgba[3]), inspector_panel_, QCoreApplication::translate("FusionWorkspace", "Generator color"), QColorDialog::ShowAlphaChannel);
             if (!chosen.isValid()) return;
             auto candidate = graph_; auto* target = findMutableNode(candidate, node_id);
             const std::array<std::uint8_t, 4> value{static_cast<std::uint8_t>(chosen.red()), static_cast<std::uint8_t>(chosen.green()), static_cast<std::uint8_t>(chosen.blue()), static_cast<std::uint8_t>(chosen.alpha())};
@@ -597,12 +600,12 @@ void FusionWorkspace::refreshInspector() {
         if (node->type == fusion::nodes::NodeType::Text) {
             auto* content = new QPlainTextEdit(node_properties_); content->setObjectName("fusionTextContent");
             content->setPlainText(QString::fromUtf8(node->text.content.data(), static_cast<qsizetype>(node->text.content.size())));
-            content->setMaximumHeight(100); layout->addRow("Text", content);
+            content->setMaximumHeight(100); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Text"), content);
             // Apply together so graph refresh does not interrupt text entry.
-            auto* text_apply = new QPushButton("Apply Text", node_properties_); text_apply->setObjectName("fusionApplyText"); layout->addRow(text_apply);
-            auto* font = new QFontComboBox(node_properties_); font->setObjectName("fusionTextFont"); font->setCurrentFont(QFont(QString::fromUtf8(node->text.font_family.c_str()))); layout->addRow("Font", font);
-            auto* size = new QDoubleSpinBox(node_properties_); size->setObjectName("fusionTextSize"); size->setRange(1, 512); size->setValue(node->text.font_size_pixels); layout->addRow("Size", size);
-            auto* alignment = new QComboBox(node_properties_); alignment->setObjectName("fusionTextAlignment"); alignment->addItems({"Left", "Center", "Right"}); alignment->setCurrentIndex(static_cast<int>(node->text.alignment)); layout->addRow("Alignment", alignment);
+            auto* text_apply = new QPushButton(QCoreApplication::translate("FusionWorkspace", "Apply Text"), node_properties_); text_apply->setObjectName("fusionApplyText"); layout->addRow(text_apply);
+            auto* font = new QFontComboBox(node_properties_); font->setObjectName("fusionTextFont"); font->setCurrentFont(QFont(QString::fromUtf8(node->text.font_family.c_str()))); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Font"), font);
+            auto* size = new QDoubleSpinBox(node_properties_); size->setObjectName("fusionTextSize"); size->setRange(1, 512); size->setValue(node->text.font_size_pixels); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Size"), size);
+            auto* alignment = new QComboBox(node_properties_); alignment->setObjectName("fusionTextAlignment"); alignment->addItems({QCoreApplication::translate("FusionWorkspace", "Left"), QCoreApplication::translate("FusionWorkspace", "Center"), QCoreApplication::translate("FusionWorkspace", "Right")}); alignment->setCurrentIndex(static_cast<int>(node->text.alignment)); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Alignment"), alignment);
             connect(text_apply, &QPushButton::clicked, this, [this, node_id, content, font, size, alignment] {
                 auto candidate = graph_; auto* target = findMutableNode(candidate, node_id); if (!target) return;
                 target->text.content = content->toPlainText().toUtf8().toStdString();
@@ -615,14 +618,14 @@ void FusionWorkspace::refreshInspector() {
     if (node->type == fusion::nodes::NodeType::Input) {
         auto* source = new QComboBox(node_properties_);
         source->setObjectName("fusionInputMediaSource");
-        source->addItem(independent_composition_ ? "Transparent" : "Selected Timeline clip", -1);
+        source->addItem(independent_composition_ ? QCoreApplication::translate("FusionWorkspace", "Transparent") : QCoreApplication::translate("FusionWorkspace", "Selected Timeline clip"), -1);
         for (std::size_t i = 0; i < media_choices_.size(); ++i)
             source->addItem(media_choices_[i].label, static_cast<int>(i));
         int selected = -1;
         if (!node->source_path.empty()) for (std::size_t i = 0; i < media_choices_.size(); ++i)
             if (media_choices_[i].path == node->source_path) selected = static_cast<int>(i);
         source->setCurrentIndex(std::max(0, source->findData(selected)));
-        layout->addRow("Media", source);
+        layout->addRow(QCoreApplication::translate("FusionWorkspace", "Media"), source);
         connect(source, qOverload<int>(&QComboBox::currentIndexChanged), this,
             [this, source, node_id = node->id] {
                 if (refreshing_) return;
@@ -672,14 +675,14 @@ void FusionWorkspace::refreshInspector() {
         auto* enabled = new QCheckBox(node_properties_);
         enabled->setObjectName("fusionBlurEnabled");
         enabled->setChecked(node->gaussian_blur.enabled);
-        layout->addRow("Enabled", enabled);
+        layout->addRow(QCoreApplication::translate("FusionWorkspace", "Enabled"), enabled);
         auto* radius = spin("fusionBlurRadius", "Radius", node->gaussian_blur.radius_pixels, 0, 100, .5);
         radius->setDecimals(1);radius->setSuffix(" px");
     } else if (node->type == fusion::nodes::NodeType::Color) {
         auto* enabled = new QCheckBox(node_properties_);
         enabled->setObjectName("fusionColorEnabled");
         enabled->setChecked(node->color.enabled);
-        layout->addRow("Enabled", enabled);
+        layout->addRow(QCoreApplication::translate("FusionWorkspace", "Enabled"), enabled);
         spin("fusionColorBrightness", "Brightness", node->color.brightness, -100.0, 100.0, 1.0);
         spin("fusionColorContrast", "Contrast %", node->color.contrast_percent, 0.0, 200.0, 1.0);
         spin("fusionColorSaturation", "Saturation %", node->color.saturation_percent, 0.0, 200.0, 1.0);
@@ -687,13 +690,13 @@ void FusionWorkspace::refreshInspector() {
         auto* enabled = new QCheckBox(node_properties_);
         enabled->setObjectName("fusionEffectEnabled");
         enabled->setChecked(node->effect.enabled);
-        layout->addRow("Enabled", enabled);
+        layout->addRow(QCoreApplication::translate("FusionWorkspace", "Enabled"), enabled);
         if (const auto* definition = creative_suite::effects::findDefinition(node->effect.id)) {
             for (const auto& parameter : definition->parameters) {
                 const auto parameter_id = QString::fromUtf8(
                     parameter.id.data(), static_cast<qsizetype>(parameter.id.size()));
-                const auto parameter_name = QString::fromUtf8(
-                    parameter.name.data(), static_cast<qsizetype>(parameter.name.size()));
+                const auto parameter_name = ::effects::translateCatalogLabel(QString::fromUtf8(
+                    parameter.name.data(), static_cast<qsizetype>(parameter.name.size())));
                 const auto control_name = QStringLiteral("fusionEffectParameter_%1")
                     .arg(parameter_id);
                 if (node->effect.id == "video.brightness" &&
@@ -828,7 +831,7 @@ void FusionWorkspace::refreshInspector() {
             [node_id](const auto& value) { return value.id == node_id; });
         if (selected == candidate.nodes.end() ||
             selected->type == fusion::nodes::NodeType::Output) {
-            status->setText("The Output node is required and cannot be removed.");
+            status->setText(QCoreApplication::translate("FusionWorkspace", "The Output node is required and cannot be removed."));
             return;
         }
         std::optional<fusion::nodes::NodeId> replacement;
@@ -849,7 +852,7 @@ void FusionWorkspace::refreshInspector() {
             candidate.connections.end());
         candidate.connections.insert(candidate.connections.end(), reconnect.begin(), reconnect.end());
         if (!fusion::nodes::validate(candidate)) {
-            status->setText("The node cannot be removed because the remaining graph would be invalid. Reconnect its downstream nodes first.");
+            status->setText(QCoreApplication::translate("FusionWorkspace", "The node cannot be removed because the remaining graph would be invalid. Reconnect its downstream nodes first."));
             return;
         }
         selected_node_id_ = candidate.nodes.empty() ? 0 : candidate.nodes.front().id;
@@ -875,8 +878,8 @@ void FusionWorkspace::refreshAnimatedControls() {
         button->setChecked(keyed);
         button->setText(keyed ? QStringLiteral("â—†") : QStringLiteral("â—‡"));
         button->setToolTip(keyed
-            ? QStringLiteral("Remove keyframe at the current frame")
-            : QStringLiteral("Add keyframe at the current frame"));
+            ? QCoreApplication::translate("FusionWorkspace", "Remove keyframe at the current frame")
+            : QCoreApplication::translate("FusionWorkspace", "Add keyframe at the current frame"));
     };
     if (fusion::nodes::isMaskNode(node->type)) {
         const auto p=fusion::nodes::evaluateMask(node->mask,node->mask_keyframes,local_frame_);

@@ -32,6 +32,7 @@ struct Definition {
 
 const QVector<Category>& categories();
 const QVector<Definition>& definitions();
+[[nodiscard]] QString translateCatalogLabel(const QString& source_text);
 [[nodiscard]] bool isDraggable(const QString& id);
 [[nodiscard]] Action actionFor(const QString& id, Workspace workspace);
 [[nodiscard]] bool isAvailable(const QString& id, Workspace workspace);

@@ -29,6 +29,7 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
+#include <QCoreApplication>
 
 namespace timeline {
 namespace {
@@ -2452,17 +2453,17 @@ void TimelineWidget::showTransitionMenu(
     QAction* fade = nullptr;
     QAction* crossfade = nullptr;
     if (track.kind == TrackKind::Audio) {
-        crossfade = menu.addAction("Add Audio Crossfade");
+        crossfade = menu.addAction(QCoreApplication::translate("TimelineWidget", "Add Audio Crossfade"));
         crossfade->setEnabled(existing == nullptr &&
             !from.linked_clip_id.has_value() && !to.linked_clip_id.has_value());
     } else {
-        dissolve = menu.addAction("Add Cross Dissolve");
-        fade = menu.addAction("Add Fade to Black");
+        dissolve = menu.addAction(QCoreApplication::translate("TimelineWidget", "Add Cross Dissolve"));
+        fade = menu.addAction(QCoreApplication::translate("TimelineWidget", "Add Fade to Black"));
         dissolve->setEnabled(existing == nullptr);
         fade->setEnabled(existing == nullptr);
     }
     menu.addSeparator();
-    auto* remove = menu.addAction("Remove Transition");
+    auto* remove = menu.addAction(QCoreApplication::translate("TimelineWidget", "Remove Transition"));
     remove->setEnabled(existing != nullptr);
     const auto* chosen = menu.exec(global_position);
     if (chosen == dissolve) {
@@ -2489,26 +2490,26 @@ void TimelineWidget::showVisualClipMenu(
     const bool has_linked_audio = clip.linked_clip_id.has_value();
     emitSelected(location);
     QMenu menu(this);
-    auto* open_fusion = menu.addAction(QStringLiteral("Open in Fusion"));
+    auto* open_fusion = menu.addAction(QCoreApplication::translate("TimelineWidget", "Open in Fusion"));
     connect(open_fusion, &QAction::triggered, this, [this, clip_id]() {
         emit openFusionClipRequested(clip_id);
     });
     if (clip_kind == ClipKind::Image) {
-        auto* edit = menu.addAction(QStringLiteral("Edit Clip Image in Image Editor"));
+        auto* edit = menu.addAction(QCoreApplication::translate("TimelineWidget", "Edit Clip Image in Image Editor"));
         connect(edit, &QAction::triggered, this, [this, clip_id]() {
             emit editImageClipRequested(clip_id);
         });
     }
     if (clip_kind == ClipKind::Video) {
         auto* motion = menu.addAction(clip.motion_link.has_value()
-            ? QStringLiteral("Open Linked Composition in Motion Studio")
-            : QStringLiteral("Create Motion Composition..."));
+            ? QCoreApplication::translate("TimelineWidget", "Open Linked Composition in Motion Studio")
+            : QCoreApplication::translate("TimelineWidget", "Create Motion Composition..."));
         connect(motion, &QAction::triggered, this, [this, clip_id]() {
             emit openMotionClipRequested(clip_id);
         });
     }
     if (has_linked_audio) {
-        auto* unlink = menu.addAction(QStringLiteral("Unlink Audio"));
+        auto* unlink = menu.addAction(QCoreApplication::translate("TimelineWidget", "Unlink Audio"));
         connect(unlink, &QAction::triggered, this, [this, clip_id]() {
             emit audioUnlinkRequested(clip_id);
         });
@@ -2526,7 +2527,7 @@ void TimelineWidget::showAudioLinkMenu(
     const auto clip_id = clip.clip_id;
     emitSelected(location);
     QMenu menu(this);
-    auto* unlink = menu.addAction(QStringLiteral("Unlink Audio"));
+    auto* unlink = menu.addAction(QCoreApplication::translate("TimelineWidget", "Unlink Audio"));
     connect(unlink, &QAction::triggered, this, [this, clip_id]() {
         emit audioUnlinkRequested(clip_id);
     });
@@ -2584,8 +2585,8 @@ void TimelineWidget::showAudioGainKeyframeMenu(
     QAction* edit_action = nullptr;
     const bool edge = keyframe.frame == 0 || keyframe.frame == duration;
     edit_action = menu.addAction(edge
-        ? QStringLiteral("Reset Edge Point to 100%")
-        : QStringLiteral("Remove Volume Point"));
+        ? QCoreApplication::translate("TimelineWidget", "Reset Edge Point to 100%")
+        : QCoreApplication::translate("TimelineWidget", "Remove Volume Point"));
     if (menu.exec(global_position) != edit_action) return;
     auto points = original_points;
     if (edge) {

@@ -15,6 +15,7 @@ extern "C" {
 }
 
 #include <system_error>
+#include <QCoreApplication>
 
 namespace main_window_detail {
 
@@ -50,8 +51,8 @@ public:
                 dock_, &QDockWidget::close);
         updateFloatButton(dock_->isFloating());
         close_button_->setIcon(style()->standardIcon(QStyle::SP_TitleBarCloseButton));
-        close_button_->setToolTip(QStringLiteral("Close panel"));
-        close_button_->setAccessibleName(QStringLiteral("Close panel"));
+        close_button_->setToolTip(QCoreApplication::translate("MainWindow", "Close panel"));
+        close_button_->setAccessibleName(QCoreApplication::translate("MainWindow", "Close panel"));
     }
 
     QToolButton* addAction(DockTitleBarAction action) {
@@ -93,8 +94,8 @@ private:
             floating ? QStyle::SP_TitleBarNormalButton
                      : QStyle::SP_TitleBarMaxButton));
         float_button_->setToolTip(
-            floating ? QStringLiteral("Dock panel")
-                     : QStringLiteral("Float panel"));
+            floating ? QCoreApplication::translate("MainWindow", "Dock panel")
+                     : QCoreApplication::translate("MainWindow", "Float panel"));
         float_button_->setAccessibleName(float_button_->toolTip());
     }
 

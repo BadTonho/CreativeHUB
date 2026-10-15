@@ -13,6 +13,7 @@
 #include <creative_suite/media/media_importer.h>
 #include <future>
 #include <set>
+#include <QCoreApplication>
 namespace x = creative_suite::composition_exchange;
 namespace {
 template <class F> auto worker(QWidget *parent, F work) {
@@ -39,15 +40,15 @@ void failure(QWidget *owner, const std::filesystem::path &path, const std::excep
     creative_suite::diagnostics::Logger::instance().log(
         creative_suite::diagnostics::Level::Error, "composition_exchange", "transfer", e.what(),
         {{"path", main_window_detail::pathToUtf8(path)}});
-    QMessageBox::warning(owner, "Composition Interchange", QString::fromUtf8(e.what()));
+    QMessageBox::warning(owner, QCoreApplication::translate("MainWindow", "Composition Interchange"), QString::fromUtf8(e.what()));
 }
 } // namespace
 void MainWindow::exportCompositionInterchange() {
     if (project_load_pending_)
         return;
     if (!active_timeline_clip_id_) {
-        QMessageBox::information(this, "Composition Interchange",
-                                 "Select a Fusion Composition to export.");
+        QMessageBox::information(this, QCoreApplication::translate("MainWindow", "Composition Interchange"),
+                                 QCoreApplication::translate("MainWindow", "Select a Fusion Composition to export."));
         return;
     }
     auto location = timeline_model_.locateClip(*active_timeline_clip_id_);
@@ -70,9 +71,9 @@ void MainWindow::exportCompositionInterchange() {
             return x::save(path, d, [&] { return canceled.load(); });
         });
         if (saved)
-            statusBar()->showMessage("Composition interchange exported.", 5000);
+            statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Composition interchange exported."), 5000);
     } catch (const x::Unsupported &e) {
-        QMessageBox::information(this, "Composition Cannot Be Transferred",
+        QMessageBox::information(this, QCoreApplication::translate("MainWindow", "Composition Cannot Be Transferred"),
                                  QString::fromUtf8(e.what()));
     } catch (const std::exception &e) {
         failure(this, path, e);
@@ -83,14 +84,14 @@ void MainWindow::importCompositionInterchange() {
         return;
     const auto project_generation = project_generation_;
     if (!active_timeline_track_id_) {
-        QMessageBox::information(this, "Composition Interchange",
-                                 "Select a video track before importing.");
+        QMessageBox::information(this, QCoreApplication::translate("MainWindow", "Composition Interchange"),
+                                 QCoreApplication::translate("MainWindow", "Select a video track before importing."));
         return;
     }
     const auto track = *active_timeline_track_id_;
     const auto position = timelinePlayheadFrame();
-    const auto name = QFileDialog::getOpenFileName(this, "Import Composition Interchange", {},
-                                                   "Composition interchange (*.cscomp)");
+    const auto name = QFileDialog::getOpenFileName(this, QCoreApplication::translate("MainWindow", "Import Composition Interchange"), {},
+                                                   QCoreApplication::translate("MainWindow", "Composition interchange (*.cscomp)"));
     if (name.isEmpty())
         return;
     const auto path = std::filesystem::path(name.toStdU16String());
@@ -144,7 +145,7 @@ void MainWindow::importCompositionInterchange() {
             if (result.changed() && has_media) populateMediaBrowser();
         }
     } catch (const x::Unsupported &e) {
-        QMessageBox::information(this, "Composition Cannot Be Transferred",
+        QMessageBox::information(this, QCoreApplication::translate("MainWindow", "Composition Cannot Be Transferred"),
                                  QString::fromUtf8(e.what()));
     } catch (const std::exception &e) {
         failure(this, path, e);

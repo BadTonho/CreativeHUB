@@ -28,31 +28,32 @@
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
+#include <QCoreApplication>
 
 namespace fusion::nodes {
 namespace {
 QString title(NodeType type) {
     switch (type) {
-    case NodeType::Input: return QStringLiteral("Input");
-    case NodeType::Background: return QStringLiteral("Background");
-    case NodeType::Text: return QStringLiteral("Text");
-    case NodeType::RectangleMask: return QStringLiteral("Rectangle Mask");
-    case NodeType::EllipseMask: return QStringLiteral("Ellipse Mask");
-    case NodeType::Transform: return QStringLiteral("Transform");
-    case NodeType::Color: return QStringLiteral("Color");
-    case NodeType::GaussianBlur: return QStringLiteral("Gaussian Blur");
-    case NodeType::Merge: return QStringLiteral("Merge");
-    case NodeType::Output: return QStringLiteral("Output");
-    case NodeType::Effect: return QStringLiteral("Effect");
+    case NodeType::Input: return ::effects::translateCatalogLabel(QStringLiteral("Input"));
+    case NodeType::Background: return ::effects::translateCatalogLabel(QStringLiteral("Background"));
+    case NodeType::Text: return ::effects::translateCatalogLabel(QStringLiteral("Text"));
+    case NodeType::RectangleMask: return ::effects::translateCatalogLabel(QStringLiteral("Rectangle Mask"));
+    case NodeType::EllipseMask: return ::effects::translateCatalogLabel(QStringLiteral("Ellipse Mask"));
+    case NodeType::Transform: return ::effects::translateCatalogLabel(QStringLiteral("Transform"));
+    case NodeType::Color: return ::effects::translateCatalogLabel(QStringLiteral("Color"));
+    case NodeType::GaussianBlur: return ::effects::translateCatalogLabel(QStringLiteral("Gaussian Blur"));
+    case NodeType::Merge: return ::effects::translateCatalogLabel(QStringLiteral("Merge"));
+    case NodeType::Output: return QCoreApplication::translate("NodeCanvas", "Output");
+    case NodeType::Effect: return ::effects::translateCatalogLabel(QStringLiteral("Effect"));
     }
-    return QStringLiteral("Node");
+    return ::effects::translateCatalogLabel(QStringLiteral("Node"));
 }
 
 QString title(const Node& node) {
     if (node.type == NodeType::Effect) {
         if (const auto* definition = creative_suite::effects::findDefinition(node.effect.id))
-            return QString::fromUtf8(definition->name.data(),
-                                     static_cast<qsizetype>(definition->name.size()));
+            return ::effects::translateCatalogLabel(QString::fromUtf8(
+                definition->name.data(), static_cast<qsizetype>(definition->name.size())));
     }
     return title(node.type);
 }
@@ -268,7 +269,7 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         viewer_button->setData(0, QVariant::fromValue<qulonglong>(node.id));
         viewer_button->setData(1, 4);
         viewer_button->setData(3, node.id == viewer_node_id_);
-        viewer_button->setToolTip(QStringLiteral("Show this node in the Fusion Viewer."));
+        viewer_button->setToolTip(QCoreApplication::translate("NodeCanvas", "Show this node in the Fusion Viewer."));
         viewer_button->setFlag(QGraphicsItem::ItemIsSelectable, false);
         viewer_button->setZValue(2);
         auto* viewer_label = scene_->addText(QStringLiteral("VIEW"));
@@ -279,7 +280,7 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         viewer_label->setData(0, QVariant::fromValue<qulonglong>(node.id));
         viewer_label->setData(1, 4);
         viewer_label->setData(3, node.id == viewer_node_id_);
-        viewer_label->setToolTip(QStringLiteral("Show this node in the Fusion Viewer."));
+        viewer_label->setToolTip(QCoreApplication::translate("NodeCanvas", "Show this node in the Fusion Viewer."));
         viewer_label->setZValue(3);
         const auto add_port = [this, item, &node](double x, double y,
                                                   int kind, std::uint8_t input) {
@@ -290,13 +291,13 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
             port->setData(0, QVariant::fromValue<qulonglong>(node.id));
             port->setData(1, kind);
             port->setData(2, static_cast<int>(input));
-            port->setToolTip((kind==1 && input==2) || (kind==2 && isMaskNode(node.type)) ? QStringLiteral("Mask coverage (Mask connections only)") : kind == 2
-                ? QStringLiteral("Drag from this output to a node input.")
+            port->setToolTip((kind==1 && input==2) || (kind==2 && isMaskNode(node.type)) ? QCoreApplication::translate("NodeCanvas", "Mask coverage (Mask connections only)") : kind == 2
+                ? QCoreApplication::translate("NodeCanvas", "Drag from this output to a node input.")
                 : node.type == NodeType::Merge && input == 0
-                    ? QStringLiteral("Merge background input.")
+                    ? QCoreApplication::translate("NodeCanvas", "Merge background input.")
                     : node.type == NodeType::Merge
-                        ? QStringLiteral("Merge foreground input.")
-                        : QStringLiteral("Node input."));
+                        ? QCoreApplication::translate("NodeCanvas", "Merge foreground input.")
+                        : QCoreApplication::translate("NodeCanvas", "Node input."));
             port->setZValue(2);
         };
         constexpr int input_port = 1;

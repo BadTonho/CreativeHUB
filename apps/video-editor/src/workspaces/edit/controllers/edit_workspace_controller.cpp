@@ -6,6 +6,7 @@
 #include "timeline/timeline_clip_edge_command.h"
 #include "timeline/timeline_zoom.h"
 #include "timeline/timeline_widget.h"
+#include "ui/effects/effects_catalog.h"
 
 #include <QApplication>
 #include <QColorDialog>
@@ -41,6 +42,7 @@
 #include <limits>
 #include <string>
 #include <utility>
+#include <QCoreApplication>
 
 namespace ui {
 
@@ -705,14 +707,14 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
     }
 
     QDialog dialog(dialog_parent);
-    dialog.setWindowTitle(QStringLiteral("Paste Attributes"));
+    dialog.setWindowTitle(QCoreApplication::translate("EditWorkspaceController", "Paste Attributes"));
     dialog.setModal(true);
     auto* layout = new QVBoxLayout(&dialog);
     auto* description = new QLabel(
         !target_clip_ids.empty()
-            ? QStringLiteral("Choose which attributes to apply to compatible clips (%1 selected).")
+            ? QCoreApplication::translate("EditWorkspaceController", "Choose which attributes to apply to compatible clips (%1 selected).")
                 .arg(target_clip_ids.size())
-            : QStringLiteral("Select a Timeline clip to choose compatible attributes."),
+            : QCoreApplication::translate("EditWorkspaceController", "Select a Timeline clip to choose compatible attributes."),
         &dialog);
     description->setWordWrap(true);
     layout->addWidget(description);
@@ -721,7 +723,7 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
         const QString& label, const QString& object_name,
         int compatible_count, int target_count, const QString& explanation) {
         auto* check_box = new QCheckBox(
-            QStringLiteral("%1 (%2/%3 compatible)")
+            QCoreApplication::translate("EditWorkspaceController", "%1 (%2/%3 compatible)")
                 .arg(label).arg(compatible_count).arg(target_count),
             &dialog);
         check_box->setObjectName(object_name);
@@ -757,6 +759,10 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Apply | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Apply)->setText(
+        QCoreApplication::translate("EditWorkspaceController", "Apply"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(
+        QCoreApplication::translate("EditWorkspaceController", "Cancel"));
     auto* apply_button = buttons->button(QDialogButtonBox::Apply);
     const bool any_compatible = std::any_of(
         compatible_counts.begin(), compatible_counts.end(),
@@ -1054,8 +1060,8 @@ void EditWorkspaceController::promptAddVideoTrack(QWidget* dialog_parent) {
     bool accepted = false;
     const auto name = QInputDialog::getText(
         dialog_parent,
-        QStringLiteral("Add Video Track"),
-        QStringLiteral("Track name:"),
+        QCoreApplication::translate("EditWorkspaceController", "Add Video Track"),
+        QCoreApplication::translate("EditWorkspaceController", "Track name:"),
         QLineEdit::Normal,
         QStringLiteral("Video %1").arg(session_.timeline().trackCount() + 1),
         &accepted);
@@ -1094,8 +1100,8 @@ void EditWorkspaceController::promptRenameTrack(
         static_cast<qsizetype>(session_.timeline().tracks()[*track_index].name.size()));
     const auto name = QInputDialog::getText(
         dialog_parent,
-        QStringLiteral("Rename Track"),
-        QStringLiteral("Track name:"),
+        QCoreApplication::translate("EditWorkspaceController", "Rename Track"),
+        QCoreApplication::translate("EditWorkspaceController", "Track name:"),
         QLineEdit::Normal,
         current,
         &accepted);
@@ -1292,7 +1298,7 @@ void EditWorkspaceController::setTimelineWidget(
                 }
                 if (ui_.zoom_indicator != nullptr) {
                     ui_.zoom_indicator->setText(
-                        QString::number(static_cast<int>(std::lround(factor * 100.0))) + "%");
+                        QString::number(static_cast<int>(std::lround(factor * 100.0))) + QStringLiteral("%"));
                 }
                 emit projectDirtyStateUpdateRequested();
             });
@@ -1834,8 +1840,9 @@ void EditWorkspaceController::updateInspector() {
                 const auto* definition = creative_suite::effects::findDefinition(
                     selected_clip->effects[index].id);
                 const auto expected = definition != nullptr
-                    ? QString::fromUtf8(definition->name.data(),
-                                         static_cast<qsizetype>(definition->name.size()))
+                    ? ::effects::translateCatalogLabel(QString::fromUtf8(
+                          definition->name.data(),
+                          static_cast<qsizetype>(definition->name.size())))
                     : QString::fromStdString(selected_clip->effects[index].id);
                 if (list->item(static_cast<int>(index))->text() != expected) {
                     rebuild = true;
@@ -1851,8 +1858,9 @@ void EditWorkspaceController::updateInspector() {
                     const auto* definition =
                         creative_suite::effects::findDefinition(effect.id);
                     auto* item = new QListWidgetItem(definition != nullptr
-                        ? QString::fromUtf8(definition->name.data(),
-                                            static_cast<qsizetype>(definition->name.size()))
+                        ? ::effects::translateCatalogLabel(QString::fromUtf8(
+                              definition->name.data(),
+                              static_cast<qsizetype>(definition->name.size())))
                         : QString::fromStdString(effect.id), list);
                     item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
                     item->setCheckState(effect.enabled ? Qt::Checked : Qt::Unchecked);
@@ -1906,9 +1914,9 @@ void EditWorkspaceController::updateInspector() {
         if (selected_parameter != nullptr) {
             const auto minimum = static_cast<int>(std::ceil(selected_parameter->minimum));
             const auto maximum = static_cast<int>(std::floor(selected_parameter->maximum));
-            ui_.clip_effect_parameter_label->setText(QString::fromUtf8(
-                selected_parameter->name.data(),
-                static_cast<qsizetype>(selected_parameter->name.size())));
+            ui_.clip_effect_parameter_label->setText(::effects::translateCatalogLabel(
+                QString::fromUtf8(selected_parameter->name.data(),
+                    static_cast<qsizetype>(selected_parameter->name.size()))));
             slider->setRange(minimum, maximum);
             slider->setSingleStep(std::max(1, static_cast<int>(selected_parameter->step)));
             spin->setRange(selected_parameter->minimum, selected_parameter->maximum);
@@ -1921,7 +1929,7 @@ void EditWorkspaceController::updateInspector() {
             slider->setEnabled(true);
             spin->setEnabled(true);
         } else {
-            ui_.clip_effect_parameter_label->setText(QStringLiteral("Parameter"));
+            ui_.clip_effect_parameter_label->setText(QCoreApplication::translate("EditWorkspaceController", "Parameter"));
             slider->setEnabled(false);
             spin->setEnabled(false);
         }
@@ -1972,7 +1980,7 @@ void EditWorkspaceController::updateInspector() {
                 const QSignalBlocker blocker(button);
                 button->setChecked(false);
                 button->setText(QStringLiteral("â—‡"));
-                button->setToolTip(QStringLiteral("Select a clip to edit keyframes"));
+                button->setToolTip(QCoreApplication::translate("EditWorkspaceController", "Select a clip to edit keyframes"));
             }
         }
         const auto& track = timeline_model_.tracks()[*transition_track_index];
@@ -2081,8 +2089,8 @@ void EditWorkspaceController::updateInspector() {
                 ui_.transform_keys[index]->setChecked(has_key);
                 ui_.transform_keys[index]->setText(has_key ? QStringLiteral("â—†") : QStringLiteral("â—‡"));
                 ui_.transform_keys[index]->setToolTip(
-                    has_key ? QStringLiteral("Remove keyframe at the current frame")
-                            : QStringLiteral("Add keyframe at the current frame"));
+                    has_key ? QCoreApplication::translate("EditWorkspaceController", "Remove keyframe at the current frame")
+                            : QCoreApplication::translate("EditWorkspaceController", "Add keyframe at the current frame"));
             }
         }
     } else {
@@ -2091,7 +2099,7 @@ void EditWorkspaceController::updateInspector() {
                 const QSignalBlocker blocker(button);
                 button->setChecked(false);
                 button->setText(QStringLiteral("â—‡"));
-                button->setToolTip(QStringLiteral("Add keyframe at the current frame"));
+                button->setToolTip(QCoreApplication::translate("EditWorkspaceController", "Add keyframe at the current frame"));
             }
         }
     }
@@ -2206,7 +2214,7 @@ void EditWorkspaceController::chooseTextColor() {
     const QColor current(
         text_color_[0], text_color_[1], text_color_[2], text_color_[3]);
     const auto chosen = QColorDialog::getColor(
-        current, ui_.text_color, QStringLiteral("Text color"),
+        current, ui_.text_color, QCoreApplication::translate("EditWorkspaceController", "Text color"),
         QColorDialog::ShowAlphaChannel);
     if (!chosen.isValid()) return;
     text_color_ = {

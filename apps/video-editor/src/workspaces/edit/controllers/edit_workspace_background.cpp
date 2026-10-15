@@ -9,6 +9,7 @@
 #include <QSignalBlocker>
 #include <algorithm>
 #include <cmath>
+#include <QCoreApplication>
 
 namespace ui {
 
@@ -45,7 +46,7 @@ void EditWorkspaceController::refreshBackgroundInspector(const timeline::Timelin
     if (clip && timeline::supportsNodeGraph(clip->kind) && clip->node_graph) {
         for (const auto& node : clip->node_graph->nodes) {
             if (node.type != fusion::nodes::NodeType::Background) continue;
-            nodes->addItem(QStringLiteral("Background #%1").arg(node.id), QVariant::fromValue<qulonglong>(node.id));
+            nodes->addItem(QCoreApplication::translate("EditWorkspaceController", "Background #%1").arg(node.id), QVariant::fromValue<qulonglong>(node.id));
             if (node.id == background_node_id_) selected = &node;
         }
         if (!selected && nodes->count() > 0)
@@ -58,7 +59,7 @@ void EditWorkspaceController::refreshBackgroundInspector(const timeline::Timelin
     background_node_id_ = selected->id;
     nodes->setCurrentIndex(nodes->findData(QVariant::fromValue<qulonglong>(selected->id)));
     const auto& c = selected->background_color;
-    ui_.background_sample->setText(QStringLiteral("RGBA  %1, %2, %3, %4").arg(c[0]).arg(c[1]).arg(c[2]).arg(c[3]));
+    ui_.background_sample->setText(QCoreApplication::translate("EditWorkspaceController", "RGBA  %1, %2, %3, %4").arg(c[0]).arg(c[1]).arg(c[2]).arg(c[3]));
     const auto base = ui_.background_controls->palette().color(QPalette::Window);
     const int luminance = (qGray(c[0],c[1],c[2])*c[3] + qGray(base.rgb())*(255-c[3]))/255;
     const auto ink = luminance > 128 ? QStringLiteral("#111111") : QStringLiteral("#ffffff");
@@ -84,7 +85,7 @@ void EditWorkspaceController::chooseBackgroundColor() {
     try {
         QColorDialog dialog(QColor(c[0],c[1],c[2],c[3]), ui_.inspector_panel);
         dialog.setObjectName(QStringLiteral("editBackgroundColorDialog"));
-        dialog.setWindowTitle(QStringLiteral("Background Color"));
+        dialog.setWindowTitle(QCoreApplication::translate("EditWorkspaceController", "Background Color"));
         dialog.setOptions(QColorDialog::ShowAlphaChannel | QColorDialog::DontUseNativeDialog);
         if (dialog.exec() != QDialog::Accepted || !dialog.currentColor().isValid()) return;
         // Re-read the graph after the modal dialog; never restore an obsolete graph.

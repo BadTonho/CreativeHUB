@@ -26,6 +26,7 @@
 
 #include <functional>
 #include <utility>
+#include <QCoreApplication>
 
 namespace ui {
 namespace {
@@ -101,7 +102,7 @@ FunctionPalette::FunctionPalette(
     settings::ShortcutManager& shortcut_manager)
     : QObject(owner), owner_(owner) {
     toggle_action_ = new QAction(
-        QStringLiteral("Open Functions Window"), owner_);
+        QCoreApplication::translate("FunctionPalette", "Open Functions Window"), owner_);
     toggle_action_->setObjectName(
         QStringLiteral("toggleFunctionsWindowAction"));
     toggle_action_->setShortcut(QKeySequence(QStringLiteral("Shift+Space")));
@@ -311,7 +312,7 @@ void FunctionPalette::closeDialog(bool restore_owner_focus) {
 void FunctionPalette::createDialog() {
     dialog_ = new QDialog(owner_);
     dialog_->setObjectName(QStringLiteral("functionsWindow"));
-    dialog_->setWindowTitle(QStringLiteral("Functions"));
+    dialog_->setWindowTitle(QCoreApplication::translate("FunctionPalette", "Functions"));
     dialog_->setWindowFlag(Qt::Tool, true);
     dialog_->setWindowModality(Qt::NonModal);
     dialog_->setModal(false);
@@ -323,7 +324,7 @@ void FunctionPalette::createDialog() {
     layout->setSpacing(7);
     search_ = new QLineEdit(dialog_);
     search_->setObjectName(QStringLiteral("functionsEffectSearch"));
-    search_->setPlaceholderText(QStringLiteral("Search effects, generators and nodes"));
+    search_->setPlaceholderText(QCoreApplication::translate("FunctionPalette", "Search effects, generators and nodes"));
     layout->addWidget(search_);
     effect_list_ = new FunctionEffectListWidget(dialog_,
         [this](bool in_progress, bool drop_accepted) {
@@ -343,10 +344,10 @@ void FunctionPalette::createDialog() {
     layout->addWidget(entry_hint_);
     auto* buttons = new QHBoxLayout;
     buttons->addStretch();
-    auto* cancel_button = new QPushButton(QStringLiteral("Cancel"), dialog_);
+    auto* cancel_button = new QPushButton(QCoreApplication::translate("FunctionPalette", "Cancel"), dialog_);
     cancel_button->setAutoDefault(false);
     cancel_button->setObjectName(QStringLiteral("functionsCancelButton"));
-    add_button_ = new QPushButton(QStringLiteral("Add"), dialog_);
+    add_button_ = new QPushButton(QCoreApplication::translate("FunctionPalette", "Add"), dialog_);
     add_button_->setObjectName(QStringLiteral("functionsAddButton"));
     buttons->addWidget(cancel_button);
     buttons->addWidget(add_button_);

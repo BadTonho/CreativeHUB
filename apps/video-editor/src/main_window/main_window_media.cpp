@@ -235,8 +235,8 @@ bool chooseMotionProfile(QWidget* owner, media::MotionLinkReference* link) {
     if (link == nullptr) return false;
     const auto containers = creative_suite::media::availableVideoContainers();
     if (containers.empty()) {
-        QMessageBox::warning(owner, QStringLiteral("Motion Studio"),
-            QStringLiteral("No supported video container is available."));
+        QMessageBox::warning(owner, QCoreApplication::translate("MainWindow", "Motion Studio"),
+            QCoreApplication::translate("MainWindow", "No supported video container is available."));
         return false;
     }
     QStringList container_labels;
@@ -245,24 +245,24 @@ bool chooseMotionProfile(QWidget* owner, media::MotionLinkReference* link) {
     }
     bool accepted = false;
     const auto selected_container = QInputDialog::getItem(
-        owner, QStringLiteral("Motion Publication Profile"),
-        QStringLiteral("Container"), container_labels, 0, false, &accepted);
+        owner, QCoreApplication::translate("MainWindow", "Motion Publication Profile"),
+        QCoreApplication::translate("MainWindow", "Container"), container_labels, 0, false, &accepted);
     if (!accepted) return false;
     const auto container_it = std::find_if(containers.begin(), containers.end(),
         [&containers, &selected_container](const auto& value) {
             return QString::fromStdString(value.display_name) == selected_container;
         });
     if (container_it == containers.end() || container_it->video_encoders.empty()) {
-        QMessageBox::warning(owner, QStringLiteral("Motion Studio"),
-            QStringLiteral("The selected container has no supported video codec."));
+        QMessageBox::warning(owner, QCoreApplication::translate("MainWindow", "Motion Studio"),
+            QCoreApplication::translate("MainWindow", "The selected container has no supported video codec."));
         return false;
     }
     QStringList codec_labels;
     for (const auto& codec : container_it->video_encoders)
         codec_labels.push_back(QString::fromStdString(codec.display_name));
     const auto selected_codec = QInputDialog::getItem(
-        owner, QStringLiteral("Motion Publication Profile"),
-        QStringLiteral("Video codec"), codec_labels, 0, false, &accepted);
+        owner, QCoreApplication::translate("MainWindow", "Motion Publication Profile"),
+        QCoreApplication::translate("MainWindow", "Video codec"), codec_labels, 0, false, &accepted);
     if (!accepted) return false;
     const auto codec_it = std::find_if(container_it->video_encoders.begin(),
         container_it->video_encoders.end(), [&selected_codec](const auto& value) {
@@ -274,8 +274,8 @@ bool chooseMotionProfile(QWidget* owner, media::MotionLinkReference* link) {
         QStringLiteral("Balanced (10 Mbps)"),
         QStringLiteral("Compact (5 Mbps)")};
     const auto selected_quality = QInputDialog::getItem(
-        owner, QStringLiteral("Motion Publication Profile"),
-        QStringLiteral("Quality"), qualities, 1, false, &accepted);
+        owner, QCoreApplication::translate("MainWindow", "Motion Publication Profile"),
+        QCoreApplication::translate("MainWindow", "Quality"), qualities, 1, false, &accepted);
     if (!accepted) return false;
     link->container = container_it->name;
     link->codec = codec_it->name;
@@ -332,8 +332,8 @@ QWidget* MainWindow::createMediaPanel() {
     auto* title_row = new QHBoxLayout;
     title_row->addStretch();
 
-    auto* icon_size_label = new QLabel("Icon size", container);
-    icon_size_label->setToolTip("Adjust the Media Browser icon size.");
+    auto* icon_size_label = new QLabel(QCoreApplication::translate("MainWindow", "Icon size"), container);
+    icon_size_label->setToolTip(QCoreApplication::translate("MainWindow", "Adjust the Media Browser icon size."));
     title_row->addWidget(icon_size_label);
 
     auto* icon_size_slider = new QSlider(Qt::Horizontal, container);
@@ -343,7 +343,7 @@ QWidget* MainWindow::createMediaPanel() {
     icon_size_slider->setSingleStep(10);
     icon_size_slider->setPageStep(20);
     icon_size_slider->setFixedWidth(96);
-    icon_size_slider->setAccessibleName("Media Browser icon size");
+    icon_size_slider->setAccessibleName(QCoreApplication::translate("MainWindow", "Media Browser icon size"));
     title_row->addWidget(icon_size_slider);
 
     auto* view_group = new QButtonGroup(container);
@@ -352,7 +352,7 @@ QWidget* MainWindow::createMediaPanel() {
     list_view_button->setCheckable(true);
     list_view_button->setIcon(
         style()->standardIcon(QStyle::SP_FileDialogListView));
-    list_view_button->setToolTip("List view");
+    list_view_button->setToolTip(QCoreApplication::translate("MainWindow", "List view"));
     view_group->addButton(list_view_button);
     title_row->addWidget(list_view_button);
 
@@ -360,7 +360,7 @@ QWidget* MainWindow::createMediaPanel() {
     grid_view_button->setCheckable(true);
     grid_view_button->setIcon(
         style()->standardIcon(QStyle::SP_FileDialogDetailedView));
-    grid_view_button->setToolTip("Blocks view");
+    grid_view_button->setToolTip(QCoreApplication::translate("MainWindow", "Blocks view"));
     view_group->addButton(grid_view_button);
     title_row->addWidget(grid_view_button);
     layout->addLayout(title_row);
@@ -746,7 +746,7 @@ void MainWindow::createBin() {
         }
     }
     if (new_path.empty()) {
-        statusBar()->showMessage("Could not create a new bin.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not create a new bin."));
         return;
     }
     updateProjectDirtyState();
@@ -779,7 +779,7 @@ void MainWindow::handleMediaBrowserListItemChanged(QListWidgetItem* item) {
             if (old_path.empty() || old_path == "Unsorted" ||
                 !validInlineBinName(new_name)) {
                 restore();
-                statusBar()->showMessage("That bin name is not valid.");
+                statusBar()->showMessage(QCoreApplication::translate("MainWindow", "That bin name is not valid."));
                 return;
             }
 
@@ -789,7 +789,7 @@ void MainWindow::handleMediaBrowserListItemChanged(QListWidgetItem* item) {
                 : parent + "/" + new_name.toStdString();
             if (!media_controller_.renameBin(old_path, new_path).changed()) {
                 restore();
-                statusBar()->showMessage("That bin name is already in use or invalid.");
+                statusBar()->showMessage(QCoreApplication::translate("MainWindow", "That bin name is already in use or invalid."));
                 return;
             }
             updateProjectDirtyState();
@@ -818,7 +818,7 @@ void MainWindow::handleMediaBrowserListItemChanged(QListWidgetItem* item) {
         };
         if (index >= media_items_.size() || new_name.isEmpty()) {
             restore();
-            statusBar()->showMessage("The media name cannot be empty.");
+            statusBar()->showMessage(QCoreApplication::translate("MainWindow", "The media name cannot be empty."));
             return;
         }
 
@@ -826,7 +826,7 @@ void MainWindow::handleMediaBrowserListItemChanged(QListWidgetItem* item) {
             media_items_[index].metadata.source_path, new_name.toStdString());
         if (!rename_result.changed()) {
             restore();
-            statusBar()->showMessage("The media name could not be changed.");
+            statusBar()->showMessage(QCoreApplication::translate("MainWindow", "The media name could not be changed."));
             return;
         }
         const auto source_path = media_items_[index].metadata.source_path;
@@ -856,7 +856,7 @@ void MainWindow::handleMediaBrowserBinItemChanged(
         if (old_path.empty() || old_path == "Unsorted" ||
             !validInlineBinName(new_name)) {
             restore();
-            statusBar()->showMessage("That bin name is not valid.");
+            statusBar()->showMessage(QCoreApplication::translate("MainWindow", "That bin name is not valid."));
             return;
         }
 
@@ -866,7 +866,7 @@ void MainWindow::handleMediaBrowserBinItemChanged(
             : parent + "/" + new_name.toStdString();
         if (!media_controller_.renameBin(old_path, new_path).changed()) {
             restore();
-            statusBar()->showMessage("That bin name is already in use or invalid.");
+            statusBar()->showMessage(QCoreApplication::translate("MainWindow", "That bin name is already in use or invalid."));
             return;
         }
         updateProjectDirtyState();
@@ -886,14 +886,14 @@ void MainWindow::moveSelectedMediaToBin() {
     if (choices.isEmpty()) choices << "Unsorted";
     bool accepted = false;
     const QString value = QInputDialog::getItem(
-        this, "Move to Bin", "Bin:", choices,
+        this, QCoreApplication::translate("MainWindow", "Move to Bin"), QCoreApplication::translate("MainWindow", "Bin:"), choices,
         choices.indexOf(QString::fromStdString(media_items_[*index].bin_path)), false, &accepted);
     if (!accepted) return;
     const auto destination_bin = value.toStdString();
     if (destination_bin == media_items_[*index].bin_path) return;
     if (!media_controller_.moveToBin(
             media_items_[*index].metadata.source_path, destination_bin).changed()) {
-        QMessageBox::warning(this, "Could not move media", "The destination bin is invalid.");
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not move media"), QCoreApplication::translate("MainWindow", "The destination bin is invalid."));
         return;
     }
     updateProjectDirtyState();
@@ -914,7 +914,7 @@ void MainWindow::handleMediaBrowserMediaDrop(
             return normalizedPath(media.metadata.source_path) == normalized_source;
         });
     if (item == media_items_.end()) {
-        statusBar()->showMessage("The dragged media is no longer available.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "The dragged media is no longer available."));
         return;
     }
 
@@ -922,14 +922,14 @@ void MainWindow::handleMediaBrowserMediaDrop(
     if (item->bin_path == destination) return;
 
     if (!media_controller_.moveToBin(item->metadata.source_path, destination).changed()) {
-        statusBar()->showMessage("Could not move media to that bin.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not move media to that bin."));
         return;
     }
 
     updateProjectDirtyState();
     populateMediaBrowser(normalized_source, destination);
     statusBar()->showMessage(
-        QString("Media moved to %1.").arg(QString::fromStdString(destination)));
+        QString(QCoreApplication::translate("MainWindow", "Media moved to %1.")).arg(QString::fromStdString(destination)));
 }
 
 void MainWindow::handleMediaBrowserBinDrop(
@@ -938,7 +938,7 @@ void MainWindow::handleMediaBrowserBinDrop(
     const auto source = source_bin.toStdString();
     const auto destination = destination_bin.toStdString();
     if (source.empty() || destination.empty() || source == media::default_bin) {
-        statusBar()->showMessage("That bin cannot be moved.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "That bin cannot be moved."));
         return;
     }
 
@@ -948,14 +948,14 @@ void MainWindow::handleMediaBrowserBinDrop(
     const auto new_path = destination + "/" + leaf;
 
     if (!media_controller_.moveBin(source, new_path).changed()) {
-        statusBar()->showMessage("That bin cannot be moved to this location.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "That bin cannot be moved to this location."));
         return;
     }
 
     updateProjectDirtyState();
     populateMediaBrowser({}, new_path);
     statusBar()->showMessage(
-        QString("Bin moved to %1.").arg(QString::fromStdString(destination)));
+        QString(QCoreApplication::translate("MainWindow", "Bin moved to %1.")).arg(QString::fromStdString(destination)));
 }
 
 void MainWindow::removeSelectedMedia() {
@@ -969,7 +969,7 @@ void MainWindow::removeSelectedMedia() {
     preview_widget_->clearFrame("Preview area\n\nThe selected media is offline.");
     updateProjectDirtyState();
     populateMediaBrowser(media_items_[*index].metadata.source_path);
-    statusBar()->showMessage("Media marked offline. Timeline clips were preserved.");
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Media marked offline. Timeline clips were preserved."));
 }
 
 void MainWindow::restoreSelectedMedia() {
@@ -1130,8 +1130,8 @@ void MainWindow::pollLinkedMotionOutputs() {
                      {"link_id", target.link.id}});
                 statusBar()->showMessage(
                     source_exists
-                        ? QStringLiteral("The linked Motion render is missing; the original source remains available. Reopen the clip or Media Pool item in Motion Studio to repair the link.")
-                        : QStringLiteral("The linked Motion render and its source are missing. Reopen the clip or Media Pool item in Motion Studio to repair the link."),
+                        ? QCoreApplication::translate("MainWindow", "The linked Motion render is missing; the original source remains available. Reopen the clip or Media Pool item in Motion Studio to repair the link.")
+                        : QCoreApplication::translate("MainWindow", "The linked Motion render and its source are missing. Reopen the clip or Media Pool item in Motion Studio to repair the link."),
                     8000);
                 target.missing_reported = true;
             }
@@ -1203,7 +1203,7 @@ void MainWindow::pollLinkedMotionOutputs() {
                                 {{"path", pathToUtf8(link.published_output_path)},
                                  {"link_id", link.id}});
                             guard->statusBar()->showMessage(
-                                QStringLiteral("The Motion render could not be decoded; the previous preview remains active."), 6000);
+                                QCoreApplication::translate("MainWindow", "The Motion render could not be decoded; the previous preview remains active."), 6000);
                             return;
                         }
                         bool changed = false;
@@ -1241,7 +1241,7 @@ void MainWindow::pollLinkedMotionOutputs() {
                             guard->preview_widget_->setFrame(frame);
                         }
                         guard->statusBar()->showMessage(
-                            QStringLiteral("Motion Studio published a new linked render."), 3500);
+                            QCoreApplication::translate("MainWindow", "Motion Studio published a new linked render."), 3500);
                     }, Qt::QueuedConnection);
             }));
     }
@@ -1351,7 +1351,7 @@ void MainWindow::applyLinkedImageRefresh(
             failure,
             {{"path", pathToUtf8(link.published_output_path)},
              {"link_id", link.id}});
-        statusBar()->showMessage("The saved Image Editor output could not be decoded.", 5000);
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "The saved Image Editor output could not be decoded."), 5000);
         return;
     }
 
@@ -1410,9 +1410,9 @@ bool MainWindow::launchLinkedImageEditor(
     if (executable.isEmpty()) {
         executable = QFileDialog::getOpenFileName(
             this,
-            "Locate Image Editor",
+            QCoreApplication::translate("MainWindow", "Locate Image Editor"),
             QCoreApplication::applicationDirPath(),
-            "Image Editor executable (*)");
+            QCoreApplication::translate("MainWindow", "Image Editor executable (*)"));
         if (executable.isEmpty()) return false;
         QSettings settings;
         settings.setValue(QStringLiteral("applications/image_editor_executable"), executable);
@@ -1444,7 +1444,7 @@ bool MainWindow::launchLinkedImageEditor(
         {{"executable", executable.toUtf8().toStdString()},
          {"document_path", pathToUtf8(link.document_path)},
          {"source_path", pathToUtf8(linked_source)}});
-    QMessageBox::warning(this, "Could not start Image Editor", cause);
+    QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not start Image Editor"), cause);
     return false;
 }
 
@@ -1469,7 +1469,7 @@ void MainWindow::editSelectedMediaInImageEditor() {
             logging::Level::Error, "image_editor_compatibility",
             "create_link_directory", cause,
             {{"path", pathToUtf8(link.document_path.parent_path())}});
-        QMessageBox::warning(this, "Could not prepare linked image", fromUtf8(cause));
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not prepare linked image"), fromUtf8(cause));
         return;
     }
     if (!launchLinkedImageEditor(link, item.metadata.source_path)) return;
@@ -1479,7 +1479,7 @@ void MainWindow::editSelectedMediaInImageEditor() {
         updateProjectDirtyState();
     }
     refreshLinkedImageTargets();
-    statusBar()->showMessage("Image Editor opened for this Media Pool image.", 3500);
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Image Editor opened for this Media Pool image."), 3500);
 }
 
 void MainWindow::editTimelineImageClip(timeline::ClipId clip_id) {
@@ -1491,7 +1491,7 @@ void MainWindow::editTimelineImageClip(timeline::ClipId clip_id) {
     const auto source_path = clip.source_path;
     const auto media_index = media_controller_.library().indexForPath(source_path);
     if (media_index >= media_controller_.library().size()) {
-        statusBar()->showMessage("The image clip has no matching Media Pool item.", 4000);
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "The image clip has no matching Media Pool item."), 4000);
         return;
     }
     const auto media_item = media_controller_.library().items()[media_index];
@@ -1512,7 +1512,7 @@ void MainWindow::editTimelineImageClip(timeline::ClipId clip_id) {
             "create_clip_variant_directory", cause,
             {{"path", pathToUtf8(link.document_path.parent_path())},
              {"clip_id", std::to_string(clip_id)}});
-        QMessageBox::warning(this, "Could not prepare clip image", fromUtf8(cause));
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not prepare clip image"), fromUtf8(cause));
         return;
     }
     const auto snapshot_path = link.document_path.parent_path() / "source.png";
@@ -1535,7 +1535,7 @@ void MainWindow::editTimelineImageClip(timeline::ClipId clip_id) {
                 {{"source_path", pathToUtf8(effective_source)},
                  {"snapshot_path", pathToUtf8(snapshot_path)},
                  {"clip_id", std::to_string(clip_id)}});
-            QMessageBox::warning(this, "Could not create clip image copy", copy_error);
+            QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not create clip image copy"), copy_error);
             return;
         }
     }
@@ -1547,7 +1547,7 @@ void MainWindow::editTimelineImageClip(timeline::ClipId clip_id) {
         updateTimelineState();
     }
     refreshLinkedImageTargets();
-    statusBar()->showMessage("Image Editor opened for this timeline clip.", 3500);
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Image Editor opened for this timeline clip."), 3500);
 }
 
 bool MainWindow::openMotionStudio(
@@ -1559,9 +1559,9 @@ bool MainWindow::openMotionStudio(
     auto executable = bundledMotionEditorExecutable();
     if (executable.isEmpty()) {
         executable = QFileDialog::getOpenFileName(
-            this, QStringLiteral("Locate Motion Studio"),
+            this, QCoreApplication::translate("MainWindow", "Locate Motion Studio"),
             QCoreApplication::applicationDirPath(),
-            QStringLiteral("Motion Studio executable (*)"));
+            QCoreApplication::translate("MainWindow", "Motion Studio executable (*)"));
         if (executable.isEmpty()) return false;
         QSettings settings;
         settings.setValue(QStringLiteral("applications/motion_editor_executable"), executable);
@@ -1615,8 +1615,8 @@ bool MainWindow::openMotionStudio(
             logging::Level::Error, "motion_compatibility", "create_link_directory",
             directory_error.message(),
             {{"path", pathToUtf8(link.document_path.parent_path())}, {"link_id", link.id}});
-        QMessageBox::warning(this, QStringLiteral("Motion Studio"),
-            QStringLiteral("The linked composition folder could not be created."));
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Motion Studio"),
+            QCoreApplication::translate("MainWindow", "The linked composition folder could not be created."));
         return false;
     }
     const auto request_path = link.document_path.parent_path() / "handoff.json";
@@ -1626,8 +1626,8 @@ bool MainWindow::openMotionStudio(
             logging::Level::Error, "motion_compatibility", "write_handoff_request",
             request_file.errorString().toUtf8().toStdString(),
             {{"path", pathToUtf8(request_path)}, {"link_id", link.id}});
-        QMessageBox::warning(this, QStringLiteral("Motion Studio"),
-            QStringLiteral("The Motion Studio handoff could not be prepared."));
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Motion Studio"),
+            QCoreApplication::translate("MainWindow", "The Motion Studio handoff could not be prepared."));
         return false;
     }
     const auto serialized = QJsonDocument(request.toJson()).toJson(QJsonDocument::Indented);
@@ -1636,8 +1636,8 @@ bool MainWindow::openMotionStudio(
             logging::Level::Error, "motion_compatibility", "write_handoff_request",
             request_file.errorString().toUtf8().toStdString(),
             {{"path", pathToUtf8(request_path)}, {"link_id", link.id}});
-        QMessageBox::warning(this, QStringLiteral("Motion Studio"),
-            QStringLiteral("The Motion Studio handoff could not be saved."));
+        QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Motion Studio"),
+            QCoreApplication::translate("MainWindow", "The Motion Studio handoff could not be saved."));
         return false;
     }
 
@@ -1653,8 +1653,8 @@ bool MainWindow::openMotionStudio(
         {{"executable", executable.toUtf8().toStdString()},
          {"document_path", pathToUtf8(link.document_path)},
          {"source_path", pathToUtf8(source_path)}});
-    QMessageBox::warning(this, QStringLiteral("Could not start Motion Studio"),
-        QStringLiteral("Motion Studio could not be started. Check the Video Editor log for details."));
+    QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Could not start Motion Studio"),
+        QCoreApplication::translate("MainWindow", "Motion Studio could not be started. Check the Video Editor log for details."));
     return false;
 }
 
@@ -1671,7 +1671,7 @@ void MainWindow::editSelectedMediaInMotionStudio() {
     const bool new_link = link.id.empty();
     if (new_link) {
         if (item.offline) {
-            statusBar()->showMessage(QStringLiteral("Restore this media before linking it to Motion Studio."), 5000);
+            statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Restore this media before linking it to Motion Studio."), 5000);
             return;
         }
         link.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
@@ -1695,15 +1695,15 @@ void MainWindow::editSelectedMediaInMotionStudio() {
                 logging::Level::Error, "motion_compatibility", "create_media_pool_link",
                 "The linked Motion output could not be added to the Media Pool.",
                 {{"path", pathToUtf8(output_path)}, {"link_id", link.id}});
-            QMessageBox::warning(this, QStringLiteral("Motion Studio"),
-                QStringLiteral("Motion Studio opened, but the linked output could not be added to the Media Pool."));
+            QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Motion Studio"),
+                QCoreApplication::translate("MainWindow", "Motion Studio opened, but the linked output could not be added to the Media Pool."));
         } else {
             updateProjectDirtyState();
             populateMediaBrowser(output_path);
         }
     }
     refreshLinkedMotionTargets();
-    statusBar()->showMessage(QStringLiteral("Motion Studio opened for this Media Pool item."), 4000);
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Motion Studio opened for this Media Pool item."), 4000);
 }
 
 void MainWindow::editTimelineVideoClipInMotionStudio(timeline::ClipId clip_id) {
@@ -1719,7 +1719,7 @@ void MainWindow::editTimelineVideoClipInMotionStudio(timeline::ClipId clip_id) {
     const bool new_link = link.id.empty();
     if (new_link) {
         if (media_item.offline) {
-            statusBar()->showMessage(QStringLiteral("Restore the source video before linking this clip."), 5000);
+            statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Restore the source video before linking this clip."), 5000);
             return;
         }
         link.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
@@ -1738,12 +1738,12 @@ void MainWindow::editTimelineVideoClipInMotionStudio(timeline::ClipId clip_id) {
         }
     }
     refreshLinkedMotionTargets();
-    statusBar()->showMessage(QStringLiteral("Motion Studio opened for this timeline clip."), 4000);
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Motion Studio opened for this timeline clip."), 4000);
 }
 
 void MainWindow::showMediaContextMenu(const QPoint& position) {
     QMenu menu(this);
-    auto* new_bin = menu.addAction("New Bin");
+    auto* new_bin = menu.addAction(QCoreApplication::translate("MainWindow", "New Bin"));
     connect(new_bin, &QAction::triggered, this, &MainWindow::createBin);
     const bool from_media_list = sender() == media_list_;
     if (from_media_list) {
@@ -1769,7 +1769,7 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
         if (selected.metadata.kind == media::MediaKind::Image &&
             (!selected.offline || selected_image_link.has_value())) {
             menu.addSeparator();
-            auto* edit_image = menu.addAction("Edit Image in Image Editor");
+            auto* edit_image = menu.addAction(QCoreApplication::translate("MainWindow", "Edit Image in Image Editor"));
             connect(edit_image, &QAction::triggered,
                     this, &MainWindow::editSelectedMediaInImageEditor);
         }
@@ -1780,16 +1780,16 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
             menu.addSeparator();
             auto* open_motion = menu.addAction(
                 editor_session_.motionLinkForPath(selected.metadata.source_path).has_value()
-                    ? QStringLiteral("Open Linked Composition in Motion Studio")
-                    : QStringLiteral("Create Motion Composition..."));
+                    ? QCoreApplication::translate("MainWindow", "Open Linked Composition in Motion Studio")
+                    : QCoreApplication::translate("MainWindow", "Create Motion Composition..."));
             connect(open_motion, &QAction::triggered,
                     this, &MainWindow::editSelectedMediaInMotionStudio);
         }
         menu.addSeparator();
-        auto* move = menu.addAction("Move to Bin");
+        auto* move = menu.addAction(QCoreApplication::translate("MainWindow", "Move to Bin"));
         connect(move, &QAction::triggered, this, &MainWindow::moveSelectedMediaToBin);
         auto* remove = menu.addAction(media_items_[*media_index].offline
-            ? "Restore Media" : "Remove from Browser");
+            ? QCoreApplication::translate("MainWindow", "Restore Media") : QCoreApplication::translate("MainWindow", "Remove from Browser"));
         connect(remove, &QAction::triggered, this,
                 media_items_[*media_index].offline
                     ? &MainWindow::restoreSelectedMedia
@@ -1809,7 +1809,7 @@ void MainWindow::openMedia() {
     filters.push_back(QStringLiteral("All Files (*)"));
     const QStringList selected_files = QFileDialog::getOpenFileNames(
         this,
-        "Open Media",
+        QCoreApplication::translate("MainWindow", "Open Media"),
         QString(),
         filters.join(QStringLiteral(";;")));
     if (selected_files.isEmpty()) return;
@@ -1826,7 +1826,7 @@ bool MainWindow::startMediaImport(
     std::optional<MediaImportIntent> intent) {
     if (paths.empty()) return false;
     if (active_media_import_cancel_) {
-        statusBar()->showMessage("A media import batch is already running or cancelling.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "A media import batch is already running or cancelling."));
         return false;
     }
 
@@ -1838,15 +1838,15 @@ bool MainWindow::startMediaImport(
     auto cancel = std::make_shared<std::atomic_bool>(false);
     active_media_import_cancel_ = cancel;
     auto* progress = new QProgressDialog(
-        "Preparing media...", "Cancel", 0, static_cast<int>(paths.size()), this);
-    progress->setWindowTitle("Import Media");
+        QCoreApplication::translate("MainWindow", "Preparing media..."), QCoreApplication::translate("MainWindow", "Cancel"), 0, static_cast<int>(paths.size()), this);
+    progress->setWindowTitle(QCoreApplication::translate("MainWindow", "Import Media"));
     progress->setWindowModality(Qt::NonModal);
     progress->setAutoClose(false);
     progress->setAutoReset(false);
     progress->setMinimumDuration(250);
     connect(progress, &QProgressDialog::canceled, this, [cancel, progress]() {
         cancel->store(true, std::memory_order_relaxed);
-        progress->setLabelText("Finishing the current media operation...");
+        progress->setLabelText(QCoreApplication::translate("MainWindow", "Finishing the current media operation..."));
         progress->setCancelButton(nullptr);
     });
     media_import_progress_ = progress;
@@ -1875,7 +1875,7 @@ bool MainWindow::startMediaImport(
                                 guard->active_media_work_id_ != work_id) return;
                             guard->media_import_progress_->setValue(static_cast<int>(current));
                             guard->media_import_progress_->setLabelText(
-                                QString("Processing %1 of %2: %3")
+                                QString(QCoreApplication::translate("MainWindow", "Processing %1 of %2: %3"))
                                     .arg(current + 1).arg(total)
                                     .arg(fromUtf8(path_text)));
                         },
@@ -2072,11 +2072,11 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
     } else if (import_intent.has_value() && result.cancelled &&
                import_intent->destination == MediaImportIntent::Destination::Timeline) {
         statusBar()->showMessage(
-            "Media import cancelled; no files were added to the Timeline.");
+            QCoreApplication::translate("MainWindow", "Media import cancelled; no files were added to the Timeline."));
     }
     statusBar()->showMessage(
-        QString("Media import %1: %2 imported, %3 restored, %4 duplicate(s), %5 failed.")
-            .arg(result.cancelled ? "cancelled" : "complete")
+        QString(QCoreApplication::translate("MainWindow", "Media import %1: %2 imported, %3 restored, %4 duplicate(s), %5 failed."))
+            .arg(result.cancelled ? QCoreApplication::translate("MainWindow", "cancelled") : QCoreApplication::translate("MainWindow", "complete"))
             .arg(imported_count)
             .arg(restored_count)
             .arg(duplicate_count)
@@ -2086,11 +2086,11 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
     if (!failures.isEmpty()) {
         QMessageBox::warning(
             this,
-            has_timing_warnings ? "Media import needs attention" :
-                                  "Some media could not be imported",
+            has_timing_warnings ? QCoreApplication::translate("MainWindow", "Media import needs attention") :
+                                  QCoreApplication::translate("MainWindow", "Some media could not be imported"),
             failures.join('\n'));
     } else if (imported_count + restored_count == 1 && duplicate_count == 0) {
-        statusBar()->showMessage("Media imported with preview frame.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Media imported with preview frame."));
     }
 }
 

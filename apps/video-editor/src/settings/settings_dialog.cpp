@@ -26,6 +26,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <QCoreApplication>
 
 namespace settings {
 namespace {
@@ -34,25 +35,38 @@ constexpr int kSnapshotPathRole = Qt::UserRole;
 constexpr int kProjectPathRole = Qt::UserRole + 1;
 constexpr int kFolderPathRole = Qt::UserRole + 2;
 
+QString shortcutScopeKey(ShortcutScope scope) {
+    switch (scope) {
+    case ShortcutScope::Application: return QStringLiteral("application");
+    case ShortcutScope::Shared: return QStringLiteral("shared");
+    case ShortcutScope::Edit: return QStringLiteral("edit");
+    case ShortcutScope::Fusion: return QStringLiteral("fusion");
+    case ShortcutScope::Render: return QStringLiteral("render");
+    }
+    return QStringLiteral("other");
+}
+
 } // namespace
 
 SettingsDialog::SettingsDialog(
     QWidget* parent,
     ShortcutManager& shortcut_manager)
     : QDialog(parent), shortcut_manager_(shortcut_manager) {
-    setWindowTitle("Settings");
+    setWindowTitle(QCoreApplication::translate("SettingsDialog", "Settings"));
     setModal(true);
     resize(960, 720);
 
     auto* layout = new QVBoxLayout(this);
     auto* tabs = new QTabWidget(this);
-    tabs->addTab(createGeneralPage(), "General");
-    tabs->addTab(createAutosavePage(), "Autosave");
-    tabs->addTab(createTimelinePage(), "Timeline");
-    tabs->addTab(createShortcutsPage(), "Shortcuts");
+    tabs->addTab(createGeneralPage(), QCoreApplication::translate("SettingsDialog", "General"));
+    tabs->addTab(createAutosavePage(), QCoreApplication::translate("SettingsDialog", "Autosave"));
+    tabs->addTab(createTimelinePage(), QCoreApplication::translate("SettingsDialog", "Timeline"));
+    tabs->addTab(createShortcutsPage(), QCoreApplication::translate("SettingsDialog", "Shortcuts"));
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Close, Qt::Horizontal, this);
+    buttons->button(QDialogButtonBox::Close)->setText(
+        QCoreApplication::translate("SettingsDialog", "Close"));
     connect(buttons, &QDialogButtonBox::rejected,
             this, &QDialog::reject);
 
@@ -64,24 +78,24 @@ QWidget* SettingsDialog::createGeneralPage() {
     auto* page = new QWidget(this);
     auto* layout = new QVBoxLayout(page);
     auto* metrics_check = new QCheckBox(
-        "Enable preview performance metrics", page);
+        QCoreApplication::translate("SettingsDialog", "Enable preview performance metrics"), page);
     metrics_check->setObjectName("previewMetricsCheckBox");
     metrics_check->setToolTip(
-        "Collect one aggregated Preview performance sample per second in the application log.");
+        QCoreApplication::translate("SettingsDialog", "Collect one aggregated Preview performance sample per second in the application log."));
     metrics_check->setChecked(settings::previewPerformanceMetricsEnabled());
 
     auto* description = new QLabel(
-        "When enabled, the Video Editor records aggregated decoding, composition, UI, and GPU timing data. "
-        "This preference is global and does not modify projects.",
+        QCoreApplication::translate("SettingsDialog", "When enabled, the Video Editor records aggregated decoding, composition, UI, and GPU timing data. ") +
+        QCoreApplication::translate("SettingsDialog", "This preference is global and does not modify projects."),
         page);
     description->setWordWrap(true);
 
     layout->addWidget(metrics_check);
     layout->addWidget(description);
 
-    auto* hardware_check = new QCheckBox("Use hardware video decoding for preview (Experimental)", page);
+    auto* hardware_check = new QCheckBox(QCoreApplication::translate("SettingsDialog", "Use hardware video decoding for preview (Experimental)"), page);
     hardware_check->setObjectName("hardwareDecodingCheckBox");
-    hardware_check->setToolTip("Accelerates supported H.264 and HEVC video. Uses CPU automatically when needed. Export has its own setting.");
+    hardware_check->setToolTip(QCoreApplication::translate("SettingsDialog", "Accelerates supported H.264 and HEVC video. Uses CPU automatically when needed. Export has its own setting."));
     hardware_check->setChecked(settings::hardwareDecodingEnabled());
     layout->addWidget(hardware_check);
     connect(hardware_check, &QCheckBox::toggled, this, [this](bool enabled) {
@@ -90,9 +104,9 @@ QWidget* SettingsDialog::createGeneralPage() {
     });
 
     auto* gpu_check = new QCheckBox(
-        "Use GPU for timeline preview (Experimental)", page);
+        QCoreApplication::translate("SettingsDialog", "Use GPU for timeline preview (Experimental)"), page);
     gpu_check->setObjectName("gpuCompositionCheckBox");
-    gpu_check->setToolTip("Accelerates supported effects, Fusion graphs, and timeline composition. Applies immediately and uses CPU when needed. Export has its own setting.");
+    gpu_check->setToolTip(QCoreApplication::translate("SettingsDialog", "Accelerates supported effects, Fusion graphs, and timeline composition. Applies immediately and uses CPU when needed. Export has its own setting."));
     gpu_check->setAccessibleDescription(gpu_check->toolTip());
     gpu_check->setChecked(settings::gpuCompositionEnabled());
     layout->addWidget(gpu_check);
@@ -102,32 +116,32 @@ QWidget* SettingsDialog::createGeneralPage() {
     });
 
     auto* transitions_group = new QGroupBox(
-        "Workspace transitions", page);
+        QCoreApplication::translate("SettingsDialog", "Workspace transitions"), page);
     transitions_group->setObjectName("workspaceTransitionsGroup");
     auto* transitions_layout = new QVBoxLayout(transitions_group);
     auto* transitions_check = new QCheckBox(
-        "Animate workspace switches", transitions_group);
+        QCoreApplication::translate("SettingsDialog", "Animate workspace switches"), transitions_group);
     transitions_check->setObjectName("workspacePageTransitionsCheckBox");
     transitions_check->setToolTip(
-        "Slide the workspace panels when switching among Edit, Fusion, and Render.");
+        QCoreApplication::translate("SettingsDialog", "Slide the workspace panels when switching among Edit, Fusion, and Render."));
     transitions_check->setChecked(settings::workspacePageTransitionsEnabled());
     transitions_layout->addWidget(transitions_check);
 
     auto* style_row = new QWidget(transitions_group);
     auto* style_layout = new QHBoxLayout(style_row);
     style_layout->setContentsMargins(0, 0, 0, 0);
-    auto* style_label = new QLabel("Style:", style_row);
+    auto* style_label = new QLabel(QCoreApplication::translate("SettingsDialog", "Style:"), style_row);
     auto* style_combo = new QComboBox(style_row);
     style_combo->setObjectName("workspacePageTransitionStyleComboBox");
     style_combo->addItem(
-        "Workspace content",
+        QCoreApplication::translate("SettingsDialog", "Workspace content"),
         static_cast<int>(
             WorkspacePageTransitionStyle::WorkspaceContent));
     style_combo->addItem(
-        "Entire application window",
+        QCoreApplication::translate("SettingsDialog", "Entire application window"),
         static_cast<int>(
             WorkspacePageTransitionStyle::EntireApplicationWindow));
-    style_combo->setAccessibleName("Workspace transition style");
+    style_combo->setAccessibleName(QCoreApplication::translate("SettingsDialog", "Workspace transition style"));
     const auto selected_style = settings::workspacePageTransitionStyle();
     style_combo->setCurrentIndex(style_combo->findData(
         static_cast<int>(selected_style)));
@@ -138,7 +152,7 @@ QWidget* SettingsDialog::createGeneralPage() {
     auto* duration_row = new QWidget(transitions_group);
     auto* duration_layout = new QHBoxLayout(duration_row);
     duration_layout->setContentsMargins(0, 0, 0, 0);
-    auto* duration_label = new QLabel("Duration:", duration_row);
+    auto* duration_label = new QLabel(QCoreApplication::translate("SettingsDialog", "Duration:"), duration_row);
     auto* duration_slider = new QSlider(Qt::Horizontal, duration_row);
     duration_slider->setObjectName("workspacePageTransitionDurationSlider");
     duration_slider->setRange(
@@ -152,9 +166,9 @@ QWidget* SettingsDialog::createGeneralPage() {
         settings::kWorkspacePageTransitionDurationStepMs);
     duration_slider->setTickPosition(QSlider::TicksBelow);
     duration_slider->setValue(settings::workspacePageTransitionDurationMs());
-    duration_slider->setAccessibleName("Workspace transition duration");
+    duration_slider->setAccessibleName(QCoreApplication::translate("SettingsDialog", "Workspace transition duration"));
     auto* duration_value = new QLabel(
-        QStringLiteral("%1 ms").arg(duration_slider->value()), duration_row);
+        QCoreApplication::translate("SettingsDialog", "%1 ms").arg(duration_slider->value()), duration_row);
     duration_value->setObjectName("workspacePageTransitionDurationLabel");
     duration_value->setMinimumWidth(64);
     duration_value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -164,14 +178,14 @@ QWidget* SettingsDialog::createGeneralPage() {
     transitions_layout->addWidget(duration_row);
 
     auto* transitions_description = new QLabel(
-        "Workspace content slides everything below the menu bar as one block. Entire application window also moves the native window frame. These preferences are saved on this device and do not modify projects.",
+        QCoreApplication::translate("SettingsDialog", "Workspace content slides everything below the menu bar as one block. Entire application window also moves the native window frame. These preferences are saved on this device and do not modify projects."),
         transitions_group);
     transitions_description->setWordWrap(true);
     transitions_layout->addWidget(transitions_description);
     transitions_check->setAccessibleDescription(
         transitions_description->text());
     duration_slider->setToolTip(
-        "Choose a duration from 100 to 600 milliseconds in 25 millisecond steps.");
+        QCoreApplication::translate("SettingsDialog", "Choose a duration from 100 to 600 milliseconds in 25 millisecond steps."));
     duration_slider->setEnabled(transitions_check->isChecked());
     style_combo->setEnabled(transitions_check->isChecked());
 
@@ -197,21 +211,21 @@ QWidget* SettingsDialog::createGeneralPage() {
                     duration_slider->setValue(normalized);
                 }
                 duration_value->setText(
-                    QStringLiteral("%1 ms").arg(normalized));
+                    QCoreApplication::translate("SettingsDialog", "%1 ms").arg(normalized));
             });
     layout->addWidget(transitions_group);
 
     auto* autosave_check = new QCheckBox(
-        "Enable project autosave", page);
+        QCoreApplication::translate("SettingsDialog", "Enable project autosave"), page);
     autosave_check->setObjectName("projectAutosaveCheckBox");
     autosave_check->setToolTip(
-        "Save recovery snapshots without overwriting the project file.");
+        QCoreApplication::translate("SettingsDialog", "Save recovery snapshots without overwriting the project file."));
     autosave_check->setChecked(settings::projectAutosaveEnabled());
 
     auto* autosave_options = new QWidget(page);
     auto* autosave_options_layout = new QHBoxLayout(autosave_options);
     autosave_options_layout->setContentsMargins(0, 0, 0, 0);
-    auto* interval_label = new QLabel("Interval (seconds):", autosave_options);
+    auto* interval_label = new QLabel(QCoreApplication::translate("SettingsDialog", "Interval (seconds):"), autosave_options);
     auto* interval_spin = new QSpinBox(autosave_options);
     interval_spin->setObjectName("projectAutosaveIntervalSpinBox");
     interval_spin->setRange(
@@ -220,7 +234,7 @@ QWidget* SettingsDialog::createGeneralPage() {
     interval_spin->setValue(settings::projectAutosaveIntervalSeconds());
     interval_spin->setSuffix(" s");
     interval_spin->setMinimumWidth(96);
-    auto* retention_label = new QLabel("Snapshots:", autosave_options);
+    auto* retention_label = new QLabel(QCoreApplication::translate("SettingsDialog", "Snapshots:"), autosave_options);
     auto* retention_spin = new QSpinBox(autosave_options);
     retention_spin->setObjectName("projectAutosaveRetentionSpinBox");
     retention_spin->setRange(
@@ -236,8 +250,8 @@ QWidget* SettingsDialog::createGeneralPage() {
     autosave_options_layout->addStretch();
 
     auto* autosave_description = new QLabel(
-        "Autosave keeps recovery snapshots in a separate folder and never replaces the main .csp file. "
-        "The default is every 30 seconds with 5 snapshots retained.",
+        QCoreApplication::translate("SettingsDialog", "Autosave keeps recovery snapshots in a separate folder and never replaces the main .csp file. ") +
+        QCoreApplication::translate("SettingsDialog", "The default is every 30 seconds with 5 snapshots retained."),
         page);
     autosave_description->setWordWrap(true);
 
@@ -318,8 +332,8 @@ QWidget* SettingsDialog::createAutosavePage() {
     auto* layout = new QVBoxLayout(page);
 
     auto* description = new QLabel(
-        "Manage recovery snapshots for the current project and unsaved projects. "
-        "Restoring never overwrites the main .csp file.",
+        QCoreApplication::translate("SettingsDialog", "Manage recovery snapshots for the current project and unsaved projects. ") +
+        QCoreApplication::translate("SettingsDialog", "Restoring never overwrites the main .csp file."),
         page);
     description->setWordWrap(true);
     layout->addWidget(description);
@@ -328,7 +342,7 @@ QWidget* SettingsDialog::createAutosavePage() {
     autosave_table_->setObjectName("autosaveSnapshotsTable");
     autosave_table_->setColumnCount(4);
     autosave_table_->setHorizontalHeaderLabels(
-        {"Project", "Type", "Modified", "Snapshot"});
+        {QCoreApplication::translate("SettingsDialog", "Project"), QCoreApplication::translate("SettingsDialog", "Type"), QCoreApplication::translate("SettingsDialog", "Modified"), QCoreApplication::translate("SettingsDialog", "Snapshot")});
     autosave_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     autosave_table_->setSelectionMode(QAbstractItemView::SingleSelection);
     autosave_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -345,26 +359,26 @@ QWidget* SettingsDialog::createAutosavePage() {
     layout->addWidget(autosave_table_, 1);
 
     autosave_empty_label_ = new QLabel(
-        "No valid autosave snapshots found.", page);
+        QCoreApplication::translate("SettingsDialog", "No valid autosave snapshots found."), page);
     autosave_empty_label_->setObjectName("autosaveEmptyLabel");
     autosave_empty_label_->setAlignment(Qt::AlignCenter);
     layout->addWidget(autosave_empty_label_);
 
     auto* buttons = new QHBoxLayout();
-    auto* refresh = new QPushButton("Refresh", page);
+    auto* refresh = new QPushButton(QCoreApplication::translate("SettingsDialog", "Refresh"), page);
     refresh->setObjectName("autosaveRefreshButton");
-    refresh->setToolTip("Reload the available recovery snapshots");
-    autosave_restore_button_ = new QPushButton("Restore Selected", page);
+    refresh->setToolTip(QCoreApplication::translate("SettingsDialog", "Reload the available recovery snapshots"));
+    autosave_restore_button_ = new QPushButton(QCoreApplication::translate("SettingsDialog", "Restore Selected"), page);
     autosave_restore_button_->setObjectName("autosaveRestoreButton");
     autosave_restore_button_->setToolTip(
-        "Load the selected snapshot as the current dirty project");
-    autosave_delete_button_ = new QPushButton("Delete Selected", page);
+        QCoreApplication::translate("SettingsDialog", "Load the selected snapshot as the current dirty project"));
+    autosave_delete_button_ = new QPushButton(QCoreApplication::translate("SettingsDialog", "Delete Selected"), page);
     autosave_delete_button_->setObjectName("autosaveDeleteButton");
-    autosave_delete_button_->setToolTip("Delete the selected recovery snapshot");
-    autosave_open_folder_button_ = new QPushButton("Open Folder", page);
+    autosave_delete_button_->setToolTip(QCoreApplication::translate("SettingsDialog", "Delete the selected recovery snapshot"));
+    autosave_open_folder_button_ = new QPushButton(QCoreApplication::translate("SettingsDialog", "Open Folder"), page);
     autosave_open_folder_button_->setObjectName("autosaveOpenFolderButton");
     autosave_open_folder_button_->setToolTip(
-        "Open the folder containing the selected recovery snapshot");
+        QCoreApplication::translate("SettingsDialog", "Open the folder containing the selected recovery snapshot"));
 
     buttons->addWidget(refresh);
     buttons->addStretch();
@@ -410,25 +424,25 @@ QWidget* SettingsDialog::createTimelinePage() {
     auto* waveform_row = new QWidget(page);
     auto* waveform_layout = new QHBoxLayout(waveform_row);
     waveform_layout->setContentsMargins(0, 0, 0, 0);
-    auto* waveform_label = new QLabel("Audio waveform display:", waveform_row);
+    auto* waveform_label = new QLabel(QCoreApplication::translate("SettingsDialog", "Audio waveform display:"), waveform_row);
     auto* waveform_mode = new QComboBox(waveform_row);
     waveform_mode->setObjectName("audioWaveformDisplayModeComboBox");
-    waveform_mode->addItem("Mono", static_cast<int>(
+    waveform_mode->addItem(QCoreApplication::translate("SettingsDialog", "Mono"), static_cast<int>(
         AudioWaveformDisplayMode::Mono));
-    waveform_mode->addItem("Stereo", static_cast<int>(
+    waveform_mode->addItem(QCoreApplication::translate("SettingsDialog", "Stereo"), static_cast<int>(
         AudioWaveformDisplayMode::Stereo));
     waveform_mode->setCurrentIndex(waveform_mode->findData(static_cast<int>(
         settings::audioWaveformDisplayMode())));
     waveform_mode->setToolTip(
-        "Choose a combined mono waveform or separate left and right channels.");
+        QCoreApplication::translate("SettingsDialog", "Choose a combined mono waveform or separate left and right channels."));
     waveform_label->setBuddy(waveform_mode);
     waveform_layout->addWidget(waveform_label);
     waveform_layout->addWidget(waveform_mode);
     waveform_layout->addStretch();
     auto* waveform_description = new QLabel(
-        "This global preference applies immediately and does not modify projects. "
-        "Stereo media shows left and right channels in separate halves; mono media "
-        "keeps one centered waveform.", page);
+        QCoreApplication::translate("SettingsDialog", "This global preference applies immediately and does not modify projects. ") +
+        QCoreApplication::translate("SettingsDialog", "Stereo media shows left and right channels in separate halves; mono media ") +
+        QCoreApplication::translate("SettingsDialog", "keeps one centered waveform."), page);
     waveform_description->setWordWrap(true);
     layout->addWidget(waveform_row);
     layout->addWidget(waveform_description);
@@ -437,29 +451,29 @@ QWidget* SettingsDialog::createTimelinePage() {
     auto* row_height_layout = new QHBoxLayout(row_height_row);
     row_height_layout->setContentsMargins(0, 0, 0, 0);
     auto* row_height_label = new QLabel(
-        "Track height adjustment:", row_height_row);
+        QCoreApplication::translate("SettingsDialog", "Track height adjustment:"), row_height_row);
     auto* row_height_mode = new QComboBox(row_height_row);
     row_height_mode->setObjectName(
         "timelineTrackHeightAdjustmentModeComboBox");
     row_height_mode->addItem(
-        "Together", static_cast<int>(
+        QCoreApplication::translate("SettingsDialog", "Together"), static_cast<int>(
             timeline::TrackRowHeightAdjustmentMode::Together));
     row_height_mode->addItem(
-        "Independently by group", static_cast<int>(
+        QCoreApplication::translate("SettingsDialog", "Independently by group"), static_cast<int>(
             timeline::TrackRowHeightAdjustmentMode::IndependentlyByGroup));
     row_height_mode->setCurrentIndex(row_height_mode->findData(static_cast<int>(
         settings::timelineTrackRowHeightAdjustmentMode())));
     row_height_mode->setToolTip(
-        "Choose whether Shift + mouse wheel changes both groups or only the Video or Audio group under the pointer.");
+        QCoreApplication::translate("SettingsDialog", "Choose whether Shift + mouse wheel changes both groups or only the Video or Audio group under the pointer."));
     row_height_label->setBuddy(row_height_mode);
     row_height_layout->addWidget(row_height_label);
     row_height_layout->addWidget(row_height_mode);
     row_height_layout->addStretch();
     auto* row_height_description = new QLabel(
-        "This local preference applies immediately. In independent mode, "
-        "Shift + mouse wheel changes only the group beneath the pointer; "
-        "each project's Video and Audio row heights are saved separately. "
-        "Switching back to Together matches Audio to Video.", page);
+        QCoreApplication::translate("SettingsDialog", "This local preference applies immediately. In independent mode, ") +
+        QCoreApplication::translate("SettingsDialog", "Shift + mouse wheel changes only the group beneath the pointer; ") +
+        QCoreApplication::translate("SettingsDialog", "each project's Video and Audio row heights are saved separately. ") +
+        QCoreApplication::translate("SettingsDialog", "Switching back to Together matches Audio to Video."), page);
     row_height_description->setWordWrap(true);
     layout->addWidget(row_height_row);
     layout->addWidget(row_height_description);
@@ -487,7 +501,7 @@ QWidget* SettingsDialog::createShortcutsPage() {
     auto* layout = new QVBoxLayout(page);
 
     auto* description = new QLabel(
-        "Changes apply immediately. Clear a field to disable that shortcut.",
+        QCoreApplication::translate("SettingsDialog", "Changes apply immediately. Clear a field to disable that shortcut."),
         page);
     description->setWordWrap(true);
     layout->addWidget(description);
@@ -516,7 +530,7 @@ QWidget* SettingsDialog::createShortcutsPage() {
             shortcut_manager_.scopeLabel(scope), content);
         heading->setObjectName(
             QStringLiteral("shortcutScope_%1")
-                .arg(shortcut_manager_.scopeLabel(scope).toLower()));
+                .arg(shortcutScopeKey(scope)));
         QFont heading_font = heading->font();
         heading_font.setBold(true);
         heading->setFont(heading_font);
@@ -525,7 +539,7 @@ QWidget* SettingsDialog::createShortcutsPage() {
         auto* availability = new QLabel(description_text, content);
         availability->setObjectName(
             QStringLiteral("shortcutScopeDescription_%1")
-                .arg(shortcut_manager_.scopeLabel(scope).toLower()));
+                .arg(shortcutScopeKey(scope)));
         availability->setWordWrap(true);
         content_layout->addWidget(availability);
 
@@ -542,17 +556,17 @@ QWidget* SettingsDialog::createShortcutsPage() {
                 shortcut_manager_.shortcut(entry.id), row);
             editor->setObjectName(
                 QStringLiteral("shortcutEditor_%1").arg(entry.id));
-            editor->setToolTip(QString("Shortcut for %1").arg(entry.label));
-            auto* reset_button = new QPushButton("Reset", row);
+            editor->setToolTip(QString(QCoreApplication::translate("SettingsDialog", "Shortcut for %1")).arg(entry.label));
+            auto* reset_button = new QPushButton(QCoreApplication::translate("SettingsDialog", "Reset"), row);
             reset_button->setObjectName(
                 QStringLiteral("shortcutReset_%1").arg(entry.id));
             reset_button->setToolTip(
-                QString("Restore the default shortcut for %1").arg(entry.label));
-            auto* clear_button = new QPushButton("Clear", row);
+                QString(QCoreApplication::translate("SettingsDialog", "Restore the default shortcut for %1")).arg(entry.label));
+            auto* clear_button = new QPushButton(QCoreApplication::translate("SettingsDialog", "Clear"), row);
             clear_button->setObjectName(
                 QStringLiteral("shortcutClear_%1").arg(entry.id));
             clear_button->setToolTip(
-                QString("Disable the shortcut for %1").arg(entry.label));
+                QString(QCoreApplication::translate("SettingsDialog", "Disable the shortcut for %1")).arg(entry.label));
 
             row_layout->addWidget(label);
             row_layout->addWidget(editor, 1);
@@ -615,27 +629,27 @@ QWidget* SettingsDialog::createShortcutsPage() {
     };
 
     add_scope(ShortcutScope::Application,
-              QStringLiteral("Available in every workspace."));
+              QCoreApplication::translate("SettingsDialog", "Available in every workspace."));
     add_scope(ShortcutScope::Shared,
-              QStringLiteral("Available in the Edit and Fusion workspaces."));
+              QCoreApplication::translate("SettingsDialog", "Available in the Edit and Fusion workspaces."));
     add_scope(ShortcutScope::Edit,
-              QStringLiteral("Available only in the Edit workspace."));
+              QCoreApplication::translate("SettingsDialog", "Available only in the Edit workspace."));
     add_scope(ShortcutScope::Fusion,
-              QStringLiteral("Available only in the Fusion workspace."));
+              QCoreApplication::translate("SettingsDialog", "Available only in the Fusion workspace."));
     add_scope(ShortcutScope::Render,
-              QStringLiteral("Available only in the Render workspace."));
+              QCoreApplication::translate("SettingsDialog", "Available only in the Render workspace."));
     content_layout->addStretch();
     scroll->setWidget(content);
     layout->addWidget(scroll, 1);
 
-    auto* reset_all_button = new QPushButton("Reset All", page);
-    reset_all_button->setToolTip("Restore all default keyboard shortcuts");
+    auto* reset_all_button = new QPushButton(QCoreApplication::translate("SettingsDialog", "Reset All"), page);
+    reset_all_button->setToolTip(QCoreApplication::translate("SettingsDialog", "Restore all default keyboard shortcuts"));
     connect(reset_all_button, &QPushButton::clicked, this,
             [this, feedback, editors]() {
                 const auto result = QMessageBox::question(
                     this,
-                    "Reset Shortcuts",
-                    "Restore all default keyboard shortcuts?",
+                    QCoreApplication::translate("SettingsDialog", "Reset Shortcuts"),
+                    QCoreApplication::translate("SettingsDialog", "Restore all default keyboard shortcuts?"),
                     QMessageBox::Yes | QMessageBox::No,
                     QMessageBox::No);
                 if (result != QMessageBox::Yes) return;

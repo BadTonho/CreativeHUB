@@ -5,6 +5,7 @@
 
 #include <QMetaObject>
 #include <QOffscreenSurface>
+#include <QCoreApplication>
 
 #include <algorithm>
 #include <exception>
@@ -72,7 +73,8 @@ bool RenderQueueController::start(std::vector<RenderJob> jobs) {
                                    QString::fromUtf8(error.what()), {});
                 } catch (...) {
                     emit jobFailed(static_cast<qulonglong>(job.id),
-                                   QStringLiteral("An unknown export error occurred."), {});
+                                   QCoreApplication::translate(
+                                       "RenderQueueController", "An unknown export error occurred."), {});
                 }
             }
             QMetaObject::invokeMethod(this, [this, canceled] {

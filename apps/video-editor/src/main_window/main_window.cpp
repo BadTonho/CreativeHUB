@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <QCoreApplication>
 
 namespace {
 
@@ -43,7 +44,7 @@ MainWindow::MainWindow(QWidget* parent)
       shortcut_manager_(std::make_unique<settings::ShortcutManager>()) {
     media_task_pool_.setMaxThreadCount(1);
     media_task_pool_.setExpiryTimeout(-1);
-    setWindowTitle("Video Editor");
+    setWindowTitle(QCoreApplication::translate("MainWindow", "Video Editor"));
     QSettings settings;
     const auto saved_preview_quality = settings.value(
         "preview/playback_quality", 0).toInt();
@@ -98,7 +99,7 @@ MainWindow::MainWindow(QWidget* parent)
         settings::projectAutosaveEnabled(),
         settings::projectAutosaveIntervalSeconds());
 
-    statusBar()->showMessage("Ready");
+    statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Ready"));
 
     if (initial_window_layout_pending_) {
         QTimer::singleShot(0, this, [this]() { applyInitialWindowLayout(); });
@@ -181,13 +182,13 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
     if (snapshots.empty()) return std::nullopt;
 
     QDialog dialog(this);
-    dialog.setWindowTitle("Project Recovery");
+    dialog.setWindowTitle(QCoreApplication::translate("MainWindow", "Project Recovery"));
     dialog.setModal(true);
     dialog.resize(620, 360);
     auto* layout = new QVBoxLayout(&dialog);
     auto* description = new QLabel(
-        QString("Recovery snapshots were found for %1. Select one to restore, "
-                "or ignore them for now.").arg(project_name),
+        QString(QCoreApplication::translate("MainWindow", "Recovery snapshots were found for %1. Select one to restore, ") +
+                QCoreApplication::translate("MainWindow", "or ignore them for now.")).arg(project_name),
         &dialog);
     description->setWordWrap(true);
     auto* list = new QListWidget(&dialog);
@@ -196,7 +197,7 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
     auto available_snapshots = snapshots;
     for (const auto& snapshot : available_snapshots) {
         new QListWidgetItem(
-            QString("%1 — %2")
+            QString(QCoreApplication::translate("MainWindow", "%1 — %2"))
                 .arg(snapshotDateText(snapshot),
                      main_window_detail::fromUtf8(
                          main_window_detail::pathToUtf8(snapshot.path.filename()))),
@@ -205,9 +206,9 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
     if (list->count() > 0) list->setCurrentRow(0);
 
     auto* buttons = new QHBoxLayout();
-    auto* restore = new QPushButton("Restore", &dialog);
-    auto* ignore = new QPushButton("Ignore", &dialog);
-    auto* remove = new QPushButton("Delete", &dialog);
+    auto* restore = new QPushButton(QCoreApplication::translate("MainWindow", "Restore"), &dialog);
+    auto* ignore = new QPushButton(QCoreApplication::translate("MainWindow", "Ignore"), &dialog);
+    auto* remove = new QPushButton(QCoreApplication::translate("MainWindow", "Delete"), &dialog);
     buttons->addWidget(restore);
     buttons->addWidget(remove);
     buttons->addStretch();

@@ -57,6 +57,7 @@
 #include <system_error>
 #include <type_traits>
 #include <utility>
+#include <QCoreApplication>
 
 
 using namespace main_window_detail;
@@ -1079,11 +1080,11 @@ void MainWindow::activateTimelineClipAt(
         clip.clip_id, target_frame, resume_playback,
         preserve_timeline_playhead);
     if (result == playback::PlaybackCommandResult::Pending) {
-        statusBar()->showMessage("Loading timeline clip...");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Loading timeline clip..."));
     } else if (result == playback::PlaybackCommandResult::Rejected) {
-        statusBar()->showMessage("Could not activate the timeline clip.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not activate the timeline clip."));
     } else if (result == playback::PlaybackCommandResult::Unavailable) {
-        statusBar()->showMessage("Playback is unavailable.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Playback is unavailable."));
     }
 }
 
@@ -1133,19 +1134,19 @@ void MainWindow::sendPlaybackCommand(playback::PlaybackCommand command) {
     const auto result = playback_controller_->execute(command);
     switch (result) {
     case playback::PlaybackCommandResult::Gap:
-        statusBar()->showMessage("Gap in timeline.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Gap in timeline."));
         break;
     case playback::PlaybackCommandResult::NoClip:
-        statusBar()->showMessage("No timeline clip at the playhead.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "No timeline clip at the playhead."));
         break;
     case playback::PlaybackCommandResult::Beginning:
-        statusBar()->showMessage("Already at the beginning of the timeline.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Already at the beginning of the timeline."));
         break;
     case playback::PlaybackCommandResult::End:
-        statusBar()->showMessage("Already at the end of the timeline.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Already at the end of the timeline."));
         break;
     case playback::PlaybackCommandResult::Rejected:
-        statusBar()->showMessage("The selected timeline media is unavailable.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "The selected timeline media is unavailable."));
         break;
     case playback::PlaybackCommandResult::Pending:
     case playback::PlaybackCommandResult::Unavailable:
@@ -1169,7 +1170,7 @@ void MainWindow::updatePlaybackStatus() {
     if (editUi().playback_status == nullptr) return;
 
     if (playback_activation_loading_) {
-        editUi().playback_status->setText("Loading timeline clip...");
+        editUi().playback_status->setText(QCoreApplication::translate("MainWindow", "Loading timeline clip..."));
         return;
     }
 
@@ -1185,18 +1186,18 @@ void MainWindow::updatePlaybackStatus() {
                 .clips[*active_timeline_clip_index_cache_];
             const QString state = playback_is_playing_ ? "Playing" : "Paused";
             editUi().playback_status->setText(
-                QString("%1 - Frame %2 / %3")
+                QString(QCoreApplication::translate("MainWindow", "%1 - Frame %2 / %3"))
                     .arg(state)
                     .arg(playback_frame_index_ + 1)
                     .arg(clip.timeline_duration_frames));
             return;
         }
-        editUi().playback_status->setText("No media selected.");
+        editUi().playback_status->setText(QCoreApplication::translate("MainWindow", "No media selected."));
         return;
     }
 
     if (!canPreviewSelectedMedia()) {
-        editUi().playback_status->setText("Select the timeline media to play.");
+        editUi().playback_status->setText(QCoreApplication::translate("MainWindow", "Select the timeline media to play."));
         return;
     }
 
@@ -1216,7 +1217,7 @@ void MainWindow::updatePlaybackStatus() {
     }
     const QString state = playback_is_playing_ ? "Playing" : "Paused";
     editUi().playback_status->setText(
-        QString("%1 - Frame %2 / %3")
+        QString(QCoreApplication::translate("MainWindow", "%1 - Frame %2 / %3"))
             .arg(state)
             .arg(playback_frame_index_ + 1)
             .arg(total));
@@ -1244,10 +1245,10 @@ void MainWindow::handlePlaybackEvent(
             statusBar()->showMessage(value.message, 5000);
         } else if constexpr (std::is_same_v<Event, playback::PlaybackAudioWarningEvent>) {
             statusBar()->showMessage(
-                "Audio unavailable; continuing with video playback.");
+                QCoreApplication::translate("MainWindow", "Audio unavailable; continuing with video playback."));
             if (editUi().playback_status != nullptr) {
                 editUi().playback_status->setText(
-                    "Audio unavailable; video fallback is active.");
+                    QCoreApplication::translate("MainWindow", "Audio unavailable; video fallback is active."));
             }
         }
     }, event);
@@ -1265,7 +1266,7 @@ void MainWindow::handlePlaybackActivation(
             setActiveTimelineSelection(*location);
         }
         updateTimelineState();
-        statusBar()->showMessage("Loading timeline clip...");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Loading timeline clip..."));
         updatePlaybackControls();
         updatePlaybackStatus();
         break;
@@ -1337,15 +1338,15 @@ void MainWindow::handlePlaybackFinished(bool during_playback, bool gap) {
     updatePlaybackControls();
     if (gap) {
         if (editUi().playback_status != nullptr) {
-            editUi().playback_status->setText("Gap in timeline.");
+            editUi().playback_status->setText(QCoreApplication::translate("MainWindow", "Gap in timeline."));
         }
         preview_widget_->clearFrame("Gap in timeline.");
-        statusBar()->showMessage("Gap in timeline.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Gap in timeline."));
         return;
     }
     if (editUi().playback_status != nullptr) {
         editUi().playback_status->setText(
-            during_playback ? "End of timeline." : "End of media.");
+            during_playback ? QCoreApplication::translate("MainWindow", "End of timeline.") : QCoreApplication::translate("MainWindow", "End of media."));
     }
 }
 
@@ -1383,7 +1384,7 @@ void MainWindow::handlePlaybackError(const playback::PlaybackErrorEvent& event) 
         if (active_timeline_clip_id_ == event.activation_clip_id) {
             clearActiveTimelineSelection();
         }
-        statusBar()->showMessage("Could not activate the next timeline clip.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not activate the next timeline clip."));
     }
 
     playback_activation_loading_ = false;
@@ -1391,10 +1392,10 @@ void MainWindow::handlePlaybackError(const playback::PlaybackErrorEvent& event) 
     updateTimelineState();
     updatePlaybackControls();
     if (editUi().playback_status != nullptr) {
-        editUi().playback_status->setText("Playback error.");
+        editUi().playback_status->setText(QCoreApplication::translate("MainWindow", "Playback error."));
     }
     if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
         edit_workspace_->controller()->refreshTimelinePresentation();
     }
-    QMessageBox::warning(this, "Playback error", event.message);
+    QMessageBox::warning(this, QCoreApplication::translate("MainWindow", "Playback error"), event.message);
 }

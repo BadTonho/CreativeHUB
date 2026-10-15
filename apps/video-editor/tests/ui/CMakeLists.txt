@@ -437,3 +437,16 @@ set_tests_properties(creative-suite-main-editor-edit-workspace-controller PROPER
 )
 
 preserve_video_editor_test_working_directory()
+add_executable(creative-suite-main-editor-translation-catalog-tests
+    translation_catalog_test.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/translations.qrc)
+target_link_libraries(creative-suite-main-editor-translation-catalog-tests PRIVATE
+    creative-suite-main-editor-core
+    creative-suite::translations)
+target_compile_features(creative-suite-main-editor-translation-catalog-tests PRIVATE cxx_std_20)
+add_dependencies(creative-suite-main-editor-translation-catalog-tests
+    creative-suite-video-editor-translation-catalog)
+deploy_qt_test_runtime(creative-suite-main-editor-translation-catalog-tests)
+add_creative_suite_test(
+    NAME creative-suite-main-editor-translation-catalog
+    COMMAND creative-suite-main-editor-translation-catalog-tests)

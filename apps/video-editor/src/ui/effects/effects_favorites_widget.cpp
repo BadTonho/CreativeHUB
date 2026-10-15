@@ -3,6 +3,7 @@
 #include "ui/media_browser/media_drag_mime.h"
 #include <QMenu>
 #include <QMessageBox>
+#include <QCoreApplication>
 
 EffectsFavoritesWidget::EffectsFavoritesWidget(QWidget* parent) : QListWidget(parent) {
     setObjectName("effectsFavorites");
@@ -22,10 +23,10 @@ EffectsFavoritesWidget::EffectsFavoritesWidget(QWidget* parent) : QListWidget(pa
         auto* entry=itemAt(position);
         if (!entry) return;
         const auto id=entry->data(Qt::UserRole).toString();
-        QMenu menu(this);auto* remove=menu.addAction("Remove from Favorites");
+        QMenu menu(this);auto* remove=menu.addAction(QCoreApplication::translate("EffectsFavoritesWidget", "Remove from Favorites"));
         if (menu.exec(viewport()->mapToGlobal(position))!=remove) return;
         if (effects::setFavorite(id,false)) { refresh();emit favoritesChanged(); }
-        else QMessageBox::warning(this,"Favorites","The favorites could not be saved.");
+        else QMessageBox::warning(this,QCoreApplication::translate("EffectsFavoritesWidget", "Favorites"),QCoreApplication::translate("EffectsFavoritesWidget", "The favorites could not be saved."));
     });
     refresh();
 }

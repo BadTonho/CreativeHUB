@@ -367,8 +367,8 @@ void MainWindow::createWorkspace() {
             if (playback_controller_ && preview_widget_->currentPayload().gpu)
                 playback_controller_->recoverPreviewFrame(preview_widget_->currentPayload());
             statusBar()->showMessage(preview_widget_->usesGpuPreview()
-                ? "Direct GPU preview unavailable; using RGBA delivery."
-                : "GPU preview unavailable; using CPU preview.", 5000);
+                ? QCoreApplication::translate("MainWindow", "Direct GPU preview unavailable; using RGBA delivery.")
+                : QCoreApplication::translate("MainWindow", "GPU preview unavailable; using CPU preview."), 5000);
         });
 
     bins_dock_ = createDock(
@@ -753,10 +753,10 @@ void MainWindow::createMenus() {
 
     auto* file_menu = menuBar()->addMenu("&File");
     file_menu->setObjectName(QStringLiteral("fileMenu"));
-    auto* import_interchange = file_menu->addAction("Import Composition Interchange...");
+    auto* import_interchange = file_menu->addAction(QCoreApplication::translate("MainWindow", "Import Composition Interchange..."));
     import_interchange->setObjectName("importCompositionInterchangeAction");
     connect(import_interchange, &QAction::triggered, this, &MainWindow::importCompositionInterchange);
-    auto* export_interchange = file_menu->addAction("Export Composition Interchange...");
+    auto* export_interchange = file_menu->addAction(QCoreApplication::translate("MainWindow", "Export Composition Interchange..."));
     export_interchange->setObjectName("exportCompositionInterchangeAction");
     disableDuringProjectLoad(import_interchange);
     disableDuringProjectLoad(export_interchange);
@@ -764,7 +764,7 @@ void MainWindow::createMenus() {
     register_menu_action(export_interchange, settings::ShortcutScope::Application);
     connect(export_interchange, &QAction::triggered, this, &MainWindow::exportCompositionInterchange);
     file_menu->addSeparator();
-    new_project_action_ = file_menu->addAction("&New Project");
+    new_project_action_ = file_menu->addAction(QCoreApplication::translate("MainWindow", "&New Project"));
     register_menu_action(new_project_action_, settings::ShortcutScope::Application);
     disableDuringProjectLoad(new_project_action_);
     new_project_action_->setShortcut(QKeySequence("Ctrl+N"));
@@ -774,17 +774,17 @@ void MainWindow::createMenus() {
         new_project_action_, settings::ShortcutScope::Application,
         QStringLiteral("All workspaces"));
     connect(new_project_action_, &QAction::triggered, this, &MainWindow::newProject);
-    project_settings_action_ = file_menu->addAction("Project Settings...");
+    project_settings_action_ = file_menu->addAction(QCoreApplication::translate("MainWindow", "Project Settings..."));
     register_menu_action(project_settings_action_, settings::ShortcutScope::Application);
     project_settings_action_->setObjectName(QStringLiteral("projectSettingsAction"));
     disableDuringProjectLoad(project_settings_action_);
     connect(project_settings_action_, &QAction::triggered,
             this, &MainWindow::showProjectSettingsDialog);
-    auto* open_media_action = file_menu->addAction("Open &Media...");
+    auto* open_media_action = file_menu->addAction(QCoreApplication::translate("MainWindow", "Open &Media..."));
     register_menu_action(open_media_action, settings::ShortcutScope::Application);
     disableDuringProjectLoad(open_media_action);
     connect(open_media_action, &QAction::triggered, this, &MainWindow::openMedia);
-    open_project_action_ = file_menu->addAction("&Open Project...");
+    open_project_action_ = file_menu->addAction(QCoreApplication::translate("MainWindow", "&Open Project..."));
     register_menu_action(open_project_action_, settings::ShortcutScope::Application);
     disableDuringProjectLoad(open_project_action_);
     open_project_action_->setShortcut(QKeySequence("Ctrl+O"));
@@ -794,7 +794,7 @@ void MainWindow::createMenus() {
         open_project_action_, settings::ShortcutScope::Application,
         QStringLiteral("All workspaces"));
     connect(open_project_action_, &QAction::triggered, this, &MainWindow::openProject);
-    save_project_action_ = file_menu->addAction("&Save Project");
+    save_project_action_ = file_menu->addAction(QCoreApplication::translate("MainWindow", "&Save Project"));
     register_menu_action(save_project_action_, settings::ShortcutScope::Application);
     disableDuringProjectLoad(save_project_action_);
     save_project_action_->setShortcut(QKeySequence("Ctrl+S"));
@@ -804,7 +804,7 @@ void MainWindow::createMenus() {
         save_project_action_, settings::ShortcutScope::Application,
         QStringLiteral("All workspaces"));
     connect(save_project_action_, &QAction::triggered, this, &MainWindow::saveProject);
-    save_project_as_action_ = file_menu->addAction("Save Project &As...");
+    save_project_as_action_ = file_menu->addAction(QCoreApplication::translate("MainWindow", "Save Project &As..."));
     register_menu_action(save_project_as_action_, settings::ShortcutScope::Application);
     disableDuringProjectLoad(save_project_as_action_);
     save_project_as_action_->setShortcut(QKeySequence("Ctrl+Shift+S"));
@@ -816,13 +816,13 @@ void MainWindow::createMenus() {
         QStringLiteral("All workspaces"));
     connect(save_project_as_action_, &QAction::triggered, this, &MainWindow::saveProjectAs);
     file_menu->addSeparator();
-    auto* exit_action = file_menu->addAction("E&xit");
+    auto* exit_action = file_menu->addAction(QCoreApplication::translate("MainWindow", "E&xit"));
     register_menu_action(exit_action, settings::ShortcutScope::Application);
     connect(exit_action, &QAction::triggered, this, &QWidget::close);
 
     auto* edit_menu = menuBar()->addMenu("&Edit");
     edit_menu->setObjectName(QStringLiteral("editMenu"));
-    auto* undo_action = edit_menu->addAction("&Undo");
+    auto* undo_action = edit_menu->addAction(QCoreApplication::translate("MainWindow", "&Undo"));
     register_menu_action(undo_action, settings::ShortcutScope::Shared);
     disableDuringProjectLoad(undo_action);
     undo_action->setShortcut(QKeySequence::Undo);
@@ -835,7 +835,7 @@ void MainWindow::createMenus() {
     connect(undo_action_, &QAction::triggered, this, [this]() {
         static_cast<void>(edit_workspace_->controller()->undo());
     });
-    auto* redo_action = edit_menu->addAction("&Redo");
+    auto* redo_action = edit_menu->addAction(QCoreApplication::translate("MainWindow", "&Redo"));
     register_menu_action(redo_action, settings::ShortcutScope::Shared);
     disableDuringProjectLoad(redo_action);
     redo_action->setShortcut(QKeySequence::Redo);
@@ -892,7 +892,7 @@ void MainWindow::createMenus() {
     register_menu_action(inspector_view_action, settings::ShortcutScope::Application);
     register_menu_action(timeline_view_action, settings::ShortcutScope::Application);
     view_menu->addSeparator();
-    auto* grayscale_action = view_menu->addAction("Grayscale Preview");
+    auto* grayscale_action = view_menu->addAction(QCoreApplication::translate("MainWindow", "Grayscale Preview"));
     register_menu_action(grayscale_action, settings::ShortcutScope::Application);
     grayscale_action->setCheckable(true);
     grayscale_action->setChecked(false);
@@ -939,7 +939,7 @@ void MainWindow::createMenus() {
         "playbackPreviewQualityQuarter",
         playback::PreviewQuality::Quarter);
     view_menu->addSeparator();
-    auto* restore_layout_action = view_menu->addAction("Restore &Default Layout");
+    auto* restore_layout_action = view_menu->addAction(QCoreApplication::translate("MainWindow", "Restore &Default Layout"));
     register_menu_action(restore_layout_action, settings::ShortcutScope::Application);
     connect(restore_layout_action, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);
 
@@ -970,14 +970,14 @@ void MainWindow::createMenus() {
         " background-color: #1f5f91;"
         "}");
     addToolBar(Qt::TopToolBarArea, media_pool_toolbar);
-    media_pool_action_ = media_pool_toolbar->addAction("Media Pool");
+    media_pool_action_ = media_pool_toolbar->addAction(QCoreApplication::translate("MainWindow", "Media Pool"));
     register_menu_action(media_pool_action_, settings::ShortcutScope::Shared);
     media_pool_action_->setCheckable(true);
-    media_pool_action_->setToolTip("Show the Media Pool docks");
-    effects_action_ = media_pool_toolbar->addAction("Effects");
+    media_pool_action_->setToolTip(QCoreApplication::translate("MainWindow", "Show the Media Pool docks"));
+    effects_action_ = media_pool_toolbar->addAction(QCoreApplication::translate("MainWindow", "Effects"));
     register_menu_action(effects_action_, settings::ShortcutScope::Shared);
     effects_action_->setCheckable(true);
-    effects_action_->setToolTip("Show the Effects docks");
+    effects_action_->setToolTip(QCoreApplication::translate("MainWindow", "Show the Effects docks"));
     auto* workspace_toolbar_spacer = new QWidget(media_pool_toolbar);
     workspace_toolbar_spacer->setSizePolicy(
         QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -1015,30 +1015,30 @@ void MainWindow::createMenus() {
             });
     updateEffectsActionState();
 
-    auto* settings_action = menuBar()->addAction("&Settings");
+    auto* settings_action = menuBar()->addAction(QCoreApplication::translate("MainWindow", "&Settings"));
     settings_action->setObjectName(QStringLiteral("settingsMenuAction"));
     register_menu_action(settings_action, settings::ShortcutScope::Application);
-    settings_action->setToolTip("Open editor settings");
+    settings_action->setToolTip(QCoreApplication::translate("MainWindow", "Open editor settings"));
     connect(settings_action, &QAction::triggered,
             this, &MainWindow::showSettingsDialog);
 
     auto* help_menu = menuBar()->addMenu("&Help");
     help_menu->setObjectName(QStringLiteral("helpMenu"));
-    auto* system_action = help_menu->addAction("&System");
+    auto* system_action = help_menu->addAction(QCoreApplication::translate("MainWindow", "&System"));
     register_menu_action(system_action, settings::ShortcutScope::Application);
     connect(system_action, &QAction::triggered, this, [this]() {
         const auto version = QCoreApplication::applicationVersion();
         const auto executable_path = QCoreApplication::applicationFilePath();
         QMessageBox::information(
             this,
-            "System",
-            QString("Video Editor\n\nVersion: %1\nExecutable: %2")
-                .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.0") : version,
+            QCoreApplication::translate("MainWindow", "System"),
+            QString(QCoreApplication::translate("MainWindow", "Video Editor\n\nVersion: %1\nExecutable: %2"))
+                .arg(version.isEmpty() ? QCoreApplication::translate("MainWindow", "Beta 0.1.0") : version,
                      executable_path.isEmpty()
-                         ? QStringLiteral("N/A")
+                         ? QCoreApplication::translate("MainWindow", "N/A")
                          : executable_path));
     });
-    auto* open_log_folder_action = help_menu->addAction("Open &Log Folder");
+    auto* open_log_folder_action = help_menu->addAction(QCoreApplication::translate("MainWindow", "Open &Log Folder"));
     register_menu_action(open_log_folder_action, settings::ShortcutScope::Application);
     connect(open_log_folder_action, &QAction::triggered, this, [this]() {
         auto& logger = logging::Logger::instance();
@@ -1053,7 +1053,7 @@ void MainWindow::createMenus() {
                 "open_log_folder",
                 "Could not open the log directory.",
                 {{"path", directory_text}});
-            statusBar()->showMessage("Could not open the log folder.");
+            statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not open the log folder."));
             return;
         }
 
@@ -1063,17 +1063,17 @@ void MainWindow::createMenus() {
             "open_log_folder",
             "Opened the log directory.",
             {{"path", directory_text}});
-        statusBar()->showMessage("Log folder opened.");
+        statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Log folder opened."));
     });
     help_menu->addSeparator();
-    auto* about_action = help_menu->addAction("&About Video Editor");
+    auto* about_action = help_menu->addAction(QCoreApplication::translate("MainWindow", "&About Video Editor"));
     register_menu_action(about_action, settings::ShortcutScope::Application);
     connect(about_action, &QAction::triggered, this, [this]() {
         QMessageBox::about(
             this,
-            "About Video Editor",
-            "Video Editor application shell\n\n"
-            "This is an early open-source creative suite workspace.");
+            QCoreApplication::translate("MainWindow", "About Video Editor"),
+            QCoreApplication::translate("MainWindow", "Video Editor application shell\n\n") +
+            QCoreApplication::translate("MainWindow", "This is an early open-source creative suite workspace."));
     });
 
     auto* play_action = new QAction(this);
@@ -1146,7 +1146,7 @@ void MainWindow::createMenus() {
                     QKeySequence::NativeText);
                 button->setToolTip(shortcut_text.isEmpty()
                     ? tooltip
-                    : QStringLiteral("%1 (%2)").arg(tooltip, shortcut_text));
+                    : QCoreApplication::translate("MainWindow", "%1 (%2)").arg(tooltip, shortcut_text));
             };
             connect(action, &QAction::changed,
                     this, update_button_tooltip);
@@ -1613,8 +1613,8 @@ void MainWindow::updateInspectorExpandButton() {
                             : QStyle::SP_TitleBarMaxButton));
     inspector_expand_button_->setToolTip(
         inspector_expanded_
-            ? QStringLiteral("Restore Inspector layout")
-            : QStringLiteral("Expand Inspector to full window height"));
+            ? QCoreApplication::translate("MainWindow", "Restore Inspector layout")
+            : QCoreApplication::translate("MainWindow", "Expand Inspector to full window height"));
     inspector_expand_button_->setAccessibleName(
         inspector_expand_button_->toolTip());
 }
@@ -1628,8 +1628,8 @@ void MainWindow::updateMediaPoolExpandButton() {
                              : QStyle::SP_TitleBarMaxButton));
     media_pool_expand_button_->setToolTip(
         media_pool_expanded_
-            ? QStringLiteral("Restore Media Pool layout")
-            : QStringLiteral("Expand Media Pool to full window height"));
+            ? QCoreApplication::translate("MainWindow", "Restore Media Pool layout")
+            : QCoreApplication::translate("MainWindow", "Expand Media Pool to full window height"));
     media_pool_expand_button_->setAccessibleName(
         media_pool_expand_button_->toolTip());
 }

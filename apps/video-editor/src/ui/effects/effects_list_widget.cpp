@@ -9,6 +9,7 @@
 
 #include <QMenu>
 #include <QMessageBox>
+#include <QCoreApplication>
 
 EffectsListWidget::EffectsListWidget(QWidget* parent)
     : QListWidget(parent) {
@@ -44,10 +45,10 @@ EffectsListWidget::EffectsListWidget(QWidget* parent)
         if (!effects::isDraggable(id)) return;
         const bool saved=effects::favoriteIds().contains(id);
         QMenu menu(this);
-        auto* toggle=menu.addAction(saved ? "Remove from Favorites" : "Add to Favorites");
+        auto* toggle=menu.addAction(saved ? QCoreApplication::translate("EffectsListWidget", "Remove from Favorites") : QCoreApplication::translate("EffectsListWidget", "Add to Favorites"));
         if (menu.exec(viewport()->mapToGlobal(position))!=toggle) return;
         if (effects::setFavorite(id,!saved)) emit favoritesChanged();
-        else QMessageBox::warning(this,"Favorites","The favorites could not be saved.");
+        else QMessageBox::warning(this,QCoreApplication::translate("EffectsListWidget", "Favorites"),QCoreApplication::translate("EffectsListWidget", "The favorites could not be saved."));
     });
     updateVisibility();
 }

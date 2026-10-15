@@ -4,6 +4,7 @@
 #include "rendering/preview_performance_metrics.h"
 
 #include <QImage>
+#include <QCoreApplication>
 #include <QLabel>
 #include <QPaintEvent>
 #include <QPixmap>
@@ -73,7 +74,8 @@ PreviewWidget::PreviewWidget(QWidget* parent)
             this, &PreviewWidget::gpuFallbackRequested);
     }
 
-    clearFrame("Preview area\n\nImport media to display its first frame.");
+    clearFrame(QCoreApplication::translate(
+        "PreviewWidget", "Preview area\n\nImport media to display its first frame."));
 }
 
 void PreviewWidget::setFrame(const media::VideoFrame& frame) {
@@ -104,7 +106,7 @@ void PreviewWidget::setFrame(rendering::PreviewFramePayload frame, quint64 deliv
         rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(
             delivery_trace_id,
             rendering::PreviewFrameDeliveryDropReason::InvalidFrame);
-        clearFrame("Preview frame is unavailable.");
+        clearFrame(QCoreApplication::translate("PreviewWidget", "Preview frame is unavailable."));
         return;
     }
 
@@ -113,7 +115,7 @@ void PreviewWidget::setFrame(rendering::PreviewFramePayload frame, quint64 deliv
         rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(
             delivery_trace_id,
             rendering::PreviewFrameDeliveryDropReason::InvalidFrame);
-        clearFrame("Preview frame is unavailable.");
+        clearFrame(QCoreApplication::translate("PreviewWidget", "Preview frame is unavailable."));
         return;
     }
 
@@ -137,7 +139,8 @@ void PreviewWidget::setFrame(rendering::PreviewFramePayload frame, quint64 deliv
     }
 
     if (current_payload_.gpu) {
-        emit gpuFallbackRequested("The shared texture cannot be presented by the current viewer.", -1);
+        emit gpuFallbackRequested(QCoreApplication::translate(
+            "PreviewWidget", "The shared texture cannot be presented by the current viewer."), -1);
         return;
     }
 
