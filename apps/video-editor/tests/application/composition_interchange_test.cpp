@@ -8,6 +8,7 @@
 #include "project/project_file.h"
 #include "rendering/composition_frame_renderer.h"
 #include "rendering/graph_generators.h"
+#include "workspaces/edit/controllers/edit_workspace_controller.h"
 #include <QApplication>
 #include <QImage>
 #include <QJsonDocument>
@@ -20,6 +21,7 @@
 #include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/composition_exchange/raster.h>
 #include <creative_suite/media/still_image_decoder.h>
+#include <creative_suite/media/media_importer.h>
 #include <creative_suite/media/video_playback.h>
 #include <creative_suite/media/video_probe.h>
 #include <cstdlib>
@@ -140,7 +142,8 @@ void compare(const x::Document &d, const motion::model::MotionProjectData &proje
     check(maximum <= 2, message);
 }
 } // namespace
-int main(int argc, char **argv) {
+int main(int argc, char **argv) try {
+    std::cout << std::unitbuf;
     QApplication app(argc, argv);
     QTemporaryDir temporary;
     check(temporary.isValid(), "temporary directory");
@@ -193,6 +196,28 @@ int main(int argc, char **argv) {
     rejected([&] { (void)x::fromJson(invalid, path); }, "invalid geometry");
     auto project = motion::model::importComposition(*loaded);
     check(project.layers[1].keyframes == text.curves, "editable curves");
+    {
+        motion::model::CompositionDocument editable(320, 180, {30, 1}, project.layers);
+        auto title = std::get<motion::model::TextLayerContent>(project.layers[1].content);
+        title.text = "Edited in Motion";
+        title.font_size_pixels = 28.5;
+        auto fill = std::get<motion::model::ShapeLayerContent>(project.layers[0].content);
+        fill.fill_color = {11, 22, 33, 99};
+        check(editable.setTextLayerContent(text.id, title) &&
+                  editable.setShapeLayerContent(bg.id, fill) &&
+                  editable.setLayerName(text.id, "Edited title") &&
+                  editable.setLayerKeyframe(text.id,
+                      creative_suite::animation::TransformProperty::Opacity, 30, .4),
+              "normal Motion controls edit imported layers");
+        auto edited_project = project;
+        edited_project.layers = editable.layers();
+        auto edited = motion::model::exportComposition(edited_project);
+        check(edited.layers[1].text.content == title.text && edited.layers[1].text.size == 28.5 &&
+                  edited.layers[1].presentation.name == "Edited title" &&
+                  edited.layers[0].color == fill.fill_color &&
+                  project.layers[1].keyframes == text.curves,
+              "edited export and independent source composition");
+    }
     auto motion_path = dir / "saved.motion";
     motion::persistence::MotionDocumentStore::save(motion_path, project);
     auto reopened = motion::persistence::MotionDocumentStore::load(motion_path);
@@ -279,15 +304,30 @@ int main(int argc, char **argv) {
 
     application::EditorSession session;
     application::TimelineCommandService commands(session);
+    ui::EditWorkspaceController controller(session, commands);
+    controller.setPlaybackPresentation(false, false, true);
+    int commits = 0;
+    qint64 rendered_global = -1, rendered_local = -1;
+    QObject::connect(&controller, &ui::EditWorkspaceController::timelineEditCommitted,
+        [&](const application::TimelineEditResult& result, bool, bool refresh, const QString&) {
+            check(result.changed() && refresh, "import refresh notification");
+            ++commits;
+        });
+    QObject::connect(&controller, &ui::EditWorkspaceController::renderCompositionFrameRequested,
+        [&](qint64 global, qint64 local) { rendered_global = global; rendered_local = local; });
     auto track = session.timeline().tracks().front().track_id;
     application::AddFusionCompositionCommand add{track, 10, d.duration};
     add.graph = application::importComposition(returned);
     add.display_name = d.name;
-    auto applied = commands.execute(add);
+    auto applied = controller.insertPreparedComposition(add);
     check(applied.changed() && applied.invalidate_playback &&
               applied.selection.active_clip_id.has_value(),
           "insertion result");
-    check(commands.execute(add).status == application::EditStatus::Rejected, "collision");
+    check(commits == 1 && rendered_global == 10 && rendered_local == 0 &&
+              session.playheadFrame() == 0 && controller.timelinePlayheadFrame() == 10,
+          "import selects the clip and refreshes its global timeline position");
+    check(controller.insertPreparedComposition(add).status == application::EditStatus::Rejected &&
+              commits == 1, "collision must not publish a committed edit");
     check(commands.undo().changed() && session.timeline().tracks().front().clips.empty(), "undo");
     check(commands.redo().changed(), "redo");
     auto document = application::ProjectDocumentMapper::toDocument(session);
@@ -321,6 +361,39 @@ int main(int argc, char **argv) {
             d.layers[1].transform, d.layers[1].curves, frame + 30);
         check(std::abs(sliced.opacity - original.opacity) < 1e-8, "Bezier split continuity");
     }
+    {
+        application::EditorSession media_session;
+        application::TimelineCommandService media_commands(media_session);
+        ui::EditWorkspaceController media_controller(media_session, media_commands);
+        auto image_document = native_motion;
+        image_document.layers = {image_layer};
+        image_document.layers.front().source =
+            creative_suite::media::MediaLibrary::canonicalPath(image_path);
+        application::AddFusionCompositionCommand prepared{
+            media_session.timeline().tracks().front().track_id, 200, image_document.duration};
+        prepared.graph = application::importComposition(image_document);
+        std::atomic_bool canceled{false};
+        auto batch = creative_suite::media::MediaImporter{}.process({image_path}, canceled);
+        check(batch.files.size() == 1 && batch.files.front().item.has_value(), "prepare image media");
+        prepared.media.push_back(std::move(*batch.files.front().item));
+        const auto* pixels = prepared.media.front().first_frame.rgba_pixels.data();
+        check(media_controller.insertPreparedComposition(std::move(prepared)).changed() &&
+                  media_session.mediaLibrary().contains(image_path) &&
+                  media_session.mediaLibrary().items().front().first_frame.rgba_pixels.data() == pixels,
+              "prepared import commits media without copying pixels");
+        check(media_commands.undo().changed() &&
+                  media_session.timeline().tracks().front().clips.empty() &&
+                  media_commands.redo().changed(), "prepared media import history");
+    }
+    auto processed_clip = clip;
+    processed_clip.transform.opacity = .5;
+    bool unsupported_clip = false;
+    try {
+        (void)application::exportComposition(processed_clip, 320, 180, {30, 1});
+    } catch (const x::Unsupported&) {
+        unsupported_clip = true;
+    }
+    check(unsupported_clip, "clip processing is an expected incompatibility, not a technical failure");
     clip.node_graph->nodes.push_back(
         {clip.node_graph->next_id++, fusion::nodes::NodeType::RectangleMask});
     rejected([&] { (void)application::exportComposition(clip, 320, 180, {30, 1}); },
@@ -373,4 +446,8 @@ int main(int argc, char **argv) {
     missing.layers.front().source_rate = 30;
     check(!x::validate(missing, true).empty(), "missing media");
     std::cout << "Composition interchange passed\n";
+    return 0;
+} catch (const std::exception& error) {
+    std::cerr << "Composition interchange failed: " << error.what() << '\n';
+    return 1;
 }

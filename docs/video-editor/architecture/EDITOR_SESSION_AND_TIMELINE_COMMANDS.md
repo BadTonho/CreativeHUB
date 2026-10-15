@@ -1,6 +1,13 @@
 # Editor Session and Timeline Commands
 
-The AddFusionComposition command accepts a validated graph, display name and prepared media for atomic interchange insertion. Timeline collisions leave the staged timeline/catalog unapplied. See [interchange](../../COMPOSITION_INTERCHANGE.md).
+The AddFusionComposition command accepts a validated graph, display name and
+worker-prepared media for interchange insertion. Timeline collisions leave the
+staged timeline/catalog unapplied. The catalog validates the entire prepared
+batch before appending and moves pixel owners without copying existing frames.
+The Edit controller publishes the normal committed-edit notification to refresh
+timeline, Inspector and composition preview. Insertion uses the global playhead;
+the selected new clip starts at local frame zero. See
+[interchange](../../COMPOSITION_INTERCHANGE.md).
 
 ## Background Generator
 

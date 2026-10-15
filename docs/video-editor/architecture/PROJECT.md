@@ -8,8 +8,8 @@ Fusion Composition clips may store UTF-8 `display_name`. Background presets use
 this field while retaining `kind: "fusion_composition"` and the existing graph.
 Missing/empty names reconstruct Fusion Composition. Custom names on other clip
 kinds or in older root versions are refused. Mapping, opening, autosave and
-recovery preserve names, node data and input offsets. Hub supports v29 and
-rejects future v30. See [Background Generator](../BACKGROUND_GENERATOR.md).
+recovery preserve names, node data and input offsets. Hub supports v30 and
+rejects future v31. See [Background Generator](../BACKGROUND_GENERATOR.md).
 
 ## Fusion masks (version 28)
 
@@ -19,8 +19,8 @@ The `mask_keyframes` object contains five named scalar arrays with the existing
 frame/value/interpolation/easing representation. Mask connections use input 2;
 image input indices remain unchanged. Mask data is accepted only in v28 and
 later. Versions 1–27 retain their previous reader behavior. Generated composition
-input offsets, autosave and recovery remain intact. Hub supports v28 and rejects
-future v30. See [Fusion Masks](../FUSION_MASKS.md).
+input offsets, autosave and recovery remain intact. Hub supports v30 and rejects
+future v31. See [Fusion Masks](../FUSION_MASKS.md).
 
 ## Fusion Composition and generators (version 27)
 

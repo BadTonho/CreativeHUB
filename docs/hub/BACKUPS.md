@@ -7,7 +7,7 @@ Editable composition interchange advances supported native backups to CSP v30 an
 Named Fusion Compositions retain optional `display_name`, including Background
 presets, through snapshot and restored projects. The existing graph/media path
 adapter preserves node colors, masks and input offsets while relocating external
-Input sources. Formats 1–29 are supported; future v30 is refused. The actual
+Input sources. Formats 1–30 are supported; future v31 is refused. The actual
 Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 
 ## Video Editor v28 masks
@@ -15,14 +15,14 @@ Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 The backup adapter preserves Rectangle/Ellipse node types, geometry, curves and
 Mask input 2 alongside generators and composition input offsets. Masks carry no
 media references; external Input paths continue to be rewritten on snapshot and
-restore. Supported Video Editor schemas are 1–29; future v30 is rejected.
+restore. Supported Video Editor schemas are 1–30; future v31 is rejected.
 The Video Editor reader reopens restored fixtures in `hub-backup-format-test`.
 
 ## Video Editor v27 compositions
 
 Fusion Composition clips have no primary source. Backup preserves Background/
 Text data, graph curves and the signed input-time offset, while external Input
-paths are relocated through the existing node path adapter. Video formats 1–29
+paths are relocated through the existing node path adapter. Video formats 1–30
 are accepted; future versions are rejected. Producer/consumer round trips use
 the actual Video Editor writer and reader.
 
@@ -52,13 +52,13 @@ producer/consumer regression coverage when supported schemas gain path fields.
 | Format identifier | Supported versions | References rewritten |
 | --- | --- | --- |
 | `creative-suite-image-document` | 1–16 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
-| `creative-suite.main-editor` | 1–29 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
-| `creative-suite.motion-studio` | 1–6 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
+| `creative-suite.main-editor` | 1–30 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
+| `creative-suite.motion-studio` | 1–7 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
 
 Video v26 adjustment clips have no source path. Their duration, effects and
 transform curves are preserved by backup and restoration. They do not cause
 media lookup or path rewriting. Versions 1–25 remain accepted, and versions
-newer than 29 are rejected until their reference contracts are supported.
+newer than 30 are rejected until their reference contracts are supported.
 
 Image paths use the original document directory. Video and Motion paths use
 the weakly canonical original document location, matching their readers.

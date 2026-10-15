@@ -30,8 +30,8 @@ x::Document exportComposition(const timeline::TimelineClip &clip, int w, int h,
         throw x::Unsupported("Select a Fusion Composition to export.");
     if (clip.transform != timeline::Transform2D{} || !clip.effects.empty() ||
         clip.keyframes != timeline::TransformKeyframes{})
-        throw x::Error("Clip-level effects and transforms require composition-wide processing and "
-                       "cannot be transferred yet.");
+        throw x::Unsupported("Composition clip: Edit Inspector effects and transforms require "
+                             "composition-wide processing and cannot be transferred yet.");
     constexpr auto limit = std::int64_t(1) << 50;
     if (clip.timeline_duration_frames < 1 || clip.timeline_duration_frames >= limit ||
         clip.composition_input_offset_frames <= -limit ||

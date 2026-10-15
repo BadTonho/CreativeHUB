@@ -114,7 +114,7 @@ pending separately from automated offscreen checks.
 | Edit/Fusion RGBA synchronization, multiple-node selection, node removal, ordinary video/image graphs, canceled dialogs and real video/audio/collision drops | `creative-suite-main-editor-background-generator` |
 | Dirty state, color Undo to saved baseline and cancellation in the real application | `creative-suite-main-editor-main-window` |
 | Pre-encoding Preview/export parity for the white preset and colored/transparent backgrounds over lower tracks | `creative-suite-main-editor-fusion-composition` |
-| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future v30 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future v31 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
 
 The generator drag test sends actual Qt drag/drop events directly, without
 showing the standalone TimelineWidget. In this Windows/offscreen fixture,
@@ -199,7 +199,7 @@ Background/Text/Merge parity through the native graph backend and requires that
 GPU work actually occurred. The main-window test checks insertion/effects dirty
 state, save and undo to the saved baseline. `hub-backup-format-test` preserves
 generator data, graph input paths and signed offsets through relocated restore;
-`hub-backup-manager-test` rejects future v30. Existing graph, timeline, playback,
+`hub-backup-manager-test` rejects future v31. Existing graph, timeline, playback,
 project, autosave, Inspector, adjustment and export gates remain relevant.
 
 CSP v27 also round-trips optional cubic Bezier easing for clip/node curves;
