@@ -47,12 +47,11 @@ Experimental preview now delivers shared GPU textures directly to the
 Motion-owned viewer, with a bounded mailbox and RGBA/CPU recovery; see
 [GPU_TEXTURE_PREVIEW.md](GPU_TEXTURE_PREVIEW.md). Offline export
 uses the same opt-in path and reads back RGBA for the existing CPU encoder.
-Manual Save, Save As, and Open use a
-versioned `.motion`
-document that includes the Media Pool. The writer emits v4, reads v1-v3 with
-empty effect stacks, reads v1 and v2 with old keyframes migrated as Linear,
-and reads v1 text or shape records with default content. The recovery wrapper
-remains at v1 and accepts nested documents through v4. Undo/Redo and configurable autosave and recovery cover the
+Manual Save, Save As, and Open use a versioned `.motion` document that includes
+the Media Pool. The writer emits schema v8 and reads versions 1–8; migrations
+and compatibility behavior are specified in [FORMAT.md](FORMAT.md). The
+separate recovery wrapper remains at version 1 and contains a nested native
+document. Undo/Redo and configurable autosave and recovery cover the
 composition and Media Pool. A first-pass video export uses a shared FFmpeg
 encoder, with opaque video-only output and per-job settings; audio and alpha
 remain outside the implemented export path. The composition workspace keeps
@@ -145,15 +144,12 @@ The standalone MVP does not depend on opening a Video Editor project or
 maintaining a live connection between the applications. Its rendered video can
 be used in a video workflow through the Video Editor's supported media import.
 
-The later linked workflow is a separate editable Motion Studio document
-referenced by the Video Editor. It should support opening or creating a
-composition from a supported timeline clip and creating one from a Media Pool
-item. Before insertion, the contract must define the composition canvas, frame
-rate, duration, and media dependency behavior. Saving a supported composition
-publishes a new saved revision; the Video Editor refreshes the corresponding
-output and invalidates dependent render-cache entries. Unsaved live previews
-between applications are deferred and require a separate demonstrated use
-case.
+The linked workflow uses a separate editable Motion Studio document referenced
+by the Video Editor. The supported layer subset, timing conversion, media
+dependencies, saved revisions, refresh behavior, and missing-media recovery
+are defined in [composition interchange](../COMPOSITION_INTERCHANGE.md).
+Unsaved live previews between applications remain deferred and require a
+separate demonstrated use case.
 
 Motion Studio and Video Editor keep distinct native project formats and
 application-specific document adapters. The Video Editor's `.csp` project
@@ -169,8 +165,8 @@ provide a recoverable reference if a linked document or dependency is missing.
 | Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, shared OpenGL composition and texture preview paths. | Motion Studio rasterizes native text and shape content to transparent RGBA8 on its preview worker, then uses `libs/composition/` by default or the optional `libs/composition-opengl` adapter. This app-owned Qt renderer and experimental opt-in GPU path are provisional and do not establish a final renderer choice. |
 | Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | Motion Studio uses `libs/animation/` to evaluate Linear and bounded cubic Bezier transform segments consistently in preview, playback, and export. Its Graph Editor, presets, property tracks, and inspector remain application-owned. |
 | Timeline and history | Timeline model, commands, and bounded undo/redo are application-specific. | Motion Studio owns its composition timeline and editing history; share lower-level behavior only where a second real consumer uses the same contract. |
-| Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 12, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
-| Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio implements an application-owned version 1 recovery wrapper around validated `.motion` v1-v4 data, including effect stacks. Shared recovery services remain deferred until both document owners have stable common requirements. |
+| Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 30, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
+| Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio implements an application-owned version 1 recovery wrapper around validated `.motion` v1-v8 data, including the Media Pool. Shared recovery services remain deferred until both document owners have stable common requirements. |
 | Diagnostics | Structured local logging is implemented in `libs/diagnostics/`; each application selects its own log directory. | Reuse the service with a Motion Studio-specific application identifier and context. |
 
 ### Candidate shared capabilities
@@ -275,11 +271,10 @@ The blur duration is wall-clock time, including pool scheduling and pass barrier
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
-The native `.motion` writer emits v4, reads v1-v3 with empty effect stacks,
-reads v1/v2 keyframes as Linear, and migrates v1 text and shape records using
-documented defaults; the recovery wrapper remains at version 1 and accepts
-nested documents through v4. Other interpolation modes, overshoot-capable
-curves, and advanced effects remain open. Final
+The native `.motion` writer emits schema v8 and reads versions 1–8. Migration
+details are maintained in [FORMAT.md](FORMAT.md); the recovery wrapper remains
+at version 1 and contains the validated native document. Other interpolation
+modes, overshoot-capable curves, and advanced effects remain open. Final
 encoder/profile selection and output color handling remain Windows technical
 validation work. The one-hour ruler range controls
 navigation only and does not define the composition's duration. See
@@ -368,22 +363,24 @@ unchanged.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The current implementation writes version 4 JSON documents and reads
-  versions 1, 2, 3, and 4, identified by
+- The current implementation writes version 8 JSON documents and reads
+  versions 1 through 8, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
   in [FORMAT.md](FORMAT.md).
-- Version 1 text and shape records migrate to documented defaults when opened;
-  v1-v3 load with empty effect stacks, v1/v2 keyframes load as Linear, and
-  saving older documents writes version 4.
+- Older text, shape, keyframe, effect, and linked-image records migrate as
+  specified in [FORMAT.md](FORMAT.md); saving an older document writes version
+  8.
   An unsupported future schema version is
   rejected without replacing the current composition or overwriting or
   normalizing the original file.
 - Cross-application references identify a Motion Studio document and its saved
   revision through a separately documented compatibility contract. Native
   document versioning and the Video Editor reference contract are distinct.
-- Cross-application reference representation remains undecided until the
-  handoff contract is implemented and validated.
+- The supported cross-application reference and editable interchange behavior
+  are implemented for the documented subset. See
+  [composition interchange](../COMPOSITION_INTERCHANGE.md) for its contract,
+  compatibility behavior, and pending acceptance.
 
 ## Deferred Technical Decisions
 

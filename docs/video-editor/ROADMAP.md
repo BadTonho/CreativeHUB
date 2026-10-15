@@ -1,6 +1,29 @@
 # Video Editor Roadmap
 
-Editable Fusion/Motion composition interchange uses independent `.cscomp` files for the documented compatible subset. Full graph conversion remains future work; see [contract and acceptance](../COMPOSITION_INTERCHANGE.md).
+Current application version: **Beta 0.1.0**. This roadmap tracks implementation,
+milestone order, release gates, and pending validation. `[x]` records completed
+implementation or a completed decision; it does not by itself mean release
+acceptance.
+
+## Documentation map
+
+| Question | Canonical document |
+| --- | --- |
+| What works in the application today? | [Current scope](architecture/SCOPE.md) |
+| How do the native project and effects contracts work? | [Project format](architecture/PROJECT.md), [effects](architecture/EFFECTS.md), and the feature guides below |
+| What is implemented, planned, or gated? | This roadmap |
+| Which automated and manual checks cover the behavior? | [Regression Testing](REGRESSION_TESTING.md) and its linked manual/platform evidence |
+| How do supported cross-application workflows behave? | [Composition interchange](../COMPOSITION_INTERCHANGE.md) and [cross-application compatibility](../CROSS_APPLICATION_COMPATIBILITY.md) |
+
+Editable Fusion/Motion composition interchange uses independent `.cscomp` files
+for the documented compatible subset. Full graph conversion remains future
+work; see [contract and acceptance](../COMPOSITION_INTERCHANGE.md).
+
+## Implemented for the pending 0.1.1 release
+
+The entries below summarize delivered work and link to its detailed contract.
+The roadmap milestone checklists remain the implementation history; current
+behavior is described in the canonical documents in the map above.
 
 ## Workspace-aware Functions
 
@@ -31,13 +54,8 @@ Automated checks accompany implementation; native graphical and macOS/Linux
 acceptance are tracked separately.
 
 
-Current application version: **Beta 0.1.0**.
-
-This roadmap tracks the Video Editor through its foundation exit gate. It
-separates implemented capabilities, approved foundation scope, release gates,
-open technical validation, and later expansion. A completed product-decision
-item records an agreed direction; it does not mean its feature is implemented.
-Update it when implementation, scope, or a decision changes.
+This roadmap tracks the Video Editor through its foundation exit gate. Update
+it when implementation, scope, or a decision changes.
 
 ## Adjustment Clip v1
 

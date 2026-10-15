@@ -1,21 +1,22 @@
 # Motion Studio Roadmap
 
-[Shape-mask interchange](../COMPOSITION_INTERCHANGE.md) adds editable shared
-Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
-curve slicing are shared; native Motion advances to v8 while CSP stays v30.
-Automated coverage: `creative-suite-mask-interchange`, shared composition/
-OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
-Native UI and platform acceptance remain separately pending.
+This roadmap records milestone order, implementation history, release gates,
+and feature-to-verification coverage. `[x]` means implementation or a decision
+is complete; it does not establish release acceptance.
 
-The first [editable composition interchange](../COMPOSITION_INTERCHANGE.md) transfers compatible layer stacks to Fusion and back. Masks on Merge/Output, blur interchange and group processing require later work. Native menu/platform acceptance remains separate from automated coverage.
+## Documentation map
 
-## Shared composition mask-operation regression
+| Question | Canonical document |
+| --- | --- |
+| What is in the approved MVP and what is its readiness? | [Scope and readiness](SCOPE_AND_READINESS.md) |
+| How are native documents stored and migrated? | [Native format](FORMAT.md) |
+| How do masks and editable handoff work? | [Masks](MASKS.md) and [composition interchange](../COMPOSITION_INTERCHANGE.md) |
+| Which tests and manual checks cover each feature? | [Regression coverage index](#regression-coverage-index) in this roadmap |
+| How is shared code reuse planned? | [Reuse plan](REUSE_PLAN.md) |
 
-The shared engine adds straight-RGBA ApplyMask/MaskedBlend for Video Editor
-Fusion masks. Graphs without masks retain their previous rendering behavior.
-The Windows Debug consumer gate includes Image interactive/GPU raster and Motion
-preview/GPU composition/export, plus shared composition CPU/OpenGL tests.
-Native macOS/Linux acceptance remains separate and pending.
+Feature entries below preserve implementation history. Use the linked scope,
+format, and contract documents for current behavior; use the regression index
+for evidence and pending acceptance.
 
 Current application version: **Beta 0.1.0**.
 
@@ -84,6 +85,26 @@ record direct-preview improvements; cross-platform driver acceptance remains
 pending. Direct preview now uses shared
 texture delivery with bounded resources and CPU recovery; see
 [GPU_TEXTURE_PREVIEW.md](GPU_TEXTURE_PREVIEW.md) for contracts and native checks.
+
+## Cross-application updates
+
+[Shape-mask interchange](../COMPOSITION_INTERCHANGE.md) adds editable shared
+Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
+curve slicing are shared; native Motion advances to v8 while CSP stays v30.
+Automated coverage: `creative-suite-mask-interchange`, shared composition/
+OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
+Native UI and platform acceptance remain separately pending.
+
+The first [editable composition interchange](../COMPOSITION_INTERCHANGE.md)
+transfers compatible layer stacks to Fusion and back. Masks on Merge/Output,
+blur interchange and group processing require later work. Native menu/platform
+acceptance remains separate from automated coverage.
+
+The shared engine adds straight-RGBA ApplyMask/MaskedBlend for Video Editor
+Fusion masks. Graphs without masks retain their previous rendering behavior.
+The Windows Debug consumer gate includes Image interactive/GPU raster and Motion
+preview/GPU composition/export, plus shared composition CPU/OpenGL tests.
+Native macOS/Linux acceptance remains separate and pending.
 
 ## Milestones
 

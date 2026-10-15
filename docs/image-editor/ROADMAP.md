@@ -1,12 +1,23 @@
 # Image Editor Roadmap
 
-## Shared composition mask-operation regression
+This roadmap records milestone order, implementation history, release gates,
+and feature-to-verification coverage. `[x]` means implementation or a decision
+is complete; it does not establish release acceptance.
 
-The shared engine adds straight-RGBA ApplyMask/MaskedBlend for Video Editor
-Fusion masks. Existing application rendering semantics and formats are unchanged.
-The Windows Debug consumer gate includes Image interactive/GPU raster and Motion
-preview/GPU composition/export, plus shared composition CPU/OpenGL tests.
-Native macOS/Linux acceptance remains separate and pending.
+## Documentation map
+
+| Question | Canonical document |
+| --- | --- |
+| What can the editor do today? | [Current scope](SCOPE.md) |
+| How are documents stored and migrated? | [Document format](FORMAT.md) |
+| How is the editor structured? | [Architecture](ARCHITECTURE.md) |
+| Which behaviors still need hands-on checks? | [Manual validation](MANUAL_VALIDATION.md) |
+| Which tests and manual checks cover each feature? | [Regression coverage index](#regression-coverage-index) in this roadmap |
+| Which shortcuts are available? | [Shortcuts](SHORTCUTS.md) |
+
+Feature entries and dated extensions below preserve the implementation history.
+Use the linked scope and format documents for current behavior, rather than
+treating milestone notes as the complete user-facing specification.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
@@ -74,6 +85,14 @@ and history are unchanged. The [GPU plan](GPU_ACCELERATION_PLAN.md) documents
 ownership, fallback and measured activation requirements. Windows evidence is in
 [the delivery results](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md);
 native macOS/Linux validation remains pending independently of the CI matrix.
+
+## Shared composition mask-operation regression
+
+The shared engine adds straight-RGBA ApplyMask/MaskedBlend for Video Editor
+Fusion masks. Existing application rendering semantics and formats are unchanged.
+The Windows Debug consumer gate includes Image interactive/GPU raster and Motion
+preview/GPU composition/export, plus shared composition CPU/OpenGL tests.
+Native macOS/Linux acceptance remains separate and pending.
 
 ## Milestones
 

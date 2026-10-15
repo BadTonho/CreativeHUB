@@ -169,7 +169,7 @@ UTF-8 JSON wrapper uses format identifier
 `creative-suite.motion-studio-recovery` and wrapper version `1`. Its fields are
 `format`, `version`, `target_document_path`, `session_id`, and `document`. The
 `document` value uses the same validated payload described above and may be
-version 1 through 6; preview caches and Undo/Redo history are not included. The
+version 1 through 8; preview caches and Undo/Redo history are not included. The
 wrapper remains version 1 and its nested document is written atomically with
 `QSaveFile`.
 

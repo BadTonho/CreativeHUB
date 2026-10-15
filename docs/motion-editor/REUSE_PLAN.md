@@ -335,9 +335,9 @@ the shared CPU compositor. Composition Undo/Redo is implemented in the Motion
 Studio application; Media Pool changes remain outside its history. Autosave
 and recovery use a version 1 wrapper, configurable timer, per-session untitled
 storage, saved-project sidecars, and recovery-management dialog. The `.motion`
-writer emits v4 and reads v1-v3; older keyframes migrate as Linear, and v1-v3
-documents receive empty effect stacks. The recovery wrapper remains at version
-1 and accepts nested documents through v4. Other application formats remain
+writer emits schema v8 and reads versions 1–8; migration details are recorded
+in [FORMAT.md](FORMAT.md). The recovery wrapper remains at version 1 and
+contains the validated native document. Other application formats remain
 unchanged.
 The Motion Studio timeline and export path consume shared media, playback,
 composition, effects, diagnostics, and video-encoding libraries directly without
