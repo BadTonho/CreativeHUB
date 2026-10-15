@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "main_window.h"
 #include "main_window_support.h"
 
@@ -52,34 +53,34 @@ MainWindow::MainWindow(QWidget* parent,
     empty_state_layout->setSpacing(10);
     empty_state_layout->addStretch(1);
 
-    empty_state_ = new QLabel(QStringLiteral("No composition open"), empty_state_container);
+    empty_state_ = new QLabel(MotionUiTranslation::tr("No composition open"), empty_state_container);
     empty_state_->setObjectName(QStringLiteral("motion-empty-state"));
     empty_state_->setAlignment(Qt::AlignCenter);
     empty_state_layout->addWidget(empty_state_, 0, Qt::AlignHCenter);
 
     empty_state_new_composition_button_ = new QPushButton(
-        QStringLiteral("New Composition..."), empty_state_container);
+        MotionUiTranslation::tr("New Composition..."), empty_state_container);
     empty_state_new_composition_button_->setObjectName(
         QStringLiteral("motion-empty-new-composition-button"));
     empty_state_layout->addWidget(empty_state_new_composition_button_, 0, Qt::AlignHCenter);
     empty_state_layout->addStretch(1);
     setCentralWidget(empty_state_container);
 
-    QMenu* file_menu = menuBar()->addMenu(QStringLiteral("File"));
-    auto* import_interchange = file_menu->addAction("Import Composition Interchange...");
+    QMenu* file_menu = menuBar()->addMenu(MotionUiTranslation::tr("File"));
+    auto* import_interchange = file_menu->addAction(MotionUiTranslation::tr("Import Composition Interchange..."));
     import_interchange->setObjectName("importCompositionInterchangeAction");
     connect(import_interchange, &QAction::triggered, this, &MainWindow::importCompositionInterchange);
-    auto* export_interchange = file_menu->addAction("Export Composition Interchange...");
+    auto* export_interchange = file_menu->addAction(MotionUiTranslation::tr("Export Composition Interchange..."));
     export_interchange->setObjectName("exportCompositionInterchangeAction");
     connect(export_interchange, &QAction::triggered, this, &MainWindow::exportCompositionInterchange);
     file_menu->addSeparator();
-    new_composition_action_ = file_menu->addAction(QStringLiteral("New Composition..."));
+    new_composition_action_ = file_menu->addAction(MotionUiTranslation::tr("New Composition..."));
     new_composition_action_->setObjectName(QStringLiteral("motion-new-composition-action"));
     new_composition_action_->setShortcut(QKeySequence::New);
     new_composition_action_->setShortcutContext(Qt::WindowShortcut);
     addAction(new_composition_action_);
     shortcut_manager_.registerAction(
-        QStringLiteral("file.new_composition"), QStringLiteral("New Composition"),
+        QStringLiteral("file.new_composition"), MotionUiTranslation::tr("New Composition"),
         new_composition_action_);
     connect(new_composition_action_, &QAction::triggered, this, [this] {
         createNewComposition();
@@ -87,32 +88,32 @@ MainWindow::MainWindow(QWidget* parent,
     connect(empty_state_new_composition_button_, &QPushButton::clicked,
             new_composition_action_, &QAction::trigger);
 
-    open_composition_action_ = file_menu->addAction(QStringLiteral("Open Composition..."));
+    open_composition_action_ = file_menu->addAction(MotionUiTranslation::tr("Open Composition..."));
     open_composition_action_->setObjectName(QStringLiteral("motion-open-composition-action"));
     open_composition_action_->setShortcut(QKeySequence::Open);
     open_composition_action_->setShortcutContext(Qt::WindowShortcut);
     addAction(open_composition_action_);
     shortcut_manager_.registerAction(
-        QStringLiteral("file.open_composition"), QStringLiteral("Open Composition"),
+        QStringLiteral("file.open_composition"), MotionUiTranslation::tr("Open Composition"),
         open_composition_action_);
     connect(open_composition_action_, &QAction::triggered, this, [this] {
         openComposition();
     });
 
-    save_composition_action_ = file_menu->addAction(QStringLiteral("Save"));
+    save_composition_action_ = file_menu->addAction(MotionUiTranslation::tr("Save"));
     save_composition_action_->setObjectName(QStringLiteral("motion-save-composition-action"));
     save_composition_action_->setShortcut(QKeySequence::Save);
     save_composition_action_->setShortcutContext(Qt::WindowShortcut);
     save_composition_action_->setEnabled(false);
     addAction(save_composition_action_);
     shortcut_manager_.registerAction(
-        QStringLiteral("file.save_composition"), QStringLiteral("Save Composition"),
+        QStringLiteral("file.save_composition"), MotionUiTranslation::tr("Save Composition"),
         save_composition_action_);
     connect(save_composition_action_, &QAction::triggered, this, [this] {
         (void)saveComposition();
     });
 
-    save_composition_as_action_ = file_menu->addAction(QStringLiteral("Save As..."));
+    save_composition_as_action_ = file_menu->addAction(MotionUiTranslation::tr("Save As..."));
     save_composition_as_action_->setObjectName(
         QStringLiteral("motion-save-composition-as-action"));
 #if defined(Q_OS_MACOS)
@@ -126,20 +127,20 @@ MainWindow::MainWindow(QWidget* parent,
     save_composition_as_action_->setEnabled(false);
     addAction(save_composition_as_action_);
     shortcut_manager_.registerAction(
-        QStringLiteral("file.save_composition_as"), QStringLiteral("Save Composition As"),
+        QStringLiteral("file.save_composition_as"), MotionUiTranslation::tr("Save Composition As"),
         save_composition_as_action_);
     connect(save_composition_as_action_, &QAction::triggered, this, [this] {
         (void)saveCompositionAs();
     });
 
-    export_video_action_ = file_menu->addAction(QStringLiteral("Export Video..."));
+    export_video_action_ = file_menu->addAction(MotionUiTranslation::tr("Export Video..."));
     export_video_action_->setObjectName(QStringLiteral("motion-export-video-action"));
     export_video_action_->setEnabled(false);
     connect(export_video_action_, &QAction::triggered,
             this, [this] { startVideoExport(); });
 
     file_menu->addSeparator();
-    import_media_action_ = file_menu->addAction(QStringLiteral("Import Media..."));
+    import_media_action_ = file_menu->addAction(MotionUiTranslation::tr("Import Media..."));
     import_media_action_->setObjectName(QStringLiteral("motion-import-media-action"));
     import_media_action_->setEnabled(false);
     const auto import_sequence =
@@ -152,25 +153,25 @@ MainWindow::MainWindow(QWidget* parent,
     import_media_action_->setShortcutContext(Qt::WindowShortcut);
     addAction(import_media_action_);
     shortcut_manager_.registerAction(
-        QStringLiteral("media.import"), QStringLiteral("Import Media"),
+        QStringLiteral("media.import"), MotionUiTranslation::tr("Import Media"),
         import_media_action_);
     connect(import_media_action_, &QAction::triggered, this, [this] { openMedia(); });
 
-    auto* layer_menu = menuBar()->addMenu(QStringLiteral("Layer"));
-    new_text_layer_action_ = layer_menu->addAction(QStringLiteral("New Text"));
+    auto* layer_menu = menuBar()->addMenu(MotionUiTranslation::tr("Layer"));
+    new_text_layer_action_ = layer_menu->addAction(MotionUiTranslation::tr("New Text"));
     new_text_layer_action_->setObjectName(QStringLiteral("motion-new-text-layer-action"));
     new_text_layer_action_->setEnabled(false);
     connect(new_text_layer_action_, &QAction::triggered, this, [this] {
         createContentLayer(model::LayerKind::Text, model::ShapeKind::Rectangle);
     });
-    new_rectangle_layer_action_ = layer_menu->addAction(QStringLiteral("New Rectangle"));
+    new_rectangle_layer_action_ = layer_menu->addAction(MotionUiTranslation::tr("New Rectangle"));
     new_rectangle_layer_action_->setObjectName(
         QStringLiteral("motion-new-rectangle-layer-action"));
     new_rectangle_layer_action_->setEnabled(false);
     connect(new_rectangle_layer_action_, &QAction::triggered, this, [this] {
         createContentLayer(model::LayerKind::Shape, model::ShapeKind::Rectangle);
     });
-    new_ellipse_layer_action_ = layer_menu->addAction(QStringLiteral("New Ellipse"));
+    new_ellipse_layer_action_ = layer_menu->addAction(MotionUiTranslation::tr("New Ellipse"));
     new_ellipse_layer_action_->setObjectName(
         QStringLiteral("motion-new-ellipse-layer-action"));
     new_ellipse_layer_action_->setEnabled(false);
@@ -179,86 +180,86 @@ MainWindow::MainWindow(QWidget* parent,
     });
     layer_menu->addSeparator();
     edit_image_in_image_editor_action_ = layer_menu->addAction(
-        QStringLiteral("Edit Image in Image Editor"));
+        MotionUiTranslation::tr("Edit Image in Image Editor"));
     edit_image_in_image_editor_action_->setObjectName(
         QStringLiteral("motion-edit-image-in-image-editor-action"));
     edit_image_in_image_editor_action_->setEnabled(false);
     connect(edit_image_in_image_editor_action_, &QAction::triggered,
             this, &MainWindow::editSelectedLayerImage);
     generate_audio_keyframes_action_ = layer_menu->addAction(
-        QStringLiteral("Generate Keyframes from Audio..."));
+        MotionUiTranslation::tr("Generate Keyframes from Audio..."));
     generate_audio_keyframes_action_->setObjectName(
         QStringLiteral("motion-generate-audio-keyframes-action"));
     generate_audio_keyframes_action_->setEnabled(false);
     connect(generate_audio_keyframes_action_, &QAction::triggered,
             this, [this] { generateKeyframesFromAudio(); });
 
-    auto* edit_menu = menuBar()->addMenu(QStringLiteral("Edit"));
-    undo_action_ = edit_menu->addAction(QStringLiteral("Undo"));
+    auto* edit_menu = menuBar()->addMenu(MotionUiTranslation::tr("Edit"));
+    undo_action_ = edit_menu->addAction(MotionUiTranslation::tr("Undo"));
     undo_action_->setObjectName(QStringLiteral("motion-undo-action"));
     undo_action_->setShortcut(QKeySequence::Undo);
     undo_action_->setShortcutContext(Qt::WindowShortcut);
     undo_action_->setEnabled(false);
     addAction(undo_action_);
     shortcut_manager_.registerAction(
-        QStringLiteral("edit.undo"), QStringLiteral("Undo"), undo_action_);
+        QStringLiteral("edit.undo"), MotionUiTranslation::tr("Undo"), undo_action_);
     connect(undo_action_, &QAction::triggered, this, [this] { undoComposition(); });
 
-    redo_action_ = edit_menu->addAction(QStringLiteral("Redo"));
+    redo_action_ = edit_menu->addAction(MotionUiTranslation::tr("Redo"));
     redo_action_->setObjectName(QStringLiteral("motion-redo-action"));
     redo_action_->setShortcut(QKeySequence::Redo);
     redo_action_->setShortcutContext(Qt::WindowShortcut);
     redo_action_->setEnabled(false);
     addAction(redo_action_);
     shortcut_manager_.registerAction(
-        QStringLiteral("edit.redo"), QStringLiteral("Redo"), redo_action_);
+        QStringLiteral("edit.redo"), MotionUiTranslation::tr("Redo"), redo_action_);
     connect(redo_action_, &QAction::triggered, this, [this] { redoComposition(); });
 
-    view_menu_ = menuBar()->addMenu(QStringLiteral("View"));
+    view_menu_ = menuBar()->addMenu(MotionUiTranslation::tr("View"));
     view_menu_->setObjectName(QStringLiteral("motion-view-menu"));
     reset_panel_layout_action_ = view_menu_->addAction(
-        QStringLiteral("Reset Panel Layout"));
+        MotionUiTranslation::tr("Reset Panel Layout"));
     reset_panel_layout_action_->setObjectName(
         QStringLiteral("motion-reset-panel-layout-action"));
     reset_panel_layout_action_->setEnabled(false);
     connect(reset_panel_layout_action_, &QAction::triggered,
             this, [this] { restoreDefaultPanelLayout(); });
 
-    auto* settings_menu = menuBar()->addMenu(QStringLiteral("Settings"));
-    settings_action_ = settings_menu->addAction(QStringLiteral("Keyboard Shortcuts..."));
+    auto* settings_menu = menuBar()->addMenu(MotionUiTranslation::tr("Settings"));
+    settings_action_ = settings_menu->addAction(MotionUiTranslation::tr("Keyboard Shortcuts..."));
     settings_action_->setObjectName(QStringLiteral("motion-shortcut-settings-action"));
     connect(settings_action_, &QAction::triggered,
             this, [this] { openShortcutSettings(); });
     autosave_settings_action_ = settings_menu->addAction(
-        QStringLiteral("Autosave & Recovery..."));
+        MotionUiTranslation::tr("Autosave & Recovery..."));
     autosave_settings_action_->setObjectName(
         QStringLiteral("motion-autosave-recovery-action"));
     connect(autosave_settings_action_, &QAction::triggered,
             this, [this] { openAutosaveRecoverySettings(); });
     general_settings_action_ = settings_menu->addAction(
-        QStringLiteral("General..."));
+        MotionUiTranslation::tr("General..."));
     general_settings_action_->setObjectName(
         QStringLiteral("motion-general-settings-action"));
     connect(general_settings_action_, &QAction::triggered,
             this, [this] { openGeneralSettings(); });
 
-    auto* help_menu = menuBar()->addMenu(QStringLiteral("&Help"));
-    auto* system_action = help_menu->addAction(QStringLiteral("&System"));
+    auto* help_menu = menuBar()->addMenu(MotionUiTranslation::tr("&Help"));
+    auto* system_action = help_menu->addAction(MotionUiTranslation::tr("&System"));
     connect(system_action, &QAction::triggered, this, [this] {
         const auto version = QCoreApplication::applicationVersion();
         const auto executable_path = QCoreApplication::applicationFilePath();
         QMessageBox::information(
             this,
-            QStringLiteral("System"),
-            QStringLiteral("Motion Studio\n\nVersion: %1\nExecutable: %2")
-                .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.0") : version,
+            MotionUiTranslation::tr("System"),
+            MotionUiTranslation::tr("Motion Studio\n\nVersion: %1\nExecutable: %2")
+                .arg(version.isEmpty() ? MotionUiTranslation::tr("Beta 0.1.0") : version,
                      executable_path.isEmpty()
-                         ? QStringLiteral("N/A")
+                         ? MotionUiTranslation::tr("Unavailable")
                          : executable_path));
     });
 
     auto* open_log_folder_action = help_menu->addAction(
-        QStringLiteral("Open &Log Folder"));
+        MotionUiTranslation::tr("Open &Log Folder"));
     connect(open_log_folder_action, &QAction::triggered, this, [this] {
         auto& logger = creative_suite::diagnostics::Logger::instance();
         const auto directory = logger.log_directory();
@@ -270,23 +271,22 @@ MainWindow::MainWindow(QWidget* parent,
                 creative_suite::diagnostics::Level::Warning,
                 "ui", "open_log_folder", "Could not open the log directory.",
                 {{"path", directory_text}});
-            statusBar()->showMessage(QStringLiteral("Could not open the log folder."));
+            statusBar()->showMessage(MotionUiTranslation::tr("Could not open the log folder."));
             return;
         }
         logger.log(
             creative_suite::diagnostics::Level::Info,
             "ui", "open_log_folder", "Opened the log directory.",
             {{"path", directory_text}});
-        statusBar()->showMessage(QStringLiteral("Log folder opened."));
+        statusBar()->showMessage(MotionUiTranslation::tr("Log folder opened."));
     });
 
     help_menu->addSeparator();
-    auto* about_action = help_menu->addAction(QStringLiteral("&About Motion Studio"));
+    auto* about_action = help_menu->addAction(MotionUiTranslation::tr("&About Motion Studio"));
     about_action->setObjectName(QStringLiteral("motion-about-action"));
     connect(about_action, &QAction::triggered, this, [this] {
-        QMessageBox::about(this, QStringLiteral("About Motion Studio"),
-            QStringLiteral("Motion Studio application shell\n\n"
-                           "This is an early open-source creative suite workspace."));
+        QMessageBox::about(this, MotionUiTranslation::tr("About Motion Studio"),
+            MotionUiTranslation::tr("Motion Studio application shell\n\nThis is an early open-source creative suite workspace."));
     });
 
     const auto register_timeline_action = [this](
@@ -301,26 +301,26 @@ MainWindow::MainWindow(QWidget* parent,
     };
     register_timeline_action(
         play_pause_action_, QStringLiteral("motion-play-pause-action"),
-        QStringLiteral("timeline.play_pause"), QStringLiteral("Play/Pause"),
+        QStringLiteral("timeline.play_pause"), MotionUiTranslation::tr("Play/Pause"),
         QKeySequence(Qt::Key_Space));
     register_timeline_action(
         previous_frame_action_, QStringLiteral("motion-previous-frame-action"),
-        QStringLiteral("timeline.previous_frame"), QStringLiteral("Previous frame"),
+        QStringLiteral("timeline.previous_frame"), MotionUiTranslation::tr("Previous frame"),
         QKeySequence(Qt::Key_Left));
     register_timeline_action(
         next_frame_action_, QStringLiteral("motion-next-frame-action"),
-        QStringLiteral("timeline.next_frame"), QStringLiteral("Next frame"),
+        QStringLiteral("timeline.next_frame"), MotionUiTranslation::tr("Next frame"),
         QKeySequence(Qt::Key_Right));
     register_timeline_action(
         loop_action_, QStringLiteral("motion-loop-action"),
-        QStringLiteral("timeline.toggle_loop"), QStringLiteral("Loop"), QKeySequence{});
+        QStringLiteral("timeline.toggle_loop"), MotionUiTranslation::tr("Loop"), QKeySequence{});
     loop_action_->setCheckable(true);
     register_timeline_action(
         zoom_in_action_, QStringLiteral("motion-zoom-in-action"),
-        QStringLiteral("timeline.zoom_in"), QStringLiteral("Zoom In"), QKeySequence{});
+        QStringLiteral("timeline.zoom_in"), MotionUiTranslation::tr("Zoom In"), QKeySequence{});
     register_timeline_action(
         zoom_out_action_, QStringLiteral("motion-zoom-out-action"),
-        QStringLiteral("timeline.zoom_out"), QStringLiteral("Zoom Out"), QKeySequence{});
+        QStringLiteral("timeline.zoom_out"), MotionUiTranslation::tr("Zoom Out"), QKeySequence{});
     previous_frame_action_->setEnabled(false);
     next_frame_action_->setEnabled(false);
     play_pause_action_->setEnabled(false);

@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "composition_viewer.h"
 #include "diagnostics/performance_metrics.h"
 
@@ -335,7 +336,7 @@ void CompositionViewer::paintOverlay(QPainter& painter) {
     painter.setPen(QColor(235, 237, 240));
     painter.drawText(QRectF(16.0, 12.0, width() - 32.0, 20.0),
         Qt::AlignLeft | Qt::AlignVCenter,
-        QStringLiteral("%1 x %2 px").arg(canvas_size_.width).arg(canvas_size_.height));
+        MotionUiTranslation::tr("%1 x %2 px").arg(canvas_size_.width).arg(canvas_size_.height));
     if (!selected_layer_anchor_) return;
     const QPointF guide(canvas_rect.left() + selected_layer_anchor_->x() * canvas_rect.width(),
                         canvas_rect.top() + selected_layer_anchor_->y() * canvas_rect.height());

@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "shortcut_settings_dialog.h"
 
 #include <QAbstractItemView>
@@ -22,7 +23,7 @@ ShortcutSettingsDialog::ShortcutSettingsDialog(
     : QDialog(parent), entries_(entries)
 {
     setObjectName(QStringLiteral("motion-shortcut-settings-dialog"));
-    setWindowTitle(QStringLiteral("Keyboard Shortcuts"));
+    setWindowTitle(MotionUiTranslation::tr("Keyboard Shortcuts"));
     setSizeGripEnabled(true);
     QScreen* target_screen = parent != nullptr ? parent->screen() : nullptr;
     if (target_screen == nullptr) target_screen = QGuiApplication::primaryScreen();
@@ -42,7 +43,7 @@ ShortcutSettingsDialog::ShortcutSettingsDialog(
     auto* table = new QTableWidget(static_cast<int>(entries_.size()), 2, this);
     table->setObjectName(QStringLiteral("motion-shortcut-settings-table"));
     table->setHorizontalHeaderLabels(
-        {QStringLiteral("Command"), QStringLiteral("Shortcut")});
+        {MotionUiTranslation::tr("Command"), MotionUiTranslation::tr("Shortcut")});
     table->verticalHeader()->setVisible(false);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setSelectionMode(QAbstractItemView::NoSelection);
@@ -64,13 +65,13 @@ ShortcutSettingsDialog::ShortcutSettingsDialog(
         editor_layout->setSpacing(6);
         auto* editor = new QKeySequenceEdit(entry.action->shortcut(), editor_container);
         editor->setObjectName(QStringLiteral("motion-shortcut-editor-%1").arg(entry.id));
-        editor->setAccessibleName(QStringLiteral("Shortcut for %1").arg(entry.label));
+        editor->setAccessibleName(MotionUiTranslation::tr("Shortcut for %1").arg(entry.label));
         editors_.push_back(editor);
         editor_layout->addWidget(editor, 1);
 
-        auto* clear_button = new QPushButton(QStringLiteral("Clear"), editor_container);
+        auto* clear_button = new QPushButton(MotionUiTranslation::tr("Clear"), editor_container);
         clear_button->setObjectName(QStringLiteral("motion-shortcut-clear-%1").arg(entry.id));
-        clear_button->setToolTip(QStringLiteral("Remove this shortcut"));
+        clear_button->setToolTip(MotionUiTranslation::tr("Remove this shortcut"));
         editor_layout->addWidget(clear_button);
         connect(clear_button, &QPushButton::clicked, editor, [editor] { editor->clear(); });
         connect(editor, &QKeySequenceEdit::keySequenceChanged,
@@ -87,13 +88,15 @@ ShortcutSettingsDialog::ShortcutSettingsDialog(
     layout->addWidget(validation_label_);
 
     auto* bottom_row = new QHBoxLayout;
-    auto* reset_button = new QPushButton(QStringLiteral("Reset All"), this);
+    auto* reset_button = new QPushButton(MotionUiTranslation::tr("Reset All"), this);
     reset_button->setObjectName(QStringLiteral("motion-shortcut-reset-all"));
     bottom_row->addWidget(reset_button);
     bottom_row->addStretch(1);
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->setObjectName(QStringLiteral("motion-shortcut-dialog-buttons"));
+    buttons->button(QDialogButtonBox::Ok)->setText(MotionUiTranslation::tr("OK"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(MotionUiTranslation::tr("Cancel"));
     buttons->button(QDialogButtonBox::Ok)->setObjectName(
         QStringLiteral("motion-shortcut-dialog-ok"));
     buttons->button(QDialogButtonBox::Cancel)->setObjectName(
@@ -129,7 +132,7 @@ void ShortcutSettingsDialog::accept()
             if (current[first].sequence != current[second].sequence) continue;
             const auto text = current[first].sequence.toString(QKeySequence::NativeText);
             showValidationMessage(
-                QStringLiteral("%1 is assigned to both %2 and %3. Choose a unique shortcut.")
+                MotionUiTranslation::tr("%1 is assigned to both %2 and %3. Choose a unique shortcut.")
                     .arg(text, entries_[second].label, entries_[first].label));
             editors_[first]->setFocus();
             return;

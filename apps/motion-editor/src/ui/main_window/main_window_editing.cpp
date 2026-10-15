@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "ui/inspector/mask_inspector_widget.h"
 #include "main_window.h"
 #include "main_window_support.h"
@@ -274,8 +275,8 @@ void MainWindow::refreshCurveEditor()
         curve_selection_->segment_start_frame = keys.front().frame;
     }
     const auto segment=keys.size()>=2?std::optional<std::int64_t>(curve_selection_->segment_start_frame):std::nullopt;
-    if(mask){const char* names[]{"Center X","Center Y","Width","Height","Rotation"};
-        curve_editor_->setScalarCurve(mask->id,QString("Mask #%1 / %2 (composition frames)").arg(mask->id).arg(names[curve_selection_->mask_property]),keys,segment);
+    if(mask){const std::array<QString,5> names{{MotionUiTranslation::tr("Center X"),MotionUiTranslation::tr("Center Y"),MotionUiTranslation::tr("Width"),MotionUiTranslation::tr("Height"),MotionUiTranslation::tr("Rotation")}};
+        curve_editor_->setScalarCurve(mask->id,MotionUiTranslation::tr("Mask #%1 / %2 (composition frames)").arg(mask->id).arg(names[curve_selection_->mask_property]),keys,segment);
     } else curve_editor_->setCurve(found->id,curve_selection_->property,keys,segment);
     const auto selected_key = std::lower_bound(keys.begin(), keys.end(),
         curve_selection_->segment_start_frame, [](const auto& item, std::int64_t frame) {
@@ -387,14 +388,15 @@ void MainWindow::createContentLayer(model::LayerKind kind, model::ShapeKind shap
     } else {
         name = QStringLiteral("%1 %2")
             .arg(shape == model::ShapeKind::Ellipse
-                    ? QStringLiteral("Ellipse") : QStringLiteral("Rectangle"))
+                    ? QStringLiteral("Ellipse")
+                    : QStringLiteral("Rectangle"))
             .arg(same_kind_count + 1);
     }
 
     model::LayerId added_id = 0;
     if (!document_->addContentLayer(kind, utf8String(name), timeline_->currentFrame(), &added_id)) {
         statusBar()->showMessage(
-            QStringLiteral("The layer could not be added at the current frame."), 4000);
+            MotionUiTranslation::tr("The layer could not be added at the current frame."), 4000);
         return;
     }
     if (kind == model::LayerKind::Shape && shape == model::ShapeKind::Ellipse) {
@@ -539,7 +541,7 @@ void MainWindow::applySelectedEffectStack(
     if (!document_->setLayerEffects(selected_layer_id_, effects)) {
         syncEffectsInspector(&*found);
         statusBar()->showMessage(
-            QStringLiteral("The effect parameters are outside the supported range."), 4000);
+            MotionUiTranslation::tr("The effect parameters are outside the supported range."), 4000);
         return;
     }
     if (coalesce_parameters) {
@@ -685,7 +687,7 @@ void MainWindow::editSelectedLayerContent()
     if (rejected) {
         syncLayerContentInspector(&*found);
         statusBar()->showMessage(
-            QStringLiteral("The layer content value is outside the supported range."), 4000);
+            MotionUiTranslation::tr("The layer content value is outside the supported range."), 4000);
         return;
     }
     if (!changed) return;
@@ -716,8 +718,8 @@ void MainWindow::chooseSelectedLayerColor(bool text_color, bool stroke_color)
     }
     const QColor chosen = QColorDialog::getColor(
         qColor(old_color), this,
-        text_color ? QStringLiteral("Text Color")
-            : stroke_color ? QStringLiteral("Stroke Color") : QStringLiteral("Fill Color"),
+        text_color ? MotionUiTranslation::tr("Text Color")
+            : stroke_color ? MotionUiTranslation::tr("Stroke Color") : MotionUiTranslation::tr("Fill Color"),
         QColorDialog::ShowAlphaChannel);
     if (!chosen.isValid()) return;
     const auto new_color = modelColor(chosen);
@@ -831,13 +833,13 @@ void MainWindow::handleMediaDrop(const std::filesystem::path& path,
     if (!document_ || media_pool_ == nullptr || timeline_ == nullptr) return;
     const auto index = media_pool_->library().indexForPath(path);
     if (index >= media_pool_->library().size()) {
-        statusBar()->showMessage(QStringLiteral("This media item is no longer in the Media Pool."),
+        statusBar()->showMessage(MotionUiTranslation::tr("This media item is no longer in the Media Pool."),
                                  5000);
         return;
     }
     const auto& item = media_pool_->library().items()[index];
     if (item.offline) {
-        statusBar()->showMessage(QStringLiteral("Restore this offline media item before adding it."),
+        statusBar()->showMessage(MotionUiTranslation::tr("Restore this offline media item before adding it."),
                                  5000);
         return;
     }
@@ -852,16 +854,16 @@ void MainWindow::handleMediaDrop(const std::filesystem::path& path,
             creative_suite::diagnostics::Level::Error,
             "motion_timeline", "insert_media_layer", error.what(),
             {{"path", pathForLog(path)}, {"frame", std::to_string(start_frame)}});
-        QMessageBox::warning(this, QStringLiteral("Cannot Add Media"),
-            QStringLiteral("The selected media could not be added to this composition."));
+        QMessageBox::warning(this, MotionUiTranslation::tr("Cannot Add Media"),
+            MotionUiTranslation::tr("The selected media could not be added to this composition."));
         return;
     } catch (...) {
         creative_suite::diagnostics::Logger::instance().log(
             creative_suite::diagnostics::Level::Error,
             "motion_timeline", "insert_media_layer", "Unknown media layer insertion failure",
             {{"path", pathForLog(path)}, {"frame", std::to_string(start_frame)}});
-        QMessageBox::warning(this, QStringLiteral("Cannot Add Media"),
-            QStringLiteral("The selected media could not be added to this composition."));
+        QMessageBox::warning(this, MotionUiTranslation::tr("Cannot Add Media"),
+            MotionUiTranslation::tr("The selected media could not be added to this composition."));
         return;
     }
     if (result != model::AddMediaLayerResult::Added) {
@@ -872,10 +874,10 @@ void MainWindow::handleMediaDrop(const std::filesystem::path& path,
             creative_suite::diagnostics::Level::Error,
             "motion_timeline", "insert_media_layer", cause,
             {{"path", pathForLog(path)}, {"frame", std::to_string(start_frame)}});
-        QMessageBox::warning(this, QStringLiteral("Cannot Add Media"),
+        QMessageBox::warning(this, MotionUiTranslation::tr("Cannot Add Media"),
             result == model::AddMediaLayerResult::InvalidTimingMetadata
-                ? QStringLiteral("This video needs a valid frame rate and positive duration or frame count.")
-                : QStringLiteral("The selected media could not be added to this composition."));
+                ? MotionUiTranslation::tr("This video needs a valid frame rate and positive duration or frame count.")
+                : MotionUiTranslation::tr("The selected media could not be added to this composition."));
         return;
     }
 

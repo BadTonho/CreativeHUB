@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "new_composition_dialog.h"
 
 #include <QComboBox>
@@ -17,7 +18,7 @@ NewCompositionDialog::NewCompositionDialog(QWidget* parent)
     : QDialog(parent)
 {
     setObjectName(QStringLiteral("motion-new-composition-dialog"));
-    setWindowTitle(QStringLiteral("New Composition"));
+    setWindowTitle(MotionUiTranslation::tr("New Composition"));
 
     auto* layout = new QVBoxLayout(this);
     auto* form = new QFormLayout();
@@ -25,20 +26,20 @@ NewCompositionDialog::NewCompositionDialog(QWidget* parent)
     width_edit_ = new QLineEdit(this);
     width_edit_->setObjectName(QStringLiteral("motion-canvas-width"));
     width_edit_->setValidator(new QIntValidator(1, std::numeric_limits<int>::max(), width_edit_));
-    width_edit_->setPlaceholderText(QStringLiteral("Enter width"));
-    form->addRow(QStringLiteral("Width (px)"), width_edit_);
+    width_edit_->setPlaceholderText(MotionUiTranslation::tr("Enter width"));
+    form->addRow(MotionUiTranslation::tr("Width (px)"), width_edit_);
 
     height_edit_ = new QLineEdit(this);
     height_edit_->setObjectName(QStringLiteral("motion-canvas-height"));
     height_edit_->setValidator(new QIntValidator(1, std::numeric_limits<int>::max(), height_edit_));
-    height_edit_->setPlaceholderText(QStringLiteral("Enter height"));
-    form->addRow(QStringLiteral("Height (px)"), height_edit_);
+    height_edit_->setPlaceholderText(MotionUiTranslation::tr("Enter height"));
+    form->addRow(MotionUiTranslation::tr("Height (px)"), height_edit_);
 
     frame_rate_combo_ = new QComboBox(this);
     frame_rate_combo_->setObjectName(QStringLiteral("motion-frame-rate"));
-    frame_rate_combo_->addItem(QStringLiteral("Select frame rate"));
+    frame_rate_combo_->addItem(MotionUiTranslation::tr("Select frame rate"));
     for (const auto frame_rate : model::supportedFrameRates()) {
-        const QString label = QStringLiteral("%1 fps")
+        const QString label = MotionUiTranslation::tr("%1 fps")
             .arg(QString::number(frame_rate.asDouble(), 'g', 6));
         frame_rate_combo_->addItem(label);
         const int index = frame_rate_combo_->count() - 1;
@@ -51,7 +52,7 @@ NewCompositionDialog::NewCompositionDialog(QWidget* parent)
             QVariant::fromValue<qlonglong>(frame_rate.denominator),
             Qt::UserRole + 1);
     }
-    form->addRow(QStringLiteral("Frame rate"), frame_rate_combo_);
+    form->addRow(MotionUiTranslation::tr("Frame rate"), frame_rate_combo_);
 
     layout->addLayout(form);
 
@@ -60,7 +61,8 @@ NewCompositionDialog::NewCompositionDialog(QWidget* parent)
         Qt::Horizontal,
         this);
     buttons_->setObjectName(QStringLiteral("motion-new-composition-buttons"));
-    buttons_->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Create"));
+    buttons_->button(QDialogButtonBox::Ok)->setText(MotionUiTranslation::tr("Create"));
+    buttons_->button(QDialogButtonBox::Cancel)->setText(MotionUiTranslation::tr("Cancel"));
     buttons_->button(QDialogButtonBox::Ok)->setObjectName(QStringLiteral("motion-create-composition"));
     buttons_->button(QDialogButtonBox::Ok)->setEnabled(false);
     buttons_->button(QDialogButtonBox::Cancel)->setObjectName(QStringLiteral("motion-cancel-composition"));

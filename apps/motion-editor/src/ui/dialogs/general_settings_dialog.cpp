@@ -1,7 +1,9 @@
+#include "ui/translation_helpers.h"
 #include "general_settings_dialog.h"
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
+#include <QPushButton>
 #include <QVBoxLayout>
 
 namespace motion::ui {
@@ -11,13 +13,13 @@ GeneralSettingsDialog::GeneralSettingsDialog(
     QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle(QStringLiteral("General Settings"));
+    setWindowTitle(MotionUiTranslation::tr("General Settings"));
     setObjectName(QStringLiteral("motion-general-settings-dialog"));
     setModal(true);
 
     auto* layout = new QVBoxLayout(this);
     preview_metrics_checkbox_ = new QCheckBox(
-        QStringLiteral("Enable preview performance metrics"), this);
+        MotionUiTranslation::tr("Enable preview performance metrics"), this);
     preview_metrics_checkbox_->setObjectName(
         QStringLiteral("motion-preview-performance-metrics-checkbox"));
     preview_metrics_checkbox_->setChecked(preview_metrics_enabled);
@@ -25,6 +27,7 @@ GeneralSettingsDialog::GeneralSettingsDialog(
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     buttons->setObjectName(QStringLiteral("motion-general-settings-buttons"));
+    buttons->button(QDialogButtonBox::Close)->setText(MotionUiTranslation::tr("Close"));
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     layout->addWidget(buttons);

@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/translations">
+        <file alias="motion-editor/pt_BR.qm">../../../languages/motion-editor/pt_BR.qm</file>
+    </qresource>
+</RCC>

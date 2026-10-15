@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "main_window.h"
 #include "main_window_support.h"
 
@@ -85,9 +86,9 @@ void MainWindow::startVideoExport()
     }
 
     export_progress_ = new QProgressDialog(
-        QStringLiteral("Preparing video export..."), QStringLiteral("Cancel"), 0, 100, this);
+        MotionUiTranslation::tr("Preparing video export..."), MotionUiTranslation::tr("Cancel"), 0, 100, this);
     export_progress_->setObjectName(QStringLiteral("motion-export-progress"));
-    export_progress_->setWindowTitle(QStringLiteral("Export Video"));
+    export_progress_->setWindowTitle(MotionUiTranslation::tr("Export Video"));
     export_progress_->setWindowModality(Qt::NonModal);
     export_progress_->setAutoClose(false);
     export_progress_->setAutoReset(false);
@@ -95,7 +96,7 @@ void MainWindow::startVideoExport()
     connect(export_progress_, &QProgressDialog::canceled, this, [this] {
         if (!export_worker_) return;
         export_worker_->cancel();
-        export_progress_->setLabelText(QStringLiteral("Canceling video export..."));
+        export_progress_->setLabelText(MotionUiTranslation::tr("Canceling video export..."));
         export_progress_->setCancelButton(nullptr);
     });
 
@@ -105,7 +106,7 @@ void MainWindow::startVideoExport()
         [owner](int progress) {
             if (!owner.isNull() && owner->export_progress_ != nullptr) {
                 owner->export_progress_->setLabelText(
-                    QStringLiteral("Rendering video... %1%").arg(progress));
+                    MotionUiTranslation::tr("Rendering video... %1%").arg(progress));
                 owner->export_progress_->setValue(progress);
             }
         },
@@ -125,7 +126,7 @@ void MainWindow::startLinkedPublication()
     if (!linked_handoff_.has_value()) return;
     linked_publication_pending_ = true;
     statusBar()->showMessage(
-        QStringLiteral("Publishing the saved Motion composition..."), 5000);
+        MotionUiTranslation::tr("Publishing the saved Motion composition..."), 5000);
     startVideoExport();
 }
 void MainWindow::finishVideoExport(MotionExportResult result)
@@ -144,22 +145,22 @@ void MainWindow::finishVideoExport(MotionExportResult result)
     const bool publish_again = linked_handoff_.has_value() && linked_publication_pending_;
     if (result.succeeded) {
         statusBar()->showMessage(linked_handoff_.has_value()
-            ? QStringLiteral("Motion render published. The Video Editor will refresh the linked item.")
-            : QStringLiteral("Video exported to %1")
+            ? MotionUiTranslation::tr("Motion render published. The Video Editor will refresh the linked item.")
+            : MotionUiTranslation::tr("Video exported to %1")
                 .arg(QString::fromUtf8(pathForLog(result.output_path))), 8000);
     } else if (result.cancelled) {
         statusBar()->showMessage(linked_handoff_.has_value()
-            ? QStringLiteral("Publication is pending; the previous linked render remains available.")
-            : QStringLiteral("Video export canceled."), 6000);
+            ? MotionUiTranslation::tr("Publication is pending; the previous linked render remains available.")
+            : MotionUiTranslation::tr("Video export canceled."), 6000);
     } else {
         if (linked_handoff_.has_value()) {
             statusBar()->showMessage(
-                QStringLiteral("Publication is pending; the previous linked render remains available."), 7000);
+                MotionUiTranslation::tr("Publication is pending; the previous linked render remains available."), 7000);
         }
-        QMessageBox::warning(this, QStringLiteral("Video Export Failed"),
+        QMessageBox::warning(this, MotionUiTranslation::tr("Video Export Failed"),
             linked_handoff_.has_value()
-                ? QStringLiteral("The linked render could not be published. The previous render was preserved; see the Motion Studio log for details.")
-                : QStringLiteral("The video could not be exported. See the Motion Studio log for details."));
+                ? MotionUiTranslation::tr("The linked render could not be published. The previous render was preserved; see the Motion Studio log for details.")
+                : MotionUiTranslation::tr("The video could not be exported. See the Motion Studio log for details."));
     }
     if (publish_again) QTimer::singleShot(0, this, [this] { startLinkedPublication(); });
 }
@@ -208,8 +209,8 @@ void MainWindow::generateKeyframesFromAudio()
         static_cast<std::uint64_t>(selected->duration_frames),
         static_cast<std::uint64_t>(available_keyframes) + 1U);
     if (analysis_limit == 0) {
-        QMessageBox::warning(this, QStringLiteral("Audio Keyframes"),
-            QStringLiteral("This composition has reached its supported keyframe limit."));
+        QMessageBox::warning(this, MotionUiTranslation::tr("Audio Keyframes"),
+            MotionUiTranslation::tr("This composition has reached its supported keyframe limit."));
         return;
     }
 
@@ -225,9 +226,9 @@ void MainWindow::generateKeyframesFromAudio()
     request.maximum_keyframe_count = available_keyframes;
 
     audio_keyframe_progress_ = new QProgressDialog(
-        QStringLiteral("Analyzing audio..."), QStringLiteral("Cancel"), 0, 100, this);
+        MotionUiTranslation::tr("Analyzing audio..."), MotionUiTranslation::tr("Cancel"), 0, 100, this);
     audio_keyframe_progress_->setObjectName(QStringLiteral("motion-audio-keyframe-progress"));
-    audio_keyframe_progress_->setWindowTitle(QStringLiteral("Generate Audio Keyframes"));
+    audio_keyframe_progress_->setWindowTitle(MotionUiTranslation::tr("Generate Audio Keyframes"));
     audio_keyframe_progress_->setWindowModality(Qt::WindowModal);
     audio_keyframe_progress_->setAutoClose(false);
     audio_keyframe_progress_->setAutoReset(false);
@@ -236,7 +237,7 @@ void MainWindow::generateKeyframesFromAudio()
     connect(audio_keyframe_progress_, &QProgressDialog::canceled, this, [this] {
         if (!audio_keyframe_worker_) return;
         audio_keyframe_worker_->cancel();
-        audio_keyframe_progress_->setLabelText(QStringLiteral("Canceling audio analysis..."));
+        audio_keyframe_progress_->setLabelText(MotionUiTranslation::tr("Canceling audio analysis..."));
         audio_keyframe_progress_->setCancelButton(nullptr);
     });
 
@@ -246,7 +247,7 @@ void MainWindow::generateKeyframesFromAudio()
         [owner](int progress) {
             if (owner.isNull() || owner->audio_keyframe_progress_ == nullptr) return;
             owner->audio_keyframe_progress_->setLabelText(
-                QStringLiteral("Analyzing audio... %1%").arg(progress));
+                MotionUiTranslation::tr("Analyzing audio... %1%").arg(progress));
             owner->audio_keyframe_progress_->setValue(progress);
         },
         [owner](AudioKeyframeGenerationResult result) mutable {
@@ -270,17 +271,17 @@ void MainWindow::finishAudioKeyframeGeneration(AudioKeyframeGenerationResult res
     updateDocumentState();
 
     if (result.cancelled) {
-        statusBar()->showMessage(QStringLiteral("Audio keyframe generation canceled."), 5000);
+        statusBar()->showMessage(MotionUiTranslation::tr("Audio keyframe generation canceled."), 5000);
         return;
     }
     if (!result.succeeded) {
-        QMessageBox::warning(this, QStringLiteral("Audio Keyframes Failed"),
-            QStringLiteral("Keyframes could not be generated. See the Motion Studio log for details."));
+        QMessageBox::warning(this, MotionUiTranslation::tr("Audio Keyframes Failed"),
+            MotionUiTranslation::tr("Keyframes could not be generated. See the Motion Studio log for details."));
         return;
     }
     if (result.silent) {
         statusBar()->showMessage(
-            QStringLiteral("No audio samples or signal were found; the layer was not changed."),
+            MotionUiTranslation::tr("No audio samples or signal were found; the layer was not changed."),
             6000);
         return;
     }
@@ -301,8 +302,8 @@ void MainWindow::finishAudioKeyframeGeneration(AudioKeyframeGenerationResult res
             "motion_audio", "apply_keyframes", error.what(),
             {{"path", pathForLog(result.audio_path)},
              {"layer_id", std::to_string(result.layer_id)}});
-        QMessageBox::warning(this, QStringLiteral("Audio Keyframes Failed"),
-            QStringLiteral("Keyframes could not be applied. See the Motion Studio log for details."));
+        QMessageBox::warning(this, MotionUiTranslation::tr("Audio Keyframes Failed"),
+            MotionUiTranslation::tr("Keyframes could not be applied. See the Motion Studio log for details."));
         return;
     }
 
@@ -316,7 +317,7 @@ void MainWindow::finishAudioKeyframeGeneration(AudioKeyframeGenerationResult res
     updateDocumentState();
     requestPreview();
     statusBar()->showMessage(
-        QStringLiteral("Generated %1 audio keyframes.").arg(result.keyframes.size()), 6000);
+        MotionUiTranslation::tr("Generated %1 audio keyframes.").arg(result.keyframes.size()), 6000);
 }
 
 } // namespace motion::ui

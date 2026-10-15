@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include <QScrollArea>
 #include "inspector_widget.h"
 #include "mask_inspector_widget.h"
@@ -135,9 +136,9 @@ private:
 constexpr std::array<const char*, 5> kTransformObjectNames{{
     "motion-transform-position-x", "motion-transform-position-y",
     "motion-transform-scale", "motion-transform-rotation", "motion-transform-opacity"}};
-constexpr std::array<const char*, 5> kTransformLabels{{
-    "Position X (normalized)", "Position Y (normalized)", "Scale",
-    "Rotation (degrees)", "Opacity (0-1)"}};
+const std::array<QString, 5> kTransformLabels{{
+    MotionUiTranslation::tr("Position X (normalized)"), MotionUiTranslation::tr("Position Y (normalized)"), MotionUiTranslation::tr("Scale"),
+    MotionUiTranslation::tr("Rotation (degrees)"), MotionUiTranslation::tr("Opacity (0-1)")}};
 
 double transformValue(const creative_suite::animation::Transform2D& transform,
                       creative_suite::animation::TransformProperty property)
@@ -161,20 +162,20 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     setMinimumWidth(250);
 
     controls_.media_details = new MediaDetailsWidget(this);
-    addTab(controls_.media_details, QStringLiteral("Media"));
+    addTab(controls_.media_details, MotionUiTranslation::tr("Media"));
 
     controls_.layer_content_inspector = new QWidget(this);
     controls_.layer_content_inspector->setObjectName(
         QStringLiteral("motion-layer-content-inspector"));
     auto* content_layout = new QVBoxLayout(controls_.layer_content_inspector);
-    auto* content_title = new QLabel(QStringLiteral("Selected Layer Content"),
+    auto* content_title = new QLabel(MotionUiTranslation::tr("Selected Layer Content"),
                                      controls_.layer_content_inspector);
     content_title->setObjectName(QStringLiteral("motion-layer-content-title"));
     content_layout->addWidget(content_title);
     controls_.layer_content_pages = new QStackedWidget(controls_.layer_content_inspector);
     controls_.layer_content_pages->setObjectName(QStringLiteral("motion-layer-content-pages"));
     auto* empty_page = new QLabel(
-        QStringLiteral("Select a text or shape layer to edit its content."),
+        MotionUiTranslation::tr("Select a text or shape layer to edit its content."),
         controls_.layer_content_pages);
     empty_page->setObjectName(QStringLiteral("motion-layer-content-empty"));
     empty_page->setWordWrap(true);
@@ -189,37 +190,37 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     controls_.text_content_field->setObjectName(QStringLiteral("motion-text-content"));
     controls_.text_content_field->setAcceptRichText(false);
     controls_.text_content_field->setMaximumHeight(112);
-    text_form->addRow(QStringLiteral("Text"), controls_.text_content_field);
+    text_form->addRow(MotionUiTranslation::tr("Text"), controls_.text_content_field);
     controls_.text_font_field = new QFontComboBox(controls_.text_content_page);
     controls_.text_font_field->setObjectName(QStringLiteral("motion-text-font-family"));
-    text_form->addRow(QStringLiteral("Font"), controls_.text_font_field);
+    text_form->addRow(MotionUiTranslation::tr("Font"), controls_.text_font_field);
     controls_.text_font_size_field = new QDoubleSpinBox(controls_.text_content_page);
     controls_.text_font_size_field->setObjectName(QStringLiteral("motion-text-font-size"));
     controls_.text_font_size_field->setRange(1, 4096);
     controls_.text_font_size_field->setSuffix(QStringLiteral(" px"));
-    text_form->addRow(QStringLiteral("Size"), controls_.text_font_size_field);
+    text_form->addRow(MotionUiTranslation::tr("Size"), controls_.text_font_size_field);
     controls_.text_color_button = new QPushButton(controls_.text_content_page);
     controls_.text_color_button->setObjectName(QStringLiteral("motion-text-color"));
-    text_form->addRow(QStringLiteral("Color"), controls_.text_color_button);
+    text_form->addRow(MotionUiTranslation::tr("Color"), controls_.text_color_button);
     controls_.text_alignment_field = new QComboBox(controls_.text_content_page);
     controls_.text_alignment_field->setObjectName(QStringLiteral("motion-text-alignment"));
-    controls_.text_alignment_field->addItem(QStringLiteral("Left"),
+    controls_.text_alignment_field->addItem(MotionUiTranslation::tr("Left"),
         static_cast<int>(model::TextAlignment::Left));
-    controls_.text_alignment_field->addItem(QStringLiteral("Center"),
+    controls_.text_alignment_field->addItem(MotionUiTranslation::tr("Center"),
         static_cast<int>(model::TextAlignment::Center));
-    controls_.text_alignment_field->addItem(QStringLiteral("Right"),
+    controls_.text_alignment_field->addItem(MotionUiTranslation::tr("Right"),
         static_cast<int>(model::TextAlignment::Right));
-    text_form->addRow(QStringLiteral("Alignment"), controls_.text_alignment_field);
+    text_form->addRow(MotionUiTranslation::tr("Alignment"), controls_.text_alignment_field);
     controls_.text_box_width_field = new QSpinBox(controls_.text_content_page);
     controls_.text_box_width_field->setObjectName(QStringLiteral("motion-text-box-width"));
     controls_.text_box_width_field->setRange(1, 32768);
     controls_.text_box_width_field->setSuffix(QStringLiteral(" px"));
-    text_form->addRow(QStringLiteral("Box width"), controls_.text_box_width_field);
+    text_form->addRow(MotionUiTranslation::tr("Box width"), controls_.text_box_width_field);
     controls_.text_box_height_field = new QSpinBox(controls_.text_content_page);
     controls_.text_box_height_field->setObjectName(QStringLiteral("motion-text-box-height"));
     controls_.text_box_height_field->setRange(1, 32768);
     controls_.text_box_height_field->setSuffix(QStringLiteral(" px"));
-    text_form->addRow(QStringLiteral("Box height"), controls_.text_box_height_field);
+    text_form->addRow(MotionUiTranslation::tr("Box height"), controls_.text_box_height_field);
     text_layout->addLayout(text_form);
     text_layout->addStretch(1);
     controls_.layer_content_pages->addWidget(controls_.text_content_page);
@@ -232,36 +233,36 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     controls_.shape_width_field->setObjectName(QStringLiteral("motion-shape-width"));
     controls_.shape_width_field->setRange(1, 32768);
     controls_.shape_width_field->setSuffix(QStringLiteral(" px"));
-    shape_form->addRow(QStringLiteral("Width"), controls_.shape_width_field);
+    shape_form->addRow(MotionUiTranslation::tr("Width"), controls_.shape_width_field);
     controls_.shape_height_field = new QSpinBox(controls_.shape_content_page);
     controls_.shape_height_field->setObjectName(QStringLiteral("motion-shape-height"));
     controls_.shape_height_field->setRange(1, 32768);
     controls_.shape_height_field->setSuffix(QStringLiteral(" px"));
-    shape_form->addRow(QStringLiteral("Height"), controls_.shape_height_field);
+    shape_form->addRow(MotionUiTranslation::tr("Height"), controls_.shape_height_field);
     controls_.shape_fill_button = new QPushButton(controls_.shape_content_page);
     controls_.shape_fill_button->setObjectName(QStringLiteral("motion-shape-fill-color"));
-    shape_form->addRow(QStringLiteral("Fill"), controls_.shape_fill_button);
+    shape_form->addRow(MotionUiTranslation::tr("Fill"), controls_.shape_fill_button);
     controls_.shape_stroke_button = new QPushButton(controls_.shape_content_page);
     controls_.shape_stroke_button->setObjectName(QStringLiteral("motion-shape-stroke-color"));
-    shape_form->addRow(QStringLiteral("Stroke"), controls_.shape_stroke_button);
+    shape_form->addRow(MotionUiTranslation::tr("Stroke"), controls_.shape_stroke_button);
     controls_.shape_stroke_width_field = new QSpinBox(controls_.shape_content_page);
     controls_.shape_stroke_width_field->setObjectName(
         QStringLiteral("motion-shape-stroke-width"));
     controls_.shape_stroke_width_field->setRange(0, 4096);
     controls_.shape_stroke_width_field->setSuffix(QStringLiteral(" px"));
-    shape_form->addRow(QStringLiteral("Stroke width"), controls_.shape_stroke_width_field);
+    shape_form->addRow(MotionUiTranslation::tr("Stroke width"), controls_.shape_stroke_width_field);
     shape_layout->addLayout(shape_form);
     shape_layout->addStretch(1);
     controls_.layer_content_pages->addWidget(controls_.shape_content_page);
     content_layout->addWidget(controls_.layer_content_pages, 1);
     controls_.layer_content_tab_index = addTab(
-        controls_.layer_content_inspector, QStringLiteral("Layer"));
+        controls_.layer_content_inspector, MotionUiTranslation::tr("Layer"));
     setTabEnabled(controls_.layer_content_tab_index, false);
 
     controls_.transform_inspector = new QWidget(this);
     controls_.transform_inspector->setObjectName(QStringLiteral("motion-transform-inspector"));
     auto* transform_layout = new QVBoxLayout(controls_.transform_inspector);
-    auto* transform_title = new QLabel(QStringLiteral("Selected Layer Transform"),
+    auto* transform_title = new QLabel(MotionUiTranslation::tr("Selected Layer Transform"),
                                        controls_.transform_inspector);
     transform_title->setObjectName(QStringLiteral("motion-transform-inspector-title"));
     transform_layout->addWidget(transform_title);
@@ -286,10 +287,10 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
             .mid(QStringLiteral("motion-transform-").size());
         key_button->setObjectName(QStringLiteral("motion-transform-keyframe-%1").arg(suffix));
         key_button->setText(QStringLiteral("◇"));
-        key_button->setToolTip(QStringLiteral("Add or remove a keyframe at the current frame"));
+        key_button->setToolTip(MotionUiTranslation::tr("Add or remove a keyframe at the current frame"));
         controls_.transform_key_buttons[index] = key_button;
         row_layout->addWidget(key_button);
-        transform_form->addRow(QString::fromLatin1(kTransformLabels[index]), row);
+        transform_form->addRow(kTransformLabels[index], row);
         connect(field, &QDoubleSpinBox::valueChanged, this,
                 [this, index](double) { emit transformValueEdited(static_cast<int>(index)); });
         connect(field, &QDoubleSpinBox::editingFinished,
@@ -299,29 +300,29 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     }
     transform_layout->addLayout(transform_form);
     transform_layout->addStretch(1);
-    addTab(controls_.transform_inspector, QStringLiteral("Transform"));
+    addTab(controls_.transform_inspector, MotionUiTranslation::tr("Transform"));
 
     controls_.effects_inspector = new QWidget(this);
     controls_.effects_inspector->setObjectName(QStringLiteral("motion-effects-inspector"));
     auto* effects_layout = new QVBoxLayout(controls_.effects_inspector);
     auto* toolbar = new QHBoxLayout;
     controls_.add_layer_effect_button = new QPushButton(
-        QStringLiteral("Add Effect"), controls_.effects_inspector);
+        MotionUiTranslation::tr("Add Effect"), controls_.effects_inspector);
     controls_.add_layer_effect_button->setObjectName(QStringLiteral("motion-add-effect"));
     auto* add_menu = new QMenu(controls_.add_layer_effect_button);
-    auto* blur_action = add_menu->addAction(QStringLiteral("Gaussian Blur"));
+    auto* blur_action = add_menu->addAction(MotionUiTranslation::tr("Gaussian Blur"));
     blur_action->setObjectName(QStringLiteral("motion-add-gaussian-blur"));
-    auto* color_action = add_menu->addAction(QStringLiteral("Color Adjustment"));
+    auto* color_action = add_menu->addAction(MotionUiTranslation::tr("Color Adjustment"));
     color_action->setObjectName(QStringLiteral("motion-add-color-adjustment"));
     controls_.add_layer_effect_button->setMenu(add_menu);
     toolbar->addWidget(controls_.add_layer_effect_button);
-    controls_.effect_up_button = new QPushButton(QStringLiteral("Up"), controls_.effects_inspector);
+    controls_.effect_up_button = new QPushButton(MotionUiTranslation::tr("Up"), controls_.effects_inspector);
     controls_.effect_up_button->setObjectName(QStringLiteral("motion-effect-up"));
     controls_.effect_down_button = new QPushButton(
-        QStringLiteral("Down"), controls_.effects_inspector);
+        MotionUiTranslation::tr("Down"), controls_.effects_inspector);
     controls_.effect_down_button->setObjectName(QStringLiteral("motion-effect-down"));
     controls_.remove_effect_button = new QPushButton(
-        QStringLiteral("Remove"), controls_.effects_inspector);
+        MotionUiTranslation::tr("Remove"), controls_.effects_inspector);
     controls_.remove_effect_button->setObjectName(QStringLiteral("motion-effect-remove"));
     toolbar->addWidget(controls_.effect_up_button);
     toolbar->addWidget(controls_.effect_down_button);
@@ -337,12 +338,12 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     controls_.layer_effect_list->setDragDropMode(QAbstractItemView::InternalMove);
     controls_.layer_effect_list->setDefaultDropAction(Qt::MoveAction);
     controls_.layer_effect_list->setDragDropOverwriteMode(false);
-    controls_.layer_effect_list->setToolTip(QStringLiteral(
-        "Drag effects to change their order. Effects apply from top to bottom."));
+    controls_.layer_effect_list->setToolTip(
+        MotionUiTranslation::tr("Drag effects to change their order. Effects apply from top to bottom."));
     effects_layout->addWidget(controls_.layer_effect_list, 1);
     controls_.effect_parameter_pages = new QStackedWidget(controls_.effects_inspector);
     controls_.effect_parameter_pages->setObjectName(QStringLiteral("motion-effect-parameters"));
-    auto* no_effect = new QLabel(QStringLiteral("Select an effect to edit its parameters."),
+    auto* no_effect = new QLabel(MotionUiTranslation::tr("Select an effect to edit its parameters."),
                                  controls_.effect_parameter_pages);
     no_effect->setObjectName(QStringLiteral("motion-effect-empty"));
     no_effect->setWordWrap(true);
@@ -358,7 +359,7 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     controls_.blur_radius_field->setSingleStep(0.5);
     controls_.blur_radius_field->setSuffix(QStringLiteral(" px"));
     controls_.blur_radius_field->setKeyboardTracking(false);
-    blur_form->addRow(QStringLiteral("Radius (sigma)"), controls_.blur_radius_field);
+    blur_form->addRow(MotionUiTranslation::tr("Radius (sigma)"), controls_.blur_radius_field);
     controls_.effect_parameter_pages->addWidget(blur_page);
     auto* color_page = new QWidget(controls_.effect_parameter_pages);
     color_page->setObjectName(QStringLiteral("motion-color-adjustment-parameters"));
@@ -368,24 +369,24 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     controls_.effect_brightness_field->setRange(-100.0, 100.0);
     controls_.effect_brightness_field->setDecimals(1);
     controls_.effect_brightness_field->setKeyboardTracking(false);
-    color_form->addRow(QStringLiteral("Brightness"), controls_.effect_brightness_field);
+    color_form->addRow(MotionUiTranslation::tr("Brightness"), controls_.effect_brightness_field);
     controls_.effect_contrast_field = new QDoubleSpinBox(color_page);
     controls_.effect_contrast_field->setObjectName(QStringLiteral("motion-effect-contrast"));
     controls_.effect_contrast_field->setRange(0.0, 200.0);
     controls_.effect_contrast_field->setDecimals(1);
     controls_.effect_contrast_field->setSuffix(QStringLiteral(" %"));
     controls_.effect_contrast_field->setKeyboardTracking(false);
-    color_form->addRow(QStringLiteral("Contrast"), controls_.effect_contrast_field);
+    color_form->addRow(MotionUiTranslation::tr("Contrast"), controls_.effect_contrast_field);
     controls_.effect_saturation_field = new QDoubleSpinBox(color_page);
     controls_.effect_saturation_field->setObjectName(QStringLiteral("motion-effect-saturation"));
     controls_.effect_saturation_field->setRange(0.0, 200.0);
     controls_.effect_saturation_field->setDecimals(1);
     controls_.effect_saturation_field->setSuffix(QStringLiteral(" %"));
     controls_.effect_saturation_field->setKeyboardTracking(false);
-    color_form->addRow(QStringLiteral("Saturation"), controls_.effect_saturation_field);
+    color_form->addRow(MotionUiTranslation::tr("Saturation"), controls_.effect_saturation_field);
     controls_.effect_parameter_pages->addWidget(color_page);
     effects_layout->addWidget(controls_.effect_parameter_pages);
-    controls_.effects_tab_index = addTab(controls_.effects_inspector, QStringLiteral("Effects"));
+    controls_.effects_tab_index = addTab(controls_.effects_inspector, MotionUiTranslation::tr("Effects"));
     setTabEnabled(controls_.effects_tab_index, false);
 
     connect(blur_action, &QAction::triggered, this, [this] { emit effectAddRequested(0); });
@@ -453,7 +454,7 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     auto* mask_scroll=new QScrollArea(this);
     mask_scroll->setWidgetResizable(true);mask_scroll->setFrameShape(QFrame::NoFrame);
     masks_=new MaskInspectorWidget(mask_scroll);mask_scroll->setWidget(masks_);
-    addTab(mask_scroll,QStringLiteral("Masks"));
+    addTab(mask_scroll,MotionUiTranslation::tr("Masks"));
 }
 
 void InspectorWidget::setMedia(const creative_suite::media::MediaItem* item)
@@ -521,7 +522,7 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
             const auto& effect = layer->effects[i];
             const bool enabled = std::visit([](const auto& value) { return value.enabled; }, effect);
             const QString name = std::holds_alternative<model::GaussianBlurEffect>(effect)
-                ? QStringLiteral("Gaussian Blur") : QStringLiteral("Color Adjustment");
+                ? MotionUiTranslation::tr("Gaussian Blur") : MotionUiTranslation::tr("Color Adjustment");
             auto* item = new QListWidgetItem(name, controls_.layer_effect_list);
             item->setData(Qt::UserRole, static_cast<qulonglong>(i));
             item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsDragEnabled);
@@ -562,8 +563,8 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
         controls_.transform_key_buttons[i]->setText(key_here ? QStringLiteral("◆")
                                                                : QStringLiteral("◇"));
         controls_.transform_key_buttons[i]->setToolTip(key_here
-            ? QStringLiteral("Remove the keyframe at the current frame")
-            : QStringLiteral("Add a keyframe at the current frame"));
+            ? MotionUiTranslation::tr("Remove the keyframe at the current frame")
+            : MotionUiTranslation::tr("Add a keyframe at the current frame"));
     }
 }
 

@@ -74,6 +74,19 @@ int main(int argc, char** argv) {
     CS_TEST_CHECK(imageEditorPublished->sha256 ==
                   QCryptographicHash::hash(imageEditorPublishedQm, QCryptographicHash::Sha256));
 
+    const auto motionEditorPublished = std::find_if(
+        publishedCatalog.translations.cbegin(), publishedCatalog.translations.cend(),
+        [](const TranslationCatalogEntry& candidate) {
+            return candidate.application_id == QStringLiteral("motion-editor") &&
+                candidate.locale == QStringLiteral("pt_BR");
+        });
+    CS_TEST_CHECK(motionEditorPublished != publishedCatalog.translations.cend());
+    const QByteArray motionEditorPublishedQm = readFile(
+        QString::fromLocal8Bit(TRANSLATION_PUBLISHED_MOTION_EDITOR_QM));
+    CS_TEST_CHECK(motionEditorPublished->size_bytes == motionEditorPublishedQm.size());
+    CS_TEST_CHECK(motionEditorPublished->sha256 ==
+                  QCryptographicHash::hash(motionEditorPublishedQm, QCryptographicHash::Sha256));
+
     TranslationCatalog catalog;
     QString error;
     const QByteArray validManifest = manifestFor(

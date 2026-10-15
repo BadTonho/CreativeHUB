@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "autosave_recovery_dialog.h"
 
 #include "settings/autosave_preferences.h"
@@ -30,12 +31,12 @@ AutosaveRecoveryDialog::AutosaveRecoveryDialog(
     : QDialog(parent)
 {
     setObjectName(QStringLiteral("motion-autosave-recovery-dialog"));
-    setWindowTitle(QStringLiteral("Autosave & Recovery"));
+    setWindowTitle(MotionUiTranslation::tr("Autosave & Recovery"));
     resize(760, 460);
 
     auto* layout = new QVBoxLayout(this);
     auto* form = new QFormLayout();
-    enabled_check_ = new QCheckBox(QStringLiteral("Enable autosave"), this);
+    enabled_check_ = new QCheckBox(MotionUiTranslation::tr("Enable autosave"), this);
     enabled_check_->setObjectName(QStringLiteral("motion-autosave-enabled"));
     enabled_check_->setChecked(enabled);
     interval_spin_ = new QSpinBox(this);
@@ -43,27 +44,27 @@ AutosaveRecoveryDialog::AutosaveRecoveryDialog(
     interval_spin_->setRange(settings::minimum_autosave_interval_seconds,
                              settings::maximum_autosave_interval_seconds);
     interval_spin_->setValue(interval_seconds);
-    interval_spin_->setSuffix(QStringLiteral(" s"));
+    interval_spin_->setSuffix(MotionUiTranslation::tr(" s"));
     retention_spin_ = new QSpinBox(this);
     retention_spin_->setObjectName(QStringLiteral("motion-autosave-retention"));
     retention_spin_->setRange(settings::minimum_recovery_retention,
                               settings::maximum_recovery_retention);
     retention_spin_->setValue(retention);
     form->addRow(enabled_check_);
-    form->addRow(QStringLiteral("Interval:"), interval_spin_);
-    form->addRow(QStringLiteral("Keep snapshots:"), retention_spin_);
+    form->addRow(MotionUiTranslation::tr("Interval:"), interval_spin_);
+    form->addRow(MotionUiTranslation::tr("Keep snapshots:"), retention_spin_);
     layout->addLayout(form);
 
     auto* description = new QLabel(
-        QStringLiteral("Recovery snapshots never replace the original .motion file."), this);
+        MotionUiTranslation::tr("Recovery snapshots never replace the original .motion file."), this);
     description->setWordWrap(true);
     layout->addWidget(description);
 
     snapshots_table_ = new QTableWidget(0, 4, this);
     snapshots_table_->setObjectName(QStringLiteral("motion-recovery-snapshots"));
     snapshots_table_->setHorizontalHeaderLabels({
-        QStringLiteral("Composition"), QStringLiteral("Type"),
-        QStringLiteral("Modified"), QStringLiteral("Snapshot")});
+        MotionUiTranslation::tr("Composition"), MotionUiTranslation::tr("Type"),
+        MotionUiTranslation::tr("Modified"), MotionUiTranslation::tr("Snapshot")});
     snapshots_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     snapshots_table_->setSelectionMode(QAbstractItemView::SingleSelection);
     snapshots_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -74,15 +75,15 @@ AutosaveRecoveryDialog::AutosaveRecoveryDialog(
     layout->addWidget(snapshots_table_, 1);
 
     auto* buttons = new QHBoxLayout();
-    auto* refresh = new QPushButton(QStringLiteral("Refresh"), this);
+    auto* refresh = new QPushButton(MotionUiTranslation::tr("Refresh"), this);
     refresh->setObjectName(QStringLiteral("motion-recovery-refresh"));
-    auto* restore = new QPushButton(QStringLiteral("Restore"), this);
+    auto* restore = new QPushButton(MotionUiTranslation::tr("Restore"), this);
     restore->setObjectName(QStringLiteral("motion-recovery-restore"));
-    auto* remove = new QPushButton(QStringLiteral("Delete"), this);
+    auto* remove = new QPushButton(MotionUiTranslation::tr("Delete"), this);
     remove->setObjectName(QStringLiteral("motion-recovery-delete"));
-    auto* open_folder = new QPushButton(QStringLiteral("Open Folder"), this);
+    auto* open_folder = new QPushButton(MotionUiTranslation::tr("Open Folder"), this);
     open_folder->setObjectName(QStringLiteral("motion-recovery-open-folder"));
-    auto* close = new QPushButton(QStringLiteral("Close"), this);
+    auto* close = new QPushButton(MotionUiTranslation::tr("Close"), this);
     close->setObjectName(QStringLiteral("motion-recovery-close"));
     buttons->addWidget(refresh);
     buttons->addWidget(restore);

@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "ui/inspector/mask_inspector_widget.h"
 #include "main_window.h"
 #include "main_window_support.h"
@@ -165,7 +166,7 @@ void MainWindow::createWorkspace()
                     id, property, from_local_frame, to_local_frame)) {
                 if (statusBar() != nullptr) {
                     statusBar()->showMessage(
-                        QStringLiteral("A keyframe already exists at that frame."), 4000);
+                        MotionUiTranslation::tr("A keyframe already exists at that frame."), 4000);
                 }
                 return false;
             }
@@ -247,22 +248,22 @@ void MainWindow::createWorkspace()
     curve_panel_layout->setContentsMargins(6, 4, 6, 4);
     curve_panel_layout->setSpacing(3);
     auto* curve_panel_controls = new QHBoxLayout();
-    auto* curve_panel_title = new QLabel(QStringLiteral("Graph Editor"), curve_editor_panel_);
+    auto* curve_panel_title = new QLabel(MotionUiTranslation::tr("Graph Editor"), curve_editor_panel_);
     curve_panel_title->setObjectName(QStringLiteral("motion-graph-editor-title"));
     curve_panel_controls->addWidget(curve_panel_title);
     curve_panel_controls->addStretch(1);
-    curve_custom_label_ = new QLabel(QStringLiteral("Custom Bézier"), curve_editor_panel_);
+    curve_custom_label_ = new QLabel(MotionUiTranslation::tr("Custom Bézier"), curve_editor_panel_);
     curve_custom_label_->setObjectName(QStringLiteral("motion-curve-editor-custom-status"));
     curve_custom_label_->hide();
     curve_panel_controls->addWidget(curve_custom_label_);
     curve_preset_combo_ = new QComboBox(curve_editor_panel_);
     curve_preset_combo_->setObjectName(QStringLiteral("motion-curve-editor-preset"));
-    curve_preset_combo_->addItem(QStringLiteral("Linear"));
-    curve_preset_combo_->addItem(QStringLiteral("Ease In"));
-    curve_preset_combo_->addItem(QStringLiteral("Ease Out"));
-    curve_preset_combo_->addItem(QStringLiteral("Ease In/Out"));
+    curve_preset_combo_->addItem(MotionUiTranslation::tr("Linear"));
+    curve_preset_combo_->addItem(MotionUiTranslation::tr("Ease In"));
+    curve_preset_combo_->addItem(MotionUiTranslation::tr("Ease Out"));
+    curve_preset_combo_->addItem(MotionUiTranslation::tr("Ease In/Out"));
     curve_preset_combo_->setToolTip(
-        QStringLiteral("Set interpolation for the selected keyframe segment"));
+        MotionUiTranslation::tr("Set interpolation for the selected keyframe segment"));
     curve_panel_controls->addWidget(curve_preset_combo_);
     curve_panel_layout->addLayout(curve_panel_controls);
     curve_editor_ = new PropertyCurveEditor(curve_editor_panel_);
@@ -372,14 +373,14 @@ void MainWindow::restoreDefaultPanelLayout()
 void MainWindow::openMedia()
 {
     if (!document_.has_value() || media_pool_ == nullptr) return;
-    QFileDialog dialog(this, QStringLiteral("Import Media"));
+    QFileDialog dialog(this, MotionUiTranslation::tr("Import Media"));
     dialog.setObjectName(QStringLiteral("motion-import-media-dialog"));
     dialog.setFileMode(QFileDialog::ExistingFiles);
     dialog.setNameFilters({
-        QStringLiteral("Supported media (*.avi *.mkv *.mov *.mp4 *.mxf *.webm *.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"),
-        QStringLiteral("Video files (*.avi *.mkv *.mov *.mp4 *.mxf *.webm)"),
-        QStringLiteral("Image files (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"),
-        QStringLiteral("All files (*)"),
+        MotionUiTranslation::tr("Supported media (*.avi *.mkv *.mov *.mp4 *.mxf *.webm *.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"),
+        MotionUiTranslation::tr("Video files (*.avi *.mkv *.mov *.mp4 *.mxf *.webm)"),
+        MotionUiTranslation::tr("Image files (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"),
+        MotionUiTranslation::tr("All files (*)"),
     });
     if (dialog.exec() != QDialog::Accepted) return;
     const auto files = dialog.selectedFiles();

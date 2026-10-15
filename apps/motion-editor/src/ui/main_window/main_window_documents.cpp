@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "main_window.h"
 #include "main_window_support.h"
 
@@ -181,12 +182,12 @@ void MainWindow::openComposition()
     if (audio_keyframe_worker_) return;
     finishPendingTransformEdit();
     if (open_cancel_requested_) return;
-    QFileDialog dialog(this, QStringLiteral("Open Composition"));
+    QFileDialog dialog(this, MotionUiTranslation::tr("Open Composition"));
     dialog.setObjectName(QStringLiteral("motion-open-composition-dialog"));
     dialog.setFileMode(QFileDialog::ExistingFile);
     dialog.setAcceptMode(QFileDialog::AcceptOpen);
-    dialog.setNameFilters({QStringLiteral("Motion Studio documents (*.motion)"),
-                           QStringLiteral("All files (*)")});
+    dialog.setNameFilters({MotionUiTranslation::tr("Motion Studio documents (*.motion)"),
+                           MotionUiTranslation::tr("All files (*)")});
     if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return;
 
     const auto path = pathFromQString(dialog.selectedFiles().front());
@@ -221,8 +222,8 @@ void MainWindow::openHandoffRequest(const std::filesystem::path& request_path)
             creative_suite::diagnostics::Level::Error,
             "motion_handoff", "read_request", file.errorString().toUtf8().toStdString(),
             {{"path", pathForLog(request_path)}});
-        QMessageBox::warning(this, QStringLiteral("Motion Handoff"),
-            QStringLiteral("The Video Editor handoff request could not be read."));
+        QMessageBox::warning(this, MotionUiTranslation::tr("Motion Handoff"),
+            MotionUiTranslation::tr("The Video Editor handoff request could not be read."));
         startup_handoff_requested_ = false;
         return;
     }
@@ -241,8 +242,8 @@ void MainWindow::openHandoffRequest(const std::filesystem::path& request_path)
             creative_suite::diagnostics::Level::Error,
             "motion_handoff", "validate_request", cause.toUtf8().toStdString(),
             {{"path", pathForLog(request_path)}});
-        QMessageBox::warning(this, QStringLiteral("Motion Handoff"),
-            QStringLiteral("The Video Editor handoff request is invalid."));
+        QMessageBox::warning(this, MotionUiTranslation::tr("Motion Handoff"),
+            MotionUiTranslation::tr("The Video Editor handoff request is invalid."));
         startup_handoff_requested_ = false;
         return;
     }
@@ -301,10 +302,10 @@ void MainWindow::stageOpenProject(
     }
 
     open_progress_ = new QProgressDialog(
-        QStringLiteral("Preparing linked media..."), QStringLiteral("Cancel"),
+        MotionUiTranslation::tr("Preparing linked media..."), MotionUiTranslation::tr("Cancel"),
         0, static_cast<int>(project.media.size()), this);
     open_progress_->setObjectName(QStringLiteral("motion-open-media-progress"));
-    open_progress_->setWindowTitle(QStringLiteral("Open Composition"));
+    open_progress_->setWindowTitle(MotionUiTranslation::tr("Open Composition"));
     open_progress_->setWindowModality(Qt::WindowModal);
     open_progress_->setMinimumDuration(250);
     open_progress_->setValue(0);
@@ -325,7 +326,7 @@ void MainWindow::stageOpenProject(
             owner->open_progress_ == nullptr) return;
         owner->open_progress_->setRange(0, static_cast<int>(total));
         owner->open_progress_->setValue(static_cast<int>(completed));
-        owner->open_progress_->setLabelText(QStringLiteral("Loading %1")
+        owner->open_progress_->setLabelText(MotionUiTranslation::tr("Loading %1")
             .arg(QFileInfo(pathForDisplay(media_path)).fileName()));
     };
     auto finished_handler = [owner](std::uint64_t task_generation,
@@ -357,11 +358,11 @@ bool MainWindow::saveCompositionAs()
 {
     finishPendingTransformEdit();
     if (!document_) return false;
-    QFileDialog dialog(this, QStringLiteral("Save Composition As"));
+    QFileDialog dialog(this, MotionUiTranslation::tr("Save Composition As"));
     dialog.setObjectName(QStringLiteral("motion-save-composition-dialog"));
     dialog.setAcceptMode(QFileDialog::AcceptSave);
     dialog.setFileMode(QFileDialog::AnyFile);
-    dialog.setNameFilters({QStringLiteral("Motion Studio documents (*.motion)")});
+    dialog.setNameFilters({MotionUiTranslation::tr("Motion Studio documents (*.motion)")});
     dialog.setDefaultSuffix(QStringLiteral("motion"));
     if (document_path_.has_value())
         dialog.selectFile(QString::fromUtf8(pathForLog(*document_path_)));
@@ -391,8 +392,8 @@ bool MainWindow::saveCompositionAs()
                     creative_suite::diagnostics::Level::Error,
                     "image_editor_compatibility", "clone_link_directory",
                     directory_error.message(), {{"path", pathForLog(directory)}});
-                QMessageBox::warning(this, QStringLiteral("Save As Failed"),
-                    QStringLiteral("A linked image folder could not be copied."));
+                QMessageBox::warning(this, MotionUiTranslation::tr("Save As Failed"),
+                    MotionUiTranslation::tr("A linked image folder could not be copied."));
                 return false;
             }
             model::LinkedImageDocument new_link{
@@ -430,8 +431,8 @@ bool MainWindow::saveCompositionAs()
             if (!copied_snapshot ||
                 !copy_file(old_link.document_path, new_link.document_path, false) ||
                 !copy_file(old_link.published_output_path, new_link.published_output_path, false)) {
-                QMessageBox::warning(this, QStringLiteral("Save As Failed"),
-                    QStringLiteral("The linked image files could not be cloned. The original composition remains unchanged."));
+                QMessageBox::warning(this, MotionUiTranslation::tr("Save As Failed"),
+                    MotionUiTranslation::tr("The linked image files could not be cloned. The original composition remains unchanged."));
                 return false;
             }
             rebased_links.push_back({layer.id, old_link, std::move(new_link)});
@@ -463,7 +464,7 @@ bool MainWindow::saveCompositionAs()
                 detail::pathFromQString(linked_handoff_->document_path))) {
         linked_handoff_.reset();
         handoff_needs_initial_layer_ = false;
-        statusBar()->showMessage(QStringLiteral("Independent composition copy saved."), 5000);
+        statusBar()->showMessage(MotionUiTranslation::tr("Independent composition copy saved."), 5000);
     }
     return saved;
 }
@@ -480,8 +481,8 @@ bool MainWindow::saveToPath(const std::filesystem::path& path)
         QLockFile lock(detail::pathForDisplay(lock_path));
         lock.setStaleLockTime(30000);
         if (!lock.tryLock(0)) {
-            QMessageBox::warning(this, QStringLiteral("Document Is Being Edited"),
-                QStringLiteral("Another Motion Studio session is saving this composition. Close that session or reopen the composition before saving."));
+            QMessageBox::warning(this, MotionUiTranslation::tr("Document Is Being Edited"),
+                MotionUiTranslation::tr("Another Motion Studio session is saving this composition. Close that session or reopen the composition before saving."));
             return false;
         }
         std::error_code file_error;
@@ -498,7 +499,8 @@ bool MainWindow::saveToPath(const std::filesystem::path& path)
                     {{"path", pathForLog(target_path)},
                      {"expected_revision", std::to_string(document_revision_)},
                      {"actual_revision", std::to_string(disk_document.document_revision)}});
-                QMessageBox::warning(this, QStringLiteral("Concurrent Composition Change"), message);
+                QMessageBox::warning(this, MotionUiTranslation::tr("Concurrent Composition Change"),
+                    MotionUiTranslation::tr("The composition changed in another Motion Studio session. This copy was kept open; reopen the latest file before saving again."));
                 return false;
             }
             project_snapshot.document_revision = disk_document.document_revision + 1;
@@ -515,7 +517,7 @@ bool MainWindow::saveToPath(const std::filesystem::path& path)
             cleanupRecoveredUnsavedSnapshot("save_as_recovered_snapshot_cleanup");
         }
         updateDocumentState();
-        statusBar()->showMessage(QStringLiteral("Composition saved."), 4000);
+        statusBar()->showMessage(MotionUiTranslation::tr("Composition saved."), 4000);
         return true;
     } catch (const persistence::MotionDocumentError& error) {
         reportDocumentError("save_document", path, error,
@@ -530,13 +532,16 @@ bool MainWindow::confirmReplaceDocument()
 {
     if (!documentIsDirty()) return true;
     QMessageBox prompt(QMessageBox::Warning,
-                       QStringLiteral("Unsaved Changes"),
-                       QStringLiteral("Save changes to the current composition before continuing?"),
+                       MotionUiTranslation::tr("Unsaved Changes"),
+                       MotionUiTranslation::tr("Save changes to the current composition before continuing?"),
                        QMessageBox::NoButton, this);
     prompt.setObjectName(QStringLiteral("motion-unsaved-changes-prompt"));
     auto* save = prompt.addButton(QMessageBox::Save);
     auto* discard = prompt.addButton(QMessageBox::Discard);
     auto* cancel = prompt.addButton(QMessageBox::Cancel);
+    save->setText(MotionUiTranslation::tr("Save"));
+    discard->setText(MotionUiTranslation::tr("Discard"));
+    cancel->setText(MotionUiTranslation::tr("Cancel"));
     save->setObjectName(QStringLiteral("motion-unsaved-save-button"));
     discard->setObjectName(QStringLiteral("motion-unsaved-discard-button"));
     cancel->setObjectName(QStringLiteral("motion-unsaved-cancel-button"));
@@ -623,8 +628,8 @@ void MainWindow::updateDocumentState()
     }
     const QString document_name = document_path_.has_value()
         ? QFileInfo(pathForDisplay(*document_path_)).fileName()
-        : QStringLiteral("Untitled");
-    setWindowTitle(QStringLiteral("%1 — Motion Studio[*]").arg(document_name));
+        : MotionUiTranslation::tr("Untitled");
+    setWindowTitle(MotionUiTranslation::tr("%1 — Motion Studio[*]").arg(document_name));
     setWindowModified(dirty);
 }
 void MainWindow::reportDocumentError(const char* operation,
@@ -641,10 +646,11 @@ void MainWindow::reportDocumentError(const char* operation,
         creative_suite::diagnostics::Level::Error,
         "motion_document", operation, error.what(), context);
     QMessageBox::warning(
-        this, QStringLiteral("Document Error"),
-        QStringLiteral("The composition could not be %1. Check the Motion Studio log for details.")
+        this, MotionUiTranslation::tr("Document Error"),
+        MotionUiTranslation::tr("The composition could not be %1. Check the Motion Studio log for details.")
             .arg(QString::fromUtf8(operation).contains(QStringLiteral("save"))
-                     ? QStringLiteral("saved") : QStringLiteral("opened")));
+                     ? MotionUiTranslation::tr("saved")
+                     : MotionUiTranslation::tr("opened")));
 }
 void MainWindow::finishOpen(std::uint64_t generation,
                             std::filesystem::path path,
@@ -805,8 +811,8 @@ void MainWindow::finishOpen(std::uint64_t generation,
             last_autosaved_data_ = projectData();
         }
         statusBar()->showMessage(offline_count == 0
-            ? QStringLiteral("Composition opened.")
-            : QStringLiteral("Composition opened; %1 media item(s) are offline.")
+            ? MotionUiTranslation::tr("Composition opened.")
+            : MotionUiTranslation::tr("Composition opened; %1 media item(s) are offline.")
                   .arg(offline_count), 7000);
         if (handoff_needs_initial_layer_) finishLinkedHandoffInitialization();
     } catch (const std::exception& error) {
@@ -831,7 +837,7 @@ void MainWindow::finishLinkedHandoffInitialization()
             "The source media could not be loaded for the linked composition.",
             {{"path", pathForLog(source_path)}});
         statusBar()->showMessage(
-            QStringLiteral("The linked source is offline. Restore it, then reopen the handoff from the Video Editor."),
+            MotionUiTranslation::tr("The linked source is offline. Restore it, then reopen the handoff from the Video Editor."),
             8000);
         return;
     }
@@ -842,7 +848,7 @@ void MainWindow::finishLinkedHandoffInitialization()
         const auto result = document_->addMediaLayer(metadata, 0, &layer_id);
         if (result != model::AddMediaLayerResult::Added) {
             statusBar()->showMessage(
-                QStringLiteral("The source could not be added to the linked Motion composition."), 7000);
+                MotionUiTranslation::tr("The source could not be added to the linked Motion composition."), 7000);
             return;
         }
         if (request.origin_kind == QStringLiteral("timeline_clip")) {
@@ -878,7 +884,7 @@ void MainWindow::finishLinkedHandoffInitialization()
         }
         if (!recordCompositionEdit(before)) {
             statusBar()->showMessage(
-                QStringLiteral("The linked source could not be added to the composition."), 7000);
+                MotionUiTranslation::tr("The linked source could not be added to the composition."), 7000);
             return;
         }
         selected_layer_id_ = layer_id;
@@ -889,8 +895,8 @@ void MainWindow::finishLinkedHandoffInitialization()
         requestPreview();
         statusBar()->showMessage(
             request.origin_kind == QStringLiteral("timeline_clip")
-                ? QStringLiteral("The selected video range is ready in Motion Studio.")
-                : QStringLiteral("The source is ready in Motion Studio; images start with the standard five-second duration."),
+                ? MotionUiTranslation::tr("The selected video range is ready in Motion Studio.")
+                : MotionUiTranslation::tr("The source is ready in Motion Studio; images start with the standard five-second duration."),
             6000);
     } catch (const std::exception& error) {
         if (document_) *document_ = std::move(before.document);
@@ -899,8 +905,8 @@ void MainWindow::finishLinkedHandoffInitialization()
             "motion_handoff", "create_initial_layer", error.what(),
             {{"path", pathForLog(source_path)}, {"document_path", pathForLog(
                 detail::pathFromQString(request.document_path))}});
-        QMessageBox::warning(this, QStringLiteral("Motion Handoff"),
-            QStringLiteral("The source range could not be added. Check the Motion Studio log for details."));
+        QMessageBox::warning(this, MotionUiTranslation::tr("Motion Handoff"),
+            MotionUiTranslation::tr("The source range could not be added. Check the Motion Studio log for details."));
     }
 }
 void MainWindow::closeEvent(QCloseEvent* event)

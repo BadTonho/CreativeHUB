@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "main_window.h"
 #include "main_window_support.h"
 
@@ -140,11 +141,11 @@ void MainWindow::showLayerContextMenu(model::LayerId id,
     QMenu menu(this);
     menu.setObjectName(QStringLiteral("motion-layer-context-menu"));
     if (found->kind == model::LayerKind::Image) {
-        auto* edit = menu.addAction(QStringLiteral("Edit Image in Image Editor"));
+        auto* edit = menu.addAction(MotionUiTranslation::tr("Edit Image in Image Editor"));
         edit->setObjectName(QStringLiteral("motion-context-edit-image-action"));
         connect(edit, &QAction::triggered, this, &MainWindow::editSelectedLayerImage);
     }
-    auto* remove = menu.addAction(QStringLiteral("Remove Layer"));
+    auto* remove = menu.addAction(MotionUiTranslation::tr("Remove Layer"));
     connect(remove, &QAction::triggered, this, [this, id] {
         if (!document_) return;
         finishPendingTransformEdit();
@@ -189,8 +190,8 @@ void MainWindow::editSelectedLayerImage()
             creative_suite::diagnostics::Level::Error,
             "image_editor_compatibility", "create_link_directory",
             directory_error.message(), {{"path", pathForLog(link->document_path.parent_path())}});
-        QMessageBox::warning(this, QStringLiteral("Image Editor Link Error"),
-            QStringLiteral("The linked image folder could not be created."));
+        QMessageBox::warning(this, MotionUiTranslation::tr("Image Editor Link Error"),
+            MotionUiTranslation::tr("The linked image folder could not be created."));
         return;
     }
 
@@ -208,7 +209,8 @@ void MainWindow::editSelectedLayerImage()
                 cause.toUtf8().toStdString(),
                 {{"source", pathForLog(found->source_path)},
                  {"snapshot", pathForLog(link->source_snapshot_path)}});
-            QMessageBox::warning(this, QStringLiteral("Image Editor Link Error"), cause);
+            QMessageBox::warning(this, MotionUiTranslation::tr("Image Editor Link Error"),
+                MotionUiTranslation::tr("The original image could not be copied to the linked-image recovery file."));
             return;
         }
     }
@@ -227,9 +229,9 @@ void MainWindow::editSelectedLayerImage()
     auto executable = linkedImageExecutable();
     if (executable.isEmpty()) {
         executable = QFileDialog::getOpenFileName(
-            this, QStringLiteral("Locate Image Editor"),
+            this, MotionUiTranslation::tr("Locate Image Editor"),
             QCoreApplication::applicationDirPath(),
-            QStringLiteral("Image Editor executable (*)"));
+            MotionUiTranslation::tr("Image Editor executable (*)"));
         if (executable.isEmpty()) return;
         QSettings settings;
         settings.setValue(QStringLiteral("applications/image_editor_executable"), executable);
@@ -250,11 +252,12 @@ void MainWindow::editSelectedLayerImage()
             {{"executable", executable.toUtf8().toStdString()},
              {"document_path", pathForLog(link->document_path)},
              {"layer_id", std::to_string(found->id)}});
-        QMessageBox::warning(this, QStringLiteral("Could Not Start Image Editor"), cause);
+        QMessageBox::warning(this, MotionUiTranslation::tr("Could Not Start Image Editor"),
+            MotionUiTranslation::tr("The Image Editor process could not be started."));
         return;
     }
     statusBar()->showMessage(
-        QStringLiteral("Image Editor opened for this Motion layer. Save there to refresh this layer."),
+        MotionUiTranslation::tr("Image Editor opened for this Motion layer. Save there to refresh this layer."),
         6000);
 }
 
@@ -276,7 +279,7 @@ void MainWindow::initializeLinkedImageFrames()
         if (!path.empty()) decodeLinkedImageFrame(layer.id, path, output.isFile());
         else if (statusBar() != nullptr)
             statusBar()->showMessage(
-                QStringLiteral("A linked image is missing; use Edit Image in Image Editor to repair it."),
+                MotionUiTranslation::tr("A linked image is missing; use Edit Image in Image Editor to repair it."),
                 9000);
     }
 }
@@ -306,7 +309,7 @@ void MainWindow::refreshLinkedImagePublications()
             if (!fallback.empty()) decodeLinkedImageFrame(layer.id, fallback, false);
             else if (statusBar() != nullptr)
                 statusBar()->showMessage(
-                    QStringLiteral("A linked image is missing; use Edit Image in Image Editor to repair it."),
+                    MotionUiTranslation::tr("A linked image is missing; use Edit Image in Image Editor to repair it."),
                     9000);
         }
     }
@@ -357,7 +360,7 @@ void MainWindow::decodeLinkedImageFrame(model::LayerId id,
                                 owner->decodeLinkedImageFrame(id, fallback, false);
                             } else if (owner->statusBar() != nullptr) {
                                 owner->statusBar()->showMessage(
-                                    QStringLiteral("The linked image needs repair; no valid publication or recovery image is available."),
+                                    MotionUiTranslation::tr("The linked image needs repair; no valid publication or recovery image is available."),
                                     9000);
                             }
                         }
@@ -365,11 +368,11 @@ void MainWindow::decodeLinkedImageFrame(model::LayerId id,
                                !owner->linked_image_frames_.contains(id) &&
                                owner->statusBar() != nullptr) {
                         owner->statusBar()->showMessage(
-                            QStringLiteral("The linked image needs repair; its recovery image could not be opened."),
+                            MotionUiTranslation::tr("The linked image needs repair; its recovery image could not be opened."),
                             9000);
                     } else if (published_output && owner->statusBar() != nullptr) {
                         owner->statusBar()->showMessage(
-                            QStringLiteral("Image publication could not be decoded; keeping the last valid frame."),
+                            MotionUiTranslation::tr("Image publication could not be decoded; keeping the last valid frame."),
                             6000);
                     }
                     return;

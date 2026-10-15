@@ -7,15 +7,15 @@ only catalogs that are currently published for download, with their exact byte
 size and SHA-256 digest.
 
 Catalogs are organized by application ID and locale, for example
-`hub/pt_BR.ts`, `video-editor/pt_BR.ts`, and `image-editor/pt_BR.ts`. English
-is the source language. Brazilian Portuguese catalogs are available for the
-Hub, Video Editor, and Image Editor; Motion Studio will be added as its user
-interface strings are migrated.
+`hub/pt_BR.ts`, `video-editor/pt_BR.ts`, `image-editor/pt_BR.ts`, and
+`motion-editor/pt_BR.ts`. English is the source language. Brazilian Portuguese
+catalogs are available for all four applications.
 
-Use `update-hub-translations`, `update-video-editor-translations`, or
-`update-image-editor-translations` in the corresponding CMake build to refresh
-that application's `.ts` source. Each app build compiles its `.ts` and fails
-if the generated `.qm` differs from the tracked file. After intentionally
-updating a `.ts`, finish the translations, generate the matching `.qm`, review
-both files, then update the manifest size and SHA-256 values together. Do not
-publish a manifest entry until its matching `.qm` is present.
+Use `update-hub-translations`, `update-video-editor-translations`,
+`update-image-editor-translations`, or `update-motion-editor-translations` in
+the corresponding CMake build to refresh that application's `.ts` source. Each
+app build compiles its `.ts` and fails if the generated `.qm` differs from the
+tracked file. After intentionally updating a `.ts`, finish the translations,
+generate the matching `.qm`, review both files, then update the manifest size
+and SHA-256 values together. Do not publish a manifest entry until its matching
+`.qm` is present.

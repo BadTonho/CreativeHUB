@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "timeline_controls.h"
 
 #include "timeline_navigator_math.h"
@@ -19,48 +20,48 @@ TimelineControls::TimelineControls(QWidget* parent)
     auto* controls = new QHBoxLayout(this);
     controls->setContentsMargins(0, 0, 0, 0);
 
-    previous_frame_button_ = new QPushButton(QStringLiteral("Previous frame"), this);
+    previous_frame_button_ = new QPushButton(MotionUiTranslation::tr("Previous frame"), this);
     previous_frame_button_->setObjectName(QStringLiteral("motion-timeline-previous-frame"));
-    play_pause_button_ = new QPushButton(QStringLiteral("Play"), this);
+    play_pause_button_ = new QPushButton(MotionUiTranslation::tr("Play"), this);
     play_pause_button_->setObjectName(QStringLiteral("motion-timeline-play-pause"));
-    play_pause_button_->setToolTip(QStringLiteral("Play or pause the composition"));
-    loop_button_ = new QPushButton(QStringLiteral("Loop"), this);
+    play_pause_button_->setToolTip(MotionUiTranslation::tr("Play or pause the composition"));
+    loop_button_ = new QPushButton(MotionUiTranslation::tr("Loop"), this);
     loop_button_->setObjectName(QStringLiteral("motion-timeline-loop"));
     loop_button_->setCheckable(true);
-    loop_button_->setToolTip(QStringLiteral("Restart playback from frame 0 at the end"));
+    loop_button_->setToolTip(MotionUiTranslation::tr("Restart playback from frame 0 at the end"));
     display_mode_combo_ = new QComboBox(this);
     display_mode_combo_->setObjectName(QStringLiteral("motion-timeline-display-mode"));
-    display_mode_combo_->addItem(QStringLiteral("Time"),
+    display_mode_combo_->addItem(MotionUiTranslation::tr("Time"),
         static_cast<int>(TimelineDisplayMode::Time));
-    display_mode_combo_->addItem(QStringLiteral("Frames"),
+    display_mode_combo_->addItem(MotionUiTranslation::tr("Frames"),
         static_cast<int>(TimelineDisplayMode::Frames));
-    display_mode_combo_->setToolTip(QStringLiteral("Timeline ruler and playhead display"));
+    display_mode_combo_->setToolTip(MotionUiTranslation::tr("Timeline ruler and playhead display"));
     frame_label_ = new QLabel(this);
     frame_label_->setObjectName(QStringLiteral("motion-timeline-position-readout"));
     zoom_out_button_ = new QPushButton(QStringLiteral("\u2212"), this);
     zoom_out_button_->setObjectName(QStringLiteral("motion-timeline-zoom-out"));
-    zoom_out_button_->setToolTip(QStringLiteral("Zoom out"));
+    zoom_out_button_->setToolTip(MotionUiTranslation::tr("Zoom out"));
     zoom_slider_ = new QSlider(Qt::Horizontal, this);
     zoom_slider_->setObjectName(QStringLiteral("motion-timeline-zoom-slider"));
     zoom_slider_->setRange(0, static_cast<int>(detail::kTimelineZoomLevels.size()) - 1);
     zoom_slider_->setValue(detail::kTimelineZoomDefaultIndex);
     zoom_slider_->setFixedWidth(150);
-    zoom_slider_->setToolTip(QStringLiteral("Timeline zoom"));
+    zoom_slider_->setToolTip(MotionUiTranslation::tr("Timeline zoom"));
     zoom_level_label_ = new QLabel(this);
     zoom_level_label_->setObjectName(QStringLiteral("motion-timeline-zoom-level"));
     zoom_level_label_->setMinimumWidth(52);
     zoom_level_label_->setAlignment(Qt::AlignCenter);
     zoom_in_button_ = new QPushButton(QStringLiteral("+"), this);
     zoom_in_button_->setObjectName(QStringLiteral("motion-timeline-zoom-in"));
-    zoom_in_button_->setToolTip(QStringLiteral("Zoom in"));
+    zoom_in_button_->setToolTip(MotionUiTranslation::tr("Zoom in"));
     frame_rate_label_ = new QLabel(this);
     frame_rate_label_->setObjectName(QStringLiteral("motion-timeline-frame-rate"));
-    next_frame_button_ = new QPushButton(QStringLiteral("Next frame"), this);
+    next_frame_button_ = new QPushButton(MotionUiTranslation::tr("Next frame"), this);
     next_frame_button_->setObjectName(QStringLiteral("motion-timeline-next-frame"));
-    graph_editor_button_ = new QPushButton(QStringLiteral("Graph Editor"), this);
+    graph_editor_button_ = new QPushButton(MotionUiTranslation::tr("Graph Editor"), this);
     graph_editor_button_->setObjectName(QStringLiteral("motion-timeline-graph-editor-toggle"));
     graph_editor_button_->setCheckable(true);
-    graph_editor_button_->setToolTip(QStringLiteral("Select the Graph Editor tab"));
+    graph_editor_button_->setToolTip(MotionUiTranslation::tr("Select the Graph Editor tab"));
 
     controls->addWidget(previous_frame_button_);
     controls->addWidget(play_pause_button_);

@@ -135,6 +135,26 @@ set_tests_properties(creative-suite-motion-editor-startup PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(creative-suite-motion-editor-translation-tests
+    motion_editor_translation_test.cpp
+    ../resources/translations.qrc
+)
+target_link_libraries(creative-suite-motion-editor-translation-tests PRIVATE
+    creative-suite-motion-editor-core
+    creative-suite::translations
+    Qt6::Widgets
+)
+target_compile_features(creative-suite-motion-editor-translation-tests PRIVATE cxx_std_20)
+add_dependencies(creative-suite-motion-editor-translation-tests
+    creative-suite-motion-editor-translation-catalog)
+add_creative_suite_test(
+    NAME creative-suite-motion-editor-translation-catalog
+    COMMAND creative-suite-motion-editor-translation-tests)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-translation-tests)
+set_tests_properties(creative-suite-motion-editor-translation-catalog PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
 add_executable(creative-suite-motion-editor-ui-tests
     motion_editor_ui_test.cpp
 )
@@ -197,6 +217,7 @@ if(MSVC)
     target_compile_options(creative-suite-motion-editor-performance-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-export-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE /W4 /permissive-)
+    target_compile_options(creative-suite-motion-editor-translation-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-audio-keyframes-tests PRIVATE /W4 /permissive-)
 else()
@@ -210,6 +231,7 @@ else()
     target_compile_options(creative-suite-motion-editor-performance-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-export-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(creative-suite-motion-editor-translation-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-audio-keyframes-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -230,6 +252,7 @@ if(WIN32)
             creative-suite-motion-editor-performance-tests
             creative-suite-motion-editor-export-tests
             creative-suite-motion-editor-startup-tests
+            creative-suite-motion-editor-translation-tests
             creative-suite-motion-editor-audio-keyframes-tests
             creative-suite-motion-editor-ui-tests)
         add_custom_command(TARGET ${TEST_TARGET} POST_BUILD

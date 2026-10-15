@@ -3,7 +3,7 @@ include(GNUInstallDirs)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL OpenGLWidgets Widgets)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL OpenGLWidgets Widgets LinguistTools)
 
 add_library(creative-suite-motion-editor-core STATIC
     src/audio/audio_envelope_analyzer.cpp
@@ -113,6 +113,7 @@ target_compile_features(creative-suite-motion-editor-core PUBLIC cxx_std_20)
 add_executable(creative-suite-motion-editor
     src/main.cpp
     resources/app_icon.qrc
+    resources/translations.qrc
 )
 target_link_libraries(creative-suite-motion-editor PRIVATE
     creative-suite-motion-editor-core
@@ -123,6 +124,49 @@ target_link_libraries(creative-suite-motion-editor PRIVATE
 target_compile_definitions(creative-suite-motion-editor PRIVATE
     CREATIVE_SUITE_APP_VERSION="${CREATIVE_SUITE_VERSION_MOTION_EDITOR}")
 target_compile_features(creative-suite-motion-editor PRIVATE cxx_std_20)
+
+file(GLOB_RECURSE MOTION_EDITOR_TRANSLATION_INPUTS CONFIGURE_DEPENDS
+    LIST_DIRECTORIES FALSE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.h"
+)
+list(APPEND MOTION_EDITOR_TRANSLATION_INPUTS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+
+set(MOTION_EDITOR_TRANSLATION_TS "${CMAKE_SOURCE_DIR}/languages/motion-editor/pt_BR.ts")
+set(MOTION_EDITOR_TRANSLATION_QM "${CMAKE_SOURCE_DIR}/languages/motion-editor/pt_BR.qm")
+set(MOTION_EDITOR_GENERATED_TRANSLATION_QM
+    "${CMAKE_CURRENT_BINARY_DIR}/translations/motion-editor/pt_BR.qm")
+add_custom_command(
+    OUTPUT "${MOTION_EDITOR_GENERATED_TRANSLATION_QM}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/translations/motion-editor"
+    COMMAND "$<TARGET_FILE:Qt6::lrelease>" "${MOTION_EDITOR_TRANSLATION_TS}"
+            -qm "${MOTION_EDITOR_GENERATED_TRANSLATION_QM}"
+    DEPENDS "${MOTION_EDITOR_TRANSLATION_TS}"
+    VERBATIM
+)
+add_custom_target(creative-suite-motion-editor-translation-catalog
+    COMMAND "${CMAKE_COMMAND}" -E compare_files
+            "${MOTION_EDITOR_GENERATED_TRANSLATION_QM}"
+            "${MOTION_EDITOR_TRANSLATION_QM}"
+    DEPENDS "${MOTION_EDITOR_GENERATED_TRANSLATION_QM}"
+            "${MOTION_EDITOR_TRANSLATION_QM}"
+    COMMENT "Checking that the tracked Motion Studio catalog matches its TS source"
+    VERBATIM
+)
+add_dependencies(creative-suite-motion-editor creative-suite-motion-editor-translation-catalog)
+
+add_custom_target(update-motion-editor-translations
+    COMMAND "$<TARGET_FILE:Qt6::lupdate>" -no-obsolete
+            -source-language en_US -target-language pt_BR
+            ${MOTION_EDITOR_TRANSLATION_INPUTS}
+            -ts "${MOTION_EDITOR_TRANSLATION_TS}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Updating the Motion Studio translation source"
+    VERBATIM
+)
+
 creative_suite_deploy_media_runtime(creative-suite-motion-editor motion-editor)
 
 if(MSVC)

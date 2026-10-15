@@ -16,6 +16,13 @@
       "sha256": "e9562a5853c979bf2dbc715521839224f4d4a9bbd2088f20d18ca1061d0518fd"
     },
     {
+      "application": "motion-editor",
+      "locale": "pt_BR",
+      "path": "motion-editor/pt_BR.qm",
+      "size_bytes": 46419,
+      "sha256": "db70d39060b3e0ae9407b60205cecdb3ef033c21902f0c91dd5c39231347800e"
+    },
+    {
       "application": "video-editor",
       "locale": "pt_BR",
       "path": "video-editor/pt_BR.qm",

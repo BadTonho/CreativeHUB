@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "main_window.h"
 #include "main_window_support.h"
 
@@ -51,8 +52,8 @@ void MainWindow::openShortcutSettings()
             "motion_settings", "save_shortcuts", detail,
             {{"settings_group", shortcut_manager_.settingsGroup().toStdString()}});
         QMessageBox::warning(
-            this, QStringLiteral("Settings Error"),
-            QStringLiteral("Keyboard shortcut preferences could not be saved."));
+            this, MotionUiTranslation::tr("Settings Error"),
+            MotionUiTranslation::tr("Keyboard shortcut preferences could not be saved."));
     }
 }
 void MainWindow::configureAutosaveTimer()
@@ -85,7 +86,7 @@ void MainWindow::autosaveProject()
         if (recovered_untitled_snapshot_path_.has_value()) {
             cleanupRecoveredUnsavedSnapshot("autosave_recovered_snapshot_cleanup");
         }
-        statusBar()->showMessage(QStringLiteral("Recovery snapshot saved."), 2500);
+        statusBar()->showMessage(MotionUiTranslation::tr("Recovery snapshot saved."), 2500);
     } catch (const persistence::MotionDocumentError& error) {
         creative_suite::diagnostics::Context context{
             {"path", pathForLog(error.path())},
@@ -96,7 +97,7 @@ void MainWindow::autosaveProject()
             creative_suite::diagnostics::Level::Warning,
             "motion_recovery", "autosave", error.what(), context);
         statusBar()->showMessage(
-            QStringLiteral("Autosave failed. Check the Motion Studio log."), 5000);
+            MotionUiTranslation::tr("Autosave failed. Check the Motion Studio log."), 5000);
     } catch (const std::exception& error) {
         creative_suite::diagnostics::Logger::instance().log(
             creative_suite::diagnostics::Level::Warning,
@@ -104,7 +105,7 @@ void MainWindow::autosaveProject()
             {{"document_path", document_path_.has_value()
                 ? pathForLog(*document_path_) : std::string{}}});
         statusBar()->showMessage(
-            QStringLiteral("Autosave failed. Check the Motion Studio log."), 5000);
+            MotionUiTranslation::tr("Autosave failed. Check the Motion Studio log."), 5000);
     }
 }
 void MainWindow::cleanupCurrentUnsavedSnapshots(const char* operation) noexcept
@@ -157,12 +158,12 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
 
     QDialog dialog(this);
     dialog.setObjectName(QStringLiteral("motion-recovery-choice-dialog"));
-    dialog.setWindowTitle(QStringLiteral("Composition Recovery"));
+    dialog.setWindowTitle(MotionUiTranslation::tr("Composition Recovery"));
     dialog.setModal(true);
     dialog.resize(620, 360);
     auto* layout = new QVBoxLayout(&dialog);
     auto* description = new QLabel(
-        QStringLiteral("Recovery snapshots were found for %1. Restore one or continue without recovery.")
+        MotionUiTranslation::tr("Recovery snapshots were found for %1. Restore one or continue without recovery.")
             .arg(project_label), &dialog);
     description->setWordWrap(true);
     auto* list = new QListWidget(&dialog);
@@ -172,7 +173,7 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
         const QFileInfo info(pathForDisplay(snapshot.path));
         const auto modified = info.lastModified().isValid()
             ? info.lastModified().toLocalTime().toString(Qt::TextDate)
-            : QStringLiteral("Unknown time");
+            : MotionUiTranslation::tr("Unknown time");
         auto* item = new QListWidgetItem(
             QStringLiteral("%1 — %2").arg(modified, info.fileName()), list);
         item->setData(Qt::UserRole, pathForDisplay(snapshot.path));
@@ -181,11 +182,11 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
     if (list->count() > 0) list->setCurrentRow(0);
 
     auto* buttons = new QHBoxLayout();
-    auto* restore = new QPushButton(QStringLiteral("Restore"), &dialog);
+    auto* restore = new QPushButton(MotionUiTranslation::tr("Restore"), &dialog);
     restore->setObjectName(QStringLiteral("motion-recovery-choice-restore"));
-    auto* remove = new QPushButton(QStringLiteral("Delete"), &dialog);
+    auto* remove = new QPushButton(MotionUiTranslation::tr("Delete"), &dialog);
     remove->setObjectName(QStringLiteral("motion-recovery-choice-delete"));
-    auto* ignore = new QPushButton(QStringLiteral("Ignore"), &dialog);
+    auto* ignore = new QPushButton(MotionUiTranslation::tr("Ignore"), &dialog);
     ignore->setObjectName(QStringLiteral("motion-recovery-choice-ignore"));
     buttons->addWidget(restore);
     buttons->addWidget(remove);
@@ -210,10 +211,14 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
     connect(remove, &QPushButton::clicked, &dialog, [&] {
         auto* item = list->currentItem();
         if (item == nullptr) return;
-        if (QMessageBox::question(
-                &dialog, QStringLiteral("Delete Recovery Snapshot"),
-                QStringLiteral("Delete the selected recovery snapshot?"),
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        QMessageBox confirmation(
+            QMessageBox::Question, MotionUiTranslation::tr("Delete Recovery Snapshot"),
+            MotionUiTranslation::tr("Delete the selected recovery snapshot?"),
+            QMessageBox::Yes | QMessageBox::No, &dialog);
+        confirmation.setButtonText(QMessageBox::Yes, MotionUiTranslation::tr("Yes"));
+        confirmation.setButtonText(QMessageBox::No, MotionUiTranslation::tr("No"));
+        confirmation.setDefaultButton(QMessageBox::No);
+        if (confirmation.exec() != QMessageBox::Yes)
             return;
         const auto path = current_path();
         try {
@@ -229,7 +234,7 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
                  {"system_error", error.systemError().has_value()
                      ? std::to_string(*error.systemError()) : std::string{}}});
             statusBar()->showMessage(
-                QStringLiteral("Recovery snapshot could not be deleted."), 5000);
+                MotionUiTranslation::tr("Recovery snapshot could not be deleted."), 5000);
         }
     });
     connect(ignore, &QPushButton::clicked, &dialog, &QDialog::reject);
@@ -255,7 +260,7 @@ void MainWindow::maybeOfferUnsavedRecovery()
     auto snapshots = recovery_store_.unsavedSnapshots();
     if (snapshots.empty()) return;
     const auto selected = chooseRecoverySnapshot(
-        std::move(snapshots), QStringLiteral("an untitled composition"));
+        std::move(snapshots), MotionUiTranslation::tr("an untitled composition"));
     if (selected.has_value()) restoreRecoverySnapshot(*selected);
 }
 void MainWindow::restoreRecoverySnapshot(
@@ -299,10 +304,10 @@ void MainWindow::refreshAutosaveRecoveryDialog(
         const QFileInfo project_info(pathForDisplay(snapshot.target_document_path));
         const auto modified = file_info.lastModified().isValid()
             ? file_info.lastModified().toLocalTime().toString(Qt::TextDate)
-            : QStringLiteral("Unknown time");
+            : MotionUiTranslation::tr("Unknown time");
         rows.push_back({
-            has_project ? project_info.fileName() : QStringLiteral("Untitled composition"),
-            has_project ? QStringLiteral("Saved project") : QStringLiteral("Untitled project"),
+            has_project ? project_info.fileName() : MotionUiTranslation::tr("Untitled composition"),
+            has_project ? MotionUiTranslation::tr("Saved project") : MotionUiTranslation::tr("Untitled project"),
             modified,
             file_info.fileName(),
             pathForDisplay(snapshot.path),
@@ -328,10 +333,14 @@ void MainWindow::openAutosaveRecoverySettings()
             this, [this, &dialog] { refreshAutosaveRecoveryDialog(dialog); });
     connect(&dialog, &AutosaveRecoveryDialog::deleteSnapshotRequested,
             this, [this, &dialog](const QString& encoded_path) {
-        if (QMessageBox::question(
-                this, QStringLiteral("Delete Recovery Snapshot"),
-                QStringLiteral("Delete the selected recovery snapshot?"),
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        QMessageBox confirmation(
+            QMessageBox::Question, MotionUiTranslation::tr("Delete Recovery Snapshot"),
+            MotionUiTranslation::tr("Delete the selected recovery snapshot?"),
+            QMessageBox::Yes | QMessageBox::No, this);
+        confirmation.setButtonText(QMessageBox::Yes, MotionUiTranslation::tr("Yes"));
+        confirmation.setButtonText(QMessageBox::No, MotionUiTranslation::tr("No"));
+        confirmation.setDefaultButton(QMessageBox::No);
+        if (confirmation.exec() != QMessageBox::Yes)
             return;
         const auto path = pathFromQString(encoded_path);
         try {
@@ -344,7 +353,7 @@ void MainWindow::openAutosaveRecoverySettings()
                 {{"path", pathForLog(path)},
                  {"error_code", std::to_string(static_cast<int>(error.code()))}});
             statusBar()->showMessage(
-                QStringLiteral("Recovery snapshot could not be deleted."), 5000);
+                MotionUiTranslation::tr("Recovery snapshot could not be deleted."), 5000);
         }
     });
     connect(&dialog, &AutosaveRecoveryDialog::openFolderRequested,
@@ -356,7 +365,7 @@ void MainWindow::openAutosaveRecoverySettings()
             "The recovery snapshot folder could not be opened.",
             {{"path", pathForLog(pathFromQString(encoded_folder))}});
         statusBar()->showMessage(
-            QStringLiteral("The recovery folder could not be opened."), 5000);
+            MotionUiTranslation::tr("The recovery folder could not be opened."), 5000);
     });
 
     if (dialog.exec() == AutosaveRecoveryDialog::restore_snapshot_result) {

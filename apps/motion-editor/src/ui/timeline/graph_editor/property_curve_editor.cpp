@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "property_curve_editor.h"
 
 #include <QMouseEvent>
@@ -29,13 +30,13 @@ constexpr int kBottomMargin = 28;
 QString propertyName(TransformProperty property)
 {
     switch (property) {
-    case TransformProperty::PositionX: return QStringLiteral("Position X");
-    case TransformProperty::PositionY: return QStringLiteral("Position Y");
-    case TransformProperty::Scale: return QStringLiteral("Scale");
-    case TransformProperty::Rotation: return QStringLiteral("Rotation");
-    case TransformProperty::Opacity: return QStringLiteral("Opacity");
+    case TransformProperty::PositionX: return MotionUiTranslation::tr("Position X");
+    case TransformProperty::PositionY: return MotionUiTranslation::tr("Position Y");
+    case TransformProperty::Scale: return MotionUiTranslation::tr("Scale");
+    case TransformProperty::Rotation: return MotionUiTranslation::tr("Rotation");
+    case TransformProperty::Opacity: return MotionUiTranslation::tr("Opacity");
     }
-    return QStringLiteral("Transform");
+    return MotionUiTranslation::tr("Transform");
 }
 
 QColor propertyColor(TransformProperty property)
@@ -264,7 +265,7 @@ void PropertyCurveEditor::paintEvent(QPaintEvent*)
     if (keyframes_.size() < 2) {
         painter.setPen(QColor(165, 172, 182));
         painter.drawText(plot, Qt::AlignCenter,
-                         QStringLiteral("Add two keyframes to edit this curve"));
+                         MotionUiTranslation::tr("Add two keyframes to edit this curve"));
         return;
     }
 

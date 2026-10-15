@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "motion_workspace.h"
 
 #include "../timeline/timeline_navigator.h"
@@ -43,13 +44,13 @@ MotionWorkspace::MotionWorkspace(QMainWindow* window,
     window_->setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     window_->setCentralWidget(viewer);
 
-    media_pool_dock_ = makeDock(window_, media_pool, QStringLiteral("Media Pool"),
+    media_pool_dock_ = makeDock(window_, media_pool, MotionUiTranslation::tr("Media Pool"),
                                 QStringLiteral("motion-media-pool-dock"));
-    inspector_dock_ = makeDock(window_, inspector, QStringLiteral("Inspector"),
+    inspector_dock_ = makeDock(window_, inspector, MotionUiTranslation::tr("Inspector"),
                                QStringLiteral("motion-inspector-dock"));
-    timeline_dock_ = makeDock(window_, timeline, QStringLiteral("Timeline"),
+    timeline_dock_ = makeDock(window_, timeline, MotionUiTranslation::tr("Timeline"),
                               QStringLiteral("motion-timeline-dock"));
-    graph_editor_dock_ = makeDock(window_, graph_editor, QStringLiteral("Graph Editor"),
+    graph_editor_dock_ = makeDock(window_, graph_editor, MotionUiTranslation::tr("Graph Editor"),
                                   QStringLiteral("motion-graph-editor-dock"));
 
     window_->addDockWidget(Qt::LeftDockWidgetArea, media_pool_dock_);

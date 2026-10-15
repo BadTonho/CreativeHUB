@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "motion_video_export_dialog.h"
 
 #include <QComboBox>
@@ -66,7 +67,7 @@ MotionVideoExportDialog::MotionVideoExportDialog(
     : QDialog(parent), canvas_size_(canvas_size), composition_rate_(composition_rate)
 {
     setObjectName(QStringLiteral("motion-video-export-dialog"));
-    setWindowTitle(QStringLiteral("Export Video"));
+    setWindowTitle(MotionUiTranslation::tr("Export Video"));
     setModal(true);
     auto* layout = new QVBoxLayout(this);
     auto* form = new QFormLayout();
@@ -76,48 +77,48 @@ MotionVideoExportDialog::MotionVideoExportDialog(
     output_layout->setContentsMargins(0, 0, 0, 0);
     output_path_ = new QLineEdit(output_row);
     output_path_->setObjectName(QStringLiteral("motion-export-output-path"));
-    output_path_->setAccessibleName(QStringLiteral("Video output file"));
-    auto* browse = new QPushButton(QStringLiteral("Browse..."), output_row);
+    output_path_->setAccessibleName(MotionUiTranslation::tr("Video output file"));
+    auto* browse = new QPushButton(MotionUiTranslation::tr("Browse..."), output_row);
     browse->setObjectName(QStringLiteral("motion-export-browse-output"));
     output_layout->addWidget(output_path_, 1);
     output_layout->addWidget(browse);
-    form->addRow(QStringLiteral("Output file"), output_row);
+    form->addRow(MotionUiTranslation::tr("Output file"), output_row);
 
     container_combo_ = new QComboBox(this);
     container_combo_->setObjectName(QStringLiteral("motion-export-container"));
-    form->addRow(QStringLiteral("Container"), container_combo_);
+    form->addRow(MotionUiTranslation::tr("Container"), container_combo_);
     encoder_combo_ = new QComboBox(this);
     encoder_combo_->setObjectName(QStringLiteral("motion-export-video-encoder"));
-    form->addRow(QStringLiteral("Video encoder"), encoder_combo_);
+    form->addRow(MotionUiTranslation::tr("Video encoder"), encoder_combo_);
 
     resolution_combo_ = new QComboBox(this);
     resolution_combo_->setObjectName(QStringLiteral("motion-export-resolution"));
     resolution_combo_->addItem(
-        QStringLiteral("Composition (%1 x %2)").arg(canvas_size.width).arg(canvas_size.height),
+        MotionUiTranslation::tr("Composition (%1 x %2)").arg(canvas_size.width).arg(canvas_size.height),
         QSize(canvas_size.width, canvas_size.height));
     const std::vector<QSize> common_resolutions{
         QSize(1280, 720), QSize(1920, 1080), QSize(2560, 1440), QSize(3840, 2160)};
     for (const auto& size : common_resolutions) {
         if (size.width() == canvas_size.width && size.height() == canvas_size.height) continue;
         resolution_combo_->addItem(
-            QStringLiteral("%1 x %2").arg(size.width()).arg(size.height()), size);
+            MotionUiTranslation::tr("%1 x %2").arg(size.width()).arg(size.height()), size);
     }
-    resolution_combo_->addItem(QStringLiteral("Custom dimensions"), QVariant{});
-    form->addRow(QStringLiteral("Resolution"), resolution_combo_);
+    resolution_combo_->addItem(MotionUiTranslation::tr("Custom dimensions"), QVariant{});
+    form->addRow(MotionUiTranslation::tr("Resolution"), resolution_combo_);
 
     custom_width_ = new QSpinBox(this);
     custom_width_->setObjectName(QStringLiteral("motion-export-custom-width"));
     custom_width_->setRange(1, 16384);
     custom_width_->setValue(canvas_size.width);
     custom_width_->setSuffix(QStringLiteral(" px"));
-    custom_width_label_ = new QLabel(QStringLiteral("Custom width"), this);
+    custom_width_label_ = new QLabel(MotionUiTranslation::tr("Custom width"), this);
     form->addRow(custom_width_label_, custom_width_);
     custom_height_ = new QSpinBox(this);
     custom_height_->setObjectName(QStringLiteral("motion-export-custom-height"));
     custom_height_->setRange(1, 16384);
     custom_height_->setValue(canvas_size.height);
     custom_height_->setSuffix(QStringLiteral(" px"));
-    custom_height_label_ = new QLabel(QStringLiteral("Custom height"), this);
+    custom_height_label_ = new QLabel(MotionUiTranslation::tr("Custom height"), this);
     form->addRow(custom_height_label_, custom_height_);
 
     frame_rate_ = new QDoubleSpinBox(this);
@@ -127,16 +128,16 @@ MotionVideoExportDialog::MotionVideoExportDialog(
     frame_rate_->setSingleStep(0.001);
     frame_rate_->setSuffix(QStringLiteral(" fps"));
     frame_rate_->setValue(composition_rate.asDouble());
-    form->addRow(QStringLiteral("Output frame rate"), frame_rate_);
+    form->addRow(MotionUiTranslation::tr("Output frame rate"), frame_rate_);
 
     quality_combo_ = new QComboBox(this);
     quality_combo_->setObjectName(QStringLiteral("motion-export-quality"));
-    quality_combo_->addItem(QStringLiteral("Low"), 0);
-    quality_combo_->addItem(QStringLiteral("Standard"), 1);
-    quality_combo_->addItem(QStringLiteral("High"), 2);
-    quality_combo_->addItem(QStringLiteral("Custom"), 3);
+    quality_combo_->addItem(MotionUiTranslation::tr("Low"), 0);
+    quality_combo_->addItem(MotionUiTranslation::tr("Standard"), 1);
+    quality_combo_->addItem(MotionUiTranslation::tr("High"), 2);
+    quality_combo_->addItem(MotionUiTranslation::tr("Custom"), 3);
     quality_combo_->setCurrentIndex(1);
-    form->addRow(QStringLiteral("Quality profile"), quality_combo_);
+    form->addRow(MotionUiTranslation::tr("Quality profile"), quality_combo_);
 
     bitrate_ = new QDoubleSpinBox(this);
     bitrate_->setObjectName(QStringLiteral("motion-export-video-bitrate"));
@@ -144,17 +145,18 @@ MotionVideoExportDialog::MotionVideoExportDialog(
     bitrate_->setDecimals(1);
     bitrate_->setSingleStep(0.5);
     bitrate_->setSuffix(QStringLiteral(" Mbps"));
-    form->addRow(QStringLiteral("Video bitrate"), bitrate_);
+    form->addRow(MotionUiTranslation::tr("Video bitrate"), bitrate_);
     layout->addLayout(form);
 
     auto* note = new QLabel(
-        QStringLiteral("Exports the full layer range as opaque video. Audio is not included."), this);
+        MotionUiTranslation::tr("Exports the full layer range as opaque video. Audio is not included."), this);
     note->setWordWrap(true);
     layout->addWidget(note);
     buttons_ = new QDialogButtonBox(
         QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
     buttons_->setObjectName(QStringLiteral("motion-export-buttons"));
-    buttons_->button(QDialogButtonBox::Save)->setText(QStringLiteral("Export"));
+    buttons_->button(QDialogButtonBox::Save)->setText(MotionUiTranslation::tr("Export"));
+    buttons_->button(QDialogButtonBox::Cancel)->setText(MotionUiTranslation::tr("Cancel"));
     buttons_->button(QDialogButtonBox::Save)->setObjectName(
         QStringLiteral("motion-export-accept"));
     buttons_->button(QDialogButtonBox::Cancel)->setObjectName(
@@ -223,7 +225,7 @@ void MotionVideoExportDialog::browseOutput()
     if (index < 0 || index >= static_cast<int>(containers_.size())) return;
     const auto& container = containers_[static_cast<std::size_t>(index)];
     const auto selected = QFileDialog::getSaveFileName(
-        this, QStringLiteral("Choose Video Output"), output_path_->text(),
+        this, MotionUiTranslation::tr("Choose Video Output"), output_path_->text(),
         extensionFilter(container));
     if (!selected.isEmpty()) output_path_->setText(selected);
 }

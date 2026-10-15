@@ -1,4 +1,5 @@
-﻿#include "timeline_layer_tracks.h"
+#include "ui/translation_helpers.h"
+#include "timeline_layer_tracks.h"
 #include "timeline_view_mapping.h"
 
 #include <QColor>
@@ -56,11 +57,11 @@ QString propertyName(creative_suite::animation::TransformProperty property)
 {
     using P = creative_suite::animation::TransformProperty;
     switch (property) {
-    case P::PositionX: return QStringLiteral("Position X");
-    case P::PositionY: return QStringLiteral("Position Y");
-    case P::Scale: return QStringLiteral("Scale");
-    case P::Rotation: return QStringLiteral("Rotation");
-    case P::Opacity: return QStringLiteral("Opacity");
+    case P::PositionX: return MotionUiTranslation::tr("Position X");
+    case P::PositionY: return MotionUiTranslation::tr("Position Y");
+    case P::Scale: return MotionUiTranslation::tr("Scale");
+    case P::Rotation: return MotionUiTranslation::tr("Rotation");
+    case P::Opacity: return MotionUiTranslation::tr("Opacity");
     }
     return {};
 }
@@ -214,7 +215,7 @@ protected:
         if (rows_.empty()) {
             painter.setPen(QColor(170, 176, 184));
             painter.drawText(rect(), Qt::AlignCenter,
-                             QStringLiteral("Drag media here to add a layer"));
+                             MotionUiTranslation::tr("Drag media here to add a layer"));
         }
 
         const auto mapping = viewMapping();
@@ -327,7 +328,7 @@ protected:
                 painter.setPen(QColor(228, 231, 235));
                 painter.drawText(QRect(66, top, kTimelineHeaderWidth - 72, kTimelineRowHeight),
                                  Qt::AlignLeft | Qt::AlignVCenter,
-                                 QStringLiteral("Transform"));
+                                 MotionUiTranslation::tr("Transform"));
             } else {
                 const auto property = *visual.property;
                 painter.setPen(propertyColor(property));

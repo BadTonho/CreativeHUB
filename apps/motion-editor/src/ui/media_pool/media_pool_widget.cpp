@@ -1,3 +1,4 @@
+#include "ui/translation_helpers.h"
 #include "media_pool_widget.h"
 
 #include <creative_suite/diagnostics/logger.h>
@@ -68,7 +69,7 @@ std::filesystem::path filePath(const QString& path)
 
 QString mediaKindText(MediaKind kind)
 {
-    return kind == MediaKind::Image ? QStringLiteral("Image") : QStringLiteral("Video");
+    return kind == MediaKind::Image ? MotionUiTranslation::tr("Image") : MotionUiTranslation::tr("Video");
 }
 
 QString optionalNumber(const std::optional<double>& value, const QString& suffix = {})
@@ -180,16 +181,16 @@ MediaPoolWidget::MediaPoolWidget(QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
 
-    auto* title = new QLabel(QStringLiteral("Media Pool"), this);
+    auto* title = new QLabel(MotionUiTranslation::tr("Media Pool"), this);
     title->setObjectName(QStringLiteral("motion-media-pool-title"));
     layout->addWidget(title);
 
     auto* actions = new QWidget(this);
     auto* actions_layout = new QHBoxLayout(actions);
     actions_layout->setContentsMargins(0, 0, 0, 0);
-    auto* import_button = new QPushButton(QStringLiteral("Import Media..."), actions);
+    auto* import_button = new QPushButton(MotionUiTranslation::tr("Import Media..."), actions);
     import_button->setObjectName(QStringLiteral("motion-media-import-button"));
-    auto* new_bin_button = new QPushButton(QStringLiteral("New Bin"), actions);
+    auto* new_bin_button = new QPushButton(MotionUiTranslation::tr("New Bin"), actions);
     new_bin_button->setObjectName(QStringLiteral("motion-media-new-bin-button"));
     actions_layout->addWidget(import_button);
     actions_layout->addWidget(new_bin_button);
@@ -198,15 +199,15 @@ MediaPoolWidget::MediaPoolWidget(QWidget* parent)
     auto* view_actions = new QWidget(this);
     auto* view_layout = new QHBoxLayout(view_actions);
     view_layout->setContentsMargins(0, 0, 0, 0);
-    auto* bins_title = new QLabel(QStringLiteral("Bins"), view_actions);
+    auto* bins_title = new QLabel(MotionUiTranslation::tr("Bins"), view_actions);
     list_mode_button_ = new QToolButton(view_actions);
     list_mode_button_->setObjectName(QStringLiteral("motion-media-list-mode"));
-    list_mode_button_->setText(QStringLiteral("List"));
+    list_mode_button_->setText(MotionUiTranslation::tr("List"));
     list_mode_button_->setCheckable(true);
     list_mode_button_->setChecked(true);
     thumbnail_mode_button_ = new QToolButton(view_actions);
     thumbnail_mode_button_->setObjectName(QStringLiteral("motion-media-thumbnail-mode"));
-    thumbnail_mode_button_->setText(QStringLiteral("Thumbnails"));
+    thumbnail_mode_button_->setText(MotionUiTranslation::tr("Thumbnails"));
     thumbnail_mode_button_->setCheckable(true);
     view_layout->addWidget(bins_title);
     view_layout->addStretch(1);
@@ -231,7 +232,7 @@ MediaPoolWidget::MediaPoolWidget(QWidget* parent)
     media_list_->setViewMode(QListView::ListMode);
     layout->addWidget(media_list_, 3);
 
-    status_label_ = new QLabel(QStringLiteral("No media imported"), this);
+    status_label_ = new QLabel(MotionUiTranslation::tr("No media imported"), this);
     status_label_->setObjectName(QStringLiteral("motion-media-status"));
     status_label_->setWordWrap(true);
     layout->addWidget(status_label_);
@@ -325,8 +326,8 @@ void MediaPoolWidget::replaceLibrary(MediaLibrary library)
     shared_frame_cache_.clear();
     refresh();
     status_label_->setText(library_.empty()
-        ? QStringLiteral("No media imported")
-        : QStringLiteral("Media Pool loaded"));
+        ? MotionUiTranslation::tr("No media imported")
+        : MotionUiTranslation::tr("Media Pool loaded"));
     if (content_changed_handler_) content_changed_handler_();
 }
 
@@ -339,7 +340,7 @@ void MediaPoolWidget::clear()
     library_.clear();
     shared_frame_cache_.clear();
     refresh();
-    status_label_->setText(QStringLiteral("No media imported"));
+    status_label_->setText(MotionUiTranslation::tr("No media imported"));
 }
 
 void MediaPoolWidget::importFiles(std::vector<std::filesystem::path> paths)
@@ -348,10 +349,10 @@ void MediaPoolWidget::importFiles(std::vector<std::filesystem::path> paths)
     if (paths.empty() || cancel_requested_) return;
 
     if (progress_ == nullptr) {
-        progress_ = new QProgressDialog(QStringLiteral("Importing media..."),
-                                        QStringLiteral("Cancel"), 0, 0, this);
+        progress_ = new QProgressDialog(MotionUiTranslation::tr("Importing media..."),
+                                        MotionUiTranslation::tr("Cancel"), 0, 0, this);
         progress_->setObjectName(QStringLiteral("motion-media-import-progress"));
-        progress_->setWindowTitle(QStringLiteral("Import Media"));
+        progress_->setWindowTitle(MotionUiTranslation::tr("Import Media"));
         progress_->setWindowModality(Qt::WindowModal);
         progress_->setMinimumDuration(250);
         connect(progress_, &QProgressDialog::canceled, this, [this] {
@@ -364,7 +365,7 @@ void MediaPoolWidget::importFiles(std::vector<std::filesystem::path> paths)
     progress_->setRange(0, static_cast<int>(std::min<std::size_t>(
         paths.size(), static_cast<std::size_t>(std::numeric_limits<int>::max()))));
     progress_->setValue(0);
-    progress_->setLabelText(QStringLiteral("Preparing media import..."));
+    progress_->setLabelText(MotionUiTranslation::tr("Preparing media import..."));
     progress_->show();
     QThreadPool::globalInstance()->start(
         new ImportTask(this, std::move(paths), cancel_requested_, generation));
@@ -381,7 +382,7 @@ void MediaPoolWidget::refreshBins(const QString& selected_bin)
     refreshing_ = true;
     const QSignalBlocker blocker(bins_tree_);
     bins_tree_->clear();
-    auto* all = new QTreeWidgetItem(bins_tree_, {QStringLiteral("All Media")});
+    auto* all = new QTreeWidgetItem(bins_tree_, {MotionUiTranslation::tr("All Media")});
     all->setData(0, kPathRole, QString{});
     all->setData(0, kAllMediaRole, true);
 
@@ -443,7 +444,7 @@ void MediaPoolWidget::refreshMedia(const QString& selected_path)
         if (thumbnails) entry->setIcon(thumbnailFor(item, true));
         else if (!item.offline) entry->setIcon(thumbnailFor(item, false));
         if (item.offline) {
-            entry->setText(utf8Text(item.display_name) + QStringLiteral("  (Offline)"));
+            entry->setText(utf8Text(item.display_name) + MotionUiTranslation::tr("  (Offline)"));
             entry->setForeground(palette().color(QPalette::Disabled, QPalette::Text));
         }
         if (pathText(item.metadata.source_path) == selected_path) selected_row = row;
@@ -460,7 +461,7 @@ void MediaPoolWidget::handleMediaItemChanged(QListWidgetItem* item)
     const auto path = filePath(item->data(kPathRole).toString());
     const auto index = library_.indexForPath(path);
     if (index >= library_.size()) return;
-    const auto name = item->text().remove(QStringLiteral("  (Offline)"));
+    const auto name = item->text().remove(MotionUiTranslation::tr("  (Offline)"));
     const auto result = library_.rename(index, name.toUtf8().toStdString());
     if (result != creative_suite::media::MediaMutationResult::Changed &&
         result != creative_suite::media::MediaMutationResult::NoChange) {
@@ -501,7 +502,7 @@ void MediaPoolWidget::showMediaContextMenu(const QPoint& position)
     media_list_->setCurrentItem(item);
     auto* menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
-    auto* rename = menu->addAction(QStringLiteral("Rename"));
+    auto* rename = menu->addAction(MotionUiTranslation::tr("Rename"));
     connect(rename, &QAction::triggered, this, [this, item] { media_list_->editItem(item); });
     const auto path = filePath(item->data(kPathRole).toString());
     const auto index = library_.indexForPath(path);
@@ -509,7 +510,7 @@ void MediaPoolWidget::showMediaContextMenu(const QPoint& position)
         menu->deleteLater();
         return;
     }
-    auto* move = menu->addMenu(QStringLiteral("Move to Bin"));
+    auto* move = menu->addMenu(MotionUiTranslation::tr("Move to Bin"));
     for (const auto& bin : library_.bins()) {
         const auto bin_text = QString::fromUtf8(
             bin.data(), static_cast<qsizetype>(bin.size()));
@@ -527,7 +528,7 @@ void MediaPoolWidget::showMediaContextMenu(const QPoint& position)
                     content_changed_handler_) content_changed_handler_();
                 QTimer::singleShot(0, this, [this, path, bin] {
                     refreshMedia(pathText(path));
-                    status_label_->setText(QStringLiteral("Moved to %1")
+                    status_label_->setText(MotionUiTranslation::tr("Moved to %1")
                         .arg(QString::fromUtf8(bin.data(), static_cast<qsizetype>(bin.size()))));
                 });
             }
@@ -535,7 +536,7 @@ void MediaPoolWidget::showMediaContextMenu(const QPoint& position)
     }
     menu->addSeparator();
     auto* offline = menu->addAction(library_.items()[index].offline
-        ? QStringLiteral("Restore Media") : QStringLiteral("Mark Offline"));
+        ? MotionUiTranslation::tr("Restore Media") : MotionUiTranslation::tr("Mark Offline"));
     connect(offline, &QAction::triggered, this, [this, path, was_offline = library_.items()[index].offline] {
         const auto current_index = library_.indexForPath(path);
         if (current_index >= library_.size()) return;
@@ -552,11 +553,11 @@ void MediaPoolWidget::showBinContextMenu(const QPoint& position)
     bins_tree_->setCurrentItem(item);
     auto* menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
-    auto* create = menu->addAction(QStringLiteral("New Bin"));
+    auto* create = menu->addAction(MotionUiTranslation::tr("New Bin"));
     connect(create, &QAction::triggered, this, [this] { createBin(); });
     if (!item->data(0, kAllMediaRole).toBool()) {
-        auto* rename = menu->addAction(QStringLiteral("Rename Bin"));
-        auto* move = menu->addAction(QStringLiteral("Move Bin..."));
+        auto* rename = menu->addAction(MotionUiTranslation::tr("Rename Bin"));
+        auto* move = menu->addAction(MotionUiTranslation::tr("Move Bin..."));
         connect(rename, &QAction::triggered, this, [this] { renameSelectedBin(); });
         connect(move, &QAction::triggered, this, [this] { moveSelectedBin(); });
     }
@@ -569,8 +570,8 @@ void MediaPoolWidget::createBin()
     const QString current = bins_tree_->currentItem() == nullptr
         ? QString{} : bins_tree_->currentItem()->data(0, kPathRole).toString();
     const auto name = QInputDialog::getText(
-        this, QStringLiteral("New Bin"),
-        QStringLiteral("Bin name (use / for nested bins):"),
+        this, MotionUiTranslation::tr("New Bin"),
+        MotionUiTranslation::tr("Bin name (use / for nested bins):"),
         QLineEdit::Normal, QString{}, &accepted).trimmed();
     if (!accepted || name.isEmpty()) return;
     QString path = name;
@@ -582,11 +583,11 @@ void MediaPoolWidget::createBin()
     if (result == creative_suite::media::MediaMutationResult::Changed ||
         result == creative_suite::media::MediaMutationResult::NoChange) {
         refresh(path);
-        status_label_->setText(QStringLiteral("Bin ready: %1").arg(path));
+        status_label_->setText(MotionUiTranslation::tr("Bin ready: %1").arg(path));
         if (result == creative_suite::media::MediaMutationResult::Changed &&
             content_changed_handler_) content_changed_handler_();
     } else {
-        status_label_->setText(QStringLiteral("That bin name is not valid."));
+        status_label_->setText(MotionUiTranslation::tr("That bin name is not valid."));
     }
 }
 
@@ -605,7 +606,7 @@ void MediaPoolWidget::moveSelectedBin()
     bool accepted = false;
     const auto old_path = item->data(0, kPathRole).toString();
     const QString new_path = QInputDialog::getText(
-        this, QStringLiteral("Move Bin"), QStringLiteral("New bin path:"),
+        this, MotionUiTranslation::tr("Move Bin"), MotionUiTranslation::tr("New bin path:"),
         QLineEdit::Normal, old_path, &accepted).trimmed();
     if (!accepted || new_path.isEmpty()) return;
     const auto result = library_.moveBin(old_path.toUtf8().toStdString(),
@@ -614,7 +615,7 @@ void MediaPoolWidget::moveSelectedBin()
         refresh(new_path);
         if (content_changed_handler_) content_changed_handler_();
     }
-    else status_label_->setText(QStringLiteral("That bin move is not valid."));
+    else status_label_->setText(MotionUiTranslation::tr("That bin move is not valid."));
 }
 
 void MediaPoolWidget::markSelectedMediaOffline()
@@ -626,7 +627,7 @@ void MediaPoolWidget::markSelectedMediaOffline()
     if (index >= library_.size()) return;
     const auto result = library_.markOffline(index);
     if (result == creative_suite::media::MediaMutationResult::Changed) {
-        status_label_->setText(QStringLiteral("Media marked offline; its source reference was kept."));
+        status_label_->setText(MotionUiTranslation::tr("Media marked offline; its source reference was kept."));
         QTimer::singleShot(0, this, [this, path] { refreshMedia(pathText(path)); });
         if (content_changed_handler_) content_changed_handler_();
     }
@@ -666,7 +667,7 @@ void MediaPoolWidget::updateProgress(std::uint64_t generation,
         total, static_cast<std::size_t>(std::numeric_limits<int>::max()))));
     progress_->setValue(static_cast<int>(std::min<std::size_t>(
         completed, static_cast<std::size_t>(std::numeric_limits<int>::max()))));
-    progress_->setLabelText(QStringLiteral("Importing %1").arg(QFileInfo(pathText(path)).fileName()));
+    progress_->setLabelText(MotionUiTranslation::tr("Importing %1").arg(QFileInfo(pathText(path)).fileName()));
 }
 
 void MediaPoolWidget::finishImport(
@@ -722,9 +723,9 @@ void MediaPoolWidget::finishImport(
     cancel_requested_.reset();
     if (progress_ != nullptr) progress_->hide();
     refresh(!last_imported.isEmpty() ? last_imported : selection);
-    status_label_->setText(QStringLiteral("Imported %1; %2 failed; %3 duplicates%4.")
+    status_label_->setText(MotionUiTranslation::tr("Imported %1; %2 failed; %3 duplicates%4.")
         .arg(imported).arg(failed).arg(duplicates)
-        .arg(result.cancelled ? QStringLiteral("; cancelled") : QString{}));
+        .arg(result.cancelled ? MotionUiTranslation::tr("; cancelled") : QString{}));
     if (imported > 0 && content_changed_handler_) content_changed_handler_();
 }
 
@@ -734,22 +735,22 @@ MediaDetailsWidget::MediaDetailsWidget(QWidget* parent)
     setObjectName(QStringLiteral("motion-media-details"));
     setMinimumWidth(250);
     auto* layout = new QVBoxLayout(this);
-    auto* title = new QLabel(QStringLiteral("Media Details"), this);
+    auto* title = new QLabel(MotionUiTranslation::tr("Media Details"), this);
     title->setObjectName(QStringLiteral("motion-media-details-title"));
     layout->addWidget(title);
     auto* form = new QFormLayout();
     const std::array<std::pair<QString, QString>, 11> rows{{
-        {QStringLiteral("Name"), QStringLiteral("motion-media-detail-name")},
-        {QStringLiteral("Type"), QStringLiteral("motion-media-detail-type")},
-        {QStringLiteral("Format"), QStringLiteral("motion-media-detail-format")},
-        {QStringLiteral("Codec"), QStringLiteral("motion-media-detail-codec")},
-        {QStringLiteral("Resolution"), QStringLiteral("motion-media-detail-resolution")},
-        {QStringLiteral("Frame rate"), QStringLiteral("motion-media-detail-frame-rate")},
-        {QStringLiteral("Duration"), QStringLiteral("motion-media-detail-duration")},
-        {QStringLiteral("Frames"), QStringLiteral("motion-media-detail-frame-count")},
-        {QStringLiteral("Audio"), QStringLiteral("motion-media-detail-audio")},
-        {QStringLiteral("Bin"), QStringLiteral("motion-media-detail-bin")},
-        {QStringLiteral("Status"), QStringLiteral("motion-media-detail-status")},
+        {MotionUiTranslation::tr("Name"), QStringLiteral("motion-media-detail-name")},
+        {MotionUiTranslation::tr("Type"), QStringLiteral("motion-media-detail-type")},
+        {MotionUiTranslation::tr("Format"), QStringLiteral("motion-media-detail-format")},
+        {MotionUiTranslation::tr("Codec"), QStringLiteral("motion-media-detail-codec")},
+        {MotionUiTranslation::tr("Resolution"), QStringLiteral("motion-media-detail-resolution")},
+        {MotionUiTranslation::tr("Frame rate"), QStringLiteral("motion-media-detail-frame-rate")},
+        {MotionUiTranslation::tr("Duration"), QStringLiteral("motion-media-detail-duration")},
+        {MotionUiTranslation::tr("Frames"), QStringLiteral("motion-media-detail-frame-count")},
+        {MotionUiTranslation::tr("Audio"), QStringLiteral("motion-media-detail-audio")},
+        {MotionUiTranslation::tr("Bin"), QStringLiteral("motion-media-detail-bin")},
+        {MotionUiTranslation::tr("Status"), QStringLiteral("motion-media-detail-status")},
     }};
     for (const auto& [label, object_name] : rows) {
         auto* value = new QLabel(QStringLiteral("—"), this);
@@ -763,7 +764,7 @@ MediaDetailsWidget::MediaDetailsWidget(QWidget* parent)
     path->setObjectName(QStringLiteral("motion-media-detail-path"));
     path->setWordWrap(true);
     path->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    form->addRow(QStringLiteral("Source"), path);
+    form->addRow(MotionUiTranslation::tr("Source"), path);
     values_.push_back(path);
     layout->addLayout(form);
     layout->addStretch(1);
@@ -788,15 +789,15 @@ void MediaDetailsWidget::setMedia(const MediaItem* item)
     values_[6]->setText(optionalNumber(metadata.duration_seconds, QStringLiteral(" s")));
     values_[7]->setText(optionalInteger(metadata.frame_count));
     if (metadata.audio.has_value()) {
-        values_[8]->setText(QStringLiteral("%1, %2 Hz, %3 ch")
+        values_[8]->setText(MotionUiTranslation::tr("%1, %2 Hz, %3 ch")
             .arg(utf8Text(metadata.audio->codec))
             .arg(metadata.audio->sample_rate)
             .arg(metadata.audio->channel_count));
     } else {
-        values_[8]->setText(QStringLiteral("None"));
+        values_[8]->setText(MotionUiTranslation::tr("None"));
     }
     values_[9]->setText(utf8Text(item->bin_path));
-    values_[10]->setText(item->offline ? QStringLiteral("Offline") : QStringLiteral("Online"));
+    values_[10]->setText(item->offline ? MotionUiTranslation::tr("Offline") : MotionUiTranslation::tr("Online"));
     values_[11]->setText(pathText(metadata.source_path));
 }
 

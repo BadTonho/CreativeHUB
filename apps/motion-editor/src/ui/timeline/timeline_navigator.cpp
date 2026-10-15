@@ -1,4 +1,5 @@
-﻿#include "timeline_navigator.h"
+#include "ui/translation_helpers.h"
+#include "timeline_navigator.h"
 #include "timeline_navigator_math.h"
 #include "timeline_controls.h"
 #include "timeline_layer_tracks.h"
@@ -97,10 +98,8 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
 
     ruler_ = new TimelineRuler(this);
     ruler_->setHeaderWidth(kTimelineHeaderWidth);
-    ruler_->setToolTip(QStringLiteral(
-        "At 100%, the initial one-hour range fits the timeline. Use Ctrl+wheel or the zoom "
-        "controls to change scale. Drag past the actual range end to extend by one hour per "
-        "gesture; scroll to the end first if it is offscreen. This range is not the composition end."));
+    ruler_->setToolTip(MotionUiTranslation::tr(
+        "At 100%, the initial one-hour range fits the timeline. Use Ctrl+wheel or the zoom controls to change scale. Drag past the actual range end to extend by one hour per gesture; scroll to the end first if it is offscreen. This range is not the composition end."));
     layout->addWidget(ruler_);
 
     layer_scroll_area_ = new QScrollArea(this);
@@ -738,12 +737,12 @@ std::int64_t TimelineNavigator::calculateFramesPerView() const noexcept
 void TimelineNavigator::updateControls()
 {
     controls_->frameLabel()->setText(display_mode_ == TimelineDisplayMode::Frames
-        ? QStringLiteral("Frame %1").arg(static_cast<qlonglong>(current_frame_))
+        ? MotionUiTranslation::tr("Frame %1").arg(static_cast<qlonglong>(current_frame_))
         : formatTimelinePosition(current_frame_, frame_rate_, display_mode_));
-    controls_->frameRateLabel()->setText(QStringLiteral("FPS: %1").arg(formatFrameRate(frame_rate_)));
+    controls_->frameRateLabel()->setText(MotionUiTranslation::tr("FPS: %1").arg(formatFrameRate(frame_rate_)));
     controls_->previousFrameButton()->setEnabled(current_frame_ > 0);
     controls_->nextFrameButton()->setEnabled(current_frame_ < visible_end_frame_);
-    controls_->playPauseButton()->setText(playing_ ? QStringLiteral("Pause") : QStringLiteral("Play"));
+    controls_->playPauseButton()->setText(playing_ ? MotionUiTranslation::tr("Pause") : MotionUiTranslation::tr("Play"));
     controls_->playPauseButton()->setEnabled(playing_ || playback_end_frame_exclusive_ > 0);
     controls_->loopButton()->setEnabled(playing_ || playback_end_frame_exclusive_ > 0);
     controls_->zoomOutButton()->setEnabled(zoom_level_index_ > 0);

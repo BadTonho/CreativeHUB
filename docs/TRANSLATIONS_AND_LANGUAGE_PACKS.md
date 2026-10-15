@@ -9,10 +9,10 @@ Portuguese files are `languages/image-editor/pt_BR.ts` and
 `languages/image-editor/pt_BR.qm`.
 
 The `.ts` file is the editable source for translators. The `.qm` file is the
-runtime catalog loaded by Qt. Both are committed. The Video Editor and Image
-Editor bundle their catalogs for offline use. The Hub can obtain the same `.qm`
-independently from the repository's `main` branch when a catalog is listed in
-`languages/manifest.json`.
+runtime catalog loaded by Qt. Both are committed. The Video Editor, Image
+Editor, and Motion Studio bundle their catalogs for offline use. The Hub can
+obtain the same `.qm` independently from the repository's `main` branch when a
+catalog is listed in `languages/manifest.json`.
 
 The manifest uses schema version 1. Each published entry contains an
 application ID, locale, repository-relative catalog path, exact byte size, and
@@ -41,8 +41,9 @@ an application update.
    translation calls and stable contexts. Keep logs, identifiers, protocols,
    and project data out of the UI catalog.
 2. Run the application's CMake update target. The current targets are
-   `update-hub-translations`, `update-video-editor-translations`, and
-   `update-image-editor-translations`.
+   `update-hub-translations`, `update-video-editor-translations`,
+   `update-image-editor-translations`, and
+   `update-motion-editor-translations`.
 3. Translate every active entry in the `.ts` file. Preserve placeholders such
    as `%1` and `%n`, line breaks, accelerator markers, formatting, and plural
    forms. Keep product names and common technical terms when they are clearer
@@ -71,12 +72,20 @@ translation before constructing the main window. The
 regional Portuguese selection, translated error messages, placeholder
 handling, and English fallback.
 
+For Motion Studio, the catalog is embedded as
+`:/translations/motion-editor/pt_BR.qm`. Its startup installs the local
+translation before constructing the main window. The
+`creative-suite-motion-editor-translation-catalog` test checks bundled loading,
+regional Portuguese selection, visible menu labels, placeholders, missing-text
+fallback, and English fallback.
+
 ## Regression and acceptance
 
 Automated catalog tests cover manifest validation, locale selection, compiled
 catalog loading, download failures, integrity checks, and atomic installation.
-The Video Editor and Image Editor tests cover their bundled pt-BR catalogs and
-English fallback. These automated checks do not replace native visual review.
+The Video Editor, Image Editor, and Motion Studio tests cover their bundled
+pt-BR catalogs and English fallback. These automated checks do not replace
+native visual review.
 
 For each application with a published catalog, verify the following on the
 target operating system:
@@ -97,5 +106,6 @@ target operating system:
 
 Native visual review of the Video Editor's Edit, Fusion, Render, dialogs, and
 tooltips, and of the Image Editor's menus, tools, panels, dialogs, and
-tooltips, plus the end-to-end Hub download and next-launch check, remain
-pending until performed on a native desktop environment.
+tooltips, and of Motion Studio's menus, panels, timeline, dialogs, tooltips,
+and accessibility labels, plus the end-to-end Hub download and next-launch
+check, remain pending until performed on a native desktop environment.
