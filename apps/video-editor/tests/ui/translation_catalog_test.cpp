@@ -1,9 +1,11 @@
 #include "ui/effects/effects_catalog.h"
 
 #include <creative_suite/translations/translation_runtime.h>
+#include <creative_suite/translations/language_preference.h>
 
 #include <QCoreApplication>
 #include <QLocale>
+#include <QSettings>
 #include <QTemporaryDir>
 
 #include <cstdio>
@@ -11,16 +13,29 @@
 int main(int argc, char* argv[]) {
     QCoreApplication application(argc, argv);
     QTemporaryDir storage;
-    if (!storage.isValid()) {
+    QTemporaryDir preferences_directory;
+    if (!storage.isValid() || !preferences_directory.isValid()) {
         std::fprintf(stderr, "Could not create isolated translation storage.\n");
         return 1;
     }
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       preferences_directory.path());
+    using creative_suite::translations::LanguagePreference;
+    using namespace creative_suite::translations;
+    if (!saveLanguagePreference(QStringLiteral("video-editor"),
+                                LanguagePreference::PortugueseBrazil)) {
+        std::fprintf(stderr, "Could not save the explicit Video Editor language preference.\n");
+        return 1;
+    }
 
-    creative_suite::translations::TranslationRuntime runtime;
+    TranslationRuntime runtime;
     const auto result = runtime.installForApplication(
         application, QStringLiteral("video-editor"),
         QStringLiteral(":/translations/video-editor/pt_BR.qm"),
-        QLocale(QStringLiteral("pt_PT")), storage.path());
+        localeForApplicationPreference(QStringLiteral("video-editor"),
+                                       QLocale(QStringLiteral("en_US"))),
+        storage.path());
     if (result.locale != QStringLiteral("pt_BR") || !result.bundled_loaded) {
         std::fprintf(stderr, "The bundled pt-BR Video Editor catalog was not loaded.\n");
         return 1;
@@ -58,12 +73,19 @@ int main(int argc, char* argv[]) {
     const auto english_result = runtime.installForApplication(
         application, QStringLiteral("video-editor"),
         QStringLiteral(":/translations/video-editor/pt_BR.qm"),
-        QLocale(QStringLiteral("en_US")), storage.path());
+        localeForLanguagePreference(LanguagePreference::English,
+                                    QLocale(QStringLiteral("pt_BR"))),
+        storage.path());
     if (!english_result.locale.isEmpty() || english_result.bundled_loaded ||
         QCoreApplication::translate("RenderWorkspace", "Render Settings") !=
             QStringLiteral("Render Settings")) {
         std::fprintf(stderr, "An unsupported locale must use the English source strings.\n");
         return 1;
     }
+    QSettings preferences(QSettings::IniFormat, QSettings::UserScope,
+                          QStringLiteral("CreativeSuite"),
+                          QStringLiteral("LanguagePreferences"));
+    preferences.clear();
+    preferences.sync();
     return 0;
 }

@@ -1,13 +1,18 @@
 #include "ui/main_window/main_window.h"
 #include "ui/translation_helpers.h"
+#include "ui/dialogs/general_settings_dialog.h"
 
+#include <creative_suite/translations/language_preference.h>
+#include <creative_suite/translations/translation_catalog.h>
 #include <creative_suite/translations/translation_runtime.h>
 
 #include <QAction>
 #include <QApplication>
 #include <QLabel>
+#include <QComboBox>
 #include <QMenuBar>
 #include <QLocale>
+#include <QSettings>
 #include <QTemporaryDir>
 
 #include <filesystem>
@@ -37,8 +42,25 @@ int main(int argc, char* argv[])
     QApplication application(argc, argv);
     QTemporaryDir translation_storage;
     QTemporaryDir recovery_storage;
-    if (!check(translation_storage.isValid() && recovery_storage.isValid(),
+    QTemporaryDir preference_storage;
+    if (!check(translation_storage.isValid() && recovery_storage.isValid() &&
+                   preference_storage.isValid(),
                "Could not create isolated translation test directories.")) {
+        return 1;
+    }
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       preference_storage.path());
+    using creative_suite::translations::LanguagePreference;
+    using namespace creative_suite::translations;
+    QSettings preferences(QSettings::IniFormat, QSettings::UserScope,
+                          QStringLiteral("CreativeSuite"),
+                          QStringLiteral("LanguagePreferences"));
+    preferences.clear();
+    preferences.sync();
+    if (!check(saveLanguagePreference(QStringLiteral("motion-editor"),
+                                     LanguagePreference::PortugueseBrazil),
+               "The explicit Motion Studio language preference could not be saved.")) {
         return 1;
     }
 
@@ -46,7 +68,9 @@ int main(int argc, char* argv[])
     const auto portuguese = runtime.installForApplication(
         application, QStringLiteral("motion-editor"),
         QStringLiteral(":/translations/motion-editor/pt_BR.qm"),
-        QLocale(QStringLiteral("pt_PT")), translation_storage.path());
+        localeForApplicationPreference(QStringLiteral("motion-editor"),
+                                       QLocale(QStringLiteral("en_US"))),
+        translation_storage.path());
     if (!check(portuguese.locale == QStringLiteral("pt_BR") && portuguese.bundled_loaded &&
                    !portuguese.downloaded_loaded,
                "The bundled Motion Studio pt-BR catalog was not selected offline.") ||
@@ -74,6 +98,34 @@ int main(int argc, char* argv[])
         }
     }
 
+    {
+        motion::ui::GeneralSettingsDialog dialog(false);
+        auto* language = dialog.findChild<QComboBox*>(
+            QStringLiteral("motion-language-preference-combo"));
+        auto* note = dialog.findChild<QLabel*>(
+            QStringLiteral("motion-language-preference-note"));
+        if (!check(language != nullptr && note != nullptr && language->count() == 3 &&
+                       language->currentData().toInt() ==
+                           static_cast<int>(LanguagePreference::PortugueseBrazil),
+                   "Motion Studio Settings did not restore its language preference.") ||
+            !check(note->text().contains(QStringLiteral("próxima")),
+                   "Motion Studio Settings does not explain that language applies next launch.")) {
+            return 1;
+        }
+        language->setCurrentIndex(language->findData(
+            static_cast<int>(LanguagePreference::English)));
+        if (!check(loadLanguagePreference(QStringLiteral("motion-editor")) ==
+                       LanguagePreference::English &&
+                       translationLocaleFor(localeForApplicationPreference(
+                           QStringLiteral("motion-editor"),
+                           QLocale(QStringLiteral("pt_BR")))).isEmpty(),
+                   "Explicit English did not override a Portuguese system locale.")) {
+            return 1;
+        }
+        language->setCurrentIndex(language->findData(
+            static_cast<int>(LanguagePreference::PortugueseBrazil)));
+    }
+
     if (!check(motion::ui::MotionUiTranslation::tr("A future source string") ==
                    QStringLiteral("A future source string"),
                "Missing catalog entries must fall back to English source text.")) {
@@ -83,13 +135,18 @@ int main(int argc, char* argv[])
     const auto english = runtime.installForApplication(
         application, QStringLiteral("motion-editor"),
         QStringLiteral(":/translations/motion-editor/pt_BR.qm"),
-        QLocale(QStringLiteral("en_US")), translation_storage.path());
+        localeForLanguagePreference(LanguagePreference::English,
+                                    QLocale(QStringLiteral("pt_BR"))),
+        translation_storage.path());
     if (!check(english.locale.isEmpty() && !english.bundled_loaded &&
                    motion::ui::MotionUiTranslation::tr("No composition open") ==
                        QStringLiteral("No composition open"),
                "An unsupported locale must keep Motion Studio in English.")) {
         return 1;
     }
+
+    preferences.clear();
+    preferences.sync();
 
     return 0;
 }

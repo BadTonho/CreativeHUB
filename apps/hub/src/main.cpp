@@ -1,6 +1,7 @@
 #include "ui/main_window.h"
 #include "diagnostics/hub_logger.h"
 #include <creative_suite/translations/translation_runtime.h>
+#include <creative_suite/translations/language_preference.h>
 #ifdef Q_OS_WIN
 #include <creative_suite/updater/update_service.h>
 #endif
@@ -21,7 +22,9 @@ int main(int argc, char* argv[]) {
     app.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
     creative_suite::translations::TranslationRuntime translations;
     static_cast<void>(translations.installForApplication(
-        app, QStringLiteral("hub"), QStringLiteral(":/translations/hub/pt_BR.qm")));
+        app, QStringLiteral("hub"), QStringLiteral(":/translations/hub/pt_BR.qm"),
+        creative_suite::translations::localeForApplicationPreference(
+            QStringLiteral("hub"))));
 
     creative_suite::hub::HubLogger::instance().logInfo(
         QStringLiteral("Application"),

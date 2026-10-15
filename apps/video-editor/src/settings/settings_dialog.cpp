@@ -3,6 +3,9 @@
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
 
+#include <creative_suite/diagnostics/logger.h>
+#include <creative_suite/translations/language_preference.h>
+
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
@@ -77,6 +80,64 @@ SettingsDialog::SettingsDialog(
 QWidget* SettingsDialog::createGeneralPage() {
     auto* page = new QWidget(this);
     auto* layout = new QVBoxLayout(page);
+    using creative_suite::translations::LanguagePreference;
+    const auto saved_language = creative_suite::translations::loadLanguagePreference(
+        QStringLiteral("video-editor"));
+    auto* language_row = new QWidget(page);
+    auto* language_layout = new QHBoxLayout(language_row);
+    language_layout->setContentsMargins(0, 0, 0, 0);
+    auto* language_label = new QLabel(
+        QCoreApplication::translate("SettingsDialog", "Language:"), language_row);
+    auto* language_combo = new QComboBox(language_row);
+    language_combo->setObjectName("languagePreferenceComboBox");
+    language_combo->addItem(
+        QCoreApplication::translate("SettingsDialog", "System language"),
+        static_cast<int>(LanguagePreference::System));
+    language_combo->addItem(
+        QCoreApplication::translate("SettingsDialog", "English"),
+        static_cast<int>(LanguagePreference::English));
+    language_combo->addItem(
+        QCoreApplication::translate("SettingsDialog", "Português (Brasil)"),
+        static_cast<int>(LanguagePreference::PortugueseBrazil));
+    language_combo->setCurrentIndex(language_combo->findData(
+        static_cast<int>(saved_language)));
+    language_layout->addWidget(language_label);
+    language_layout->addWidget(language_combo, 1);
+    layout->addWidget(language_row);
+    auto* language_note = new QLabel(
+        QCoreApplication::translate(
+            "SettingsDialog", "Changes take effect the next time you open this app."), page);
+    language_note->setObjectName("languagePreferenceNote");
+    language_note->setWordWrap(true);
+    layout->addWidget(language_note);
+    connect(language_combo, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [language_combo, language_note](int index) {
+        const auto selected = static_cast<LanguagePreference>(
+            language_combo->itemData(index).toInt());
+        QString error;
+        if (!creative_suite::translations::saveLanguagePreference(
+                QStringLiteral("video-editor"), selected, &error)) {
+            auto& logger = creative_suite::diagnostics::Logger::instance();
+            if (!logger.is_initialized()) {
+                static_cast<void>(logger.initialize_default("video-editor"));
+            }
+            const auto detail = error.toUtf8();
+            logger.log(creative_suite::diagnostics::Level::Warning,
+                       "settings", "save_language_preference", detail.constData(),
+                       {{"application", "video-editor"}});
+            const QSignalBlocker blocker(language_combo);
+            const auto saved_language = creative_suite::translations::loadLanguagePreference(
+                QStringLiteral("video-editor"));
+            language_combo->setCurrentIndex(language_combo->findData(
+                static_cast<int>(saved_language)));
+            language_note->setText(QCoreApplication::translate(
+                "SettingsDialog", "The language preference could not be saved. See the application log."));
+            return;
+        }
+        language_note->setText(QCoreApplication::translate(
+            "SettingsDialog", "Changes take effect the next time you open this app."));
+    });
+
     auto* metrics_check = new QCheckBox(
         QCoreApplication::translate("SettingsDialog", "Enable preview performance metrics"), page);
     metrics_check->setObjectName("previewMetricsCheckBox");

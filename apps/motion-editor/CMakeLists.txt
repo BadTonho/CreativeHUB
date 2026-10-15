@@ -94,6 +94,7 @@ target_include_directories(creative-suite-motion-editor-core PUBLIC
 )
 target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::composition-exchange
+    creative-suite::translations
     creative-suite::animation
     creative-suite::composition
     creative-suite::composition-opengl

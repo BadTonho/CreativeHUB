@@ -17,6 +17,9 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 #include <QScrollArea>
+#include <QComboBox>
+#include <QSignalBlocker>
+#include <creative_suite/translations/language_preference.h>
 
 namespace creative_suite::hub {
 
@@ -107,6 +110,61 @@ void SettingsPage::setupUi() {
     auto* generalSectionLabel = new QLabel(QCoreApplication::translate("SettingsPage", "GENERAL BEHAVIOR"), generalCard);
     generalSectionLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 0.8px; background: transparent;"));
     generalLayout->addWidget(generalSectionLabel);
+
+    using creative_suite::translations::LanguagePreference;
+    m_savedLanguagePreference = creative_suite::translations::loadLanguagePreference(
+        QStringLiteral("hub"));
+    auto* languageRow = new QHBoxLayout();
+    auto* languageLabel = new QLabel(
+        QCoreApplication::translate("SettingsPage", "Language"), generalCard);
+    m_languageCombo = new QComboBox(generalCard);
+    m_languageCombo->setObjectName(QStringLiteral("languagePreferenceComboBox"));
+    m_languageCombo->addItem(
+        QCoreApplication::translate("SettingsPage", "System language"),
+        static_cast<int>(LanguagePreference::System));
+    m_languageCombo->addItem(
+        QCoreApplication::translate("SettingsPage", "English"),
+        static_cast<int>(LanguagePreference::English));
+    m_languageCombo->addItem(
+        QCoreApplication::translate("SettingsPage", "Português (Brasil)"),
+        static_cast<int>(LanguagePreference::PortugueseBrazil));
+    m_languageCombo->setCurrentIndex(m_languageCombo->findData(
+        static_cast<int>(m_savedLanguagePreference)));
+    languageRow->addWidget(languageLabel);
+    languageRow->addWidget(m_languageCombo, 1);
+    generalLayout->addLayout(languageRow);
+
+    m_languageNote = new QLabel(
+        QCoreApplication::translate(
+            "SettingsPage", "Changes take effect the next time you open this app."),
+        generalCard);
+    m_languageNote->setObjectName(QStringLiteral("languagePreferenceNote"));
+    m_languageNote->setWordWrap(true);
+    generalLayout->addWidget(m_languageNote);
+    connect(m_languageCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this](int index) {
+        using creative_suite::translations::LanguagePreference;
+        const auto selected = static_cast<LanguagePreference>(
+            m_languageCombo->itemData(index).toInt());
+        QString error;
+        if (!creative_suite::translations::saveLanguagePreference(
+                QStringLiteral("hub"), selected, &error)) {
+            HubLogger::instance().logWarning(
+                QStringLiteral("SettingsPage"),
+                QStringLiteral("save_language_preference"), error,
+                QStringLiteral("application=hub"));
+            const QSignalBlocker blocker(m_languageCombo);
+            m_languageCombo->setCurrentIndex(m_languageCombo->findData(
+                static_cast<int>(m_savedLanguagePreference)));
+            m_languageNote->setText(QCoreApplication::translate(
+                "SettingsPage", "The language preference could not be saved. See the Hub log."));
+            return;
+        }
+        m_savedLanguagePreference = selected;
+        m_languageNote->setText(QCoreApplication::translate(
+            "SettingsPage", "Changes take effect the next time you open this app."));
+    });
 
     m_autostartCheck = new QCheckBox(QCoreApplication::translate("SettingsPage", "Start Creative Suite Hub with Windows"), generalCard);
     m_autostartCheck->setMinimumHeight(24);

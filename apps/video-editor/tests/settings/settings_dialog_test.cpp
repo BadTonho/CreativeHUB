@@ -1,6 +1,7 @@
 #include "settings/settings_dialog.h"
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
+#include <creative_suite/translations/language_preference.h>
 
 #include <QApplication>
 #include <QAction>
@@ -216,6 +217,29 @@ int main(int argc, char* argv[]) {
         require(tabs->tabText(3) == "Shortcuts",
                 "Shortcuts settings tab is missing.");
 
+        using creative_suite::translations::LanguagePreference;
+        auto* language = dialog.findChild<QComboBox*>("languagePreferenceComboBox");
+        auto* language_note = dialog.findChild<QLabel*>("languagePreferenceNote");
+        require(language != nullptr && language_note != nullptr && language->count() == 3 &&
+                    language->currentData().toInt() ==
+                        static_cast<int>(LanguagePreference::System),
+                "The Video Editor language selector does not default to system language.");
+        const int english_language = language->findData(
+            static_cast<int>(LanguagePreference::English));
+        const int portuguese_language = language->findData(
+            static_cast<int>(LanguagePreference::PortugueseBrazil));
+        require(english_language >= 0 && portuguese_language >= 0,
+                "A supported Video Editor language option is missing.");
+        language->setCurrentIndex(english_language);
+        require(creative_suite::translations::loadLanguagePreference(
+                    QStringLiteral("video-editor")) == LanguagePreference::English,
+                "The Video Editor English preference did not persist.");
+        language->setCurrentIndex(portuguese_language);
+        require(creative_suite::translations::loadLanguagePreference(
+                    QStringLiteral("video-editor")) == LanguagePreference::PortugueseBrazil &&
+                    language_note->text().contains("next time"),
+                "The Video Editor Portuguese preference or next-launch notice is missing.");
+
         auto* workspace_transitions = dialog.findChild<QCheckBox*>(
             "workspacePageTransitionsCheckBox");
         auto* workspace_transition_duration = dialog.findChild<QSlider*>(
@@ -260,13 +284,18 @@ int main(int argc, char* argv[]) {
                 "Disabling workspace animation must persist and disable its controls.");
         {
             settings::SettingsDialog reopened(nullptr, shortcut_manager);
+            auto* reopened_language = reopened.findChild<QComboBox*>(
+                "languagePreferenceComboBox");
             auto* reopened_toggle = reopened.findChild<QCheckBox*>(
                 "workspacePageTransitionsCheckBox");
             auto* reopened_duration = reopened.findChild<QSlider*>(
                 "workspacePageTransitionDurationSlider");
             auto* reopened_style = reopened.findChild<QComboBox*>(
                 "workspacePageTransitionStyleComboBox");
-            require(reopened_toggle != nullptr && reopened_duration != nullptr &&
+            require(reopened_language != nullptr &&
+                        reopened_language->currentData().toInt() ==
+                            static_cast<int>(LanguagePreference::PortugueseBrazil) &&
+                        reopened_toggle != nullptr && reopened_duration != nullptr &&
                         reopened_style != nullptr &&
                         !reopened_toggle->isChecked() &&
                         !reopened_duration->isEnabled() &&
@@ -638,6 +667,11 @@ int main(int argc, char* argv[]) {
 
         dialog.close();
         settings.clear();
+        QSettings language_preferences(QSettings::IniFormat, QSettings::UserScope,
+                                       QStringLiteral("CreativeSuite"),
+                                       QStringLiteral("LanguagePreferences"));
+        language_preferences.clear();
+        language_preferences.sync();
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

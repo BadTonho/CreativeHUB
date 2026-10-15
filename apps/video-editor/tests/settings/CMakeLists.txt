@@ -18,6 +18,7 @@ target_link_libraries(creative-suite-main-editor-settings-dialog-tests PRIVATE
     Qt6::Widgets
     Qt6::Test
     creative-suite::shortcuts
+    creative-suite::translations
 )
 
 target_compile_features(creative-suite-main-editor-settings-dialog-tests PRIVATE cxx_std_20)

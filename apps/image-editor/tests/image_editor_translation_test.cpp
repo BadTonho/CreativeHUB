@@ -1,6 +1,7 @@
 #include "translation_helpers.h"
 
 #include <creative_suite/translations/translation_runtime.h>
+#include <creative_suite/translations/language_preference.h>
 
 #include <test_check.h>
 
@@ -10,6 +11,7 @@
 #include <QLocale>
 #include <QTemporaryDir>
 #include <QFileInfo>
+#include <QSettings>
 
 #include <creative_suite/translations/translation_catalog.h>
 
@@ -18,7 +20,15 @@ using creative_suite::translations::TranslationRuntime;
 int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
     QTemporaryDir storage;
+    QTemporaryDir preferences_directory;
     CS_TEST_CHECK(storage.isValid());
+    CS_TEST_CHECK(preferences_directory.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       preferences_directory.path());
+    using creative_suite::translations::LanguagePreference;
+    CS_TEST_CHECK(creative_suite::translations::saveLanguagePreference(
+        QStringLiteral("image-editor"), LanguagePreference::PortugueseBrazil));
 
     {
         const QString installed_translation =
@@ -38,7 +48,9 @@ int main(int argc, char** argv) {
         const auto result = runtime.installForApplication(
             application, QStringLiteral("image-editor"),
             QStringLiteral(":/translations/image-editor/pt_BR.qm"),
-            QLocale(QStringLiteral("pt_PT")), storage.path());
+            creative_suite::translations::localeForApplicationPreference(
+                QStringLiteral("image-editor"), QLocale(QStringLiteral("en_US"))),
+            storage.path());
         CS_TEST_CHECK(result.locale == QStringLiteral("pt_BR"));
         CS_TEST_CHECK(result.bundled_loaded);
         CS_TEST_CHECK(result.downloaded_loaded);
@@ -82,5 +94,10 @@ int main(int argc, char** argv) {
         CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Open Image") ==
                       QStringLiteral("Open Image"));
     }
+    QSettings preferences(QSettings::IniFormat, QSettings::UserScope,
+                          QStringLiteral("CreativeSuite"),
+                          QStringLiteral("LanguagePreferences"));
+    preferences.clear();
+    preferences.sync();
     return 0;
 }

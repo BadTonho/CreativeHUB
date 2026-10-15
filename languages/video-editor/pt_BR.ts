@@ -1299,11 +1299,11 @@
         <translation>Preparando mídia...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="1841"/>
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="108"/>
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="202"/>
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="509"/>
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="705"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="1841"/>
         <source>Cancel</source>
         <translation>Cancelar</translation>
     </message>
@@ -2040,12 +2040,12 @@ Importe uma mídia para exibir o primeiro quadro.</translation>
         <translation>Desconhecido</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="38"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="53"/>
         <source>%1  |  %2  |  %3 × %4 @ %5 fps  |  %6</source>
         <translation>%1  |  %2  |  %3 × %4 a %5 fps  |  %6</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="50"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="65"/>
         <source>%1
 Output: %2
 Video: %3
@@ -2058,24 +2058,24 @@ Vídeo: %3
 Composição: %6</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="57"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="72"/>
         <source>Disabled</source>
         <translation>Desativado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="60"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="75"/>
         <source>
 Error: </source>
         <translation>
 Erro: </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="62"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="77"/>
         <source>GPU requested (Experimental)</source>
         <translation>GPU solicitada (experimental)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="63"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_model.cpp" line="78"/>
         <source>CPU</source>
         <translation>CPU</translation>
     </message>
@@ -2385,388 +2385,419 @@ Erro: </translation>
 <context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="55"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="58"/>
         <source>Settings</source>
         <translation>Configurações</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="61"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="64"/>
         <source>General</source>
         <translation>Geral</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="62"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="65"/>
         <source>Autosave</source>
         <translation>Salvamento automático</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="63"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="66"/>
         <source>Timeline</source>
         <translation>Linha do tempo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="64"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="67"/>
         <source>Shortcuts</source>
         <translation>Atalhos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="69"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="72"/>
         <source>Close</source>
         <translation>Fechar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="81"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="90"/>
+        <source>Language:</source>
+        <translation>Idioma:</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="94"/>
+        <source>System language</source>
+        <translation>Idioma do sistema</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="97"/>
+        <source>English</source>
+        <translation>Inglês</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="100"/>
+        <source>Português (Brasil)</source>
+        <translation>Português (Brasil)</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="108"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="137"/>
+        <source>Changes take effect the next time you open this app.</source>
+        <translation>A alteração será aplicada na próxima vez que você abrir este aplicativo.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="133"/>
+        <source>The language preference could not be saved. See the application log.</source>
+        <translation>Não foi possível salvar a preferência de idioma. Consulte o log do aplicativo.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="142"/>
         <source>Enable preview performance metrics</source>
         <translation>Ativar métricas de desempenho da pré-visualização</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="84"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="145"/>
         <source>Collect one aggregated Preview performance sample per second in the application log.</source>
         <translation>Registrar uma amostra agregada de desempenho da pré-visualização por segundo no log do aplicativo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="88"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="149"/>
         <source>When enabled, the Video Editor records aggregated decoding, composition, UI, and GPU timing data. </source>
         <translation>Quando ativado, o Video Editor registra dados agregados de tempo de decodificação, composição, interface e GPU. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="89"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="150"/>
         <source>This preference is global and does not modify projects.</source>
         <translation>Esta preferência é global e não altera os projetos.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="96"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="157"/>
         <source>Use hardware video decoding for preview (Experimental)</source>
         <translation>Usar decodificação de vídeo por hardware na pré-visualização (experimental)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="98"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="159"/>
         <source>Accelerates supported H.264 and HEVC video. Uses CPU automatically when needed. Export has its own setting.</source>
         <translation>Acelera vídeos H.264 e HEVC compatíveis. Usa a CPU automaticamente quando necessário. A exportação tem uma configuração própria.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="107"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="168"/>
         <source>Use GPU for timeline preview (Experimental)</source>
         <translation>Usar GPU na pré-visualização da linha do tempo (experimental)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="109"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="170"/>
         <source>Accelerates supported effects, Fusion graphs, and timeline composition. Applies immediately and uses CPU when needed. Export has its own setting.</source>
         <translation>Acelera efeitos compatíveis, grafos Fusion e a composição da linha do tempo. Aplica-se imediatamente e usa a CPU quando necessário. A exportação tem uma configuração própria.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="119"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="180"/>
         <source>Workspace transitions</source>
         <translation>Transições entre áreas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="123"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="184"/>
         <source>Animate workspace switches</source>
         <translation>Animar a troca de áreas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="126"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="187"/>
         <source>Slide the workspace panels when switching among Edit, Fusion, and Render.</source>
         <translation>Deslizar os painéis ao alternar entre Edit, Fusion e Render.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="133"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="194"/>
         <source>Style:</source>
         <translation>Estilo:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="137"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="198"/>
         <source>Workspace content</source>
         <translation>Conteúdo da área</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="141"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="202"/>
         <source>Entire application window</source>
         <translation>Janela inteira do aplicativo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="144"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="205"/>
         <source>Workspace transition style</source>
         <translation>Estilo da transição entre áreas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="155"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="216"/>
         <source>Duration:</source>
         <translation>Duração:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="169"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="230"/>
         <source>Workspace transition duration</source>
         <translation>Duração da transição entre áreas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="171"/>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="214"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="232"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="275"/>
         <source>%1 ms</source>
         <translation>%1 ms</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="181"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="242"/>
         <source>Workspace content slides everything below the menu bar as one block. Entire application window also moves the native window frame. These preferences are saved on this device and do not modify projects.</source>
         <translation>O conteúdo da área desliza como um bloco, abaixo da barra de menus. A opção de janela inteira também move a moldura nativa da janela. Essas preferências são salvas neste dispositivo e não alteram os projetos.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="188"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="249"/>
         <source>Choose a duration from 100 to 600 milliseconds in 25 millisecond steps.</source>
         <translation>Escolha uma duração de 100 a 600 milissegundos, em intervalos de 25 milissegundos.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="219"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="280"/>
         <source>Enable project autosave</source>
         <translation>Ativar salvamento automático do projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="222"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="283"/>
         <source>Save recovery snapshots without overwriting the project file.</source>
         <translation>Salvar instantâneos de recuperação sem sobrescrever o arquivo do projeto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="228"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="289"/>
         <source>Interval (seconds):</source>
         <translation>Intervalo (segundos):</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="237"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="298"/>
         <source>Snapshots:</source>
         <translation>Instantâneos:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="253"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="314"/>
         <source>Autosave keeps recovery snapshots in a separate folder and never replaces the main .csp file. </source>
         <translation>O salvamento automático mantém os instantâneos de recuperação em uma pasta separada e nunca substitui o arquivo .csp principal. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="254"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="315"/>
         <source>The default is every 30 seconds with 5 snapshots retained.</source>
         <translation>O padrão é salvar a cada 30 segundos e manter 5 instantâneos.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="335"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="396"/>
         <source>Manage recovery snapshots for the current project and unsaved projects. </source>
         <translation>Gerencie os instantâneos de recuperação do projeto atual e de projetos não salvos. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="336"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="397"/>
         <source>Restoring never overwrites the main .csp file.</source>
         <translation>A restauração nunca sobrescreve o arquivo .csp principal.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="345"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="406"/>
         <source>Project</source>
         <translation>Projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="345"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="406"/>
         <source>Type</source>
         <translation>Tipo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="345"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="406"/>
         <source>Modified</source>
         <translation>Modificado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="345"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="406"/>
         <source>Snapshot</source>
         <translation>Instantâneo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="362"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="423"/>
         <source>No valid autosave snapshots found.</source>
         <translation>Nenhum instantâneo válido de salvamento automático foi encontrado.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="368"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="429"/>
         <source>Refresh</source>
         <translation>Atualizar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="370"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="431"/>
         <source>Reload the available recovery snapshots</source>
         <translation>Recarregar os instantâneos de recuperação disponíveis</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="371"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="432"/>
         <source>Restore Selected</source>
         <translation>Restaurar selecionado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="374"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="435"/>
         <source>Load the selected snapshot as the current dirty project</source>
         <translation>Carregar o instantâneo selecionado como projeto atual com alterações não salvas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="375"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="436"/>
         <source>Delete Selected</source>
         <translation>Excluir selecionado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="377"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="438"/>
         <source>Delete the selected recovery snapshot</source>
         <translation>Excluir o instantâneo de recuperação selecionado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="378"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="439"/>
         <source>Open Folder</source>
         <translation>Abrir pasta</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="381"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="442"/>
         <source>Open the folder containing the selected recovery snapshot</source>
         <translation>Abrir a pasta que contém o instantâneo de recuperação selecionado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="427"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="488"/>
         <source>Audio waveform display:</source>
         <translation>Exibição da forma de onda de áudio:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="430"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="491"/>
         <source>Mono</source>
         <translation>Mono</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="432"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="493"/>
         <source>Stereo</source>
         <translation>Estéreo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="437"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="498"/>
         <source>Choose a combined mono waveform or separate left and right channels.</source>
         <translation>Escolha uma forma de onda mono combinada ou canais esquerdo e direito separados.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="443"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="504"/>
         <source>This global preference applies immediately and does not modify projects. </source>
         <translation>Esta preferência global é aplicada imediatamente e não altera os projetos. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="444"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="505"/>
         <source>Stereo media shows left and right channels in separate halves; mono media </source>
         <translation>Mídias estéreo exibem os canais esquerdo e direito em metades separadas; mídias mono </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="445"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="506"/>
         <source>keeps one centered waveform.</source>
         <translation>mantêm uma forma de onda centralizada.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="454"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="515"/>
         <source>Track height adjustment:</source>
         <translation>Ajuste da altura das faixas:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="459"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="520"/>
         <source>Together</source>
         <translation>Em conjunto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="462"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="523"/>
         <source>Independently by group</source>
         <translation>Separadamente por grupo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="467"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="528"/>
         <source>Choose whether Shift + mouse wheel changes both groups or only the Video or Audio group under the pointer.</source>
         <translation>Escolha se Shift + roda do mouse altera os dois grupos ou apenas o grupo de vídeo ou áudio sob o ponteiro.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="473"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="534"/>
         <source>This local preference applies immediately. In independent mode, </source>
         <translation>Esta preferência local é aplicada imediatamente. No modo independente, </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="474"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="535"/>
         <source>Shift + mouse wheel changes only the group beneath the pointer; </source>
         <translation>Shift + roda do mouse altera apenas o grupo sob o ponteiro; </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="475"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="536"/>
         <source>each project&apos;s Video and Audio row heights are saved separately. </source>
         <translation>a altura das linhas de vídeo e áudio é salva separadamente em cada projeto. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="476"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="537"/>
         <source>Switching back to Together matches Audio to Video.</source>
         <translation>Ao voltar para Em conjunto, a altura do áudio é igualada à do vídeo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="504"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="565"/>
         <source>Changes apply immediately. Clear a field to disable that shortcut.</source>
         <translation>As alterações são aplicadas imediatamente. Apague o conteúdo de um campo para desativar o atalho.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="559"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="620"/>
         <source>Shortcut for %1</source>
         <translation>Atalho para %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="560"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="621"/>
         <source>Reset</source>
         <translation>Redefinir</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="564"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="625"/>
         <source>Restore the default shortcut for %1</source>
         <translation>Restaurar o atalho padrão de %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="565"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="626"/>
         <source>Clear</source>
         <translation>Limpar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="569"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="630"/>
         <source>Disable the shortcut for %1</source>
         <translation>Desativar o atalho de %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="632"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="693"/>
         <source>Available in every workspace.</source>
         <translation>Disponível em todas as áreas.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="634"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="695"/>
         <source>Available in the Edit and Fusion workspaces.</source>
         <translation>Disponível nas áreas Edit e Fusion.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="636"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="697"/>
         <source>Available only in the Edit workspace.</source>
         <translation>Disponível somente na área Edit.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="638"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="699"/>
         <source>Available only in the Fusion workspace.</source>
         <translation>Disponível somente na área Fusion.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="640"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="701"/>
         <source>Available only in the Render workspace.</source>
         <translation>Disponível somente na área Render.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="645"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="706"/>
         <source>Reset All</source>
         <translation>Redefinir tudo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="646"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="707"/>
         <source>Restore all default keyboard shortcuts</source>
         <translation>Restaurar todos os atalhos de teclado padrão</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="651"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="712"/>
         <source>Reset Shortcuts</source>
         <translation>Redefinir atalhos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="652"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="713"/>
         <source>Restore all default keyboard shortcuts?</source>
         <translation>Restaurar todos os atalhos de teclado padrão?</translation>
     </message>

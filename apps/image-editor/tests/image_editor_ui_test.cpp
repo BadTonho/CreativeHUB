@@ -16,6 +16,8 @@
 #include "text/text_tool.h"
 #include "tool_sidebar.h"
 
+#include <creative_suite/translations/language_preference.h>
+
 #include <QAction>
 #include <QApplication>
 #include <QSurfaceFormat>
@@ -3882,6 +3884,59 @@ int main(int argc, char* argv[]) {
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, temporary.path());
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, temporary.path());
+    {
+        using creative_suite::translations::LanguagePreference;
+        using creative_suite::translations::loadLanguagePreference;
+        using creative_suite::translations::saveLanguagePreference;
+        image_editor::ImageEditorWindow language_window;
+        auto* language_menu = language_window.findChild<QMenu*>(
+            QStringLiteral("languageMenu"));
+        if (language_menu == nullptr || language_menu->actions().size() != 3) {
+            std::cerr << "The Image Editor language menu is missing its three options.\n";
+            return 1;
+        }
+        auto* system_action = language_window.findChild<QAction*>(
+            QStringLiteral("languagePreferenceSystemAction"));
+        auto* english_action = language_window.findChild<QAction*>(
+            QStringLiteral("languagePreferenceEnglishAction"));
+        auto* portuguese_action = language_window.findChild<QAction*>(
+            QStringLiteral("languagePreferencePortugueseBrazilAction"));
+        if (system_action == nullptr || english_action == nullptr ||
+            portuguese_action == nullptr || !system_action->isChecked()) {
+            std::cerr << "The Image Editor language preference default is incorrect.\n";
+            return 1;
+        }
+        portuguese_action->trigger();
+        if (loadLanguagePreference(QStringLiteral("image-editor")) !=
+                LanguagePreference::PortugueseBrazil ||
+            loadLanguagePreference(QStringLiteral("motion-editor")) !=
+                LanguagePreference::System) {
+            std::cerr << "The Image Editor language choice did not persist independently.\n";
+            return 1;
+        }
+        {
+            image_editor::ImageEditorWindow reopened_language_window;
+            auto* reopened_portuguese_action = reopened_language_window.findChild<QAction*>(
+                QStringLiteral("languagePreferencePortugueseBrazilAction"));
+            if (reopened_portuguese_action == nullptr ||
+                !reopened_portuguese_action->isChecked()) {
+                std::cerr << "The Image Editor did not restore its saved language choice.\n";
+                return 1;
+            }
+        }
+        english_action->trigger();
+        if (loadLanguagePreference(QStringLiteral("image-editor")) !=
+                LanguagePreference::English) {
+            std::cerr << "The Image Editor English language choice did not persist.\n";
+            return 1;
+        }
+        system_action->trigger();
+        if (!saveLanguagePreference(QStringLiteral("image-editor"),
+                                    LanguagePreference::System)) {
+            std::cerr << "The Image Editor system language preference could not be restored.\n";
+            return 1;
+        }
+    }
     if (application.arguments().contains(QStringLiteral("--rendering-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         const QString screenshot=application.arguments().size()>2?application.arguments().at(2):QString();

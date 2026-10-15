@@ -5,6 +5,9 @@
 #include <QCheckBox>
 #include <QPushButton>
 #include <QLabel>
+#include <creative_suite/translations/language_preference.h>
+
+class QComboBox;
 
 namespace creative_suite::hub {
 
@@ -25,6 +28,10 @@ private:
     QCheckBox* m_autostartCheck{nullptr};
     QCheckBox* m_notificationsCheck{nullptr};
     QLineEdit* m_logPathEdit{nullptr};
+    QComboBox* m_languageCombo{nullptr};
+    QLabel* m_languageNote{nullptr};
+    creative_suite::translations::LanguagePreference m_savedLanguagePreference{
+        creative_suite::translations::LanguagePreference::System};
 };
 
 } // namespace creative_suite::hub

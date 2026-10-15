@@ -246,6 +246,7 @@ add_custom_target(update-video-editor-translations
 
 target_link_libraries(creative-suite-main-editor-core PUBLIC
     creative-suite::composition-exchange
+    creative-suite::translations
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets

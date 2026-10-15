@@ -20,20 +20,35 @@ SHA-256 digest. The Hub validates these fields and the compiled Qt catalog
 before atomically installing a downloaded file in the shared per-user
 translation directory. Do not add archives or translation-only releases.
 
+All four applications link the shared `creative-suite::translations` library
+for language preference resolution and catalog loading. The Hub also links
+`creative-suite::translation-updater` to check and install published catalogs.
+
 ## Runtime behavior
 
-Applications select a catalog from the system locale. Any Portuguese locale
-uses `pt_BR`; unsupported locales use English source text. At startup, the
-downloaded catalog takes precedence over the bundled catalog. If a downloaded
-catalog cannot be loaded, the bundled catalog remains available. A source
-string missing from either catalog remains in English.
+Each application stores its own language preference in a shared per-user
+settings file, keyed by application ID. The choices are System language,
+English, and Português (Brasil). System language maps any
+Portuguese locale to `pt_BR` and unsupported locales to English source text;
+the explicit choices override the system language. The preference is read
+before that application's interface is created. Dates, numbers, and other
+regional formatting continue to follow the operating system locale. Changing
+the preference takes effect the next time that application opens.
 
-The Hub checks for available translation updates at startup and from its
-existing Updates screen. Editors load the local catalog when they start and do
-not access the network themselves. A newly downloaded catalog takes effect the
-next time that application opens. It can change translations for existing
-source strings; source strings added by later application code still require
-an application update.
+At startup, the downloaded catalog takes precedence over the bundled catalog.
+If a downloaded catalog cannot be loaded, the bundled catalog remains
+available. A source string missing from either catalog remains in English.
+Apps remain usable offline with their bundled or previously downloaded
+catalogs.
+
+The Hub checks for translation updates at startup and from its existing
+Updates screen only when at least one of the four applications resolves to
+`pt_BR`, including an explicit Portuguese (Brazil) choice on a non-Portuguese
+system. If no application uses `pt_BR`, the Hub skips the catalog request.
+Editors load their local catalog when they start and do not access the network
+themselves. A newly downloaded catalog can update existing source strings;
+source strings added by later application code still require an application
+update.
 
 ## Updating a catalog
 
@@ -81,11 +96,13 @@ fallback, and English fallback.
 
 ## Regression and acceptance
 
-Automated catalog tests cover manifest validation, locale selection, compiled
-catalog loading, download failures, integrity checks, and atomic installation.
-The Video Editor, Image Editor, and Motion Studio tests cover their bundled
-pt-BR catalogs and English fallback. These automated checks do not replace
-native visual review.
+Automated catalog tests cover manifest validation, per-app preference
+persistence, invalid-value defaults, locale resolution, Hub update decisions,
+compiled catalog loading, download failures, integrity checks, and atomic
+installation. The Hub, Video Editor, Image Editor, and Motion Studio UI tests
+cover each app's language control and persisted selection. The editor
+translation tests cover their bundled pt-BR catalogs and English fallback.
+These automated checks do not replace native visual review.
 
 For each application with a published catalog, verify the following on the
 target operating system:

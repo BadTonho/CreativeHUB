@@ -21,6 +21,7 @@
 #include <QUrl>
 #include <QFileInfo>
 #include <QLocale>
+#include <creative_suite/translations/language_preference.h>
 
 namespace creative_suite::hub {
 
@@ -413,10 +414,11 @@ void MainWindow::startTranslationUpdateCheck() {
 }
 
 void MainWindow::onCheckTranslationUpdates() {
-    const QString locale = creative_suite::translations::translationLocaleFor(QLocale::system());
-    if (locale.isEmpty()) {
+    const QString locale = QStringLiteral("pt_BR");
+    if (!creative_suite::translations::anyApplicationUsesTranslationLocale(
+            locale, QLocale::system())) {
         m_updatesPage->setTranslationStatus(
-            tr("Your system language uses the English source text."));
+            tr("None of your app language settings currently use a translated language."));
         return;
     }
     if (!m_translationUpdateService->checkForUpdates(locale)) {

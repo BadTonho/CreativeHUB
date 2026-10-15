@@ -1,4 +1,5 @@
 #include <creative_suite/translations/translation_catalog.h>
+#include <creative_suite/translations/language_preference.h>
 #include <creative_suite/translations/translation_runtime.h>
 
 #include <test_check.h>
@@ -9,6 +10,7 @@
 #include <QLocale>
 #include <QTemporaryDir>
 #include <QTranslator>
+#include <QSettings>
 
 #include <algorithm>
 
@@ -36,6 +38,68 @@ int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
     CS_TEST_CHECK(argc == 1);
 
+    QTemporaryDir preferences_directory;
+    CS_TEST_CHECK(preferences_directory.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       preferences_directory.path());
+    QSettings preferences(QSettings::IniFormat, QSettings::UserScope,
+                          QStringLiteral("CreativeSuite"),
+                          QStringLiteral("LanguagePreferences"));
+    preferences.clear();
+    preferences.sync();
+
+    using LanguagePreference = creative_suite::translations::LanguagePreference;
+    CS_TEST_CHECK(loadLanguagePreference(QStringLiteral("hub")) == LanguagePreference::System);
+    CS_TEST_CHECK(loadLanguagePreference(QStringLiteral("video-editor")) == LanguagePreference::System);
+    QString preference_error;
+    const bool saved_video_preference = saveLanguagePreference(
+        QStringLiteral("video-editor"), LanguagePreference::English, &preference_error);
+    if (!saved_video_preference) {
+        std::cerr << preference_error.toStdString() << "; settings file="
+                  << preferences.fileName().toStdString() << "; current status="
+                  << static_cast<int>(preferences.status()) << std::endl;
+    }
+    CS_TEST_CHECK(saved_video_preference);
+    CS_TEST_CHECK(loadLanguagePreference(QStringLiteral("video-editor")) == LanguagePreference::English);
+    CS_TEST_CHECK(loadLanguagePreference(QStringLiteral("hub")) == LanguagePreference::System);
+    CS_TEST_CHECK(loadLanguagePreference(QStringLiteral("image-editor")) == LanguagePreference::System);
+    CS_TEST_CHECK(translationLocaleFor(localeForApplicationPreference(
+        QStringLiteral("hub"), QLocale(QStringLiteral("pt_BR")))) == QStringLiteral("pt_BR"));
+    CS_TEST_CHECK(translationLocaleFor(localeForApplicationPreference(
+        QStringLiteral("video-editor"), QLocale(QStringLiteral("pt_BR")))).isEmpty());
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("image-editor"),
+                                         LanguagePreference::PortugueseBrazil));
+    CS_TEST_CHECK(translationLocaleFor(localeForApplicationPreference(
+        QStringLiteral("image-editor"), QLocale(QStringLiteral("en_US")))) == QStringLiteral("pt_BR"));
+    CS_TEST_CHECK(anyApplicationUsesTranslationLocale(
+        QStringLiteral("pt_BR"), QLocale(QStringLiteral("en_US"))));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("hub"), LanguagePreference::English));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("video-editor"), LanguagePreference::English));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("image-editor"), LanguagePreference::English));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("motion-editor"), LanguagePreference::English));
+    CS_TEST_CHECK(!anyApplicationUsesTranslationLocale(
+        QStringLiteral("pt_BR"), QLocale(QStringLiteral("pt_PT"))));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("motion-editor"),
+                                         LanguagePreference::PortugueseBrazil));
+    CS_TEST_CHECK(anyApplicationUsesTranslationLocale(
+        QStringLiteral("pt_BR"), QLocale(QStringLiteral("en_US"))));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("motion-editor"),
+                                         LanguagePreference::System));
+    CS_TEST_CHECK(anyApplicationUsesTranslationLocale(
+        QStringLiteral("pt_BR"), QLocale(QStringLiteral("pt_PT"))));
+    preferences.setValue(QStringLiteral("applications/video-editor/language"),
+                         QStringLiteral("unsupported"));
+    preferences.sync();
+    CS_TEST_CHECK(loadLanguagePreference(QStringLiteral("video-editor")) == LanguagePreference::System);
+    CS_TEST_CHECK(loadLanguagePreference(QStringLiteral("not-an-app")) == LanguagePreference::System);
+    CS_TEST_CHECK(!saveLanguagePreference(QStringLiteral("not-an-app"),
+                                          LanguagePreference::English, &preference_error));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("hub"), LanguagePreference::System));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("video-editor"), LanguagePreference::System));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("image-editor"), LanguagePreference::System));
+    CS_TEST_CHECK(saveLanguagePreference(QStringLiteral("motion-editor"), LanguagePreference::System));
+
     const QByteArray bundled = readFile(QString::fromLocal8Bit(TRANSLATION_TEST_BUNDLED_QM));
     const QByteArray downloaded = readFile(QString::fromLocal8Bit(TRANSLATION_TEST_DOWNLOADED_QM));
     const QByteArray downloadedHash = QCryptographicHash::hash(downloaded, QCryptographicHash::Sha256);
@@ -60,6 +124,19 @@ int main(int argc, char** argv) {
     const QByteArray publishedQm = readFile(QString::fromLocal8Bit(TRANSLATION_PUBLISHED_HUB_QM));
     CS_TEST_CHECK(published->size_bytes == publishedQm.size());
     CS_TEST_CHECK(published->sha256 == QCryptographicHash::hash(publishedQm, QCryptographicHash::Sha256));
+
+    const auto videoEditorPublished = std::find_if(
+        publishedCatalog.translations.cbegin(), publishedCatalog.translations.cend(),
+        [](const TranslationCatalogEntry& candidate) {
+            return candidate.application_id == QStringLiteral("video-editor") &&
+                candidate.locale == QStringLiteral("pt_BR");
+        });
+    CS_TEST_CHECK(videoEditorPublished != publishedCatalog.translations.cend());
+    const QByteArray videoEditorPublishedQm = readFile(
+        QString::fromLocal8Bit(TRANSLATION_PUBLISHED_VIDEO_EDITOR_QM));
+    CS_TEST_CHECK(videoEditorPublished->size_bytes == videoEditorPublishedQm.size());
+    CS_TEST_CHECK(videoEditorPublished->sha256 ==
+                  QCryptographicHash::hash(videoEditorPublishedQm, QCryptographicHash::Sha256));
 
     const auto imageEditorPublished = std::find_if(
         publishedCatalog.translations.cbegin(), publishedCatalog.translations.cend(),

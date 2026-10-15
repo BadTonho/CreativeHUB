@@ -38,7 +38,7 @@
         <location filename="../../apps/image-editor/src/ui/diagnostics/performance_metrics_panel.cpp" line="24"/>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="357"/>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="722"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1898"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1899"/>
         <source>Text</source>
         <translation>Texto</translation>
     </message>
@@ -180,7 +180,7 @@
     <message>
         <location filename="../../apps/image-editor/src/ui/diagnostics/performance_metrics_panel.cpp" line="61"/>
         <location filename="../../apps/image-editor/src/ui/diagnostics/performance_metrics_panel.cpp" line="67"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2067"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2117"/>
         <source>N/A</source>
         <translation>Indisponível</translation>
     </message>
@@ -289,8 +289,8 @@
         <location filename="../../apps/image-editor/src/ui/dialogs/image_export_dialog.cpp" line="62"/>
         <location filename="../../apps/image-editor/src/ui/dialogs/new_canvas_dialog.cpp" line="84"/>
         <location filename="../../apps/image-editor/src/ui/dialogs/shortcut_settings_dialog.cpp" line="100"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="93"/>
-        <location filename="../../apps/image-editor/src/app/main.cpp" line="72"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="94"/>
+        <location filename="../../apps/image-editor/src/app/main.cpp" line="74"/>
         <source>OK</source>
         <translation>OK</translation>
     </message>
@@ -347,7 +347,7 @@
         <location filename="../../apps/image-editor/src/ui/dialogs/image_export_dialog.cpp" line="122"/>
         <location filename="../../apps/image-editor/src/ui/dialogs/new_canvas_dialog.cpp" line="86"/>
         <location filename="../../apps/image-editor/src/ui/dialogs/shortcut_settings_dialog.cpp" line="102"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2379"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2429"/>
         <source>Cancel</source>
         <translation>Cancelar</translation>
     </message>
@@ -592,7 +592,7 @@
     </message>
     <message>
         <location filename="../../apps/image-editor/src/ui/layers/layer_panel.cpp" line="352"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="276"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="277"/>
         <source>+</source>
         <translation>+</translation>
     </message>
@@ -806,7 +806,7 @@
     </message>
     <message>
         <location filename="../../apps/image-editor/src/ui/tools/options/image_tool_options_bar.cpp" line="154"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1943"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1944"/>
         <source>Delete Selected Objects</source>
         <translation>Excluir objetos selecionados</translation>
     </message>
@@ -917,7 +917,7 @@
         <location filename="../../apps/image-editor/src/ui/tools/shapes/shape_palette.cpp" line="62"/>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="346"/>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="719"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1887"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1888"/>
         <source>Shapes</source>
         <translation>Formas</translation>
     </message>
@@ -934,7 +934,7 @@
     <message>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="280"/>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="680"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1865"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1866"/>
         <source>Paint</source>
         <translation>Pintar</translation>
     </message>
@@ -979,7 +979,7 @@
     <message>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="324"/>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="700"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1876"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1877"/>
         <source>Eraser</source>
         <translation>Borracha</translation>
     </message>
@@ -1012,7 +1012,7 @@
     <message>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="368"/>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="710"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1909"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1910"/>
         <source>Selection</source>
         <translation>Seleção</translation>
     </message>
@@ -1024,7 +1024,7 @@
     <message>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="379"/>
         <location filename="../../apps/image-editor/src/ui/tools/tool_sidebar.cpp" line="713"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1921"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1922"/>
         <source>Area Selection</source>
         <translation>Seleção de área</translation>
     </message>
@@ -2082,417 +2082,447 @@
         <translation>Não foi possível salvar as preferências de atalhos de teclado.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="118"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="119"/>
         <source>Images (%1)</source>
         <translation>Imagens (%1)</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="250"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2216"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2720"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="3011"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="251"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2266"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2770"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="3061"/>
         <source>Image Editor</source>
         <translation>Image Editor</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="277"/>
         <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="278"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="279"/>
         <source>Open a new document tab</source>
         <translation>Abrir uma nova aba de documento</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="287"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2215"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2266"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="288"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2265"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2316"/>
         <source>No image open</source>
         <translation>Nenhuma imagem aberta</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="411"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="412"/>
         <source>A layer could not be added</source>
         <translation>Não foi possível adicionar a camada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="417"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="418"/>
         <source>Layer added</source>
         <translation>Camada adicionada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="428"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="429"/>
         <source>Group added</source>
         <translation>Grupo adicionado</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="439"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="440"/>
         <source>Layers grouped</source>
         <translation>Camadas agrupadas</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="454"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="455"/>
         <source>Selected layers / groups deleted</source>
         <translation>Camadas / grupos selecionados excluídos</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="496"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="497"/>
         <source>Recovery snapshot could not be saved for %1</source>
         <translation>Não foi possível salvar o instantâneo de recuperação de %1</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="771"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="886"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2257"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="772"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="887"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2307"/>
         <source>Untitled Canvas</source>
         <translation>Tela sem título</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="888"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="889"/>
         <source>New Document</source>
         <translation>Novo documento</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="967"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="968"/>
         <source>Layers</source>
         <translation>Camadas</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1036"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1037"/>
         <source>Shape Stroke Color</source>
         <translation>Cor do traço da forma</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1047"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1048"/>
         <source>Shape Fill Color</source>
         <translation>Cor de preenchimento da forma</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1076"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1077"/>
         <source>Text Color</source>
         <translation>Cor do texto</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1314"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1315"/>
         <source>Cannot create a shape: the 512-layer limit has been reached.</source>
         <translation>Não é possível criar uma forma: o limite de 512 camadas foi atingido.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1325"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1326"/>
         <source>Shape created</source>
         <translation>Forma criada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1346"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1347"/>
         <source>Text removed</source>
         <translation>Texto removido</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1366"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1367"/>
         <source>Text updated</source>
         <translation>Texto atualizado</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1372"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1373"/>
         <source>Cannot create text: the 512-layer limit has been reached.</source>
         <translation>Não é possível criar texto: o limite de 512 camadas foi atingido.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1383"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1384"/>
         <source>Text created</source>
         <translation>Texto criado</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1391"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1392"/>
         <source>Selected objects transformed</source>
         <translation>Objetos selecionados transformados</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1402"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1403"/>
         <source>Selected objects deleted</source>
         <translation>Objetos selecionados excluídos</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1629"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1630"/>
         <source>Image import cancelled</source>
         <translation>Importação de imagens cancelada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1654"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1655"/>
         <source>Images imported</source>
         <translation>Imagens importadas</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1655"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1656"/>
         <source>Image relinked</source>
         <translation>Imagem vinculada novamente</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1669"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1670"/>
         <source>New Canvas...</source>
         <translation>Nova tela...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1673"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1674"/>
         <source>Canvas Size...</source>
         <translation>Tamanho da tela...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1676"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1677"/>
         <source>Open Image...</source>
         <translation>Abrir imagem...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1679"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1680"/>
         <source>Open Editable Document...</source>
         <translation>Abrir documento editável...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1682"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1683"/>
         <source>New Canvas in New Tab...</source>
         <translation>Nova tela em outra aba...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1685"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1686"/>
         <source>Open Image in New Tab...</source>
         <translation>Abrir imagem em outra aba...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1687"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1688"/>
         <source>Open Image in New Tab</source>
         <translation>Abrir imagem em outra aba</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1692"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1693"/>
         <source>Open Editable Document in New Tab...</source>
         <translation>Abrir documento editável em outra aba...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1694"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1695"/>
         <source>Open Editable Image Document in New Tab</source>
         <translation>Abrir documento de imagem editável em outra aba</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1695"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2426"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1696"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2476"/>
         <source>Image Editor documents (*.cimg)</source>
         <translation>Documentos do Image Editor (*.cimg)</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1699"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1700"/>
         <source>Import Image as Layer...</source>
         <translation>Importar imagem como camada...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1700"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1701"/>
         <source>Import Image as Layer</source>
         <translation>Importar imagem como camada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1701"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1709"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1702"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1710"/>
         <source>Images (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)</source>
         <translation>Imagens (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1706"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1707"/>
         <source>Relink Image...</source>
         <translation>Vincular imagem novamente...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1708"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1709"/>
         <source>Relink Image</source>
         <translation>Vincular imagem novamente</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1715"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1716"/>
         <source>Relink Source Image...</source>
         <translation>Vincular imagem de origem novamente...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1717"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1718"/>
         <source>Save Document</source>
         <translation>Salvar documento</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1719"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1720"/>
         <source>Save Document As...</source>
         <translation>Salvar documento como...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1721"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1722"/>
         <source>Export Image...</source>
         <translation>Exportar imagem...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1723"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1724"/>
         <source>Quick Export...</source>
         <translation>Exportação rápida...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1725"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1726"/>
         <source>Quit</source>
         <translation>Sair</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1727"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1728"/>
         <source>Close Document Tab</source>
         <translation>Fechar aba do documento</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1732"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1733"/>
         <source>Next Document Tab</source>
         <translation>Próxima aba do documento</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1738"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1739"/>
         <source>Previous Document Tab</source>
         <translation>Aba anterior do documento</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1749"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1750"/>
         <source>Undo</source>
         <translation>Desfazer</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1762"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1763"/>
         <source>Redo</source>
         <translation>Refazer</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1775"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1776"/>
         <source>Rotate Left 90°</source>
         <translation>Girar 90° à esquerda</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1780"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1781"/>
         <source>Rotate Right 90°</source>
         <translation>Girar 90° à direita</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1786"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1787"/>
         <source>Flip Horizontal</source>
         <translation>Inverter horizontalmente</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1791"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1792"/>
         <source>Flip Vertical</source>
         <translation>Inverter verticalmente</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1795"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1796"/>
         <source>Crop Selection</source>
         <translation>Cortar seleção</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1810"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1811"/>
         <source>Drag over the image to crop; press Esc to cancel</source>
         <translation>Arraste sobre a imagem para cortar; pressione Esc para cancelar</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1811"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1812"/>
         <source>Ready</source>
         <translation>Pronto</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1814"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1815"/>
         <source>Fit Image</source>
         <translation>Ajustar imagem à janela</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1815"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1816"/>
         <source>Cancel Crop</source>
         <translation>Cancelar corte</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1822"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1823"/>
         <source>Area selection cancelled</source>
         <translation>Seleção de área cancelada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1828"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1829"/>
         <source>Crop cancelled</source>
         <translation>Corte cancelado</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1932"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1933"/>
         <source>Deselect</source>
         <translation>Desmarcar seleção</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1948"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1949"/>
         <source>Delete Selection</source>
         <translation>Excluir seleção</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1956"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1957"/>
         <source>File</source>
         <translation>Arquivo</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1973"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1974"/>
         <source>Edit</source>
         <translation>Editar</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1987"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1988"/>
         <source>Image</source>
         <translation>Imagem</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1990"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="1991"/>
         <source>View</source>
         <translation>Exibir</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2000"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2001"/>
         <source>Performance Metrics</source>
         <translation>Métricas de desempenho</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2012"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2013"/>
         <source>Settings</source>
         <translation>Configurações</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2013"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2015"/>
+        <source>Language</source>
+        <translation>Idioma</translation>
+    </message>
+    <message>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2022"/>
+        <source>System language</source>
+        <translation>Idioma do sistema</translation>
+    </message>
+    <message>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2024"/>
+        <source>English</source>
+        <translation>Inglês</translation>
+    </message>
+    <message>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2026"/>
+        <source>Português (Brasil)</source>
+        <translation>Português (Brasil)</translation>
+    </message>
+    <message>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2054"/>
+        <source>The language preference could not be saved. See the application log.</source>
+        <translation>Não foi possível salvar a preferência de idioma. Consulte o log do aplicativo.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2058"/>
+        <source>Changes take effect the next time you open this app.</source>
+        <translation>A alteração será aplicada na próxima vez que você abrir este aplicativo.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2063"/>
         <source>Rendering</source>
         <translation>Renderização</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2018"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2068"/>
         <source>Automatic</source>
         <translation>Automático</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2019"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2069"/>
         <source>CPU</source>
         <translation>CPU</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2036"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2086"/>
         <source>Collect Performance Metrics</source>
         <translation>Coletar métricas de desempenho</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2051"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2101"/>
         <source>Keyboard Shortcuts...</source>
         <translation>Atalhos de teclado...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2056"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2106"/>
         <source>&amp;Help</source>
         <translation>&amp;Ajuda</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2057"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2107"/>
         <source>&amp;System</source>
         <translation>&amp;Sistema</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2063"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2113"/>
         <source>System</source>
         <translation>Sistema</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2064"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2114"/>
         <source>Image Editor
 
 Version: %1
@@ -2503,199 +2533,199 @@ Versão: %1
 Executável: %2</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2065"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2115"/>
         <source>Beta 0.1.0</source>
         <translation>Beta 0.1.0</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2118"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2168"/>
         <source>Keyboard shortcut preferences could not be loaded; defaults may be in use.</source>
         <translation>Não foi possível carregar as preferências de atalhos de teclado; os padrões podem estar em uso.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2154"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2204"/>
         <source>Settings Error</source>
         <translation>Erro nas configurações</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2260"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2310"/>
         <source> [Linked]</source>
         <translation> [Vinculado]</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2265"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2315"/>
         <source>Source image is missing — relink it to continue</source>
         <translation>Imagem de origem ausente — vincule-a novamente para continuar</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2270"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2320"/>
         <source>%1 × %2 px  |  %3%</source>
         <translation>%1 × %2 px  |  %3%</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2274"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2283"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2324"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2333"/>
         <source>  |  Editing layer mask — black hides, white reveals</source>
         <translation>  |  Editando máscara de camada — preto oculta, branco revela</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2349"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2399"/>
         <source>New canvas created</source>
         <translation>Nova tela criada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2366"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2416"/>
         <source>Canvas resized</source>
         <translation>Tela redimensionada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2373"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2423"/>
         <source>Unsaved image edits</source>
         <translation>Edições de imagem não salvas</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2374"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2424"/>
         <source>Save the changes to this image document?</source>
         <translation>Salvar as alterações neste documento de imagem?</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2376"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2426"/>
         <source>Save</source>
         <translation>Salvar</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2377"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2427"/>
         <source>Discard</source>
         <translation>Descartar</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2394"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2444"/>
         <source>Open Image</source>
         <translation>Abrir imagem</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2419"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2469"/>
         <source>Image opened</source>
         <translation>Imagem aberta</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2425"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2475"/>
         <source>Open Editable Image Document</source>
         <translation>Abrir documento de imagem editável</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2464"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2540"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2880"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2514"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2590"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2930"/>
         <source>Source image is missing</source>
         <translation>Imagem de origem ausente</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2465"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2541"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2515"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2591"/>
         <source>The editable document is open, but its source image could not be found.</source>
         <translation>O documento editável está aberto, mas a imagem de origem não foi encontrada.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2467"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2543"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2517"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2593"/>
         <source>Relink Source...</source>
         <translation>Vincular origem novamente...</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2469"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2545"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2519"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2595"/>
         <source>Close</source>
         <translation>Fechar</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2585"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2635"/>
         <source>Relink Source Image</source>
         <translation>Vincular imagem de origem novamente</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2594"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2644"/>
         <source>Source image relinked</source>
         <translation>Imagem de origem vinculada novamente</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2632"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2682"/>
         <source>Save Editable Image Document</source>
         <translation>Salvar documento de imagem editável</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2633"/>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2675"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2683"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2725"/>
         <source>Image Editor document (*.cimg)</source>
         <translation>Documento do Image Editor (*.cimg)</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2663"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2713"/>
         <source>Editable document saved</source>
         <translation>Documento editável salvo</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2664"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2714"/>
         <source>Linked document saved and image published</source>
         <translation>Documento vinculado salvo e imagem publicada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2674"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2724"/>
         <source>Save Editable Image Document As</source>
         <translation>Salvar documento de imagem editável como</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2684"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2734"/>
         <source>Quick Export Selected Layer</source>
         <translation>Exportar camada selecionada rapidamente</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2685"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2735"/>
         <source>Export Flattened Image</source>
         <translation>Exportar imagem achatada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2686"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2736"/>
         <source>PNG image (*.png);;JPEG image (*.jpg *.jpeg)</source>
         <translation>Imagem PNG (*.png);;Imagem JPEG (*.jpg *.jpeg)</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2722"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2772"/>
         <source>This export will continue with the selected options.</source>
         <translation>A exportação continuará com as opções selecionadas.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2738"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2788"/>
         <source>Image export cancelled</source>
         <translation>Exportação de imagem cancelada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2745"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2795"/>
         <source>Image exported</source>
         <translation>Imagem exportada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2753"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2803"/>
         <source>Image cropped</source>
         <translation>Imagem cortada</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2770"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2820"/>
         <source>Paint stroke applied</source>
         <translation>Traço de pintura aplicado</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2785"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2835"/>
         <source>Erase stroke applied</source>
         <translation>Traço de borracha aplicado</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2854"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2904"/>
         <source>Recover image edits?</source>
         <translation>Recuperar edições de imagem?</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2855"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2905"/>
         <source>Restore this recovery snapshot in a new tab?
 
 %1</source>
@@ -2704,47 +2734,47 @@ Executável: %2</translation>
 %1</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2858"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2908"/>
         <source>Restore in New Tab</source>
         <translation>Restaurar em nova aba</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2859"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2909"/>
         <source>Discard Snapshot</source>
         <translation>Descartar instantâneo</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2860"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2910"/>
         <source>Later</source>
         <translation>Depois</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2881"/>
+        <location filename="../../apps/image-editor/src/ui/windows/image_editor_window.cpp" line="2931"/>
         <source>The recovered document needs its source image to be relinked.</source>
         <translation>O documento recuperado precisa que a imagem de origem seja vinculada novamente.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/app/main.cpp" line="39"/>
+        <location filename="../../apps/image-editor/src/app/main.cpp" line="41"/>
         <source>Source image for a new linked document.</source>
         <translation>Imagem de origem para um novo documento vinculado.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/app/main.cpp" line="43"/>
+        <location filename="../../apps/image-editor/src/app/main.cpp" line="45"/>
         <source>Editable linked .cimg document path.</source>
         <translation>Caminho do documento editável vinculado .cimg.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/app/main.cpp" line="47"/>
+        <location filename="../../apps/image-editor/src/app/main.cpp" line="49"/>
         <source>PNG path published after saving the linked document.</source>
         <translation>Caminho PNG publicado após salvar o documento vinculado.</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/app/main.cpp" line="66"/>
+        <location filename="../../apps/image-editor/src/app/main.cpp" line="68"/>
         <source>Image Editor launch error</source>
         <translation>Erro ao iniciar o Image Editor</translation>
     </message>
     <message>
-        <location filename="../../apps/image-editor/src/app/main.cpp" line="67"/>
+        <location filename="../../apps/image-editor/src/app/main.cpp" line="69"/>
         <source>Linked mode requires --linked-source, --linked-document, and --publish-output.</source>
         <translation>O modo vinculado exige --linked-source, --linked-document e --publish-output.</translation>
     </message>

@@ -77,9 +77,24 @@ compiled, linked, and completed Qt runtime deployment under their canonical
 `build/apps/<application-id>/Release` directories. Native startup, offline
 behavior, manual update, and UI acceptance remain pending.
 
+**2026-10-15 per-app language selection verification:** Windows/Release
+compiled and linked all four application executables in their canonical
+`build/apps/<application-id>/Release` directories. Seven focused CTest entries
+passed: `creative-suite-translations`, `hub-language-settings-page-test`,
+`creative-suite-main-editor-settings-dialog`,
+`creative-suite-main-editor-translation-catalog`,
+`creative-suite-image-editor-ui`,
+`creative-suite-image-editor-translation-catalog`, and
+`creative-suite-motion-editor-translation-catalog`. All four tracked `.qm`
+catalogs matched their `.ts` sources, and the manifest hash/size checks passed.
+The translation updater's loopback HTTP test could not be revalidated in this
+restricted environment: its local request failed with `Permission denied`.
+The CMake post-build Qt deployment command also could not query `qtpaths`, so
+packaged runtime deployment and native UI validation remain pending.
+
 | Behavior | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
-| Translation catalog parsing, validation, Qt loading precedence, download, repeat checks, and preservation after invalid data | `libs/translations/tests/translation_catalog_test.cpp` (`creative-suite-translations`), `translation_update_service_test.cpp` (`creative-suite-translation-updater`), registered in `libs/translations/tests/CMakeLists.txt`; Hub source checks the tracked `.qm` against its `.ts` at build time | Automated coverage exercises manifest schema/path/size/hash checks, valid and invalid QM data, atomic install, downloaded-over-bundled and bundled-over-source fallback, HTTP success/error/interruption, and repeat checks. Hub offline startup, manual check, and next-launch use after a `main` update remain **pending**; follow [translation acceptance](../../TRANSLATIONS_AND_LANGUAGE_PACKS.md#regression-and-acceptance). |
+| Translation catalog parsing, per-app language preferences, conditional update checks, Qt loading precedence, download, repeat checks, and preservation after invalid data | `libs/translations/tests/translation_catalog_test.cpp` (`creative-suite-translations`), `translation_update_service_test.cpp` (`creative-suite-translation-updater`), and `apps/hub/tests/test_language_settings_page.cpp` (`hub-language-settings-page-test`), registered in their CMake files; Hub source checks the tracked `.qm` against its `.ts` at build time | Automated coverage exercises per-app persistence/defaults, explicit language overrides, pt-BR update decisions, manifest validation, valid and invalid QM data, atomic install, catalog fallback, HTTP success/error/interruption, and repeat checks. Hub offline startup, manual check, and next-launch use after a `main` update remain **pending**; follow [translation acceptance](../../TRANSLATIONS_AND_LANGUAGE_PACKS.md#regression-and-acceptance). |
 | Live registered-installation refresh and next-update installer arguments | `apps/hub/tests/test_update_installation_refresh.cpp` (`hub-update-installation-refresh-test`, Windows only), registered in `apps/hub/tests/CMakeLists.txt`; `libs/updater/tests/update_service_test.cpp` (`updater-service-test`) | Automated coverage present for all three editors, first install, a subsequent update without restart, version/path/executable changes, removed registrations, rollback snapshots, stale-package suppression, invalid-version logging, active downloads, and reopening update details. Native installer lifecycle and GUI acceptance remain **pending**; follow [WINDOWS_UPDATES.md](../../WINDOWS_UPDATES.md). |
 | Published versions and per-app update status | `apps/hub/tests/test_app_catalog.cpp` (`hub-catalog-test`) | Hub UI refresh and version labels in a packaged Windows build: **pending**. |
 | Catalog parsing, semantic version comparison, malformed assets and sizes, and URL resolution | `libs/updater/tests/release_catalog_test.cpp` (`updater-catalog-test`) | Covered by the shared updater test suite; actual GitHub Release availability remains a release operation. |

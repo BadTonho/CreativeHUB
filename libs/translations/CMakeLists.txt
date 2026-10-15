@@ -3,8 +3,10 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core)
 
 add_library(creative-suite-translations STATIC
+    src/language_preference.cpp
     src/translation_catalog.cpp
     src/translation_runtime.cpp
+    include/creative_suite/translations/language_preference.h
     include/creative_suite/translations/translation_catalog.h
     include/creative_suite/translations/translation_runtime.h
 )

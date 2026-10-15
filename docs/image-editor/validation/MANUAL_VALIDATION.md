@@ -4,6 +4,26 @@ Use local test copies of images so the original assets remain available for
 comparison. Record the OS, Qt version, image dimensions, and result for each
 run.
 
+## Language preference
+
+1. Open **Settings > Language** and confirm the three choices are available:
+   **System language**, **English**, and **Português (Brasil)**. Select each
+   choice and confirm the message says it applies the next time the app opens.
+2. Set the system locale to English, select **Português (Brasil)**, and restart
+   the Image Editor. Confirm the interface is translated while dates and
+   numbers retain the system's regional formatting. Repeat with a Portuguese
+   system locale and explicit **English** to confirm the preference overrides
+   the system language.
+3. Restore **System language** and confirm Portuguese locales use pt-BR while
+   unsupported locales use English. Repeat once with the network unavailable to
+   confirm that the bundled catalog keeps the app usable offline.
+
+Automated selector, preference persistence, catalog loading, and locale
+fallback coverage is in `image_editor_ui_test.cpp`,
+`image_editor_translation_test.cpp`, and the shared `creative-suite-translations`
+test. Native locale, regional-formatting, offline startup, and visual checks
+remain pending.
+
 ## Windows updater
 
 Run this checklist against generated setup executables in a disposable

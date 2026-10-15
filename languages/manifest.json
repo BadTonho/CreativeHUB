@@ -5,29 +5,29 @@
       "application": "hub",
       "locale": "pt_BR",
       "path": "hub/pt_BR.qm",
-      "size_bytes": 27729,
-      "sha256": "f58d4c3a5c2969a41c8c01bf09dcd9c6b19ac2a7e0abf9ef550080b8303bdbb3"
+      "size_bytes": 28585,
+      "sha256": "b1deb3006018046e44ede7ab2af6838fb1d7cd5db10f224b1a3a75a63e782d79"
     },
     {
       "application": "image-editor",
       "locale": "pt_BR",
       "path": "image-editor/pt_BR.qm",
-      "size_bytes": 77082,
-      "sha256": "e9562a5853c979bf2dbc715521839224f4d4a9bbd2088f20d18ca1061d0518fd"
+      "size_bytes": 77897,
+      "sha256": "f47624d8a57e2f9acb9acbed882fc622f2be030f7a9ea1d2ec4f138b187e2cac"
     },
     {
       "application": "motion-editor",
       "locale": "pt_BR",
       "path": "motion-editor/pt_BR.qm",
-      "size_bytes": 46419,
-      "sha256": "db70d39060b3e0ae9407b60205cecdb3ef033c21902f0c91dd5c39231347800e"
+      "size_bytes": 47273,
+      "sha256": "205428e2003c6bc474d606899c558476fa9434ef3a8706dd722e8d5858e26a1f"
     },
     {
       "application": "video-editor",
       "locale": "pt_BR",
       "path": "video-editor/pt_BR.qm",
-      "size_bytes": 73374,
-      "sha256": "65ec9c18ecad3fcb80ba0e908ff15e75defd3ea9079f0421f17bdf23eaf90b85"
+      "size_bytes": 74198,
+      "sha256": "f685c00558f0a40476f2722775646f8d6a46a20db17360569309102a875ced58"
     }
   ]
 }

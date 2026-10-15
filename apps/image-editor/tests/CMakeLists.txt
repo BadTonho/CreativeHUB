@@ -184,6 +184,7 @@ target_include_directories(creative-suite-image-editor-ui-tests PRIVATE
 )
 target_link_libraries(creative-suite-image-editor-ui-tests PRIVATE
     creative-suite-image-editor-rendering
+    creative-suite::translations
     creative-suite::shortcuts
     creative-suite::system-monitor
     Qt6::Widgets

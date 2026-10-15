@@ -441,124 +441,124 @@ Backup: %2</translation>
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="312"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="313"/>
         <source>Could not verify the installed version.</source>
         <translation>Não foi possível verificar a versão instalada.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="327"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="328"/>
         <source>The %1 installer has started.</source>
         <translation>O instalador de %1 foi iniciado.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="355"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="356"/>
         <source>Confirm the update</source>
         <translation>Verifique a atualização</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="356"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="357"/>
         <source>%1 was recently updated but has not confirmed startup yet. Is it opening correctly?</source>
         <translation>O %1 foi atualizado recentemente, mas ainda não confirmou a inicialização. Ele está abrindo corretamente?</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="358"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="359"/>
         <source>Restore Previous Version</source>
         <translation>Restaurar versão anterior</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="360"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="361"/>
         <source>It works</source>
         <translation>Está funcionando</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="367"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="368"/>
         <source>Version Restored</source>
         <translation>Versão restaurada</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="368"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="369"/>
         <source>The previous version of %1 was restored.</source>
         <translation>A versão anterior do %1 foi restaurada.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="370"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="371"/>
         <source>Could not restore</source>
         <translation>Não foi possível restaurar</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="438"/>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="471"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="440"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="473"/>
         <source>Application not found</source>
         <translation>Aplicativo não encontrado</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="439"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="441"/>
         <source>Could not find or launch the file &apos;%1&apos;. Make sure the application has been built.</source>
         <translation>Não foi possível encontrar ou executar o arquivo &apos;%1&apos;. Certifique-se de que o aplicativo foi compilado.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="444"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="446"/>
         <source>Application Opened</source>
         <translation>Aplicativo Aberto</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="445"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="447"/>
         <source>%1 started successfully.</source>
         <translation>O %1 foi iniciado com sucesso.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="460"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="462"/>
         <source>Opening project</source>
         <translation>Abrindo projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="461"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="463"/>
         <source>%1 (%2)</source>
         <translation>%1 (%2)</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="472"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="474"/>
         <source>Could not find or launch &apos;%1&apos; to open project &apos;%2&apos;. Make sure the application has been built.</source>
         <translation>Não foi possível encontrar ou executar o aplicativo &apos;%1&apos; para abrir o projeto &apos;%2&apos;. Certifique-se de que o aplicativo foi compilado.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="478"/>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="492"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="480"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="494"/>
         <source>Project Opened</source>
         <translation>Projeto Aberto</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="479"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="481"/>
         <source>Project &apos;%1&apos; opened in %2.</source>
         <translation>Projeto &apos;%1&apos; aberto no %2.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="493"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="495"/>
         <source>Project &apos;%1&apos; opened on this system.</source>
         <translation>Projeto &apos;%1&apos; aberto no sistema.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="502"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="504"/>
         <source>Could not open project</source>
         <translation>Não foi possível abrir o projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="503"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="505"/>
         <source>No application is associated with file &apos;%1&apos;.</source>
         <translation>Não há nenhum aplicativo associado para abrir o arquivo &apos;%1&apos;.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="513"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="515"/>
         <source>Creating a new project in the application</source>
         <translation>Criando novo projeto no aplicativo</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="523"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="525"/>
         <source>The updater is not available for this application.</source>
         <translation>O atualizador não está disponível para este aplicativo.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="535"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="537"/>
         <source>Hub-based installation will be available on this platform in a future update.</source>
         <translation>A instalação pelo Hub estará disponível nesta plataforma em uma etapa futura.</translation>
     </message>
@@ -719,52 +719,83 @@ Comece criando um novo projeto ou abrindo um arquivo existente da suíte.</trans
 <context>
     <name>SettingsPage</name>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="48"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="51"/>
         <source>Hub Settings</source>
         <translation>Configurações do Hub</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="52"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="55"/>
         <source>Customize installation paths, notifications, and system preferences.</source>
         <translation>Personalize caminhos de instalação, notificações e preferências do sistema.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="70"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="73"/>
         <source>APPLICATION INSTALLATION FOLDER</source>
         <translation>PASTA DE INSTALAÇÃO DOS APLICATIVOS</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="84"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="87"/>
         <source>Change...</source>
         <translation>Alterar...</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="107"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="110"/>
         <source>GENERAL BEHAVIOR</source>
         <translation>COMPORTAMENTO GERAL</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="111"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="119"/>
+        <source>Language</source>
+        <translation>Idioma</translation>
+    </message>
+    <message>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="123"/>
+        <source>System language</source>
+        <translation>Idioma do sistema</translation>
+    </message>
+    <message>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="126"/>
+        <source>English</source>
+        <translation>Inglês</translation>
+    </message>
+    <message>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="129"/>
+        <source>Português (Brasil)</source>
+        <translation>Português (Brasil)</translation>
+    </message>
+    <message>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="138"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="165"/>
+        <source>Changes take effect the next time you open this app.</source>
+        <translation>A alteração será aplicada na próxima vez que você abrir este aplicativo.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="160"/>
+        <source>The language preference could not be saved. See the Hub log.</source>
+        <translation>Não foi possível salvar a preferência de idioma. Consulte o log do Hub.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="169"/>
         <source>Start Creative Suite Hub with Windows</source>
         <translation>Iniciar o Creative Suite Hub junto com o Windows</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="120"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="178"/>
         <source>Notify me automatically about available updates</source>
         <translation>Notificar automaticamente sobre novas versões disponíveis</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="145"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="203"/>
         <source>DIAGNOSTICS AND ERROR LOGS</source>
         <translation>DIAGNÓSTICO E REGISTROS DE ERRO</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="158"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="216"/>
         <source>Open Folder</source>
         <translation>Abrir Pasta</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="177"/>
+        <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="235"/>
         <source>Select installation folder</source>
         <translation>Selecionar pasta de instalação</translation>
     </message>
@@ -993,32 +1024,32 @@ Seus aplicativos estão na versão mais recente, estável e rápida.</translatio
 <context>
     <name>creative_suite::hub::MainWindow</name>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="71"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="72"/>
         <source>Checking translation files…</source>
         <translation>Verificando arquivos de tradução…</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="79"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="80"/>
         <source>Could not check all translation files. See the Hub log.</source>
         <translation>Não foi possível verificar todos os arquivos de tradução. Consulte o registro do Hub.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="82"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="83"/>
         <source>Translation files downloaded. Restart the affected app to use them.</source>
         <translation>Arquivos de tradução baixados. Reinicie o aplicativo afetado para usá-los.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="84"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="85"/>
         <source>Translation files are up to date.</source>
         <translation>Os arquivos de tradução estão atualizados.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="419"/>
-        <source>Your system language uses the English source text.</source>
-        <translation>O idioma do sistema usa os textos originais em inglês.</translation>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="421"/>
+        <source>None of your app language settings currently use a translated language.</source>
+        <translation>Nenhum aplicativo está configurado para usar o português do Brasil no momento.</translation>
     </message>
     <message>
-        <location filename="../../apps/hub/src/ui/main_window.cpp" line="423"/>
+        <location filename="../../apps/hub/src/ui/main_window.cpp" line="425"/>
         <source>A translation check is already running.</source>
         <translation>Já existe uma verificação de tradução em andamento.</translation>
     </message>

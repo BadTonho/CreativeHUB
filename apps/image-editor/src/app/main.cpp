@@ -1,4 +1,5 @@
 #include "image_editor_window.h"
+#include <creative_suite/translations/language_preference.h>
 #include <creative_suite/translations/translation_runtime.h>
 #include <QCoreApplication>
 #ifdef Q_OS_WIN
@@ -30,7 +31,9 @@ int main(int argc, char* argv[]) {
     creative_suite::translations::TranslationRuntime translations;
     static_cast<void>(translations.installForApplication(
         application, QStringLiteral("image-editor"),
-        QStringLiteral(":/translations/image-editor/pt_BR.qm")));
+        QStringLiteral(":/translations/image-editor/pt_BR.qm"),
+        creative_suite::translations::localeForApplicationPreference(
+            QStringLiteral("image-editor"))));
 
     QCommandLineParser parser;
     parser.addHelpOption();

@@ -60,6 +60,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <creative_suite/translations/language_preference.h>
 
 #include <memory>
 #include <algorithm>
@@ -2010,6 +2011,55 @@ void ImageEditorWindow::createActions() {
     view_menu->addAction(performance_panel_action);
 
     auto* settings_menu = menuBar()->addMenu(QCoreApplication::translate("ImageEditorUI", "Settings"));
+    auto* language_menu = settings_menu->addMenu(
+        QCoreApplication::translate("ImageEditorUI", "Language"));
+    auto* language_group = new QActionGroup(this);
+    language_group->setExclusive(true);
+    const auto saved_language = creative_suite::translations::loadLanguagePreference(
+        QStringLiteral("image-editor"));
+    const std::array<std::pair<QString, creative_suite::translations::LanguagePreference>, 3>
+        language_options = {{
+            {QCoreApplication::translate("ImageEditorUI", "System language"),
+             creative_suite::translations::LanguagePreference::System},
+            {QCoreApplication::translate("ImageEditorUI", "English"),
+             creative_suite::translations::LanguagePreference::English},
+            {QCoreApplication::translate("ImageEditorUI", "Português (Brasil)"),
+             creative_suite::translations::LanguagePreference::PortugueseBrazil},
+        }};
+    for (const auto& [label, preference] : language_options) {
+        auto* action = language_menu->addAction(label);
+        action->setCheckable(true);
+        action->setChecked(preference == saved_language);
+        action->setObjectName(preference == creative_suite::translations::LanguagePreference::System
+                ? QStringLiteral("languagePreferenceSystemAction")
+                : preference == creative_suite::translations::LanguagePreference::English
+                    ? QStringLiteral("languagePreferenceEnglishAction")
+                    : QStringLiteral("languagePreferencePortugueseBrazilAction"));
+        language_group->addAction(action);
+        connect(action, &QAction::triggered, this, [this, preference, language_group] {
+            QString error;
+            if (!creative_suite::translations::saveLanguagePreference(
+                    QStringLiteral("image-editor"), preference, &error)) {
+                logger_.logError(QStringLiteral("save_language_preference"), error);
+                const auto saved = creative_suite::translations::loadLanguagePreference(
+                    QStringLiteral("image-editor"));
+                for (auto* item : language_group->actions()) {
+                    const auto expected = item->objectName() == QStringLiteral("languagePreferenceSystemAction")
+                        ? creative_suite::translations::LanguagePreference::System
+                        : item->objectName() == QStringLiteral("languagePreferenceEnglishAction")
+                            ? creative_suite::translations::LanguagePreference::English
+                            : creative_suite::translations::LanguagePreference::PortugueseBrazil;
+                    item->setChecked(expected == saved);
+                }
+                statusBar()->showMessage(QCoreApplication::translate(
+                    "ImageEditorUI", "The language preference could not be saved. See the application log."), 5000);
+                return;
+            }
+            statusBar()->showMessage(QCoreApplication::translate(
+                "ImageEditorUI", "Changes take effect the next time you open this app."), 5000);
+        });
+    }
+    language_menu->setObjectName(QStringLiteral("languageMenu"));
     auto* rendering_menu = settings_menu->addMenu(QCoreApplication::translate("ImageEditorUI", "Rendering"));
     auto* rendering_group = new QActionGroup(this);
     QSettings rendering_settings;

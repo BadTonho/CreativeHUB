@@ -204,17 +204,48 @@
     </message>
     <message>
         <location filename="../../apps/motion-editor/src/ui/dialogs/autosave_recovery_dialog.cpp" line="86"/>
-        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="30"/>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="91"/>
         <source>Close</source>
         <translation>Fechar</translation>
     </message>
     <message>
-        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="16"/>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="23"/>
         <source>General Settings</source>
         <translation>Configurações gerais</translation>
     </message>
     <message>
-        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="22"/>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="34"/>
+        <source>Language:</source>
+        <translation>Idioma:</translation>
+    </message>
+    <message>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="37"/>
+        <source>System language</source>
+        <translation>Idioma do sistema</translation>
+    </message>
+    <message>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="39"/>
+        <source>English</source>
+        <translation>Inglês</translation>
+    </message>
+    <message>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="41"/>
+        <source>Português (Brasil)</source>
+        <translation>Português (Brasil)</translation>
+    </message>
+    <message>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="49"/>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="78"/>
+        <source>Changes take effect the next time you open this app.</source>
+        <translation>A alteração será aplicada na próxima vez que você abrir este aplicativo.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="74"/>
+        <source>The language preference could not be saved. See the application log.</source>
+        <translation>Não foi possível salvar a preferência de idioma. Consulte o log do aplicativo.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/motion-editor/src/ui/dialogs/general_settings_dialog.cpp" line="83"/>
         <source>Enable preview performance metrics</source>
         <translation>Ativar métricas de desempenho da prévia</translation>
     </message>

@@ -3,6 +3,7 @@
 #include <QDialog>
 
 class QCheckBox;
+class QComboBox;
 
 namespace motion::ui {
 
@@ -20,6 +21,7 @@ signals:
 
 private:
     QCheckBox* preview_metrics_checkbox_ = nullptr;
+    QComboBox* language_combo_ = nullptr;
 };
 
 } // namespace motion::ui

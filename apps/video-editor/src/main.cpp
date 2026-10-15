@@ -1,6 +1,7 @@
 #include "main_window/main_window.h"
 
 #include "logging/logger.h"
+#include <creative_suite/translations/language_preference.h>
 #include <creative_suite/translations/translation_runtime.h>
 #ifdef Q_OS_WIN
 #include <creative_suite/updater/update_service.h>
@@ -80,7 +81,9 @@ int main(int argc, char* argv[]) {
         creative_suite::translations::TranslationRuntime translations;
         static_cast<void>(translations.installForApplication(
             application, QStringLiteral("video-editor"),
-            QStringLiteral(":/translations/video-editor/pt_BR.qm")));
+            QStringLiteral(":/translations/video-editor/pt_BR.qm"),
+            creative_suite::translations::localeForApplicationPreference(
+                QStringLiteral("video-editor"))));
 
         MainWindow window;
 #ifdef Q_OS_WIN

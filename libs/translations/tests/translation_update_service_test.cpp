@@ -12,9 +12,11 @@
 #include <QNetworkProxy>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTimer>
 
+#include <iostream>
 
 using namespace creative_suite::translations;
 
@@ -94,6 +96,7 @@ struct CheckResult {
     int installed{0};
     bool hadErrors{false};
     bool timedOut{false};
+    QStringList errors;
 };
 
 CheckResult runCheck(TranslationUpdateService& service) {
@@ -104,6 +107,12 @@ CheckResult runCheck(TranslationUpdateService& service) {
         result.installed = installed;
         result.hadErrors = hadErrors;
         loop.quit();
+    });
+    QObject::connect(&service, &TranslationUpdateService::operationFailed, &loop,
+                     [&result](const QString& operation, const QString& application_id,
+                               const QString& cause) {
+        result.errors.push_back(QStringLiteral("%1 application=%2 cause=%3")
+            .arg(operation, application_id, cause));
     });
     QTimer timeout;
     timeout.setSingleShot(true);
@@ -138,6 +147,12 @@ int main(int argc, char** argv) {
     fixture.assetBody = validQm;
     fixture.manifestBody = makeManifest(fixture.assetBody);
     auto result = runCheck(service);
+    if (result.hadErrors) {
+        for (const auto& error : result.errors) {
+            std::cerr << "Unexpected translation update failure: "
+                      << error.toStdString() << std::endl;
+        }
+    }
     CS_TEST_CHECK(!result.timedOut);
     CS_TEST_CHECK(!result.hadErrors);
     CS_TEST_CHECK(result.installed == 1);

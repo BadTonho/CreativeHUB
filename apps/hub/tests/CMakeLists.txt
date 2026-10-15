@@ -67,6 +67,18 @@ target_link_libraries(hub-storage-page-test PRIVATE creative-suite-hub-core Qt6:
 target_compile_features(hub-storage-page-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-storage-page-test COMMAND hub-storage-page-test)
 
+add_executable(hub-language-settings-page-test
+    test_language_settings_page.cpp
+    ../resources/translations.qrc
+)
+target_link_libraries(hub-language-settings-page-test PRIVATE
+    creative-suite-hub-core Qt6::Widgets)
+target_compile_features(hub-language-settings-page-test PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME hub-language-settings-page-test COMMAND hub-language-settings-page-test)
+set_tests_properties(hub-language-settings-page-test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 add_executable(hub-activity-manager-test test_activity_manager.cpp)
 target_link_libraries(hub-activity-manager-test PRIVATE creative-suite-hub-core Qt6::Core)
 target_compile_features(hub-activity-manager-test PRIVATE cxx_std_20)
@@ -140,6 +152,7 @@ if(WIN32)
             hub-recent-projects-test
             hub-storage-manager-test
             hub-storage-page-test
+            hub-language-settings-page-test
             hub-activity-manager-test
             hub-backup-manager-test
             hub-backups-page-test)
