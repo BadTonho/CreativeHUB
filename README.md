@@ -37,7 +37,7 @@ The suite is composed of four coordinated desktop applications:
 | <img src="docs/assets/app-icons/image-editor.png" alt="Image Editor icon" width="48"> | [**Image Editor**](docs/image-editor/ROADMAP.md) | `image-editor` | Beta 0.1.0 | Layered raster editing, vector shapes, layer masks, and atomic linked-image handoff with the Video Editor. |
 | <img src="docs/assets/app-icons/motion-studio.png" alt="Motion Studio icon" width="48"> | [**Motion Studio**](docs/motion-editor/ROADMAP.md) | `motion-editor` | Beta 0.1.0 | Motion graphics, Bezier Graph Editor curve animation, layer compositing, Gaussian blur/color effects, and video export. |
 
-> *Note:* App icons are temporary product assets. Executable icons on Windows are generated as multi-resolution `.ico` binaries.
+> *Note:* The PNG application icons are original artwork drawn manually by the maintainer. Windows multi-resolution `.ico` files are generated from those PNGs; see [asset provenance](docs/assets/README.md).
 
 ---
 
