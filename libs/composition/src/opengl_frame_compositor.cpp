@@ -818,6 +818,40 @@ void main() {
             ~InteropGuard() { if (adapter) (void)adapter->end(); }
         } interop_guard{operation.background.native ? video_interop.get() : nullptr};
         if (bound.status != OpenGlCompositionStatus::Complete) return bound;
+        if(operation.kind==OpenGlImageOperationKind::GaussianBlur) {
+            const auto bytes=static_cast<std::uint64_t>(width)*height*4;
+            if(budget->bytes()+bytes>budget->impl_->byte_limit)
+                return result(OpenGlCompositionStatus::Unsupported,"image-blur-budget","Blur scratch exceeds the bounded texture budget.");
+            if(!effect_scratch || effect_scratch->width()!=width || effect_scratch->height()!=height) {
+                QOpenGLFramebufferObjectFormat format;format.setInternalTextureFormat(GL_RGBA8);
+                effect_scratch=std::make_unique<QOpenGLFramebufferObject>(width,height,format);
+            }
+            if(!effect_scratch->isValid()||!effect_program->bind())
+                return result(OpenGlCompositionStatus::Failed,"image-blur-target","Cannot prepare the existing blur shader and scratch target.");
+            const auto started=Clock::now();
+            gl->glDisable(GL_BLEND);gl->glDisable(GL_DITHER);gl->glDisable(GL_FRAMEBUFFER_SRGB);
+            gl->glDisable(GL_DEPTH_TEST);gl->glDisable(GL_SCISSOR_TEST);gl->glDisable(GL_STENCIL_TEST);
+            gl->glViewport(0,0,width,height);gl->glBindVertexArray(vao);
+            effect_program->setUniformValue("source_image",0);
+            effect_program->setUniformValue("effect_kind",1);
+            effect_program->setUniformValue("blur_radius",int(std::lround(operation.blur_radius_pixels)));
+            GLuint current=operation.background.texture ? operation.background.texture->texture() : video_interop->texture();
+            for(int pass=0;pass<8;++pass) {
+                if(cancel && cancel())return result(OpenGlCompositionStatus::Cancelled);
+                auto* destination=pass%2==0?effect_scratch.get():selected_output;
+                if(!destination->bind())return result(OpenGlCompositionStatus::Failed,"image-blur-bind","Cannot bind a blur pass target.");
+                effect_program->setUniformValue("premultiply_alpha",pass==0);
+                effect_program->setUniformValue("unpremultiply_alpha",pass==7);
+                effect_program->setUniformValue("horizontal_pass",pass%2==1);
+                gl->glActiveTexture(GL_TEXTURE0);gl->glBindTexture(GL_TEXTURE_2D,current);
+                gl->glDrawArrays(GL_TRIANGLES,0,3);current=destination->texture();
+                if(const auto code=gl->glGetError();code!=GL_NO_ERROR)return result(OpenGlCompositionStatus::Failed,"image-blur-pass","The existing Gaussian Blur pass failed.",code);
+            }
+            ++measured.gaussian_blur_count;
+            measured.gaussian_blur_submission_nanoseconds+=elapsed(started);
+            measured.draw_submission_nanoseconds+=elapsed(started);
+            rememberResourcePeak();return result(OpenGlCompositionStatus::Complete);
+        }
         if (operation.kind == OpenGlImageOperationKind::Merge || operation.kind == OpenGlImageOperationKind::MaskedBlend) {
             bound = bind(operation.foreground, 1);
             if (bound.status != OpenGlCompositionStatus::Complete) return bound;
@@ -1033,6 +1067,23 @@ OpenGlCompositionResult OpenGlFrameCompositor::copyToNative(const OpenGlTextureF
 
 OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
     const OpenGlImageOperation& operation, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    if(operation.kind==OpenGlImageOperationKind::GaussianBlur) {
+        if(!std::isfinite(operation.blur_radius_pixels)||operation.blur_radius_pixels<0||operation.blur_radius_pixels>100)
+            return {OpenGlCompositionStatus::Unsupported,{},"image-blur-radius","Blur radius must be between 0 and 100."};
+        if(std::lround(operation.blur_radius_pixels)==0) {
+            auto copy=operation;copy.kind=OpenGlImageOperationKind::Copy;return processImage(copy,cancel,timings);
+        }
+        if(!operation.background.texture && !operation.background.native) {
+            OpenGlImageOperation copy;copy.background=operation.background;
+            OpenGlCompositionTimings uploaded, blurred;
+            auto prepared=processImage(copy,cancel,&uploaded);
+            if(prepared.status!=OpenGlCompositionStatus::Complete)return prepared;
+            auto gpu=operation;gpu.background={nullptr,prepared.frame};
+            auto result=processImage(gpu,cancel,&blurred);
+            if(timings){*timings=blurred;timings->uploaded_bytes+=uploaded.uploaded_bytes;timings->uploaded_layers+=uploaded.uploaded_layers;timings->upload_nanoseconds+=uploaded.upload_nanoseconds;}
+            return result;
+        }
+    }
     if (operation.output_width < 0 || operation.output_height < 0 ||
         ((operation.output_width == 0) != (operation.output_height == 0)) ||
         (operation.output_width > 0 && operation.kind != OpenGlImageOperationKind::Transform))

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <set>
 #include <sstream>
+#include <map>
 namespace application {
 namespace x = creative_suite::composition_exchange;
 using namespace fusion::nodes;
@@ -44,15 +45,15 @@ x::Document exportComposition(const timeline::TimelineClip &clip, int w, int h,
     std::vector<x::Issue> issues;
     std::set<NodeId> used;
     for (const auto &n : g.nodes) {
-        if (isMaskNode(n.type))
-            issues.push_back({n.id, "Masks are not supported."});
+        if ((n.type==NodeType::Merge || n.type==NodeType::Output) && input(g,n.id,2))
+            issues.push_back({n.id,"Masks on Merge or Output are not supported by interchange."});
         if (!n.effect_parameter_keyframes.empty())
             issues.push_back({n.id, "Animated effects are not supported."});
         unsigned count = 0;
         for (auto e : g.connections)
             if (e.from == n.id)
                 ++count;
-        if (count > 1)
+        if (count > 1 && !isMaskNode(n.type))
             issues.push_back({n.id, "Shared branches are not supported."});
     }
     x::Document d;
@@ -62,6 +63,16 @@ x::Document exportComposition(const timeline::TimelineClip &clip, int w, int h,
     d.fps_numerator = fps.numerator;
     d.fps_denominator = fps.denominator;
     d.duration = clip.timeline_duration_frames;
+    const auto maskFor = [&](const Node& receiver) -> x::MaskId {
+        const auto* mask=input(g,receiver.id,2);
+        if(!mask)return 0;
+        if(!isMaskNode(mask->type)) {issues.push_back({receiver.id,"Invalid mask input."});return 0;}
+        if(used.insert(mask->id).second) {
+            x::Mask definition{mask->id, mask->type==NodeType::RectangleMask ? creative_suite::composition::ShapeMaskKind::Rectangle : creative_suite::composition::ShapeMaskKind::Ellipse,mask->mask,mask->mask_keyframes};
+            d.masks.push_back(std::move(definition));
+        }
+        return mask->id;
+    };
     const auto branch = [&](const Node *end) {
         if (!end)
             return;
@@ -70,6 +81,7 @@ x::Document exportComposition(const timeline::TimelineClip &clip, int w, int h,
         bool transformed = false;
         if (n->type == NodeType::Transform) {
             transformed = true;
+            layer.transform_mask=maskFor(*n);
             layer.transform = n->transform;
             layer.curves = n->transform_keyframes;
             used.insert(n->id);
@@ -77,8 +89,10 @@ x::Document exportComposition(const timeline::TimelineClip &clip, int w, int h,
         }
         std::vector<std::vector<creative_suite::effects::ColorAdjustmentParameters>> colors;
         std::vector<bool> enabled;
+        std::vector<x::MaskId> masks;
         while (n && (n->type == NodeType::Color || n->type == NodeType::Effect)) {
             used.insert(n->id);
+            masks.push_back(maskFor(*n));
             enabled.push_back(n->type == NodeType::Color ? n->color.enabled : n->effect.enabled);
             if (n->type == NodeType::Color)
                 colors.push_back({{n->color.brightness, n->color.contrast_percent,
@@ -101,6 +115,7 @@ x::Document exportComposition(const timeline::TimelineClip &clip, int w, int h,
             return;
         }
         used.insert(n->id);
+        layer.source_mask=maskFor(*n);
         layer.id = n->id;
         layer.presentation = n->presentation.value_or(x::Presentation{});
         if (layer.presentation.name.empty())
@@ -143,8 +158,11 @@ x::Document exportComposition(const timeline::TimelineClip &clip, int w, int h,
         for (auto i = colors.rbegin(); i != colors.rend(); ++i) {
             layer.colors.insert(layer.colors.end(), i->begin(), i->end());
             const bool on = enabled[--index];
+            if(i->size()>1 && masks[index])issues.push_back({end->id,"A masked multi-pass effect cannot be split into independent color stages."});
+            layer.color_masks.insert(layer.color_masks.end(),i->size(),masks[index]);
             layer.colors_enabled.insert(layer.colors_enabled.end(), i->size(), on);
         }
+        if(std::all_of(layer.color_masks.begin(),layer.color_masks.end(),[](auto id){return id==0;}))layer.color_masks.clear();
         d.layers.push_back(std::move(layer));
     };
     const auto out = std::find_if(g.nodes.begin(), g.nodes.end(),
@@ -182,6 +200,7 @@ NodeGraph importComposition(const x::Document &d) {
     NodeGraph g;
     NodeId background = 0;
     double row = 0;
+    std::vector<std::pair<x::MaskId,NodeId>> bindings;
     std::size_t column = 0;
     const auto add = [&](Node n) -> NodeId {
         n.id = g.next_id++;
@@ -205,6 +224,7 @@ NodeGraph importComposition(const x::Document &d) {
                        static_cast<timeline::TextAlignment>(layer.text.alignment)};
         source.presentation = layer.presentation;
         NodeId previous = add(source);
+        if(layer.source_mask)bindings.emplace_back(layer.source_mask,previous);
         std::size_t color_index = 0;
         for (auto color : layer.colors) {
             Node effect;
@@ -212,8 +232,9 @@ NodeGraph importComposition(const x::Document &d) {
             effect.color = {color.brightness, color.contrast_percent, color.saturation_percent,
                             layer.colors_enabled.empty() ? true
                                                          : bool(layer.colors_enabled[color_index])};
-            ++color_index;
             auto id = add(effect);
+            if(!layer.color_masks.empty() && layer.color_masks[color_index])bindings.emplace_back(layer.color_masks[color_index],id);
+            ++color_index;
             g.connections.push_back({previous, id, 0});
             previous = id;
         }
@@ -228,6 +249,7 @@ NodeGraph importComposition(const x::Document &d) {
         transform.transform = bounded_base;
         transform.presentation = layer.presentation;
         auto id = add(transform);
+        if(layer.transform_mask)bindings.emplace_back(layer.transform_mask,id);
         g.connections.push_back({previous, id, 0});
         previous = id;
         if (background) {
@@ -246,6 +268,19 @@ NodeGraph importComposition(const x::Document &d) {
     auto id = add(output);
     if (background)
         g.connections.push_back({background, id, 0});
+    row += 160;
+    std::map<x::MaskId,NodeId> mapped_masks;
+    for(const auto& m:d.masks) {
+        Node mask;mask.type=m.kind==creative_suite::composition::ShapeMaskKind::Rectangle?NodeType::RectangleMask:NodeType::EllipseMask;
+        mask.mask=m.parameters;mask.mask_keyframes=m.keyframes;
+        for(std::size_t i=0;i<5;++i)if(!mask.mask_keyframes[i].empty() && mask.mask_keyframes[i].back().frame>=d.duration) {
+            const auto base=maskValue(mask.mask,i);
+            mask.mask_keyframes[i]=creative_suite::animation::sliceScalarCurve(mask.mask_keyframes[i],0,d.duration,base);
+            setMaskValue(mask.mask,i,creative_suite::animation::evaluateScalar(base,m.keyframes[i],0));
+        }
+        column=0; mapped_masks.emplace(m.id,add(mask));row+=160;
+    }
+    for(const auto& [mask,receiver]:bindings)g.connections.push_back({mapped_masks.at(mask),receiver,2});
     if (!validate(g))
         throw x::Error("Converted Fusion graph is invalid.");
     return g;

@@ -104,9 +104,13 @@ struct ShapeLayerContent {
 
 using LayerContent = std::variant<std::monostate, TextLayerContent, ShapeLayerContent>;
 
+using Mask = creative_suite::composition_exchange::Mask;
+using MaskId = creative_suite::composition_exchange::MaskId;
+
 struct GaussianBlurEffect {
     bool enabled = true;
     double radius_pixels = 10.0;
+    MaskId mask = 0;
 
     friend bool operator==(const GaussianBlurEffect&, const GaussianBlurEffect&) = default;
 };
@@ -116,6 +120,7 @@ struct ColorAdjustmentEffect {
     double brightness = 0.0;
     double contrast_percent = 100.0;
     double saturation_percent = 100.0;
+    MaskId mask = 0;
 
     friend bool operator==(const ColorAdjustmentEffect&,
                            const ColorAdjustmentEffect&) = default;
@@ -158,6 +163,7 @@ struct CompositionLayer {
     LayerContent content;
     std::vector<LayerEffect> effects;
     std::optional<creative_suite::composition_exchange::Presentation> presentation;
+    MaskId source_mask = 0, transform_mask = 0;
 
     friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
@@ -187,7 +193,7 @@ public:
         int canvas_width,
         int canvas_height,
         FrameRate frame_rate,
-        std::vector<CompositionLayer> layers);
+        std::vector<CompositionLayer> layers, std::vector<Mask> masks = {});
 
     [[nodiscard]] CanvasSize canvasSize() const noexcept;
     [[nodiscard]] FrameRate frameRate() const noexcept;
@@ -259,9 +265,27 @@ public:
         std::int64_t from_local_frame,
         std::int64_t to_local_frame) noexcept;
 
+    // Targets: -2 content, -1 transform, non-negative effect index.
+    [[nodiscard]] const std::vector<Mask>& masks() const noexcept { return masks_; }
+    [[nodiscard]] const Mask* findMask(MaskId) const noexcept;
+    [[nodiscard]] MaskId maskForTarget(LayerId, int target) const noexcept;
+    [[nodiscard]] std::size_t maskUseCount(MaskId) const noexcept;
+    [[nodiscard]] MaskId createMask(LayerId, int target, creative_suite::composition::ShapeMaskKind);
+    [[nodiscard]] bool associateMask(LayerId, int target, MaskId);
+    [[nodiscard]] bool setMaskParameters(MaskId, const creative_suite::composition::ShapeMaskParameters&);
+    [[nodiscard]] bool replaceMaskKeyframes(MaskId, std::size_t property, creative_suite::animation::ScalarKeyframes);
+    [[nodiscard]] bool setMaskKeyframe(MaskId, std::size_t property, std::int64_t composition_frame, double value);
+    [[nodiscard]] bool removeMaskKeyframe(MaskId, std::size_t property, std::int64_t composition_frame);
+    [[nodiscard]] bool setMaskKeyframeInterpolation(MaskId, std::size_t property, std::int64_t composition_frame,
+        creative_suite::animation::InterpolationMode, const creative_suite::animation::CubicBezierEasing&);
+
 private:
     [[nodiscard]] CompositionLayer* findLayer(LayerId id) noexcept;
+    [[nodiscard]] const CompositionLayer* findLayer(LayerId id) const noexcept;
 
+    void collectUnreferencedMasks() noexcept;
+    std::vector<Mask> masks_;
+    MaskId next_mask_id_ = 1;
     CanvasSize canvas_size_;
     FrameRate frame_rate_;
     LayerId next_layer_id_ = 1;

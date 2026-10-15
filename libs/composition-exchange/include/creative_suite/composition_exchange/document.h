@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <creative_suite/composition/shape_mask.h>
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/effects/effects.h>
 #include <filesystem>
@@ -10,6 +11,7 @@
 #include <string>
 #include <vector>
 class QJsonObject;
+class QJsonArray;
 
 namespace creative_suite::composition_exchange {
 enum class Kind { Video, Image, Background, Text };
@@ -31,6 +33,17 @@ struct Text {
     std::array<std::uint8_t, 4> color{255, 255, 255, 255};
     friend bool operator==(const Text &, const Text &) = default;
 };
+using MaskId = std::uint64_t;
+struct Mask {
+    MaskId id = 0;
+    composition::ShapeMaskKind kind = composition::ShapeMaskKind::Rectangle;
+    composition::ShapeMaskParameters parameters;
+    composition::ShapeMaskKeyframes keyframes;
+    friend bool operator==(const Mask&, const Mask&) = default;
+};
+[[nodiscard]] QJsonArray masksJson(const std::vector<Mask>&);
+[[nodiscard]] std::vector<Mask> parseMasksJson(const QJsonArray&);
+[[nodiscard]] bool validMask(const Mask&) noexcept;
 struct Layer {
     std::uint64_t id = 0;
     Kind kind = Kind::Background;
@@ -44,12 +57,15 @@ struct Layer {
     animation::TransformKeyframes curves;
     std::vector<effects::ColorAdjustmentParameters> colors;
     std::vector<bool> colors_enabled;
+    MaskId source_mask = 0, transform_mask = 0;
+    std::vector<MaskId> color_masks;
 };
 struct Document {
     std::string name = "Composition";
     int width = 1920, height = 1080;
     std::int64_t fps_numerator = 30, fps_denominator = 1, duration = 150;
     std::vector<Layer> layers;
+    std::vector<Mask> masks;
 };
 struct Issue {
     std::uint64_t id = 0;

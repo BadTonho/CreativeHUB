@@ -238,8 +238,13 @@ private:
         creative_suite::animation::TransformProperty property =
             creative_suite::animation::TransformProperty::PositionX;
         std::int64_t segment_start_frame = 0;
+        model::MaskId mask_id = 0;
+        std::size_t mask_property = 0;
     };
     std::optional<CurveSelection> curve_selection_;
+    std::shared_ptr<const std::vector<model::Mask>> mask_snapshot_;
+    model::LayerId mask_view_layer_=0;
+    int mask_view_target_=-2;
     QProgressDialog* open_progress_ = nullptr;
     QProgressDialog* export_progress_ = nullptr;
     std::unique_ptr<MotionVideoExportWorker> export_worker_;

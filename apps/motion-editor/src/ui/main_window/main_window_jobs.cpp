@@ -73,6 +73,7 @@ void MainWindow::startVideoExport()
     snapshot.canvas_size = document_->canvasSize();
     snapshot.frame_rate = document_->frameRate();
     snapshot.layers = document_->layers();
+    snapshot.masks = document_->masks();
     for (const auto& layer : snapshot.layers) {
         if (layer.kind == model::LayerKind::Image) {
             const auto linked = linked_image_frames_.find(layer.id);

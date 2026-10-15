@@ -340,11 +340,16 @@ void testMotionDocuments(const QString& root) {
     project.layers.front().presentation = creative_suite::composition_exchange::Presentation{};
     project.layers.front().presentation->name = "Interchange image";
     project.layers.front().presentation->offset = -7;
+    CompositionDocument masked(1920,1080,{30,1},project.layers);
+    const auto mask=masked.createMask(project.layers.front().id,-2,creative_suite::composition::ShapeMaskKind::Ellipse);
+    CS_TEST_CHECK(mask && masked.associateMask(project.layers.front().id,-1,mask));
+    CS_TEST_CHECK(masked.setMaskKeyframe(mask,0,15,.25));
+    project.layers=masked.layers();project.masks=masked.masks();
     project.composition.name = "Interchange";
     project.composition.duration = 180;
     const auto interchange_path = QDir(QFileInfo(assets).absolutePath()).filePath("interchange.motion");
     Store::save(fsPath(interchange_path), project);
-    const auto interchange_backup = backup(QDir(root).filePath("motion-interchange-v7"), interchange_path);
+    const auto interchange_backup = backup(QDir(root).filePath("motion-interchange-v8"), interchange_path);
     CS_TEST_CHECK(Store::load(fsPath(interchange_backup.vault)) == project);
     CS_TEST_CHECK(Store::load(fsPath(interchange_backup.restored)) == project);
 }

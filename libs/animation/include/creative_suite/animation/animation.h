@@ -141,4 +141,9 @@ using ScalarKeyframes = std::vector<Keyframe>;
     const TransformKeyframes& keyframes,
     TransformProperty property) noexcept;
 
+// Slice [start, start+duration) and rebase to zero, retaining partial Bezier easing.
+// Throws invalid_argument for a non-positive or overflowing interval.
+[[nodiscard]] ScalarKeyframes sliceScalarCurve(const ScalarKeyframes&, std::int64_t start,
+    std::int64_t duration, double base_value);
+
 } // namespace creative_suite::animation

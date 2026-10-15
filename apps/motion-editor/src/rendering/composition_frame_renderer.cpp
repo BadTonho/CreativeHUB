@@ -1,7 +1,9 @@
+#include <creative_suite/media/video_probe.h>
 #include <creative_suite/composition_exchange/raster.h>
 #include "composition_frame_renderer.h"
 #include "layer_content_renderer.h"
 #include "layer_effect_processor.h"
+#include "masked_layer_renderer.h"
 #include "../diagnostics/performance_metrics.h"
 
 #include <creative_suite/composition/frame_compositor.h>
@@ -192,6 +194,33 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         return {};
     }
 
+    if(request.mask_view_layer && request.masks) {
+        const auto layer=std::find_if(request.layers.begin(),request.layers.end(),[&](const auto& l){return l.id==request.mask_view_layer;});
+        if(layer!=request.layers.end()) {
+            const auto target=request.mask_view_target;
+            const auto id=target==-2?layer->source_mask:target==-1?layer->transform_mask:
+                target>=0 && std::size_t(target)<layer->effects.size()?std::visit([](const auto& e){return e.mask;},layer->effects[target]):0;
+            const auto mask=std::find_if(request.masks->begin(),request.masks->end(),[id](const auto& m){return m.id==id;});
+            if(mask!=request.masks->end())try {
+                int width=request.canvas_size.width,height=request.canvas_size.height;
+                if(target!=-1 && (!layer->presentation || layer->presentation->profile==creative_suite::composition_exchange::Profile::MotionLayer)) {
+                    if(const auto* text=std::get_if<model::TextLayerContent>(&layer->content)){width=text->box_width;height=text->box_height;}
+                    else if(const auto* shape=std::get_if<model::ShapeLayerContent>(&layer->content)){width=shape->width;height=shape->height;}
+                    else if(layer->still_frame){width=layer->still_frame->width;height=layer->still_frame->height;}
+                    else {const auto metadata=creative_suite::media::VideoProbe{}.probe(layer->source_path);width=metadata.width;height=metadata.height;}
+                }
+                creative_suite::composition::ShapeMaskRasterCache cache;
+                auto frame=cache.coverage(mask->kind,creative_suite::composition::evaluateShapeMask(mask->parameters,mask->keyframes,request.composition_frame),width,height,should_cancel);
+                if(!frame){if(should_cancel&&should_cancel())return {};throw std::runtime_error("Mask VIEW exceeds the coverage budget.");}
+                auto result=creative_suite::composition::FrameCompositor::compose(request.canvas_size.width,request.canvas_size.height,{{frame.get(),{}}});
+                return result?std::make_shared<const creative_suite::media::RgbaFrame>(std::move(*result)):nullptr;
+            } catch(const std::exception& e){
+                if(should_cancel&&should_cancel())return {};
+                creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,"motion_masks","view_mask",e.what(),{{"mask_id",std::to_string(id)}});
+                if(fail_on_media_error)throw;return {};
+            }
+        }
+    }
     std::vector<creative_suite::composition::CompositionLayer> composition_layers;
     std::vector<creative_suite::media::RgbaFramePtr> owned_frames;
     struct PendingGpuEffects {
@@ -213,6 +242,16 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         !gpu_composition_disabled_after_failure_;
     std::set<model::LayerId> active_content_ids;
     std::uint64_t portable_raster_bytes = 0;
+    creative_suite::composition::ShapeMaskRasterCache mask_cache;
+    bool mask_gpu_in_use=false;
+    creative_suite::composition::OpenGlCompositionTimings mask_timings;
+    const auto cpu_mask_recovery=[&]() {
+        composition_layers.clear();owned_frames.clear();pending_gpu_effects.clear();mask_cache={};
+        const auto previous=gpu_composition_disabled_after_failure_;
+        struct Restore {bool& field;bool value;~Restore(){field=value;}} restore{gpu_composition_disabled_after_failure_,previous};
+        gpu_composition_disabled_after_failure_=true;
+        return render(request,should_cancel,fail_on_media_error,mode,async_ticket,async_failure,texture,texture_busy);
+    };
     composition_layers.reserve(request.layers.size());
     owned_frames.reserve(request.layers.size());
     composition_layer_ids.reserve(request.layers.size());
@@ -388,6 +427,35 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             if (portable_raster_bytes > 256ULL*1024*1024)
                 throw creative_suite::composition_exchange::Error("Interchange source preparation exceeds the 256 MiB frame budget.");
             frame = std::make_shared<const creative_suite::media::RgbaFrame>(creative_suite::composition_exchange::fit(*frame,request.canvas_size.width,request.canvas_size.height, layer.kind == model::LayerKind::Text, should_cancel));
+        }
+        if(hasLayerMasks(layer)) {
+            if(try_gpu_effects && !gpu_compositor_)gpu_compositor_=std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(
+                gpu_surface_,creative_suite::composition::OpenGlPrecisionPolicy::Automatic,texture_share_context_,texture_budget_);
+            MaskedLayerFrame processed;
+            try {processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel);}
+            catch(const std::exception& e) {
+                if(should_cancel && should_cancel())return {};
+                creative_suite::diagnostics::Logger::instance().log(try_gpu_effects?creative_suite::diagnostics::Level::Warning:creative_suite::diagnostics::Level::Error,
+                    "motion_masks",try_gpu_effects?"gpu_cpu_recovery":"render_layer",e.what(),{{"layer_id",std::to_string(layer.id)}});
+                if(try_gpu_effects)return cpu_mask_recovery();
+                if(fail_on_media_error)throw;
+                return {};
+            }
+            if(!processed.rgba && !processed.texture)return {};
+            addMaskTimings(mask_timings,processed.timings);
+            if(request.mask_view_layer==layer.id) {
+                auto composed=creative_suite::composition::FrameCompositor::compose(request.canvas_size.width,request.canvas_size.height,{{processed.rgba.get(),{}}});
+                return composed?std::make_shared<const creative_suite::media::RgbaFrame>(std::move(*composed)):nullptr;
+            }
+            portable_raster_bytes+=std::uint64_t(request.canvas_size.width)*request.canvas_size.height*4;
+            if(portable_raster_bytes>256ULL*1024*1024)throw std::runtime_error("Masked layer outputs exceed the 256 MiB preparation budget.");
+            if(processed.rgba){owned_frames.push_back(processed.rgba);composition_layers.push_back({processed.rgba.get(),{}});}
+            else {
+                auto geometry=std::make_shared<const creative_suite::media::RgbaFrame>(creative_suite::media::RgbaFrame{request.canvas_size.width,request.canvas_size.height,request.canvas_size.width*4,{}});
+                owned_frames.push_back(geometry);CompositionLayer entry{geometry.get(),{}};entry.texture_frame=processed.texture;
+                composition_layers.push_back(std::move(entry));mask_gpu_in_use=true;
+            }
+            composition_layer_ids.push_back(layer.id);continue;
         }
         std::vector<creative_suite::effects::ColorAdjustmentParameters> gpu_adjustments;
         std::vector<creative_suite::composition::GpuCompositionEffect> gpu_effects;
@@ -656,6 +724,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 gpu_result.cause = "Unknown OpenGL composition failure";
             }
         }
+        addMaskTimings(gpu_timings,mask_timings);
         if (gpu_metrics_ != nullptr) gpu_metrics_->record(gpu_timings);
         if (gpu_result.status == OpenGlCompositionStatus::Cancelled ||
             (should_cancel && should_cancel())) {
@@ -710,7 +779,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             static_cast<std::size_t>(gpu_result.layer_index) < composition_layer_ids.size()
             ? std::to_string(composition_layer_ids[static_cast<std::size_t>(gpu_result.layer_index)])
             : std::string("unknown");
-        gpu_composition_disabled_after_failure_ = true;
+        if(!mask_gpu_in_use || gpu_failed)gpu_composition_disabled_after_failure_ = true;
         const char* const gpu_subsystem = record_preview_metrics_
             ? "motion_preview" : "motion_export";
         creative_suite::diagnostics::Logger::instance().log(
@@ -752,6 +821,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         diagnostics::PerformanceMetrics::instance().recordGpuGaussianBlur(
             0, cpu_gaussian_blur_fallbacks, false, 0);
     }
+    if(mask_gpu_in_use)return cpu_mask_recovery();
     for (const auto& pending : pending_gpu_effects) {
         if (should_cancel && should_cancel()) return {};
         try {

@@ -31,6 +31,8 @@ public:
                   creative_suite::animation::TransformProperty property,
                   std::vector<creative_suite::animation::Keyframe> keyframes,
                   std::optional<std::int64_t> selected_segment_start);
+    void setScalarCurve(std::uint64_t owner_id, QString name,
+        std::vector<creative_suite::animation::Keyframe>, std::optional<std::int64_t> segment);
     void setSelectionHandler(SelectionHandler handler);
     void setEasingEditedHandler(EasingEditedHandler handler);
     [[nodiscard]] QPoint controlHandlePosition(int control_index) const;
@@ -51,6 +53,7 @@ private:
     [[nodiscard]] std::optional<std::size_t> segmentAt(QPointF position) const;
     void selectSegment(std::size_t index);
 
+    QString scalar_name_;
     std::uint64_t layer_id_ = 0;
     creative_suite::animation::TransformProperty property_{
         creative_suite::animation::TransformProperty::PositionX};

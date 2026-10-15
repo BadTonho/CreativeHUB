@@ -1,11 +1,18 @@
 # Motion Studio Roadmap
 
-The first [editable composition interchange](../COMPOSITION_INTERCHANGE.md) transfers compatible layer stacks to Fusion and back. Unsupported masks, blur and group processing require later work. Native menu/platform acceptance remains separate from automated coverage.
+[Shape-mask interchange](../COMPOSITION_INTERCHANGE.md) adds editable shared
+Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
+curve slicing are shared; native Motion advances to v8 while CSP stays v30.
+Automated coverage: `creative-suite-mask-interchange`, shared composition/
+OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
+Native UI and platform acceptance remain separately pending.
+
+The first [editable composition interchange](../COMPOSITION_INTERCHANGE.md) transfers compatible layer stacks to Fusion and back. Masks on Merge/Output, blur interchange and group processing require later work. Native menu/platform acceptance remains separate from automated coverage.
 
 ## Shared composition mask-operation regression
 
 The shared engine adds straight-RGBA ApplyMask/MaskedBlend for Video Editor
-Fusion masks. Existing application rendering semantics and formats are unchanged.
+Fusion masks. Graphs without masks retain their previous rendering behavior.
 The Windows Debug consumer gate includes Image interactive/GPU raster and Motion
 preview/GPU composition/export, plus shared composition CPU/OpenGL tests.
 Native macOS/Linux acceptance remains separate and pending.
@@ -326,7 +333,7 @@ readiness checks remain in this roadmap and
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
-| Hub snapshot references and restoration across versions 1–7 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Motion persistence producer and consumer | Automated coverage present for Media Pool, layer sources, linked-image sidecars, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
+| Hub snapshot references and restoration across versions 1–8 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Motion persistence producer and consumer | Automated coverage present for Media Pool, layer sources, linked-image sidecars, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
 | Composition model, validation, layer data, and timing | `composition_document_test.cpp` (`creative-suite-motion-editor-document`) | Pending manual composition and supported-layer checks remain part of MVP acceptance. |
 | Undo/Redo and edit history | `composition_history_test.cpp` (`creative-suite-motion-editor-history`) | Pending manual validation: confirm interactive edit sequences during the broader Windows UI checklist. |
 | `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Windows invalid-file and path results remain part of Windows acceptance. |
@@ -596,12 +603,15 @@ composition without losing its layer or frame-rate data.
 - [ ] Profile representative compositions and validate export throughput,
   memory use, and codec behavior on Windows.
 - [ ] Address measured bottlenecks before expanding the MVP scope.
-- [ ] (Provisional next initiative, after the performance gate) Build editable
+- [x] Implement shared Rectangle/Ellipse masks with geometry animation and
+  editable Fusion interchange; see [Masks](MASKS.md). Manual/platform acceptance
+  and representative performance measurements remain separate.
+- [ ] (Provisional later initiative, after the performance gate) Build editable
   cubic Bezier vector paths and 2D alpha masks. Start with Pen-created paths
   and one invertible mask per image, video, text, or shape layer; then add
   animated path keyframes, Undo/Redo, `.motion` version migration, and preview
-  and export parity. Defer multiple-mask operations and edge feathering until
-  profiling confirms they fit the performance budget.
+  and export parity. Reuse the shape-mask stage operations and softness already
+  implemented; defer mask combinations and tracking to later work.
 
 **Exit criteria:** the agreed MVP workflows pass regression coverage and
 manual visual checks, including save/reopen, recovery, and heavy-composition

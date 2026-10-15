@@ -86,7 +86,7 @@ bool CompositionHistory::sameComposition(
 {
     return left.canvasSize() == right.canvasSize() &&
         left.frameRate() == right.frameRate() &&
-        left.layers() == right.layers();
+        left.layers() == right.layers() && left.masks() == right.masks();
 }
 
 void CompositionHistory::trimToLimit(std::deque<CompositionEditState>& states)

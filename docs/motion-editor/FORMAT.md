@@ -1,7 +1,7 @@
 # Motion Studio Native Document Format
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 7 schema may change before a stable release. This format is separate
+version 8 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 ## File identity and versioning
@@ -11,22 +11,22 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `7`. |
+| `version` | integer | Current schema version is `8`. |
 | `revision` | decimal string | Monotonic saved revision used to reject stale linked writes. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1 through 7. Version 1 text and shape layers
+Motion Studio reads versions 1 through 8. Version 1 text and shape layers
 had no typed content, so they open with the current default text or rectangle content
 for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
-older document writes it as version 7. Versions 1 through 5 load without linked
+older document writes it as version 8. Versions 1 through 5 load without linked
 Image Editor metadata. Motion Studio rejects malformed data, an
 unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
 
-Hub snapshots preserve versions 1–7 and rebase relative media and linked-image
+Hub snapshots preserve versions 1–8 and rebase relative media and linked-image
 references to their original absolute locations. Relative-directory escape
 restrictions are retained. Native save behavior is unchanged and media are not
 bundled. See [Hub backups](../hub/BACKUPS.md) and the producer/consumer
@@ -86,8 +86,8 @@ same transform tracks. The `.motion` document stores the resulting keyframes;
 it does not store or embed the source audio file.
 
 Version 2 adds typed content to native Text and Shape layers. A Text layer has
-a `text_content` object with UTF-8 `text` and `font_family`, integer
-`font_size_pixels`, RGBA byte-array `color`, `alignment` (`left`, `center`, or
+a `text_content` object with UTF-8 `text` and `font_family`, numeric
+`font_size_pixels` (integer before v7), RGBA byte-array `color`, `alignment` (`left`, `center`, or
 `right`), and integer `box_width` and `box_height`. A Shape layer has a
 `shape_content` object with `primitive` (`rectangle` or `ellipse`), integer
 `width` and `height`, RGBA byte-array `fill_color` and `stroke_color`, and
@@ -231,3 +231,15 @@ in version 24; `.cimg` is unchanged.
 ## Version 7 composition interchange
 
 Version 7 adds optional layer `presentation` records as defined in [composition interchange](../COMPOSITION_INTERCHANGE.md), composition `name` and string-encoded `duration`, and numeric font sizes. Older documents retain legacy presentation defaults. Presentation fields are rejected in documents before v7. Recovery uses the same records.
+
+## Version 8 shared masks
+
+Optional root `masks` uses the shared definitions documented in
+[composition interchange](../COMPOSITION_INTERCHANGE.md). Layer `source_mask`
+and `transform_mask`, and each effect's `mask`, are optional decimal-string
+references; zero means absent. They do not contain media paths. Mask IDs remain
+shared within a document; keys are composition-frame scalar curves. Duplicate
+IDs, dangling references, unused definitions and invalid geometry/curves are
+rejected before applying a document. Mask fields are rejected before v8.
+Save, autosave and recovery use the same records. Geometry defaults and the
+Inspector workflow are in [Masks](MASKS.md).

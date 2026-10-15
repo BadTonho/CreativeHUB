@@ -65,6 +65,15 @@ add_creative_suite_test(
 preserve_video_editor_test_working_directory()
 
 if(BUILD_MOTION_EDITOR)
+    add_executable(creative-suite-mask-interchange-tests mask_interchange_test.cpp)
+    target_link_libraries(creative-suite-mask-interchange-tests PRIVATE creative-suite-main-editor-core creative-suite-motion-editor-core)
+    copy_ffmpeg_test_runtime(creative-suite-mask-interchange-tests)
+    deploy_qt_test_runtime(creative-suite-mask-interchange-tests)
+    add_creative_suite_test(NAME creative-suite-mask-interchange COMMAND creative-suite-mask-interchange-tests)
+    set_tests_properties(creative-suite-mask-interchange PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1")
+    if(WIN32)
+        set_tests_properties(creative-suite-mask-interchange PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1")
+    endif()
     add_executable(creative-suite-composition-interchange-tests composition_interchange_test.cpp)
     target_link_libraries(creative-suite-composition-interchange-tests PRIVATE
         creative-suite-main-editor-core creative-suite-motion-editor-core)

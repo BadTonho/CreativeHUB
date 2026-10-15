@@ -30,6 +30,7 @@ namespace creative_suite::media { struct MediaItem; }
 namespace motion::ui {
 
 class MediaDetailsWidget;
+class MaskInspectorWidget;
 
 class InspectorWidget final : public QTabWidget {
     Q_OBJECT
@@ -74,6 +75,7 @@ private:
 public:
     explicit InspectorWidget(QWidget* parent = nullptr);
 
+    [[nodiscard]] MaskInspectorWidget* masksInspector() const noexcept { return masks_; }
     void setMedia(const creative_suite::media::MediaItem* item);
     void selectMediaTab();
     void selectLayerTab();
@@ -112,6 +114,7 @@ protected:
 
 private:
     Controls controls_;
+    MaskInspectorWidget* masks_=nullptr;
 };
 
 } // namespace motion::ui

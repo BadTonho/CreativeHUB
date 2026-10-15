@@ -212,7 +212,7 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
         }
         if (const auto* edge=incoming(graph,id,2)) {
             const auto* mask_node=findNode(graph,edge->from);
-            const auto original=operation.background;
+            auto original=operation.background;
             const auto& processed=values.at(id);
             auto coverage=maskCoverage(mask_cache,*mask_node,processed->width(),processed->height(),context);
             if (!coverage) return {};
@@ -226,6 +226,16 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
             const bool blend=node->type==NodeType::Transform || node->type==NodeType::Color ||
                 node->type==NodeType::Effect || node->type==NodeType::Merge;
             masked.kind=blend ? OpenGlImageOperationKind::MaskedBlend : OpenGlImageOperationKind::ApplyMask;
+            OpenGlTextureFramePtr normalized_original;
+            if(blend && (original.width()!=processed->width() || original.height()!=processed->height())) {
+                OpenGlImageOperation align;align.kind=OpenGlImageOperationKind::Transform;align.background=original;
+                align.output_width=processed->width();align.output_height=processed->height();
+                if(node->presentation && node->presentation->profile==creative_suite::composition_exchange::Profile::MotionLayer && node->presentation->text_width==0)
+                    align.transform.scale*=std::min(double(align.output_width)/original.width(),double(align.output_height)/original.height());
+                auto aligned=context.gpu->processImage(align,context.should_cancel);
+                if(aligned.status!=OpenGlCompositionStatus::Complete || !aligned.frame)return {};
+                normalized_original=std::move(aligned.frame);original={nullptr,normalized_original};
+            }
             masked.background=blend ? original : OpenGlImageInput{nullptr,processed};
             if (blend) masked.foreground={nullptr,processed};
             OpenGlCompositionTimings measured;
@@ -447,7 +457,11 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
             auto coverage=maskCoverage(mask_cache,*mask,frame.width,frame.height,context);
             if (!coverage) return std::nullopt;
             const bool blend=node->type!=NodeType::Output;
-            if (!(blend ? creative_suite::composition::maskedBlend(background,frame,*coverage,context.should_cancel)
+            std::optional<media::VideoFrame> aligned;
+            if(blend && (background.width!=frame.width || background.height!=frame.height))
+                aligned=creative_suite::composition_exchange::transformFrame(background,frame.width,frame.height,{},
+                    creative_suite::composition_exchange::Profile::MotionLayer,node->presentation && node->presentation->text_width>0,context.should_cancel);
+            if (!(blend ? creative_suite::composition::maskedBlend(aligned?*aligned:background,frame,*coverage,context.should_cancel)
                 : creative_suite::composition::applyMask(frame,*coverage,context.should_cancel))) return std::nullopt;
         }
         for (const auto& edge : graph.connections)

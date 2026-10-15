@@ -27,6 +27,7 @@ struct MotionProjectData {
     std::vector<CompositionLayer> layers;
     std::vector<std::string> bins{std::string(creative_suite::media::default_bin)};
     std::vector<MotionMediaEntryData> media;
+    std::vector<Mask> masks;
 
     friend bool operator==(const MotionProjectData&, const MotionProjectData&) = default;
 };

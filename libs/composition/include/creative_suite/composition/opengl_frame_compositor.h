@@ -109,7 +109,7 @@ struct OpenGlImageInput {
     [[nodiscard]] int width() const noexcept;
     [[nodiscard]] int height() const noexcept;
 };
-enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge, ApplyMask, MaskedBlend };
+enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge, ApplyMask, MaskedBlend, GaussianBlur };
 struct OpenGlImageOperation {
     OpenGlImageOperationKind kind = OpenGlImageOperationKind::Copy;
     OpenGlImageInput background;
@@ -120,6 +120,7 @@ struct OpenGlImageOperation {
     // Optional canvas for an intrinsic source transformed into a composition.
     // Zero preserves the source-sized legacy image-operation contract.
     int output_width = 0, output_height = 0;
+    double blur_radius_pixels = 0;
 };
 
 // Optional raster contract: top-down ARGB32 premultiplied content and ARGB32

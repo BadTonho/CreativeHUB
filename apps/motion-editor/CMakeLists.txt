@@ -28,6 +28,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/rendering/layer_content_renderer.h
     src/rendering/layer_effect_processor.cpp
     src/rendering/layer_effect_processor.h
+    src/rendering/masked_layer_renderer.cpp
+    src/rendering/masked_layer_renderer.h
     src/rendering/layer_effect_worker_pool.cpp
     src/rendering/layer_effect_worker_pool.h
     src/settings/autosave_preferences.cpp
@@ -66,6 +68,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/dialogs/shortcut_settings_dialog.h
     src/ui/media_pool/media_pool_widget.cpp
     src/ui/media_pool/media_pool_widget.h
+    src/ui/inspector/mask_inspector_widget.cpp
+    src/ui/inspector/mask_inspector_widget.h
     src/ui/inspector/inspector_widget.cpp
     src/ui/inspector/inspector_widget.h
     src/ui/timeline/graph_editor/property_curve_editor.cpp

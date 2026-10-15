@@ -278,7 +278,7 @@ CompositionDocument::CompositionDocument(
     int canvas_width,
     int canvas_height,
     FrameRate frame_rate,
-    std::vector<CompositionLayer> layers)
+    std::vector<CompositionLayer> layers, std::vector<Mask> masks)
     : CompositionDocument(canvas_width, canvas_height, frame_rate)
 {
     std::unordered_set<LayerId> ids;
@@ -300,6 +300,21 @@ CompositionDocument::CompositionDocument(
         greatest_id = std::max(greatest_id, layer.id);
     }
     layers_ = std::move(layers);
+    std::unordered_set<MaskId> mask_ids;
+    if(masks.size()>4096)throw std::invalid_argument("Too many masks.");
+    for(const auto& m:masks) {
+        if(!creative_suite::composition_exchange::validMask(m)||!mask_ids.insert(m.id).second)
+            throw std::invalid_argument("Invalid mask definition or duplicate ID.");
+        next_mask_id_=std::max(next_mask_id_,m.id+1);
+    }
+    masks_=std::move(masks);
+    std::unordered_set<MaskId> used_masks;
+    for(const auto& layer:layers_) {
+        const auto check=[&](MaskId id){if(id && !mask_ids.contains(id))throw std::invalid_argument("Unknown mask reference.");if(id)used_masks.insert(id);};
+        check(layer.source_mask);check(layer.transform_mask);
+        for(const auto& effect:layer.effects)std::visit([&](const auto& e){check(e.mask);},effect);
+    }
+    for(const auto& m:masks_)if(!used_masks.contains(m.id))throw std::invalid_argument("Unreferenced mask definition.");
     next_layer_id_ = greatest_id == std::numeric_limits<LayerId>::max()
         ? 0 : greatest_id + 1;
 }
@@ -452,6 +467,7 @@ bool CompositionDocument::removeLayer(LayerId id) noexcept
         return false;
     }
     layers_.erase(layer);
+    collectUnreferencedMasks();
     return true;
 }
 
@@ -646,7 +662,9 @@ bool CompositionDocument::setLayerEffects(
 {
     auto* layer = findLayer(id);
     if (layer == nullptr || !validLayerEffects(effects)) return false;
+    for(const auto& effect:effects)if(!std::visit([&](const auto& e){return !e.mask || findMask(e.mask);},effect))return false;
     layer->effects = effects;
+    collectUnreferencedMasks();
     return true;
 }
 
@@ -763,4 +781,93 @@ CompositionLayer* CompositionDocument::findLayer(LayerId id) noexcept
     return layer == layers_.end() ? nullptr : &*layer;
 }
 
+const CompositionLayer* CompositionDocument::findLayer(LayerId id) const noexcept {
+    const auto it=std::find_if(layers_.begin(),layers_.end(),[id](const auto& layer){return layer.id==id;});
+    return it==layers_.end()?nullptr:&*it;
+}
+const Mask* CompositionDocument::findMask(MaskId id) const noexcept {
+    const auto it=std::find_if(masks_.begin(),masks_.end(),[id](const auto& m){return m.id==id;});
+    return it==masks_.end()?nullptr:&*it;
+}
+MaskId CompositionDocument::maskForTarget(LayerId id,int target) const noexcept {
+    const auto* layer=findLayer(id);if(!layer)return 0;
+    if(target==-2)return layer->source_mask;
+    if(target==-1)return layer->transform_mask;
+    if(target<0 || std::size_t(target)>=layer->effects.size())return 0;
+    return std::visit([](const auto& e){return e.mask;},layer->effects[target]);
+}
+std::size_t CompositionDocument::maskUseCount(MaskId id) const noexcept {
+    if(!id)return 0;std::size_t count=0;
+    for(const auto& layer:layers_) {
+        count+=(layer.source_mask==id)+(layer.transform_mask==id);
+        for(const auto& effect:layer.effects)count+=std::visit([id](const auto& e){return e.mask==id;},effect);
+    }
+    return count;
+}
+void CompositionDocument::collectUnreferencedMasks() noexcept {
+    if (masks_.empty()) return;
+    // The validated collection is capped at 4096. A bounded stack index keeps
+    // removal allocation-free, including the existing noexcept layer-removal API.
+    std::array<MaskId,4096> ids{};
+    std::array<bool,4096> used{};
+    for(std::size_t i=0;i<masks_.size();++i)ids[i]=masks_[i].id;
+    const auto end=ids.begin()+masks_.size();
+    std::sort(ids.begin(),end);
+    const auto mark=[&](MaskId id) {
+        if(!id)return;
+        const auto found=std::lower_bound(ids.begin(),end,id);
+        if(found!=end && *found==id)used[std::distance(ids.begin(),found)]=true;
+    };
+    for(const auto& layer:layers_) {
+        mark(layer.source_mask);mark(layer.transform_mask);
+        for(const auto& effect:layer.effects)std::visit([&](const auto& e){mark(e.mask);},effect);
+    }
+    std::erase_if(masks_,[&](const auto& m){const auto at=std::lower_bound(ids.begin(),end,m.id);return at==end||!used[std::distance(ids.begin(),at)];});
+}
+
+bool CompositionDocument::associateMask(LayerId id,int target,MaskId mask) {
+    auto* layer=findLayer(id);
+    if(!layer || (mask && !findMask(mask)) || target < -2 || (target>=0 && std::size_t(target)>=layer->effects.size()))return false;
+    if(maskForTarget(id,target)==mask)return false;
+    if(target==-2)layer->source_mask=mask;
+    else if(target==-1)layer->transform_mask=mask;
+    else std::visit([mask](auto& e){e.mask=mask;},layer->effects[target]);
+    collectUnreferencedMasks();return true;
+}
+MaskId CompositionDocument::createMask(LayerId id,int target,creative_suite::composition::ShapeMaskKind kind) {
+    if(!findLayer(id)||target < -2 || (target>=0 && std::size_t(target)>=findLayer(id)->effects.size()) ||
+       masks_.size()>=4096 || next_mask_id_>std::uint64_t(INT64_MAX) ||
+       (kind!=creative_suite::composition::ShapeMaskKind::Rectangle && kind!=creative_suite::composition::ShapeMaskKind::Ellipse))return 0;
+    const auto next=next_mask_id_++;
+    masks_.push_back({next,kind});
+    if(!associateMask(id,target,next)) {masks_.pop_back();return 0;}
+    return next;
+}
+bool CompositionDocument::setMaskParameters(MaskId id,const creative_suite::composition::ShapeMaskParameters& p) {
+    const auto* old=findMask(id);if(!old || old->parameters==p || !creative_suite::composition::validShapeMask(p,old->keyframes))return false;
+    for(auto& m:masks_)if(m.id==id){m.parameters=p;return true;}return false;
+}
+bool CompositionDocument::replaceMaskKeyframes(MaskId id,std::size_t property,creative_suite::animation::ScalarKeyframes keys) {
+    const auto* old=findMask(id);if(!old||property>=5)return false;
+    auto m=*old;m.keyframes[property]=std::move(keys);
+    if(!creative_suite::composition_exchange::validMask(m)||m.keyframes==old->keyframes)return false;
+    for(auto& existing:masks_)if(existing.id==id){existing=std::move(m);return true;}return false;
+}
+bool CompositionDocument::setMaskKeyframe(MaskId id,std::size_t property,std::int64_t frame,double value) {
+    const auto* m=findMask(id);if(!m||property>=5)return false;
+    auto keys=m->keyframes[property];if(!creative_suite::animation::setKeyframe(keys,frame,value))return false;
+    return replaceMaskKeyframes(id,property,std::move(keys));
+}
+bool CompositionDocument::removeMaskKeyframe(MaskId id,std::size_t property,std::int64_t frame) {
+    const auto* m=findMask(id);if(!m||property>=5)return false;
+    auto keys=m->keyframes[property];if(!creative_suite::animation::removeKeyframe(keys,frame))return false;
+    return replaceMaskKeyframes(id,property,std::move(keys));
+}
+bool CompositionDocument::setMaskKeyframeInterpolation(MaskId id,std::size_t property,std::int64_t frame,
+    creative_suite::animation::InterpolationMode interpolation,const creative_suite::animation::CubicBezierEasing& easing) {
+    const auto* m=findMask(id);if(!m||property>=5||!creative_suite::animation::validKeyframeInterpolation(interpolation,easing))return false;
+    auto keys=m->keyframes[property];
+    for(auto& k:keys)if(k.frame==frame){k.interpolation=interpolation;k.easing=easing;return replaceMaskKeyframes(id,property,std::move(keys));}
+    return false;
+}
 } // namespace motion::model

@@ -1,5 +1,12 @@
 # Fusion Composition
 
+[Shape-mask interchange](../COMPOSITION_INTERCHANGE.md) adds editable shared
+Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
+curve slicing are shared; native Motion advances to v8 while CSP stays v30.
+Automated coverage: `creative-suite-mask-interchange`, shared composition/
+OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
+Native UI and platform acceptance remain separately pending.
+
 [Editable composition interchange](../COMPOSITION_INTERCHANGE.md) transfers compatible Fusion compositions to Motion layers and back through `.cscomp` files. CSP v30 preserves imported presentation semantics.
 
 The [Background Generator](BACKGROUND_GENERATOR.md) in Edit creates an opaque-white

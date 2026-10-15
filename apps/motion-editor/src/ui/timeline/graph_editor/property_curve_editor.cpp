@@ -72,6 +72,7 @@ void PropertyCurveEditor::setCurve(
     std::vector<Keyframe> keyframes,
     std::optional<std::int64_t> selected_segment_start)
 {
+    scalar_name_.clear();
     layer_id_ = layer_id;
     property_ = property;
     keyframes_ = std::move(keyframes);
@@ -83,6 +84,10 @@ void PropertyCurveEditor::setCurve(
     update();
 }
 
+void PropertyCurveEditor::setScalarCurve(std::uint64_t owner_id,QString name,std::vector<Keyframe> keys,
+    std::optional<std::int64_t> segment) {
+    setCurve(owner_id,TransformProperty::PositionX,std::move(keys),segment);scalar_name_=std::move(name);update();
+}
 void PropertyCurveEditor::setSelectionHandler(SelectionHandler handler)
 {
     selection_handler_ = std::move(handler);
@@ -254,7 +259,7 @@ void PropertyCurveEditor::paintEvent(QPaintEvent*)
     painter.setPen(QColor(176, 183, 193));
     painter.drawText(QRectF(4, 4, width() - 8, 18),
                      Qt::AlignLeft | Qt::AlignVCenter,
-                     propertyName(property_));
+                     (scalar_name_.isEmpty()?propertyName(property_):scalar_name_));
 
     if (keyframes_.size() < 2) {
         painter.setPen(QColor(165, 172, 182));
@@ -288,10 +293,10 @@ void PropertyCurveEditor::paintEvent(QPaintEvent*)
             else path.lineTo(point);
         }
         const bool selected = selected_segment_start_ == left.frame;
-        painter.setPen(QPen(selected ? QColor(255, 183, 54) : propertyColor(property_),
+        painter.setPen(QPen(selected ? QColor(255, 183, 54) : (scalar_name_.isEmpty()?propertyColor(property_):QColor(220,190,80)),
                             selected ? 3.0 : 2.0));
         painter.drawPath(path);
-        painter.setBrush(selected ? QColor(255, 183, 54) : propertyColor(property_));
+        painter.setBrush(selected ? QColor(255, 183, 54) : (scalar_name_.isEmpty()?propertyColor(property_):QColor(220,190,80)));
         painter.setPen(Qt::NoPen);
         painter.drawEllipse(pointForValue(static_cast<double>(left.frame), left.value), 4, 4);
         painter.drawEllipse(pointForValue(static_cast<double>(right.frame), right.value), 4, 4);

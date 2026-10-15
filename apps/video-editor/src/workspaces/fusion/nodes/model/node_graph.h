@@ -3,6 +3,7 @@
 #include "timeline/timeline_transform.h"
 #include "timeline/text_style.h"
 #include <creative_suite/effects/effects.h>
+#include <creative_suite/composition/shape_mask.h>
 #include <creative_suite/composition_exchange/document.h>
 
 #include <cstdint>
@@ -39,13 +40,8 @@ struct InputPort { std::uint8_t index; PortKind kind; const char* label; };
 [[nodiscard]] bool isMaskNode(NodeType) noexcept;
 
 // Geometry is normalized to the receiving image. Curves use clip-local frames.
-struct MaskParameters {
-    double center_x = 0.5, center_y = 0.5, width = 0.5, height = 0.5;
-    double rotation = 0.0, soft_edge = 0.0;
-    bool invert = false;
-    friend bool operator==(const MaskParameters&, const MaskParameters&) = default;
-};
-using MaskKeyframes = std::array<creative_suite::animation::ScalarKeyframes, 5>;
+using MaskParameters = creative_suite::composition::ShapeMaskParameters;
+using MaskKeyframes = creative_suite::composition::ShapeMaskKeyframes;
 [[nodiscard]] double maskValue(const MaskParameters&, std::size_t) noexcept;
 void setMaskValue(MaskParameters&, std::size_t, double) noexcept;
 [[nodiscard]] MaskParameters evaluateMask(const MaskParameters&, const MaskKeyframes&, std::int64_t);

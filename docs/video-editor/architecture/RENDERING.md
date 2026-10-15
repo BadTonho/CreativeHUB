@@ -1,5 +1,12 @@
 # Rendering Boundary
 
+[Shape-mask interchange](../../COMPOSITION_INTERCHANGE.md) adds editable shared
+Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
+curve slicing are shared; native Motion advances to v8 while CSP stays v30.
+Automated coverage: `creative-suite-mask-interchange`, shared composition/
+OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
+Native UI and platform acceptance remain separately pending.
+
 [Composition interchange](../../COMPOSITION_INTERCHANGE.md) preserves source raster domains, text layout and source clocks. Imported Motion Transform operations can target the project canvas while retaining intrinsic inputs. Preview, node VIEW and export prepare the same source windows; GPU image operations accept optional output dimensions.
 
 ## Background Generator

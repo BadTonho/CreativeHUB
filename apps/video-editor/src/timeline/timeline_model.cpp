@@ -691,72 +691,11 @@ std::optional<std::int64_t> shiftedSourceStart(
 
 // Slice generated and mask curves without changing the sampled animation.
 // De Casteljau subdivision retains the easing on partial Bezier segments.
-struct CurvePoint { double x, y; };
-CurvePoint mixCurvePoint(CurvePoint a, CurvePoint b, double t) {
-    return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t};
-}
-using CurveSegment = std::array<CurvePoint, 4>;
-std::pair<CurveSegment, CurveSegment> subdivideCurve(const CurveSegment& curve, double t) {
-    const auto a = mixCurvePoint(curve[0], curve[1], t);
-    const auto b = mixCurvePoint(curve[1], curve[2], t);
-    const auto c = mixCurvePoint(curve[2], curve[3], t);
-    const auto d = mixCurvePoint(a, b, t), e = mixCurvePoint(b, c, t);
-    const auto f = mixCurvePoint(d, e, t);
-    return {CurveSegment{curve[0], a, d, f}, CurveSegment{f, e, c, curve[3]}};
-}
-double curveParameterAtX(const CurveSegment& curve, double x) {
-    double low = 0, high = 1;
-    for (int iteration = 0; iteration < 60; ++iteration) {
-        const auto middle = (low + high) * 0.5;
-        const auto point = subdivideCurve(curve, middle).first.back();
-        if (point.x < x) low = middle; else high = middle;
-    }
-    return (low + high) * 0.5;
-}
 template<class Evaluate>
 creative_suite::animation::ScalarKeyframes reframeScalarCurve(
-    const creative_suite::animation::ScalarKeyframes& source,
-    std::int64_t delta, std::int64_t duration, Evaluate valueAt) {
-    if (source.empty()) return {};
-    creative_suite::animation::ScalarKeyframes output;
-        output.push_back({0, valueAt(delta)});
-        for (const auto& key : source) {
-            // Comparison in source coordinates avoids overflowing a shifted key.
-            if (key.frame > delta && key.frame - std::max<std::int64_t>(0, delta) < duration &&
-                (delta >= 0 || key.frame <= std::numeric_limits<std::int64_t>::max() + delta)) {
-                const auto shifted = key.frame - delta;
-                if (shifted < duration) { auto copy = key; copy.frame = shifted; output.push_back(copy); }
-            }
-        }
-        if (output.back().frame != duration - 1)
-            output.push_back({duration - 1, valueAt(delta + duration - 1)});
-        for (std::size_t index = 0; index + 1 < output.size(); ++index) {
-            auto& left = output[index];
-            const auto begin = left.frame + delta, end = output[index + 1].frame + delta;
-            const auto upper = std::upper_bound(source.begin(), source.end(), begin,
-                [](std::int64_t frame, const auto& key) { return frame < key.frame; });
-            left.interpolation = creative_suite::animation::InterpolationMode::Linear;
-            if (upper == source.begin() || upper == source.end()) continue;
-            const auto& original_left = *(upper - 1);
-            const auto& original_right = *upper;
-            if (original_left.interpolation != creative_suite::animation::InterpolationMode::CubicBezier) continue;
-            const double interval = static_cast<double>(original_right.frame - original_left.frame);
-            const auto x0 = static_cast<double>(begin - original_left.frame) / interval;
-            const auto x1 = static_cast<double>(end - original_left.frame) / interval;
-            CurveSegment curve{CurvePoint{0, 0}, CurvePoint{original_left.easing.x1, original_left.easing.y1},
-                CurvePoint{original_left.easing.x2, original_left.easing.y2}, CurvePoint{1, 1}};
-            const auto t0 = curveParameterAtX(curve, x0), t1 = curveParameterAtX(curve, x1);
-            if (t0 > 0) curve = subdivideCurve(curve, t0).second;
-            if (t1 < 1) curve = subdivideCurve(curve, (t1 - t0) / (1 - t0)).first;
-            const auto dx = curve[3].x - curve[0].x, dy = curve[3].y - curve[0].y;
-            if (dx <= 0 || dy <= 0) continue;
-            left.interpolation = creative_suite::animation::InterpolationMode::CubicBezier;
-            left.easing = {std::clamp((curve[1].x - curve[0].x) / dx, 0.0, 1.0),
-                std::clamp((curve[1].y - curve[0].y) / dy, 0.0, 1.0),
-                std::clamp((curve[2].x - curve[0].x) / dx, 0.0, 1.0),
-                std::clamp((curve[2].y - curve[0].y) / dy, 0.0, 1.0)};
-        }
-    return output;
+    const creative_suite::animation::ScalarKeyframes& source, std::int64_t delta,
+    std::int64_t duration, Evaluate valueAt) {
+    return creative_suite::animation::sliceScalarCurve(source,delta,duration,valueAt(delta));
 }
 TransformKeyframes reframeAdjustmentKeyframes(
     const TimelineClip& old_clip, std::int64_t new_start,

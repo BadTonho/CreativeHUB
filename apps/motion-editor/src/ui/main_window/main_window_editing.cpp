@@ -1,3 +1,4 @@
+#include "ui/inspector/mask_inspector_widget.h"
 #include "main_window.h"
 #include "main_window_support.h"
 
@@ -263,17 +264,19 @@ void MainWindow::refreshCurveEditor()
         refreshCurveEditor();
         return;
     }
-    const auto& keys = creative_suite::animation::keyframesFor(
+    const auto* mask=curve_selection_->mask_id?document_->findMask(curve_selection_->mask_id):nullptr;
+    if(curve_selection_->mask_id && (!mask || curve_selection_->mask_property>=5)){resetCurveEditor();return;}
+    const auto& keys = mask?mask->keyframes[curve_selection_->mask_property]:creative_suite::animation::keyframesFor(
         found->keyframes, curve_selection_->property);
     if (keys.size() >= 2 && std::none_of(keys.begin(), keys.end(), [this](const auto& keyframe) {
             return keyframe.frame == curve_selection_->segment_start_frame;
         })) {
         curve_selection_->segment_start_frame = keys.front().frame;
     }
-    curve_editor_->setCurve(found->id, curve_selection_->property, keys,
-        keys.size() >= 2
-            ? std::optional<std::int64_t>(curve_selection_->segment_start_frame)
-            : std::nullopt);
+    const auto segment=keys.size()>=2?std::optional<std::int64_t>(curve_selection_->segment_start_frame):std::nullopt;
+    if(mask){const char* names[]{"Center X","Center Y","Width","Height","Rotation"};
+        curve_editor_->setScalarCurve(mask->id,QString("Mask #%1 / %2 (composition frames)").arg(mask->id).arg(names[curve_selection_->mask_property]),keys,segment);
+    } else curve_editor_->setCurve(found->id,curve_selection_->property,keys,segment);
     const auto selected_key = std::lower_bound(keys.begin(), keys.end(),
         curve_selection_->segment_start_frame, [](const auto& item, std::int64_t frame) {
             return item.frame < frame;
@@ -301,9 +304,10 @@ void MainWindow::applyCurvePreset(int preset_index)
     finishPendingTransformEdit();
     const auto [interpolation, easing] = easingForPreset(preset_index);
     const auto before = captureEditState();
-    if (!document_->setLayerKeyframeInterpolation(
-            curve_selection_->layer_id, curve_selection_->property,
-            curve_selection_->segment_start_frame, interpolation, easing)) {
+    const bool changed=curve_selection_->mask_id
+        ? document_->setMaskKeyframeInterpolation(curve_selection_->mask_id,curve_selection_->mask_property,curve_selection_->segment_start_frame,interpolation,easing)
+        : document_->setLayerKeyframeInterpolation(curve_selection_->layer_id,curve_selection_->property,curve_selection_->segment_start_frame,interpolation,easing);
+    if (!changed) {
         refreshCurveEditor();
         return;
     }
@@ -320,9 +324,10 @@ void MainWindow::applyCurveEasing(
     if (!document_ || !curve_selection_) return;
     finishPendingTransformEdit();
     auto before = captureEditState();
-    if (!document_->setLayerKeyframeInterpolation(
-            curve_selection_->layer_id, curve_selection_->property,
-            local_start_frame, InterpolationMode::CubicBezier, easing)) {
+    const bool changed=curve_selection_->mask_id
+        ? document_->setMaskKeyframeInterpolation(curve_selection_->mask_id,curve_selection_->mask_property,local_start_frame,InterpolationMode::CubicBezier,easing)
+        : document_->setLayerKeyframeInterpolation(curve_selection_->layer_id,curve_selection_->property,local_start_frame,InterpolationMode::CubicBezier,easing);
+    if (!changed) {
         refreshCurveEditor();
         return;
     }
@@ -438,9 +443,11 @@ void MainWindow::syncTransformInspector()
         selected_effect_ = std::pair{selected->id, std::size_t{0}};
     }
 
-    if (inspector_ != nullptr)
+    if (inspector_ != nullptr) {
         inspector_->syncLayer(selected, timeline_ != nullptr ? timeline_->currentFrame() : 0,
                               effect_row);
+        inspector_->masksInspector()->sync(document_?&*document_:nullptr,selected_layer_id_,timeline_?timeline_->currentFrame():0);
+    }
     if (selected == nullptr) {
         if (viewer_ != nullptr) viewer_->setSelectedLayerAnchor(std::nullopt);
         return;

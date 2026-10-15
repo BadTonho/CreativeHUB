@@ -1,6 +1,13 @@
 # Motion Studio Scope and Readiness
 
-[Editable composition interchange](../COMPOSITION_INTERCHANGE.md) adds independent `.cscomp` import/export and Motion native schema v7. Automated coverage: `creative-suite-composition-interchange` plus native document, preview/export and Hub backup suites. Manual/platform acceptance is tracked in the interchange guide.
+[Shape-mask interchange](../COMPOSITION_INTERCHANGE.md) adds editable shared
+Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
+curve slicing are shared; native Motion advances to v8 while CSP stays v30.
+Automated coverage: `creative-suite-mask-interchange`, shared composition/
+OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
+Native UI and platform acceptance remain separately pending.
+
+[Editable composition interchange](../COMPOSITION_INTERCHANGE.md) adds independent `.cscomp` import/export and Motion native schema v8. Automated coverage: `creative-suite-composition-interchange` plus native document, preview/export and Hub backup suites. Manual/platform acceptance is tracked in the interchange guide.
 
 Shared video decoding honors tagged YUV matrices and full/limited range before
 RGBA8 composition. Decoder changes require the Motion preview/export consumer
@@ -90,7 +97,7 @@ The first Motion Studio MVP is a 2D composition workflow with:
 - document validation, actionable local error logging, undo/redo, autosave, and
   recovery appropriate to the supported workflow.
 
-The MVP does not include audio editing or mixing, animated masks, advanced
+The original MVP does not include audio editing or mixing, animated masks, advanced
 effect graphs, nested compositions, 3D, node-based workflows, or particles.
 Video sources are visual layers; the approved MVP output is opaque video without
 audio. Alpha-channel export is outside this MVP. Codec and output-profile
@@ -115,8 +122,10 @@ is complete. This tool analyzes a local audio file and bakes its
 frame-level RMS envelope into linear keyframes for one selected transform
 property. The source audio is not persisted, and the tool does not add audio
 playback, mixing, or audio export. MVP and release acceptance gates remain
-open. 3D, nested compositions, node-based workflows, particles, animated masks,
-and advanced effect graphs remain later research.
+open. Rectangle/Ellipse masks with geometry animation are now an additional
+implemented expansion, separate from release acceptance. 3D, nested
+compositions, node-based workflows, particles, vector-path masks/tracking and
+advanced effect graphs remain later research.
 
 ### MVP acceptance
 

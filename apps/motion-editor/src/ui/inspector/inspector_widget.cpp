@@ -1,4 +1,6 @@
+#include <QScrollArea>
 #include "inspector_widget.h"
+#include "mask_inspector_widget.h"
 
 #include "ui/media_pool/media_pool_widget.h"
 
@@ -448,6 +450,10 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
         connect(field, &QDoubleSpinBox::editingFinished,
                 this, &InspectorWidget::effectParametersEditFinished);
     }
+    auto* mask_scroll=new QScrollArea(this);
+    mask_scroll->setWidgetResizable(true);mask_scroll->setFrameShape(QFrame::NoFrame);
+    masks_=new MaskInspectorWidget(mask_scroll);mask_scroll->setWidget(masks_);
+    addTab(mask_scroll,QStringLiteral("Masks"));
 }
 
 void InspectorWidget::setMedia(const creative_suite::media::MediaItem* item)

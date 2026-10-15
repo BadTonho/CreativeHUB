@@ -4,6 +4,7 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <cmath>
+#include <algorithm>
 #include <creative_suite/composition_exchange/document.h>
 #include <limits>
 #include <set>
@@ -53,6 +54,70 @@ constexpr animation::TransformProperty props[]{
     animation::TransformProperty::Scale, animation::TransformProperty::Rotation,
     animation::TransformProperty::Opacity};
 } // namespace
+bool validMask(const Mask& m) noexcept {
+    if(!m.id || m.id > std::uint64_t(INT64_MAX) ||
+       (m.kind!=composition::ShapeMaskKind::Rectangle && m.kind!=composition::ShapeMaskKind::Ellipse) ||
+       !composition::validShapeMask(m.parameters,m.keyframes))return false;
+    std::size_t count=0;
+    for(const auto& curve:m.keyframes)for(const auto& key:curve) {
+        if(key.frame >= (std::int64_t(1)<<50))return false;
+        ++count;
+    }
+    return count<=100000;
+}
+QJsonArray masksJson(const std::vector<Mask>& masks) {
+    QJsonArray result;
+    if(masks.size()>4096)throw Error("Too many masks.");
+    std::set<MaskId> ids;
+    for(const auto& m:masks) {
+        if(!validMask(m)||!ids.insert(m.id).second)throw Error("Invalid mask definition.");
+        QJsonArray geometry, curves;
+        for(std::size_t i=0;i<5;++i) {
+            geometry.append(composition::shapeMaskValue(m.parameters,i));
+            QJsonArray curve;
+            for(const auto& k:m.keyframes[i])curve.append(QJsonObject{
+                {"frame",QString::number(k.frame)}, {"value",k.value},
+                {"bezier",k.interpolation==animation::InterpolationMode::CubicBezier},
+                {"easing",QJsonArray{k.easing.x1,k.easing.y1,k.easing.x2,k.easing.y2}}});
+            curves.append(curve);
+        }
+        result.append(QJsonObject{{"id",QString::number(m.id)},
+            {"kind",m.kind==composition::ShapeMaskKind::Rectangle?"rectangle":"ellipse"},
+            {"geometry",geometry},{"soft_edge",m.parameters.soft_edge},
+            {"invert",m.parameters.invert},{"curves",curves}});
+    }
+    return result;
+}
+std::vector<Mask> parseMasksJson(const QJsonArray& array) {
+    if(array.size()>4096)throw Error("Too many masks.");
+    std::vector<Mask> result;
+    std::set<MaskId> ids;
+    for(const auto& value:array) {
+        const auto o=value.toObject();Mask m;
+        const auto id=integer(o,"id");if(id<=0)throw Error("Invalid mask ID.");m.id=id;
+        if(o.value("kind")!="rectangle" && o.value("kind")!="ellipse")throw Error("Unknown mask kind.");
+        m.kind=o.value("kind")=="rectangle"?composition::ShapeMaskKind::Rectangle:composition::ShapeMaskKind::Ellipse;
+        auto geometry=o.value("geometry").toArray();auto curves=o.value("curves").toArray();
+        if(geometry.size()!=5||curves.size()!=5||!o.value("invert").isBool())throw Error("Invalid mask properties.");
+        m.parameters.soft_edge=number(o,"soft_edge");m.parameters.invert=o.value("invert").toBool();
+        for(std::size_t i=0;i<5;++i) {
+            if(!geometry[qsizetype(i)].isDouble() || !curves[qsizetype(i)].isArray())throw Error("Invalid mask geometry/curve.");
+            composition::setShapeMaskValue(m.parameters,i,geometry[qsizetype(i)].toDouble());
+            const auto curve=curves[qsizetype(i)].toArray();if(curve.size()>100000)throw Error("Too many mask keys.");
+            for(const auto& key:curve) {
+                const auto k=key.toObject();auto easing=k.value("easing").toArray();
+                if(!k.value("bezier").isBool()||easing.size()!=4)throw Error("Invalid mask interpolation.");
+                for(const auto& e:easing)if(!e.isDouble())throw Error("Invalid mask easing.");
+                m.keyframes[i].push_back({integer(k,"frame"),number(k,"value"),
+                    k.value("bezier").toBool()?animation::InterpolationMode::CubicBezier:animation::InterpolationMode::Linear,
+                    {easing[0].toDouble(),easing[1].toDouble(),easing[2].toDouble(),easing[3].toDouble()}});
+            }
+        }
+        if(!validMask(m)||!ids.insert(m.id).second)throw Error("Invalid mask definition or duplicate ID.");
+        result.push_back(std::move(m));
+    }
+    return result;
+}
 bool validPresentation(const Presentation &p) noexcept {
     constexpr auto limit = std::int64_t(1) << 50;
     return (p.profile == Profile::FusionCanvas || p.profile == Profile::MotionLayer) &&
@@ -95,7 +160,11 @@ Presentation parsePresentation(const QJsonObject &o) {
 std::vector<Issue> validate(const Document &d, bool media) {
     std::vector<Issue> issues;
     std::set<std::uint64_t> ids;
-    std::size_t stages = 1;
+    std::size_t stages = 1 + d.masks.size();
+    std::set<MaskId> mask_ids, referenced_masks;
+    if(d.masks.size()>4096)issues.push_back({0,"Too many masks."});
+    for(const auto& m:d.masks)if(!validMask(m)||!mask_ids.insert(m.id).second)
+        issues.push_back({m.id,"Invalid mask definition or duplicate ID."});
     if (d.width < 1 || d.height < 1 || std::uint64_t(d.width) * d.height > 16777216 ||
         d.fps_numerator <= 0 || d.fps_denominator <= 0 || d.fps_numerator > 1000000 ||
         d.fps_denominator > 1000000 || double(d.fps_numerator) / d.fps_denominator > 1000 ||
@@ -105,6 +174,14 @@ std::vector<Issue> validate(const Document &d, bool media) {
             {0, "Invalid composition dimensions, frame rate, duration or resource limits."});
     for (const auto &l : d.layers) {
         stages += 3 + l.colors.size();
+        const auto reference = [&](MaskId id) {
+            if(!id)return;
+            referenced_masks.insert(id);
+            if(!mask_ids.contains(id))issues.push_back({l.id,"Unknown mask reference."});
+        };
+        reference(l.source_mask);reference(l.transform_mask);
+        if(!l.color_masks.empty() && l.color_masks.size()!=l.colors.size())issues.push_back({l.id,"Invalid effect mask bindings."});
+        for(auto id:l.color_masks)reference(id);
         if (!l.id || !ids.insert(l.id).second || !validPresentation(l.presentation) ||
             !animation::validTransform(l.transform) ||
             !animation::validTransformKeyframes(l.curves) || l.colors.size() > 1024 ||
@@ -159,6 +236,7 @@ std::vector<Issue> validate(const Document &d, bool media) {
         if (keys > 100000)
             issues.push_back({l.id, "Too many animation keys."});
     }
+    for(auto id:mask_ids)if(!referenced_masks.contains(id))issues.push_back({id,"Unreferenced mask."});
     if (stages > 16384)
         issues.push_back({0, "The composition exceeds the 16384-stage interchange limit."});
     return issues;
@@ -212,10 +290,13 @@ QJsonObject toJson(const Document &d, const std::filesystem::path &file) {
                                      l.colors_enabled.empty() ? true : bool(l.colors_enabled[i])});
         }
         o.insert("colors", colors);
+        if(l.source_mask)o.insert("source_mask",QString::number(l.source_mask));
+        if(l.transform_mask)o.insert("transform_mask",QString::number(l.transform_mask));
+        if(std::any_of(l.color_masks.begin(),l.color_masks.end(),[](auto id){return id!=0;})) {QJsonArray refs;for(auto id:l.color_masks)refs.append(QString::number(id));o.insert("color_masks",refs);}
         layers.append(o);
     }
-    return {{"format", "creative-suite.composition-interchange"},
-            {"version", 1},
+    QJsonObject result{{"format", "creative-suite.composition-interchange"},
+            {"version", d.masks.empty()?1:2},
             {"name", str(d.name)},
             {"width", d.width},
             {"height", d.height},
@@ -223,11 +304,18 @@ QJsonObject toJson(const Document &d, const std::filesystem::path &file) {
             {"fps_denominator", QString::number(d.fps_denominator)},
             {"duration", QString::number(d.duration)},
             {"layers", layers}};
+    if(!d.masks.empty())result.insert("masks",masksJson(d.masks));
+    return result;
 }
 Document fromJson(const QJsonObject &o, const std::filesystem::path &file) {
-    if (o.value("format") != "creative-suite.composition-interchange" || o.value("version") != 1)
+    if (o.value("format") != "creative-suite.composition-interchange" || (o.value("version") != 1 && o.value("version") != 2))
         throw Error("Unsupported composition interchange format or version.");
     Document d;
+    const bool masks_allowed=o.value("version")==2;
+    if(o.contains("masks")) {
+        if(!masks_allowed||!o.value("masks").isArray())throw Error("Masks require interchange v2.");
+        d.masks=parseMasksJson(o.value("masks").toArray());
+    }
     d.name = o.value("name").toString().toUtf8().toStdString();
     d.width = smallInteger(o, "width");
     d.height = smallInteger(o, "height");
@@ -243,6 +331,18 @@ Document fromJson(const QJsonObject &o, const std::filesystem::path &file) {
         l.id = a.value("id").toString().toULongLong(&ok);
         if (!ok)
             throw Error("Invalid layer ID.");
+        const auto ref=[&](const char* field) -> MaskId {
+            if(!a.contains(field))return 0;
+            if(!masks_allowed)throw Error("Mask bindings require interchange v2.");
+            const auto id=integer(a,field);if(id<0)throw Error("Invalid mask reference.");return id;
+        };
+        l.source_mask=ref("source_mask");l.transform_mask=ref("transform_mask");
+        if(a.contains("color_masks")) {
+            if(!masks_allowed||!a.value("color_masks").isArray())throw Error("Invalid effect mask bindings.");
+            for(const auto& v:a.value("color_masks").toArray()) {
+                QJsonObject temp{{"ref",v}};const auto id=integer(temp,"ref");if(id<0)throw Error("Invalid effect mask reference.");l.color_masks.push_back(id);
+            }
+        }
         auto k = a.value("kind").toString();
         if (k != "video" && k != "image" && k != "text" && k != "background")
             throw Error("Unknown layer kind.");

@@ -43,6 +43,7 @@ target_compile_features(creative-suite-effects PUBLIC cxx_std_20)
 add_library(creative-suite-composition STATIC
     composition/src/frame_compositor.cpp
     composition/include/creative_suite/composition/frame_compositor.h
+      composition/include/creative_suite/composition/shape_mask.h
 )
 add_library(creative-suite::composition ALIAS creative-suite-composition)
 target_include_directories(creative-suite-composition PUBLIC
@@ -63,7 +64,7 @@ if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
     target_include_directories(creative-suite-composition-exchange PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/composition-exchange/include)
     target_link_libraries(creative-suite-composition-exchange PUBLIC
-        creative-suite::animation creative-suite::effects Qt6::Core Qt6::Gui)
+        creative-suite::composition creative-suite::animation creative-suite::effects Qt6::Core Qt6::Gui)
 endif()
 
 if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_IMAGE_EDITOR)

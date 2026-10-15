@@ -343,6 +343,7 @@ QJsonArray writeEffects(const std::vector<model::LayerEffect>& effects)
         std::visit([&object](const auto& value) {
             using Effect = std::decay_t<decltype(value)>;
             object.insert(QStringLiteral("enabled"), value.enabled);
+            if(value.mask)object.insert("mask",encodedInt64(static_cast<std::int64_t>(value.mask)));
             if constexpr (std::is_same_v<Effect, model::GaussianBlurEffect>) {
                 object.insert(QStringLiteral("type"), QStringLiteral("gaussian_blur"));
                 object.insert(QStringLiteral("radius_pixels"), value.radius_pixels);
@@ -360,7 +361,7 @@ QJsonArray writeEffects(const std::vector<model::LayerEffect>& effects)
 
 std::vector<model::LayerEffect> parseEffects(const QJsonArray& array,
                                             const std::filesystem::path& path,
-                                            std::size_t& effect_count)
+                                            std::size_t& effect_count, int document_version)
 {
     if (effect_count + static_cast<std::size_t>(array.size()) >
         static_cast<std::size_t>(kMaximumEffectCount)) {
@@ -377,15 +378,20 @@ std::vector<model::LayerEffect> parseEffects(const QJsonArray& array,
         }
         const auto object = value.toObject();
         const auto type = requiredString(object, "type", path);
+        if(object.contains("mask") && document_version<8)fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Masks require version 8."));
+        const auto mask=object.contains("mask")?requiredInt64(object,"mask",path):0;
+        if(mask<0)fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Invalid mask reference."));
         const auto enabled = requiredBool(object, "enabled", path);
         if (type == QLatin1String("gaussian_blur")) {
             model::GaussianBlurEffect blur;
             blur.enabled = enabled;
+            blur.mask=mask;
             blur.radius_pixels = requiredNumber(object, "radius_pixels", path);
             effects.emplace_back(blur);
         } else if (type == QLatin1String("color_adjustment")) {
             model::ColorAdjustmentEffect color;
             color.enabled = enabled;
+            color.mask=mask;
             color.brightness = requiredNumber(object, "brightness", path);
             color.contrast_percent = requiredNumber(object, "contrast_percent", path);
             color.saturation_percent = requiredNumber(object, "saturation_percent", path);
@@ -555,11 +561,15 @@ void validateDocument(const MotionProjectData& document,
         }
     }
 
+    for(const auto& mask:document.masks)for(const auto& keys:mask.keyframes) {
+        keyframe_count+=keys.size();
+        if(keyframe_count>static_cast<std::size_t>(kMaximumKeyframeCount))fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Too many keyframes."));
+    }
     try {
         (void)CompositionDocument(document.composition.canvas_size.width,
                                   document.composition.canvas_size.height,
                                   document.composition.frame_rate,
-                                  document.layers);
+                                  document.layers, document.masks);
     } catch (const std::exception& error) {
         fail(MotionDocumentErrorCode::InvalidValue, path,
              QString::fromUtf8(error.what()));
@@ -627,6 +637,8 @@ QJsonObject writeLayer(const CompositionLayer& layer,
                    encodedInt64(layer.maximum_timeline_duration_frames));
     object.insert(QStringLiteral("source_frame_rate"), layer.source_frame_rate);
     object.insert(QStringLiteral("visible"), layer.visible);
+    if(layer.source_mask)object.insert("source_mask",encodedInt64(static_cast<std::int64_t>(layer.source_mask)));
+    if(layer.transform_mask)object.insert("transform_mask",encodedInt64(static_cast<std::int64_t>(layer.transform_mask)));
     object.insert(QStringLiteral("transform"), writeTransform(layer.transform));
     QJsonObject keyframes;
     keyframes.insert(QStringLiteral("position_x"), writeKeyframes(layer.keyframes.position_x));
@@ -766,6 +778,12 @@ CompositionLayer parseLayer(const QJsonValue& value,
         object, "maximum_timeline_duration_frames", document_path);
     layer.source_frame_rate = requiredNumber(object, "source_frame_rate", document_path);
     layer.visible = requiredBool(object, "visible", document_path);
+    const auto read_mask=[&](const char* key) -> model::MaskId {
+        if(!object.contains(key))return 0;
+        if(document_version<8)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Masks require version 8."));
+        const auto id=requiredInt64(object,key,document_path);if(id<0)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Invalid mask reference."));return id;
+    };
+    layer.source_mask=read_mask("source_mask");layer.transform_mask=read_mask("transform_mask");
 
     const auto transform = requiredObject(object, "transform", document_path);
     layer.transform.position_x = requiredNumber(transform, "position_x", document_path);
@@ -821,7 +839,7 @@ CompositionLayer parseLayer(const QJsonValue& value,
     }
     if (document_version >= 4) {
         layer.effects = parseEffects(requiredArray(object, "effects", document_path),
-                                     document_path, effect_count);
+                                     document_path, effect_count, document_version);
     }
     return layer;
 }
@@ -908,6 +926,11 @@ MotionProjectData parseDocument(const QJsonObject& root,
         result.media.push_back(std::move(item));
     }
 
+    if(root.contains("masks")) {
+        if(version<8 || !root.value("masks").isArray())fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Masks require version 8."));
+        try {result.masks=creative_suite::composition_exchange::parseMasksJson(root.value("masks").toArray());}
+        catch(const std::exception& e){fail(MotionDocumentErrorCode::InvalidValue,document_path,QString::fromUtf8(e.what()));}
+    }
     const auto layers = requiredArray(root, "layers", document_path);
     if (layers.size() > kMaximumLayerCount) {
         fail(MotionDocumentErrorCode::InvalidValue, document_path,
@@ -969,6 +992,7 @@ QJsonObject encodeDocument(const MotionProjectData& document,
         layers.append(writeLayer(layer, document_path));
     }
     root.insert(QStringLiteral("layers"), layers);
+    if(!document.masks.empty())root.insert("masks",creative_suite::composition_exchange::masksJson(document.masks));
     return root;
 }
 

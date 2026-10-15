@@ -19,6 +19,7 @@ x::Document exportComposition(const MotionProjectData &project) {
     d.name = project.composition.name;
     d.duration = std::max<std::int64_t>(1, project.composition.duration);
     std::vector<x::Issue> issues;
+    d.masks=project.masks;
     for (const auto &layer : project.layers) {
         constexpr auto limit = std::int64_t(1) << 50;
         if (layer.timeline_start_frame < 0 || layer.timeline_start_frame >= limit ||
@@ -38,6 +39,7 @@ x::Document exportComposition(const MotionProjectData &project) {
         l.presentation.source_start = layer.source_start_frame;
         l.transform = layer.transform;
         l.curves = layer.keyframes;
+        l.source_mask=layer.source_mask;l.transform_mask=layer.transform_mask;
         l.source = layer.source_path;
         l.source_rate = layer.source_frame_rate;
         l.source_count = layer.source_frame_count;
@@ -68,11 +70,13 @@ x::Document exportComposition(const MotionProjectData &project) {
             if (auto c = std::get_if<ColorAdjustmentEffect>(&effect)) {
                 l.colors.push_back({c->brightness, c->contrast_percent, c->saturation_percent});
                 l.colors_enabled.push_back(c->enabled);
+                l.color_masks.push_back(c->mask);
             } else
                 issues.push_back(
                     {layer.id, "Gaussian Blur is not supported by Fusion interchange."});
         }
         d.duration = std::max(d.duration, layer.timeline_start_frame + layer.duration_frames);
+        if(std::all_of(l.color_masks.begin(),l.color_masks.end(),[](auto id){return id==0;}))l.color_masks.clear();
         d.layers.push_back(std::move(l));
     }
     auto invalid = x::validate(d);
@@ -94,6 +98,7 @@ MotionProjectData importComposition(const x::Document &d) {
     MotionProjectData project;
     project.composition = {
         {d.width, d.height}, {d.fps_numerator, d.fps_denominator}, d.name, d.duration};
+    project.masks=d.masks;
     std::set<std::filesystem::path> media;
     for (const auto &l : d.layers) {
         CompositionLayer layer{};
@@ -112,6 +117,7 @@ MotionProjectData importComposition(const x::Document &d) {
         layer.maximum_timeline_duration_frames = std::int64_t(1) << 49;
         layer.transform = l.transform;
         layer.keyframes = l.curves;
+        layer.source_mask=l.source_mask;layer.transform_mask=l.transform_mask;
         if (l.kind == x::Kind::Video)
             layer.kind = LayerKind::Video;
         else if (l.kind == x::Kind::Image)
@@ -134,7 +140,7 @@ MotionProjectData importComposition(const x::Document &d) {
         for (auto c : l.colors) {
             layer.effects.emplace_back(ColorAdjustmentEffect{
                 l.colors_enabled.empty() ? true : bool(l.colors_enabled[color_index]), c.brightness,
-                c.contrast_percent, c.saturation_percent});
+                c.contrast_percent, c.saturation_percent, l.color_masks.empty()?0:l.color_masks[color_index]});
             ++color_index;
         }
         if (!l.source.empty() && media.insert(l.source).second)
@@ -146,7 +152,7 @@ MotionProjectData importComposition(const x::Document &d) {
         project.layers.push_back(std::move(layer));
     }
     CompositionDocument checked(d.width, d.height, {d.fps_numerator, d.fps_denominator},
-                                project.layers);
+                                project.layers, project.masks);
     return project;
 }
 } // namespace motion::model

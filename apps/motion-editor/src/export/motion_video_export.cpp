@@ -435,6 +435,7 @@ void MotionVideoExporter::exportVideo(
         std::deque<PendingOutputFrame> pending;
         const auto output_frame_bytes = static_cast<std::uint64_t>(snapshot.canvas_size.width) *
             static_cast<std::uint64_t>(snapshot.canvas_size.height) * 4;
+        const auto mask_snapshot=std::make_shared<const std::vector<model::Mask>>(snapshot.masks);
         const auto make_request = [&](std::int64_t output_frame) {
             const auto composition_frame = std::min(
                 duration_frames - 1,
@@ -443,6 +444,7 @@ void MotionVideoExporter::exportVideo(
             request.canvas_size = snapshot.canvas_size;
             request.frame_rate = snapshot.frame_rate;
             request.black_canvas_when_empty = true;
+            request.masks=mask_snapshot;request.composition_frame=composition_frame;
             for (const auto& layer : snapshot.layers) {
                 if (!layer.visible || composition_frame < layer.timeline_start_frame ||
                     composition_frame - layer.timeline_start_frame >= layer.duration_frames) {
@@ -456,6 +458,7 @@ void MotionVideoExporter::exportVideo(
                 active.source_frame_count = layer.source_frame_count;
                 active.source_start_frame = layer.source_start_frame;
         active.presentation = layer.presentation;
+                active.source_mask=layer.source_mask;active.transform_mask=layer.transform_mask;
                 active.source_frame_rate = layer.source_frame_rate;
                 active.transform = layer.transform;
                 active.keyframes = layer.keyframes;

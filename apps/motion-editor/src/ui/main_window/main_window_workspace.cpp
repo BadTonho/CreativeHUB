@@ -1,3 +1,4 @@
+#include "ui/inspector/mask_inspector_widget.h"
 #include "main_window.h"
 #include "main_window_support.h"
 
@@ -68,6 +69,19 @@ void MainWindow::createWorkspace()
         }
     });
     inspector_ = new InspectorWidget(this);
+    inspector_->masksInspector()->setHandlers(
+        [this](MaskInspectorWidget::Edit edit) {
+            finishPendingTransformEdit();if(!document_)return;
+            try {
+                auto before=captureEditState();
+                if(edit(*document_)){(void)recordCompositionEdit(std::move(before));updateDocumentState();refreshTimeline();}
+                syncTransformInspector();refreshCurveEditor();requestPreview();
+            } catch(const std::exception& e){reportDocumentError("edit_mask",document_path_.value_or(std::filesystem::path{}),e);}
+        },
+        [this](model::LayerId layer,int target,bool enabled){mask_view_layer_=enabled?layer:0;mask_view_target_=target;requestPreview();},
+        [this](model::MaskId mask,std::size_t property,std::int64_t frame){
+            curve_selection_=CurveSelection{selected_layer_id_,creative_suite::animation::TransformProperty::PositionX,frame,mask,property};refreshCurveEditor();
+        });
     connect(inspector_, &InspectorWidget::layerContentEdited,
             this, &MainWindow::editSelectedLayerContent);
     connect(inspector_, &InspectorWidget::layerContentEditFinished,

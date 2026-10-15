@@ -37,8 +37,9 @@ background. Blend uses premultiplied alpha and returns straight RGBA; zero and
 full coverage preserve the respective endpoint bytes. Disconnected Mask inputs
 retain the previous evaluation path.
 
-The Video Editor owns geometry, animation and coverage generation. Its shared
-Preview/Viewer/export rasterizer uses fixed 2×2 samples per pixel. Rectangle
+The Video Editor owns its graph and editing workflow. Geometry validation,
+scalar evaluation and coverage generation are shared with Motion through the
+composition/animation libraries. The Preview/Viewer/export rasterizer uses fixed 2×2 samples per pixel. Rectangle
 distance is signed distance to the rectangle; ellipse distance is normalized
 radial distance scaled by the smaller semiaxis. Softness uses smoothstep across
 a band centered on the shape boundary; inversion follows coverage evaluation.
@@ -67,3 +68,8 @@ and relocate only external Input/media paths. Current Hub backups also accept v3
 Direct Viewer editing, pen/polygon masks, mask combinations, tracking and masks
 on Adjustment Clips remain outside this delivery. See [regression testing](REGRESSION_TESTING.md)
 for automated evidence and separate pending native/platform acceptance.
+
+[Editable interchange](../COMPOSITION_INTERCHANGE.md) v2 now transfers source,
+Color/Effect and Transform masks to Motion with shared identities. Merge and
+Output masks remain valid inside Fusion but are refused by this interchange
+version. The native CSP schema remains 30.

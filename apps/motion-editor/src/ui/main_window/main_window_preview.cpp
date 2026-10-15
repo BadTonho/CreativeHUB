@@ -65,9 +65,13 @@ void MainWindow::requestPreview(bool playback_tick)
     request.canvas_size = document_->canvasSize();
     request.frame_rate = document_->frameRate();
     const auto frame = timeline_->currentFrame();
+    request.composition_frame=frame;
+    if(!mask_snapshot_ || *mask_snapshot_!=document_->masks())mask_snapshot_=std::make_shared<const std::vector<model::Mask>>(document_->masks());
+    request.masks=mask_snapshot_;
+    request.mask_view_layer=mask_view_layer_;request.mask_view_target=mask_view_target_;
     for (const auto& layer : document_->layers()) {
-        if (!layer.visible || layer.duration_frames <= 0 || frame < layer.timeline_start_frame ||
-            frame - layer.timeline_start_frame >= layer.duration_frames) {
+        if (mask_view_layer_!=layer.id && (!layer.visible || layer.duration_frames <= 0 || frame < layer.timeline_start_frame ||
+            frame - layer.timeline_start_frame >= layer.duration_frames)) {
             continue;
         }
         PreviewLayerSnapshot snapshot;
@@ -78,6 +82,7 @@ void MainWindow::requestPreview(bool playback_tick)
         snapshot.source_frame_count = layer.source_frame_count;
         snapshot.source_start_frame = layer.source_start_frame;
         snapshot.presentation = layer.presentation;
+        snapshot.source_mask=layer.source_mask;snapshot.transform_mask=layer.transform_mask;
         snapshot.source_frame_rate = layer.source_frame_rate;
         snapshot.transform = layer.transform;
         snapshot.keyframes = layer.keyframes;

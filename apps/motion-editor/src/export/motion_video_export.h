@@ -35,6 +35,7 @@ struct MotionExportSnapshot {
     model::FrameRate frame_rate{};
     std::vector<model::CompositionLayer> layers;
     std::map<model::LayerId, creative_suite::media::RgbaFramePtr> still_frames;
+    std::vector<model::Mask> masks;
 };
 
 struct MotionExportPerformanceSummary {

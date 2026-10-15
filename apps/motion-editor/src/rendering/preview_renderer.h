@@ -37,6 +37,7 @@ struct PreviewLayerSnapshot {
     std::vector<model::LayerEffect> effects;
     creative_suite::media::RgbaFramePtr still_frame;
     std::optional<creative_suite::composition_exchange::Presentation> presentation;
+    model::MaskId source_mask=0, transform_mask=0;
 };
 
 struct PreviewRequest {
@@ -44,6 +45,10 @@ struct PreviewRequest {
     model::FrameRate frame_rate{};
     std::vector<PreviewLayerSnapshot> layers;
     bool black_canvas_when_empty = false;
+    std::shared_ptr<const std::vector<model::Mask>> masks;
+    std::int64_t composition_frame=0;
+    model::LayerId mask_view_layer=0;
+    int mask_view_target=-2;
 };
 
 class CompositionFrameRenderer;

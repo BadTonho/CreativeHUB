@@ -552,6 +552,7 @@ model::MotionProjectData MainWindow::projectData() const
     snapshot.document_revision = document_revision_;
     snapshot.composition = {document_->canvasSize(), document_->frameRate(), document_->interchange_name, document_->interchange_duration};
     snapshot.layers = document_->layers();
+    snapshot.masks = document_->masks();
     if (media_pool_ != nullptr) {
         snapshot.bins = media_pool_->library().bins();
         snapshot.media.reserve(media_pool_->library().items().size());
@@ -679,7 +680,7 @@ void MainWindow::finishOpen(std::uint64_t generation,
             project.composition.canvas_size.width,
             project.composition.canvas_size.height,
             project.composition.frame_rate,
-            project.layers);
+            project.layers, project.masks);
         creative_suite::media::MediaLibrary staged_library;
         for (const auto& bin : project.bins) {
             if (bin == creative_suite::media::default_bin) continue;
