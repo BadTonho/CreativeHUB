@@ -2,6 +2,7 @@
 
 #include <QButtonGroup>
 #include <QColor>
+#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QPainter>
@@ -15,7 +16,6 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
-
 namespace image_editor {
 
 namespace {
@@ -41,13 +41,25 @@ QIcon shapePaletteIcon(ImageShapeKind kind) {
     return QIcon(icon);
 }
 
+QString shapeDisplayName(ImageShapeKind kind) {
+    switch (kind) {
+    case ImageShapeKind::Line:
+        return QCoreApplication::translate("ImageEditorUI", "Line");
+    case ImageShapeKind::Rectangle:
+        return QCoreApplication::translate("ImageEditorUI", "Rectangle");
+    case ImageShapeKind::Ellipse:
+        return QCoreApplication::translate("ImageEditorUI", "Ellipse");
+    }
+    return {};
+}
+
 } // namespace
 
 ShapePalette::ShapePalette(QWidget* parent)
     : QDialog(parent, Qt::Tool | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
                          Qt::WindowCloseButtonHint) {
     setObjectName(QStringLiteral("shapePaletteWindow"));
-    setWindowTitle(QStringLiteral("Shapes"));
+    setWindowTitle(QCoreApplication::translate("ImageEditorUI", "Shapes"));
     setModal(false);
 
     auto* layout = new QVBoxLayout(this);
@@ -59,17 +71,16 @@ ShapePalette::ShapePalette(QWidget* parent)
     button_group_->setExclusive(true);
 
     const auto addShapeButton = [this, layout](ImageShapeKind kind,
-                                               const QString& text,
                                                const QString& object_name) {
+        const QString text = shapeDisplayName(kind);
         auto* button = new QToolButton(this);
         button->setObjectName(object_name);
-        button->setAccessibleName(text + QStringLiteral(" shape"));
+        button->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "%1 shape").arg(text));
         button->setIcon(shapePaletteIcon(kind));
         button->setIconSize(QSize(24, 24));
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-        const QString article = kind == ImageShapeKind::Ellipse
-            ? QStringLiteral("an") : QStringLiteral("a");
-        button->setToolTip(QStringLiteral("Draw %1 %2").arg(article, text.toLower()));
+        button->setToolTip(
+            QCoreApplication::translate("ImageEditorUI", "Draw %1").arg(text.toLower()));
         button->setCheckable(true);
         button->setFixedSize(36, 36);
         button_group_->addButton(button, static_cast<int>(kind));
@@ -78,11 +89,11 @@ ShapePalette::ShapePalette(QWidget* parent)
         connect(button, &QToolButton::clicked, this,
                 [this, kind]() { emit shapeKindSelected(static_cast<int>(kind)); });
     };
-    addShapeButton(ImageShapeKind::Line, QStringLiteral("Line"),
+    addShapeButton(ImageShapeKind::Line,
                    QStringLiteral("shapePaletteLineButton"));
-    addShapeButton(ImageShapeKind::Rectangle, QStringLiteral("Rectangle"),
+    addShapeButton(ImageShapeKind::Rectangle,
                    QStringLiteral("shapePaletteRectangleButton"));
-    addShapeButton(ImageShapeKind::Ellipse, QStringLiteral("Ellipse"),
+    addShapeButton(ImageShapeKind::Ellipse,
                    QStringLiteral("shapePaletteEllipseButton"));
 
     adjustSize();

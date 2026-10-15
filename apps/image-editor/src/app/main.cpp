@@ -1,5 +1,6 @@
 #include "image_editor_window.h"
 #include <creative_suite/translations/translation_runtime.h>
+#include <QCoreApplication>
 #ifdef Q_OS_WIN
 #include <creative_suite/updater/update_service.h>
 #endif
@@ -10,6 +11,7 @@
 #include <QCommandLineParser>
 #include <QIcon>
 #include <QMessageBox>
+#include <QPushButton>
 
 #ifndef CREATIVE_SUITE_APP_VERSION
 #define CREATIVE_SUITE_APP_VERSION "0.1.0"
@@ -34,15 +36,15 @@ int main(int argc, char* argv[]) {
     parser.addHelpOption();
     const QCommandLineOption linked_source(
         QStringLiteral("linked-source"),
-        QStringLiteral("Source image for a new linked document."),
+        QCoreApplication::translate("ImageEditorUI", "Source image for a new linked document."),
         QStringLiteral("path"));
     const QCommandLineOption linked_document(
         QStringLiteral("linked-document"),
-        QStringLiteral("Editable linked .cimg document path."),
+        QCoreApplication::translate("ImageEditorUI", "Editable linked .cimg document path."),
         QStringLiteral("path"));
     const QCommandLineOption publish_output(
         QStringLiteral("publish-output"),
-        QStringLiteral("PNG path published after saving the linked document."),
+        QCoreApplication::translate("ImageEditorUI", "PNG path published after saving the linked document."),
         QStringLiteral("path"));
     parser.addOption(linked_source);
     parser.addOption(linked_document);
@@ -59,10 +61,16 @@ int main(int argc, char* argv[]) {
         image_editor::ImageEditorLogger{}.logError(
             QStringLiteral("parse_linked_arguments"), cause,
             parser.value(linked_document));
-        QMessageBox::critical(
-            nullptr,
-            QStringLiteral("Image Editor launch error"),
-            cause);
+        QMessageBox launch_error(
+            QMessageBox::Critical,
+            QCoreApplication::translate("ImageEditorUI", "Image Editor launch error"),
+            QCoreApplication::translate(
+                "ImageEditorUI",
+                "Linked mode requires --linked-source, --linked-document, and --publish-output."),
+            QMessageBox::NoButton);
+        auto* ok = launch_error.addButton(QMessageBox::Ok);
+        ok->setText(QCoreApplication::translate("ImageEditorUI", "OK"));
+        launch_error.exec();
         return 2;
     }
 

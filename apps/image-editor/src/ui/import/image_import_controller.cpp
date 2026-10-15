@@ -7,6 +7,7 @@
 #include <atomic>
 #include <memory>
 
+#include <QCoreApplication>
 namespace image_editor {
 
 RasterImportResult ImageImportController::run(
@@ -20,10 +21,10 @@ RasterImportResult ImageImportController::run(
     progress_dialog.setObjectName(QStringLiteral("imageImportProgressDialog"));
     progress_dialog.setWindowTitle(
         purpose == ImageImportPurpose::Relink
-            ? QStringLiteral("Relinking Image")
-            : QStringLiteral("Importing Images"));
-    progress_dialog.setPhaseText(QStringLiteral("Decoding images…"));
-    progress_dialog.setCancellationText(QStringLiteral("Cancelling image import…"));
+            ? QCoreApplication::translate("ImageEditorUI", "Relinking Image")
+            : QCoreApplication::translate("ImageEditorUI", "Importing Images"));
+    progress_dialog.setPhaseText(QCoreApplication::translate("ImageEditorUI", "Decoding images…"));
+    progress_dialog.setCancellationText(QCoreApplication::translate("ImageEditorUI", "Cancelling image import…"));
 
     QObject::connect(&progress_dialog,
                      &ImageExportProgressDialog::cancelRequested,

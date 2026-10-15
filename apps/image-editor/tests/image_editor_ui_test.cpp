@@ -3015,7 +3015,7 @@ bool testPerformanceMetricsUi(const QString& temporary_directory) {
 
     bool composite_visible = false;
     for (int row = 0; row < table->rowCount(); ++row) {
-        if (table->item(row, 0)->text() == QStringLiteral("interactive_render")) {
+        if (table->item(row, 0)->text() == QStringLiteral("Interactive render")) {
             composite_visible = table->item(row, 1)->text() != QStringLiteral("—");
             break;
         }
@@ -5458,9 +5458,9 @@ int main(int argc, char* argv[]) {
         shape_line_button->accessibleName() != QStringLiteral("Line shape") ||
         shape_rectangle_button->accessibleName() != QStringLiteral("Rectangle shape") ||
         shape_ellipse_button->accessibleName() != QStringLiteral("Ellipse shape") ||
-        shape_line_button->toolTip() != QStringLiteral("Draw a line") ||
-        shape_rectangle_button->toolTip() != QStringLiteral("Draw a rectangle") ||
-        shape_ellipse_button->toolTip() != QStringLiteral("Draw an ellipse") ||
+        shape_line_button->toolTip() != QStringLiteral("Draw line") ||
+        shape_rectangle_button->toolTip() != QStringLiteral("Draw rectangle") ||
+        shape_ellipse_button->toolTip() != QStringLiteral("Draw ellipse") ||
         shape_line_button->icon().isNull() || shape_rectangle_button->icon().isNull() ||
         shape_ellipse_button->icon().isNull() || shape_stroke == nullptr ||
         shape_fill == nullptr || shape_width == nullptr || shape_stroke_color == nullptr ||

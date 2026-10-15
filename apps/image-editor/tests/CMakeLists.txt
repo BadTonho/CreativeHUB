@@ -211,6 +211,47 @@ add_creative_suite_test(
 set_tests_properties(creative-suite-image-editor-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+
+add_executable(creative-suite-image-editor-translation-tests
+    image_editor_translation_test.cpp
+    ../resources/translations.qrc
+)
+set(IMAGE_EDITOR_TRANSLATION_TEST_DOWNLOADED_QM
+    "${CMAKE_CURRENT_BINARY_DIR}/fixtures/image_editor_downloaded_pt_BR.qm")
+add_custom_command(
+    OUTPUT "${IMAGE_EDITOR_TRANSLATION_TEST_DOWNLOADED_QM}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+        "${CMAKE_CURRENT_BINARY_DIR}/fixtures"
+    COMMAND "$<TARGET_FILE:Qt6::lrelease>"
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/image_editor_downloaded.ts"
+        -qm "${IMAGE_EDITOR_TRANSLATION_TEST_DOWNLOADED_QM}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/image_editor_downloaded.ts"
+    VERBATIM
+)
+add_custom_target(creative-suite-image-editor-translation-test-fixture
+    DEPENDS "${IMAGE_EDITOR_TRANSLATION_TEST_DOWNLOADED_QM}")
+add_dependencies(creative-suite-image-editor-translation-tests
+    creative-suite-image-editor-translation-test-fixture)
+target_link_libraries(creative-suite-image-editor-translation-tests PRIVATE
+    creative-suite::translations
+    Qt6::Core
+)
+target_include_directories(creative-suite-image-editor-translation-tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/ui"
+    "${PROJECT_SOURCE_DIR}/cmake/test_support"
+)
+target_compile_features(creative-suite-image-editor-translation-tests PRIVATE cxx_std_20)
+target_compile_definitions(creative-suite-image-editor-translation-tests PRIVATE
+    IMAGE_EDITOR_TRANSLATION_TEST_DOWNLOADED_QM="${IMAGE_EDITOR_TRANSLATION_TEST_DOWNLOADED_QM}")
+add_dependencies(creative-suite-image-editor-translation-tests
+    creative-suite-image-editor-translation-catalog)
+add_creative_suite_test(
+    NAME creative-suite-image-editor-translation-catalog
+    COMMAND creative-suite-image-editor-translation-tests)
+set_tests_properties(creative-suite-image-editor-translation-catalog PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
 add_creative_suite_test(
     NAME creative-suite-image-editor-bucket-fill-ui
     COMMAND creative-suite-image-editor-ui-tests --bucket-fill-only)

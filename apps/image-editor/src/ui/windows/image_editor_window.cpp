@@ -16,6 +16,7 @@
 #include "options/image_tool_options_bar.h"
 #include "shapes/shape_palette.h"
 #include "../diagnostics/performance_metrics_panel.h"
+#include "../translation_helpers.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -62,6 +63,7 @@
 
 #include <memory>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <utility>
 
@@ -84,6 +86,14 @@ struct ImageEditorDocumentTab {
 
 namespace {
 
+void showTranslatedMessage(QWidget* parent, QMessageBox::Icon icon,
+                          const QString& title, const QString& message) {
+    QMessageBox box(icon, title, message, QMessageBox::NoButton, parent);
+    auto* ok = box.addButton(QMessageBox::Ok);
+    ok->setText(QCoreApplication::translate("ImageEditorUI", "OK"));
+    box.exec();
+}
+
 bool editingFieldHasFocus() {
     for (QWidget* widget = QApplication::focusWidget(); widget != nullptr;
          widget = widget->parentWidget()) {
@@ -105,7 +115,7 @@ QString imageObjectId(const ImageOperation& operation) {
 }
 
 QString imageFilter() {
-    return QStringLiteral("Images (%1)").arg(
+    return QCoreApplication::translate("ImageEditorUI", "Images (%1)").arg(
         ImageDocumentStore::supportedImageExtensions().join(' '));
 }
 
@@ -237,7 +247,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
             }
         });
     empty_document_state_ = std::make_unique<ImageEditorDocumentTab>();
-    setWindowTitle(QStringLiteral("Image Editor"));
+    setWindowTitle(QCoreApplication::translate("ImageEditorUI", "Image Editor"));
     resize(1180, 760);
 
     auto* central = new QWidget(this);
@@ -263,9 +273,9 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
     tab_row_layout->addWidget(document_tab_bar_, 1);
     new_document_tab_button_ = new QToolButton(tab_row);
     new_document_tab_button_->setObjectName(QStringLiteral("newDocumentTabButton"));
-    new_document_tab_button_->setText(QStringLiteral("+"));
-    new_document_tab_button_->setAccessibleName(QStringLiteral("Open a new document tab"));
-    new_document_tab_button_->setToolTip(QStringLiteral("Open a new document tab"));
+    new_document_tab_button_->setText(QCoreApplication::translate("ImageEditorUI", "+"));
+    new_document_tab_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Open a new document tab"));
+    new_document_tab_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Open a new document tab"));
     tab_row_layout->addWidget(new_document_tab_button_);
     document_layout->addWidget(tab_row);
     document_stack_ = new QStackedWidget(document_workspace);
@@ -274,7 +284,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
     layout->addWidget(document_workspace, 1);
     setCentralWidget(central);
 
-    status_label_ = new QLabel(QStringLiteral("No image open"), this);
+    status_label_ = new QLabel(QCoreApplication::translate("ImageEditorUI", "No image open"), this);
     status_label_->setObjectName(QStringLiteral("imageStatusLabel"));
     statusBar()->addWidget(status_label_, 1);
 
@@ -379,7 +389,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
                 if (activeSession().renameLayer(id, name, &error)) updateView(true);
                 else {
                     updateView(true);
-                    if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
+                    if (!error.isEmpty()) statusBar()->showMessage(ui::translateMessage(error), 4000);
                 }
             });
     connect(layer_panel_, &LayerPanel::groupVisibilityChanged, this,
@@ -392,41 +402,41 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
                 if (activeSession().renameGroup(id, name, &error)) updateView(true);
                 else {
                     updateView(true);
-                    if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
+                    if (!error.isEmpty()) statusBar()->showMessage(ui::translateMessage(error), 4000);
                 }
             });
     connect(layer_panel_, &LayerPanel::addLayerRequested, this, [this]() {
         const QString id = activeSession().addLayer();
         if (id.isEmpty()) {
-            statusBar()->showMessage(QStringLiteral("A layer could not be added"), 3000);
+            statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "A layer could not be added"), 3000);
             return;
         }
         selectedStackItems().clear();
         static_cast<void>(activeSession().selectLayer(id));
         updateView(true);
-        statusBar()->showMessage(QStringLiteral("Layer added"), 1800);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Layer added"), 1800);
     });
     connect(layer_panel_, &LayerPanel::addGroupRequested, this, [this]() {
         QString error;
         const QString id = activeSession().addGroup(&error);
         if (id.isEmpty()) {
-            if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
+            if (!error.isEmpty()) statusBar()->showMessage(ui::translateMessage(error), 4000);
             return;
         }
         selectedStackItems().clear();
         updateView(true);
-        statusBar()->showMessage(QStringLiteral("Group added"), 1800);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Group added"), 1800);
     });
     connect(layer_panel_, &LayerPanel::groupSelectedLayersRequested, this,
             [this](const QStringList& ids) {
                 QString error;
                 if (activeSession().groupLayers(ids, &error).isEmpty()) {
-                    if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
+                    if (!error.isEmpty()) statusBar()->showMessage(ui::translateMessage(error), 4000);
                     return;
                 }
                 selectedStackItems().clear();
                 updateView(true);
-                statusBar()->showMessage(QStringLiteral("Layers grouped"), 1800);
+                statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Layers grouped"), 1800);
             });
     connect(layer_panel_, &LayerPanel::deleteStackItemsRequested, this,
             [this](const QVector<ImageStackItemData>& items) {
@@ -441,7 +451,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
                     deactivateCanvasTools();
                 }
                 updateView(true);
-                statusBar()->showMessage(QStringLiteral("Selected layers / groups deleted"), 1800);
+                statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Selected layers / groups deleted"), 1800);
             });
     connect(layer_panel_, &LayerPanel::ungroupRequested, this,
             [this](const QString& id) {
@@ -483,7 +493,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
                 if (context.isEmpty()) context = document.recoverySessionId();
                 logger_.logError(QStringLiteral("autosave"), error, context);
                 statusBar()->showMessage(
-                    QStringLiteral("Recovery snapshot could not be saved for %1")
+                    QCoreApplication::translate("ImageEditorUI", "Recovery snapshot could not be saved for %1")
                         .arg(context), 5000);
             }
         }
@@ -605,7 +615,7 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
                                     return;
                                 }
                                 if (result.status == MagicWandTool::Status::Rejected) {
-                                    statusBar()->showMessage(result.rejection_reason, 4000);
+                                    statusBar()->showMessage(ui::translateMessage(result.rejection_reason), 4000);
                                     return;
                                 }
                                 if (result.status != MagicWandTool::Status::Selected) return;
@@ -664,7 +674,7 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
     connect(canvas, &ImageCanvas::areaSelectionChanged, this,
             [this](bool) { updateDeleteActions(); });
     connect(canvas, &ImageCanvas::areaSelectionRejected, this,
-            [this](const QString& reason) { statusBar()->showMessage(reason, 4000); });
+            [this](const QString& reason) { statusBar()->showMessage(ui::translateMessage(reason), 4000); });
     connect(canvas, &ImageCanvas::shapeCreated, this,
             [this](const ImageShapeData& shape) { handleShapeCreated(shape); });
     connect(canvas, &ImageCanvas::textCommitted, this,
@@ -758,7 +768,7 @@ int ImageEditorWindow::addDocumentTab(bool activate) {
     document_stack_->addWidget(tab->page);
     {
         const QSignalBlocker blocker(document_tab_bar_);
-        document_tab_bar_->addTab(QStringLiteral("Untitled Canvas"));
+        document_tab_bar_->addTab(QCoreApplication::translate("ImageEditorUI", "Untitled Canvas"));
         if (activate) document_tab_bar_->setCurrentIndex(index);
     }
     if (activate) activateDocumentTab(index);
@@ -873,9 +883,9 @@ void ImageEditorWindow::updateDocumentTabLabel() {
     } else if (!activeSession().sourcePath().isEmpty()) {
         label = QFileInfo(activeSession().sourcePath()).fileName();
     } else if (activeSession().hasDocument()) {
-        label = QStringLiteral("Untitled Canvas");
+        label = QCoreApplication::translate("ImageEditorUI", "Untitled Canvas");
     } else {
-        label = QStringLiteral("New Document");
+        label = QCoreApplication::translate("ImageEditorUI", "New Document");
     }
     if (activeSession().isDirty()) label.prepend('*');
     document_tab_bar_->setTabText(active_document_tab_, label);
@@ -954,7 +964,7 @@ QByteArray& ImageEditorWindow::linkedDocumentFingerprint() noexcept {
 }
 
 void ImageEditorWindow::createLayerPanel() {
-    layer_dock_ = new QDockWidget(QStringLiteral("Layers"), this);
+    layer_dock_ = new QDockWidget(QCoreApplication::translate("ImageEditorUI", "Layers"), this);
     layer_dock_->setObjectName(QStringLiteral("imageEditorLayersDock"));
     layer_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     layer_dock_->setFeatures(QDockWidget::DockWidgetMovable |
@@ -1023,7 +1033,7 @@ void ImageEditorWindow::createToolOptionsBar() {
     connect(tool_options_bar_, &ImageToolOptionsBar::shapeStrokeColorRequested,
             this, [this]() {
                 const QColor color = QColorDialog::getColor(
-                    shape_style_.stroke_color, this, QStringLiteral("Shape Stroke Color"),
+                    shape_style_.stroke_color, this, QCoreApplication::translate("ImageEditorUI", "Shape Stroke Color"),
                     QColorDialog::ShowAlphaChannel);
                 if (!color.isValid()) return;
                 shape_style_.stroke_color = color;
@@ -1034,7 +1044,7 @@ void ImageEditorWindow::createToolOptionsBar() {
     connect(tool_options_bar_, &ImageToolOptionsBar::shapeFillColorRequested,
             this, [this]() {
                 const QColor color = QColorDialog::getColor(
-                    shape_style_.fill_color, this, QStringLiteral("Shape Fill Color"),
+                    shape_style_.fill_color, this, QCoreApplication::translate("ImageEditorUI", "Shape Fill Color"),
                     QColorDialog::ShowAlphaChannel);
                 if (!color.isValid()) return;
                 shape_style_.fill_color = color;
@@ -1063,7 +1073,7 @@ void ImageEditorWindow::createToolOptionsBar() {
     connect(tool_options_bar_, &ImageToolOptionsBar::textColorRequested,
             this, [this]() {
                 const QColor color = QColorDialog::getColor(
-                    text_style_.color, this, QStringLiteral("Text Color"),
+                    text_style_.color, this, QCoreApplication::translate("ImageEditorUI", "Text Color"),
                     QColorDialog::ShowAlphaChannel);
                 if (!color.isValid()) return;
                 text_style_.color = color;
@@ -1301,7 +1311,7 @@ void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
     if (activeSession().data().layers.size() + activeSession().data().groups.size() >=
         ImageDocumentStore::kMaximumLayers) {
         statusBar()->showMessage(
-            QStringLiteral("Cannot create a shape: the 512-layer limit has been reached."),
+            QCoreApplication::translate("ImageEditorUI", "Cannot create a shape: the 512-layer limit has been reached."),
             4000);
         return;
     }
@@ -1312,7 +1322,7 @@ void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
         return;
     }
     updateView(true);
-    statusBar()->showMessage(QStringLiteral("Shape created"), 1800);
+    statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Shape created"), 1800);
 }
 
 void ImageEditorWindow::handleTextEditingStarted(const ImageTextData& text, bool existing) {
@@ -1333,7 +1343,7 @@ void ImageEditorWindow::handleTextCommitted(const ImageTextData& text, bool exis
         if (existing && activeSession().deleteObjects({text.id})) {
             selectedObjectIds().removeAll(text.id);
             updateView(true);
-            statusBar()->showMessage(QStringLiteral("Text removed"), 1800);
+            statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Text removed"), 1800);
         }
         return;
     }
@@ -1353,13 +1363,13 @@ void ImageEditorWindow::handleTextCommitted(const ImageTextData& text, bool exis
         }
         selectedObjectIds() = {text.id};
         updateView(true);
-        statusBar()->showMessage(QStringLiteral("Text updated"), 1800);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Text updated"), 1800);
         return;
     }
     if (activeSession().data().layers.size() + activeSession().data().groups.size() >=
         ImageDocumentStore::kMaximumLayers) {
         statusBar()->showMessage(
-            QStringLiteral("Cannot create text: the 512-layer limit has been reached."), 4000);
+            QCoreApplication::translate("ImageEditorUI", "Cannot create text: the 512-layer limit has been reached."), 4000);
         return;
     }
     QString error;
@@ -1370,7 +1380,7 @@ void ImageEditorWindow::handleTextCommitted(const ImageTextData& text, bool exis
     }
     selectedObjectIds() = {id};
     updateView(true);
-    statusBar()->showMessage(QStringLiteral("Text created"), 1800);
+    statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Text created"), 1800);
 }
 
 void ImageEditorWindow::handleObjectsGeometryChanged(
@@ -1378,7 +1388,7 @@ void ImageEditorWindow::handleObjectsGeometryChanged(
     QString error;
     if (activeSession().updateObjectsRendered(objects, &error)) {
         updateView(true);
-        statusBar()->showMessage(QStringLiteral("Selected objects transformed"), 1500);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Selected objects transformed"), 1500);
     } else if (!error.isEmpty()) {
         reportError(QStringLiteral("transform_selected_objects"), error);
     }
@@ -1389,7 +1399,7 @@ void ImageEditorWindow::deleteSelectedObjects() {
     if (selectedObjectIds().isEmpty() || !activeSession().deleteObjects(selectedObjectIds())) return;
     selectedObjectIds().clear();
     updateView(true);
-    statusBar()->showMessage(QStringLiteral("Selected objects deleted"), 1800);
+    statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Selected objects deleted"), 1800);
 }
 
 void ImageEditorWindow::deleteSelection() {
@@ -1616,7 +1626,7 @@ bool ImageEditorWindow::importImagePaths(const QStringList& paths,
             : ImageImportPurpose::Relink);
     importing_ = false;
     if (result.status == RasterImportStatus::Cancelled) {
-        statusBar()->showMessage(QStringLiteral("Image import cancelled"), 3000);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Image import cancelled"), 3000);
         return false;
     }
     if (result.status != RasterImportStatus::Ready) {
@@ -1640,7 +1650,9 @@ bool ImageEditorWindow::importImagePaths(const QStringList& paths,
     }
     tool_sidebar_->setActiveTool(ToolSidebar::Tool::Select);
     updateView(true);
-    statusBar()->showMessage(relink_id.isEmpty() ? QStringLiteral("Images imported") : QStringLiteral("Image relinked"), 3000);
+    statusBar()->showMessage(relink_id.isEmpty()
+        ? QCoreApplication::translate("ImageEditorUI", "Images imported")
+        : QCoreApplication::translate("ImageEditorUI", "Image relinked"), 3000);
     return true;
 }
 
@@ -1654,76 +1666,76 @@ void ImageEditorWindow::createActions() {
     };
 
     new_canvas_action_ = makeAction(
-        QStringLiteral("New Canvas..."), QKeySequence::New,
+        QCoreApplication::translate("ImageEditorUI", "New Canvas..."), QKeySequence::New,
         [this]() { createNewCanvas(); });
     new_canvas_action_->setObjectName(QStringLiteral("newCanvasAction"));
     resize_canvas_action_ = makeAction(
-        QStringLiteral("Canvas Size..."), {}, [this]() { resizeCanvas(); });
+        QCoreApplication::translate("ImageEditorUI", "Canvas Size..."), {}, [this]() { resizeCanvas(); });
     resize_canvas_action_->setObjectName(QStringLiteral("resizeCanvasAction"));
     open_image_action_ = makeAction(
-        QStringLiteral("Open Image..."), QKeySequence::Open, [this]() { openImage(); });
+        QCoreApplication::translate("ImageEditorUI", "Open Image..."), QKeySequence::Open, [this]() { openImage(); });
     open_image_action_->setObjectName(QStringLiteral("openImageAction"));
     open_document_action_ = makeAction(
-        QStringLiteral("Open Editable Document..."), {}, [this]() { openDocument(); });
+        QCoreApplication::translate("ImageEditorUI", "Open Editable Document..."), {}, [this]() { openDocument(); });
     open_document_action_->setObjectName(QStringLiteral("openEditableDocumentAction"));
     new_tab_canvas_action_ = makeAction(
-        QStringLiteral("New Canvas in New Tab..."), {}, [this]() { createNewCanvas(true); });
+        QCoreApplication::translate("ImageEditorUI", "New Canvas in New Tab..."), {}, [this]() { createNewCanvas(true); });
     new_tab_canvas_action_->setObjectName(QStringLiteral("newTabCanvasAction"));
     new_tab_open_image_action_ = makeAction(
-        QStringLiteral("Open Image in New Tab..."), {}, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Open Image in New Tab..."), {}, [this]() {
             const QString path = QFileDialog::getOpenFileName(
-                this, QStringLiteral("Open Image in New Tab"), {}, imageFilter());
+                this, QCoreApplication::translate("ImageEditorUI", "Open Image in New Tab"), {}, imageFilter());
             if (!path.isEmpty()) static_cast<void>(openImagePathInTarget(path, OpenTarget::NewTab));
         });
     new_tab_open_image_action_->setObjectName(QStringLiteral("newTabOpenImageAction"));
     new_tab_open_document_action_ = makeAction(
-        QStringLiteral("Open Editable Document in New Tab..."), {}, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Open Editable Document in New Tab..."), {}, [this]() {
             const QString path = QFileDialog::getOpenFileName(
-                this, QStringLiteral("Open Editable Image Document in New Tab"), {},
-                QStringLiteral("Image Editor documents (*.cimg)"));
+                this, QCoreApplication::translate("ImageEditorUI", "Open Editable Image Document in New Tab"), {},
+                QCoreApplication::translate("ImageEditorUI", "Image Editor documents (*.cimg)"));
             if (!path.isEmpty()) static_cast<void>(openDocumentPathInTarget(path, OpenTarget::NewTab));
         });
     new_tab_open_document_action_->setObjectName(QStringLiteral("newTabOpenEditableDocumentAction"));
-    import_layer_action_ = makeAction(QStringLiteral("Import Image as Layer..."), {}, [this]() {
-        const auto paths = QFileDialog::getOpenFileNames(this, QStringLiteral("Import Image as Layer"), {},
-            QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"));
+    import_layer_action_ = makeAction(QCoreApplication::translate("ImageEditorUI", "Import Image as Layer..."), {}, [this]() {
+        const auto paths = QFileDialog::getOpenFileNames(this, QCoreApplication::translate("ImageEditorUI", "Import Image as Layer"), {},
+            QCoreApplication::translate("ImageEditorUI", "Images (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"));
         if (!paths.isEmpty()) (void)importImagePaths(paths);
     });
     import_layer_action_->setObjectName(QStringLiteral("importImageAsLayerAction"));
     registerShortcutAction(import_layer_action_, {});
-    relink_raster_action_ = makeAction(QStringLiteral("Relink Image..."), {}, [this]() {
+    relink_raster_action_ = makeAction(QCoreApplication::translate("ImageEditorUI", "Relink Image..."), {}, [this]() {
         if (selectedObjectIds().size() != 1) return;
-        const auto path = QFileDialog::getOpenFileName(this, QStringLiteral("Relink Image"), {},
-            QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"));
+        const auto path = QFileDialog::getOpenFileName(this, QCoreApplication::translate("ImageEditorUI", "Relink Image"), {},
+            QCoreApplication::translate("ImageEditorUI", "Images (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"));
         if (!path.isEmpty()) (void)importImagePaths({path}, {}, selectedObjectIds().front());
     });
     relink_raster_action_->setObjectName(QStringLiteral("relinkRasterImageAction"));
     registerShortcutAction(relink_raster_action_, {});
     relink_action_ = makeAction(
-        QStringLiteral("Relink Source Image..."), {}, [this]() { relinkSource(); });
+        QCoreApplication::translate("ImageEditorUI", "Relink Source Image..."), {}, [this]() { relinkSource(); });
     save_action_ = makeAction(
-        QStringLiteral("Save Document"), QKeySequence::Save, [this]() { saveDocument(); });
+        QCoreApplication::translate("ImageEditorUI", "Save Document"), QKeySequence::Save, [this]() { saveDocument(); });
     save_as_action_ = makeAction(
-        QStringLiteral("Save Document As..."), QKeySequence::SaveAs, [this]() { saveDocumentAs(); });
+        QCoreApplication::translate("ImageEditorUI", "Save Document As..."), QKeySequence::SaveAs, [this]() { saveDocumentAs(); });
     export_action_ = makeAction(
-        QStringLiteral("Export Image..."), {}, [this]() { exportImage(); });
+        QCoreApplication::translate("ImageEditorUI", "Export Image..."), {}, [this]() { exportImage(); });
     quick_export_action_ = makeAction(
-        QStringLiteral("Quick Export..."), {}, [this]() { exportImage(true); });
+        QCoreApplication::translate("ImageEditorUI", "Quick Export..."), {}, [this]() { exportImage(true); });
     auto* quit_action = makeAction(
-        QStringLiteral("Quit"), QKeySequence::Quit, [this]() { close(); });
+        QCoreApplication::translate("ImageEditorUI", "Quit"), QKeySequence::Quit, [this]() { close(); });
     close_document_tab_action_ = makeAction(
-        QStringLiteral("Close Document Tab"), QKeySequence::Close, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Close Document Tab"), QKeySequence::Close, [this]() {
             closeDocumentTab(active_document_tab_);
         });
     close_document_tab_action_->setObjectName(QStringLiteral("closeDocumentTabAction"));
     next_document_tab_action_ = makeAction(
-        QStringLiteral("Next Document Tab"), QKeySequence::NextChild, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Next Document Tab"), QKeySequence::NextChild, [this]() {
             if (document_tabs_.size() > 1)
                 document_tab_bar_->setCurrentIndex((active_document_tab_ + 1) % document_tabs_.size());
         });
     next_document_tab_action_->setObjectName(QStringLiteral("nextDocumentTabAction"));
     previous_document_tab_action_ = makeAction(
-        QStringLiteral("Previous Document Tab"), QKeySequence::PreviousChild, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Previous Document Tab"), QKeySequence::PreviousChild, [this]() {
             if (document_tabs_.size() > 1)
                 document_tab_bar_->setCurrentIndex(
                     (active_document_tab_ + document_tabs_.size() - 1) % document_tabs_.size());
@@ -1734,7 +1746,7 @@ void ImageEditorWindow::createActions() {
     addAction(previous_document_tab_action_);
 
     undo_action_ = makeAction(
-        QStringLiteral("Undo"), QKeySequence::Undo, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Undo"), QKeySequence::Undo, [this]() {
             activeCanvas()->commitTextEditing();
             const QPoint old_offset = activeSession().data().canvas_base_offset;
             if (activeSession().undo()) {
@@ -1747,7 +1759,7 @@ void ImageEditorWindow::createActions() {
         });
     undo_action_->setObjectName(QStringLiteral("undoAction"));
     redo_action_ = makeAction(
-        QStringLiteral("Redo"), QKeySequence::Redo, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Redo"), QKeySequence::Redo, [this]() {
             activeCanvas()->commitTextEditing();
             const QPoint old_offset = activeSession().data().canvas_base_offset;
             if (activeSession().redo()) {
@@ -1760,27 +1772,27 @@ void ImageEditorWindow::createActions() {
         });
     redo_action_->setObjectName(QStringLiteral("redoAction"));
     rotate_left_action_ = makeAction(
-        QStringLiteral("Rotate Left 90°"), {}, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Rotate Left 90°"), {}, [this]() {
             activeCanvas()->commitTextEditing();
             if (activeSession().hasSource()) { activeSession().rotateLeft(); updateView(); }
         });
     rotate_right_action_ = makeAction(
-        QStringLiteral("Rotate Right 90°"), {}, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Rotate Right 90°"), {}, [this]() {
             activeCanvas()->commitTextEditing();
             if (activeSession().hasSource()) { activeSession().rotateRight(); updateView(); }
         });
     rotate_right_action_->setObjectName(QStringLiteral("rotateRightAction"));
     flip_horizontal_action_ = makeAction(
-        QStringLiteral("Flip Horizontal"), {}, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Flip Horizontal"), {}, [this]() {
             activeCanvas()->commitTextEditing();
             if (activeSession().hasSource()) { activeSession().flipHorizontal(); updateView(); }
         });
     flip_vertical_action_ = makeAction(
-        QStringLiteral("Flip Vertical"), {}, [this]() {
+        QCoreApplication::translate("ImageEditorUI", "Flip Vertical"), {}, [this]() {
             activeCanvas()->commitTextEditing();
             if (activeSession().hasSource()) { activeSession().flipVertical(); updateView(); }
         });
-    crop_action_ = new QAction(QStringLiteral("Crop Selection"), this);
+    crop_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Crop Selection"), this);
     crop_action_->setObjectName(QStringLiteral("cropSelectionAction"));
     crop_action_->setCheckable(true);
     connect(crop_action_, &QAction::toggled, this, [this](bool enabled) {
@@ -1795,25 +1807,25 @@ void ImageEditorWindow::createActions() {
             cancel_crop_action_->setEnabled(enabled && activeSession().hasSource());
         }
         statusBar()->showMessage(enabled
-            ? QStringLiteral("Drag over the image to crop; press Esc to cancel")
-            : QStringLiteral("Ready"));
+            ? QCoreApplication::translate("ImageEditorUI", "Drag over the image to crop; press Esc to cancel")
+            : QCoreApplication::translate("ImageEditorUI", "Ready"));
     });
     fit_action_ = makeAction(
-        QStringLiteral("Fit Image"), {}, [this]() { activeCanvas()->fitToWindow(); });
-    cancel_crop_action_ = new QAction(QStringLiteral("Cancel Crop"), this);
+        QCoreApplication::translate("ImageEditorUI", "Fit Image"), {}, [this]() { activeCanvas()->fitToWindow(); });
+    cancel_crop_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Cancel Crop"), this);
     cancel_crop_action_->setObjectName(QStringLiteral("cancelCropAction"));
     cancel_crop_action_->setEnabled(false);
     addAction(cancel_crop_action_);
     connect(cancel_crop_action_, &QAction::triggered, this, [this]() {
         if (activeCanvas() != nullptr && activeCanvas()->areaSelectionGestureActive()) {
             activeCanvas()->cancelAreaSelectionGesture();
-            statusBar()->showMessage(QStringLiteral("Area selection cancelled"), 2500);
+            statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Area selection cancelled"), 2500);
             return;
         }
         if (!crop_action_->isChecked()) return;
         crop_action_->setChecked(false);
         activeCanvas()->setCropMode(false);
-        statusBar()->showMessage(QStringLiteral("Crop cancelled"), 2500);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Crop cancelled"), 2500);
     });
 
     open_document_action_->setObjectName(QStringLiteral("openEditableDocumentAction"));
@@ -1850,7 +1862,7 @@ void ImageEditorWindow::createActions() {
     registerShortcutAction(flip_vertical_action_, {});
     registerShortcutAction(fit_action_, {});
 
-    paint_tool_action_ = new QAction(QStringLiteral("Paint"), this);
+    paint_tool_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Paint"), this);
     paint_tool_action_->setObjectName(QStringLiteral("paintToolAction"));
     paint_tool_action_->setCheckable(true);
     registerShortcutAction(paint_tool_action_, QKeySequence(Qt::Key_B));
@@ -1861,7 +1873,7 @@ void ImageEditorWindow::createActions() {
             : (current == ToolSidebar::Tool::Paint ? ToolSidebar::Tool::None : current));
     });
 
-    eraser_tool_action_ = new QAction(QStringLiteral("Eraser"), this);
+    eraser_tool_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Eraser"), this);
     eraser_tool_action_->setObjectName(QStringLiteral("eraserToolAction"));
     eraser_tool_action_->setCheckable(true);
     registerShortcutAction(eraser_tool_action_, QKeySequence(Qt::Key_E));
@@ -1872,7 +1884,7 @@ void ImageEditorWindow::createActions() {
             : (current == ToolSidebar::Tool::Eraser ? ToolSidebar::Tool::None : current));
     });
 
-    shapes_tool_action_ = new QAction(QStringLiteral("Shapes"), this);
+    shapes_tool_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Shapes"), this);
     shapes_tool_action_->setObjectName(QStringLiteral("shapesToolAction"));
     shapes_tool_action_->setCheckable(true);
     registerShortcutAction(shapes_tool_action_, {});
@@ -1883,7 +1895,7 @@ void ImageEditorWindow::createActions() {
             : (current == ToolSidebar::Tool::Shapes ? ToolSidebar::Tool::None : current));
     });
 
-    text_tool_action_ = new QAction(QStringLiteral("Text"), this);
+    text_tool_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Text"), this);
     text_tool_action_->setObjectName(QStringLiteral("textToolAction"));
     text_tool_action_->setCheckable(true);
     registerShortcutAction(text_tool_action_, {});
@@ -1894,7 +1906,7 @@ void ImageEditorWindow::createActions() {
             : (current == ToolSidebar::Tool::Text ? ToolSidebar::Tool::None : current));
     });
 
-    select_tool_action_ = new QAction(QStringLiteral("Selection"), this);
+    select_tool_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Selection"), this);
     // Keep the old preference key so customized shortcuts survive this rename.
     select_tool_action_->setObjectName(QStringLiteral("selectShapesToolAction"));
     select_tool_action_->setCheckable(true);
@@ -1906,7 +1918,7 @@ void ImageEditorWindow::createActions() {
             : (current == ToolSidebar::Tool::Select ? ToolSidebar::Tool::None : current));
     });
 
-    area_selection_tool_action_ = new QAction(QStringLiteral("Area Selection"), this);
+    area_selection_tool_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Area Selection"), this);
     area_selection_tool_action_->setObjectName(QStringLiteral("areaSelectionToolAction"));
     area_selection_tool_action_->setCheckable(true);
     registerShortcutAction(area_selection_tool_action_, QKeySequence(Qt::Key_M));
@@ -1917,7 +1929,7 @@ void ImageEditorWindow::createActions() {
             : (current == ToolSidebar::Tool::AreaSelect ? ToolSidebar::Tool::None : current));
     });
 
-    deselect_area_selection_action_ = new QAction(QStringLiteral("Deselect"), this);
+    deselect_area_selection_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Deselect"), this);
     deselect_area_selection_action_->setObjectName(QStringLiteral("deselectAreaSelectionAction"));
     registerShortcutAction(deselect_area_selection_action_,
                            QKeySequence(Qt::CTRL | Qt::Key_D));
@@ -1928,12 +1940,12 @@ void ImageEditorWindow::createActions() {
         updateDeleteActions();
     });
 
-    delete_objects_action_ = new QAction(QStringLiteral("Delete Selected Objects"), this);
+    delete_objects_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Delete Selected Objects"), this);
     delete_objects_action_->setObjectName(QStringLiteral("deleteSelectedObjectsAction"));
     connect(delete_objects_action_, &QAction::triggered, this,
             [this]() { deleteSelectedObjects(); });
 
-    delete_selection_action_ = new QAction(QStringLiteral("Delete Selection"), this);
+    delete_selection_action_ = new QAction(QCoreApplication::translate("ImageEditorUI", "Delete Selection"), this);
     // Keep the preference key for any user-assigned Delete Selected Shape shortcut.
     delete_selection_action_->setObjectName(QStringLiteral("deleteSelectedShapeAction"));
     registerShortcutAction(delete_selection_action_, QKeySequence(Qt::Key_Delete));
@@ -1941,7 +1953,7 @@ void ImageEditorWindow::createActions() {
     connect(delete_selection_action_, &QAction::triggered, this,
             [this]() { deleteSelection(); });
 
-    auto* file_menu = menuBar()->addMenu(QStringLiteral("File"));
+    auto* file_menu = menuBar()->addMenu(QCoreApplication::translate("ImageEditorUI", "File"));
     file_menu->addAction(new_canvas_action_);
     file_menu->addAction(close_document_tab_action_);
     file_menu->addSeparator();
@@ -1958,7 +1970,7 @@ void ImageEditorWindow::createActions() {
     file_menu->addSeparator();
     file_menu->addAction(quit_action);
 
-    auto* edit_menu = menuBar()->addMenu(QStringLiteral("Edit"));
+    auto* edit_menu = menuBar()->addMenu(QCoreApplication::translate("ImageEditorUI", "Edit"));
     edit_menu->addAction(undo_action_);
     edit_menu->addAction(redo_action_);
     edit_menu->addSeparator();
@@ -1972,10 +1984,10 @@ void ImageEditorWindow::createActions() {
     edit_menu->addAction(flip_horizontal_action_);
     edit_menu->addAction(flip_vertical_action_);
 
-    auto* image_menu = menuBar()->addMenu(QStringLiteral("Image"));
+    auto* image_menu = menuBar()->addMenu(QCoreApplication::translate("ImageEditorUI", "Image"));
     image_menu->addAction(resize_canvas_action_);
 
-    auto* view_menu = menuBar()->addMenu(QStringLiteral("View"));
+    auto* view_menu = menuBar()->addMenu(QCoreApplication::translate("ImageEditorUI", "View"));
     view_menu->addAction(fit_action_);
     view_menu->addAction(next_document_tab_action_);
     view_menu->addAction(previous_document_tab_action_);
@@ -1985,7 +1997,7 @@ void ImageEditorWindow::createActions() {
     view_menu->addAction(layers_view_action);
 
     performance_metrics_dock_ = new QDockWidget(
-        QStringLiteral("Performance Metrics"), this);
+        QCoreApplication::translate("ImageEditorUI", "Performance Metrics"), this);
     performance_metrics_dock_->setObjectName(
         QStringLiteral("imageEditorPerformanceMetricsDock"));
     performance_metrics_panel_ = new PerformanceMetricsPanel(performance_metrics_dock_);
@@ -1997,14 +2009,18 @@ void ImageEditorWindow::createActions() {
         QStringLiteral("togglePerformanceMetricsPanelAction"));
     view_menu->addAction(performance_panel_action);
 
-    auto* settings_menu = menuBar()->addMenu(QStringLiteral("Settings"));
-    auto* rendering_menu = settings_menu->addMenu(QStringLiteral("Rendering"));
+    auto* settings_menu = menuBar()->addMenu(QCoreApplication::translate("ImageEditorUI", "Settings"));
+    auto* rendering_menu = settings_menu->addMenu(QCoreApplication::translate("ImageEditorUI", "Rendering"));
     auto* rendering_group = new QActionGroup(this);
     QSettings rendering_settings;
     const bool automatic = rendering_settings.value(QStringLiteral("ImageEditor/Rendering/automatic"), true).toBool();
-    for (const auto& option : {QStringLiteral("Automatic"), QStringLiteral("CPU")}) {
-        auto* action = rendering_menu->addAction(option); action->setCheckable(true); rendering_group->addAction(action);
-        const bool use_gpu = option == QStringLiteral("Automatic"); action->setChecked(use_gpu == automatic);
+    const std::array<std::pair<QString, bool>, 2> rendering_options = {{
+        {QCoreApplication::translate("ImageEditorUI", "Automatic"), true},
+        {QCoreApplication::translate("ImageEditorUI", "CPU"), false},
+    }};
+    for (const auto& [label, use_gpu] : rendering_options) {
+        auto* action = rendering_menu->addAction(label); action->setCheckable(true); rendering_group->addAction(action);
+        action->setChecked(use_gpu == automatic);
         action->setObjectName(use_gpu ? QStringLiteral("automaticRenderingAction") : QStringLiteral("cpuRenderingAction"));
         connect(action, &QAction::triggered, this, [this, use_gpu] {
             QSettings settings; settings.setValue(QStringLiteral("ImageEditor/Rendering/automatic"), use_gpu); settings.sync();
@@ -2017,7 +2033,7 @@ void ImageEditorWindow::createActions() {
     render_controller_->setAutomatic(automatic);
     settings_menu->setObjectName(QStringLiteral("settingsMenu"));
     performance_metrics_action_ = settings_menu->addAction(
-        QStringLiteral("Collect Performance Metrics"));
+        QCoreApplication::translate("ImageEditorUI", "Collect Performance Metrics"));
     performance_metrics_action_->setObjectName(
         QStringLiteral("collectPerformanceMetricsAction"));
     performance_metrics_action_->setCheckable(true);
@@ -2032,23 +2048,23 @@ void ImageEditorWindow::createActions() {
             this, [this](bool enabled) { setPerformanceMetricsEnabled(enabled); });
     settings_menu->addSeparator();
     auto* shortcuts_action = settings_menu->addAction(
-        QStringLiteral("Keyboard Shortcuts..."));
+        QCoreApplication::translate("ImageEditorUI", "Keyboard Shortcuts..."));
     shortcuts_action->setObjectName(QStringLiteral("keyboardShortcutsAction"));
     connect(shortcuts_action, &QAction::triggered,
             this, [this]() { openShortcutSettings(); });
 
-    auto* help_menu = menuBar()->addMenu(QStringLiteral("&Help"));
-    auto* system_action = help_menu->addAction(QStringLiteral("&System"));
+    auto* help_menu = menuBar()->addMenu(QCoreApplication::translate("ImageEditorUI", "&Help"));
+    auto* system_action = help_menu->addAction(QCoreApplication::translate("ImageEditorUI", "&System"));
     connect(system_action, &QAction::triggered, this, [this]() {
         const auto version = QCoreApplication::applicationVersion();
         const auto executable_path = QCoreApplication::applicationFilePath();
-        QMessageBox::information(
-            this,
-            QStringLiteral("System"),
-            QStringLiteral("Image Editor\n\nVersion: %1\nExecutable: %2")
-                .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.0") : version,
+        showTranslatedMessage(
+            this, QMessageBox::Information,
+            QCoreApplication::translate("ImageEditorUI", "System"),
+            QCoreApplication::translate("ImageEditorUI", "Image Editor\n\nVersion: %1\nExecutable: %2")
+                .arg(version.isEmpty() ? QCoreApplication::translate("ImageEditorUI", "Beta 0.1.0") : version,
                      executable_path.isEmpty()
-                         ? QStringLiteral("N/A")
+                         ? QCoreApplication::translate("ImageEditorUI", "N/A")
                          : executable_path));
     });
 
@@ -2099,7 +2115,9 @@ void ImageEditorWindow::loadShortcutPreferences() {
                              ? QStringLiteral("The keyboard shortcut preferences could not be read.")
                              : error);
         statusBar()->showMessage(
-            QStringLiteral("Keyboard shortcut preferences could not be loaded; defaults may be in use."),
+            QCoreApplication::translate(
+                "ImageEditorUI",
+                "Keyboard shortcut preferences could not be loaded; defaults may be in use."),
             5000);
     }
 }
@@ -2131,7 +2149,10 @@ void ImageEditorWindow::openShortcutSettings() {
             "The keyboard shortcut preferences could not be saved.");
         logger_.logError(QStringLiteral("save_keyboard_shortcuts"),
                          error.isEmpty() ? cause : error);
-        QMessageBox::warning(this, QStringLiteral("Settings Error"), cause);
+        showTranslatedMessage(
+            this, QMessageBox::Warning,
+            QCoreApplication::translate("ImageEditorUI", "Settings Error"),
+            ui::translateMessage(error.isEmpty() ? cause : error));
     }
 }
 
@@ -2191,8 +2212,8 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
         open_image_action_->setEnabled(!linked);
         open_document_action_->setEnabled(!linked);
         fit_action_->setEnabled(false);
-        status_label_->setText(QStringLiteral("No image open"));
-        setWindowTitle(QStringLiteral("Image Editor"));
+        status_label_->setText(QCoreApplication::translate("ImageEditorUI", "No image open"));
+        setWindowTitle(QCoreApplication::translate("ImageEditorUI", "Image Editor"));
         updateSelectionContext();
         return;
     }
@@ -2233,24 +2254,24 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     } else if (!activeSession().sourcePath().isEmpty()) {
         title = QFileInfo(activeSession().sourcePath()).fileName() + QStringLiteral(" — Image Editor");
     } else if (activeSession().hasDocument()) {
-        title = QStringLiteral("Untitled Canvas — Image Editor");
+        title = QCoreApplication::translate("ImageEditorUI", "Untitled Canvas") + QStringLiteral(" — Image Editor");
     }
     if (activeSession().isDirty()) title.prepend('*');
-    if (linked) title += QStringLiteral(" [Linked]");
+    if (linked) title += QCoreApplication::translate("ImageEditorUI", " [Linked]");
     setWindowTitle(title);
 
     if (!activeSession().hasSource()) {
         status_label_->setText(activeSession().sourceIsMissing()
-            ? QStringLiteral("Source image is missing — relink it to continue")
-            : QStringLiteral("No image open"));
+            ? QCoreApplication::translate("ImageEditorUI", "Source image is missing — relink it to continue")
+            : QCoreApplication::translate("ImageEditorUI", "No image open"));
         return;
     }
     const QSize size = rendered;
-    status_label_->setText(QStringLiteral("%1 × %2 px  |  %3%")
+    status_label_->setText(QCoreApplication::translate("ImageEditorUI", "%1 × %2 px  |  %3%")
         .arg(size.width()).arg(size.height())
         .arg(static_cast<int>(activeCanvas()->zoomFactor() * 100.0)));
     if (editingMask()) status_label_->setText(status_label_->text() +
-        QStringLiteral("  |  Editing layer mask — black hides, white reveals"));
+        QCoreApplication::translate("ImageEditorUI", "  |  Editing layer mask — black hides, white reveals"));
 }
 
 void ImageEditorWindow::updateSelectionContext() {
@@ -2259,7 +2280,8 @@ void ImageEditorWindow::updateSelectionContext() {
         activeCanvas()->setEraserPreviewEnabled(eraser_preview_enabled_);
     }
     if (layer_panel_ != nullptr) layer_panel_->setSelectedMask(selectedMaskLayerId());
-    const QString mask_hint = QStringLiteral("  |  Editing layer mask — black hides, white reveals");
+    const QString mask_hint = QCoreApplication::translate(
+        "ImageEditorUI", "  |  Editing layer mask — black hides, white reveals");
     QString status = status_label_->text();
     if (status.endsWith(mask_hint)) status.chop(mask_hint.size());
     if (editingMask()) status += mask_hint;
@@ -2324,7 +2346,7 @@ void ImageEditorWindow::createNewCanvas(bool new_tab) {
     resetActiveDocumentSelection();
     deactivateCanvasTools();
     updateView();
-    statusBar()->showMessage(QStringLiteral("New canvas created"), 3000);
+    statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "New canvas created"), 3000);
 }
 
 void ImageEditorWindow::resizeCanvas() {
@@ -2341,19 +2363,20 @@ void ImageEditorWindow::resizeCanvas() {
     selectedObjectIds().clear();
     updateView(true);
     activeCanvas()->translateAreaSelection(activeSession().data().canvas_base_offset - old_offset);
-    statusBar()->showMessage(QStringLiteral("Canvas resized"), 3000);
+    statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Canvas resized"), 3000);
 }
 
 bool ImageEditorWindow::confirmDiscardOrSave(bool clearRecoveryOnDiscard) {
     if (activeCanvas() != nullptr) activeCanvas()->commitTextEditing();
     if (!activeSession().isDirty()) return true;
     QMessageBox prompt(QMessageBox::Warning,
-                       QStringLiteral("Unsaved image edits"),
-                       QStringLiteral("Save the changes to this image document?"),
+                       QCoreApplication::translate("ImageEditorUI", "Unsaved image edits"),
+                       QCoreApplication::translate("ImageEditorUI", "Save the changes to this image document?"),
                        QMessageBox::NoButton, this);
-    auto* save = prompt.addButton(QStringLiteral("Save"), QMessageBox::AcceptRole);
-    auto* discard = prompt.addButton(QStringLiteral("Discard"), QMessageBox::DestructiveRole);
+    auto* save = prompt.addButton(QCoreApplication::translate("ImageEditorUI", "Save"), QMessageBox::AcceptRole);
+    auto* discard = prompt.addButton(QCoreApplication::translate("ImageEditorUI", "Discard"), QMessageBox::DestructiveRole);
     auto* cancel = prompt.addButton(QMessageBox::Cancel);
+    cancel->setText(QCoreApplication::translate("ImageEditorUI", "Cancel"));
     prompt.exec();
     if (prompt.clickedButton() == cancel) return false;
     if (prompt.clickedButton() == discard) {
@@ -2368,7 +2391,7 @@ bool ImageEditorWindow::confirmDiscardOrSave(bool clearRecoveryOnDiscard) {
 
 void ImageEditorWindow::openImage() {
     const QString path = QFileDialog::getOpenFileName(
-        this, QStringLiteral("Open Image"), {}, imageFilter());
+        this, QCoreApplication::translate("ImageEditorUI", "Open Image"), {}, imageFilter());
     if (path.isEmpty()) return;
     static_cast<void>(openImagePath(path));
 }
@@ -2393,14 +2416,14 @@ bool ImageEditorWindow::openImagePathInTarget(const QString& path, OpenTarget ta
     resetActiveDocumentSelection();
     deactivateCanvasTools();
     updateView();
-    statusBar()->showMessage(QStringLiteral("Image opened"), 3000);
+    statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Image opened"), 3000);
     return true;
 }
 
 void ImageEditorWindow::openDocument() {
     const QString path = QFileDialog::getOpenFileName(
-        this, QStringLiteral("Open Editable Image Document"), {},
-        QStringLiteral("Image Editor documents (*.cimg)"));
+        this, QCoreApplication::translate("ImageEditorUI", "Open Editable Image Document"), {},
+        QCoreApplication::translate("ImageEditorUI", "Image Editor documents (*.cimg)"));
     if (path.isEmpty()) return;
     static_cast<void>(openDocumentPath(path));
 }
@@ -2438,11 +2461,12 @@ bool ImageEditorWindow::openDocumentPathInTarget(const QString& path, OpenTarget
     updateView();
     if (activeSession().sourceIsMissing()) {
         QMessageBox prompt(QMessageBox::Warning,
-                           QStringLiteral("Source image is missing"),
-                           QStringLiteral("The editable document is open, but its source image could not be found."),
+                           QCoreApplication::translate("ImageEditorUI", "Source image is missing"),
+                           QCoreApplication::translate("ImageEditorUI", "The editable document is open, but its source image could not be found."),
                            QMessageBox::NoButton, this);
-        auto* relink = prompt.addButton(QStringLiteral("Relink Source..."), QMessageBox::AcceptRole);
-        prompt.addButton(QMessageBox::Close);
+        auto* relink = prompt.addButton(QCoreApplication::translate("ImageEditorUI", "Relink Source..."), QMessageBox::AcceptRole);
+        auto* close = prompt.addButton(QMessageBox::Close);
+        close->setText(QCoreApplication::translate("ImageEditorUI", "Close"));
         prompt.exec();
         if (prompt.clickedButton() == relink) relinkSource();
     }
@@ -2513,11 +2537,12 @@ bool ImageEditorWindow::openLinkedImage(
         updateView();
         if (activeSession().sourceIsMissing()) {
             QMessageBox prompt(QMessageBox::Warning,
-                               QStringLiteral("Source image is missing"),
-                               QStringLiteral("The editable document is open, but its source image could not be found."),
+                               QCoreApplication::translate("ImageEditorUI", "Source image is missing"),
+                               QCoreApplication::translate("ImageEditorUI", "The editable document is open, but its source image could not be found."),
                                QMessageBox::NoButton, this);
-            auto* relink = prompt.addButton(QStringLiteral("Relink Source..."), QMessageBox::AcceptRole);
-            prompt.addButton(QMessageBox::Close);
+            auto* relink = prompt.addButton(QCoreApplication::translate("ImageEditorUI", "Relink Source..."), QMessageBox::AcceptRole);
+            auto* close = prompt.addButton(QMessageBox::Close);
+            close->setText(QCoreApplication::translate("ImageEditorUI", "Close"));
             prompt.exec();
             if (prompt.clickedButton() == relink) relinkSource();
         }
@@ -2557,7 +2582,7 @@ bool ImageEditorWindow::openLinkedImage(
 void ImageEditorWindow::relinkSource() {
     if (!activeSession().sourceIsMissing()) return;
     const QString path = QFileDialog::getOpenFileName(
-        this, QStringLiteral("Relink Source Image"), {}, imageFilter());
+        this, QCoreApplication::translate("ImageEditorUI", "Relink Source Image"), {}, imageFilter());
     if (path.isEmpty()) return;
     QString error;
     if (!activeSession().relinkSource(path, &error)) {
@@ -2566,7 +2591,7 @@ void ImageEditorWindow::relinkSource() {
     }
     deactivateCanvasTools();
     updateView();
-    statusBar()->showMessage(QStringLiteral("Source image relinked"), 3000);
+    statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Source image relinked"), 3000);
 }
 
 bool ImageEditorWindow::saveToPath(QString path) {
@@ -2604,8 +2629,8 @@ bool ImageEditorWindow::saveToPath(QString path) {
     if (path.isEmpty()) path = activeSession().documentPath();
     if (path.isEmpty()) {
         path = QFileDialog::getSaveFileName(
-            this, QStringLiteral("Save Editable Image Document"), {},
-            QStringLiteral("Image Editor document (*.cimg)"));
+            this, QCoreApplication::translate("ImageEditorUI", "Save Editable Image Document"), {},
+            QCoreApplication::translate("ImageEditorUI", "Image Editor document (*.cimg)"));
     }
     if (path.isEmpty()) return false;
     if (QFileInfo(path).suffix().compare(QStringLiteral("cimg"), Qt::CaseInsensitive) != 0) {
@@ -2635,8 +2660,8 @@ bool ImageEditorWindow::saveToPath(QString path) {
     updateView();
     statusBar()->showMessage(
         linkedDocumentPath().isEmpty()
-            ? QStringLiteral("Editable document saved")
-            : QStringLiteral("Linked document saved and image published"), 3000);
+            ? QCoreApplication::translate("ImageEditorUI", "Editable document saved")
+            : QCoreApplication::translate("ImageEditorUI", "Linked document saved and image published"), 3000);
     return true;
 }
 
@@ -2646,8 +2671,8 @@ void ImageEditorWindow::saveDocument() {
 
 void ImageEditorWindow::saveDocumentAs() {
     const QString path = QFileDialog::getSaveFileName(
-        this, QStringLiteral("Save Editable Image Document As"), {},
-        QStringLiteral("Image Editor document (*.cimg)"));
+        this, QCoreApplication::translate("ImageEditorUI", "Save Editable Image Document As"), {},
+        QCoreApplication::translate("ImageEditorUI", "Image Editor document (*.cimg)"));
     if (path.isEmpty()) return;
     static_cast<void>(saveToPath(path));
 }
@@ -2656,9 +2681,9 @@ void ImageEditorWindow::exportImage(bool quick_export) {
     activeCanvas()->commitTextEditing();
     QString selected_filter;
     const QString path = QFileDialog::getSaveFileName(
-        this, quick_export ? QStringLiteral("Quick Export Selected Layer")
-                           : QStringLiteral("Export Flattened Image"), {},
-        QStringLiteral("PNG image (*.png);;JPEG image (*.jpg *.jpeg)"),
+        this, quick_export ? QCoreApplication::translate("ImageEditorUI", "Quick Export Selected Layer")
+                           : QCoreApplication::translate("ImageEditorUI", "Export Flattened Image"), {},
+        QCoreApplication::translate("ImageEditorUI", "PNG image (*.png);;JPEG image (*.jpg *.jpeg)"),
         &selected_filter);
     if (path.isEmpty()) return;
     QString output = path;
@@ -2690,9 +2715,13 @@ void ImageEditorWindow::exportImage(bool quick_export) {
             if (!saveJpegExportPreferences(options, &preferences_error, &preferences_path)) {
                 logger_.logError(QStringLiteral("save_export_preferences"),
                                  preferences_error, preferences_path);
-                QMessageBox::warning(this, QStringLiteral("Image Editor"),
-                                     preferences_error + QStringLiteral(
-                                         " This export will continue with the selected options."));
+                showTranslatedMessage(
+                    this, QMessageBox::Warning,
+                    QCoreApplication::translate("ImageEditorUI", "Image Editor"),
+                    ui::translateMessage(preferences_error) + QStringLiteral("\n") +
+                        QCoreApplication::translate(
+                            "ImageEditorUI",
+                            "This export will continue with the selected options."));
             }
         }
     }
@@ -2706,14 +2735,14 @@ void ImageEditorWindow::exportImage(bool quick_export) {
         this, snapshot, output, options);
 
     if (result.status == ImageExportStatus::Cancelled) {
-        statusBar()->showMessage(QStringLiteral("Image export cancelled"), 3000);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Image export cancelled"), 3000);
         return;
     }
     if (result.status != ImageExportStatus::Succeeded) {
         reportError(QStringLiteral("export_image"), result.error, output);
         return;
     }
-    statusBar()->showMessage(QStringLiteral("Image exported"), 3000);
+    statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Image exported"), 3000);
 }
 
 void ImageEditorWindow::handleCrop(const QRect& crop) {
@@ -2721,7 +2750,7 @@ void ImageEditorWindow::handleCrop(const QRect& crop) {
     QString error;
     if (activeSession().applyCrop(crop, &error)) {
         updateView();
-        statusBar()->showMessage(QStringLiteral("Image cropped"), 3000);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Image cropped"), 3000);
     } else if (!error.isEmpty()) {
         reportError(QStringLiteral("crop_image"), error, activeSession().sourcePath());
     }
@@ -2738,7 +2767,7 @@ void ImageEditorWindow::handlePaintStroke(const QVector<QPointF>& points,
                       : activeSession().applyPaintStroke(
                             points, color, diameter, &error, std::move(clipping_path))) {
         updateView(true);
-        statusBar()->showMessage(QStringLiteral("Paint stroke applied"), 1800);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Paint stroke applied"), 1800);
     } else if (!error.isEmpty()) {
         reportError(QStringLiteral("paint_stroke"), error, activeSession().sourcePath());
     }
@@ -2753,7 +2782,7 @@ void ImageEditorWindow::handleEraseStroke(const QVector<QPointF>& points, int di
                       : activeSession().applyEraseStroke(
                             points, diameter, &error, std::move(clipping_path))) {
         updateView(true);
-        statusBar()->showMessage(QStringLiteral("Erase stroke applied"), 1800);
+        statusBar()->showMessage(QCoreApplication::translate("ImageEditorUI", "Erase stroke applied"), 1800);
     } else if (!error.isEmpty()) {
         reportError(QStringLiteral("erase_stroke"), error, activeSession().sourcePath());
     }
@@ -2822,13 +2851,13 @@ void ImageEditorWindow::maybeOfferRecovery() {
     const auto snapshots = recovery_store_.snapshots();
     for (const QString& snapshot : snapshots) {
         QMessageBox prompt(QMessageBox::Question,
-                           QStringLiteral("Recover image edits?"),
-                           QStringLiteral("Restore this recovery snapshot in a new tab?\n\n%1")
+                           QCoreApplication::translate("ImageEditorUI", "Recover image edits?"),
+                           QCoreApplication::translate("ImageEditorUI", "Restore this recovery snapshot in a new tab?\n\n%1")
                                .arg(QFileInfo(snapshot).completeBaseName()),
                            QMessageBox::NoButton, this);
-        auto* restore = prompt.addButton(QStringLiteral("Restore in New Tab"), QMessageBox::AcceptRole);
-        auto* discard = prompt.addButton(QStringLiteral("Discard Snapshot"), QMessageBox::DestructiveRole);
-        auto* later = prompt.addButton(QStringLiteral("Later"), QMessageBox::RejectRole);
+        auto* restore = prompt.addButton(QCoreApplication::translate("ImageEditorUI", "Restore in New Tab"), QMessageBox::AcceptRole);
+        auto* discard = prompt.addButton(QCoreApplication::translate("ImageEditorUI", "Discard Snapshot"), QMessageBox::DestructiveRole);
+        auto* later = prompt.addButton(QCoreApplication::translate("ImageEditorUI", "Later"), QMessageBox::RejectRole);
         prompt.exec();
         if (prompt.clickedButton() == discard) {
             static_cast<void>(recovery_store_.remove(snapshot));
@@ -2847,8 +2876,9 @@ void ImageEditorWindow::maybeOfferRecovery() {
         deactivateCanvasTools();
         updateView();
         if (activeSession().sourceIsMissing()) {
-            QMessageBox::information(this, QStringLiteral("Source image is missing"),
-                QStringLiteral("The recovered document needs its source image to be relinked."));
+            showTranslatedMessage(this, QMessageBox::Information,
+                QCoreApplication::translate("ImageEditorUI", "Source image is missing"),
+                QCoreApplication::translate("ImageEditorUI", "The recovered document needs its source image to be relinked."));
             relinkSource();
         }
     }
@@ -2977,7 +3007,9 @@ void ImageEditorWindow::reportError(const QString& operation,
                                     const QString& cause,
                                     const QString& path) {
     logger_.logError(operation, cause, path);
-    QMessageBox::critical(this, QStringLiteral("Image Editor"), cause);
+    showTranslatedMessage(this, QMessageBox::Critical,
+                          QCoreApplication::translate("ImageEditorUI", "Image Editor"),
+                          ui::translateMessage(cause));
 }
 
 void ImageEditorWindow::closeEvent(QCloseEvent* event) {

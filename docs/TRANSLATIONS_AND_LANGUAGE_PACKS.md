@@ -4,14 +4,14 @@
 
 English is the source language. Each application has one Qt Linguist source
 catalog (`.ts`) per locale and a compiled Qt catalog (`.qm`) beside it under
-`languages/<application-id>/`. For example, the Video Editor's Brazilian
-Portuguese files are `languages/video-editor/pt_BR.ts` and
-`languages/video-editor/pt_BR.qm`.
+`languages/<application-id>/`. For example, the Image Editor's Brazilian
+Portuguese files are `languages/image-editor/pt_BR.ts` and
+`languages/image-editor/pt_BR.qm`.
 
 The `.ts` file is the editable source for translators. The `.qm` file is the
-runtime catalog loaded by Qt. Both are committed. The Video Editor bundles its
-catalog for offline use, and the Hub can obtain the same `.qm` independently
-from the repository's `main` branch when a catalog is listed in
+runtime catalog loaded by Qt. Both are committed. The Video Editor and Image
+Editor bundle their catalogs for offline use. The Hub can obtain the same `.qm`
+independently from the repository's `main` branch when a catalog is listed in
 `languages/manifest.json`.
 
 The manifest uses schema version 1. Each published entry contains an
@@ -41,7 +41,8 @@ an application update.
    translation calls and stable contexts. Keep logs, identifiers, protocols,
    and project data out of the UI catalog.
 2. Run the application's CMake update target. The current targets are
-   `update-hub-translations` and `update-video-editor-translations`.
+   `update-hub-translations`, `update-video-editor-translations`, and
+   `update-image-editor-translations`.
 3. Translate every active entry in the `.ts` file. Preserve placeholders such
    as `%1` and `%n`, line breaks, accelerator markers, formatting, and plural
    forms. Keep product names and common technical terms when they are clearer
@@ -63,12 +64,19 @@ local translation before constructing the main window. The registered
 regional Portuguese selection, dynamic Effects labels, placeholder and plural
 handling, and English fallback.
 
+For the Image Editor, the catalog is embedded as
+`:/translations/image-editor/pt_BR.qm`. Its startup installs the local
+translation before constructing the main window. The
+`creative-suite-image-editor-translation-catalog` test checks bundled loading,
+regional Portuguese selection, translated error messages, placeholder
+handling, and English fallback.
+
 ## Regression and acceptance
 
 Automated catalog tests cover manifest validation, locale selection, compiled
 catalog loading, download failures, integrity checks, and atomic installation.
-The Video Editor test covers its bundled pt-BR catalog and English fallback.
-These automated checks do not replace native visual review.
+The Video Editor and Image Editor tests cover their bundled pt-BR catalogs and
+English fallback. These automated checks do not replace native visual review.
 
 For each application with a published catalog, verify the following on the
 target operating system:
@@ -87,6 +95,7 @@ target operating system:
   install it, then reopen the editor. Confirm that the new text appears
   without replacing the editor executable.
 
-The native visual review of the Video Editor's Edit, Fusion, Render, dialogs,
-and tooltips, plus the end-to-end Hub download and next-launch check, remain
+Native visual review of the Video Editor's Edit, Fusion, Render, dialogs, and
+tooltips, and of the Image Editor's menus, tools, panels, dialogs, and
+tooltips, plus the end-to-end Hub download and next-launch check, remain
 pending until performed on a native desktop environment.

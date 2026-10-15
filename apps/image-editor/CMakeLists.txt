@@ -3,7 +3,7 @@ include(GNUInstallDirs)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets LinguistTools)
 
 add_library(creative-suite-image-editor-core STATIC
     src/core/document/persistence/image_document_codec.cpp
@@ -74,6 +74,7 @@ target_compile_features(creative-suite-image-editor-rendering PUBLIC cxx_std_20)
 add_executable(creative-suite-image-editor
     src/app/main.cpp
     resources/app_icon.qrc
+    resources/translations.qrc
     src/ui/windows/image_editor_window.cpp
     src/ui/windows/image_editor_window.h
     src/ui/diagnostics/performance_metrics_panel.cpp
@@ -156,6 +157,47 @@ target_compile_definitions(creative-suite-image-editor PRIVATE
     CREATIVE_SUITE_APP_VERSION="${CREATIVE_SUITE_VERSION_IMAGE_EDITOR}")
 
 target_compile_features(creative-suite-image-editor PRIVATE cxx_std_20)
+
+file(GLOB_RECURSE IMAGE_EDITOR_TRANSLATION_INPUTS CONFIGURE_DEPENDS
+    LIST_DIRECTORIES FALSE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.h"
+)
+list(APPEND IMAGE_EDITOR_TRANSLATION_INPUTS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/app/main.cpp")
+
+set(IMAGE_EDITOR_TRANSLATION_TS "${CMAKE_SOURCE_DIR}/languages/image-editor/pt_BR.ts")
+set(IMAGE_EDITOR_TRANSLATION_QM "${CMAKE_SOURCE_DIR}/languages/image-editor/pt_BR.qm")
+set(IMAGE_EDITOR_GENERATED_TRANSLATION_QM
+    "${CMAKE_CURRENT_BINARY_DIR}/translations/image-editor/pt_BR.qm")
+add_custom_command(
+    OUTPUT "${IMAGE_EDITOR_GENERATED_TRANSLATION_QM}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/translations/image-editor"
+    COMMAND "$<TARGET_FILE:Qt6::lrelease>" "${IMAGE_EDITOR_TRANSLATION_TS}"
+            -qm "${IMAGE_EDITOR_GENERATED_TRANSLATION_QM}"
+    DEPENDS "${IMAGE_EDITOR_TRANSLATION_TS}"
+    VERBATIM
+)
+add_custom_target(creative-suite-image-editor-translation-catalog
+    COMMAND "${CMAKE_COMMAND}" -E compare_files
+            "${IMAGE_EDITOR_GENERATED_TRANSLATION_QM}"
+            "${IMAGE_EDITOR_TRANSLATION_QM}"
+    DEPENDS "${IMAGE_EDITOR_GENERATED_TRANSLATION_QM}"
+            "${IMAGE_EDITOR_TRANSLATION_QM}"
+    COMMENT "Checking that the tracked Image Editor catalog matches its TS source"
+    VERBATIM
+)
+add_dependencies(creative-suite-image-editor creative-suite-image-editor-translation-catalog)
+
+add_custom_target(update-image-editor-translations
+    COMMAND "$<TARGET_FILE:Qt6::lupdate>" -no-obsolete -target-language pt_BR
+            ${IMAGE_EDITOR_TRANSLATION_INPUTS}
+            -ts "${IMAGE_EDITOR_TRANSLATION_TS}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Updating the Image Editor translation source"
+    VERBATIM
+)
 
 if(MSVC)
     target_compile_options(creative-suite-image-editor-core PRIVATE /W4 /permissive-)

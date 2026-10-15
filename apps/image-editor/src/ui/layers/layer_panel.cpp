@@ -1,4 +1,5 @@
 #include "layer_panel.h"
+#include "../translation_helpers.h"
 
 #include "../transparency_checkerboard.h"
 
@@ -29,6 +30,7 @@
 #include <algorithm>
 #include <functional>
 
+#include <QCoreApplication>
 namespace image_editor {
 namespace {
 
@@ -144,7 +146,9 @@ public:
         painter->setPen(source_problem ? QColor(230, 170, 80) : option.palette.color(selected ? QPalette::HighlightedText
                                                        : QPalette::Text));
         const QString text = QFontMetrics(option.font).elidedText(
-            index.data(Qt::DisplayRole).toString() + (source_problem ? QStringLiteral(" [Image unavailable]") : QString{}), Qt::ElideRight,
+            index.data(Qt::DisplayRole).toString() + (source_problem
+                ? QCoreApplication::translate("ImageEditorUI", " [Image unavailable]")
+                : QString{}), Qt::ElideRight,
             std::max(0, text_rect.width()));
         painter->drawText(text_rect, Qt::AlignVCenter | Qt::AlignLeft, text);
 
@@ -265,14 +269,14 @@ QTreeWidgetItem* makeLayerItem(const ImageLayerData& layer,
     item->setData(0, kParentGroupRole, layer.parent_group_id);
     item->setData(0, Qt::ToolTipRole, layer.background
         ? (layer.visible
-            ? QStringLiteral("Locked Background. Click the eye button to hide it.")
-            : QStringLiteral("Locked Background. Click the eye button to show it."))
+            ? QCoreApplication::translate("ImageEditorUI", "Locked Background. Click the eye button to hide it.")
+            : QCoreApplication::translate("ImageEditorUI", "Locked Background. Click the eye button to show it."))
         : (layer.visible
-            ? QStringLiteral("Visible — click the eye button to hide this layer.")
-            : QStringLiteral("Hidden — click the eye button to show this layer.")));
+            ? QCoreApplication::translate("ImageEditorUI", "Visible — click the eye button to hide this layer.")
+            : QCoreApplication::translate("ImageEditorUI", "Hidden — click the eye button to show this layer.")));
     item->setData(0, Qt::AccessibleDescriptionRole, layer.visible
-        ? QStringLiteral("Visible. Eye button hides this layer.")
-        : QStringLiteral("Hidden. Eye button shows this layer."));
+        ? QCoreApplication::translate("ImageEditorUI", "Visible. Eye button hides this layer.")
+        : QCoreApplication::translate("ImageEditorUI", "Hidden. Eye button shows this layer."));
     Qt::ItemFlags flags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
     if (!layer.background) flags |= Qt::ItemIsEditable | Qt::ItemIsDragEnabled;
     item->setFlags(flags);
@@ -287,7 +291,7 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     layout->setContentsMargins(6, 6, 6, 6);
     layout->setSpacing(6);
 
-    quick_export_button_ = new QPushButton(QStringLiteral("Quick Export"), this);
+    quick_export_button_ = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Quick Export"), this);
     quick_export_button_->setObjectName(QStringLiteral("quickExportLayerButton"));
     quick_export_button_->setEnabled(false);
     layout->addWidget(quick_export_button_);
@@ -314,30 +318,30 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     layer_context_menu_ = new QMenu(this);
     layer_context_menu_->setObjectName(QStringLiteral("imageLayerContextMenu"));
     QAction* group_context_action = layer_context_menu_->addAction(
-        QStringLiteral("Group Selected"));
+        QCoreApplication::translate("ImageEditorUI", "Group Selected"));
     group_context_action->setObjectName(QStringLiteral("groupSelectedLayersContextAction"));
     QAction* ungroup_context_action = layer_context_menu_->addAction(
-        QStringLiteral("Ungroup"));
+        QCoreApplication::translate("ImageEditorUI", "Ungroup"));
     ungroup_context_action->setObjectName(QStringLiteral("ungroupLayerGroupContextAction"));
     QAction* delete_group_context_action = layer_context_menu_->addAction(
-        QStringLiteral("Delete Group"));
+        QCoreApplication::translate("ImageEditorUI", "Delete Group"));
     delete_group_context_action->setObjectName(QStringLiteral("deleteLayerGroupContextAction"));
     QAction* delete_layer_context_action = layer_context_menu_->addAction(
-        QStringLiteral("Delete Layer"));
+        QCoreApplication::translate("ImageEditorUI", "Delete Layer"));
     delete_layer_context_action->setObjectName(QStringLiteral("deleteLayerContextAction"));
     layer_context_menu_->addSeparator();
-    QAction* add_mask_action = layer_context_menu_->addAction(QStringLiteral("Add Layer Mask"));
+    QAction* add_mask_action = layer_context_menu_->addAction(QCoreApplication::translate("ImageEditorUI", "Add Layer Mask"));
     add_mask_action->setObjectName(QStringLiteral("addLayerMaskAction"));
-    QAction* enable_mask_action = layer_context_menu_->addAction(QStringLiteral("Enable Layer Mask"));
+    QAction* enable_mask_action = layer_context_menu_->addAction(QCoreApplication::translate("ImageEditorUI", "Enable Layer Mask"));
     enable_mask_action->setObjectName(QStringLiteral("enableLayerMaskAction"));
     enable_mask_action->setCheckable(true);
-    QAction* remove_mask_action = layer_context_menu_->addAction(QStringLiteral("Remove Layer Mask"));
+    QAction* remove_mask_action = layer_context_menu_->addAction(QCoreApplication::translate("ImageEditorUI", "Remove Layer Mask"));
     remove_mask_action->setObjectName(QStringLiteral("removeLayerMaskAction"));
 
     edit_hint_ = new QLabel(this);
     edit_hint_->setObjectName(QStringLiteral("layerEditingHint"));
     edit_hint_->setWordWrap(true);
-    edit_hint_->setText(QStringLiteral(
+    edit_hint_->setText(QCoreApplication::translate("ImageEditorUI",
         "Background is locked. Select an editable layer to paint or transform; "
         "Shapes creates a separate layer for each object."));
     layout->addWidget(edit_hint_);
@@ -345,64 +349,64 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     auto* actions = new QHBoxLayout;
     add_button_ = new QToolButton(this);
     add_button_->setObjectName(QStringLiteral("addImageLayerButton"));
-    add_button_->setText(QStringLiteral("+"));
-    add_button_->setToolTip(QStringLiteral("Add layer or group"));
+    add_button_->setText(QCoreApplication::translate("ImageEditorUI", "+"));
+    add_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Add layer or group"));
     add_button_->setPopupMode(QToolButton::MenuButtonPopup);
     auto* add_menu = new QMenu(add_button_);
-    QAction* add_layer_action = add_menu->addAction(QStringLiteral("Add Layer"));
+    QAction* add_layer_action = add_menu->addAction(QCoreApplication::translate("ImageEditorUI", "Add Layer"));
     add_layer_action->setObjectName(QStringLiteral("addImageLayerAction"));
-    QAction* add_group_action = add_menu->addAction(QStringLiteral("Add Group"));
+    QAction* add_group_action = add_menu->addAction(QCoreApplication::translate("ImageEditorUI", "Add Group"));
     add_group_action->setObjectName(QStringLiteral("addImageGroupAction"));
     add_button_->setMenu(add_menu);
     actions->addWidget(add_button_);
 
     group_selected_button_ = new QToolButton(this);
     group_selected_button_->setObjectName(QStringLiteral("groupSelectedLayersButton"));
-    group_selected_button_->setText(QStringLiteral("Group"));
-    group_selected_button_->setToolTip(QStringLiteral(
+    group_selected_button_->setText(QCoreApplication::translate("ImageEditorUI", "Group"));
+    group_selected_button_->setToolTip(QCoreApplication::translate("ImageEditorUI",
         "Group contiguous selected root layers (Ctrl/Shift select)"));
     actions->addWidget(group_selected_button_);
 
     delete_button_ = new QToolButton(this);
     delete_button_->setObjectName(QStringLiteral("deleteImageLayerButton"));
-    delete_button_->setText(QStringLiteral("Delete"));
-    delete_button_->setToolTip(QStringLiteral("Delete selected layers or groups"));
-    delete_button_->setAccessibleName(QStringLiteral("Delete selected layers or groups"));
+    delete_button_->setText(QCoreApplication::translate("ImageEditorUI", "Delete"));
+    delete_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Delete selected layers or groups"));
+    delete_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Delete selected layers or groups"));
     actions->addWidget(delete_button_);
 
     ungroup_button_ = new QToolButton(this);
     ungroup_button_->setObjectName(QStringLiteral("ungroupImageLayersButton"));
-    ungroup_button_->setText(QStringLiteral("Ungroup"));
-    ungroup_button_->setToolTip(QStringLiteral("Ungroup and keep its layers"));
+    ungroup_button_->setText(QCoreApplication::translate("ImageEditorUI", "Ungroup"));
+    ungroup_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Ungroup and keep its layers"));
     actions->addWidget(ungroup_button_);
 
     rename_button_ = new QToolButton(this);
     rename_button_->setObjectName(QStringLiteral("renameImageLayerButton"));
-    rename_button_->setText(QStringLiteral("Rename"));
-    rename_button_->setToolTip(QStringLiteral("Rename layer or group"));
+    rename_button_->setText(QCoreApplication::translate("ImageEditorUI", "Rename"));
+    rename_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Rename layer or group"));
     actions->addWidget(rename_button_);
 
     move_up_button_ = new QToolButton(this);
     move_up_button_->setObjectName(QStringLiteral("moveImageLayerUpButton"));
-    move_up_button_->setText(QStringLiteral("↑"));
-    move_up_button_->setToolTip(QStringLiteral("Move item up"));
+    move_up_button_->setText(QCoreApplication::translate("ImageEditorUI", "↑"));
+    move_up_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Move item up"));
     actions->addWidget(move_up_button_);
     move_down_button_ = new QToolButton(this);
     move_down_button_->setObjectName(QStringLiteral("moveImageLayerDownButton"));
-    move_down_button_->setText(QStringLiteral("↓"));
-    move_down_button_->setToolTip(QStringLiteral("Move item down"));
+    move_down_button_->setText(QCoreApplication::translate("ImageEditorUI", "↓"));
+    move_down_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Move item down"));
     actions->addWidget(move_down_button_);
     layout->addLayout(actions);
 
     auto* opacity_row = new QHBoxLayout;
-    auto* opacity_label = new QLabel(QStringLiteral("Opacity"), this);
+    auto* opacity_label = new QLabel(QCoreApplication::translate("ImageEditorUI", "Opacity"), this);
     opacity_label->setObjectName(QStringLiteral("imageLayerOpacityLabel"));
     opacity_row->addWidget(opacity_label);
     opacity_slider_ = new QSlider(Qt::Horizontal, this);
     opacity_slider_->setObjectName(QStringLiteral("imageLayerOpacitySlider"));
     opacity_slider_->setRange(0, 100);
     opacity_slider_->setValue(100);
-    opacity_slider_->setAccessibleName(QStringLiteral("Layer or group opacity"));
+    opacity_slider_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Layer or group opacity"));
     opacity_row->addWidget(opacity_slider_, 1);
     layout->addLayout(opacity_row);
 
@@ -446,9 +450,9 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
                 delete_layer_context_action->setEnabled(!selectedStackItems().isEmpty());
                 const bool multiple = selectedStackItems().size() > 1;
                 delete_layer_context_action->setText(multiple
-                    ? QStringLiteral("Delete Selected Layers / Groups") : QStringLiteral("Delete Layer"));
+                    ? QCoreApplication::translate("ImageEditorUI", "Delete Selected Layers / Groups") : QCoreApplication::translate("ImageEditorUI", "Delete Layer"));
                 delete_group_context_action->setText(multiple
-                    ? QStringLiteral("Delete Selected Layers / Groups") : QStringLiteral("Delete Group"));
+                    ? QCoreApplication::translate("ImageEditorUI", "Delete Selected Layers / Groups") : QCoreApplication::translate("ImageEditorUI", "Delete Group"));
                 ungroup_context_action->setEnabled(is_group);
                 delete_group_context_action->setEnabled(is_group);
                 layer_context_menu_->exec(layer_tree_->viewport()->mapToGlobal(position));
@@ -598,7 +602,7 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
         item->setData(0, kMaskSelectedRole, layer.id == selected_mask_id);
         item->setData(0, kMaskEnabledRole, layer.mask.has_value() && layer.mask->enabled);
         if (layer.mask.has_value()) {
-            item->setData(0, Qt::ToolTipRole, QStringLiteral(
+            item->setData(0, Qt::ToolTipRole, QCoreApplication::translate("ImageEditorUI",
                 "Click the mask thumbnail to edit it. Black hides, white reveals. "
                 "Click the image thumbnail to edit layer content."));
         }
@@ -606,9 +610,11 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
             if (op.kind == OperationKind::RasterImage) item->setData(0, kRasterObjectRole, op.raster.id);
             if (op.kind != OperationKind::RasterImage || !source_problems.contains(op.raster.id)) continue;
             item->setData(0, kSourceProblemRole, true);
-            item->setData(0, Qt::ToolTipRole, source_problems.value(op.raster.id) +
-                QStringLiteral(" Select this image and choose File > Relink Image."));
-            item->setData(0, Qt::AccessibleDescriptionRole, source_problems.value(op.raster.id));
+            item->setData(0, Qt::ToolTipRole,
+                ui::translateMessage(source_problems.value(op.raster.id)) +
+                QCoreApplication::translate("ImageEditorUI", " Select this image and choose File > Relink Image."));
+            item->setData(0, Qt::AccessibleDescriptionRole,
+                ui::translateMessage(source_problems.value(op.raster.id)));
             item->setForeground(0, QColor(230, 170, 80));
         }
     };
@@ -637,11 +643,11 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
         group_item->setData(0, kThumbnailRole, thumbnails.value(group->id));
         group_item->setData(0, kParentGroupRole, QString{});
         group_item->setData(0, Qt::ToolTipRole, group->visible
-            ? QStringLiteral("Visible group. Click the eye button to hide its contents.")
-            : QStringLiteral("Hidden group. Click the eye button to show its contents."));
+            ? QCoreApplication::translate("ImageEditorUI", "Visible group. Click the eye button to hide its contents.")
+            : QCoreApplication::translate("ImageEditorUI", "Hidden group. Click the eye button to show its contents."));
         group_item->setData(0, Qt::AccessibleDescriptionRole, group->visible
-            ? QStringLiteral("Visible group. Eye button hides its contents.")
-            : QStringLiteral("Hidden group. Eye button shows its contents."));
+            ? QCoreApplication::translate("ImageEditorUI", "Visible group. Eye button hides its contents.")
+            : QCoreApplication::translate("ImageEditorUI", "Hidden group. Eye button shows its contents."));
         group_item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable |
                              Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
         layer_tree_->addTopLevelItem(group_item);

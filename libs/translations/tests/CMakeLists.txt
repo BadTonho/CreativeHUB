@@ -30,6 +30,7 @@ target_compile_definitions(creative-suite-translations-test PRIVATE
     TRANSLATION_TEST_BUNDLED_QM="${TRANSLATION_TEST_BUNDLED_QM}"
     TRANSLATION_TEST_DOWNLOADED_QM="${TRANSLATION_TEST_DOWNLOADED_QM}"
     TRANSLATION_PUBLISHED_HUB_QM="${PROJECT_SOURCE_DIR}/languages/hub/pt_BR.qm"
+    TRANSLATION_PUBLISHED_IMAGE_EDITOR_QM="${PROJECT_SOURCE_DIR}/languages/image-editor/pt_BR.qm"
     TRANSLATION_PUBLISHED_MANIFEST="${PROJECT_SOURCE_DIR}/languages/manifest.json"
 )
 target_compile_features(creative-suite-translations-test PRIVATE cxx_std_20)

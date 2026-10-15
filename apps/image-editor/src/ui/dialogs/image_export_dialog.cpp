@@ -12,13 +12,14 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
+#include <QCoreApplication>
 namespace image_editor {
 
 JpegExportOptionsDialog::JpegExportOptionsDialog(
     const ImageExportOptions& options, QWidget* parent)
     : QDialog(parent), background_color_(options.jpeg_background) {
     setObjectName(QStringLiteral("jpegExportOptionsDialog"));
-    setWindowTitle(QStringLiteral("JPEG Export Options"));
+    setWindowTitle(QCoreApplication::translate("ImageEditorUI", "JPEG Export Options"));
     setModal(true);
 
     auto* layout = new QVBoxLayout(this);
@@ -35,7 +36,7 @@ JpegExportOptionsDialog::JpegExportOptionsDialog(
     quality_spin_->setObjectName(QStringLiteral("jpegQualitySpinBox"));
     quality_spin_->setRange(0, 100);
     quality_spin_->setValue(qBound(0, options.jpeg_quality, 100));
-    quality_spin_->setSuffix(QStringLiteral("%"));
+    quality_spin_->setSuffix(QCoreApplication::translate("ImageEditorUI", "%"));
     quality_spin_->setMinimumWidth(78);
 
     connect(quality_slider_, &QSlider::valueChanged,
@@ -45,18 +46,22 @@ JpegExportOptionsDialog::JpegExportOptionsDialog(
 
     quality_layout->addWidget(quality_slider_, 1);
     quality_layout->addWidget(quality_spin_);
-    form->addRow(QStringLiteral("Quality:"), quality_layout);
+    form->addRow(QCoreApplication::translate("ImageEditorUI", "Quality:"), quality_layout);
 
     background_button_ = new QPushButton(this);
     background_button_->setObjectName(QStringLiteral("jpegBackgroundButton"));
     connect(background_button_, &QPushButton::clicked,
             this, &JpegExportOptionsDialog::chooseBackgroundColor);
     updateBackgroundButton();
-    form->addRow(QStringLiteral("Transparent areas:"), background_button_);
+    form->addRow(QCoreApplication::translate("ImageEditorUI", "Transparent areas:"), background_button_);
 
     layout->addLayout(form);
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(
+        QCoreApplication::translate("ImageEditorUI", "OK"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(
+        QCoreApplication::translate("ImageEditorUI", "Cancel"));
     buttons->setObjectName(QStringLiteral("jpegExportOptionsButtons"));
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -72,7 +77,7 @@ ImageExportOptions JpegExportOptionsDialog::options() const {
 
 void JpegExportOptionsDialog::chooseBackgroundColor() {
     const QColor selected = QColorDialog::getColor(
-        background_color_, this, QStringLiteral("JPEG Background Color"));
+        background_color_, this, QCoreApplication::translate("ImageEditorUI", "JPEG Background Color"));
     if (!selected.isValid()) return;
     setBackgroundColor(selected);
 }
@@ -89,20 +94,20 @@ void JpegExportOptionsDialog::updateBackgroundButton() {
         QStringLiteral("QPushButton { background-color: %1; }")
             .arg(background_color_.name(QColor::HexRgb)));
     background_button_->setAccessibleName(
-        QStringLiteral("JPEG transparency background color %1")
+        QCoreApplication::translate("ImageEditorUI", "JPEG transparency background color %1")
             .arg(background_color_.name(QColor::HexRgb)));
 }
 
 ImageExportProgressDialog::ImageExportProgressDialog(QWidget* parent)
     : QDialog(parent) {
     setObjectName(QStringLiteral("imageExportProgressDialog"));
-    setWindowTitle(QStringLiteral("Exporting Image"));
+    setWindowTitle(QCoreApplication::translate("ImageEditorUI", "Exporting Image"));
     setWindowModality(Qt::WindowModal);
     setModal(true);
     setMinimumWidth(360);
 
     auto* layout = new QVBoxLayout(this);
-    label_ = new QLabel(QStringLiteral("Rendering image…"), this);
+    label_ = new QLabel(QCoreApplication::translate("ImageEditorUI", "Rendering image…"), this);
     label_->setObjectName(QStringLiteral("imageExportProgressLabel"));
     layout->addWidget(label_);
 
@@ -114,7 +119,7 @@ ImageExportProgressDialog::ImageExportProgressDialog(QWidget* parent)
 
     auto* button_layout = new QHBoxLayout;
     button_layout->addStretch(1);
-    cancel_button_ = new QPushButton(QStringLiteral("Cancel"), this);
+    cancel_button_ = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Cancel"), this);
     cancel_button_->setObjectName(QStringLiteral("imageExportCancelButton"));
     connect(cancel_button_, &QPushButton::clicked,
             this, &ImageExportProgressDialog::requestCancellation);
@@ -131,11 +136,13 @@ void ImageExportProgressDialog::setCancellationPending() {
     if (cancellation_pending_) return;
     cancellation_pending_ = true;
     cancel_button_->setEnabled(false);
-    const QString message = phase_text_.startsWith(
-        QStringLiteral("Encoding"), Qt::CaseInsensitive)
-        ? QStringLiteral(
-              "Finishing the current encoding so the temporary output can be discarded…")
-        : (cancellation_text_.isEmpty() ? QStringLiteral("Cancelling export…") : cancellation_text_);
+    const QString message = phase_text_ == QCoreApplication::translate(
+        "ImageEditorUI", "Encoding image…")
+        ? QCoreApplication::translate(
+              "ImageEditorUI", "Finishing the current encoding so the temporary output can be discarded…")
+        : (cancellation_text_.isEmpty()
+            ? QCoreApplication::translate("ImageEditorUI", "Cancelling export…")
+            : cancellation_text_);
     label_->setText(message);
 }
 

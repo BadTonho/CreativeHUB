@@ -1,5 +1,7 @@
 #include "image_export_worker.h"
 
+#include <QCoreApplication>
+
 #include <utility>
 
 namespace image_editor {
@@ -20,13 +22,13 @@ void ImageExportWorker::run() {
         [this](ImageExportPhase phase) {
             switch (phase) {
             case ImageExportPhase::Rendering:
-                emit phaseChanged(QStringLiteral("Rendering image…"));
+                emit phaseChanged(QCoreApplication::translate("ImageEditorUI", "Rendering image…"));
                 break;
             case ImageExportPhase::Encoding:
-                emit phaseChanged(QStringLiteral("Encoding image…"));
+                emit phaseChanged(QCoreApplication::translate("ImageEditorUI", "Encoding image…"));
                 break;
             case ImageExportPhase::Finalizing:
-                emit phaseChanged(QStringLiteral("Finalizing export…"));
+                emit phaseChanged(QCoreApplication::translate("ImageEditorUI", "Finalizing export…"));
                 break;
             }
         });

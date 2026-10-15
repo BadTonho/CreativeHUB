@@ -1,4 +1,6 @@
 #include "image_canvas.h"
+
+#include <QCoreApplication>
 #include "image_gpu_presenter.h"
 
 #include "image_document_store.h"
@@ -852,7 +854,7 @@ void ImageCanvas::paintScene(QPainter& painter, const QRect& dirty, bool gpu) {
     if (document_size_.isEmpty()) {
         painter.setPen(QColor(190, 195, 204));
         painter.drawText(rect(), Qt::AlignCenter,
-                         QStringLiteral("Open an image to start editing"));
+                         QCoreApplication::translate("ImageEditorUI", "Open an image to start editing"));
         return;
     }
 

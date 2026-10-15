@@ -15,6 +15,7 @@
 
 #include <array>
 
+#include <QCoreApplication>
 namespace image_editor {
 namespace {
 
@@ -50,7 +51,7 @@ constexpr std::array<const char*, 9> kAnchorNames = {
 CanvasSizeDialog::CanvasSizeDialog(const QSize& current_size, QWidget* parent)
     : QDialog(parent) {
     setObjectName(QStringLiteral("canvasSizeDialog"));
-    setWindowTitle(QStringLiteral("Canvas Size"));
+    setWindowTitle(QCoreApplication::translate("ImageEditorUI", "Canvas Size"));
     setModal(true);
 
     auto* layout = new QVBoxLayout(this);
@@ -58,24 +59,24 @@ CanvasSizeDialog::CanvasSizeDialog(const QSize& current_size, QWidget* parent)
     preset_combo_ = new QComboBox(this);
     preset_combo_->setObjectName(QStringLiteral("canvasSizePresetCombo"));
     for (const auto& preset : kPresets) preset_combo_->addItem(QString::fromLatin1(preset.name));
-    preset_combo_->addItem(QStringLiteral("Custom"));
-    form->addRow(QStringLiteral("Format:"), preset_combo_);
+    preset_combo_->addItem(QCoreApplication::translate("ImageEditorUI", "Custom"));
+    form->addRow(QCoreApplication::translate("ImageEditorUI", "Format:"), preset_combo_);
 
     width_spin_ = new QSpinBox(this);
     width_spin_->setObjectName(QStringLiteral("canvasSizeWidthSpin"));
     width_spin_->setRange(1, 32768);
-    width_spin_->setSuffix(QStringLiteral(" px"));
+    width_spin_->setSuffix(QCoreApplication::translate("ImageEditorUI", " px"));
     width_spin_->setValue(current_size.width());
     height_spin_ = new QSpinBox(this);
     height_spin_->setObjectName(QStringLiteral("canvasSizeHeightSpin"));
     height_spin_->setRange(1, 32768);
-    height_spin_->setSuffix(QStringLiteral(" px"));
+    height_spin_->setSuffix(QCoreApplication::translate("ImageEditorUI", " px"));
     height_spin_->setValue(current_size.height());
-    form->addRow(QStringLiteral("Width:"), width_spin_);
-    form->addRow(QStringLiteral("Height:"), height_spin_);
+    form->addRow(QCoreApplication::translate("ImageEditorUI", "Width:"), width_spin_);
+    form->addRow(QCoreApplication::translate("ImageEditorUI", "Height:"), height_spin_);
     layout->addLayout(form);
 
-    auto* anchor_label = new QLabel(QStringLiteral("Anchor:"), this);
+    auto* anchor_label = new QLabel(QCoreApplication::translate("ImageEditorUI", "Anchor:"), this);
     layout->addWidget(anchor_label);
     auto* anchor_grid = new QGridLayout;
     anchor_grid->setSpacing(3);
@@ -95,7 +96,7 @@ CanvasSizeDialog::CanvasSizeDialog(const QSize& current_size, QWidget* parent)
     layout->addLayout(anchor_grid);
 
     auto* explanation = new QLabel(
-        QStringLiteral("Canvas Size changes the document bounds without scaling its layers. New area uses the canvas background or transparency."), this);
+        QCoreApplication::translate("ImageEditorUI", "Canvas Size changes the document bounds without scaling its layers. New area uses the canvas background or transparency."), this);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
     validation_label_ = new QLabel(this);
@@ -105,6 +106,10 @@ CanvasSizeDialog::CanvasSizeDialog(const QSize& current_size, QWidget* parent)
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(
+        QCoreApplication::translate("ImageEditorUI", "OK"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(
+        QCoreApplication::translate("ImageEditorUI", "Cancel"));
     buttons->setObjectName(QStringLiteral("canvasSizeButtons"));
     connect(buttons, &QDialogButtonBox::accepted, this, &CanvasSizeDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -165,8 +170,7 @@ void CanvasSizeDialog::updateValidity() {
     const bool valid = ImageDocumentStore::isValidCanvasSize(canvasSize());
     auto* buttons = findChild<QDialogButtonBox*>(QStringLiteral("canvasSizeButtons"));
     if (buttons != nullptr) buttons->button(QDialogButtonBox::Ok)->setEnabled(valid);
-    validation_label_->setText(valid ? QString{} : QStringLiteral(
-        "Canvas dimensions must be positive and stay within 64 million pixels."));
+    validation_label_->setText(valid ? QString{} : QCoreApplication::translate("ImageEditorUI", "Canvas dimensions must be positive and stay within 64 million pixels."));
 }
 
 } // namespace image_editor

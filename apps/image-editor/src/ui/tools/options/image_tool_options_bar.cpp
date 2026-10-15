@@ -18,10 +18,11 @@
 
 #include <algorithm>
 
+#include <QCoreApplication>
 namespace image_editor {
 
 ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
-    : QToolBar(QStringLiteral("Tool Options"), parent) {
+    : QToolBar(QCoreApplication::translate("ImageEditorUI", "Tool Options"), parent) {
     setObjectName(QStringLiteral("toolOptionsToolBar"));
     setMovable(false);
     setFloatable(false);
@@ -35,13 +36,13 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     options_layout->setContentsMargins(8, 3, 8, 3);
     options_layout->setSpacing(8);
 
-    tool_size_label_ = new QLabel(QStringLiteral("Brush Size"), paint_size_options_);
+    tool_size_label_ = new QLabel(QCoreApplication::translate("ImageEditorUI", "Brush Size"), paint_size_options_);
     tool_size_label_->setObjectName(QStringLiteral("paintBrushSizeLabel"));
     options_layout->addWidget(tool_size_label_);
 
     brush_size_slider_ = new QSlider(Qt::Horizontal, paint_size_options_);
     brush_size_slider_->setObjectName(QStringLiteral("paintBrushSizeSlider"));
-    brush_size_slider_->setAccessibleName(QStringLiteral("Brush size"));
+    brush_size_slider_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Brush size"));
     brush_size_slider_->setRange(1, ImageDocumentStore::kMaximumPaintBrushDiameter);
     brush_size_slider_->setValue(12);
     brush_size_slider_->setMinimumWidth(140);
@@ -50,17 +51,17 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
 
     brush_size_spin_ = new QSpinBox(paint_size_options_);
     brush_size_spin_->setObjectName(QStringLiteral("paintBrushSizeSpinBox"));
-    brush_size_spin_->setAccessibleName(QStringLiteral("Brush size in pixels"));
+    brush_size_spin_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Brush size in pixels"));
     brush_size_spin_->setRange(1, ImageDocumentStore::kMaximumPaintBrushDiameter);
     brush_size_spin_->setValue(12);
-    brush_size_spin_->setSuffix(QStringLiteral(" px"));
+    brush_size_spin_->setSuffix(QCoreApplication::translate("ImageEditorUI", " px"));
     brush_size_spin_->setFixedWidth(96);
     options_layout->addWidget(brush_size_spin_);
 
-    eraser_preview_check_ = new QCheckBox(QStringLiteral("Preview"), paint_size_options_);
+    eraser_preview_check_ = new QCheckBox(QCoreApplication::translate("ImageEditorUI", "Preview"), paint_size_options_);
     eraser_preview_check_->setObjectName(QStringLiteral("eraserPreviewCheckBox"));
     eraser_preview_check_->setToolTip(
-        QStringLiteral("Show a translucent erase preview and apply it when the stroke ends"));
+        QCoreApplication::translate("ImageEditorUI", "Show a translucent erase preview and apply it when the stroke ends"));
     eraser_preview_check_->setChecked(false);
     eraser_preview_check_->setVisible(false);
     options_layout->addWidget(eraser_preview_check_);
@@ -76,28 +77,28 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     auto* shape_layout = new QHBoxLayout(shape_options_widget_);
     shape_layout->setContentsMargins(8, 3, 8, 3);
     shape_layout->setSpacing(7);
-    shape_stroke_check_ = new QCheckBox(QStringLiteral("Stroke"), shape_options_widget_);
+    shape_stroke_check_ = new QCheckBox(QCoreApplication::translate("ImageEditorUI", "Stroke"), shape_options_widget_);
     shape_stroke_check_->setObjectName(QStringLiteral("shapeStrokeCheckBox"));
     shape_stroke_check_->setChecked(true);
     shape_layout->addWidget(shape_stroke_check_);
-    shape_stroke_color_button_ = new QPushButton(QStringLiteral("Color"), shape_options_widget_);
+    shape_stroke_color_button_ = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Color"), shape_options_widget_);
     shape_stroke_color_button_->setObjectName(QStringLiteral("shapeStrokeColorButton"));
     shape_stroke_color_button_->setFixedWidth(62);
     shape_layout->addWidget(shape_stroke_color_button_);
-    shape_fill_check_ = new QCheckBox(QStringLiteral("Fill"), shape_options_widget_);
+    shape_fill_check_ = new QCheckBox(QCoreApplication::translate("ImageEditorUI", "Fill"), shape_options_widget_);
     shape_fill_check_->setObjectName(QStringLiteral("shapeFillCheckBox"));
     shape_fill_check_->setChecked(true);
     shape_layout->addWidget(shape_fill_check_);
-    shape_fill_color_button_ = new QPushButton(QStringLiteral("Color"), shape_options_widget_);
+    shape_fill_color_button_ = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Color"), shape_options_widget_);
     shape_fill_color_button_->setObjectName(QStringLiteral("shapeFillColorButton"));
     shape_fill_color_button_->setFixedWidth(62);
     shape_layout->addWidget(shape_fill_color_button_);
-    shape_layout->addWidget(new QLabel(QStringLiteral("Width"), shape_options_widget_));
+    shape_layout->addWidget(new QLabel(QCoreApplication::translate("ImageEditorUI", "Width"), shape_options_widget_));
     shape_stroke_width_spin_ = new QSpinBox(shape_options_widget_);
     shape_stroke_width_spin_->setObjectName(QStringLiteral("shapeStrokeWidthSpinBox"));
     shape_stroke_width_spin_->setRange(1, ImageDocumentStore::kMaximumShapeStrokeWidth);
     shape_stroke_width_spin_->setValue(2);
-    shape_stroke_width_spin_->setSuffix(QStringLiteral(" px"));
+    shape_stroke_width_spin_->setSuffix(QCoreApplication::translate("ImageEditorUI", " px"));
     shape_stroke_width_spin_->setFixedWidth(82);
     shape_layout->addWidget(shape_stroke_width_spin_);
     shape_options_action_ = new QWidgetAction(this);
@@ -113,30 +114,30 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     text_layout->setSpacing(7);
     text_font_combo_ = new QFontComboBox(text_options_widget_);
     text_font_combo_->setObjectName(QStringLiteral("textFontComboBox"));
-    text_font_combo_->setAccessibleName(QStringLiteral("Text font family"));
+    text_font_combo_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Text font family"));
     text_font_combo_->setMinimumWidth(150);
     text_layout->addWidget(text_font_combo_);
     text_size_spin_ = new QSpinBox(text_options_widget_);
     text_size_spin_->setObjectName(QStringLiteral("textSizeSpinBox"));
-    text_size_spin_->setAccessibleName(QStringLiteral("Text size in pixels"));
+    text_size_spin_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Text size in pixels"));
     text_size_spin_->setRange(1, ImageDocumentStore::kMaximumTextFontPixelSize);
     text_size_spin_->setValue(ImageTextData{}.font_pixel_size);
-    text_size_spin_->setSuffix(QStringLiteral(" px"));
+    text_size_spin_->setSuffix(QCoreApplication::translate("ImageEditorUI", " px"));
     text_size_spin_->setFixedWidth(88);
     text_layout->addWidget(text_size_spin_);
-    text_color_button_ = new QPushButton(QStringLiteral("Color"), text_options_widget_);
+    text_color_button_ = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Color"), text_options_widget_);
     text_color_button_->setObjectName(QStringLiteral("textColorButton"));
-    text_color_button_->setAccessibleName(QStringLiteral("Text color"));
+    text_color_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Text color"));
     text_color_button_->setFixedWidth(70);
     text_layout->addWidget(text_color_button_);
     text_alignment_combo_ = new QComboBox(text_options_widget_);
     text_alignment_combo_->setObjectName(QStringLiteral("textAlignmentComboBox"));
-    text_alignment_combo_->setAccessibleName(QStringLiteral("Text alignment"));
-    text_alignment_combo_->addItem(QStringLiteral("Left"),
+    text_alignment_combo_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Text alignment"));
+    text_alignment_combo_->addItem(QCoreApplication::translate("ImageEditorUI", "Left"),
         static_cast<int>(ImageTextAlignment::Left));
-    text_alignment_combo_->addItem(QStringLiteral("Center"),
+    text_alignment_combo_->addItem(QCoreApplication::translate("ImageEditorUI", "Center"),
         static_cast<int>(ImageTextAlignment::Center));
-    text_alignment_combo_->addItem(QStringLiteral("Right"),
+    text_alignment_combo_->addItem(QCoreApplication::translate("ImageEditorUI", "Right"),
         static_cast<int>(ImageTextAlignment::Right));
     text_layout->addWidget(text_alignment_combo_);
     text_options_action_ = new QWidgetAction(this);
@@ -150,9 +151,9 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     auto* selection_layout = new QHBoxLayout(selection_options_widget_);
     selection_layout->setContentsMargins(8, 3, 8, 3);
     delete_selected_objects_button_ = new QPushButton(
-        QStringLiteral("Delete Selected Objects"), selection_options_widget_);
+        QCoreApplication::translate("ImageEditorUI", "Delete Selected Objects"), selection_options_widget_);
     delete_selected_objects_button_->setObjectName(QStringLiteral("deleteSelectedShapeButton"));
-    delete_selected_objects_button_->setAccessibleName(QStringLiteral("Delete selected objects"));
+    delete_selected_objects_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Delete selected objects"));
     selection_layout->addWidget(delete_selected_objects_button_);
     selection_options_action_ = new QWidgetAction(this);
     selection_options_action_->setObjectName(QStringLiteral("selectionOptionsAction"));
@@ -165,21 +166,21 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     auto* area_layout = new QHBoxLayout(area_selection_options_widget_);
     area_layout->setContentsMargins(8, 3, 8, 3);
     area_layout->setSpacing(7);
-    area_selection_shape_label_ = new QLabel(QStringLiteral("Shape"), area_selection_options_widget_);
+    area_selection_shape_label_ = new QLabel(QCoreApplication::translate("ImageEditorUI", "Shape"), area_selection_options_widget_);
     area_layout->addWidget(area_selection_shape_label_);
     area_selection_shape_combo_ = new QComboBox(area_selection_options_widget_);
     area_selection_shape_combo_->setObjectName(QStringLiteral("areaSelectionShapeComboBox"));
-    area_selection_shape_combo_->setAccessibleName(QStringLiteral("Area selection shape"));
-    area_selection_shape_combo_->addItem(QStringLiteral("Rectangle"), 0);
-    area_selection_shape_combo_->addItem(QStringLiteral("Ellipse"), 1);
+    area_selection_shape_combo_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Area selection shape"));
+    area_selection_shape_combo_->addItem(QCoreApplication::translate("ImageEditorUI", "Rectangle"), 0);
+    area_selection_shape_combo_->addItem(QCoreApplication::translate("ImageEditorUI", "Ellipse"), 1);
     area_layout->addWidget(area_selection_shape_combo_);
-    area_layout->addWidget(new QLabel(QStringLiteral("Mode"), area_selection_options_widget_));
+    area_layout->addWidget(new QLabel(QCoreApplication::translate("ImageEditorUI", "Mode"), area_selection_options_widget_));
     area_selection_mode_combo_ = new QComboBox(area_selection_options_widget_);
     area_selection_mode_combo_->setObjectName(QStringLiteral("areaSelectionModeComboBox"));
-    area_selection_mode_combo_->setAccessibleName(QStringLiteral("Area selection mode"));
-    area_selection_mode_combo_->addItem(QStringLiteral("Replace"), 0);
-    area_selection_mode_combo_->addItem(QStringLiteral("Add"), 1);
-    area_selection_mode_combo_->addItem(QStringLiteral("Subtract"), 2);
+    area_selection_mode_combo_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Area selection mode"));
+    area_selection_mode_combo_->addItem(QCoreApplication::translate("ImageEditorUI", "Replace"), 0);
+    area_selection_mode_combo_->addItem(QCoreApplication::translate("ImageEditorUI", "Add"), 1);
+    area_selection_mode_combo_->addItem(QCoreApplication::translate("ImageEditorUI", "Subtract"), 2);
     area_layout->addWidget(area_selection_mode_combo_);
     area_selection_options_action_ = new QWidgetAction(this);
     area_selection_options_action_->setObjectName(QStringLiteral("areaSelectionOptionsAction"));
@@ -192,10 +193,10 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     auto* bucket_fill_layout = new QHBoxLayout(bucket_fill_options_widget_);
     bucket_fill_layout->setContentsMargins(8, 3, 8, 3);
     bucket_fill_layout->setSpacing(7);
-    bucket_fill_layout->addWidget(new QLabel(QStringLiteral("Tolerance"), bucket_fill_options_widget_));
+    bucket_fill_layout->addWidget(new QLabel(QCoreApplication::translate("ImageEditorUI", "Tolerance"), bucket_fill_options_widget_));
     bucket_fill_tolerance_spin_ = new QSpinBox(bucket_fill_options_widget_);
     bucket_fill_tolerance_spin_->setObjectName(QStringLiteral("bucketFillToleranceSpinBox"));
-    bucket_fill_tolerance_spin_->setAccessibleName(QStringLiteral("Bucket fill tolerance"));
+    bucket_fill_tolerance_spin_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Bucket fill tolerance"));
     bucket_fill_tolerance_spin_->setRange(0, 255);
     bucket_fill_tolerance_spin_->setValue(0);
     bucket_fill_tolerance_spin_->setFixedWidth(72);
@@ -211,10 +212,10 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     auto* magic_wand_layout = new QHBoxLayout(magic_wand_options_widget_);
     magic_wand_layout->setContentsMargins(8, 3, 8, 3);
     magic_wand_layout->setSpacing(7);
-    magic_wand_layout->addWidget(new QLabel(QStringLiteral("Tolerance"), magic_wand_options_widget_));
+    magic_wand_layout->addWidget(new QLabel(QCoreApplication::translate("ImageEditorUI", "Tolerance"), magic_wand_options_widget_));
     magic_wand_tolerance_spin_ = new QSpinBox(magic_wand_options_widget_);
     magic_wand_tolerance_spin_->setObjectName(QStringLiteral("magicWandToleranceSpinBox"));
-    magic_wand_tolerance_spin_->setAccessibleName(QStringLiteral("Magic Wand tolerance"));
+    magic_wand_tolerance_spin_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Magic Wand tolerance"));
     magic_wand_tolerance_spin_->setRange(
         MagicWandConfig::kMinimumTolerance, MagicWandConfig::kMaximumTolerance);
     magic_wand_tolerance_spin_->setValue(MagicWandConfig::kDefaultTolerance);
@@ -231,22 +232,22 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     auto* blur_layout = new QHBoxLayout(blur_options_widget_);
     blur_layout->setContentsMargins(8, 3, 8, 3);
     blur_layout->setSpacing(7);
-    blur_layout->addWidget(new QLabel(QStringLiteral("Brush Size"), blur_options_widget_));
+    blur_layout->addWidget(new QLabel(QCoreApplication::translate("ImageEditorUI", "Brush Size"), blur_options_widget_));
     blur_diameter_spin_ = new QSpinBox(blur_options_widget_);
     blur_diameter_spin_->setObjectName(QStringLiteral("blurBrushSizeSpinBox"));
-    blur_diameter_spin_->setAccessibleName(QStringLiteral("Blur brush size in pixels"));
+    blur_diameter_spin_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Blur brush size in pixels"));
     blur_diameter_spin_->setRange(1, ImageDocumentStore::kMaximumPaintBrushDiameter);
     blur_diameter_spin_->setValue(12);
-    blur_diameter_spin_->setSuffix(QStringLiteral(" px"));
+    blur_diameter_spin_->setSuffix(QCoreApplication::translate("ImageEditorUI", " px"));
     blur_diameter_spin_->setFixedWidth(96);
     blur_layout->addWidget(blur_diameter_spin_);
-    blur_layout->addWidget(new QLabel(QStringLiteral("Radius"), blur_options_widget_));
+    blur_layout->addWidget(new QLabel(QCoreApplication::translate("ImageEditorUI", "Radius"), blur_options_widget_));
     blur_radius_spin_ = new QSpinBox(blur_options_widget_);
     blur_radius_spin_->setObjectName(QStringLiteral("blurRadiusSpinBox"));
-    blur_radius_spin_->setAccessibleName(QStringLiteral("Blur radius in pixels"));
+    blur_radius_spin_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Blur radius in pixels"));
     blur_radius_spin_->setRange(0, ImageDocumentStore::kMaximumBlurRadius);
     blur_radius_spin_->setValue(10);
-    blur_radius_spin_->setSuffix(QStringLiteral(" px"));
+    blur_radius_spin_->setSuffix(QCoreApplication::translate("ImageEditorUI", " px"));
     blur_radius_spin_->setFixedWidth(88);
     blur_layout->addWidget(blur_radius_spin_);
     blur_options_action_ = new QWidgetAction(this);
@@ -310,13 +311,13 @@ void ImageToolOptionsBar::setBrushOptionsState(bool visible, int diameter,
     paint_options_action_->setVisible(visible);
     paint_size_options_->setVisible(visible);
     paint_size_options_->setEnabled(visible);
-    tool_size_label_->setText(mask_editing ? QStringLiteral("Mask Brush Size")
-        : (eraser_active ? QStringLiteral("Eraser Size") : QStringLiteral("Brush Size")));
+    tool_size_label_->setText(mask_editing ? QCoreApplication::translate("ImageEditorUI", "Mask Brush Size")
+        : (eraser_active ? QCoreApplication::translate("ImageEditorUI", "Eraser Size") : QCoreApplication::translate("ImageEditorUI", "Brush Size")));
     brush_size_slider_->setAccessibleName(
-        eraser_active ? QStringLiteral("Eraser size") : QStringLiteral("Brush size"));
+        eraser_active ? QCoreApplication::translate("ImageEditorUI", "Eraser size") : QCoreApplication::translate("ImageEditorUI", "Brush size"));
     brush_size_spin_->setAccessibleName(
-        eraser_active ? QStringLiteral("Eraser size in pixels")
-                      : QStringLiteral("Brush size in pixels"));
+        eraser_active ? QCoreApplication::translate("ImageEditorUI", "Eraser size in pixels")
+                      : QCoreApplication::translate("ImageEditorUI", "Brush size in pixels"));
     eraser_preview_check_->setVisible(visible && eraser_active && !mask_editing);
     {
         const QSignalBlocker slider_blocker(brush_size_slider_);

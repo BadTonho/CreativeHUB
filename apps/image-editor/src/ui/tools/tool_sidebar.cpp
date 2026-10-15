@@ -10,6 +10,7 @@
 #include <QTransform>
 #include <QVBoxLayout>
 
+#include <QCoreApplication>
 namespace image_editor {
 namespace {
 
@@ -276,8 +277,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     paint_button_ = new QToolButton(this);
     paint_button_->setObjectName(QStringLiteral("paintToolButton"));
-    paint_button_->setToolTip(QStringLiteral("Paint"));
-    paint_button_->setAccessibleName(QStringLiteral("Paint tool"));
+    paint_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Paint"));
+    paint_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Paint tool"));
     paint_button_->setIcon(paintToolIcon());
     paint_button_->setIconSize(QSize(24, 24));
     paint_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -287,8 +288,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     bucket_fill_button_ = new QToolButton(this);
     bucket_fill_button_->setObjectName(QStringLiteral("bucketFillToolButton"));
-    bucket_fill_button_->setToolTip(QStringLiteral("Bucket Fill"));
-    bucket_fill_button_->setAccessibleName(QStringLiteral("Bucket Fill tool"));
+    bucket_fill_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Bucket Fill"));
+    bucket_fill_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Bucket Fill tool"));
     bucket_fill_button_->setIcon(bucketFillToolIcon());
     bucket_fill_button_->setIconSize(QSize(24, 24));
     bucket_fill_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -298,8 +299,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     magic_wand_button_ = new QToolButton(this);
     magic_wand_button_->setObjectName(QStringLiteral("magicWandToolButton"));
-    magic_wand_button_->setToolTip(QStringLiteral("Magic Wand"));
-    magic_wand_button_->setAccessibleName(QStringLiteral("Magic Wand tool"));
+    magic_wand_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Magic Wand"));
+    magic_wand_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Magic Wand tool"));
     magic_wand_button_->setIcon(magicWandToolIcon());
     magic_wand_button_->setIconSize(QSize(24, 24));
     magic_wand_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -309,8 +310,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     linear_gradient_button_ = new QToolButton(this);
     linear_gradient_button_->setObjectName(QStringLiteral("linearGradientToolButton"));
-    linear_gradient_button_->setToolTip(QStringLiteral("Linear Gradient"));
-    linear_gradient_button_->setAccessibleName(QStringLiteral("Linear Gradient tool"));
+    linear_gradient_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Linear Gradient"));
+    linear_gradient_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Linear Gradient tool"));
     linear_gradient_button_->setIcon(linearGradientToolIcon());
     linear_gradient_button_->setIconSize(QSize(24, 24));
     linear_gradient_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -320,8 +321,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     eraser_button_ = new QToolButton(this);
     eraser_button_->setObjectName(QStringLiteral("eraserToolButton"));
-    eraser_button_->setToolTip(QStringLiteral("Eraser"));
-    eraser_button_->setAccessibleName(QStringLiteral("Eraser tool"));
+    eraser_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Eraser"));
+    eraser_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Eraser tool"));
     eraser_button_->setIcon(eraserToolIcon());
     eraser_button_->setIconSize(QSize(24, 24));
     eraser_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -331,8 +332,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     blur_button_ = new QToolButton(this);
     blur_button_->setObjectName(QStringLiteral("blurToolButton"));
-    blur_button_->setToolTip(QStringLiteral("Blur"));
-    blur_button_->setAccessibleName(QStringLiteral("Blur tool"));
+    blur_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Blur"));
+    blur_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Blur tool"));
     blur_button_->setIcon(blurToolIcon());
     blur_button_->setIconSize(QSize(24, 24));
     blur_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -342,8 +343,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     shapes_button_ = new QToolButton(this);
     shapes_button_->setObjectName(QStringLiteral("shapesToolButton"));
-    shapes_button_->setToolTip(QStringLiteral("Shapes"));
-    shapes_button_->setAccessibleName(QStringLiteral("Shapes tool"));
+    shapes_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Shapes"));
+    shapes_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Shapes tool"));
     shapes_button_->setIcon(shapesToolIcon());
     shapes_button_->setIconSize(QSize(24, 24));
     shapes_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -353,8 +354,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     text_button_ = new QToolButton(this);
     text_button_->setObjectName(QStringLiteral("textToolButton"));
-    text_button_->setToolTip(QStringLiteral("Text"));
-    text_button_->setAccessibleName(QStringLiteral("Text tool"));
+    text_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Text"));
+    text_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Text tool"));
     text_button_->setIcon(textToolIcon());
     text_button_->setIconSize(QSize(24, 24));
     text_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -364,8 +365,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     select_shapes_button_ = new QToolButton(this);
     select_shapes_button_->setObjectName(QStringLiteral("selectShapesToolButton"));
-    select_shapes_button_->setToolTip(QStringLiteral("Selection"));
-    select_shapes_button_->setAccessibleName(QStringLiteral("Selection tool"));
+    select_shapes_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Selection"));
+    select_shapes_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Selection tool"));
     select_shapes_button_->setIcon(selectToolIcon());
     select_shapes_button_->setIconSize(QSize(24, 24));
     select_shapes_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -375,8 +376,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     area_selection_button_ = new QToolButton(this);
     area_selection_button_->setObjectName(QStringLiteral("areaSelectionToolButton"));
-    area_selection_button_->setToolTip(QStringLiteral("Area Selection"));
-    area_selection_button_->setAccessibleName(QStringLiteral("Area Selection tool"));
+    area_selection_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Area Selection"));
+    area_selection_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Area Selection tool"));
     area_selection_button_->setIcon(areaSelectionToolIcon());
     area_selection_button_->setIconSize(QSize(24, 24));
     area_selection_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -386,8 +387,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     lasso_button_ = new QToolButton(this);
     lasso_button_->setObjectName(QStringLiteral("lassoToolButton"));
-    lasso_button_->setToolTip(QStringLiteral("Lasso"));
-    lasso_button_->setAccessibleName(QStringLiteral("Lasso tool"));
+    lasso_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Lasso"));
+    lasso_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Lasso tool"));
     lasso_button_->setIcon(lassoToolIcon());
     lasso_button_->setIconSize(QSize(24, 24));
     lasso_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -397,8 +398,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     eyedropper_button_ = new QToolButton(this);
     eyedropper_button_->setObjectName(QStringLiteral("eyedropperToolButton"));
-    eyedropper_button_->setToolTip(QStringLiteral("Eyedropper"));
-    eyedropper_button_->setAccessibleName(QStringLiteral("Eyedropper tool"));
+    eyedropper_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Eyedropper"));
+    eyedropper_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Eyedropper tool"));
     eyedropper_button_->setIcon(eyedropperToolIcon());
     eyedropper_button_->setIconSize(QSize(24, 24));
     eyedropper_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -410,8 +411,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     color_button_ = new QToolButton(this);
     color_button_->setObjectName(QStringLiteral("paintBrushColorButton"));
-    color_button_->setToolTip(QStringLiteral("Paint color"));
-    color_button_->setAccessibleName(QStringLiteral("Paint color"));
+    color_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Paint color"));
+    color_button_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Paint color"));
     color_button_->setIconSize(QSize(24, 24));
     color_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
     color_button_->setFixedSize(40, 40);
@@ -470,7 +471,7 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         QColor initial_color = brush_color_;
         if (initial_color.alpha() == 0) initial_color.setAlpha(255);
         const QColor selected = QColorDialog::getColor(
-            initial_color, this, QStringLiteral("Brush Color"),
+            initial_color, this, QCoreApplication::translate("ImageEditorUI", "Brush Color"),
             QColorDialog::ShowAlphaChannel);
         setBrushColor(selected);
     });
@@ -676,53 +677,53 @@ void ToolSidebar::updateControls() {
     lasso_button_->setEnabled(document_available_);
     eyedropper_button_->setEnabled(document_available_);
     paint_button_->setToolTip(editable_layer_available
-        ? QStringLiteral("Paint")
+        ? QCoreApplication::translate("ImageEditorUI", "Paint")
         : (document_available_
-            ? QStringLiteral("Select or create an editable layer to paint")
-            : QStringLiteral("Open an image to paint")));
+            ? QCoreApplication::translate("ImageEditorUI", "Select or create an editable layer to paint")
+            : QCoreApplication::translate("ImageEditorUI", "Open an image to paint")));
     bucket_fill_button_->setToolTip(editable_layer_available
-        ? QStringLiteral("Bucket Fill")
+        ? QCoreApplication::translate("ImageEditorUI", "Bucket Fill")
         : (document_available_
-            ? QStringLiteral("Select or create an editable layer to fill")
-            : QStringLiteral("Open an image to use Bucket Fill")));
+            ? QCoreApplication::translate("ImageEditorUI", "Select or create an editable layer to fill")
+            : QCoreApplication::translate("ImageEditorUI", "Open an image to use Bucket Fill")));
     magic_wand_button_->setToolTip(editable_layer_available
-        ? QStringLiteral("Magic Wand")
+        ? QCoreApplication::translate("ImageEditorUI", "Magic Wand")
         : (document_available_
-            ? QStringLiteral("Select an editable layer to use the Magic Wand")
-            : QStringLiteral("Open an image to use the Magic Wand")));
+            ? QCoreApplication::translate("ImageEditorUI", "Select an editable layer to use the Magic Wand")
+            : QCoreApplication::translate("ImageEditorUI", "Open an image to use the Magic Wand")));
     linear_gradient_button_->setToolTip(editable_layer_available
-        ? QStringLiteral("Linear Gradient")
+        ? QCoreApplication::translate("ImageEditorUI", "Linear Gradient")
         : (document_available_
-            ? QStringLiteral("Select or create an editable layer to apply a gradient")
-            : QStringLiteral("Open an image to use Linear Gradient")));
+            ? QCoreApplication::translate("ImageEditorUI", "Select or create an editable layer to apply a gradient")
+            : QCoreApplication::translate("ImageEditorUI", "Open an image to use Linear Gradient")));
     eraser_button_->setToolTip(editable_layer_available
-        ? QStringLiteral("Eraser")
+        ? QCoreApplication::translate("ImageEditorUI", "Eraser")
         : (document_available_
-            ? QStringLiteral("Select or create an editable layer to erase")
-            : QStringLiteral("Open an image to erase")));
+            ? QCoreApplication::translate("ImageEditorUI", "Select or create an editable layer to erase")
+            : QCoreApplication::translate("ImageEditorUI", "Open an image to erase")));
     blur_button_->setToolTip(editable_layer_available
-        ? QStringLiteral("Blur")
+        ? QCoreApplication::translate("ImageEditorUI", "Blur")
         : (document_available_
-            ? QStringLiteral("Select or create an editable layer to blur")
-            : QStringLiteral("Open an image to use Blur")));
+            ? QCoreApplication::translate("ImageEditorUI", "Select or create an editable layer to blur")
+            : QCoreApplication::translate("ImageEditorUI", "Open an image to use Blur")));
     select_shapes_button_->setToolTip(document_available_
-        ? QStringLiteral("Selection")
-        : QStringLiteral("Open an image to use Selection"));
+        ? QCoreApplication::translate("ImageEditorUI", "Selection")
+        : QCoreApplication::translate("ImageEditorUI", "Open an image to use Selection"));
     area_selection_button_->setToolTip(document_available_
-        ? QStringLiteral("Area Selection")
-        : QStringLiteral("Open an image to use Area Selection"));
+        ? QCoreApplication::translate("ImageEditorUI", "Area Selection")
+        : QCoreApplication::translate("ImageEditorUI", "Open an image to use Area Selection"));
     lasso_button_->setToolTip(document_available_
-        ? QStringLiteral("Lasso")
-        : QStringLiteral("Open an image to use Lasso"));
+        ? QCoreApplication::translate("ImageEditorUI", "Lasso")
+        : QCoreApplication::translate("ImageEditorUI", "Open an image to use Lasso"));
     shapes_button_->setToolTip(document_available_
-        ? QStringLiteral("Shapes")
-        : QStringLiteral("Open an image to use Shapes"));
+        ? QCoreApplication::translate("ImageEditorUI", "Shapes")
+        : QCoreApplication::translate("ImageEditorUI", "Open an image to use Shapes"));
     text_button_->setToolTip(document_available_
-        ? QStringLiteral("Text")
-        : QStringLiteral("Open an image to add text"));
+        ? QCoreApplication::translate("ImageEditorUI", "Text")
+        : QCoreApplication::translate("ImageEditorUI", "Open an image to add text"));
     eyedropper_button_->setToolTip(document_available_
-        ? QStringLiteral("Eyedropper")
-        : QStringLiteral("Open an image to sample a color"));
+        ? QCoreApplication::translate("ImageEditorUI", "Eyedropper")
+        : QCoreApplication::translate("ImageEditorUI", "Open an image to sample a color"));
     color_button_->setEnabled(true);
 }
 

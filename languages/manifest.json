@@ -9,6 +9,13 @@
       "sha256": "f58d4c3a5c2969a41c8c01bf09dcd9c6b19ac2a7e0abf9ef550080b8303bdbb3"
     },
     {
+      "application": "image-editor",
+      "locale": "pt_BR",
+      "path": "image-editor/pt_BR.qm",
+      "size_bytes": 77082,
+      "sha256": "e9562a5853c979bf2dbc715521839224f4d4a9bbd2088f20d18ca1061d0518fd"
+    },
+    {
       "application": "video-editor",
       "locale": "pt_BR",
       "path": "video-editor/pt_BR.qm",

@@ -1,6 +1,7 @@
 #include "shortcut_settings_dialog.h"
 
 #include <QAbstractItemView>
+#include <QCoreApplication>
 #include <QDialogButtonBox>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -14,14 +15,13 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
-
 namespace image_editor {
 
 ShortcutSettingsDialog::ShortcutSettingsDialog(
     const QList<ShortcutBinding>& bindings, QWidget* parent)
     : QDialog(parent), initial_bindings_(bindings) {
     setObjectName(QStringLiteral("shortcutSettingsDialog"));
-    setWindowTitle(QStringLiteral("Keyboard Shortcuts"));
+    setWindowTitle(QCoreApplication::translate("ImageEditorUI", "Keyboard Shortcuts"));
     setSizeGripEnabled(true);
     QScreen* target_screen = parent != nullptr ? parent->screen() : nullptr;
     if (target_screen == nullptr) target_screen = QGuiApplication::primaryScreen();
@@ -42,7 +42,7 @@ ShortcutSettingsDialog::ShortcutSettingsDialog(
     auto* table = new QTableWidget(static_cast<int>(bindings.size()), 2, this);
     table->setObjectName(QStringLiteral("shortcutSettingsTable"));
     table->setHorizontalHeaderLabels(
-        {QStringLiteral("Command"), QStringLiteral("Shortcut")});
+        {QCoreApplication::translate("ImageEditorUI", "Command"), QCoreApplication::translate("ImageEditorUI", "Shortcut")});
     table->verticalHeader()->setVisible(false);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setSelectionMode(QAbstractItemView::NoSelection);
@@ -65,13 +65,13 @@ ShortcutSettingsDialog::ShortcutSettingsDialog(
 
         auto* editor = new QKeySequenceEdit(binding.sequence, editor_container);
         editor->setObjectName(QStringLiteral("shortcutEditor_%1").arg(binding.id));
-        editor->setAccessibleName(QStringLiteral("Shortcut for %1").arg(binding.label));
+        editor->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Shortcut for %1").arg(binding.label));
         editors_.append(editor);
         editor_layout->addWidget(editor, 1);
 
-        auto* clear_button = new QPushButton(QStringLiteral("Clear"), editor_container);
+        auto* clear_button = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Clear"), editor_container);
         clear_button->setObjectName(QStringLiteral("clearShortcut_%1").arg(binding.id));
-        clear_button->setToolTip(QStringLiteral("Remove this shortcut"));
+        clear_button->setToolTip(QCoreApplication::translate("ImageEditorUI", "Remove this shortcut"));
         editor_layout->addWidget(clear_button);
         QObject::connect(clear_button, &QPushButton::clicked, editor,
                          [editor]() { editor->clear(); });
@@ -89,13 +89,17 @@ ShortcutSettingsDialog::ShortcutSettingsDialog(
     layout->addWidget(validation_label_);
 
     auto* bottom_row = new QHBoxLayout;
-    auto* reset_button = new QPushButton(QStringLiteral("Reset All"), this);
+    auto* reset_button = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Reset All"), this);
     reset_button->setObjectName(QStringLiteral("resetAllShortcutsButton"));
     bottom_row->addWidget(reset_button);
     bottom_row->addStretch(1);
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(
+        QCoreApplication::translate("ImageEditorUI", "OK"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(
+        QCoreApplication::translate("ImageEditorUI", "Cancel"));
     buttons->setObjectName(QStringLiteral("shortcutSettingsButtons"));
     buttons->button(QDialogButtonBox::Ok)->setObjectName(
         QStringLiteral("shortcutSettingsOkButton"));
@@ -131,7 +135,7 @@ void ShortcutSettingsDialog::accept() {
                 const auto sequence_text = candidate.sequence.toString(
                     QKeySequence::NativeText);
                 showValidationMessage(
-                    QStringLiteral("%1 is assigned to both %2 and %3. Choose a unique shortcut.")
+                    QCoreApplication::translate("ImageEditorUI", "%1 is assigned to both %2 and %3. Choose a unique shortcut.")
                         .arg(sequence_text, earlier.label, candidate.label));
                 editors_.at(i)->setFocus();
                 return;
