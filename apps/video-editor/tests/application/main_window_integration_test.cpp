@@ -3160,7 +3160,7 @@ public:
             controller->setPlaybackPresentation(false, false, true);
             setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Fusion);
             require(!catalog_window.effects_list_->isEnabled() && !catalog_window.effects_favorites_->isEnabled() &&
-                    catalog_window.effects_list_->visibleEffectCount() == 12,
+                    catalog_window.effects_list_->visibleEffectCount() == 13,
                     "Fusion must show its catalog with creation disabled without a clip.");
             setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Edit);
             const auto track = catalog_window.timeline_model_.tracks()[0].track_id;

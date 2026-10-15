@@ -40,6 +40,7 @@ QString title(NodeType type) {
     case NodeType::EllipseMask: return QStringLiteral("Ellipse Mask");
     case NodeType::Transform: return QStringLiteral("Transform");
     case NodeType::Color: return QStringLiteral("Color");
+    case NodeType::GaussianBlur: return QStringLiteral("Gaussian Blur");
     case NodeType::Merge: return QStringLiteral("Merge");
     case NodeType::Output: return QStringLiteral("Output");
     case NodeType::Effect: return QStringLiteral("Effect");

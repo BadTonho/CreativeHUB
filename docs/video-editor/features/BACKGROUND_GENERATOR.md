@@ -43,7 +43,7 @@ duplication. Missing/empty names retain the historical Fusion Composition label.
 Names are independent of graph content and are not inferred from its topology.
 Versions 1–28 remain readable. Mask/generator data and composition input offsets
 retain their existing representation. Hub accepts schemas 1–30, preserves names
-and graph data while relocating external Input paths, and rejects future v31.
+and graph data while relocating external Input paths, and rejects future v32.
 
 The Video Editor owns the preset, commands, Inspector and document metadata.
 Effects categories optionally declare a parent so filtering Video includes

@@ -1,8 +1,21 @@
 # Regression Testing
 
+## Fusion Gaussian Blur
+
+| Behavior | Automated verification |
+| --- | --- |
+| Radius/alpha/padding/border reference, executor and cancellation | `creative-suite-effects` |
+| Effects/Favorites/Functions availability, search/Add/Enter/MIME, selection and typed cable insertion/refusal | `creative-suite-main-editor-effects-panel`, `creative-suite-main-editor-shortcut-manager`, `creative-suite-main-editor-fusion-workspace`, `creative-suite-blur-interchange` |
+| Ordered Color/Blur stages, masks, text/media profiles, source windows, GPU/CPU recovery, history, duplication, cuts/trims/FPS, v1–v3/v31/v8 and recovery | `creative-suite-blur-interchange`, `creative-suite-composition-interchange`, `creative-suite-mask-interchange` |
+| Complete Preview/export frames before encoding, existing graphs and direct/GPU export | `creative-suite-main-editor-fusion-composition`, `creative-suite-main-editor-gpu-timeline`, `creative-suite-main-editor-render-export`, `creative-suite-main-editor-gpu-export` |
+| Real-reader CSP31 backup/restoration with Blur and external Inputs; future32/9 | `hub-backup-format-test`, `hub-backup-manager-test` |
+
+See [Gaussian Blur](../features/GAUSSIAN_BLUR.md) for reproducible pending manual
+checks. Windows automation does not establish macOS/Linux or driver acceptance.
+
 [Shape-mask interchange](../../COMPOSITION_INTERCHANGE.md) adds editable shared
 Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
-curve slicing are shared; native Motion advances to v8 while CSP stays v30.
+curve slicing are shared; the mask delivery introduced Motion v8; Gaussian Blur now advances CSP to v31.
 Automated coverage: `creative-suite-mask-interchange`, shared composition/
 OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
 Native UI and platform acceptance remain separately pending.
@@ -58,7 +71,7 @@ Windows Debug verification (2026-10-14): all 10 affected CTest entries passed,
 including the final MainWindow and shortcut/Functions reruns. Video Editor and
 required test targets compiled successfully. The canonical executable was
 verified at `build/apps/video-editor/Debug/creative-suite-video-editor.exe`,
-modified 2026-10-14 15:47:41 UTC. CSP is v30; application version metadata,
+modified 2026-10-14 15:47:41 UTC. That delivery used CSP v30; application version metadata,
 Hub and other application executables are unchanged. Native graphical/platform
 acceptance remains pending as described below.
 
@@ -121,7 +134,7 @@ pending separately from automated offscreen checks.
 | Edit/Fusion RGBA synchronization, multiple-node selection, node removal, ordinary video/image graphs, canceled dialogs and real video/audio/collision drops | `creative-suite-main-editor-background-generator` |
 | Dirty state, color Undo to saved baseline and cancellation in the real application | `creative-suite-main-editor-main-window` |
 | Pre-encoding Preview/export parity for the white preset and colored/transparent backgrounds over lower tracks | `creative-suite-main-editor-fusion-composition` |
-| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future v31 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future v32 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
 
 The generator drag test sends actual Qt drag/drop events directly, without
 showing the standalone TimelineWidget. In this Windows/offscreen fixture,
@@ -206,7 +219,7 @@ Background/Text/Merge parity through the native graph backend and requires that
 GPU work actually occurred. The main-window test checks insertion/effects dirty
 state, save and undo to the saved baseline. `hub-backup-format-test` preserves
 generator data, graph input paths and signed offsets through relocated restore;
-`hub-backup-manager-test` rejects future v31. Existing graph, timeline, playback,
+`hub-backup-manager-test` rejects future v32. Existing graph, timeline, playback,
 project, autosave, Inspector, adjustment and export gates remain relevant.
 
 CSP v27 also round-trips optional cubic Bezier easing for clip/node curves;

@@ -1,8 +1,14 @@
 # Motion Studio Scope and Readiness
 
+[Gaussian Blur interchange](../COMPOSITION_INTERCHANGE.md) preserves mixed
+ordered Color/Blur stages and shared masks through cscomp v3. Motion native v8
+is unchanged; CSP advances to v31. Producer/consumer regression coverage is
+registered as `creative-suite-blur-interchange`; native platform acceptance
+remains separate.
+
 [Shape-mask interchange](../COMPOSITION_INTERCHANGE.md) adds editable shared
 Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
-curve slicing are shared; native Motion advances to v8 while CSP stays v30.
+curve slicing are shared; the mask delivery introduced Motion v8; Gaussian Blur now advances CSP to v31.
 Automated coverage: `creative-suite-mask-interchange`, shared composition/
 OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
 Native UI and platform acceptance remain separately pending.
@@ -165,7 +171,7 @@ provide a recoverable reference if a linked document or dependency is missing.
 | Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, shared OpenGL composition and texture preview paths. | Motion Studio rasterizes native text and shape content to transparent RGBA8 on its preview worker, then uses `libs/composition/` by default or the optional `libs/composition-opengl` adapter. This app-owned Qt renderer and experimental opt-in GPU path are provisional and do not establish a final renderer choice. |
 | Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | Motion Studio uses `libs/animation/` to evaluate Linear and bounded cubic Bezier transform segments consistently in preview, playback, and export. Its Graph Editor, presets, property tracks, and inspector remain application-owned. |
 | Timeline and history | Timeline model, commands, and bounded undo/redo are application-specific. | Motion Studio owns its composition timeline and editing history; share lower-level behavior only where a second real consumer uses the same contract. |
-| Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 30, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
+| Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 31, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
 | Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio implements an application-owned version 1 recovery wrapper around validated `.motion` v1-v8 data, including the Media Pool. Shared recovery services remain deferred until both document owners have stable common requirements. |
 | Diagnostics | Structured local logging is implemented in `libs/diagnostics/`; each application selects its own log directory. | Reuse the service with a Motion Studio-specific application identifier and context. |
 

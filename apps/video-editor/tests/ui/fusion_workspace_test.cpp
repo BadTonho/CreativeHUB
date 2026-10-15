@@ -739,7 +739,7 @@ void verifyCatalogDrops() {
     auto* canvas = workspace.nodeEditorPanel()->findChild<fusion::nodes::NodeCanvas*>();
     const auto initial_connections = graph.connections;
     const QStringList ids{"fusion.input", "fusion.transform", "fusion.color", "fusion.merge",
-        "video.background", "text.text", "fusion.rectangle_mask", "fusion.ellipse_mask"};
+        "video.background", "text.text", "fusion.rectangle_mask", "fusion.ellipse_mask", "video.gaussian_blur"};
     for (const auto& id : ids) {
         QListWidgetItem* entry = nullptr;
         for (int i = 0; i < catalog.count(); ++i)
@@ -762,7 +762,7 @@ void verifyCatalogDrops() {
         if (id == "text.text") require(graph.nodes.back().text.content == "Text",
             "Fusion Text must retain its generator defaults.");
     }
-    require(edits == 8, "Each catalog drop must produce one graph edit.");
+    require(edits == 9, "Each catalog drop must produce one graph edit.");
     require(workspace.addCatalogNode("fusion.merge"), "Double-click creation route failed.");
     const auto& added = graph.nodes.back();
     for (std::size_t i = 0; i + 1 < graph.nodes.size(); ++i) {
@@ -775,6 +775,17 @@ void verifyCatalogDrops() {
             !workspace.addCatalogNode("video.fusion_composition") &&
             !workspace.addCatalogNode("unknown") && edits == before,
             "Unknown and Edit-only actions must not edit a graph.");
+    // Blur inserts on an image cable, rather than becoming an unconnected node.
+    clip.node_graph=fusion::nodes::makeCompositionGraph();workspace.setSelection(&clip,{});
+    QPoint image_cable_position;
+    for(auto* item:canvas->scene()->items())if(item->data(1).toInt()==3 && item->data(2).toInt()==0)
+        if(auto* line=qgraphicsitem_cast<QGraphicsLineItem*>(item)){image_cable_position=canvas->mapFromScene(line->line().pointAt(.5));break;}
+    QMimeData blur_mime;blur_mime.setData(ui::kEffectIdMimeType,"video.gaussian_blur");
+    QDragEnterEvent blur_enter(image_cable_position,Qt::CopyAction,&blur_mime,Qt::LeftButton,Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(),&blur_enter);
+    QDropEvent blur_drop(QPointF(image_cable_position),Qt::CopyAction,&blur_mime,Qt::LeftButton,Qt::NoModifier);
+    QApplication::sendEvent(canvas->viewport(),&blur_drop);
+    require(blur_drop.isAccepted() && graph.nodes.back().type==fusion::nodes::NodeType::GaussianBlur && graph.connections.size()==2,"Blur must split image cables.");
     auto masked_graph = fusion::nodes::makeCompositionGraph();
     fusion::nodes::Node mask;
     mask.id = masked_graph.next_id++;
@@ -797,19 +808,19 @@ void verifyCatalogDrops() {
     }
     require(found_mask_cable, "Mask cable must be drawn.");
     QMimeData filter_mime;
-    filter_mime.setData(ui::kEffectIdMimeType, "video.grayscale");
+    filter_mime.setData(ui::kEffectIdMimeType, "video.gaussian_blur");
     QDragEnterEvent enter(mask_cable_position, Qt::CopyAction, &filter_mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(canvas->viewport(), &enter);
     QDropEvent drop(QPointF(mask_cable_position), Qt::CopyAction, &filter_mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(canvas->viewport(), &drop);
-    require(!drop.isAccepted() && edits == before, "Visual effects must not split mask cables.");
+    require(!drop.isAccepted() && edits == before+1, "Visual effects must not split mask cables.");
     workspace.setSelection(nullptr, {});
-    require(!workspace.addCatalogNode("fusion.input") && edits == before,
+    require(!workspace.addCatalogNode("fusion.input") && edits == before+1,
             "Missing selection must refuse node creation.");
     timeline::TimelineClip audio = clip;
     audio.kind = timeline::ClipKind::Audio;
     workspace.setSelection(&audio, {});
-    require(!workspace.addCatalogNode("text.text") && edits == before,
+    require(!workspace.addCatalogNode("text.text") && edits == before+1,
             "Audio clips must refuse graph creation.");
 }
 

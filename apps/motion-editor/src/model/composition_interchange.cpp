@@ -66,17 +66,15 @@ x::Document exportComposition(const MotionProjectData &project) {
                     {layer.id,
                      "Only full-canvas rectangles without a stroke can become Background nodes."});
         }
-        for (const auto &effect : layer.effects) {
-            if (auto c = std::get_if<ColorAdjustmentEffect>(&effect)) {
-                l.colors.push_back({c->brightness, c->contrast_percent, c->saturation_percent});
-                l.colors_enabled.push_back(c->enabled);
-                l.color_masks.push_back(c->mask);
-            } else
-                issues.push_back(
-                    {layer.id, "Gaussian Blur is not supported by Fusion interchange."});
+        for(const auto& effect:layer.effects) {
+            if(const auto* c=std::get_if<ColorAdjustmentEffect>(&effect))
+                l.effects.emplace_back(x::ColorEffect{{c->brightness,c->contrast_percent,c->saturation_percent},c->enabled,c->mask});
+            else {
+                const auto& blur=std::get<GaussianBlurEffect>(effect);
+                l.effects.emplace_back(x::BlurEffect{blur.radius_pixels,blur.enabled,blur.mask});
+            }
         }
         d.duration = std::max(d.duration, layer.timeline_start_frame + layer.duration_frames);
-        if(std::all_of(l.color_masks.begin(),l.color_masks.end(),[](auto id){return id==0;}))l.color_masks.clear();
         d.layers.push_back(std::move(l));
     }
     auto invalid = x::validate(d);
@@ -136,12 +134,13 @@ MotionProjectData importComposition(const x::Document &d) {
                                              std::max(1, l.presentation.text_width),
                                              std::max(1, l.presentation.text_height)};
         }
-        std::size_t color_index = 0;
-        for (auto c : l.colors) {
-            layer.effects.emplace_back(ColorAdjustmentEffect{
-                l.colors_enabled.empty() ? true : bool(l.colors_enabled[color_index]), c.brightness,
-                c.contrast_percent, c.saturation_percent, l.color_masks.empty()?0:l.color_masks[color_index]});
-            ++color_index;
+        for(const auto& effect:l.effects) {
+            if(const auto* c=std::get_if<x::ColorEffect>(&effect))
+                layer.effects.emplace_back(ColorAdjustmentEffect{c->enabled,c->parameters.brightness,c->parameters.contrast_percent,c->parameters.saturation_percent,c->mask});
+            else {
+                const auto& blur=std::get<x::BlurEffect>(effect);
+                layer.effects.emplace_back(GaussianBlurEffect{blur.enabled,blur.radius_pixels,blur.mask});
+            }
         }
         if (!l.source.empty() && media.insert(l.source).second)
             project.media.push_back({l.source,

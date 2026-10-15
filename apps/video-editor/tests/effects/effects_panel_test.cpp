@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
                 "Text category is missing.");
         require(toolbox.currentCategoryId() == "all",
                 "Effects Toolbox must initially select All.");
-        require(effects_list.count() == 17,
+        require(effects_list.count() == 18,
                 "Effects list must contain all visual filters and existing tools.");
         require(effects_list.categoryId() == "all",
                 "Effects list must initially show All.");
@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
             const auto effect_id = effects_list.item(index)
                 ->data(Qt::UserRole).toString();
             const bool expected_draggable =
-                effect_id.startsWith(QStringLiteral("video.")) ||
+                (effect_id.startsWith(QStringLiteral("video.")) && effect_id != QStringLiteral("video.gaussian_blur")) ||
                 effect_id == QStringLiteral("text.text") ||
                 effect_id == QStringLiteral("transitions.cross_dissolve") ||
                 effect_id == QStringLiteral("transitions.fade_to_black");
@@ -154,7 +154,7 @@ int main(int argc, char* argv[]) {
 
         require(effects::categories().size() == 8,
                 "Shared effect catalog contains unimplemented categories.");
-        require(effects::definitions().size() == 17,
+        require(effects::definitions().size() == 18,
                 "The Effects catalog must retain existing tools alongside visual filters.");
         QObject::connect(&toolbox, &EffectsToolboxWidget::categoryChanged,
                          &effects_list, &EffectsListWidget::setCategory);
@@ -168,7 +168,7 @@ int main(int argc, char* argv[]) {
         favorites.setWorkspace(effects::Workspace::Fusion);
         toolbox.setWorkspace(effects::Workspace::Fusion);
         require(toolbox.count() == 6 && toolbox.currentCategoryId() == "all" &&
-                effects_list.categoryId() == "all" && effects_list.visibleEffectCount() == 12,
+                effects_list.categoryId() == "all" && effects_list.visibleEffectCount() == 13,
                 "Fusion categories and All fallback are incorrect.");
         require(favorites.count() == 2 && effects::favoriteIds().size() == 3,
                 "Workspace filtering must retain hidden saved favorites.");
@@ -180,6 +180,9 @@ int main(int argc, char* argv[]) {
                         "Fusion must reject Edit-only MIME even for a stale item.");
             }
         }
+        effects_list.setCategory("video");
+        require(effects_list.visibleEffectCount()==6,"Fusion Video must include Gaussian Blur.");
+        verifyDragMime("Gaussian Blur","video.gaussian_blur");
         effects_list.setCategory("fusion.masks");
         require(effects_list.visibleEffectCount() == 2, "Masks category must contain both shapes.");
         verifyDragMime("Ellipse Mask", "fusion.ellipse_mask");
@@ -227,6 +230,9 @@ int main(int argc, char* argv[]) {
         toolbox.setWorkspace(effects::Workspace::None);
         require(toolbox.count() == 0 && favorites.count() == 0 && effects_list.visibleEffectCount() == 0,
                 "Render must not offer editing actions.");
+        require(effects::setFavorite("video.gaussian_blur",true),"Blur favorite must persist.");
+        favorites.setWorkspace(effects::Workspace::Fusion);require(favorites.count()==3,"Fusion Blur favorite visible.");
+        favorites.setWorkspace(effects::Workspace::Edit);require(favorites.count()==2 && effects::favoriteIds().contains("video.gaussian_blur"),"Edit hides but retains Blur favorite.");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

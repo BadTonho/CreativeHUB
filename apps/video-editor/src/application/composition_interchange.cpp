@@ -87,30 +87,30 @@ x::Document exportComposition(const timeline::TimelineClip &clip, int w, int h,
             used.insert(n->id);
             n = input(g, n->id, 0);
         }
-        std::vector<std::vector<creative_suite::effects::ColorAdjustmentParameters>> colors;
-        std::vector<bool> enabled;
-        std::vector<x::MaskId> masks;
-        while (n && (n->type == NodeType::Color || n->type == NodeType::Effect)) {
+        std::vector<std::vector<x::Effect>> stages;
+        while (n && (n->type==NodeType::Color || n->type==NodeType::Effect || n->type==NodeType::GaussianBlur)) {
             used.insert(n->id);
-            masks.push_back(maskFor(*n));
-            enabled.push_back(n->type == NodeType::Color ? n->color.enabled : n->effect.enabled);
-            if (n->type == NodeType::Color)
-                colors.push_back({{n->color.brightness, n->color.contrast_percent,
-                                   n->color.saturation_percent}});
+            const auto mask=maskFor(*n);
+            std::vector<x::Effect> group;
+            if(n->type==NodeType::GaussianBlur)
+                group.emplace_back(x::BlurEffect{n->gaussian_blur.radius_pixels,n->gaussian_blur.enabled,mask});
+            else if(n->type==NodeType::Color)
+                group.emplace_back(x::ColorEffect{{n->color.brightness,n->color.contrast_percent,n->color.saturation_percent},n->color.enabled,mask});
             else {
-                auto effect = n->effect;
-                effect.enabled = true;
-                auto passes = creative_suite::effects::colorAdjustmentPasses(std::span(&effect, 1));
-                if (!passes)
-                    issues.push_back({n->id, "Unsupported effect."});
-                else
-                    colors.push_back(*passes);
+                auto effect=n->effect;effect.enabled=true;
+                const auto passes=creative_suite::effects::colorAdjustmentPasses(std::span(&effect,1));
+                if(!passes)issues.push_back({n->id,"Unsupported effect."});
+                else {
+                    if(mask && passes->size()>1)issues.push_back({n->id,"A masked multi-pass effect cannot be split into independent stages."});
+                    for(const auto& pass:*passes)group.emplace_back(x::ColorEffect{pass,n->effect.enabled,mask});
+                }
             }
-            n = input(g, n->id, 0);
+            stages.push_back(std::move(group));
+            n=input(g,n->id,0);
         }
         if (!n || (n->type != NodeType::Input && n->type != NodeType::Background &&
                    n->type != NodeType::Text)) {
-            issues.push_back({n ? n->id : end->id, "Expected a source, ordered color adjustments "
+            issues.push_back({n ? n->id : end->id, "Expected a source, ordered static effects "
                                                    "and at most one Transform before Merge."});
             return;
         }
@@ -154,15 +154,8 @@ x::Document exportComposition(const timeline::TimelineClip &clip, int w, int h,
         layer.color = n->background_color;
         layer.text = {n->text.content, n->text.font_family, n->text.font_size_pixels,
                       int(n->text.alignment), n->text.color};
-        std::size_t index = colors.size();
-        for (auto i = colors.rbegin(); i != colors.rend(); ++i) {
-            layer.colors.insert(layer.colors.end(), i->begin(), i->end());
-            const bool on = enabled[--index];
-            if(i->size()>1 && masks[index])issues.push_back({end->id,"A masked multi-pass effect cannot be split into independent color stages."});
-            layer.color_masks.insert(layer.color_masks.end(),i->size(),masks[index]);
-            layer.colors_enabled.insert(layer.colors_enabled.end(), i->size(), on);
-        }
-        if(std::all_of(layer.color_masks.begin(),layer.color_masks.end(),[](auto id){return id==0;}))layer.color_masks.clear();
+        for(auto group=stages.rbegin();group!=stages.rend();++group)
+            layer.effects.insert(layer.effects.end(),group->begin(),group->end());
         d.layers.push_back(std::move(layer));
     };
     const auto out = std::find_if(g.nodes.begin(), g.nodes.end(),
@@ -225,18 +218,18 @@ NodeGraph importComposition(const x::Document &d) {
         source.presentation = layer.presentation;
         NodeId previous = add(source);
         if(layer.source_mask)bindings.emplace_back(layer.source_mask,previous);
-        std::size_t color_index = 0;
-        for (auto color : layer.colors) {
+        for(const auto& stage:layer.effects) {
             Node effect;
-            effect.type = NodeType::Color;
-            effect.color = {color.brightness, color.contrast_percent, color.saturation_percent,
-                            layer.colors_enabled.empty() ? true
-                                                         : bool(layer.colors_enabled[color_index])};
-            auto id = add(effect);
-            if(!layer.color_masks.empty() && layer.color_masks[color_index])bindings.emplace_back(layer.color_masks[color_index],id);
-            ++color_index;
-            g.connections.push_back({previous, id, 0});
-            previous = id;
+            if(const auto* blur=std::get_if<x::BlurEffect>(&stage)) {
+                effect.type=NodeType::GaussianBlur;effect.gaussian_blur={blur->radius_pixels,blur->enabled};
+            } else {
+                const auto& c=std::get<x::ColorEffect>(stage);
+                effect.type=NodeType::Color;effect.color={c.parameters.brightness,c.parameters.contrast_percent,c.parameters.saturation_percent,c.enabled};
+            }
+            const auto id=add(effect);
+            const auto mask=std::visit([](const auto& e){return e.mask;},stage);
+            if(mask)bindings.emplace_back(mask,id);
+            g.connections.push_back({previous,id,0});previous=id;
         }
         Node transform;
         transform.type = NodeType::Transform;

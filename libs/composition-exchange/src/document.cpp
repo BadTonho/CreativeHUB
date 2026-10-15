@@ -173,19 +173,17 @@ std::vector<Issue> validate(const Document &d, bool media) {
         issues.push_back(
             {0, "Invalid composition dimensions, frame rate, duration or resource limits."});
     for (const auto &l : d.layers) {
-        stages += 3 + l.colors.size();
+        stages += 3 + l.effects.size();
         const auto reference = [&](MaskId id) {
             if(!id)return;
             referenced_masks.insert(id);
             if(!mask_ids.contains(id))issues.push_back({l.id,"Unknown mask reference."});
         };
         reference(l.source_mask);reference(l.transform_mask);
-        if(!l.color_masks.empty() && l.color_masks.size()!=l.colors.size())issues.push_back({l.id,"Invalid effect mask bindings."});
-        for(auto id:l.color_masks)reference(id);
+        for(const auto& effect:l.effects)reference(std::visit([](const auto& e){return e.mask;},effect));
         if (!l.id || !ids.insert(l.id).second || !validPresentation(l.presentation) ||
             !animation::validTransform(l.transform) ||
-            !animation::validTransformKeyframes(l.curves) || l.colors.size() > 1024 ||
-            (!l.colors_enabled.empty() && l.colors_enabled.size() != l.colors.size()))
+            !animation::validTransformKeyframes(l.curves) || l.effects.size() > 1024)
             issues.push_back({l.id, "Invalid layer identity, timing, transform or curves."});
         if (l.kind != Kind::Video && l.kind != Kind::Image && l.kind != Kind::Background &&
             l.kind != Kind::Text)
@@ -220,12 +218,18 @@ std::vector<Issue> validate(const Document &d, bool media) {
              (l.presentation.profile == Profile::MotionLayer &&
               (l.presentation.text_width <= 0 || l.presentation.text_height <= 0))))
             issues.push_back({l.id, "Unsupported text properties."});
-        for (const auto &c : l.colors)
-            if (!std::isfinite(c.brightness) || c.brightness < -100 || c.brightness > 100 ||
-                !std::isfinite(c.contrast_percent) || c.contrast_percent < 0 ||
-                c.contrast_percent > 200 || !std::isfinite(c.saturation_percent) ||
-                c.saturation_percent < 0 || c.saturation_percent > 200)
-                issues.push_back({l.id, "Invalid color adjustment."});
+        for (const auto& effect : l.effects) {
+            if (const auto* blur=std::get_if<BlurEffect>(&effect)) {
+                if(!std::isfinite(blur->radius_pixels) || blur->radius_pixels<0 || blur->radius_pixels>100)
+                    issues.push_back({l.id,"Invalid Gaussian Blur radius."});
+            } else {
+                const auto& c=std::get<ColorEffect>(effect).parameters;
+                if (!std::isfinite(c.brightness) || c.brightness < -100 || c.brightness > 100 ||
+                    !std::isfinite(c.contrast_percent) || c.contrast_percent < 0 || c.contrast_percent > 200 ||
+                    !std::isfinite(c.saturation_percent) || c.saturation_percent < 0 || c.saturation_percent > 200)
+                    issues.push_back({l.id,"Invalid color adjustment."});
+            }
+        }
         std::size_t keys = 0;
         for (auto p : props)
             for (const auto &key : animation::keyframesFor(l.curves, p)) {
@@ -245,6 +249,9 @@ QJsonObject toJson(const Document &d, const std::filesystem::path &file) {
     auto issues = validate(d);
     if (!issues.empty())
         throw Error(issues.front().reason);
+    const bool has_blur=std::any_of(d.layers.begin(),d.layers.end(),[](const auto& l){
+        return std::any_of(l.effects.begin(),l.effects.end(),[](const auto& e){return std::holds_alternative<BlurEffect>(e);});});
+    const int version=has_blur?3:d.masks.empty()?1:2;
     QJsonArray layers;
     for (const auto &l : d.layers) {
         QJsonObject o{{"id", QString::number(l.id)},
@@ -283,20 +290,37 @@ QJsonObject toJson(const Document &d, const std::filesystem::path &file) {
             curves.append(curve);
         }
         o.insert("curves", curves);
-        QJsonArray colors;
-        for (std::size_t i = 0; i < l.colors.size(); ++i) {
-            const auto &c = l.colors[i];
-            colors.append(QJsonArray{c.brightness, c.contrast_percent, c.saturation_percent,
-                                     l.colors_enabled.empty() ? true : bool(l.colors_enabled[i])});
+        QJsonArray colors, effect_records, mask_refs;
+        bool has_color_mask=false;
+        for (const auto& effect:l.effects) {
+            const auto mask=std::visit([](const auto& e){return e.mask;},effect);
+            if(version==3) {
+                QJsonObject record,parameters;
+                if(const auto* blur=std::get_if<BlurEffect>(&effect)) {
+                    record.insert("type","gaussian_blur");parameters.insert("radius_pixels",blur->radius_pixels);
+                } else {
+                    const auto& c=std::get<ColorEffect>(effect).parameters;
+                    record.insert("type","color_adjustment");
+                    parameters={{"brightness",c.brightness},{"contrast",c.contrast_percent},{"saturation",c.saturation_percent}};
+                }
+                record.insert("parameters",parameters);
+                record.insert("enabled",std::visit([](const auto& e){return e.enabled;},effect));
+                if(mask)record.insert("mask",QString::number(mask));
+                effect_records.append(record);
+            } else {
+                const auto& c=std::get<ColorEffect>(effect);
+                colors.append(QJsonArray{c.parameters.brightness,c.parameters.contrast_percent,c.parameters.saturation_percent,c.enabled});
+                mask_refs.append(QString::number(mask));has_color_mask=has_color_mask||mask!=0;
+            }
         }
-        o.insert("colors", colors);
+        if(version==3)o.insert("effects",effect_records);
+        else {o.insert("colors",colors);if(has_color_mask)o.insert("color_masks",mask_refs);}
         if(l.source_mask)o.insert("source_mask",QString::number(l.source_mask));
         if(l.transform_mask)o.insert("transform_mask",QString::number(l.transform_mask));
-        if(std::any_of(l.color_masks.begin(),l.color_masks.end(),[](auto id){return id!=0;})) {QJsonArray refs;for(auto id:l.color_masks)refs.append(QString::number(id));o.insert("color_masks",refs);}
         layers.append(o);
     }
     QJsonObject result{{"format", "creative-suite.composition-interchange"},
-            {"version", d.masks.empty()?1:2},
+            {"version", version},
             {"name", str(d.name)},
             {"width", d.width},
             {"height", d.height},
@@ -308,10 +332,11 @@ QJsonObject toJson(const Document &d, const std::filesystem::path &file) {
     return result;
 }
 Document fromJson(const QJsonObject &o, const std::filesystem::path &file) {
-    if (o.value("format") != "creative-suite.composition-interchange" || (o.value("version") != 1 && o.value("version") != 2))
+    if (o.value("format") != "creative-suite.composition-interchange" || (o.value("version") != 1 && o.value("version") != 2 && o.value("version") != 3))
         throw Error("Unsupported composition interchange format or version.");
     Document d;
-    const bool masks_allowed=o.value("version")==2;
+    const int version=o.value("version").toInt();
+    const bool masks_allowed=version>=2;
     if(o.contains("masks")) {
         if(!masks_allowed||!o.value("masks").isArray())throw Error("Masks require interchange v2.");
         d.masks=parseMasksJson(o.value("masks").toArray());
@@ -337,10 +362,13 @@ Document fromJson(const QJsonObject &o, const std::filesystem::path &file) {
             const auto id=integer(a,field);if(id<0)throw Error("Invalid mask reference.");return id;
         };
         l.source_mask=ref("source_mask");l.transform_mask=ref("transform_mask");
+        if((version<3 && a.contains("effects")) || (version==3 && (a.contains("colors") || a.contains("color_masks"))))
+            throw Error("Effect representation conflicts with interchange version.");
+        std::vector<MaskId> color_masks;
         if(a.contains("color_masks")) {
             if(!masks_allowed||!a.value("color_masks").isArray())throw Error("Invalid effect mask bindings.");
             for(const auto& v:a.value("color_masks").toArray()) {
-                QJsonObject temp{{"ref",v}};const auto id=integer(temp,"ref");if(id<0)throw Error("Invalid effect mask reference.");l.color_masks.push_back(id);
+                QJsonObject temp{{"ref",v}};const auto id=integer(temp,"ref");if(id<0)throw Error("Invalid effect mask reference.");color_masks.push_back(id);
             }
         }
         auto k = a.value("kind").toString();
@@ -400,14 +428,34 @@ Document fromJson(const QJsonObject &o, const std::filesystem::path &file) {
                 lists[i]->push_back(keyframe);
             }
         }
-        if (!a.value("colors").isArray() || a.value("colors").toArray().size() > 1024)
-            throw Error("Invalid effects.");
-        for (auto cv : a.value("colors").toArray()) {
-            auto c = cv.toArray();
-            if (c.size() != 4 || !c[3].isBool())
-                throw Error("Invalid color adjustment.");
-            l.colors.push_back({c[0].toDouble(NAN), c[1].toDouble(NAN), c[2].toDouble(NAN)});
-            l.colors_enabled.push_back(c[3].toBool());
+        if(version<3) {
+            if(!a.value("colors").isArray() || a.value("colors").toArray().size()>1024)
+                throw Error("Invalid effects.");
+            const auto colors=a.value("colors").toArray();
+            if(!color_masks.empty() && color_masks.size()!=std::size_t(colors.size()))throw Error("Invalid effect mask bindings.");
+            std::size_t index=0;
+            for(auto cv:colors) {
+                const auto c=cv.toArray();
+                if(c.size()!=4 || !c[3].isBool())throw Error("Invalid color adjustment.");
+                l.effects.emplace_back(ColorEffect{{c[0].toDouble(NAN),c[1].toDouble(NAN),c[2].toDouble(NAN)},c[3].toBool(),color_masks.empty()?0:color_masks[index]});
+                ++index;
+            }
+        } else {
+            if(!a.value("effects").isArray() || a.value("effects").toArray().size()>1024)throw Error("Invalid effects.");
+            for(const auto& value:a.value("effects").toArray()) {
+                if(!value.isObject())throw Error("Invalid effect record.");
+                const auto effect=value.toObject();
+                if(!effect.value("enabled").isBool() || !effect.value("parameters").isObject() ||
+                    effect.contains("keyframes") || effect.contains("curves"))throw Error("Invalid static effect record.");
+                const auto parameters=effect.value("parameters").toObject();
+                const auto mask=effect.contains("mask")?integer(effect,"mask"):0;
+                if(mask<0)throw Error("Invalid effect mask reference.");
+                if(effect.value("type")=="color_adjustment")
+                    l.effects.emplace_back(ColorEffect{{number(parameters,"brightness"),number(parameters,"contrast"),number(parameters,"saturation")},effect.value("enabled").toBool(),MaskId(mask)});
+                else if(effect.value("type")=="gaussian_blur")
+                    l.effects.emplace_back(BlurEffect{number(parameters,"radius_pixels"),effect.value("enabled").toBool(),MaskId(mask)});
+                else throw Error("Unknown effect type.");
+            }
         }
         d.layers.push_back(std::move(l));
     }

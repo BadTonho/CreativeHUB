@@ -1,5 +1,11 @@
 # Motion Studio Roadmap
 
+[Gaussian Blur interchange](../COMPOSITION_INTERCHANGE.md) preserves mixed
+ordered Color/Blur stages and shared masks through cscomp v3. Motion native v8
+is unchanged; CSP advances to v31. Producer/consumer regression coverage is
+registered as `creative-suite-blur-interchange`; native platform acceptance
+remains separate.
+
 This roadmap tracks open work, release gates, and feature-to-verification
 coverage. Completed implementation checklists are archived in
 [legacy documentation](../legacy/motion-editor/IMPLEMENTED_ROADMAP_ITEMS.md).
@@ -77,14 +83,14 @@ texture delivery with bounded resources and CPU recovery; see
 
 [Shape-mask interchange](../COMPOSITION_INTERCHANGE.md) adds editable shared
 Rectangle/Ellipse masks on sources, effects and Transform. Coverage and scalar
-curve slicing are shared; native Motion advances to v8 while CSP stays v30.
+curve slicing are shared; the mask delivery introduced Motion v8; Gaussian Blur now advances CSP to v31.
 Automated coverage: `creative-suite-mask-interchange`, shared composition/
 OpenGL, native Motion preview/export/history/persistence, and Hub backup gates.
 Native UI and platform acceptance remain separately pending.
 
 The first [editable composition interchange](../COMPOSITION_INTERCHANGE.md)
-transfers compatible layer stacks to Fusion and back. Masks on Merge/Output,
-blur interchange and group processing require later work. Native menu/platform
+transfers compatible layer stacks to Fusion and back. Masks on Merge/Output
+and group processing require later work. Gaussian Blur interchange uses v3. Native menu/platform
 acceptance remains separate from automated coverage.
 
 The shared engine adds straight-RGBA ApplyMask/MaskedBlend for Video Editor

@@ -100,7 +100,7 @@ const Node* findNode(const NodeGraph& graph, NodeId id) noexcept { return find(g
 bool isVisualNode(NodeType type) noexcept {
     return type == NodeType::Input || type == NodeType::Transform ||
         type == NodeType::Color || type == NodeType::Merge ||
-        type == NodeType::Output || type == NodeType::Effect || type == NodeType::Background || type == NodeType::Text;
+        type == NodeType::Output || type == NodeType::Effect || type == NodeType::GaussianBlur || type == NodeType::Background || type == NodeType::Text;
 }
 
 GraphValidation validate(const NodeGraph& graph) {
@@ -148,6 +148,8 @@ GraphValidation validate(const NodeGraph& graph) {
         }
         if (!std::isfinite(node.mask.soft_edge) || node.mask.soft_edge<0 || node.mask.soft_edge>1)
             return {GraphError::InvalidParameter,node.id};
+        if (!std::isfinite(node.gaussian_blur.radius_pixels) || node.gaussian_blur.radius_pixels < 0 || node.gaussian_blur.radius_pixels > 100)
+            return {GraphError::InvalidParameter, node.id};
         if (node.type == NodeType::Text && !timeline::isValidTextStyle(node.text))
             return {GraphError::InvalidParameter, node.id};
         if (node.type == NodeType::Output) ++output_count;

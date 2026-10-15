@@ -16,9 +16,9 @@ int main(int argc,char** argv) try {
     const auto dir=std::filesystem::path(temp.path().toStdU16String());
     x::Document base;base.width=160;base.height=90;base.duration=60;
     x::Layer background;background.id=1;background.color={60,140,220,137};background.presentation.duration=60;
-    background.transform={.57,.43,.82,17,.65};background.colors={{12,130,70},{50,120,80}};background.colors_enabled={true,false};base.layers={background};
+    background.transform={.57,.43,.82,17,.65};background.effects={x::ColorEffect{{12,130,70}},x::ColorEffect{{50,120,80},false}};base.layers={background};
     check(x::toJson(base,dir/"v1.cscomp").value("version")==1,"unmasked exports remain v1");
-    auto zero_bindings=base;zero_bindings.layers[0].color_masks={0,0};
+    auto zero_bindings=base;
     check(x::fromJson(x::toJson(zero_bindings,dir/"zero.cscomp"),dir/"zero.cscomp").masks.empty(),"zero-only bindings remain readable v1");
     for(auto kind:{c::ShapeMaskKind::Rectangle,c::ShapeMaskKind::Ellipse})for(int target:{-2,0,-1}) {
         auto d=base;x::Mask mask;mask.id=17;mask.kind=kind;mask.parameters={.45,.55,.7,.6,23,.12,false};
@@ -26,7 +26,7 @@ int main(int argc,char** argv) try {
         mask.keyframes[0][0].interpolation=a::InterpolationMode::CubicBezier;mask.keyframes[0][0].easing={.2,.1,.8,.9};d.masks={mask};
         if(target==-2)d.layers[0].source_mask=mask.id;
         else if(target==-1)d.layers[0].transform_mask=mask.id;
-        else d.layers[0].color_masks={mask.id,mask.id};
+        else for(auto& e:d.layers[0].effects)std::visit([&](auto& v){v.mask=mask.id;},e);
         auto motion_project=motion::model::importComposition(d);
         for(int frame:{0,13,49})compare(d,motion_project,frame,"masked Fusion/Motion parity");
         auto graph=application::importComposition(d);timeline::TimelineClip clip;
@@ -43,21 +43,21 @@ int main(int argc,char** argv) try {
         for(auto& m:d.masks){m.parameters.width=0;m.parameters.invert=true;m.keyframes={};}
         auto empty=motion::model::importComposition(d);compare(d,empty,15,"inverted zero geometry");
     }
-    auto shared=base;shared.layers[0].transform={};shared.layers[0].source_mask=8;shared.layers[0].color_masks={8,0};
+    auto shared=base;shared.layers[0].transform={};shared.layers[0].source_mask=8;std::get<x::ColorEffect>(shared.layers[0].effects[0]).mask=8;
     x::Mask definition;definition.id=8;shared.masks={definition};
     for(int target:{-2,0,-1}) {
         auto text=shared;text.layers[0].kind=x::Kind::Text;
         text.layers[0].text={"Shared\nMask","Sans Serif",24.5,1,{180,90,240,151}};
-        text.layers[0].source_mask=0;text.layers[0].color_masks={0,0};text.layers[0].transform_mask=0;
+        text.layers[0].source_mask=0;for(auto& e:text.layers[0].effects)std::visit([](auto& v){v.mask=0;},e);text.layers[0].transform_mask=0;
         if(target==-2)text.layers[0].source_mask=8;
-        else if(target==0)text.layers[0].color_masks={8,0};
+        else if(target==0)std::get<x::ColorEffect>(text.layers[0].effects[0]).mask=8;
         else text.layers[0].transform_mask=8;
         compare(text,motion::model::importComposition(text),13,"masked multiline text parity");
     }
     auto excessive=shared;excessive.masks.resize(4097,definition);
     const auto excessive_issues=x::validate(excessive);
     check(std::any_of(excessive_issues.begin(),excessive_issues.end(),[](const auto& issue){return issue.reason=="Too many masks.";}),"mask collection limit");
-    excessive=shared;excessive.layers[0].colors.resize(16380);excessive.layers[0].colors_enabled.clear();excessive.layers[0].color_masks.clear();
+    excessive=shared;excessive.layers[0].effects.resize(16380);
     const auto stage_issues=x::validate(excessive);
     check(std::any_of(stage_issues.begin(),stage_issues.end(),[](const auto& issue){return issue.reason=="The composition exceeds the 16384-stage interchange limit.";}),"masks count toward graph stage budget");
     auto invalid_geometry=definition;invalid_geometry.parameters.soft_edge=1.01;
@@ -78,7 +78,7 @@ int main(int argc,char** argv) try {
     check(saved.setMaskParameters(8,{.3,.4,.7,.8,10,.2,true}),"edit shared mask");history.recordBeforeEdit({before,1});
     auto undo=history.undo({saved,1});check(undo && undo->document.masks()==before.masks(),"mask undo");
     auto redo=history.redo(*undo);check(redo && redo->document.masks()==saved.masks(),"mask redo");
-    x::Document gpu_doc=base;gpu_doc.layers[0].colors.clear();gpu_doc.layers[0].colors_enabled.clear();gpu_doc.layers[0].transform={};gpu_doc.layers[0].source_mask=8;gpu_doc.masks={definition};
+    x::Document gpu_doc=base;gpu_doc.layers[0].effects.clear();gpu_doc.layers[0].transform={};gpu_doc.layers[0].source_mask=8;gpu_doc.masks={definition};
     auto cpu=fusionFrame(gpu_doc,0),gpu=fusionFrame(gpu_doc,0,1);int error=0;
     for(std::size_t i=0;i<cpu->rgba_pixels.size();++i)error=std::max(error,std::abs(int(cpu->rgba_pixels[i])-int(gpu->rgba_pixels[i])));
     check(error<=2,"mask GPU parity");
@@ -92,7 +92,7 @@ int main(int argc,char** argv) try {
     check(blur_cpu && blur_gpu,"masked blur frames");
     if(QOpenGLContext::supportsThreadedOpenGL())check(used,"masked Gaussian Blur must use available GPU");
     for(std::size_t i=0;i<blur_cpu->rgba_pixels.size();++i)check(std::abs(int(blur_cpu->rgba_pixels[i])-int(blur_gpu->rgba_pixels[i]))<=2,"masked blur GPU parity");
-    rejected([&]{(void)motion::model::exportComposition(native_gpu);},"blur remains outside interchange");
+    check(std::holds_alternative<x::BlurEffect>(motion::model::exportComposition(native_gpu).layers[0].effects[0]),"editable Blur interchange");
     auto export_doc=gpu_doc;export_doc.layers[0].presentation.start=2;export_doc.layers[0].presentation.duration=4;
     check(a::setKeyframe(export_doc.masks[0].keyframes[0],0,.2)&&a::setKeyframe(export_doc.masks[0].keyframes[0],5,.8),"export mask composition keys");
     auto export_project=motion::model::importComposition(export_doc);
@@ -107,7 +107,7 @@ int main(int argc,char** argv) try {
     const auto sample=std::size_t(45*160+64)*4;
     check(exported.size()==6 && exported[2]->rgba_pixels[sample]>15 && exported[5]->rgba_pixels[sample]<10,"export propagates masks and global composition time through source windows");
     auto image_doc=shared;image_doc.layers[0].presentation.profile=x::Profile::MotionLayer;
-    image_doc.layers[0].kind=x::Kind::Image;image_doc.layers[0].source=dir/"source.png";image_doc.layers[0].source_mask=0;image_doc.layers[0].color_masks.clear();image_doc.layers[0].transform_mask=8;
+    image_doc.layers[0].kind=x::Kind::Image;image_doc.layers[0].source=dir/"source.png";image_doc.layers[0].source_mask=0;for(auto& e:image_doc.layers[0].effects)std::visit([](auto& v){v.mask=0;},e);image_doc.layers[0].transform_mask=8;
     QImage image(37,21,QImage::Format_RGBA8888);image.fill(QColor(130,70,230,111));check(image.save(QString::fromStdU16String(image_doc.layers[0].source.u16string())),"synthetic source");
     compare(image_doc,motion::model::importComposition(image_doc),20,"masked transform intrinsic/canvas geometry");
     auto invalid=shared;invalid.layers[0].source_mask=123;check(!x::validate(invalid).empty(),"unknown mask rejected");

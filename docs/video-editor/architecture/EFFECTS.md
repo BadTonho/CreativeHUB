@@ -10,7 +10,7 @@ or persisted graph types. Render offers no catalog creation actions.
 
 | Category | Edit | Fusion |
 | --- | --- | --- |
-| Video | Visual effects, Fusion Composition, Adjustment Clip | Visual effect nodes |
+| Video | Visual effects, Fusion Composition, Adjustment Clip | Visual effect nodes and Fusion-only Gaussian Blur |
 | Video > Generators | Opaque-white Background clip | Transparent Background node |
 | Text | Text clip | Text node |
 | Audio / Transitions | Existing Edit tools | Hidden |
@@ -27,7 +27,7 @@ or double-click to create and select a disconnected node at a free location
 near the visible graph center. Automatic placement avoids existing nodes and
 scrolls the result into view. Creation is disabled without a compatible selected
 clip. The Node Editor retains Grid controls; the Add Node selector/button have
-been removed. Existing visual effects still split image cables when dropped
+been removed. Existing visual effects and Gaussian Blur split image cables when dropped
 on them and refuse mask cables. Other catalog nodes remain disconnected even
 when dropped over a cable. Typed wiring is unchanged.
 
@@ -38,7 +38,9 @@ and `text.text`, resolving to the workspace's action. Both drop destinations
 validate compatibility; unknown IDs and Fusion-only timeline drops are refused.
 Creation reuses graph commands, dirty tracking, playback invalidation and
 Undo/Redo. Functions shares this catalog and its workspace actions as described
-below. No shortcut, rendering or CSP v29 format change is introduced.
+below. Gaussian Blur adds a dedicated Fusion-only action (`video.gaussian_blur`),
+static Inspector controls and CSP v31 persistence; other catalog behavior and
+shortcuts remain unchanged. See [Gaussian Blur](../features/GAUSSIAN_BLUR.md).
 
 
 ## Functions

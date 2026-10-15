@@ -27,7 +27,8 @@ Content masks multiply alpha before effects. Effect masks mix that effect's
 input and processed output; Transformation masks mix the untransformed and
 transformed images in the project canvas. Mixing uses premultiplied alpha and
 returns straight RGBA. Native color adjustment and Gaussian Blur retain their
-ordered processing. Gaussian Blur remains unsupported by composition interchange.
+ordered processing. Gaussian Blur is editable through composition interchange v3; it retains
+its own ordered stage and mask reference.
 
 The document owns mask IDs, associations and history. Preview/export snapshots
 share immutable definitions; the renderer evaluates them at an explicit

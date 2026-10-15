@@ -103,6 +103,7 @@ std::optional<fusion::nodes::Node> catalogNode(const QString& id) {
         node.effect = creative_suite::effects::makeDefaultInstance(key);
         break;
     }
+    case Action::GaussianBlurNode: node.type = NodeType::GaussianBlur; break;
     case Action::InputNode: node.type = NodeType::Input; break;
     case Action::TransformNode: node.type = NodeType::Transform; break;
     case Action::ColorNode: node.type = NodeType::Color; break;
@@ -345,7 +346,7 @@ bool FusionWorkspace::createCatalogNode(
     if (!active_ || clip_id_ == 0) return false;
     auto node = catalogNode(id);
     if (!node) return false;
-    const bool split_cable = cable && node->type == fusion::nodes::NodeType::Effect;
+    const bool split_cable = cable && (node->type == fusion::nodes::NodeType::Effect || node->type == fusion::nodes::NodeType::GaussianBlur);
     if (split_cable && cable->input == 2) return false;
     auto candidate = graph_;
     node->id = candidate.next_id++;
@@ -667,6 +668,13 @@ void FusionWorkspace::refreshInspector() {
             timeline::TransformProperty::Rotation, -360.0, 360.0, 1.0);
         add_transform("fusionTransformOpacity", "Opacity",
             timeline::TransformProperty::Opacity, 0.0, 1.0, 0.05);
+    } else if (node->type == fusion::nodes::NodeType::GaussianBlur) {
+        auto* enabled = new QCheckBox(node_properties_);
+        enabled->setObjectName("fusionBlurEnabled");
+        enabled->setChecked(node->gaussian_blur.enabled);
+        layout->addRow("Enabled", enabled);
+        auto* radius = spin("fusionBlurRadius", "Radius", node->gaussian_blur.radius_pixels, 0, 100, .5);
+        radius->setDecimals(1);radius->setSuffix(" px");
     } else if (node->type == fusion::nodes::NodeType::Color) {
         auto* enabled = new QCheckBox(node_properties_);
         enabled->setObjectName("fusionColorEnabled");
@@ -766,6 +774,12 @@ void FusionWorkspace::refreshInspector() {
                 node_properties_->findChild<QDoubleSpinBox*>("fusionTransformRotation"));
             apply_property(timeline::TransformProperty::Opacity,
                 node_properties_->findChild<QDoubleSpinBox*>("fusionTransformOpacity"));
+        } else if (found->type == fusion::nodes::NodeType::GaussianBlur) {
+            const auto* control=node_properties_->findChild<QDoubleSpinBox*>("fusionBlurRadius");
+            // An untouched control preserves imported sub-display precision.
+            if (control->value() != QString::number(found->gaussian_blur.radius_pixels, 'f', 1).toDouble())
+                found->gaussian_blur.radius_pixels=control->value();
+            found->gaussian_blur.enabled=node_properties_->findChild<QCheckBox*>("fusionBlurEnabled")->isChecked();
         } else if (found->type == fusion::nodes::NodeType::Color) {
             found->color.enabled = node_properties_->findChild<QCheckBox*>("fusionColorEnabled")->isChecked();
             found->color.brightness = node_properties_->findChild<QDoubleSpinBox*>("fusionColorBrightness")->value();

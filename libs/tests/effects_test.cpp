@@ -1,4 +1,5 @@
 #include <creative_suite/effects/effects.h>
+#include <creative_suite/effects/gaussian_blur.h>
 
 #include <algorithm>
 #include <array>
@@ -82,7 +83,49 @@ void applyPreviousMotionColorAdjustment(
 
 }  // namespace
 
+void verifySharedBlur() {
+    using namespace creative_suite::effects;
+    creative_suite::media::RgbaFrame input{7,5,32,std::vector<std::uint8_t>(160,73)};
+    for(int y=0;y<input.height;++y)for(int x=0;x<input.width;++x)for(int c=0;c<4;++c)
+        input.rgba_pixels[y*input.stride+x*4+c]=std::uint8_t((x*43+y*67+c*79)%256);
+    for(double amount:{0.,.4,.5,2.5,100.}) {
+        auto expected=input;const int radius=int(std::lround(amount));
+        if(radius) {
+            for(int y=0;y<input.height;++y)for(int x=0;x<input.width;++x)for(int c=0;c<3;++c) {
+                const auto i=y*input.stride+x*4;expected.rgba_pixels[i+c]=std::uint8_t((unsigned(input.rgba_pixels[i+c])*input.rgba_pixels[i+3]+127)/255);
+            }
+            for(int pass=0;pass<6;++pass) {
+                const auto source=expected;const auto divisor=unsigned(2*radius+1);
+                for(int y=0;y<input.height;++y)for(int x=0;x<input.width;++x)for(int c=0;c<4;++c) {
+                    unsigned sum=0;
+                    for(int offset=-radius;offset<=radius;++offset) {
+                        const auto sx=pass%2==0?std::clamp(x+offset,0,input.width-1):x;
+                        const auto sy=pass%2==1?std::clamp(y+offset,0,input.height-1):y;
+                        sum+=source.rgba_pixels[sy*input.stride+sx*4+c];
+                    }
+                    expected.rgba_pixels[y*input.stride+x*4+c]=std::uint8_t((sum+divisor/2)/divisor);
+                }
+            }
+            for(int y=0;y<input.height;++y)for(int x=0;x<input.width;++x)for(int c=0;c<3;++c) {
+                const auto i=y*input.stride+x*4;const unsigned alpha=expected.rgba_pixels[i+3];
+                expected.rgba_pixels[i+c]=alpha?std::uint8_t(std::min(255u,(unsigned(expected.rgba_pixels[i+c])*255+alpha/2)/alpha)):0;
+            }
+        }
+        auto actual=input;require(applyGaussianBlur(actual,amount)==ProcessingResult::Completed && actual.rgba_pixels==expected.rgba_pixels,"shared blur reference pixels, alpha, rounding and padding");
+        auto parallel=input;int dispatches=0;
+        require(applyGaussianBlur(parallel,amount,{},[&](auto count,const auto& cancel,const auto& op){++dispatches;op(0,count/2,cancel);op(count/2,count,cancel);return true;})==ProcessingResult::Completed && parallel.rgba_pixels==expected.rgba_pixels,"range executor preserves blur output");
+        require(dispatches==(radius?8:0),"radius zero bypasses premultiplication and all blur passes");
+    }
+    for(auto invalid:{-1.,101.,std::numeric_limits<double>::quiet_NaN()}) {
+        auto copy=input;require(applyGaussianBlur(copy,invalid)==ProcessingResult::InvalidInput && copy.rgba_pixels==input.rgba_pixels,"invalid blur unchanged");
+    }
+    auto copy=input;require(applyGaussianBlur(copy,3,[]{return true;})==ProcessingResult::Cancelled && copy.rgba_pixels==input.rgba_pixels,"blur initial cancellation");
+    int polls=0;require(applyGaussianBlur(copy,3,[&]{return ++polls>4;})==ProcessingResult::Cancelled,"blur cancellation during processing");
+    copy=input;copy.rgba_pixels.resize(1);require(applyGaussianBlur(copy,3)==ProcessingResult::InvalidInput,"blur incomplete frame");
+}
+
 int main() {
+    verifySharedBlur();
     using namespace creative_suite::effects;
     require(builtInEffects().size() == 4, "The built-in visual effect catalog is incomplete.");
     auto original = frame();

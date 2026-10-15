@@ -14,25 +14,25 @@ playhead on the selected video track through the timeline command service, as on
 undoable edit. The destination project must have the same canvas and exact FPS.
 Normal overlap and audio-track rejection rules apply.
 
-Video, still images, Background, Text, ordered static color passes, and one
+Video, still images, Background, Text, ordered static color and Gaussian Blur stages, and one
 animated Transform per source are supported. Merge maps to a back-to-front layer
 stack. Full-canvas Motion rectangles without strokes map to Background nodes.
 Text content, font, alignment, size, RGBA, layout, transforms and linear/Bézier
 curves remain editable. Media are referenced, not copied or embedded.
 
-Masks on Merge/Output, blur, animated effect parameters, shared image branches, disconnected
+Masks on Merge/Output, animated effect parameters, shared image branches, disconnected
 nodes, processing after Merge, multiple Transform stages, nested foreground
 compositions, linked image documents, other shapes, and clip-level effects or
 non-neutral transforms are refused with an item-specific report. No partial
 export or flattened replacement is produced. Node positions are regenerated;
-graph topology is normalized to source/color/transform branches and Merge.
+graph topology is normalized to source/effects/transform branches and Merge.
 
-Rectangle/Ellipse masks are editable on sources, individual color stages and
+Rectangle/Ellipse masks are editable on sources, individual color/Blur stages and
 Transform. A definition can be shared between destinations; shared mask keys
 use composition time, separately from layer-local transform keys. Motion exposes
 these operations in [Masks Inspector](motion-editor/features/MASKS.md).
 
-## Ownership and interchange v1/v2
+## Ownership and interchange v1/v2/v3
 
 `libs/composition-exchange` owns the UTF-8 JSON contract and worker-side raster
 and source-clock helpers. Application adapters own conversion and native editing
@@ -41,9 +41,10 @@ schedule file preparation on workers; cancellation does not publish partial
 files or replace the active document. Technical failures are logged by the app.
 
 The extension is `.cscomp`; `format` is
-`creative-suite.composition-interchange`. Readers accept versions 1 and 2;
-writers select v2 when masks are present and retain v1 for unmasked exports.
-Future v3 and mask data declared as v1 are rejected. Root fields are `name`, `width`, `height`, string-encoded
+`creative-suite.composition-interchange`. Readers accept versions 1, 2 and 3;
+writers select v3 when Blur is present (including disabled Blur), otherwise v2
+when masks are present or v1 without masks. Future v4, typed effects declared as
+v1/v2 and mask data declared as v1 are rejected. Root fields are `name`, `width`, `height`, string-encoded
 `fps_numerator`, `fps_denominator`, `duration`, and an ordered `layers` array.
 Layers contain string-encoded IDs, kind (`video`, `image`, `background`, `text`),
 media source/rate/count, RGBA, text data, a five-number transform, five ordered
@@ -67,7 +68,7 @@ through generated-clip cuts and trims.
 Paths inside the interchange directory are relative; external paths are
 absolute. Imports validate referenced files before applying. Files are limited
 to 64 MiB, canvases/intermediate RGBA buffers to 16,777,216 pixels, documents to
-4096 layers, layer color stacks to 1024 passes and layer curves to 100,000 keys.
+4096 layers, layer effect stacks to 1024 stages and layer curves to 100,000 keys.
 Interchange graphs are limited to 16,384 stages. Prepared source rasters are
 bounded to 256 MiB in both consumers, in addition to the existing
 decoder/compositor/GPU limits. Text sizes are limited to 1–512 pixels by the
@@ -85,22 +86,38 @@ and mismatched association arrays are refused. The collection is capped at
 4096 masks; their graph nodes count toward the existing 16,384-stage limit.
 Image branches remain unshareable; only mask branches may fan out.
 
+V3 replaces each layer's legacy `colors`/`color_masks` fields with `effects`:
+an ordered array of records with `type` (`color_adjustment` or `gaussian_blur`),
+required Boolean `enabled`, required `parameters`, and optional string `mask`
+(zero/absent means none). Color parameters are `brightness`, `contrast`,
+`saturation`; Blur has `radius_pixels` (finite 0–100, default for creation 10).
+Readers reject mixed old/new representations and unknown or animated effects.
+V1/v2 color passes are normalized to this same internal ordered representation.
+Legacy v2 empty `color_masks` arrays retain their original all-unmasked meaning.
+The 1024-effect/layer and 16,384-stage budgets include both effect types.
+Passes are never fused across Blur or masked stages. Repeated types, disabled
+parameters, fractional radii and shared mask references remain editable.
+Radius follows receiver pixels and is not rescaled with FPS; native source
+profiles preserve the processing dimensions. See [Gaussian Blur](video-editor/features/GAUSSIAN_BLUR.md).
+
 ## Native persistence and backups
 
-CSP v30 and Motion v8 persist optional presentation records. Motion v8 adds a shared
+CSP v31 and Motion v8 persist optional presentation records. Motion v8 adds a shared
 mask collection and source/effect/transform associations; CSP v30 already stores
-the equivalent graph masks and does not advance for this delivery. Older supported
+the equivalent graph masks. CSP v31 additionally persists the static
+Gaussian Blur node; versions through 30 reject that node. Older supported
 projects retain their existing rendering defaults; readers predating these
 versions reject the newer files. Motion v7 introduced composition
 name/duration and fractional font-size metadata. Autosave and recovery use the
-same native serializers. Hub backups accept CSP 1–30 and Motion 1–8, retain
-presentation records and rebase existing media/Input paths. CSP 31 and Motion 9
+same native serializers. Hub backups accept CSP 1–31 and Motion 1–8, retain
+presentation records and rebase existing media/Input paths. CSP 32 and Motion 9
 are rejected. Application versions and the existing linked-handoff v1 protocol
 are unchanged.
 
 ## Regression and acceptance
 
-`creative-suite-mask-interchange` adds stage masks, shared identity, mask curves,
+`creative-suite-blur-interchange` adds typed ordered Blur stages, v3/v31,
+CPU/GPU comparisons and editable roundtrips. `creative-suite-mask-interchange` adds stage masks, shared identity, mask curves,
 Inspector controls, schema v2/v8, and mask raster/CPU/GPU comparisons.
 `creative-suite-composition-interchange` exercises both app adapters, persistence,
 normal model edits after import, editable curves, generated sources,
@@ -189,3 +206,47 @@ submissions were produced by this delivery.
 | `build/apps/video-editor/Debug/creative-suite-video-editor.exe` | 2026-10-14 22:38:31 |
 | `build/apps/motion-editor/Debug/creative-suite-motion-editor.exe` | 2026-10-14 22:55:39 |
 | `build/apps/hub/Debug/creative-suite-hub.exe` | 2026-10-14 22:40:54 |
+
+
+### Gaussian Blur Windows Debug evidence — 2026-10-15
+
+All 36 selected affected-consumer suites have passing results. The initial
+175.08-second run passed 35 and exposed a test-fixture generation error in the
+new full Preview/export case: its generation had advanced beyond subsequent
+requests. The fixture now keeps the worker's monotonic-generation contract.
+After preserving legacy v2 empty mask-binding arrays, the three interchange
+suites and full Fusion-composition suite were rebuilt and passed together in
+47.69 seconds. No tests were skipped in these selections.
+
+Coverage includes shared effects/animation/composition/OpenGL, all three
+interchange suites, Effects/Functions/Fusion UI and cable drops, main-window,
+project/autosave/timeline/commands/graph/generated clips, CPU/GPU timeline and
+export, Motion document/history/persistence/recovery/preview/GPU/export/startup/
+UI, Hub real-reader backup/format and Image Editor GPU raster consumers.
+
+The extracted CPU Blur matched an independent convolution reference byte for
+byte, including premultiplied alpha, row padding, border clamping, fractional
+rounding, maximum radius, range dispatch and cancellation. New Fusion/Motion
+and CPU/GPU pre-encode comparisons observed maximum channel difference zero
+(the acceptance tolerance remains two). Cases include ordered Color/Blur/Color,
+rotation, translucent text, mismatched source sizes, both presentation profiles,
+animated/shared masks, zero-dimension/inverted rectangles, video source windows,
+cut/trim continuity and FPS preserving pixel radius. Resource exhaustion was
+logged and recovered on CPU; releasing occupied textures let the same GPU
+backend resume Blur successfully. Complete Video Preview/export frames matched
+before encoding. Native OpenGL used NVIDIA GeForce GTX 1660 SUPER, driver
+617.42, OpenGL 3.2 Core.
+
+The direct canonical Debug builds were verified without copying application
+executables. Modification times use UTC−03:00:
+
+| Executable under the repository root | Modification time |
+| --- | --- |
+| `build/apps/video-editor/Debug/creative-suite-video-editor.exe` | 2026-10-15 10:27:33 |
+| `build/apps/motion-editor/Debug/creative-suite-motion-editor.exe` | 2026-10-15 10:27:39 |
+| `build/apps/hub/Debug/creative-suite-hub.exe` | 2026-10-15 10:14:35 |
+
+The native File-menu, driver/font, small/medium/heavy interaction and macOS/Linux
+checks in [Gaussian Blur](video-editor/features/GAUSSIAN_BLUR.md) remain pending.
+Application versions and dependencies are unchanged. No installer, commit or
+remote submission was generated for this delivery.

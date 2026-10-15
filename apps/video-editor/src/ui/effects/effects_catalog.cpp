@@ -104,6 +104,7 @@ const QVector<Definition>& definitions() {
                                                 static_cast<qsizetype>(effect.category_id.size())),
                               Action::VisualEffect, Action::VisualEffect});
         }
+        result.push_back({"video.gaussian_blur", "Gaussian Blur", "video", Action::Unavailable, Action::GaussianBlurNode});
         result.push_back({"video.background", "Background", "video.generators", Action::BackgroundClip, Action::BackgroundNode});
         result.push_back({"video.fusion_composition", "Fusion Composition", "video", Action::CompositionClip});
         result.push_back({"video.adjustment_clip", "Adjustment Clip", "video", Action::AdjustmentClip});

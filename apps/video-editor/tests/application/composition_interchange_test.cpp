@@ -34,8 +34,7 @@ int main(int argc, char **argv) try {
     text.curves.opacity.front().interpolation =
         creative_suite::animation::InterpolationMode::CubicBezier;
     text.curves.opacity.front().easing = {.2, .1, .8, .9};
-    text.colors = {{10, 100, 100}, {40, 150, 60}};
-    text.colors_enabled = {true, false};
+    text.effects = {x::ColorEffect{{10,100,100}}, x::ColorEffect{{40,150,60},false}};
     d.layers.push_back(text);
     check(x::validate(d).empty(), "valid interchange");
     const auto path = dir / "roundtrip.cscomp";
@@ -46,7 +45,7 @@ int main(int argc, char **argv) try {
     check(x::load(path)->name == d.name, "cancel preserves destination");
     check(!x::load(path, [] { return true; }), "cancel load");
     auto invalid = x::toJson(d, path);
-    invalid.insert("version", 3);
+    invalid.insert("version", 4);
     rejected([&] { (void)x::fromJson(invalid, path); }, "future interchange");
     invalid = x::toJson(d, path);
     invalid.insert("width", -1);
@@ -85,7 +84,7 @@ int main(int argc, char **argv) try {
           "Motion recovery");
     auto returned = motion::model::exportComposition(reopened);
     check(returned.name == d.name && returned.layers[1].text.content == text.text.content &&
-              returned.layers[1].text.size == 24.5 && !returned.layers[1].colors_enabled.back(),
+              returned.layers[1].text.size == 24.5 && !std::get<x::ColorEffect>(returned.layers[1].effects.back()).enabled,
           "editable roundtrip properties");
     for (int frame : {0, 20, 60, 89})
         compare(returned, reopened, frame, "Fusion/Motion RGBA parity");
@@ -256,7 +255,8 @@ int main(int argc, char **argv) try {
     rejected([&] { (void)application::exportComposition(clip, 320, 180, {30, 1}); },
              "mask refusal");
     project.layers.front().effects.emplace_back(motion::model::GaussianBlurEffect{});
-    rejected([&] { (void)motion::model::exportComposition(project); }, "blur refusal");
+    check(std::holds_alternative<x::BlurEffect>(motion::model::exportComposition(project).layers.front().effects.back()),
+          "Blur remains editable through interchange");
     x::Presentation timing;
     timing.duration = 100;
     timing.offset = -10;
@@ -292,7 +292,7 @@ int main(int argc, char **argv) try {
     for (std::uint64_t id = 1; id <= 17; ++id) {
         auto l = bg;
         l.id = id;
-        l.colors.resize(1024);
+        l.effects.resize(1024);
         stages.layers.push_back(l);
     }
     check(!x::validate(stages).empty(), "aggregate stage budget");

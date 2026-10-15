@@ -415,7 +415,7 @@ void verifyFunctionCatalog() {
     require(hasMime(list->currentItem()), "Edit generators must remain draggable without a selected clip.");
     require(!hasMime(findId("fusion.rectangle_mask")), "Edit must reject stale Fusion-only MIME.");
     palette.setContext(effects::Workspace::Fusion, false);
-    require(visibleCount() == 12 && search->isEnabled(), "Fusion must show its catalog without requiring a selection to search.");
+    require(visibleCount() == 13 && search->isEnabled(), "Fusion must show its catalog without requiring a selection to search.");
     for (int i = 0; i < list->count(); ++i) if (!list->item(i)->isHidden()) {
         list->setCurrentRow(i);
         require(!add->isEnabled() && !hasMime(list->item(i)), "Unselected Fusion must refuse creation and drag.");

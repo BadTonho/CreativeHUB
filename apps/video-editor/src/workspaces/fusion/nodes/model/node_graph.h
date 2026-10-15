@@ -16,7 +16,7 @@ namespace fusion::nodes {
 
 using NodeId = std::uint64_t;
 
-enum class NodeType { Input, Transform, Color, Merge, Output, Effect, Background, Text, RectangleMask, EllipseMask };
+enum class NodeType { Input, Transform, Color, Merge, Output, Effect, Background, Text, RectangleMask, EllipseMask, GaussianBlur };
 
 struct ColorParameters {
     double brightness = 0.0;
@@ -24,6 +24,12 @@ struct ColorParameters {
     double saturation_percent = 100.0;
     bool enabled = true;
     friend bool operator==(const ColorParameters&, const ColorParameters&) = default;
+};
+
+struct GaussianBlurParameters {
+    double radius_pixels = 10.0;
+    bool enabled = true;
+    friend bool operator==(const GaussianBlurParameters&, const GaussianBlurParameters&) = default;
 };
 
 struct EffectParameterKeyframes {
@@ -67,6 +73,7 @@ struct Node {
     MaskParameters mask;
     MaskKeyframes mask_keyframes;
     std::optional<creative_suite::composition_exchange::Presentation> presentation;
+    GaussianBlurParameters gaussian_blur;
     friend bool operator==(const Node&, const Node&) = default;
 };
 

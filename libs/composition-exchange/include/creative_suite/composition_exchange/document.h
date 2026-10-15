@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <variant>
 class QJsonObject;
 class QJsonArray;
 
@@ -44,6 +45,17 @@ struct Mask {
 [[nodiscard]] QJsonArray masksJson(const std::vector<Mask>&);
 [[nodiscard]] std::vector<Mask> parseMasksJson(const QJsonArray&);
 [[nodiscard]] bool validMask(const Mask&) noexcept;
+struct ColorEffect {
+    effects::ColorAdjustmentParameters parameters;
+    bool enabled = true;
+    MaskId mask = 0;
+};
+struct BlurEffect {
+    double radius_pixels = 10;
+    bool enabled = true;
+    MaskId mask = 0;
+};
+using Effect = std::variant<ColorEffect, BlurEffect>;
 struct Layer {
     std::uint64_t id = 0;
     Kind kind = Kind::Background;
@@ -55,10 +67,8 @@ struct Layer {
     Text text;
     animation::Transform2D transform;
     animation::TransformKeyframes curves;
-    std::vector<effects::ColorAdjustmentParameters> colors;
-    std::vector<bool> colors_enabled;
+    std::vector<Effect> effects;
     MaskId source_mask = 0, transform_mask = 0;
-    std::vector<MaskId> color_masks;
 };
 struct Document {
     std::string name = "Composition";

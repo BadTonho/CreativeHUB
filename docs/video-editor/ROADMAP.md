@@ -1,5 +1,9 @@
 # Video Editor Roadmap
 
+[Gaussian Blur](features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
+catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with
+Motion, persists in CSP v31 and is covered by `creative-suite-blur-interchange`.
+
 Current application version: **Beta 0.1.0**. This roadmap tracks open work,
 release gates, and pending validation. Completed implementation checklists are
 archived in [legacy documentation](../legacy/video-editor/IMPLEMENTED_ROADMAP_ITEMS.md).

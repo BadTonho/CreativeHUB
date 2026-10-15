@@ -1,5 +1,9 @@
 # Fusion Masks
 
+[Gaussian Blur](GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
+catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with
+Motion, persists in CSP v31 and is covered by `creative-suite-blur-interchange`.
+
 Functions (Shift+Space) also lists both masks while in Fusion. Search their names
 and use Add, Enter, double click or drag to create a node. A compatible selected
 clip is required; masks are hidden from Functions in Edit.
@@ -63,7 +67,7 @@ CSP v28 adds `rectangle_mask` / `ellipse_mask` nodes, normalized `mask` paramete
 five scalar arrays in `mask_keyframes` (`center_x`, `center_y`, `width`, `height`,
 `rotation`) and typed connections to input 2. Mask data is rejected in older
 formats. Versions 1–27 remain readable; Hub backups accept v28, preserve masks
-and relocate only external Input/media paths. Current Hub backups also accept v30 presentation data and composition names and reject future v31.
+and relocate only external Input/media paths. Current Hub backups accept v31 presentation data, composition names and Gaussian Blur, and reject future v32.
 
 Direct Viewer editing, pen/polygon masks, mask combinations, tracking and masks
 on Adjustment Clips remain outside this delivery. See [regression testing](../validation/REGRESSION_TESTING.md)

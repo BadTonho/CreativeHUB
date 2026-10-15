@@ -88,8 +88,9 @@ both levels.
 
 Motion Studio owns the effect types, model validation, ordered per-layer
 stacks, inspector controls, drag-and-drop and Up/Down reordering, and edit
-history. Color Adjustment processing uses the shared CPU library while Gaussian
-Blur remains Motion-owned. Reordering an effect preserves its enabled state
+history. Color Adjustment and Gaussian Blur CPU processing use libs/effects. Motion
+retains its effect models, timing and worker pool, adapting the shared Blur
+entry point through its synchronous range executor. Reordering an effect preserves its enabled state
 and parameters, updates the live preview, and records one composition history
 action. Current effects are Gaussian Blur and Color Adjustment; stacks may
 repeat effect types and disabled effects are retained. CPU preview, playback,

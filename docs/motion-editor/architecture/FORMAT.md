@@ -1,5 +1,9 @@
 # Motion Studio Native Document Format
 
+Gaussian Blur remains represented by the existing native v8 effect fields and
+mask reference. Editable interchange now accepts `.cscomp` v3 ordered Color/Blur
+stages; no Motion schema change is required. See [contract](../../COMPOSITION_INTERCHANGE.md).
+
 **Status:** provisional implementation contract. The `.motion` extension and
 version 8 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.

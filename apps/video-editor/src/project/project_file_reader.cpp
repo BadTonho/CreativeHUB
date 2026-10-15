@@ -116,6 +116,7 @@ fusion::nodes::NodeType parseNodeType(const QJsonValue& value,
     const auto name = value.toString();
     if (name == QLatin1String("input")) return fusion::nodes::NodeType::Input;
     if (name == QLatin1String("transform")) return fusion::nodes::NodeType::Transform;
+    if (name == QLatin1String("gaussian_blur")) return fusion::nodes::NodeType::GaussianBlur;
     if (name == QLatin1String("color")) return fusion::nodes::NodeType::Color;
     if (name == QLatin1String("merge")) return fusion::nodes::NodeType::Merge;
     if (name == QLatin1String("output")) return fusion::nodes::NodeType::Output;
@@ -178,6 +179,13 @@ fusion::nodes::NodeGraph parseNodeGraph(const QJsonValue& value,
         }
         node.id = static_cast<fusion::nodes::NodeId>(id.toInteger());
         node.type = parseNodeType(node_object.value("type"), project_path);
+        if (node.type == fusion::nodes::NodeType::GaussianBlur || node_object.contains("gaussian_blur")) {
+            const auto blur=node_object.value("gaussian_blur").toObject();
+            if (version<31 || node.type!=fusion::nodes::NodeType::GaussianBlur ||
+                !blur.value("radius_pixels").isDouble() || !blur.value("enabled").isBool())
+                throwJson(ProjectErrorCode::InvalidValue,project_path,"Gaussian Blur requires valid static parameters in project format 31.");
+            node.gaussian_blur={blur.value("radius_pixels").toDouble(),blur.value("enabled").toBool()};
+        }
         if (fusion::nodes::isMaskNode(node.type) || node_object.contains("mask") || node_object.contains("mask_keyframes")) {
             if (version<fusion_masks_format_version || !fusion::nodes::isMaskNode(node.type) || !node_object.value("mask").isObject())
                 throwJson(ProjectErrorCode::InvalidValue,project_path,"Mask data requires a mask node in project format 28.");

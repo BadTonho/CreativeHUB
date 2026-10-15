@@ -13,7 +13,7 @@ enum class Action {
     Unavailable, VisualEffect, AudioEffect, BackgroundClip, CompositionClip,
     AdjustmentClip, TextClip, Transition,
     InputNode, TransformNode, ColorNode, MergeNode, BackgroundNode, TextNode,
-    RectangleMaskNode, EllipseMaskNode,
+    RectangleMaskNode, EllipseMaskNode, GaussianBlurNode,
 };
 
 struct Category {

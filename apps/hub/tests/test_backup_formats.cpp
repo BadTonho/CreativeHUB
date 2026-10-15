@@ -281,7 +281,12 @@ void testVideoDocuments(const QString& root) {
     mask.mask.invert=true;mask.mask.soft_edge=0.25;
     mask.mask_keyframes[0]={{0,0.2,creative_suite::animation::InterpolationMode::CubicBezier,{0.1,0.6,0.8,0.95}},{59,0.8}};
     composition.node_graph->nodes.push_back(mask); composition.node_graph->connections.push_back({5,2,2});
-    composition.node_graph->next_id = 6;
+    fusion::nodes::Node blur;blur.id=6;blur.type=fusion::nodes::NodeType::GaussianBlur;
+    blur.gaussian_blur={3.5,false};composition.node_graph->nodes.push_back(blur);
+    composition.node_graph->connections.erase(composition.node_graph->connections.begin());
+    composition.node_graph->connections.push_back({1,6,0});composition.node_graph->connections.push_back({6,2,0});
+    composition.node_graph->connections.push_back({5,6,2});
+    composition.node_graph->next_id = 7;
     composition.composition_input_offset_frames = -15;
     document.timeline_tracks.front().clips = {composition};
     const auto fusion_path = QDir(QFileInfo(assets).absolutePath()).filePath("fusion.csp");

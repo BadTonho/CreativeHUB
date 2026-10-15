@@ -1,4 +1,5 @@
 #include "node_graph_evaluator.h"
+#include <creative_suite/effects/gaussian_blur.h>
 #include <creative_suite/composition_exchange/raster.h>
 #include "mask_rasterizer.h"
 
@@ -180,6 +181,11 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
             if (!passes) return {};
             operation.kind = OpenGlImageOperationKind::Color;
             operation.colors = std::move(*passes);
+        } else if (node->type == NodeType::GaussianBlur) {
+            if (node->gaussian_blur.enabled) {
+                operation.kind=OpenGlImageOperationKind::GaussianBlur;
+                operation.blur_radius_pixels=node->gaussian_blur.radius_pixels;
+            }
         } else if (node->type == NodeType::Merge) {
             operation.kind = OpenGlImageOperationKind::Merge; operation.foreground = input(1);
         } else if (node->type == NodeType::Output && operation.background.texture) {
@@ -194,6 +200,8 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
                 total.uploaded_bytes += measured.uploaded_bytes;
                 total.uploaded_layers += measured.uploaded_layers;
                 total.draw_submission_nanoseconds += measured.draw_submission_nanoseconds;
+                total.gaussian_blur_count += measured.gaussian_blur_count;
+                total.gaussian_blur_submission_nanoseconds += measured.gaussian_blur_submission_nanoseconds;
                 total.native_video_imports += measured.native_video_imports;
                 total.native_video_conversion_nanoseconds += measured.native_video_conversion_nanoseconds;
             }
@@ -224,7 +232,7 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
             OpenGlImageOperation masked;
             masked.mask={coverage.get()};
             const bool blend=node->type==NodeType::Transform || node->type==NodeType::Color ||
-                node->type==NodeType::Effect || node->type==NodeType::Merge;
+                node->type==NodeType::Effect || node->type==NodeType::GaussianBlur || node->type==NodeType::Merge;
             masked.kind=blend ? OpenGlImageOperationKind::MaskedBlend : OpenGlImageOperationKind::ApplyMask;
             OpenGlTextureFramePtr normalized_original;
             if(blend && (original.width()!=processed->width() || original.height()!=processed->height())) {
@@ -439,6 +447,12 @@ std::optional<media::VideoFrame> evaluate(const NodeGraph& graph,
                         &effect, 1)))
                 return std::nullopt;
             values.emplace(id, std::move(frame));
+        } else if (node->type == NodeType::GaussianBlur) {
+            auto frame=background;
+            if (node->gaussian_blur.enabled && creative_suite::effects::applyGaussianBlur(frame,
+                    node->gaussian_blur.radius_pixels, context.should_cancel) != creative_suite::effects::ProcessingResult::Completed)
+                return std::nullopt;
+            values.emplace(id,std::move(frame));
         } else if (node->type == NodeType::Merge) {
             const auto* second = incoming(graph, id, 1);
             const auto foreground = second != nullptr

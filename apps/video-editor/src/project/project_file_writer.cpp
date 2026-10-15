@@ -65,6 +65,7 @@ const char* nodeTypeName(fusion::nodes::NodeType type) {
     case fusion::nodes::NodeType::Input: return "input";
     case fusion::nodes::NodeType::Transform: return "transform";
     case fusion::nodes::NodeType::Color: return "color";
+    case fusion::nodes::NodeType::GaussianBlur: return "gaussian_blur";
     case fusion::nodes::NodeType::Merge: return "merge";
     case fusion::nodes::NodeType::Output: return "output";
     case fusion::nodes::NodeType::Effect: return "effect";
@@ -115,6 +116,8 @@ QJsonObject nodeGraphJson(const std::filesystem::path& project_path,
         if (node.presentation) value.insert("presentation", creative_suite::composition_exchange::presentationJson(*node.presentation));
         if (node.type == fusion::nodes::NodeType::Background)
             value.insert("background_color", QJsonObject{{"r", node.background_color[0]}, {"g", node.background_color[1]}, {"b", node.background_color[2]}, {"a", node.background_color[3]}});
+        if (node.type == fusion::nodes::NodeType::GaussianBlur)
+            value.insert("gaussian_blur", QJsonObject{{"radius_pixels",node.gaussian_blur.radius_pixels},{"enabled",node.gaussian_blur.enabled}});
         if (node.type == fusion::nodes::NodeType::Text) value.insert("text", textStyleJson(node.text));
         if (fusion::nodes::isMaskNode(node.type)) {
             QJsonObject mask, curves;

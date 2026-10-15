@@ -1,6 +1,6 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is now v30.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is now v31; Gaussian Blur transfers through cscomp v3 and reuses the shared CPU/GPU effect implementation.
 
 ## Workspace Effects catalog
 
