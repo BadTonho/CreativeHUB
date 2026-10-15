@@ -218,6 +218,32 @@ acceptance remains with the maintainer; automated coverage is indexed below.
 - [ ] Use additional systems before generalizing performance requirements or
   setting numerical hardware requirements.
 
+#### Candidate feature backlog — unprioritized
+
+These capabilities are candidates for future scope, not approved release
+commitments. Preserve the lightweight, local-first workflow and prioritize only
+after the standalone acceptance gate.
+
+- **Layer compositing:** non-destructive adjustment and fill layers; clipping
+  to underlying layers; common blend modes; reusable layer styles; masks on
+  groups and nested groups; embedded or linked object layers that preserve
+  source data through transforms and support controlled relinking/refresh.
+- **Selections and paths:** assisted subject/object isolation; color-range
+  selection; feather, expand, contract, smooth, and refine selection edges;
+  editable Bezier paths; path-based vector shapes and text.
+- **Retouching:** clone and healing brushes; dodge, burn, sharpen, and smudge;
+  content-aware patch, move, and fill operations with results on separate
+  editable layers; multi-source reconstruction for matching photographs.
+- **Typography and design:** richer font and paragraph controls, outlines,
+  shadows, text-on-path, reusable styles, and multiple artboards for related
+  layouts.
+- **Color and delivery:** color profiles and soft proofing; higher-precision
+  pixel workflows; non-destructive camera-raw development; reusable presets,
+  batch operations, and multi-document export.
+- **Assisted editing:** optional object isolation and content reconstruction
+  tools only after local-processing options, privacy, dependency licensing,
+  and any external-service boundary are reviewed.
+
 ## Regression coverage index
 
 Automated evidence below is registered in

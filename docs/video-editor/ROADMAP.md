@@ -196,6 +196,32 @@ performance measurements, and Video Editor stability as the decision criteria.
 - [ ] Revisit plugin architecture, additional export presets, and templates
   after stable public workflows and extension points are known.
 
+### Candidate feature backlog — unprioritized
+
+These capabilities are candidates for future scope, not approved release
+commitments. Prioritize them against user workflows, local-first operation,
+performance, licensing, and maintenance cost.
+
+- **Editing and media:** synchronized multicamera editing; nested sequences;
+  dedicated ripple, roll, slip, and slide trim operations; scene-change
+  detection; speed remapping with ramps and high-quality frame interpolation;
+  transcript search and text-based rough cuts; caption creation, styling, and
+  export.
+- **Color:** RGB and hue/saturation curves; secondary color selection; tracked
+  masks and power windows; comparison and waveform/vectorscope displays; shot
+  matching; managed wide-gamut and HDR workflows with explicit input/output
+  transforms and LUT handling.
+- **Audio:** track routing and submixes; equalization and dynamics processing;
+  loudness measurement and normalization; dialogue cleanup, noise reduction,
+  ducking, and repair; expanded recording, automation, and surround workflows.
+- **Compositing and effects:** spline and polygon masks; mask tracking; point
+  and planar tracking; chroma/luma keying; rotoscoping; reusable effect
+  templates; advanced compositing and 3D layers after a separate performance
+  and scope review.
+- **Delivery:** batch render queue; saved output profiles; still-frame and
+  caption delivery; project interchange and relinking checks for expanded
+  workflows.
+
 ## 4. Deferred technical and ecosystem work
 
 - Keep the Rust prototype archived. Reopen a Rust comparison only if a concrete

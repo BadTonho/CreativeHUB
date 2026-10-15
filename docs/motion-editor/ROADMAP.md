@@ -451,6 +451,28 @@ gate.
   motion workflows meet their performance targets and a clear use case
   justifies their added complexity.
 
+#### Candidate feature backlog — unprioritized
+
+The items below refine the future research areas; they are candidates, not
+approved release commitments. Keep implementation modular, local-first, and
+gated by measured rendering and memory costs.
+
+- **2D animation:** editable Bezier shape paths and path operations; trim and
+  repeat controls; shape/text animation presets; per-character and per-word
+  text animation; parenting, null/control layers, reusable rigs, and
+  expression-driven links between animatable properties.
+- **Tracking and compositing:** point, planar, and camera tracking; stabilization;
+  rotoscoping and tracked masks; mattes; chroma/luma keying; edge refinement.
+- **3D:** spatial layer transforms; cameras and lights; shadows and materials;
+  3D text and shape depth; compositing 2D and 3D layers in one composition.
+- **Effects and rendering:** motion blur; glow and distortion families; particle
+  systems; reusable effect graphs and presets; render queue, output templates,
+  and per-composition caching.
+- **Audio-driven animation:** expand the in-progress envelope tool only after
+  its manual acceptance; consider frequency-band analysis and reusable
+  audio-to-property mappings while keeping audio playback and mixing a
+  separately reviewed scope.
+
 ## Status legend
 
 - `[ ]` Not started
