@@ -4,7 +4,7 @@ Status: **interactive raster composition and direct texture presentation impleme
 The first delivery keeps tools, standalone export, Quick Export, and linked PNG
 publication on the CPU. Automatic / CPU is available in Settings > Rendering.
 Automatic activation requires the correctness and performance gate described below;
-reference Windows evidence is recorded in [the delivery results](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md).
+reference Windows evidence is recorded in [the delivery results](../performance/INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md).
 Native macOS/Linux acceptance remains pending; the existing three-platform CI matrix
 builds the implementation and runs the registered portable tests.
 
@@ -94,8 +94,8 @@ and retain its existing license obligations. No new external package is added.
 
 ## Verification and deferred work
 
-The feature index is in [ROADMAP.md](ROADMAP.md), with repeatable native steps in
-[MANUAL_VALIDATION.md](MANUAL_VALIDATION.md). No document, history or recovery
+The feature index is in [ROADMAP.md](../ROADMAP.md), with repeatable native steps in
+[MANUAL_VALIDATION.md](../validation/MANUAL_VALIDATION.md). No document, history or recovery
 version changes. `.cimg` v16 and recovery wrapper v1 remain current. CPU export
 and publication remain the result reference, with existing producer/consumer
 coverage. GPU brush kernels, GPU export, PNG publication acceleration, new effects,
@@ -111,8 +111,8 @@ reference PC: AMD Ryzen 5 3600, 32 GB RAM, NVIDIA GeForce GTX 1660 SUPER with
 6 GB VRAM, and Windows 11 Version 26H2. The build used MSVC 1944 and Qt 6.7.2.
 Each profile used three warmups and 30 measured iterations in both cold and
 warm view-refresh modes. The full schema v2 report is
-[`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json);
-the prior [schema v1 direct-renderer report](performance-baseline-windows-2026-10-06.json)
+[`performance-baseline-windows-2026-10-06-v2.json`](../performance/performance-baseline-windows-2026-10-06-v2.json);
+the prior [schema v1 direct-renderer report](../performance/performance-baseline-windows-2026-10-06.json)
 remains available as a historical record and is not directly comparable. The
 v2 report and the table below are the initial measurements before group
 thumbnail caching. The table gives wall time average/p95 for cold and warm
@@ -131,7 +131,7 @@ For the export profile, the separate PNG+JPEG export iteration averaged
 579.57 ms (p95 614.07 ms, maximum 629.32 ms).
 
 The post-cache Release run is recorded in
-[`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](performance-after-group-thumbnail-cache-windows-2026-10-06.json).
+[`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](../performance/performance-after-group-thumbnail-cache-windows-2026-10-06.json).
 It used the same machine, schema v2, three warmups, and 30 measured iterations.
 All six profiles reported 30 cold group-thumbnail renders and zero warm
 group-thumbnail renders; cold and warm pixels matched. The table compares warm
@@ -167,7 +167,7 @@ uncached renderer. The collector reports `layer_raster_cache_hit`,
 `layer_raster_cache_miss`, and `layer_raster_cache_bypass`.
 
 The schema v2 report
-[`performance-after-layer-raster-cache-windows-2026-10-06.json`](performance-after-layer-raster-cache-windows-2026-10-06.json)
+[`performance-after-layer-raster-cache-windows-2026-10-06.json`](../performance/performance-after-layer-raster-cache-windows-2026-10-06.json)
 records a Release run on the same reference PC, with six profiles, three
 warmups, and 30 measured iterations per cold and warm mode. Cold sessions
 rebuild the cache; the warm session reuses it. Every profile reported matching
@@ -196,8 +196,8 @@ post-group-cache report remain unchanged for historical comparison.
 ## Shared Video Editor stage 2 delivery
 
 Video Editor remains the first consumer. Its experimental backend now supports
-[direct texture delivery](../video-editor/gpu/GPU_TEXTURE_DELIVERY.md), public Qt
+[direct texture delivery](../../video-editor/gpu/GPU_TEXTURE_DELIVERY.md), public Qt
 global sharing, a three-target/64 MiB reservation budget including retired targets,
 producer/consumer fences and asynchronous RGBA recovery. This application remains
 on its current CPU renderer; adoption requires its own rendering, alpha, lifecycle,
-export and regression contracts. See [native evidence and remaining platform gates](../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).
+export and regression contracts. See [native evidence and remaining platform gates](../../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).

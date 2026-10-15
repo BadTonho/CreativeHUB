@@ -498,13 +498,13 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   Defaults remain three warmups and 30 iterations; `--profile`, `--warmup`,
   `--iterations`, and `--output` select the workload and destination. It reads
   no personal media and changes neither `.cimg` nor shared application
-  interfaces. The [schema v1 report](performance-baseline-windows-2026-10-06.json)
+  interfaces. The [schema v1 report](../performance/performance-baseline-windows-2026-10-06.json)
   is retained as a historical direct-renderer result and is not directly
   comparable to v2. The first Windows reference-PC
   report using the v2 method is
-  [`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json).
+  [`performance-baseline-windows-2026-10-06-v2.json`](../performance/performance-baseline-windows-2026-10-06-v2.json).
   The same-PC post-cache comparison is recorded in
-  [`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](performance-after-group-thumbnail-cache-windows-2026-10-06.json);
+  [`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](../performance/performance-after-group-thumbnail-cache-windows-2026-10-06.json);
   its before/after summary is in `GPU_ACCELERATION_PLAN.md`.
   The retained CPU `renderedImage()` API also keeps premultiplied rasterized layer images
   in a per-session cache capped at 64 MiB. Entries contain the layer operations
@@ -519,11 +519,11 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   hit/miss/bypass timings use the existing metrics collector. Excluded-object
   and transient previews, thumbnails, and export snapshots bypass this cache.
   The same-PC post-cache measurements are in
-  [`performance-after-layer-raster-cache-windows-2026-10-06.json`](performance-after-layer-raster-cache-windows-2026-10-06.json).
+  [`performance-after-layer-raster-cache-windows-2026-10-06.json`](../performance/performance-after-layer-raster-cache-windows-2026-10-06.json).
 
 ## Layer mask ownership and rendering
 
-The implemented [interactive GPU path](GPU_ACCELERATION_PLAN.md) preserves this
+The implemented [interactive GPU path](../gpu/GPU_ACCELERATION_PLAN.md) preserves this
 operation/alpha contract. CPU rasterization and export/publication remain the
 reference; shared raster composition and presentation avoid full-frame readback.
 
@@ -581,7 +581,7 @@ the Video Editor's `.csp` format. The first linked-image handoff is implemented
 as a saved PNG plus a native `.cimg` companion. The Video Editor owns shared
 Media Pool links and clip-specific variants in `.csp` v10; the current
 behavior and remaining validation are documented in the
-[cross-application proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
+[cross-application proposal](../../CROSS_APPLICATION_COMPATIBILITY.md).
 
 
 ## Interactive rendering ownership and lifetime
@@ -624,7 +624,7 @@ and disable GPU for the session, with complete CPU recovery after exceptions.
 
 The adapter links Qt Gui/OpenGL/OpenGLWidgets, with optional native video interop
 isolated behind BUILD_VIDEO_MEDIA_LIBRARY. Image-only builds do not link FFmpeg.
-See [GPU_ACCELERATION_PLAN.md](GPU_ACCELERATION_PLAN.md) for the public raster
+See [GPU_ACCELERATION_PLAN.md](../gpu/GPU_ACCELERATION_PLAN.md) for the public raster
 contract, two-level final-channel tolerance, exact mask coverage and activation
-gate, and [the Windows results](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md)
+gate, and [the Windows results](../performance/INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md)
 for measurements and platform acceptance limits.

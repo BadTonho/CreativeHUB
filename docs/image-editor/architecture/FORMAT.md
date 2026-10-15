@@ -14,7 +14,7 @@ and save as v16.
 
 Hub snapshots preserve versions 1–16 and rebase relative source/import paths
 to their original absolute locations. The native save contract remains the
-same; media are not bundled. See [Hub backups](../hub/BACKUPS.md) and the
+same; media are not bundled. See [Hub backups](../../hub/BACKUPS.md) and the
 producer/consumer `hub-backup-format-test` for relocation coverage.
 
 ## Document contents
@@ -209,7 +209,7 @@ Background, base operations, masks, and group operations.
 The UUID is unique across content and masks. Width and height describe the
 automatically oriented decoded source, with the same positive dimension and
 pixel limits as the canvas. The six finite affine coefficients are
-[m11, m12, m21, m22, dx, dy]: x' = m11*x + m21*y + dx,
+[m11, m12, m21, m22, dx, dy]: ../x' = m11*x + m21*y + dx,
 y' = m12*x + m22*y + dy. The matrix must be invertible; perspective is not
 supported. Image coordinates describe pixel edges. Placement can extend beyond
 the canvas and composition clips the result.

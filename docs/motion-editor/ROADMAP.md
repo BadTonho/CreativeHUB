@@ -4,15 +4,17 @@ This roadmap tracks open work, release gates, and feature-to-verification
 coverage. Completed implementation checklists are archived in
 [legacy documentation](../legacy/motion-editor/IMPLEMENTED_ROADMAP_ITEMS.md).
 
+See the [documentation index](README.md) for organized references by topic.
+
 ## Documentation map
 
 | Question | Canonical document |
 | --- | --- |
 | What is in the approved MVP and what is its readiness? | [Scope and readiness](SCOPE_AND_READINESS.md) |
-| How are native documents stored and migrated? | [Native format](FORMAT.md) |
-| How do masks and editable handoff work? | [Masks](MASKS.md) and [composition interchange](../COMPOSITION_INTERCHANGE.md) |
+| How are native documents stored and migrated? | [Native format](architecture/FORMAT.md) |
+| How do masks and editable handoff work? | [Masks](features/MASKS.md) and [composition interchange](../COMPOSITION_INTERCHANGE.md) |
 | Which tests and manual checks cover each feature? | [Regression coverage index](#regression-coverage-index) in this roadmap |
-| How is shared code reuse planned? | [Reuse plan](REUSE_PLAN.md) |
+| How is shared code reuse planned? | [Reuse plan](architecture/REUSE_PLAN.md) |
 
 Use the linked scope, format, and contract documents for current behavior; use
 this roadmap for remaining work and its regression index for evidence and
@@ -23,8 +25,8 @@ Current application version: **Beta 0.1.0**.
 Status: **2D MVP product scope approved; implementation is substantially
 complete, with Windows acceptance in progress.** See
 [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md) for current implementation
-and open readiness items, [REUSE_PLAN.md](REUSE_PLAN.md) for shared-library
-boundaries, and [FORMAT.md](FORMAT.md) for the native document contract.
+and open readiness items, [REUSE_PLAN.md](architecture/REUSE_PLAN.md) for shared-library
+boundaries, and [FORMAT.md](architecture/FORMAT.md) for the native document contract.
 
 Motion Studio may be developed in parallel with the Video Editor and Image
 Editor on an independent track. Cross-application integrations still depend on
@@ -52,7 +54,7 @@ technically clear.
 
 ## GPU acceleration planning
 
-The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records four deliveries:
+The [GPU acceleration plan](gpu/GPU_ACCELERATION_PLAN.md) records four deliveries:
 layer composition, GPU effects, preview/export integration, and adoption by the
 other applications. Video Editor is the first consumer of the shared OpenGL
 compositor; Motion now has opt-in experimental preview and export integration
@@ -65,11 +67,11 @@ shader, while stacks containing Gaussian Blur use the shared ordered GPU effect
 path when supported. `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1` opts both preview
 and export into the backend; both remain CPU-only by default. Export reads the
 composed result back to RGBA for the existing CPU encoder.
-[Controlled Windows reference measurements](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
+[Controlled Windows reference measurements](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
 record direct-preview improvements; cross-platform driver acceptance remains
 pending. Direct preview now uses shared
 texture delivery with bounded resources and CPU recovery; see
-[GPU_TEXTURE_PREVIEW.md](GPU_TEXTURE_PREVIEW.md) for contracts and native checks.
+[GPU_TEXTURE_PREVIEW.md](gpu/GPU_TEXTURE_PREVIEW.md) for contracts and native checks.
 
 ## Cross-application updates
 
@@ -120,7 +122,7 @@ cross-platform prototype and release-readiness validation are complete.
 
 The completed implementation checklist is archived. Current behavior and
 contracts are summarized in [Scope and readiness](SCOPE_AND_READINESS.md) and
-[Native Format](FORMAT.md); the remaining technical validation items stay here.
+[Native Format](architecture/FORMAT.md); the remaining technical validation items stay here.
 
 - [-] Compare effect worker limits on Windows using the same 1920 × 1080,
   60 fps composition with radius-10 Gaussian Blur and neutral Color Adjustment.
@@ -153,10 +155,10 @@ readiness checks remain in this roadmap and
 | `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Windows invalid-file and path results remain part of Windows acceptance. |
 | Autosave and restart recovery | `motion_recovery_store_test.cpp` (`creative-suite-motion-editor-recovery`), `motion_editor_ui_test.cpp` | Automated snapshots and UI recovery paths exist. Basic recovery was reported working on the Windows 11 reference PC on 2026-10-01; detailed restart/recovery scenarios remain pending (**P0 validation**). |
 | Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; exported Color Adjustment pixels in `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`); shared evaluator coverage in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp`; shared color processing in `libs/tests/effects_test.cpp` (`creative-suite-effects`) | Offscreen tests cover preview, shared Color Adjustment delegation, export output, cancellation, timing, and interaction behavior. Real-hardware visual output and graphics-driver validation remain pending (**P2 validation**). |
-| Experimental GPU preview and offline export | `gpu_composition_test.cpp` (`creative-suite-motion-editor-gpu-composition`), `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), and shared `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`) | Automated coverage checks CPU fallback parity, GPU/CPU frame parity, worker-owned context lifecycle, two-PBO FIFO/reuse/backpressure, cancellation, budget fallback, mid-pipeline CPU recovery, and schema-3 metrics. The current Windows selection passes 16/16 in Debug and Release, including export; native lossless GPU export is checked separately with `--require-gpu`. See [current results and codec limits](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md). Three post-change Windows GPU exports and native macOS/Linux driver checks remain pending (**P2 validation**). |
-| Direct GPU texture preview | `gpu_texture_preview_test.cpp` (`creative-suite-motion-editor-gpu-texture`); native `--require-gpu`; `performance_metrics_test.cpp`; explicitly invoked `gpu_preview_benchmark.cpp` | Portable mailbox/fallback checks and native Windows texture parity, orientation, seek/replacement, resize, presentation recovery, pool backpressure, guide/context menu, GPU RGBA fallback without sharing, and actual MainWindow Play/Pause/Loop/shutdown pass in Debug and Release. Three 1080p five-layer trials per route at 30/60 fps confirm zero direct readback and reduced latency; see [Windows results](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md). Broader manual and native macOS/Linux checks remain pending. |
-| Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`) | Earlier Windows Release evidence passed all 11 Motion CTest targets before asynchronous readback. Existing 33.79 fps CPU and 54.96 s GPU exports remain historical; their export did not record its layer/effect setup. The current schema-3 summary records backend, async mode and transfer counts, CPU-side submission/wait/copy timings, staging and encoder queue peaks, fallbacks, and failures. Three post-change GPU runs use 54.96 s as baseline and 52.21 s as the 5% target; see [`PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md`](PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md). |
-| Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated coverage includes output parity and order, cancellation with submitted GPU work, prior-destination preservation, injected encoder-thread failure, missing-surface CPU fallback, staging-budget synchronous fallback, and mid-pipeline CPU recovery. The current Windows selection passes 16/16 in Debug and Release, including export; native lossless GPU export is checked separately with `--require-gpu`. See [current results and codec limits](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md). GPU export remains opt-in pending the post-change performance result (**P1/P2 validation**). |
+| Experimental GPU preview and offline export | `gpu_composition_test.cpp` (`creative-suite-motion-editor-gpu-composition`), `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), and shared `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`) | Automated coverage checks CPU fallback parity, GPU/CPU frame parity, worker-owned context lifecycle, two-PBO FIFO/reuse/backpressure, cancellation, budget fallback, mid-pipeline CPU recovery, and schema-3 metrics. The current Windows selection passes 16/16 in Debug and Release, including export; native lossless GPU export is checked separately with `--require-gpu`. See [current results and codec limits](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md). Three post-change Windows GPU exports and native macOS/Linux driver checks remain pending (**P2 validation**). |
+| Direct GPU texture preview | `gpu_texture_preview_test.cpp` (`creative-suite-motion-editor-gpu-texture`); native `--require-gpu`; `performance_metrics_test.cpp`; explicitly invoked `gpu_preview_benchmark.cpp` | Portable mailbox/fallback checks and native Windows texture parity, orientation, seek/replacement, resize, presentation recovery, pool backpressure, guide/context menu, GPU RGBA fallback without sharing, and actual MainWindow Play/Pause/Loop/shutdown pass in Debug and Release. Three 1080p five-layer trials per route at 30/60 fps confirm zero direct readback and reduced latency; see [Windows results](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md). Broader manual and native macOS/Linux checks remain pending. |
+| Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`) | Earlier Windows Release evidence passed all 11 Motion CTest targets before asynchronous readback. Existing 33.79 fps CPU and 54.96 s GPU exports remain historical; their export did not record its layer/effect setup. The current schema-3 summary records backend, async mode and transfer counts, CPU-side submission/wait/copy timings, staging and encoder queue peaks, fallbacks, and failures. Three post-change GPU runs use 54.96 s as baseline and 52.21 s as the 5% target; see [`PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md`](performance/PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md). |
+| Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated coverage includes output parity and order, cancellation with submitted GPU work, prior-destination preservation, injected encoder-thread failure, missing-surface CPU fallback, staging-budget synchronous fallback, and mid-pipeline CPU recovery. The current Windows selection passes 16/16 in Debug and Release, including export; native lossless GPU export is checked separately with `--require-gpu`. See [current results and codec limits](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md). GPU export remains opt-in pending the post-change performance result (**P1/P2 validation**). |
 | Optional audio-to-transform keyframe generation | `audio_keyframe_generation_test.cpp` (`creative-suite-motion-editor-audio-keyframes`) | Automated coverage includes per-frame RMS, whole-file peak normalization past the layer boundary, empty and silent sources, invalid audio, atomic track replacement, Undo/Redo, `.motion` round-trip, worker success and progress callbacks on the receiver thread, pre-start cancellation without an error log, and failure logging with operation, path, and layer ID. Manual generation and cancellation during an active UI analysis remain pending. |
 | Startup and application UI | `motion_editor_startup_test.cpp` (`creative-suite-motion-editor-startup`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Startup and Media Pool bin filtering have offscreen coverage; the current UI has no separate media-search control. After tightening the seek test to wait for the final still frame, the full UI suite passed 10 repeated Debug runs on 2026-10-01. Broader Windows visual and graphics-driver checks remain pending (**P2 validation**). |
 | Motion Studio to Video Editor editable handoff | Motion `composition_document_test.cpp` (`creative-suite-motion-editor-document`) covers source-in mapping across frame rates; `preview_renderer_test.cpp` and `motion_video_export_test.cpp` (`creative-suite-motion-editor-preview` / `creative-suite-motion-editor-export`) cover the preview and export paths; `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`) covers `.motion` v5 source-in round-trip, v1-v4 migration, handoff request validation, and Unicode paths. Video Editor `project_file_test.cpp` (`creative-suite-main-editor-project`) covers `.csp` v24 links and v23 compatibility; `timeline_model_test.cpp` covers clip state preservation; `application_media_services_test.cpp` and `media_library_test.cpp` cover the linked Media Pool item and refreshed video presentation. | Contract, format, rendering, timeline, and Media Pool service coverage is present. End-to-end launch, multiple save/refresh cycles, reopen, stale-callback rejection, concurrent-writer recovery, and output-profile validation remain pending manual checks in both applications. |
@@ -190,7 +192,7 @@ rollback, and Hub restoration. See [`WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md)
   The remaining export work in this phase is performance profiling and
   recording any issue found in the tested workflow.
 - **P2 — performance acceptance:** an initial Windows run is recorded in
-  [`PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md`](PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md).
+  [`PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md`](performance/PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md).
   Profile Gaussian Blur first, then record the approved 1080p/30 fps,
   10-second, five-layer workload on the Windows reference PC.
 - **In progress:** the first optional audio-reactive tool analyzes a local

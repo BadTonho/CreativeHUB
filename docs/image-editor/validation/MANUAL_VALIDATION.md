@@ -26,7 +26,7 @@ been run in a disposable profile.
    simulate a failed first launch and confirm the Hub offers restoration.
 
 Shared release behavior and other app checks are indexed in
-[`../WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md).
+[`../WINDOWS_UPDATES.md`](../../WINDOWS_UPDATES.md).
 
 ## Validation record
 
@@ -223,7 +223,7 @@ checks and record the OS, application build, and outcome.
 
 The initial, pre-group-cache Windows reference-PC Release baseline (Ryzen 5 3600,
 32 GB RAM, GeForce GTX 1660 SUPER 6 GB, Windows 11) is in
-[`performance-baseline-windows-2026-10-06-v2.json`](performance-baseline-windows-2026-10-06-v2.json).
+[`performance-baseline-windows-2026-10-06-v2.json`](../performance/performance-baseline-windows-2026-10-06-v2.json).
 It was recorded on 2026-10-06 with Windows 11 Version 26H2, x86_64, MSVC 1944,
 and Qt 6.7.2. All profiles used three warmups and 30 measured iterations for
 each refresh mode. Warm mode also uses one cache-priming refresh outside the
@@ -245,14 +245,14 @@ The separate PNG/JPEG export profile averaged 579.57 ms per iteration (p95
 
 After adding the session group-thumbnail cache, the same six profiles were run
 again with the same settings. The post-cache report is
-[`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](performance-after-group-thumbnail-cache-windows-2026-10-06.json).
+[`performance-after-group-thumbnail-cache-windows-2026-10-06.json`](../performance/performance-after-group-thumbnail-cache-windows-2026-10-06.json).
 Each profile rendered its group thumbnail in all 30 cold iterations and in
 zero warm iterations; cold and warm pixels matched. For `stroke-heavy`, warm
 refresh average / p95 changed from 945.04 / 1,005.65 ms to 696.62 / 785.30 ms.
 The full before/after table is in `GPU_ACCELERATION_PLAN.md`.
 
 The subsequent layer-raster-cache Release report is
-[`performance-after-layer-raster-cache-windows-2026-10-06.json`](performance-after-layer-raster-cache-windows-2026-10-06.json).
+[`performance-after-layer-raster-cache-windows-2026-10-06.json`](../performance/performance-after-layer-raster-cache-windows-2026-10-06.json).
 It uses schema v2, the same machine, three warmups, and 30 iterations per
 profile and mode. All six profiles reported matching cold/warm pixels; warm
 refresh average / p95 ranged from 6.82 / 7.67 ms (`reference`) to 117.75 /
@@ -279,7 +279,7 @@ These are observations from this PC; the before/after difference is not a
 performance guarantee, target, or general hardware requirement. Stage times are
 per-iteration totals and include nested rendering work; do not sum stages. The
 recorded process CPU value is a one-second sample, and memory peaks are sampled
-observations. The prior [v1 direct-renderer baseline](performance-baseline-windows-2026-10-06.json)
+observations. The prior [v1 direct-renderer baseline](../performance/performance-baseline-windows-2026-10-06.json)
 remains unchanged for historical reference and is not directly comparable to
 these session-based measurements.
 The Release Image Editor test group passed 11/11 and the configured CTest suite
@@ -920,4 +920,4 @@ native Windows, macOS and Linux; portable/headless tests do not accept drivers.
    error log before CPU recovery, with no error entry for cancellation/busy.
 
 The reference Windows measurement/visual record and pending native platforms are
-in [INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md).
+in [INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md](../performance/INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md).

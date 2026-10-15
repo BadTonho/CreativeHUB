@@ -8,7 +8,7 @@ The application version remains Beta 0.1.0. These results establish this
 controlled reference workload, not general hardware requirements or platform
 release acceptance.
 
-The [measurement tool and fixture](GPU_TEXTURE_PREVIEW.md) use a 1920 x 1080,
+The [measurement tool and fixture](../gpu/GPU_TEXTURE_PREVIEW.md) use a 1920 x 1080,
 10-second, five-layer composition: a full-resolution synthetic raster background
 with radius-10 Gaussian Blur followed by Color Adjustment (brightness 3,
 contrast 105, saturation 95); 640 x 360, 30 fps generated FFV1 video at scale

@@ -42,8 +42,8 @@ feedback; cancellations and refused edits are ordinary control flow.
 Motion schema 8 persists masks and destination references in saved documents,
 autosave and recovery. Versions 1-7 retain their prior behavior. Independent
 composition copies retain internal sharing without sharing mutable definitions
-with the original. See [interchange](../COMPOSITION_INTERCHANGE.md) for v2
-conversion and [format](FORMAT.md) for native persistence.
+with the original. See [interchange](../../COMPOSITION_INTERCHANGE.md) for v2
+conversion and [format](../architecture/FORMAT.md) for native persistence.
 
 ## Regression and pending acceptance
 
@@ -58,7 +58,7 @@ with the final mask/Inspector rerun also passing. Synthetic Fusion/Motion RGBA
 mask comparisons observed zero channel difference; native GPU comparisons
 passed the maximum tolerance of two. Export clock, bounded-pool CPU recovery
 and subsequent GPU reuse were exercised. Full environment/build evidence is
-in the [interchange guide](../COMPOSITION_INTERCHANGE.md).
+in the [interchange guide](../../COMPOSITION_INTERCHANGE.md).
 
 Manual checks pending: use both File menus, edit a mask shared across two
 layers/effects, seek/play, move a layer without shifting mask keys, edit Bezier

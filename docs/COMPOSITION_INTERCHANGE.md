@@ -30,7 +30,7 @@ graph topology is normalized to source/color/transform branches and Merge.
 Rectangle/Ellipse masks are editable on sources, individual color stages and
 Transform. A definition can be shared between destinations; shared mask keys
 use composition time, separately from layer-local transform keys. Motion exposes
-these operations in [Masks Inspector](motion-editor/MASKS.md).
+these operations in [Masks Inspector](motion-editor/features/MASKS.md).
 
 ## Ownership and interchange v1/v2
 
@@ -178,7 +178,7 @@ windows, Video split/Bezier/FPS continuity, invalid geometry/references, the
 and restored v8 masks through the real Motion reader. A test-generated Inspector
 capture was inspected for layout and active-button contrast. Full native menu
 interaction and additional drivers/macOS/Linux remain pending as described
-above and in [Motion masks](motion-editor/MASKS.md).
+above and in [Motion masks](motion-editor/features/MASKS.md).
 
 All three canonical Debug executables were compiled directly. Modification
 times use UTC−03:00; no application versions, installers, commits or remote

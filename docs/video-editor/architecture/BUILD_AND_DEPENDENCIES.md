@@ -49,7 +49,7 @@ the local CMake configuration so a developer environment without the module
 still builds the video-clock fallback; a complete vcpkg installation provides
 `Qt6::Multimedia` and enables `QAudioSink`.
 Motion Studio also links Qt OpenGLWidgets from the existing qtbase dependency
-for its experimental [direct texture preview](../../motion-editor/GPU_TEXTURE_PREVIEW.md),
+for its experimental [direct texture preview](../../motion-editor/gpu/GPU_TEXTURE_PREVIEW.md),
 under the same Qt license obligations; it adds no new external package.
 Image Editor now also links OpenGL/OpenGLWidgets for its shared raster compositor
 and direct canvas presentation, under the same Qt license obligations. Native
@@ -58,7 +58,7 @@ BUILD_VIDEO_MEDIA_LIBRARY; an Image-only configuration builds raster composition
 without FFmpeg. Unified builds with video integration can retain its FFmpeg
 imports in Debug; the application and raster tests deploy the existing media
 runtime through the shared helper. Image-only builds do not invoke that helper.
-See the [Image raster boundary](../../image-editor/GPU_ACCELERATION_PLAN.md).
+See the [Image raster boundary](../../image-editor/gpu/GPU_ACCELERATION_PLAN.md).
 CMake discovers these dependencies through the selected toolchain or an
 externally supplied `CMAKE_PREFIX_PATH`; source files must not contain an
 absolute developer-machine path.

@@ -23,7 +23,7 @@ statuses. Consult the application documents for scope, progress, and evidence:
 
 | Application | ID | Responsibility | Scope and validation |
 | --- | --- | --- | --- |
-| Hub | `hub` | Application launching, project management, backups, storage, and per-app updates. | [Distribution plan](docs/PRODUCT_DISTRIBUTION.md), [regression guide](docs/hub/REGRESSION_TESTING.md) |
+| Hub | `hub` | Application launching, project management, backups, storage, and per-app updates. | [Distribution plan](docs/PRODUCT_DISTRIBUTION.md), [regression guide](docs/hub/validation/REGRESSION_TESTING.md) |
 | Video Editor | `video-editor` | Timeline editing, media organization, color, audio, text, basic motion, and export. | [Roadmap](docs/video-editor/ROADMAP.md), [architecture](docs/video-editor/architecture/ARCHITECTURE.md) |
 | Image Editor | `image-editor` | Layered raster editing, selections, masks, text, and image export. | [Scope](docs/image-editor/SCOPE.md), [roadmap](docs/image-editor/ROADMAP.md) |
 | Motion Studio | `motion-editor` | Motion design, animation curves, and advanced compositing. | [Scope and readiness](docs/motion-editor/SCOPE_AND_READINESS.md), [roadmap](docs/motion-editor/ROADMAP.md) |

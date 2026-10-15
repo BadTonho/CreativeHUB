@@ -14,17 +14,17 @@ experimental preview and offline export integration. Preview and export stacks
 containing Color Adjustment and Gaussian Blur can use the GPU. Motion's export
 reads the composed frame back to RGBA for the existing CPU encoder. Motion
 reuses the shared adapter and does not create another composition engine. See
-[Video Editor's delivery](../video-editor/gpu/GPU_ACCELERATION_PLAN.md).
+[Video Editor's delivery](../../video-editor/gpu/GPU_ACCELERATION_PLAN.md).
 
 ## Current evidence and priorities
 
 The shared adapter's native Windows parity/measurements are recorded in
-[Video Editor results](../video-editor/gpu/GPU_COMPOSITION_RESULTS.md). They do not
+[Video Editor results](../../video-editor/gpu/GPU_COMPOSITION_RESULTS.md). They do not
 approve Motion effects, its viewer/export lifecycle, or macOS/Linux drivers.
-Video Editor's [export contract](../video-editor/gpu/GPU_EXPORT.md) now covers isolated
+Video Editor's [export contract](../../video-editor/gpu/GPU_EXPORT.md) now covers isolated
 per-job worker resources, CPU fallback and separate schema-1 metrics. Shared RGBA
 and direct paths use two 16 KiB axis lookup buffers for UHD/portrait 4K. Its
-[export measurements](../video-editor/gpu/GPU_EXPORT_RESULTS.md) are additional reuse
+[export measurements](../../video-editor/gpu/GPU_EXPORT_RESULTS.md) are additional reuse
 evidence; Motion Studio GPU effects and export remain experimental, with GPU
 effects and export limited to opt-in operation.
 
@@ -71,7 +71,7 @@ current local diagnostics: at 1920 × 1080 and 60 fps, Gaussian Blur averaged
 delivered about 11 fps; with no effects applied, it delivered about 59 fps.
 The completed 60 fps export ran at 33.79 fps (0.563× realtime). The full
 measurements and limits are in
-[PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md](PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md).
+[PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md](../performance/PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md).
 The preview log uses schema 4 while the current source emits schema 8, so it
 does not contain GPU counters and cannot establish GPU-path performance.
 
@@ -199,7 +199,7 @@ in preview, playback, or document behavior.
 - [x] Implement bounded shared-texture preview using the existing compositor,
   single-result mailbox, generation validation and worker-side RGBA/CPU recovery.
 - [x] Record three paired preview trials per route on the Windows reference
-  fixture, including 30 fps and 60 fps stress; see [results](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md).
+  fixture, including 30 fps and 60 fps stress; see [results](../performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md).
 - [ ] Complete broader manual/native platform acceptance before enabling GPU
   by default. See [direct preview](GPU_TEXTURE_PREVIEW.md).
 
@@ -212,11 +212,11 @@ direct preview implementation is separate from performance and platform acceptan
 
 - Integrate the shared compositor into Video Editor after its own regression
   and performance checks, following its
-  [dedicated stages](../video-editor/gpu/GPU_ACCELERATION_PLAN.md). Keep Video Editor
+  [dedicated stages](../../video-editor/gpu/GPU_ACCELERATION_PLAN.md). Keep Video Editor
   stability as a priority.
 - Audit Image Editor composition, masks, transforms, and editable operations
   before adapting this backend to that application's different output contract;
-  follow its [dedicated stages](../image-editor/GPU_ACCELERATION_PLAN.md).
+  follow its [dedicated stages](../../image-editor/gpu/GPU_ACCELERATION_PLAN.md).
 - Compare OpenGL with Qt RHI/native Vulkan, Metal, or Direct3D alternatives if
   portability or measurements justify the additional dependency/maintenance
   cost. Do not select a final suite renderer from this experiment alone.
@@ -272,7 +272,7 @@ while worker contexts can render to framebuffer objects. See the
 - 2026-10-10: implemented direct Motion preview texture delivery, bounded mailbox,
   generation checks, output pool backpressure, native viewer parity and context
   recovery. Preview schema 8 distinguishes delivery and presentation. Native
-  Windows tests pass; [reference measurements](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
+  Windows tests pass; [reference measurements](../performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
   sustain 30 and 60 fps with zero readback and lower median latency than GPU RGBA.
   Broader interactive and macOS/Linux acceptance remain pending; GPU stays opt-in.
 
@@ -323,7 +323,7 @@ coverage does not establish platform acceptance by itself.
 ## Shared Video Editor stage 2 delivery
 
 Video Editor remains the first consumer. Its experimental backend now supports
-[direct texture delivery](../video-editor/gpu/GPU_TEXTURE_DELIVERY.md), public Qt
+[direct texture delivery](../../video-editor/gpu/GPU_TEXTURE_DELIVERY.md), public Qt
 global sharing, a three-target/64 MiB reservation budget including retired targets,
 producer/consumer fences and asynchronous RGBA recovery. Motion adoption is now implemented experimentally through its own viewer and
-worker contracts; native platform and performance acceptance remain separate. See [native evidence and remaining platform gates](../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).
+worker contracts; native platform and performance acceptance remain separate. See [native evidence and remaining platform gates](../../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).

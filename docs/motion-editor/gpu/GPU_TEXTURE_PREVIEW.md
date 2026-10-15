@@ -109,7 +109,7 @@ CSV output records presented FPS, request-to-paint average/p95, render average,
 coalesced/stale requests, CPU, working set, upload/readback bytes, pool peaks,
 busy drops and failures. Native output must establish the requested GPU route.
 
-[Windows results](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md) record all three
+[Windows results](../performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md) record all three
 trials per route at 30/60 fps and distinguish this fixture from general acceptance.
 
 ## Manual acceptance checklist

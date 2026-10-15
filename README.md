@@ -50,7 +50,7 @@ The central desktop management console and launcher for the entire creative ecos
 - **Resilient Per-App Updates:** Inspects release catalogs, validates cryptographic signatures and SHA-256 integrity, schedules background updates per application, and provides automated rollback protection if an installation or launch fails.
 - **Project Backup Vault:** Automatically or manually captures timestamped project snapshots to prevent accidental data loss.
 - **Safe Storage Manager:** Analyzes disk space used by temporary render files and media caches across the suite, providing one-click safe cleanup without touching user project files.
-- See the [Hub regression documentation](docs/hub/REGRESSION_TESTING.md) and [product distribution architecture](docs/PRODUCT_DISTRIBUTION.md).
+- See the [Hub regression documentation](docs/hub/validation/REGRESSION_TESTING.md) and [product distribution architecture](docs/PRODUCT_DISTRIBUTION.md).
 
 #### 2. Video Editor (`video-editor`)
 A full-featured multitrack non-linear audiovisual editor (NLE) tailored for storytelling and rapid assembly:
@@ -206,21 +206,24 @@ Before contributing, please read the repository guidelines in [`AGENTS.md`](AGEN
 | | [Cross-Application Compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared contracts, linked-document handoffs, and extraction criteria. |
 | | [Product & Distribution Architecture](docs/PRODUCT_DISTRIBUTION.md) | CreativeHub architecture, app recovery, and release strategies *(Portuguese planning doc)*. |
 | | [Windows Update Contract](docs/WINDOWS_UPDATES.md) | Update catalog format, verification, staging, and rollback mechanics. |
+| **Hub** | [Hub Documentation Index](docs/hub/README.md) | Backup, storage, distribution, and validation references. |
+| | [Hub Regression Tests](docs/hub/validation/REGRESSION_TESTING.md) | Verification index and pending native checks. |
 | **Video Editor** | [Video Editor Roadmap](docs/video-editor/ROADMAP.md) | Milestones, stabilization, and release criteria. |
 | | [Video Editor Documentation Index](docs/video-editor/README.md) | Organized links to scope, architecture, feature guides, validation, and technical notes. |
 | | [Keyboard Shortcuts](docs/video-editor/SHORTCUTS.md) | User-facing keyboard shortcut directory. |
 | | [GPU Acceleration Plan](docs/video-editor/gpu/GPU_ACCELERATION_PLAN.md) | OpenGL composition pipeline, textures, and export integration. |
 | | [GPU Export Pipeline](docs/video-editor/gpu/GPU_EXPORT.md) | Resource management and independent export metrics. |
 | | [Direct GPU Preview Delivery](docs/video-editor/gpu/GPU_TEXTURE_DELIVERY.md) | Shared contexts, texture leases, fences, and diagnostics. |
-| **Image Editor** | [Image Editor Scope](docs/image-editor/SCOPE.md) | Layer workflow, selection tools, and acceptance criteria. |
+| **Image Editor** | [Image Editor Documentation Index](docs/image-editor/README.md) | Scope, architecture, validation, GPU delivery, and performance evidence. |
+| | [Image Editor Scope](docs/image-editor/SCOPE.md) | Layer workflow, selection tools, and acceptance criteria. |
 | | [Image Editor Roadmap](docs/image-editor/ROADMAP.md) | Development roadmap and platform validation milestones. |
-| **Motion Studio** | [Motion Studio Scope & Readiness](docs/motion-editor/SCOPE_AND_READINESS.md) | Standalone MVP boundary, capability ownership, and format migration. |
-| | [Motion Studio Native Format](docs/motion-editor/FORMAT.md) | `.motion` JSON schema, curve evaluation, and effect data. |
-| | [Motion Studio Reuse Plan](docs/motion-editor/REUSE_PLAN.md) | Reusable library boundaries vs application-owned components. |
+| **Motion Studio** | [Motion Studio Documentation Index](docs/motion-editor/README.md) | Scope, architecture, feature, GPU, and performance references. |
+| | [Motion Studio Scope & Readiness](docs/motion-editor/SCOPE_AND_READINESS.md) | Standalone MVP boundary, capability ownership, and format migration. |
+| | [Motion Studio Native Format](docs/motion-editor/architecture/FORMAT.md) | `.motion` JSON schema, curve evaluation, and effect data. |
+| | [Motion Studio Reuse Plan](docs/motion-editor/architecture/REUSE_PLAN.md) | Reusable library boundaries vs application-owned components. |
 | | [Motion Studio Roadmap](docs/motion-editor/ROADMAP.md) | Technical milestones and export evolution. |
 | **Quality & Tests** | [Regression Prevention Policy](docs/REGRESSION_POLICY.md) | Universal test coverage mandates for all suite components. |
 | | [Video Editor Regression Tests](docs/video-editor/validation/REGRESSION_TESTING.md) | Verification index and manual testing checklists. |
-| | [CreativeHub Regression Tests](docs/hub/REGRESSION_TESTING.md) | CreativeHub verification index, catalog tests, and update flows. |
 
 ---
 

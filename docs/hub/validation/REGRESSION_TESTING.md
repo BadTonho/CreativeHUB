@@ -1,6 +1,6 @@
 # Hub Regression Testing
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v30/Motion v8 presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v31/v9 rejection). See [interchange](../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v30/Motion v8 presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v31/v9 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Background Generator backup verification
 
@@ -42,9 +42,9 @@ Run `hub-backup-format-test` for snapshot/restoration
 round-trips and `hub-backup-manager-test` for rejection of future v31 documents.
 
 This guide indexes behavior owned by the Hub. Shared update behavior and the
-release contract are documented in [`../WINDOWS_UPDATES.md`](../WINDOWS_UPDATES.md).
+release contract are documented in [`../WINDOWS_UPDATES.md`](../../WINDOWS_UPDATES.md).
 Follow the repository-wide requirements in
-[`../REGRESSION_POLICY.md`](../REGRESSION_POLICY.md).
+[`../REGRESSION_POLICY.md`](../../REGRESSION_POLICY.md).
 
 ## Coverage index
 
@@ -64,19 +64,19 @@ and condition. Debug and macOS/Linux execution of this change remain pending.
 
 | Behavior | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
-| Live registered-installation refresh and next-update installer arguments | `apps/hub/tests/test_update_installation_refresh.cpp` (`hub-update-installation-refresh-test`, Windows only), registered in `apps/hub/tests/CMakeLists.txt`; `libs/updater/tests/update_service_test.cpp` (`updater-service-test`) | Automated coverage present for all three editors, first install, a subsequent update without restart, version/path/executable changes, removed registrations, rollback snapshots, stale-package suppression, invalid-version logging, active downloads, and reopening update details. Native installer lifecycle and GUI acceptance remain **pending**; follow [WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md). |
+| Live registered-installation refresh and next-update installer arguments | `apps/hub/tests/test_update_installation_refresh.cpp` (`hub-update-installation-refresh-test`, Windows only), registered in `apps/hub/tests/CMakeLists.txt`; `libs/updater/tests/update_service_test.cpp` (`updater-service-test`) | Automated coverage present for all three editors, first install, a subsequent update without restart, version/path/executable changes, removed registrations, rollback snapshots, stale-package suppression, invalid-version logging, active downloads, and reopening update details. Native installer lifecycle and GUI acceptance remain **pending**; follow [WINDOWS_UPDATES.md](../../WINDOWS_UPDATES.md). |
 | Published versions and per-app update status | `apps/hub/tests/test_app_catalog.cpp` (`hub-catalog-test`) | Hub UI refresh and version labels in a packaged Windows build: **pending**. |
 | Catalog parsing, semantic version comparison, malformed assets and sizes, and URL resolution | `libs/updater/tests/release_catalog_test.cpp` (`updater-catalog-test`) | Covered by the shared updater test suite; actual GitHub Release availability remains a release operation. |
 | Download, resume, cancellation, network failure, incomplete/hash rejection, and one-download lock | `libs/updater/tests/update_service_test.cpp` (`updater-service-test`) | Network interruption and resume through the visible Hub dialog: **pending**. |
 | Individual editor updates from the Hub | No packaged installer integration test yet | Update each installed editor separately; verify there is no “Update all” action and that the other editors' versions do not change: **pending**. |
-| Multiple pending editor installs and recovery on restart | `libs/updater/tests/update_runtime_test.cpp` (`updater-runtime-test`), registered in `libs/updater/tests/CMakeLists.txt`; real pending records and leases with simulated launches | Automated coverage present for closure order, resume, per-app failure, hash validation, launch contention, and deduplication. Follow the multi-app checklist in [WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md); real Inno Setup lifecycle and Hub restoration remain **pending**. |
+| Multiple pending editor installs and recovery on restart | `libs/updater/tests/update_runtime_test.cpp` (`updater-runtime-test`), registered in `libs/updater/tests/CMakeLists.txt`; real pending records and leases with simulated launches | Automated coverage present for closure order, resume, per-app failure, hash validation, launch contention, and deduplication. Follow the multi-app checklist in [WINDOWS_UPDATES.md](../../WINDOWS_UPDATES.md); real Inno Setup lifecycle and Hub restoration remain **pending**. |
 | Hub's own update | Shared updater component and Hub startup integration | Install and update the Hub itself without changing editor installations: **pending**. |
 | Changelog discovery, semantic version sorting, and modal markdown display | `apps/hub/tests/test_changelog_reader.cpp` (`hub-changelog-reader-test`), `apps/hub/tests/test_app_details_modal.cpp` (`hub-details-modal-test`) | In Hub UI, open app details modal; verify changelog section renders notes or empty state gracefully: **covered**. |
 | Recent projects tracking, file-to-app detection, recency reordering, JSON persistence, and launch delegation | `apps/hub/tests/test_recent_projects.cpp` (`hub-recent-projects-test`) | Open Projects tab in Hub; open project file via dialog or quick cards; verify list updates with recency order, app badges, and removal: **covered**. |
-| Suite storage calculation, cache cleanup results, failure logs, feedback, and activities | `apps/hub/tests/test_storage_manager.cpp`, `test_storage_page.cpp` (`hub-storage-manager-test`, `hub-storage-page-test`), registered in `apps/hub/tests/CMakeLists.txt` | Automated coverage present for removal/remaining bytes, multiple/nested/duplicate roots, hidden files, partial/total failure, retry, cancellation, empty cache, invalid roots, new files during cleanup, and error/history consistency. The Windows widget test uses a real file handle denying deletion. Native visual, directory ACL, Debug, and macOS/Linux checks remain **pending**; follow [STORAGE.md](STORAGE.md). |
+| Suite storage calculation, cache cleanup results, failure logs, feedback, and activities | `apps/hub/tests/test_storage_manager.cpp`, `test_storage_page.cpp` (`hub-storage-manager-test`, `hub-storage-page-test`), registered in `apps/hub/tests/CMakeLists.txt` | Automated coverage present for removal/remaining bytes, multiple/nested/duplicate roots, hidden files, partial/total failure, retry, cancellation, empty cache, invalid roots, new files during cleanup, and error/history consistency. The Windows widget test uses a real file handle denying deletion. Native visual, directory ACL, Debug, and macOS/Linux checks remain **pending**; follow [STORAGE.md](../STORAGE.md). |
 | Activity and notification center, event logging, read state tracking, and popup dropdown | `apps/hub/tests/test_activity_manager.cpp` (`hub-activity-manager-test`) | Click notification bell in Hub header bar; verify unread badge, categorized event list, "Marcar lidas", and "Limpar": **covered**. |
-| Backup identity, unique creation, persisted source paths, legacy compatibility, and origin labels | `apps/hub/tests/test_backup_manager.cpp`, `test_backups_page.cpp` (`hub-backup-manager-test`, `hub-backups-page-test`), registered in `apps/hub/tests/CMakeLists.txt` | Automated coverage present for same-named projects, repeated creation, restart, malformed records, source labels, and unknown legacy origins. Native folder-opening and new label presentation remain **pending**; follow [BACKUPS.md](BACKUPS.md). |
-| Snapshot relative references, supported document versions, and relocation for restoration | `apps/hub/tests/test_backup_manager.cpp` and `test_backup_formats.cpp` (`hub-backup-manager-test`, `hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; real Image/Video/Motion persistence producers and consumers | Automated coverage present. Native UI restoration checks and macOS/Linux execution remain **pending**; see [BACKUPS.md](BACKUPS.md) for the contract and manual steps. |
+| Backup identity, unique creation, persisted source paths, legacy compatibility, and origin labels | `apps/hub/tests/test_backup_manager.cpp`, `test_backups_page.cpp` (`hub-backup-manager-test`, `hub-backups-page-test`), registered in `apps/hub/tests/CMakeLists.txt` | Automated coverage present for same-named projects, repeated creation, restart, malformed records, source labels, and unknown legacy origins. Native folder-opening and new label presentation remain **pending**; follow [BACKUPS.md](../BACKUPS.md). |
+| Snapshot relative references, supported document versions, and relocation for restoration | `apps/hub/tests/test_backup_manager.cpp` and `test_backup_formats.cpp` (`hub-backup-manager-test`, `hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; real Image/Video/Motion persistence producers and consumers | Automated coverage present. Native UI restoration checks and macOS/Linux execution remain **pending**; see [BACKUPS.md](../BACKUPS.md) for the contract and manual steps. |
 | Application discovery, sibling configuration directories, bundle paths, fallbacks, and installation-path priority | `apps/hub/tests/test_app_launcher.cpp` (`hub-launcher-test`, `hub-launcher-build-layout-test`), registered in `apps/hub/tests/CMakeLists.txt`; the integration test uses the enabled editors' actual CMake outputs | Automated coverage present. Native launch and project-open checks for each editor are documented below and remain **pending**, as do Debug and macOS/Linux execution. |
 
 ## Cache cleanup verification on 2026-10-11
@@ -92,7 +92,7 @@ Native directory symlink creation lacked the required Windows privilege and
 remains pending, along with visual/ACL acceptance, Debug, and macOS/Linux
 execution. The canonical Hub executable was rebuilt at
 `build/apps/hub/Release/creative-suite-hub.exe` (2026-10-11 12:54:24 UTC).
-Follow [STORAGE.md](STORAGE.md) for the cleanup contract and manual checks.
+Follow [STORAGE.md](../STORAGE.md) for the cleanup contract and manual checks.
 
 ## Installation refresh verification on 2026-10-11
 
@@ -107,7 +107,7 @@ was generated or executed. The canonical Hub executable was rebuilt at
 `build/apps/hub/Release/creative-suite-hub.exe` (2026-10-11 12:38:33 UTC).
 Native installer lifecycle, GUI acceptance, Debug, and macOS/Linux execution
 remain pending. Follow the live-refresh checklist in
-[WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md).
+[WINDOWS_UPDATES.md](../../WINDOWS_UPDATES.md).
 
 ## Backup verification on 2026-10-10
 
@@ -118,7 +118,7 @@ entries passed: the eleven Hub tests and the Video project, Image core, and
 Motion persistence tests. The new format integration test opens snapshots in
 the vault and after relocation across all 46 supported schema versions, using
 the editors' actual producers and consumers. Native UI, Debug, and macOS/Linux
-validation remain pending; follow [BACKUPS.md](BACKUPS.md).
+validation remain pending; follow [BACKUPS.md](../BACKUPS.md).
 
 ## Backup identity verification on 2026-10-11
 
@@ -137,7 +137,7 @@ record relocation to another vault, legacy visibility without false ownership,
 malformed/unsafe records with logs, ignored unfinished records, size accounting,
 and source/unknown-origin labels in widgets. Native visual checks, folder
 opening, Debug, and macOS/Linux execution remain pending; follow
-[BACKUPS.md](BACKUPS.md).
+[BACKUPS.md](../BACKUPS.md).
 
 ## Pending-install verification on 2026-10-11
 
@@ -147,7 +147,7 @@ The 18 selected CTest entries passed in 26.97 seconds, including multiple
 editor waits, managed-ID and file-based schema-1 recovery, removed and failed
 items, explicit retry, launch-lock contention, package tampering, and self-update
 deferral. Actual installer execution, Debug, and macOS/Linux validation remain
-pending. Follow the multi-app steps in [WINDOWS_UPDATES.md](../WINDOWS_UPDATES.md).
+pending. Follow the multi-app steps in [WINDOWS_UPDATES.md](../../WINDOWS_UPDATES.md).
 
 ## Discovery verification on 2026-10-11
 

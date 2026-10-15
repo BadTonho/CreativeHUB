@@ -29,7 +29,7 @@ A future-version file is never rewritten by Open.
 Hub snapshots preserve versions 1–8 and rebase relative media and linked-image
 references to their original absolute locations. Relative-directory escape
 restrictions are retained. Native save behavior is unchanged and media are not
-bundled. See [Hub backups](../hub/BACKUPS.md) and the producer/consumer
+bundled. See [Hub backups](../../hub/BACKUPS.md) and the producer/consumer
 `hub-backup-format-test` for relocation coverage.
 
 ## Serialized values
@@ -230,16 +230,16 @@ in version 24; `.cimg` is unchanged.
 
 ## Version 7 composition interchange
 
-Version 7 adds optional layer `presentation` records as defined in [composition interchange](../COMPOSITION_INTERCHANGE.md), composition `name` and string-encoded `duration`, and numeric font sizes. Older documents retain legacy presentation defaults. Presentation fields are rejected in documents before v7. Recovery uses the same records.
+Version 7 adds optional layer `presentation` records as defined in [composition interchange](../../COMPOSITION_INTERCHANGE.md), composition `name` and string-encoded `duration`, and numeric font sizes. Older documents retain legacy presentation defaults. Presentation fields are rejected in documents before v7. Recovery uses the same records.
 
 ## Version 8 shared masks
 
 Optional root `masks` uses the shared definitions documented in
-[composition interchange](../COMPOSITION_INTERCHANGE.md). Layer `source_mask`
+[composition interchange](../../COMPOSITION_INTERCHANGE.md). Layer `source_mask`
 and `transform_mask`, and each effect's `mask`, are optional decimal-string
 references; zero means absent. They do not contain media paths. Mask IDs remain
 shared within a document; keys are composition-frame scalar curves. Duplicate
 IDs, dangling references, unused definitions and invalid geometry/curves are
 rejected before applying a document. Mask fields are rejected before v8.
 Save, autosave and recovery use the same records. Geometry defaults and the
-Inspector workflow are in [Masks](MASKS.md).
+Inspector workflow are in [Masks](../features/MASKS.md).

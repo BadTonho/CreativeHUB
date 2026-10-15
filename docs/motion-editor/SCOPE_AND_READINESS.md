@@ -41,15 +41,15 @@ with the shared CPU compositor by default or the experimental OpenGL adapter
 when `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`; failures fall back to CPU. The GPU
 composition shader applies Color Adjustment-only stacks before blending;
 stacks containing enabled Gaussian Blur use the shared ordered GPU effect path
-when supported, with bounded scratch storage and CPU fallback. [Controlled Windows preview results](GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
+when supported, with bounded scratch storage and CPU fallback. [Controlled Windows preview results](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
 record the reference workload separately from broader manual/platform acceptance.
 Experimental preview now delivers shared GPU textures directly to the
 Motion-owned viewer, with a bounded mailbox and RGBA/CPU recovery; see
-[GPU_TEXTURE_PREVIEW.md](GPU_TEXTURE_PREVIEW.md). Offline export
+[GPU_TEXTURE_PREVIEW.md](gpu/GPU_TEXTURE_PREVIEW.md). Offline export
 uses the same opt-in path and reads back RGBA for the existing CPU encoder.
 Manual Save, Save As, and Open use a versioned `.motion` document that includes
 the Media Pool. The writer emits schema v8 and reads versions 1–8; migrations
-and compatibility behavior are specified in [FORMAT.md](FORMAT.md). The
+and compatibility behavior are specified in [FORMAT.md](architecture/FORMAT.md). The
 separate recovery wrapper remains at version 1 and contains a nested native
 document. Undo/Redo and configurable autosave and recovery cover the
 composition and Media Pool. A first-pass video export uses a shared FFmpeg
@@ -172,7 +172,7 @@ provide a recoverable reference if a linked document or dependency is missing.
 ### Candidate shared capabilities
 
 The approved reuse direction and its current implementation are recorded in
-[REUSE_PLAN.md](REUSE_PLAN.md). The transform/keyframe evaluator and raster
+[REUSE_PLAN.md](architecture/REUSE_PLAN.md). The transform/keyframe evaluator and raster
 frame compositor now have focused, Qt-independent CMake targets under
 `libs/`. Motion Studio uses the shared animation types in its document model
 and evaluator, and the raster compositor in its preview, with model and
@@ -272,13 +272,13 @@ Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
 The native `.motion` writer emits schema v8 and reads versions 1–8. Migration
-details are maintained in [FORMAT.md](FORMAT.md); the recovery wrapper remains
+details are maintained in [FORMAT.md](architecture/FORMAT.md); the recovery wrapper remains
 at version 1 and contains the validated native document. Other interpolation
 modes, overshoot-capable curves, and advanced effects remain open. Final
 encoder/profile selection and output color handling remain Windows technical
 validation work. The one-hour ruler range controls
 navigation only and does not define the composition's duration. See
-[ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
+[ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](architecture/REUSE_PLAN.md) for current
 implementation details and provisional shared API contracts.
 
 ## Motion Studio Performance Diagnostics
@@ -306,7 +306,7 @@ from per-interval application counts. A bounded sample window is used for
 percentile estimates. Current schema v8 additionally distinguishes texture/RGBA
 mailbox delivery and successful presentation, recovery, bounded pool peaks and
 backpressure, and producer/viewer fence submission timing. Direct preview records
-zero readback and viewer-upload bytes; see [its contract](GPU_TEXTURE_PREVIEW.md).
+zero readback and viewer-upload bytes; see [its contract](gpu/GPU_TEXTURE_PREVIEW.md).
 
 The cross-platform CPU and memory sampler is owned by the shared
 `creative-suite::system-monitor` library and is consumed by both editors. The
@@ -326,7 +326,7 @@ Performance records do not include project/media paths, layer names, or text
 content. GPU utilization and device memory are not sampled. These diagnostics
 help inspect a running session; they are not performance benchmarks.
 An initial Windows preview/export measurement is documented in
-[PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md](PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md).
+[PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md](performance/PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md).
 It identifies Gaussian Blur as the main preview bottleneck in a 1080p, two-layer
 workload. Representative small, medium, and heavy compositions, startup,
 seek/paint latency, memory limits, and the approved five-layer benchmark still
@@ -367,9 +367,9 @@ unchanged.
   versions 1 through 8, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
-  in [FORMAT.md](FORMAT.md).
+  in [FORMAT.md](architecture/FORMAT.md).
 - Older text, shape, keyframe, effect, and linked-image records migrate as
-  specified in [FORMAT.md](FORMAT.md); saving an older document writes version
+  specified in [FORMAT.md](architecture/FORMAT.md); saving an older document writes version
   8.
   An unsupported future schema version is
   rejected without replacing the current composition or overwriting or

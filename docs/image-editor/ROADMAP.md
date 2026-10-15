@@ -4,14 +4,16 @@ This roadmap records open work, release gates, and feature-to-verification
 coverage. Completed implementation checklists are archived in
 [legacy documentation](../legacy/image-editor/IMPLEMENTED_ROADMAP_ITEMS.md).
 
+See the [documentation index](README.md) for organized references by topic.
+
 ## Documentation map
 
 | Question | Canonical document |
 | --- | --- |
 | What can the editor do today? | [Current scope](SCOPE.md) |
-| How are documents stored and migrated? | [Document format](FORMAT.md) |
-| How is the editor structured? | [Architecture](ARCHITECTURE.md) |
-| Which behaviors still need hands-on checks? | [Manual validation](MANUAL_VALIDATION.md) |
+| How are documents stored and migrated? | [Document format](architecture/FORMAT.md) |
+| How is the editor structured? | [Architecture](architecture/ARCHITECTURE.md) |
+| Which behaviors still need hands-on checks? | [Manual validation](validation/MANUAL_VALIDATION.md) |
 | Which tests and manual checks cover each feature? | [Regression coverage index](#regression-coverage-index) in this roadmap |
 | Which shortcuts are available? | [Shortcuts](SHORTCUTS.md) |
 
@@ -80,9 +82,9 @@ their existing contracts. Its execution result is tracked with the shared
 Incremental content/mask caching, bounded worker scheduling, shared raster GPU
 composition and direct texture presentation are implemented. Settings > Rendering
 provides Automatic / CPU. Tools and PNG/JPEG export/publication remain CPU; formats
-and history are unchanged. The [GPU plan](GPU_ACCELERATION_PLAN.md) documents
+and history are unchanged. The [GPU plan](gpu/GPU_ACCELERATION_PLAN.md) documents
 ownership, fallback and measured activation requirements. Windows evidence is in
-[the delivery results](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md);
+[the delivery results](performance/INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md);
 native macOS/Linux validation remains pending independently of the CI matrix.
 
 ## Shared composition mask-operation regression
@@ -98,7 +100,7 @@ Native macOS/Linux acceptance remains separate and pending.
 ### 1. Standalone minimum editor — acceptance pending
 
 The core implementation checklist is archived. Its release gate remains open:
-complete the packaging and manual checks in [MANUAL_VALIDATION.md](MANUAL_VALIDATION.md)
+complete the packaging and manual checks in [MANUAL_VALIDATION.md](validation/MANUAL_VALIDATION.md)
 and record platform acceptance before accepting linked-image compatibility.
 
 **Exit criteria:** the application builds independently, opens and edits a
@@ -127,7 +129,7 @@ Proceed after the compatibility milestone. Keep advanced image workflows
 separate from this release.
 
 - [ ] Complete the manual visual text checks in
-  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md). Their pending status does not
+  [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md). Their pending status does not
   block continuing implementation work.
 - [ ] Validate recovery, export, and linked asset handoff as a complete
   workflow.
@@ -161,7 +163,7 @@ and producer/consumer PNG refresh. Existing fixtures cover v1–v9 migration.
 ### Resizable canvas extension (approved 2026-10-04)
 
 - [ ] Record the manual anchor, export, save/reopen, and linked refresh checks in
-  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+  [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
 Automated tests are registered in the feature-to-verification index below.
 Manual and cross-platform acceptance remain pending until their outcomes are
@@ -170,7 +172,7 @@ recorded.
 ### Area Selection tool (approved 2026-10-04)
 
 - [ ] Complete the native UI and linked PNG producer/Video Editor consumer
-  checks in [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+  checks in [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
 ### Lasso tool (approved 2026-10-06)
 
@@ -180,28 +182,28 @@ coverage is indexed below.
 ### Bucket Fill tool (approved 2026-10-06)
 
 - [ ] Complete manual checks for layer/mask targeting, tolerance, selection,
-  Undo/Redo, and save/reopen in [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+  Undo/Redo, and save/reopen in [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
 ### Magic Wand tool (approved 2026-10-06)
 
 - [ ] Complete native visual checks for layer/mask targets and transformed
   groups, including a large transparent canvas, in
-  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+  [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
 ### Linear Gradient tool (approved 2026-10-06)
 
 - [ ] Complete the manual preview, direction, selection, mask, Undo/Redo, and
-  save/reopen checks in [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+  save/reopen checks in [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
 ### Blur tool (approved 2026-10-06)
 
 - [ ] Complete the manual layer/mask, selection, preview/cancel, history, and
-  save/reopen checks in [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+  save/reopen checks in [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
 ### Object Selection tool extraction (approved 2026-10-05)
 
 - [ ] Complete the owner-run selection and transform checks in
-  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+  [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
 The tool extraction does not change the `.cimg` format. Manual visual
 acceptance remains with the maintainer; automated coverage is indexed below.
@@ -209,7 +211,7 @@ acceptance remains with the maintainer; automated coverage is indexed below.
 ### Eyedropper tool (approved 2026-10-06)
 
 - [ ] Record native visual validation with masks, layer opacity, and transparent
-  canvas pixels in [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+  canvas pixels in [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
 ### 4. Future expansion
 
@@ -249,7 +251,7 @@ after the standalone acceptance gate.
 Automated evidence below is registered in
 [`apps/image-editor/tests/CMakeLists.txt`](../../apps/image-editor/tests/CMakeLists.txt).
 Manual cases and their recorded status are in
-[`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
+[`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
 **Owner-reported Windows status (2026-10-01):** all currently implemented
 Image Editor workflows had been exercised on Windows 11. A later WebP import
@@ -383,8 +385,8 @@ results.
 | Motion Studio linked Image Editor layer workflow | Image Editor producer: existing `image_editor_ui_test.cpp` linked-mode publication coverage (`creative-suite-image-editor-ui`). Motion Studio consumer: `motion_editor_ui_test.cpp`, `motion_document_store_test.cpp`, and `motion_video_export_test.cpp` (`creative-suite-motion-editor-ui`, `creative-suite-motion-editor-persistence`, and `creative-suite-motion-editor-export`). | The producer interface is reused without changing `.cimg` or Image Editor launch arguments. Automated Motion Studio refresh, corrupt-publication recovery, per-layer path isolation, export lookup, and Save As copy coverage is present. Manual duplicate-layer edits, missing-link recovery, and cross-app reopen remain pending; integration acceptance stays behind the standalone Image Editor gate (**P1 validation**). |
 | Linked image import, geometry, sources, v11 raster references, v12 canvas bounds, v13 clipped strokes, v14 bucket fills, v15 gradients, v16 blur, export and publication | `image_editor_raster_test.cpp` (`creative-suite-image-editor-raster`), `image_editor_ui_test.cpp`, Video Editor `main_window_integration_test.cpp` | Existing automated coverage checks PNG publication and host refresh; Area Selection's linked PNG acceptance is documented in `MANUAL_VALIDATION.md`. macOS/Linux and manual acceptance remain pending. |
 | Raster layer masks and shared stroke geometry | `image_editor_mask_test.cpp` (`creative-suite-image-editor-masks`), `image_editor_mask_ui_test.cpp` (within `creative-suite-image-editor-ui`); Video Editor `main_window_integration_test.cpp` when both apps are enabled | Automated coverage includes direct `ImageDocumentGeometry` group/clip/bounds tests, direct `ImageLayerMaskEditor` preparation and no-mutation tests, plus editing, transforms, previews, Undo/Redo, persistence, recovery, export, thumbnail targeting, and linked PNG producer/consumer behavior. The Release application and affected targets compiled on Windows; 11 focused tests and full CTest passed 70/70 on 2026-10-05. Mask UI checks are documented in `MANUAL_VALIDATION.md`; no manual result recorded. |
-| Optional performance collection, privacy, benchmark report, and session raster cache | `image_editor_performance_test.cpp` (`creative-suite-image-editor-performance`) covers disabled collection, aggregation/percentiles, bounded samples, serialization, JSONL rotation, unchanged render/export pixels, group-thumbnail caching, layer-cache pixel equality, selective invalidation after paint/eraser/mask/resource edits, Undo/Redo, canvas/document replacement, preview/export bypass, and the 64 MiB budget; `image_editor_ui_test.cpp` (`testPerformanceMetricsUi`; `creative-suite-image-editor-ui`) covers Settings persistence, panel refresh, final flush, stop behavior, and path omission; `verify_image_editor_benchmark.cmake` (`creative-suite-image-editor-benchmark-report`) checks schema v2, cold/warm thumbnail and layer-cache behavior, hit/miss/bypass counters, memory limit, distributions, and matching pixels | The Image Editor Release performance test passed 12/12 and the configured full CTest suite passed 27/27 on Windows on 2026-10-06. The initial pre-cache baseline remains in [performance-baseline-windows-2026-10-06-v2.json](performance-baseline-windows-2026-10-06-v2.json); the post-group-cache run remains [performance-after-group-thumbnail-cache-windows-2026-10-06.json](performance-after-group-thumbnail-cache-windows-2026-10-06.json); the new same-PC layer-cache report is [performance-after-layer-raster-cache-windows-2026-10-06.json](performance-after-layer-raster-cache-windows-2026-10-06.json). The v1 renderer-only report remains [available historically](performance-baseline-windows-2026-10-06.json). Native manual panel inspection and macOS/Linux validation remain pending (**P2 validation**); measurements are observations, with no hardware target set. |
-| Incremental CPU/GPU composition, presentation, cancellation, context/allocation failure, and resource budgets | `image_editor_interactive_test.cpp` (`creative-suite-image-editor-interactive`, `creative-suite-image-editor-gpu-raster`); `image_editor_ui_test.cpp` (`creative-suite-image-editor-native-rendering-ui`: native presentation, CPU/Automatic switching, stable panel items and logged recovery); existing UI/export/model suites; shared `creative-suite-composition-opengl` and Video/Motion consumer tests | Automated coverage present. Exact CPU incremental parity and mask coverage; final GPU premultiplied-channel tolerance <=2. Windows acceptance and measured gate are recorded in [the delivery results](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md). Native macOS/Linux pending. GPU tool rasterization/export/publication remains deferred. |
+| Optional performance collection, privacy, benchmark report, and session raster cache | `image_editor_performance_test.cpp` (`creative-suite-image-editor-performance`) covers disabled collection, aggregation/percentiles, bounded samples, serialization, JSONL rotation, unchanged render/export pixels, group-thumbnail caching, layer-cache pixel equality, selective invalidation after paint/eraser/mask/resource edits, Undo/Redo, canvas/document replacement, preview/export bypass, and the 64 MiB budget; `image_editor_ui_test.cpp` (`testPerformanceMetricsUi`; `creative-suite-image-editor-ui`) covers Settings persistence, panel refresh, final flush, stop behavior, and path omission; `verify_image_editor_benchmark.cmake` (`creative-suite-image-editor-benchmark-report`) checks schema v2, cold/warm thumbnail and layer-cache behavior, hit/miss/bypass counters, memory limit, distributions, and matching pixels | The Image Editor Release performance test passed 12/12 and the configured full CTest suite passed 27/27 on Windows on 2026-10-06. The initial pre-cache baseline remains in [performance-baseline-windows-2026-10-06-v2.json](performance/performance-baseline-windows-2026-10-06-v2.json); the post-group-cache run remains [performance-after-group-thumbnail-cache-windows-2026-10-06.json](performance/performance-after-group-thumbnail-cache-windows-2026-10-06.json); the new same-PC layer-cache report is [performance-after-layer-raster-cache-windows-2026-10-06.json](performance/performance-after-layer-raster-cache-windows-2026-10-06.json). The v1 renderer-only report remains [available historically](performance/performance-baseline-windows-2026-10-06.json). Native manual panel inspection and macOS/Linux validation remain pending (**P2 validation**); measurements are observations, with no hardware target set. |
+| Incremental CPU/GPU composition, presentation, cancellation, context/allocation failure, and resource budgets | `image_editor_interactive_test.cpp` (`creative-suite-image-editor-interactive`, `creative-suite-image-editor-gpu-raster`); `image_editor_ui_test.cpp` (`creative-suite-image-editor-native-rendering-ui`: native presentation, CPU/Automatic switching, stable panel items and logged recovery); existing UI/export/model suites; shared `creative-suite-composition-opengl` and Video/Motion consumer tests | Automated coverage present. Exact CPU incremental parity and mask coverage; final GPU premultiplied-channel tolerance <=2. Windows acceptance and measured gate are recorded in [the delivery results](performance/INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md). Native macOS/Linux pending. GPU tool rasterization/export/publication remains deferred. |
 | First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp` (`testTextToolState`, `testTextEditorGrowthLayout`, `testWindowTextGrowth`, and editable-text integration); CTest `creative-suite-image-editor-core`, `creative-suite-image-editor-ui`, and Windows `creative-suite-image-editor-native-text` (one-key shortcut interception, focus retention, click-to-create through the full window, displayed pixels without a forced native redraw, caret placement and hit testing after each character, mouse and keyboard selection, selected-text replacement, horizontal growth with native margins and zoomed font metrics, canvas-edge wrapping, and visible multiline height growth) | `testTextToolState` directly covers frame creation by click/drag, preview, style, confirmation, and cancellation. The owner confirmed that normal typing with the default settings works again in the Windows application. Detailed visual editing checks in `MANUAL_VALIDATION.md` and other-platform acceptance remain with the owner (**P2 validation**). Native Windows mouse-drag selection has automated coverage. Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
 
 ### Windows updater coverage
@@ -395,7 +397,7 @@ rejection (`updater-catalog-test`, `updater-service-test`). The Image Editor
 also shares `updater-runtime-test` coverage for pending schema-1 persistence,
 independent editor waits, self-update shutdown, and per-app launch failures. It
 must update only its own installation. The packaged Windows checklist is in
-[`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md); install-path reuse, user-data
+[`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md); install-path reuse, user-data
 preservation, rollback, and Hub restore remain **pending** packaged-installer
 validation.
 

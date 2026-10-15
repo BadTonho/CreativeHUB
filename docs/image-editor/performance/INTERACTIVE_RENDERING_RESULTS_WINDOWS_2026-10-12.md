@@ -135,7 +135,7 @@ repository.
 
 Windows automation and this visual inspection do not establish every manual
 editing workflow or every driver. The complete checklist is in
-[MANUAL_VALIDATION.md](MANUAL_VALIDATION.md#interactive-cpu--gpu-rendering).
+[MANUAL_VALIDATION.md](../validation/MANUAL_VALIDATION.md#interactive-cpu--gpu-rendering).
 Owner-operated native gesture/long-session acceptance and native macOS/Linux
 driver/UI acceptance remain separately pending. No macOS/Linux native acceptance
 or installer/distribution acceptance is claimed.

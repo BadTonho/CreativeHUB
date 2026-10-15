@@ -382,4 +382,4 @@ and preserves adjustment duration, effects and transform curves without adding
 media references. `hub-backup-format-test` produces with the Video Editor writer
 and restores through its reader, alongside versions 1–25. Application version
 metadata remains unchanged. Native restore/reopen visual acceptance is separate
-from this automated producer/consumer contract; see [Hub regression testing](hub/REGRESSION_TESTING.md).
+from this automated producer/consumer contract; see [Hub regression testing](hub/validation/REGRESSION_TESTING.md).

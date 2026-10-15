@@ -69,7 +69,7 @@ This archive is historical context; current behavior and compatibility contracts
 
 - [x] Reopen the affected WebP image in the rebuilt Windows application UI;
   the owner confirmed it opened successfully. See
-  [`MANUAL_VALIDATION.md`](../../image-editor/MANUAL_VALIDATION.md).
+  [`MANUAL_VALIDATION.md`](../../image-editor/validation/MANUAL_VALIDATION.md).
 
 - [x] Validate Windows Debug and Release build/install deployment and import
   of PNG, JPEG, BMP, WebP, and TIFF; macOS and Linux builds and interaction
@@ -200,7 +200,7 @@ This archive is historical context; current behavior and compatibility contracts
 
 - [x] Verify the dedicated button, live preview, Replace/Add/Subtract modes,
   cancellation, geometry limits, and Paint clipping in the focused UI test;
-  keep the manual visual check in [`MANUAL_VALIDATION.md`](../../image-editor/MANUAL_VALIDATION.md).
+  keep the manual visual check in [`MANUAL_VALIDATION.md`](../../image-editor/validation/MANUAL_VALIDATION.md).
 
 ## Image Editor Roadmap / Milestones / Bucket Fill tool (approved 2026-10-06)
 
@@ -297,7 +297,7 @@ This archive is historical context; current behavior and compatibility contracts
 
 - [x] Run the reference, mask-heavy, stroke-heavy, large-image,
   repeated-source, and export profiles on the maintainer's Windows reference
-  PC; see the version 2 [baseline report](../../image-editor/performance-baseline-windows-2026-10-06-v2.json).
+  PC; see the version 2 [baseline report](../../image-editor/performance/performance-baseline-windows-2026-10-06-v2.json).
 
 
 ## Historical implementation and verification note

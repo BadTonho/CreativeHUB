@@ -223,7 +223,7 @@ This archive is historical context; current behavior and compatibility contracts
   export workflow; Motion Studio currently exports opaque video without audio.
 
 - [x] Implement shared Rectangle/Ellipse masks with geometry animation and
-  editable Fusion interchange; see [Masks](../../motion-editor/MASKS.md). Manual/platform acceptance
+  editable Fusion interchange; see [Masks](../../motion-editor/features/MASKS.md). Manual/platform acceptance
   and representative performance measurements remain separate.
 
 ## Motion Studio Roadmap / Regression coverage index / 4. Video Editor integration and release readiness

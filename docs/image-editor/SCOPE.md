@@ -10,7 +10,7 @@ Interactive editing uses an incremental CPU raster cache and optional shared GPU
 composition with direct texture presentation. Settings > Rendering offers Automatic
 and CPU, with complete CPU recovery on capacity/technical failures. Automatic GPU
 activation is governed by the correctness/performance gate and reference Windows
-[evidence](INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md). Tools, export and
+[evidence](performance/INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md). Tools, export and
 published PNG rasterization remain CPU. Native macOS/Linux GPU acceptance is pending.
 
 ## Implemented Today
@@ -201,5 +201,5 @@ publication. Manual visual validation of text remains pending; the linked-image
 producer/consumer acceptance gate also remains pending until its manual checks
 are recorded. Profile the approved 1080p workload on the reference hardware
 class. macOS and Linux packaging and interaction checks remain pending. See
-[`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md) and the [roadmap](ROADMAP.md)
+[`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md) and the [roadmap](ROADMAP.md)
 for current results and outstanding checks.

@@ -191,5 +191,5 @@ Manual cross-application check (native UI acceptance **pending**):
    the same original path. Retain both its project file and `record.json`.
 
 Windows/Release automated results are recorded in
-[REGRESSION_TESTING.md](REGRESSION_TESTING.md). Native visual checks and
+[REGRESSION_TESTING.md](validation/REGRESSION_TESTING.md). Native visual checks and
 macOS/Linux execution remain pending.

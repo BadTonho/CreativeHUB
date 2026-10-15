@@ -21,7 +21,7 @@ Render > Video. Its RGBA readback path supports 1080p, 1440p and 4K UHD; see
 [the export contract](GPU_EXPORT.md) and [results](GPU_EXPORT_RESULTS.md).
 See [the rendering boundary](../architecture/RENDERING.md).
 
-The [Motion Studio plan](../../motion-editor/GPU_ACCELERATION_PLAN.md) will adopt
+The [Motion Studio plan](../../motion-editor/gpu/GPU_ACCELERATION_PLAN.md) will adopt
 this shared backend through its existing layer-preparation boundary after its
 relevant contracts are covered.
 Keep timeline scheduling, source timing, decoding, transitions, audio, history,
@@ -155,7 +155,7 @@ regressions pass, and transfer/encode costs are included in performance results.
   after publication. Invalidate dependent CPU/GPU caches on media replacement
   so preview and export use the updated asset.
 - Verify both producer and consumer for changes to shared APIs or published
-  media. Use the dedicated [Image Editor plan](../../image-editor/GPU_ACCELERATION_PLAN.md)
+  media. Use the dedicated [Image Editor plan](../../image-editor/gpu/GPU_ACCELERATION_PLAN.md)
   for its rendering work; preserve existing `.cimg`/`.csp` boundaries.
 
 **Exit:** added capabilities have explicit product contracts and producer/
@@ -226,8 +226,8 @@ evidence, unresolved issues, and the next stage here.
 
 - 2026-10-02: documentation saved; implementation and GPU composition acceptance
   remain planned. Existing GPU presentation remains in place. Coordinate shared
-  work with the [Motion Studio](../../motion-editor/GPU_ACCELERATION_PLAN.md) and
-  [Image Editor](../../image-editor/GPU_ACCELERATION_PLAN.md) plans.
+  work with the [Motion Studio](../../motion-editor/gpu/GPU_ACCELERATION_PLAN.md) and
+  [Image Editor](../../image-editor/gpu/GPU_ACCELERATION_PLAN.md) plans.
 
 - 2026-10-02: Stage 1 code added with Video Editor as first consumer. Windows
   native parity and timeline/PNG checks passed on NVIDIA GTX 1660 SUPER, OpenGL

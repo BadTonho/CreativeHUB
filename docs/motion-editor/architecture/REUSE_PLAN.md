@@ -40,7 +40,7 @@ with refresh, restore, delete, and open-folder actions. Restore stages media,
 leaves missing sources offline, preserves a saved project's Save target, and
 marks the recovered state dirty. These workflows remain Motion Studio-owned;
 no Video Editor persistence or shared-library API is reused. Manual Windows
-validation remains pending; the detailed steps are in [ROADMAP.md](ROADMAP.md).
+validation remains pending; the detailed steps are in [ROADMAP.md](../ROADMAP.md).
 
 ### Timeline zoom interaction
 
@@ -125,7 +125,7 @@ including worker scheduling and pass synchronization. Motion's effects remain
 static, while Color Adjustment's shared implementation is covered by the
 consumer and library regression tests. Compare automatic mode and worker
 limits 1, 2, 4, and
-8 with three 10-second runs per setting, as documented in [ROADMAP.md](ROADMAP.md).
+8 with three 10-second runs per setting, as documented in [ROADMAP.md](../ROADMAP.md).
 The worker limit is read once per process and logged with each active preview
 sample. Keep the automatic policy until the comparison shows a repeatable
 playback-wide improvement.
@@ -143,7 +143,7 @@ specified in [FORMAT.md](FORMAT.md).
 | creative-suite::animation | 2D transform data, keyframe storage, interpolation/easing validation, and linear/cubic-Bezier evaluation. It has no timeline, UI, or document dependency. | Evaluate the five transform properties consistently for Motion Studio preview, playback, and export. Motion Studio owns the Graph Editor, presets, history actions, and frame mapping. |
 | creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image, video, text, and shape frames in document order. Text and vector-shape rasterization remains Motion Studio-owned. |
 | creative-suite::effects | CPU RGBA visual processing with stable Video Editor filter definitions and a fused Color Adjustment entry point. It owns neither an application model nor UI. | Motion Studio delegates Color Adjustment processing and cancellation; it retains its effect variant, Inspector, history, blur implementation, and `.motion` persistence. |
-| creative-suite::composition-opengl | Optional public Qt/OpenGL 3.2 Core adapter for the shared ordered RGBA layer and effect contract, worker resources, cancellation, 4K axis lookup buffers, RGBA readback, known allocation metrics and shared texture leases/fences with bounded reservations. Video Editor is the first preview/export consumer; see its [export contract](../video-editor/gpu/GPU_EXPORT.md). | Motion Studio uses it for opt-in experimental preview and export composition, Color Adjustment, and Gaussian Blur with CPU fallback. Direct preview reuses its bounded texture leases and fences through a Motion-owned viewer and mailbox; see [GPU_TEXTURE_PREVIEW.md](GPU_TEXTURE_PREVIEW.md). The export uses a per-job GUI-owned surface and reads the result back to RGBA for the existing CPU encoder. |
+| creative-suite::composition-opengl | Optional public Qt/OpenGL 3.2 Core adapter for the shared ordered RGBA layer and effect contract, worker resources, cancellation, 4K axis lookup buffers, RGBA readback, known allocation metrics and shared texture leases/fences with bounded reservations. Video Editor is the first preview/export consumer; see its [export contract](../../video-editor/gpu/GPU_EXPORT.md). | Motion Studio uses it for opt-in experimental preview and export composition, Color Adjustment, and Gaussian Blur with CPU fallback. Direct preview reuses its bounded texture leases and fences through a Motion-owned viewer and mailbox; see [GPU_TEXTURE_PREVIEW.md](../gpu/GPU_TEXTURE_PREVIEW.md). The export uses a per-job GUI-owned surface and reads the result back to RGBA for the existing CPU encoder. |
 | creative-suite::diagnostics | Structured local logging with caller-selected application log directories; the legacy no-argument default remains compatible with the Video Editor. | Reuse with a Motion Studio-specific application identifier and log directory. |
 | creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver, including actual timestamp-seek outcomes and durations. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker, uses sequential decoding for short forward gaps during playback, and reports seek/decode path metrics. Interactive seeking and export retain timestamp-based decoding. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
 | creative-suite::video-encoding | Qt- and project-independent FFmpeg API for RGBA video encoding, optional interleaved stereo audio input, container/codec capability discovery, and atomic file publication. It shares the RGBA frame type but owns no composition, timeline, or UI. | Motion Studio schedules and renders immutable document snapshots, then uses the shared encoder for video-only output. The Video Editor uses the same encoding and discovery implementation while retaining timeline assembly, audio rendering, render queue, and application settings. |
@@ -345,6 +345,6 @@ linking Video Editor application types or targets. Layer insertion, timing,
 transforms, preview, and export behavior
 remain provisional until validated on Windows, macOS, and Linux and covered by
 Motion Studio consumer regressions. Manual Windows interaction validation is
-still pending; export-specific steps are in [ROADMAP.md](ROADMAP.md).
+still pending; export-specific steps are in [ROADMAP.md](../ROADMAP.md).
 The `.motion` extension and current C++/Qt 6 implementation remain provisional;
 the final application technology is not selected.
