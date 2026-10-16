@@ -2,6 +2,7 @@
 #include <creative_suite/composition/gpu_frame_compositor.h>
 #include <QString>
 #include <array>
+#include <optional>
 class QWindow;
 
 namespace creative_suite::composition {
@@ -17,6 +18,14 @@ class VulkanDevice final : public std::enable_shared_from_this<VulkanDevice> {
 public:
     // Create/destroy on the GUI thread before/after all workers and windows.
     static std::shared_ptr<VulkanDevice> create(std::string& cause);
+    // Opt-in research configuration. Normal editor creation keeps these defaults.
+    struct CreateOptions {
+        bool experimental_native_export = false;
+        std::optional<std::array<std::uint8_t, 8>> adapter_luid;
+        std::uint64_t known_byte_limit = 256ULL * 1024 * 1024;
+        std::uint64_t external_reserved_bytes = 0;
+    };
+    static std::shared_ptr<VulkanDevice> create(std::string& cause, const CreateOptions&);
     ~VulkanDevice();
     QString name() const;
     bool supportsPreciseRotation() const noexcept;
@@ -61,6 +70,7 @@ private:
     VulkanDevice();
     std::unique_ptr<Impl> impl_;
     friend class VulkanFrameCompositor;
+    friend class VulkanNativeExportBridge;
 };
 void setSessionVulkanDevice(const std::shared_ptr<VulkanDevice>&);
 std::shared_ptr<VulkanDevice> sessionVulkanDevice();

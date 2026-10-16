@@ -279,3 +279,20 @@ compares an instrumented baseline with the scheduler using 30 warm-up frames,
 stable heavy latency, resource costs and export preservation without assuming
 Vulkan superiority. Direct D3D11VA/NVENC interop, paced human audiovisual editing,
 other GPU vendors and native Linux/macOS acceptance remain subsequent gates.
+
+## Vulkan to NVENC research (2026-10-16)
+
+An opt-in [standalone prototype](../../../prototypes/vulkan-nvenc/README.md) now
+tests Vulkan -> NT-shared BGRA -> D3D11 GPU copy -> the existing NVENC encoder.
+It uses LUID matching, dedicated external allocations, keyed mutexes, external
+image ownership transfers and bounded FIFO tickets. The unchanged encoder pool
+and bridge share a 256 MiB known reservation cap with Vulkan; 4K reduces to one
+flight. The [native Windows report](../performance/VULKAN_NVENC_PROTOTYPE_WINDOWS_2026-10-16.md)
+records pixel/codec/lifetime checks and native-versus-RGBA measurements.
+
+This research eliminates full output readback/CPU encoder input in the measured
+native path but still performs GPU normalization/blit/copy and source uploads.
+The Video Editor export remains on RGBA; Automatic remains OpenGL. Controlled
+editor integration is a separate decision and must retain RGBA recovery and
+qualify codec parameters/devices. D3D11VA input import, Linux/macOS interop and
+other driver acceptance are still pending, not implied by this prototype.

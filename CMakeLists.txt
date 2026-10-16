@@ -64,3 +64,9 @@ if(BUILD_CREATIVE_HUB)
     add_subdirectory(apps/hub)
 endif()
 
+
+# Research executable only; ordinary applications never enable native Vulkan export.
+option(BUILD_VULKAN_NVENC_PROTOTYPE "Build the experimental Vulkan/D3D11/NVENC probe" OFF)
+if(BUILD_VULKAN_NVENC_PROTOTYPE)
+    add_subdirectory(prototypes/vulkan-nvenc)
+endif()

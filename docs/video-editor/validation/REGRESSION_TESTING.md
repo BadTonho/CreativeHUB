@@ -1,5 +1,42 @@
 # Regression Testing
 
+## Separate Vulkan / NVENC prototype
+
+**Automated coverage present:** [prototype self-test](../../../prototypes/vulkan-nvenc/main.cpp)
+registered as `creative-suite-vulkan-nvenc-prototype` in
+[its optional CMake target](../../../prototypes/vulkan-nvenc/CMakeLists.txt).
+The option is OFF by default; a skipped unsupported-host test does not establish
+native acceptance. The [Windows report](../performance/VULKAN_NVENC_PROTOTYPE_WINDOWS_2026-10-16.md)
+records required-hardware execution and reproducible comparison commands.
+
+| Behavior | Verification |
+| --- | --- |
+| Explicit opt-in, unmatched LUID, unavailable/rejected format, invalid reservation limits | Self-test: ordinary device refuses the bridge, impossible adapter identity fails creation, controlled format rejection, zero/excess/exhausted budgets |
+| Two simultaneous frames, saturation, FIFO, invalid/stale tickets, reuse, one-slot capacity | Self-test submits retained source/destinations, rejects a third and out-of-order collection, retires/reuses tickets, reduces to one under a known-byte limit |
+| Cancellation and shutdown with consumers pending | Cancel submission/collection, collect after cancelled wait, discard and destroy while pending; injected export cancellation/failure preserves an existing destination |
+| BGRA channels, orientation, alpha, transforms, opacity, ordered effects | Explicit unmeasured native readbacks against CPU using existing RGB tolerance 2 and exact alpha; composition plus encoder checks use generated fixtures |
+| Real H.264 and HEVC NVENC output | Decode/dimension/count/marker checks, packet PTS in 1/30 units and existing lossy mean RGB tolerance 12; codec errors remain fatal |
+| No full CPU output transfer in measured native mode, bounded reservations | Benchmark asserts zero pipeline readback/explicit encoder upload, excludes oracle downloads, accounts source uploads and both GPU copies, enforces combined known bytes <= 256 MiB |
+
+Run the required native self-test with `CREATIVE_SUITE_VULKAN_VALIDATION=1`,
+`VK_LAYER_VALIDATE_SYNC=1` and `--require-native` on Windows/NVIDIA. Re-run shared
+Vulkan/OpenGL, media encoder, Video timeline/preview/export, Motion composition/
+texture/export, Image canvas and interchange consumers after changes to this
+shared boundary. Also build `creative-suite-composition-opengl` with
+`ENABLE_VULKAN_RENDERER=OFF` and `BUILD_VIDEO_MEDIA_LIBRARY=OFF`. Keep performance
+runs separate from validation layers and concurrent builds/tests.
+
+Windows Release verification (2026-10-16): 27/27 scoped CTest entries and eight
+required native executions passed without skips; synchronization validation
+reported no VUID/Sync hazards. Both available NVENC codecs passed the prototype
+self-test. The Vulkan/media-disabled shared build passed. See the report for
+limits, all benchmark trials, executable paths and modification times.
+
+Manual future integration checks (pending, not implemented here): editor job
+selection/recovery, real-project audio, seek/workspace interaction during native
+export and decoder-surface imports. Other Windows adapters/drivers and Linux/macOS
+interop acceptance remain pending. This prototype does not expose a UI control.
+
 ## Fusion Gaussian Blur
 
 | Behavior | Automated verification |

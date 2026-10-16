@@ -233,3 +233,22 @@ dropped unsent/stale traces; benchmark output includes them alongside device
 submissions, accounted reservations and explicit transfers.
 See [preview scheduling measurements](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
 for the instrumented baseline, native checks and limits of the results.
+
+## Provisional Windows native export probe
+
+The separate [Vulkan/NVENC prototype](../../../prototypes/vulkan-nvenc/README.md)
+opts into external-memory/keyed-mutex creation through `VulkanDevice::CreateOptions`.
+It selects the encoder pool's LUID, verifies BGRA import and blit support, and
+imports dedicated D3D11 NT-handle allocations. `vulkan_native_export.h` exposes
+worker-owned prepare/submit/collect/discard operations with opaque FIFO tickets;
+Windows handles remain private. `Complete` from submit means queued work; collect
+returns a native surface only after its Vulkan fence, keyed-mutex handoff and
+D3D11 copy event complete. Busy/cancellation are control flow, not technical errors.
+
+The bridge retains each source/destination, follows EXTERNAL ownership and GENERAL
+layout handoff, and counts the shared backing once. Its device capacity subtracts
+the existing output-pool estimate from 256 MiB, reducing to one flight when needed.
+Normal device creation and the app's RGBA path remain compatible. Native decode
+import and editor integration are deferred. The [Windows record](../performance/VULKAN_NVENC_PROTOTYPE_WINDOWS_2026-10-16.md)
+separates measured throughput, submission time, completed delivery, logical GPU
+copies and explicit CPU transfers; it does not establish cross-platform acceptance.

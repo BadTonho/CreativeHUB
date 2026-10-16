@@ -1,8 +1,20 @@
+#if defined(_WIN32) && defined(CS_HAS_VULKAN) && defined(CS_NATIVE_VIDEO_INTEROP)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#define VK_USE_PLATFORM_WIN32_KHR
+#include <windows.h>
+#include <d3d11.h>
+#include <dxgi1_2.h>
+#include <wrl/client.h>
+#define CS_VULKAN_NATIVE_EXPORT 1
+#endif
 #ifdef CS_HAS_VULKAN
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #endif
 #include <creative_suite/composition/vulkan_frame_compositor.h>
+#include <creative_suite/composition/vulkan_native_export.h>
 #include <creative_suite/media/native_video_frame.h>
 #include <creative_suite/diagnostics/logger.h>
 #include <QWindow>
@@ -12,6 +24,7 @@
 #include <QCoreApplication>
 #if !QT_CONFIG(vulkan)
 #undef CS_HAS_VULKAN
+#undef CS_VULKAN_NATIVE_EXPORT
 #endif
 #include <algorithm>
 #include <array>
@@ -123,6 +136,11 @@ PFN_vkResetFences vkResetFences = nullptr;
 PFN_vkUnmapMemory vkUnmapMemory = nullptr;
 PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets = nullptr;
 PFN_vkWaitForFences vkWaitForFences = nullptr;
+PFN_vkGetPhysicalDeviceProperties2 vkGetPhysicalDeviceProperties2 = nullptr;
+PFN_vkEnumerateDeviceExtensionProperties vkEnumerateDeviceExtensionProperties = nullptr;
+PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
+PFN_vkGetPhysicalDeviceFormatProperties vkGetPhysicalDeviceFormatProperties = nullptr;
+PFN_vkGetPhysicalDeviceImageFormatProperties2 vkGetPhysicalDeviceImageFormatProperties2 = nullptr;
 void loadVulkanApi() {
     static QLibrary loader;
     static std::once_flag once;
@@ -138,6 +156,16 @@ void loadVulkanApi() {
 #endif
             loader.setLoadHints(QLibrary::PreventUnloadHint);
             if(!loader.load())throw Failure("The Vulkan runtime loader is unavailable: " + loader.errorString().toStdString());
+        vkGetPhysicalDeviceProperties2=reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(loader.resolve("vkGetPhysicalDeviceProperties2"));
+        if(!vkGetPhysicalDeviceProperties2)throw Failure("The Vulkan loader lacks vkGetPhysicalDeviceProperties2.");
+        vkEnumerateDeviceExtensionProperties=reinterpret_cast<PFN_vkEnumerateDeviceExtensionProperties>(loader.resolve("vkEnumerateDeviceExtensionProperties"));
+        if(!vkEnumerateDeviceExtensionProperties)throw Failure("The Vulkan loader lacks vkEnumerateDeviceExtensionProperties.");
+        vkGetDeviceProcAddr=reinterpret_cast<PFN_vkGetDeviceProcAddr>(loader.resolve("vkGetDeviceProcAddr"));
+        if(!vkGetDeviceProcAddr)throw Failure("The Vulkan loader lacks vkGetDeviceProcAddr.");
+        vkGetPhysicalDeviceFormatProperties=reinterpret_cast<PFN_vkGetPhysicalDeviceFormatProperties>(loader.resolve("vkGetPhysicalDeviceFormatProperties"));
+        if(!vkGetPhysicalDeviceFormatProperties)throw Failure("The Vulkan loader lacks vkGetPhysicalDeviceFormatProperties.");
+        vkGetPhysicalDeviceImageFormatProperties2=reinterpret_cast<PFN_vkGetPhysicalDeviceImageFormatProperties2>(loader.resolve("vkGetPhysicalDeviceImageFormatProperties2"));
+        if(!vkGetPhysicalDeviceImageFormatProperties2)throw Failure("The Vulkan loader lacks vkGetPhysicalDeviceImageFormatProperties2.");
         vkAcquireNextImageKHR = reinterpret_cast<PFN_vkAcquireNextImageKHR>(loader.resolve("vkAcquireNextImageKHR"));
         if(!vkAcquireNextImageKHR)throw Failure("The Vulkan loader lacks vkAcquireNextImageKHR.");
         vkAllocateCommandBuffers = reinterpret_cast<PFN_vkAllocateCommandBuffers>(loader.resolve("vkAllocateCommandBuffers"));
@@ -316,6 +344,8 @@ struct VulkanDevice::Impl {
     std::vector<std::unique_ptr<ImageAllocation>> pool;
     std::uint64_t bytes=0,peak=0;
     static constexpr std::uint64_t limit=256ULL*1024*1024;
+    std::uint64_t capacity=limit,external_reserved=0;
+    bool native_export=false;
     struct Completion { std::atomic_bool done{false}; };
     struct Context {
         VkDevice device=VK_NULL_HANDLE;
@@ -450,13 +480,13 @@ struct VulkanDevice::Impl {
     VkCommandBuffer begin() {auto* c=current();if(!c)throw Failure("Missing Vulkan recording context.");return c->command;}
     // Individual operations append to the current batch. Only finish() submits.
     void submit(VkCommandBuffer) {}
-    std::shared_ptr<Completion> finish(Context* c,VkSemaphore wait_semaphore=VK_NULL_HANDLE,VkSemaphore signal=VK_NULL_HANDLE) {
+    std::shared_ptr<Completion> finish(Context* c,VkSemaphore wait_semaphore=VK_NULL_HANDLE,VkSemaphore signal=VK_NULL_HANDLE,const void* submit_extension=nullptr) {
         if(!c)return {};std::unique_lock lock(mutex);
         if(!c->recording)return c->completion;
         check(vkEndCommandBuffer(c->command),"End Vulkan command batch.");
         check(vkResetFences(device,1,&c->fence),"Reset Vulkan context fence.");
         VkPipelineStageFlags stage=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        VkSubmitInfo info{VK_STRUCTURE_TYPE_SUBMIT_INFO};info.commandBufferCount=1;info.pCommandBuffers=&c->command;
+        VkSubmitInfo info{VK_STRUCTURE_TYPE_SUBMIT_INFO};info.pNext=submit_extension;info.commandBufferCount=1;info.pCommandBuffers=&c->command;
         if(wait_semaphore){info.waitSemaphoreCount=1;info.pWaitSemaphores=&wait_semaphore;info.pWaitDstStageMask=&stage;}
         if(signal){info.signalSemaphoreCount=1;info.pSignalSemaphores=&signal;}
         const auto result=vkQueueSubmit(queue,1,&info,c->fence);
@@ -508,7 +538,7 @@ struct VulkanDevice::Impl {
             check(vkCreateImage(device,&info,nullptr,&allocation->image),"Create Vulkan image.");
             VkMemoryRequirements req{};vkGetImageMemoryRequirements(device,allocation->image,&req);
             trim(req.size);
-            if(bytes+req.size>limit){vkDestroyImage(device,allocation->image,nullptr);throw Failure("The bounded Vulkan image pool is occupied.",0,Status::Busy);}
+            if(bytes+req.size>capacity){vkDestroyImage(device,allocation->image,nullptr);throw Failure("The bounded Vulkan image pool is occupied.",0,Status::Busy);}
             VkMemoryAllocateInfo memory{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};memory.allocationSize=req.size;
             memory.memoryTypeIndex=memoryType(req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
             auto result=vkAllocateMemory(device,&memory,nullptr,&allocation->memory);
@@ -537,7 +567,7 @@ struct VulkanDevice::Impl {
             try {
                 VkMemoryRequirements req{};vkGetBufferMemoryRequirements(p.device,buffer,&req);
                 p.trim(req.size);
-                if(p.bytes+req.size>limit)throw Failure("The bounded Vulkan transfer budget is occupied.",0,Status::Busy);
+                if(p.bytes+req.size>p.capacity)throw Failure("The bounded Vulkan transfer budget is occupied.",0,Status::Busy);
                 VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};allocation.allocationSize=req.size;
                 allocation.memoryTypeIndex=p.memoryType(req.memoryTypeBits,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
                 // Write-combined coherent heaps are suitable for uploads, but CPU
@@ -555,8 +585,8 @@ struct VulkanDevice::Impl {
         ~Buffer(){p.bytes-=reserved;if(data)vkUnmapMemory(p.device,memory);vkDestroyBuffer(p.device,buffer,nullptr);vkFreeMemory(p.device,memory,nullptr);}
     };
     void trim(VkDeviceSize needed) {
-        while(bytes+needed>limit && !buffer_pool.empty())buffer_pool.pop_back();
-        while(bytes+needed>limit && !pool.empty()){destroy(*pool.back());pool.pop_back();}
+        while(bytes+needed>capacity && !buffer_pool.empty())buffer_pool.pop_back();
+        while(bytes+needed>capacity && !pool.empty()){destroy(*pool.back());pool.pop_back();}
     }
     std::shared_ptr<Buffer> buffer(VkDeviceSize size,bool cpu_read=false) {
         auto found=std::find_if(buffer_pool.begin(),buffer_pool.end(),[&](const auto& b){return b->capacity==size && b->readable==cpu_read;});
@@ -616,10 +646,10 @@ struct VulkanDevice::Impl {
         vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,1,&set,0,nullptr);
         if(precise)vkCmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(parameters),&parameters);
         else {
-            struct Small {std::array<int,4> control;std::array<float,4> geometry,rotation,color;} small;
-            small.control=parameters.control;small.color=parameters.color;
-            for(unsigned i=0;i<4;++i){small.geometry[i]=float(parameters.geometry[i]);small.rotation[i]=float(parameters.rotation[i]);}
-            vkCmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(small),&small);
+            struct Small {std::array<int,4> control;std::array<float,4> geometry,rotation,color;} compact_parameters;
+            compact_parameters.control=parameters.control;compact_parameters.color=parameters.color;
+            for(unsigned i=0;i<4;++i){compact_parameters.geometry[i]=float(parameters.geometry[i]);compact_parameters.rotation[i]=float(parameters.rotation[i]);}
+            vkCmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(compact_parameters),&compact_parameters);
         }
         vkCmdDispatch(cmd,(output->width+15)/16,(output->height+15)/16,1);
         barrier(cmd,allocation(output).image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
@@ -644,12 +674,19 @@ VulkanDevice::~VulkanDevice(){
     }catch(...){}
 #endif
 }
-std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause) {
+std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause) {return create(cause,CreateOptions{});}
+std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause,const CreateOptions& options) {
     if(qEnvironmentVariableIntValue("CREATIVE_SUITE_DISABLE_VULKAN")==1){cause="Vulkan was disabled by the diagnostic environment setting.";return {};}
 #ifdef CS_HAS_VULKAN
     try {
+        if(!options.known_byte_limit || options.known_byte_limit>Impl::limit || options.external_reserved_bytes>=options.known_byte_limit)
+            throw Failure("Invalid bounded Vulkan/native reservation.",0,Status::Unsupported);
+#ifndef CS_VULKAN_NATIVE_EXPORT
+        if(options.experimental_native_export || options.adapter_luid)throw Failure("Native Vulkan export is unavailable in this build.",0,Status::Unsupported);
+#endif
         loadVulkanApi();
         auto device=std::shared_ptr<VulkanDevice>(new VulkanDevice);auto& p=*device->impl_;
+        p.capacity=options.known_byte_limit-options.external_reserved_bytes;p.external_reserved=options.external_reserved_bytes;
         p.instance.setApiVersion(QVersionNumber(1,1));
         if(qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_VALIDATION")==1)
             p.instance.setLayers({"VK_LAYER_KHRONOS_validation"});
@@ -657,6 +694,12 @@ std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause) {
         uint32_t count=0;check(vkEnumeratePhysicalDevices(p.instance.vkInstance(),&count,nullptr),"Enumerate Vulkan devices.");
         std::vector<VkPhysicalDevice> devices(count);check(vkEnumeratePhysicalDevices(p.instance.vkInstance(),&count,devices.data()),"Enumerate Vulkan devices.");
         for(auto candidate:devices){
+            if(options.adapter_luid){
+                VkPhysicalDeviceIDProperties id{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
+                VkPhysicalDeviceProperties2 properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};properties.pNext=&id;
+                vkGetPhysicalDeviceProperties2(candidate,&properties);
+                if(!id.deviceLUIDValid || std::memcmp(id.deviceLUID,options.adapter_luid->data(),VK_LUID_SIZE))continue;
+            }
             uint32_t families=0;vkGetPhysicalDeviceQueueFamilyProperties(candidate,&families,nullptr);
             std::vector<VkQueueFamilyProperties> queues(families);vkGetPhysicalDeviceQueueFamilyProperties(candidate,&families,queues.data());
             for(uint32_t i=0;i<families;++i)if((queues[i].queueFlags&(VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT))==(VK_QUEUE_GRAPHICS_BIT|VK_QUEUE_COMPUTE_BIT)){
@@ -664,15 +707,28 @@ std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause) {
             }
             if(p.physical)break;
         }
-        if(!p.physical)throw Failure("No Vulkan graphics/compute device is available.",0,Status::Unsupported);
+        if(!p.physical)throw Failure("No matching Vulkan graphics/compute adapter is available.",0,Status::Unsupported);
         vkGetPhysicalDeviceProperties(p.physical,&p.properties);vkGetPhysicalDeviceMemoryProperties(p.physical,&p.memory_properties);
         VkPhysicalDeviceFeatures available{};vkGetPhysicalDeviceFeatures(p.physical,&available);
         p.precise=available.shaderFloat64;VkPhysicalDeviceFeatures enabled{};enabled.shaderFloat64=p.precise;
         const float priority=1;VkDeviceQueueCreateInfo queue{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
         queue.queueFamilyIndex=p.family;queue.queueCount=1;queue.pQueuePriorities=&priority;
-        const char* extension=VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+        std::vector<const char*> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+#ifdef CS_VULKAN_NATIVE_EXPORT
+        if(options.experimental_native_export){
+            uint32_t extension_count=0;check(vkEnumerateDeviceExtensionProperties(p.physical,nullptr,&extension_count,nullptr),"Enumerate Vulkan device extensions.");
+            std::vector<VkExtensionProperties> device_extensions(extension_count);
+            check(vkEnumerateDeviceExtensionProperties(p.physical,nullptr,&extension_count,device_extensions.data()),"Enumerate Vulkan device extensions.");
+            for(const auto* required:{VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME}){
+                if(std::none_of(device_extensions.begin(),device_extensions.end(),[&](const auto& value){return std::strcmp(value.extensionName,required)==0;}))
+                    throw Failure(std::string("Missing Vulkan native-export extension: ")+required,0,Status::Unsupported);
+                extensions.push_back(required);
+            }
+            p.native_export=true;
+        }
+#endif
         VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};info.queueCreateInfoCount=1;info.pQueueCreateInfos=&queue;
-        info.enabledExtensionCount=1;info.ppEnabledExtensionNames=&extension;info.pEnabledFeatures=&enabled;
+        info.enabledExtensionCount=uint32_t(extensions.size());info.ppEnabledExtensionNames=extensions.data();info.pEnabledFeatures=&enabled;
         check(vkCreateDevice(p.physical,&info,nullptr,&p.device),"Create Vulkan device.");
         vkGetDeviceQueue(p.device,p.family,0,&p.queue);
         std::array<VkDescriptorSetLayoutBinding,5> bindings{};
@@ -694,7 +750,7 @@ std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause) {
     }catch(const Failure& error){cause=error.what();if(error.code)cause+=" (Vulkan error "+std::to_string(error.code)+")";return {};}
     catch(const std::exception& error){cause=error.what();return {};}
 #else
-    cause="This build does not include Vulkan support.";return {};
+    Q_UNUSED(options);cause="This build does not include Vulkan support.";return {};
 #endif
 }
 QString VulkanDevice::name() const {
@@ -1247,3 +1303,5 @@ VulkanDevice::CompletionStatus VulkanDevice::pollPresentation(const Presentation
 }
 
 }
+
+#include "vulkan_native_export.inc"

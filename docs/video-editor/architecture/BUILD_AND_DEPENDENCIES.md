@@ -144,3 +144,20 @@ loader and host shader tools. CI requests this feature on all three platforms.
 Shaders are compiled into generated build-tree headers; no shader compiler is
 required at runtime. The loader is loaded dynamically so OpenGL/CPU startup
 remains possible without Vulkan. See [dependencies and notices](../gpu/VULKAN_RENDERER.md).
+
+## Optional Vulkan / NVENC prototype
+
+`BUILD_VULKAN_NVENC_PROTOTYPE=ON` adds only the experimental executable under
+`build/prototypes/vulkan-nvenc/Release/`; it defaults to OFF. It reuses
+`creative-suite::composition-opengl`, the existing FFmpeg video encoder/native
+frame pool and Qt Gui, with no editor UI dependency or additional encoding SDK.
+Windows external-memory/keyed-mutex code is compiled only when both Vulkan and
+native video interop exist. Unsupported builds retain explicit unavailable stubs.
+The ordinary Vulkan factory does not enable native export extensions implicitly.
+
+This adds no third-party package or license obligation beyond the already tracked
+Qt, FFmpeg, Vulkan-Headers/glslang and Windows system APIs. No shader compiler is
+shipped. The existing native encoder pool flags and release rules are unchanged.
+Build the canonical Video Editor separately to check shared compatibility; never
+copy the research executable into an application output directory. See
+[build/run commands and ownership](../../../prototypes/vulkan-nvenc/README.md).
