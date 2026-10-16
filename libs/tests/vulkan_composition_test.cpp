@@ -113,26 +113,57 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
         require(asynchronous.collectAsyncReadback(replacement.ticket).frame.has_value(),"The replacement readback was lost.");
     }
     QWindow window;device->attachWindow(&window);window.resize(320,180);window.create();std::string cause;
-    require(device->present(&window,texture.frame,false,cause),cause);
+    auto presentation=device->presentFrame(&window,texture.frame,false);
+    require(presentation.status==VulkanDevice::PresentStatus::Submitted,presentation.cause);
+    require(device->presentFrame(nullptr,texture.frame,false).status==VulkanDevice::PresentStatus::Failed,
+        "An invalid presentation window was accepted.");
+    require(device->pollPresentation({},cause)==VulkanDevice::CompletionStatus::Failed && device->valid(),
+        "An invalid receipt was accepted or disabled a valid device.");
+    const auto receipt=presentation.receipt;
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+    while(device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Pending && std::chrono::steady_clock::now()<deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    require(device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Complete,cause);
+    const auto submissions=device->diagnostics().submissions;
+    for(int repeat=0;repeat<10;++repeat){
+        auto deferred=device->presentFrame(&window,texture.frame,false,{0,0,0,1},true);
+        require(deferred.status==VulkanDevice::PresentStatus::Deferred && deferred.deferral==VulkanDevice::PresentDeferral::AcquireBusy && deferred.cause.empty(),"Controlled acquisition did not defer.");
+    }
+    require(device->diagnostics().submissions==submissions,"Unavailable acquisition submitted empty GPU commands.");
+    auto recovered=device->presentFrame(&window,texture.frame,false);
+    require(recovered.status==VulkanDevice::PresentStatus::Submitted,recovered.cause);
+    require(device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Complete,"Context reuse invalidated an older receipt.");
     QSemaphore locked,resume;OpenGlTextureCompositionResult threaded;
     std::thread worker([&]{VulkanFrameCompositor compositor(device);int calls=0;
         threaded=compositor.composeTexture(61,47,{{&a}},[&]{if(++calls==3){locked.release();resume.acquire();}return false;});});
     const bool acquired=locked.tryAcquire(1,3000);
-    bool deferred=false,upload_deferred=false;
+    bool deferred=false,upload_deferred=false,receipt_independent=false;
     if(acquired){VulkanFrameCompositor gui_upload(device);
         upload_deferred=gui_upload.tryUpload(a).status==OpenGlCompositionStatus::Busy;
+        receipt_independent=device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Complete;
         cause="previous";deferred=!device->present(&window,texture.frame,false,cause) && cause.empty();}
     resume.release();worker.join();
-    require(acquired && deferred && upload_deferred && bool(threaded.frame),"GUI presentation did not defer while the render worker owned the device.");
+    require(acquired && deferred && upload_deferred && receipt_independent && bool(threaded.frame),"GUI presentation did not defer while the render worker owned the device.");
+    const auto unrelated_pending=device->diagnostics().pending;
+    require((unrelated_pending>0 || qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_SERIAL")==1) && device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Complete &&
+        device->diagnostics().pending==unrelated_pending,"Unrelated pending work affected this receipt or was globally drained.");
     window.resize(240,320);require(device->present(&window,texture.frame,true,cause),cause);device->releaseWindow(&window);
+    require(device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Complete,"Window retirement invalidated a completed receipt.");
     auto retained=texture.frame;{VulkanFrameCompositor temporary(device);auto f=temporary.composeTexture(9,7,{});retained=f.frame;}
     require(retained && retained->valid(),"A lease did not retain its device after compositor destruction.");
     {
         std::string reason;auto owned_device=VulkanDevice::create(reason);require(bool(owned_device),reason);
         std::weak_ptr<VulkanDevice> weak=owned_device;OpenGlTextureFramePtr lease;
         {VulkanFrameCompositor producer(owned_device);auto pending=producer.composeTexture(9,7,{});require(bool(pending.frame),pending.cause);lease=std::move(pending.frame);}
+        VulkanDevice::PresentationReceipt weak_receipt;
+        {
+            QWindow receipt_window;owned_device->attachWindow(&receipt_window);receipt_window.resize(80,60);receipt_window.create();
+            auto result=owned_device->presentFrame(&receipt_window,lease,false);
+            require(result.status==VulkanDevice::PresentStatus::Submitted,result.cause);weak_receipt=result.receipt;
+            owned_device->releaseWindow(&receipt_window);
+        }
         owned_device.reset();require(!weak.expired(),"A submitted lease did not retain its device.");
-        lease.reset();require(weak.expired(),"A pending submission formed a device ownership cycle.");
+        lease.reset();require(weak.expired(),"A submission or presentation receipt formed a device ownership cycle.");
     }
     std::cout<<"native_vulkan_composition=passed direct_readback_bytes="<<timings.readback_bytes<<" reserved_bytes="<<device->reservedBytes()<<"\n";
 }

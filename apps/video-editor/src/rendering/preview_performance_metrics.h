@@ -154,6 +154,8 @@ enum class PreviewFrameDeliveryStage : std::uint8_t {
     QtFrameSwapped,
     CpuPainted,
     GpuTextureAccepted,
+    VulkanPresentQueued,
+    VulkanGpuCompleted,
     Count,
 };
 
@@ -183,6 +185,9 @@ enum class PreviewFrameDeliveryTiming : std::uint8_t {
     WorkerToCpuPaint,
     PreviewToGpuTextureAcceptance,
     GpuTextureAcceptanceToDraw,
+    WorkerToVulkanQueued,
+    VulkanQueuedToCompleted,
+    WorkerToVulkanCompleted,
     Count,
 };
 

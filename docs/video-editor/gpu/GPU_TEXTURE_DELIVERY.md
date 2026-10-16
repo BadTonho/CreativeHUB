@@ -95,7 +95,7 @@ composition can still produce RGBA through the GPU readback path.
 
 ## Diagnostics and evidence
 
-Aggregate and slow-frame schemas are **9**; delivery schema is **3**. Metrics
+Aggregate and slow-frame schemas are **9**; delivery schema is **4**. Metrics
 distinguish texture/RGBA deliveries, producer fence submission, viewer wait submission,
 consumption fence submission, current/peak reserved pool bytes and occupancy,
 `texture_pool_busy_drops` during playback, `texture_pool_busy_retries` while paused,
@@ -111,3 +111,7 @@ manual/platform checks](GPU_COMPOSITION_RESULTS.md). Successful context creation
 a skipped graphical test does not approve a driver. Motion Studio and Image Editor
 adoption, GPU effects and decode/encode remain later stages. Offline export now
 uses the shared RGBA path with isolated per-job resources; see [GPU_EXPORT.md](GPU_EXPORT.md).
+
+Vulkan adds separate queued/completed receipt stages in delivery schema 4; existing
+OpenGL stages retain their IDs and semantics. Its Viewer mailbox, nonblocking
+completion timer and lifecycle are documented in [the Vulkan contract](VULKAN_RENDERER.md).

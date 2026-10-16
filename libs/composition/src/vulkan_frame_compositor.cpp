@@ -316,7 +316,7 @@ struct VulkanDevice::Impl {
     std::vector<std::unique_ptr<ImageAllocation>> pool;
     std::uint64_t bytes=0,peak=0;
     static constexpr std::uint64_t limit=256ULL*1024*1024;
-    struct Completion { bool done=false; };
+    struct Completion { std::atomic_bool done{false}; };
     struct Context {
         VkDevice device=VK_NULL_HANDLE;
         ~Context(){
@@ -464,6 +464,15 @@ struct VulkanDevice::Impl {
         if(result!=VK_SUCCESS){lost=true;check(result,"Submit Vulkan command batch.");}
         c->pending=true;++counters.submissions;++counters.pending;counters.peak_pending=std::max(counters.peak_pending,counters.pending);
         auto completion=c->completion;if(serial)this->wait(*c,lock);return completion;
+    }
+    // Only valid before recording image work or acquiring a signaled semaphore.
+    // Reset the unsubmitted reservation; no fence or queue submission is needed.
+    void abandonEmpty(Context* c) {
+        if(!c || !c->recording)return;
+        if(!c->resources.empty() || !c->images.empty() || c->sets)
+            throw Failure("Cannot abandon a nonempty Vulkan command context.");
+        check(vkResetCommandPool(device,c->pool,0),"Abandon Vulkan presentation reservation.");
+        recording.erase(c->owner);c->recording=false;c->completion->done=true;
     }
     void barrier(VkCommandBuffer cmd,VkImage image,VkImageLayout old_layout,VkImageLayout new_layout,
         VkAccessFlags source=VK_ACCESS_MEMORY_WRITE_BIT,VkAccessFlags target=VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT) {
@@ -1097,15 +1106,31 @@ void VulkanDevice::releaseWindow(QWindow* window) noexcept {
     Q_UNUSED(window);
 #endif
 }
-bool VulkanDevice::present(QWindow* window,const OpenGlTextureFramePtr& frame,bool grayscale,std::string& cause,
-    std::array<float, 4> surround) {
+VulkanDevice::PresentationResult VulkanDevice::presentFrame(QWindow* window,const OpenGlTextureFramePtr& frame,bool grayscale,
+    std::array<float, 4> surround,bool defer_acquisition_for_testing) {
 #ifdef CS_HAS_VULKAN
+    std::string cause;
     Impl::Context* context=nullptr;
+    VkSemaphore acquired_wait=VK_NULL_HANDLE;
+    const auto retire_failed_acquisition=[&]{
+        std::lock_guard lock(impl_->mutex);
+        if(context){
+            if(acquired_wait)impl_->finish(context,acquired_wait);
+            else impl_->abandonEmpty(context);
+            context=nullptr;
+        }
+        // An acquired image must be released by destroying this failed swapchain
+        // after its semaphore consumer, even if recording failed before present.
+        if(acquired_wait){
+            check(vkDeviceWaitIdle(impl_->device),"Retire failed Vulkan presentation.");
+            auto found=impl_->windows.find(window);if(found!=impl_->windows.end())impl_->destroy(found->second);
+        }
+    };
     try {
-        if(!valid() || !frame || !frame->vulkanImage() || frame->vulkanImage()->device.get()!=this)
+        if(!window || !valid() || !frame || !frame->vulkanImage() || frame->vulkanImage()->device.get()!=this)
             throw Failure("The Vulkan presentation image or device is unavailable.");
         auto& p=*impl_;std::unique_lock lock(p.mutex,std::try_to_lock);
-        if(!lock.owns_lock()){cause.clear();return false;}
+        if(!lock.owns_lock()){return {PresentStatus::Deferred,PresentDeferral::DeviceBusy};}
         auto& swap=p.windows[window];const auto surface=QVulkanInstance::surfaceForWindow(window);
         if(!surface)throw Failure("Cannot create the Vulkan window surface.");
         VkBool32 supported=VK_FALSE;check(vkGetPhysicalDeviceSurfaceSupportKHR(p.physical,p.family,surface,&supported),"Check Vulkan presentation support.");
@@ -1115,7 +1140,7 @@ bool VulkanDevice::present(QWindow* window,const OpenGlTextureFramePtr& frame,bo
         if(size.width==UINT32_MAX){size.width=uint32_t(window->width()*window->devicePixelRatio());size.height=uint32_t(window->height()*window->devicePixelRatio());
             size.width=std::clamp(size.width,capabilities.minImageExtent.width,capabilities.maxImageExtent.width);
             size.height=std::clamp(size.height,capabilities.minImageExtent.height,capabilities.maxImageExtent.height);}
-        if(!size.width || !size.height)return true;
+        if(!size.width || !size.height)return {PresentStatus::Deferred,PresentDeferral::ZeroExtent};
         if(!swap.handle || swap.size.width!=size.width || swap.size.height!=size.height || swap.surface!=surface){
             check(vkDeviceWaitIdle(p.device),"Wait before Vulkan resize.");p.destroy(swap);swap.surface=surface;swap.size=size;
             if(!(capabilities.supportedUsageFlags&VK_IMAGE_USAGE_TRANSFER_DST_BIT))throw Failure("The Vulkan surface cannot receive transfer images.");
@@ -1140,12 +1165,13 @@ bool VulkanDevice::present(QWindow* window,const OpenGlTextureFramePtr& frame,bo
             for(auto& value:swap.complete)check(vkCreateSemaphore(p.device,&semaphore,nullptr,&value),"Create Vulkan present semaphore.");
         }
         p.reap();const auto acquire_slot=swap.next%2;
-        if(swap.acquired[acquire_slot] && !swap.acquired[acquire_slot]->done){cause.clear();return false;}
-        context=p.start(true);if(!context){cause.clear();return false;}
-        uint32_t index=0;const auto acquired=vkAcquireNextImageKHR(p.device,swap.handle,0,swap.acquire[acquire_slot],VK_NULL_HANDLE,&index);
-        if(acquired==VK_NOT_READY || acquired==VK_TIMEOUT){p.finish(context);context=nullptr;cause.clear();return false;}
-        if(acquired==VK_ERROR_OUT_OF_DATE_KHR){p.finish(context);context=nullptr;check(vkDeviceWaitIdle(p.device),"Wait before Vulkan surface recreation.");p.destroy(swap);cause.clear();return false;}
+        if(swap.acquired[acquire_slot] && !swap.acquired[acquire_slot]->done){return {PresentStatus::Deferred,PresentDeferral::ContextBusy};}
+        context=p.start(true);if(!context){return {PresentStatus::Deferred,PresentDeferral::ContextBusy};}
+        uint32_t index=0;const auto acquired=defer_acquisition_for_testing ? VK_NOT_READY : vkAcquireNextImageKHR(p.device,swap.handle,0,swap.acquire[acquire_slot],VK_NULL_HANDLE,&index);
+        if(acquired==VK_NOT_READY || acquired==VK_TIMEOUT){p.abandonEmpty(context);context=nullptr;return {PresentStatus::Deferred,PresentDeferral::AcquireBusy};}
+        if(acquired==VK_ERROR_OUT_OF_DATE_KHR){p.abandonEmpty(context);context=nullptr;check(vkDeviceWaitIdle(p.device),"Wait before Vulkan surface recreation.");p.destroy(swap);return {PresentStatus::Deferred,PresentDeferral::Recreate};}
         if(acquired!=VK_SUBOPTIMAL_KHR)check(acquired,"Acquire Vulkan presentation image.");
+        acquired_wait=swap.acquire[acquire_slot];
         auto bg=frame->vulkanImage();auto scratch=p.image(shared_from_this(),bg->width,bg->height);
         auto display=p.image(shared_from_this(),bg->width,bg->height,VK_FORMAT_R8G8B8A8_UNORM);
         Parameters params;params.control={9,0,0,int(grayscale)};p.dispatch(bg,{},{},scratch,params,display);
@@ -1168,19 +1194,56 @@ bool VulkanDevice::present(QWindow* window,const OpenGlTextureFramePtr& frame,bo
         present.swapchainCount=1;present.pSwapchains=&swap.handle;present.pImageIndices=&index;
         p.instance.presentAboutToBeQueued(window);const auto result=vkQueuePresentKHR(p.queue,&present);p.instance.presentQueued(window);
         if(p.serial)check(vkQueueWaitIdle(p.queue),"Wait for serial Vulkan presentation.");
+        PresentationReceipt receipt;receipt.owner_=weak_from_this();receipt.token_=swap.acquired[acquire_slot];
         if(result==VK_ERROR_OUT_OF_DATE_KHR || result==VK_SUBOPTIMAL_KHR){check(vkDeviceWaitIdle(p.device),"Wait before Vulkan surface recreation.");p.destroy(swap);}
         else check(result,"Present Vulkan image.");
-        return true;
+        return {PresentStatus::Submitted,PresentDeferral::None,std::move(receipt)};
     }catch(const Failure& error){
-        if(context)try{impl_->finish(context);}catch(...){impl_->lost=true;}
+        try{retire_failed_acquisition();}catch(...){impl_->lost=true;}
+        if(error.status==Status::Busy && !impl_->lost)return {PresentStatus::Deferred,PresentDeferral::ContextBusy};
         cause=error.what();if(error.code)cause+=" (Vulkan error "+std::to_string(error.code)+")";
         if(error.code==VK_ERROR_DEVICE_LOST)impl_->lost=true;
-        return false;}
+        return {PresentStatus::Failed,PresentDeferral::None,{},std::move(cause)};}
     catch(const std::exception& error){
-        if(context)try{impl_->finish(context);}catch(...){impl_->lost=true;}
-        cause=error.what();return false;}
+        try{retire_failed_acquisition();}catch(...){impl_->lost=true;}
+        cause=error.what();return {PresentStatus::Failed,PresentDeferral::None,{},std::move(cause)};}
 #else
-    Q_UNUSED(window);Q_UNUSED(frame);Q_UNUSED(grayscale);Q_UNUSED(surround);cause="Vulkan was not compiled into this build.";return false;
+    Q_UNUSED(window);Q_UNUSED(frame);Q_UNUSED(grayscale);Q_UNUSED(surround);Q_UNUSED(defer_acquisition_for_testing);return {PresentStatus::Failed,PresentDeferral::None,{},"Vulkan was not compiled into this build."};
 #endif
 }
+bool VulkanDevice::present(QWindow* window,const OpenGlTextureFramePtr& frame,bool grayscale,
+    std::string& cause,std::array<float,4> surround) {
+    auto result=presentFrame(window,frame,grayscale,surround);cause=std::move(result.cause);
+    return result.status==PresentStatus::Submitted;
+}
+VulkanDevice::CompletionStatus VulkanDevice::pollPresentation(const PresentationReceipt& receipt,std::string& cause) noexcept {
+    cause.clear();
+#ifdef CS_HAS_VULKAN
+    if(receipt.owner_.lock().get()!=this || !receipt.token_){cause="Invalid Vulkan presentation receipt.";return CompletionStatus::Failed;}
+    const auto token=std::static_pointer_cast<Impl::Completion>(receipt.token_);
+    if(token->done.load())return CompletionStatus::Complete;
+    try {
+        std::unique_lock lock(impl_->mutex,std::try_to_lock);
+        if(!lock.owns_lock())return CompletionStatus::Pending;
+        // Do not reap unrelated work to decide whether this frame completed.
+        if(token->done)return CompletionStatus::Complete;
+        if(impl_->lost)throw Failure("The Vulkan device was lost.");
+        for(auto& context:impl_->contexts)if(context->completion==token && context->pending){
+            const auto status=vkGetFenceStatus(impl_->device,context->fence);
+            if(status==VK_NOT_READY)return CompletionStatus::Pending;
+            check(status,"Poll Vulkan presentation completion.");
+            context->pending=false;token->done=true;--impl_->counters.pending;
+            context->resources.clear();context->images.clear();return CompletionStatus::Complete;
+        }
+        throw Failure("The Vulkan presentation completion is unavailable.");
+    }catch(const Failure& error){
+        impl_->lost=true;cause=error.what();
+        if(error.code)cause+=" (Vulkan error "+std::to_string(error.code)+")";
+        return CompletionStatus::Failed;
+    }catch(const std::exception& error){impl_->lost=true;cause=error.what();return CompletionStatus::Failed;}
+#else
+    Q_UNUSED(receipt);cause="Vulkan was not compiled into this build.";return CompletionStatus::Failed;
+#endif
+}
+
 }

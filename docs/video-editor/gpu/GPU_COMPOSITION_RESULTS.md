@@ -254,7 +254,7 @@ and the output-pool budget remain unchanged.
    still retained and during paused Busy retries.
 6. Repeat with presentation disabled through the existing environment variable;
    composition preference still applies through RGBA. Export/cancel keeps previous
-   outputs. Inspect schemas 9/3: direct delivery has zero final readback/viewer
+   outputs. Inspect current schemas 9/4: direct delivery has zero final readback/viewer
    uploads, while source uploads, fence submission, pool bytes and Busy drops or
    retries are reported separately. Resize and toggle grayscale without another
    composition or final-frame upload.

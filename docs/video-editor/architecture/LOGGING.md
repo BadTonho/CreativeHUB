@@ -40,7 +40,7 @@ and presentation costs are separated in [metrics schema 9](RENDERING.md#gpu-comp
 
 Direct delivery failures use `gpu-delivery` operation/cause/code/context entries
 before a brief warning. Busy/cancellation/reference returns are expected control
-flow, not error logs. Aggregate/slow schema 9 and delivery schema 3 distinguish
+flow, not error logs. Aggregate/slow schema 9 and delivery schema 4 distinguish
 texture acceptance, synchronization, pool reservations and RGBA transfers.
 
 ## Experimental GPU export
@@ -61,7 +61,7 @@ Schema 2 additionally distinguishes native encoded frames, native video imports,
 conversion wall time, hardware/software decoded frames, and decoded-frame
 downloads. See [the field definitions](../gpu/GPU_EXPORT.md#export-diagnostics-schema-2).
 Preview aggregate/slow schema 9 gains additive native import/conversion counters;
-delivery schema 3 retains its meaning. `media/decode_acceleration_summary` records
+delivery schema 4 preserves OpenGL stages and appends Vulkan queued/completed stages. `media/decode_acceleration_summary` records
 each requested hardware session's effective backend, transfer/cache bytes, and
 recovery reason. `fusion-gpu` identifies whole-graph recovery with node/frame/cause.
 
@@ -83,3 +83,9 @@ GPU through the RGBA boundary; technical compositor failure uses `fallback=cpu`.
 Frame counters remain the evidence of the effective final composition path.
 `decode_packet_ns` includes packet reading and decoder submission;
 `decode_receive_ns` covers receiving the decoded frame.
+
+Vulkan presentation failures log `preview/vulkan_present` before recovery.
+Temporary device/context/acquire pressure and zero extent are deferrals, not
+errors. Delivery schema 4 keeps `vulkan_present_queued` separate from
+`vulkan_gpu_completed`; only the latter terminates that frame trace. A GPU fence
+never claims completion of physical display or retirement of presentation waits.

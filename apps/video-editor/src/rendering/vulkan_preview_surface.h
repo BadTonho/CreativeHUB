@@ -14,9 +14,14 @@ public:
     ~VulkanPreviewSurface() override;
     void setFrame(const PreviewFramePayload&,quint64 trace=0);
     void clearFrame();
+    void setDeliveryEpoch(quint64);
     void setGrayscaleEnabled(bool);
     void suspendForTransition(bool);
     bool available() const noexcept;
+    struct Diagnostics { quint64 submitted=0, completed=0, deferred=0, dropped=0; };
+    Diagnostics diagnostics() const noexcept;
+    quint64 lastCompletedDeliveryTraceId() const noexcept;
+    quint64 lastQueuedDeliveryTraceId() const noexcept;
 signals:
     void gpuFailure(const QString&,qint64);
 private:

@@ -372,7 +372,7 @@ trace ID. The ID follows the shared frame reference through the one-slot
 mailbox, controller delivery, MainWindow callback, Preview submission, and the
 active presentation backend. With performance metrics enabled, the application
 writes an aggregated `playback/frame_delivery` event with
-`diagnostic_schema_version` `3`, at most once per metrics interval. It records
+`diagnostic_schema_version` `4`, at most once per metrics interval. It records
 counts and bounded latency summaries for worker-to-mailbox, mailbox wait,
 controller-to-window, window-to-Preview, GPU upload, GPU draw, and Qt frame swap;
 the CPU fallback records its paint event instead. A Qt `frameSwapped` signal is
@@ -704,7 +704,7 @@ for that frame and the remainder of the item; retry creates a fresh backend.
 Fallback reuses prepared layers, logs detailed context before one brief nonmodal
 warning per item, and never drops output frames. Cancellation retains its existing
 transactional behavior. [GPU_EXPORT.md](../gpu/GPU_EXPORT.md) documents this contract
-and the independent export diagnostics schema 2; preview schemas remain 9/3
+and the independent export diagnostics schema 2; preview schemas are now 9/4
 with additive native video import/conversion counters.
 
 This is the CPU/default and experimental GPU composition FFmpeg export implementation. Codec
@@ -731,7 +731,7 @@ unprocessed/zero on GPU frames rather than credited as CPU fast paths.
 Direct delivery adds texture/RGBA counts, pool occupancy/current/peak bytes, Busy
 attempts, fallback, producer/consumer fence submission and viewer wait submission.
 `viewer_uploaded_bytes` counts only successful final RGBA uploads. Delivery schema
-3 records `gpu_texture_accepted`, `preview_to_gpu_texture_acceptance` and
+4 retains `gpu_texture_accepted`, `preview_to_gpu_texture_acceptance` and
 `gpu_texture_acceptance_to_draw` independently of upload. Normal direct frames
 have zero readback bytes, zero viewer upload bytes and no upload delivery stage.
 See [GPU_TEXTURE_DELIVERY.md](../gpu/GPU_TEXTURE_DELIVERY.md).
@@ -749,3 +749,13 @@ readback tickets for Video export. Preview acquisition defers instead of waiting
 for a free swapchain image; normal presentation no longer waits for queue idle.
 The 256 MiB accounted device budget and explicit codec transfers remain unchanged.
 See the Vulkan renderer contract for ownership, cancellation and FIFO recovery.
+
+Vulkan delivery schema 4 appends `vulkan_present_queued` and
+`vulkan_gpu_completed`, with worker-to-queued, queued-to-completed and
+worker-to-completed timing buckets. Queuing is not a terminal trace; the
+individual submission receipt ends it, independently of unrelated device work.
+Neither Vulkan stage means physical scanout. OpenGL stages and numeric IDs are
+unchanged. The native Viewer retains one in-flight presentation and one latest
+unsent frame; see the Vulkan contract for generation, visual-revision and timer
+ownership. The preview benchmark uses the receipt, 30 warm-up frames, 180 samples
+and three repetitions rather than the earlier whole-device completion heuristic.

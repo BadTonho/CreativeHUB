@@ -423,7 +423,7 @@ void PreviewPerformanceMetrics::recordFrameDeliveryStage(
     const auto cpu_painted = record.stage_nanoseconds[static_cast<std::size_t>(
         PreviewFrameDeliveryStage::CpuPainted)];
     if (record.drop_reason != PreviewFrameDeliveryDropReason::None ||
-        qt_swapped != 0 || cpu_painted != 0) {
+        qt_swapped != 0 || cpu_painted != 0 || record.stage_nanoseconds[static_cast<std::size_t>(PreviewFrameDeliveryStage::VulkanGpuCompleted)] != 0) {
         return;
     }
     const auto stage_index = static_cast<std::size_t>(stage);
@@ -488,6 +488,13 @@ void PreviewPerformanceMetrics::recordFrameDeliveryStage(
         record_hop(PreviewFrameDeliveryStage::WorkerEmitted,
                    PreviewFrameDeliveryTiming::WorkerToCpuPaint);
         break;
+    case PreviewFrameDeliveryStage::VulkanPresentQueued:
+        record_hop(PreviewFrameDeliveryStage::WorkerEmitted, PreviewFrameDeliveryTiming::WorkerToVulkanQueued);
+        break;
+    case PreviewFrameDeliveryStage::VulkanGpuCompleted:
+        record_hop(PreviewFrameDeliveryStage::VulkanPresentQueued, PreviewFrameDeliveryTiming::VulkanQueuedToCompleted);
+        record_hop(PreviewFrameDeliveryStage::WorkerEmitted, PreviewFrameDeliveryTiming::WorkerToVulkanCompleted);
+        break;
     case PreviewFrameDeliveryStage::WorkerEmitted:
     case PreviewFrameDeliveryStage::Count:
         break;
@@ -516,7 +523,7 @@ void PreviewPerformanceMetrics::recordFrameDeliveryDrop(
     const auto cpu_painted = record.stage_nanoseconds[static_cast<std::size_t>(
         PreviewFrameDeliveryStage::CpuPainted)];
     if (record.drop_reason != PreviewFrameDeliveryDropReason::None ||
-        qt_swapped != 0 || cpu_painted != 0) {
+        qt_swapped != 0 || cpu_painted != 0 || record.stage_nanoseconds[static_cast<std::size_t>(PreviewFrameDeliveryStage::VulkanGpuCompleted)] != 0) {
         return;
     }
     record.drop_reason = reason;
@@ -556,7 +563,8 @@ PreviewPerformanceMetrics::takeFrameDeliverySnapshotAndReset() noexcept {
             PreviewFrameDeliveryStage::QtFrameSwapped)];
         const auto cpu_painted = record.stage_nanoseconds[static_cast<std::size_t>(
             PreviewFrameDeliveryStage::CpuPainted)];
-        const auto terminal_time = qt_swapped != 0 ? qt_swapped : cpu_painted;
+        const auto vulkan_completed = record.stage_nanoseconds[static_cast<std::size_t>(PreviewFrameDeliveryStage::VulkanGpuCompleted)];
+        const auto terminal_time = vulkan_completed ? vulkan_completed : qt_swapped != 0 ? qt_swapped : cpu_painted;
         const bool complete = terminal_time != 0;
         const bool dropped = record.drop_reason != PreviewFrameDeliveryDropReason::None;
         if (!complete && !dropped) ++snapshot.incomplete_trace_count;

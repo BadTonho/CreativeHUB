@@ -134,3 +134,11 @@ ignored `build/`: `vulkan-async-preview-before.log`,
 check is `vulkan-async-serial-native.log`. The final shared input guard and transfer
 diagnostic assertions were checked again natively after the selected matrix.
 No installers, release versions, commits or publications are made.
+
+
+The subsequent [preview pacing study](VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
+corrects the whole-device completion heuristic using individual frame receipts.
+The approximately 27 ms p95 values above are historical values from that earlier
+instrumentation and short sample window; they are not a comparable baseline for
+the new scheduler. The follow-up compares instrumentation-only and scheduled
+versions using the same per-frame receipt measurement.

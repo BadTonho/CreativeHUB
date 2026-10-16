@@ -332,3 +332,11 @@ readback tickets for Video export. Preview acquisition defers instead of waiting
 for a free swapchain image; normal presentation no longer waits for queue idle.
 The 256 MiB accounted device budget and explicit codec transfers remain unchanged.
 See the Vulkan renderer contract for ownership, cancellation and FIFO recovery.
+
+The next preview increment uses per-submission completion receipts, visual
+revisions and a one-in-flight/latest-unsent Viewer mailbox. It preserves FIFO,
+256 MiB accounting and export parallelism; empty unavailable acquisitions no
+longer enter the GPU queue. Direct Vulkan/D3D11VA/NVENC sharing remains a later
+step. [Preview pacing evidence](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
+separates corrected instrumentation from scheduling changes; no default promotion
+or generalized performance claim follows from the synthetic results.

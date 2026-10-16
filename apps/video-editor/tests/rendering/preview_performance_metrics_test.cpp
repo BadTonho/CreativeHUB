@@ -57,6 +57,29 @@ int main() {
             direct_snapshot.frame_delivery.stage_counts[static_cast<std::size_t>(rendering::PreviewFrameDeliveryStage::GpuUploaded)] == 0 &&
             direct_snapshot.frame_delivery.timings[static_cast<std::size_t>(rendering::PreviewFrameDeliveryTiming::GpuTextureAcceptanceToDraw)].count == 1,
             "Direct metrics mixed acceptance with upload or lost pool state.");
+        // Vulkan queued events remain incomplete across snapshots until this
+        // frame's GPU receipt completes. Existing OpenGL terminal stages stay intact.
+        const auto vk_trace = metrics.createFrameDeliveryTrace(3, 42);
+        using Stage = rendering::PreviewFrameDeliveryStage;
+        using Timing = rendering::PreviewFrameDeliveryTiming;
+        static_assert(static_cast<unsigned>(Stage::GpuTextureAccepted) == 9);
+        metrics.recordFrameDeliveryStage(vk_trace, Stage::VulkanPresentQueued);
+        auto queued_snapshot = metrics.takeSnapshotAndReset().frame_delivery;
+        require(queued_snapshot.sample_count == 1 && !queued_snapshot.samples[0].complete &&
+                queued_snapshot.timings[static_cast<size_t>(Timing::WorkerToVulkanQueued)].count == 1,
+                "Vulkan queuing was reported as GPU completion.");
+        metrics.recordFrameDeliveryStage(vk_trace, Stage::VulkanGpuCompleted);
+        metrics.recordFrameDeliveryStage(vk_trace, Stage::VulkanGpuCompleted);
+        auto completed_snapshot = metrics.takeSnapshotAndReset().frame_delivery;
+        require(completed_snapshot.sample_count == 1 && completed_snapshot.samples[0].complete &&
+                completed_snapshot.samples[0].trace_id == vk_trace &&
+                completed_snapshot.stage_counts[static_cast<size_t>(Stage::VulkanGpuCompleted)] == 1 &&
+                completed_snapshot.stage_counts[static_cast<size_t>(Stage::QtFrameSwapped)] == 0 &&
+                completed_snapshot.timings[static_cast<size_t>(Timing::VulkanQueuedToCompleted)].count == 1 &&
+                completed_snapshot.timings[static_cast<size_t>(Timing::WorkerToVulkanCompleted)].count == 1,
+                "Vulkan completion lost its trace or was credited twice.");
+        require(metrics.takeSnapshotAndReset().frame_delivery.sample_count == 0,
+                "A completed Vulkan trace was retained after aggregation.");
         metrics.recordGpuCompositionWork(gpu_timings);
         const auto cancelled_work = metrics.takeSnapshotAndReset();
         require(cancelled_work.gpu_composition_frames == 0 && cancelled_work.gpu_composition_uploaded_bytes == 400,

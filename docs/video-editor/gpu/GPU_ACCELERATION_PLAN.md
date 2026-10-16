@@ -77,7 +77,7 @@ The [implemented contract](GPU_TEXTURE_DELIVERY.md) defines the shared global
 context, GPU lease payload, three-target/64 MiB pool (including retiring targets),
 producer/consumer fences, Busy coalescing and 5 ms retries, on-demand recovery,
 delivery epochs and shutdown ordering. Normal delivery performs no output
-readback or viewer upload. Aggregate/slow schemas are 9; delivery schema is 3.
+readback or viewer upload. Aggregate/slow schemas are 9; delivery schema is 4.
 The existing preference controls this automatically; no new setting was added.
 
 - Preserve global rational Timeline timing, mixed source rates, trims/in-points,
@@ -260,3 +260,22 @@ readback tickets for Video export. Preview acquisition defers instead of waiting
 for a free swapchain image; normal presentation no longer waits for queue idle.
 The 256 MiB accounted device budget and explicit codec transfers remain unchanged.
 See the Vulkan renderer contract for ownership, cancellation and FIFO recovery.
+
+
+## Vulkan preview scheduling increment (implemented; acceptance scoped)
+
+The provisional selectable Vulkan path now tracks per-frame presentation receipts
+rather than whole-device idleness. Each Viewer retains one in-flight presentation
+and the latest unsent frame, using visual revisions and a nonblocking 1 ms Qt timer.
+Unavailable acquisition abandons its empty reservation without a queue submission.
+FIFO, the accounted 256 MiB cap, independent acceleration controls and two-frame
+RGBA export remain unchanged. Delivery schema 4 appends Vulkan queued/completed
+stages while preserving all existing OpenGL stage IDs and behavior. No new UI
+setting, project format or automatic renderer selection is introduced.
+
+[Windows pacing evidence](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
+compares an instrumented baseline with the scheduler using 30 warm-up frames,
+180 samples and three trials. It records limited small-fixture tail improvement,
+stable heavy latency, resource costs and export preservation without assuming
+Vulkan superiority. Direct D3D11VA/NVENC interop, paced human audiovisual editing,
+other GPU vendors and native Linux/macOS acceptance remain subsequent gates.

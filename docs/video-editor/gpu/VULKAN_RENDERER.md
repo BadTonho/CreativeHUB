@@ -63,6 +63,23 @@ not wait for the queue to become idle. Resize, surface recreation and teardown
 retain exceptional idle waits. Qt surfaces/windows remain GUI-owned. A returned
 presentation event means queued presentation, not physical scanout completion.
 
+`presentFrame` returns Submitted/Deferred/Failed, an explicit deferral reason,
+and an opaque presentation receipt. `present` remains its boolean compatibility
+adapter (a deferred result has an empty cause). Nonblocking `pollPresentation`
+checks only that receipt's original command fence; completed tokens survive
+context reuse and window retirement. Tokens retain neither windows nor devices;
+a weak device identity rejects foreign receipts. A completed receipt does not
+wait for unrelated later export submissions or an idle device. It does **not**
+prove presentation-engine completion: present wait semaphores remain indexed by
+swapchain image according to the [Vulkan reuse contract](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html).
+
+A context is reserved before acquire. NOT_READY/TIMEOUT abandons the empty,
+unsubmitted command reservation without signaling/resetting a fence or submitting
+to the queue. An acquired semaphore is always consumed before failed-acquisition
+cleanup retires its swapchain. Busy, zero extent and recreation are control flow,
+not error log entries. Zero extent waits for expose/resize; only exceptional
+resize/recreation/failure/shutdown paths drain globally.
+
 Vulkan processing uses integer RGBA8 storage images and precompiled SPIR-V shaders.
 Color passes retain per-pass byte rounding, masks retain coverage arithmetic, and
 blur retains premultiply/three box-pair/unpremultiply processing. Precise rotation
@@ -82,6 +99,20 @@ and display scaling are preserved. The application supplies the surround color;
 the shared device API does not depend on the editor theme.
 Workspace animation temporarily uses a CPU snapshot and hides the native child;
 the live surface resumes after completion or cancellation.
+
+Each GUI-owned Viewer tracks one GPU presentation and one replaceable unsent
+frame. A visual revision changes for each delivered frame, effective grayscale
+changes, size/DPR, exposure and transition restoration. Repeated Qt update events
+do not resubmit an unchanged revision. New timeline frames are revisions even
+when their pixels happen to match. Completion releases the in-flight slot and
+requests an update only when another revision is pending. One 1 ms nonblocking
+Qt timer polls the receipt while an exposed, unsuspended Viewer has work in flight;
+it stops while hidden/suspended and resumes on exposure/restoration. Temporary
+acquire/context/device pressure coalesces one Qt update request; no retry thread
+or persistent idle timer is created. New generations drop unsent frames and
+retire old trace credit without releasing pending GPU allocations prematurely.
+Snapshots use the last submitted frame, never an unsent replacement. Export's
+separate two-frame FIFO and the 256 MiB device cap are unchanged.
 
 Each queued job captures the effective backend. Vulkan export owns processing
 resources independently of preview visibility and reads RGBA back for the selected
@@ -166,7 +197,9 @@ For native preview latency/throughput use
 `creative-suite-main-editor-vulkan-preview-tests --require-gpu --benchmark`.
 It runs the production preview with worker composition and one request in flight;
 its presentation events are not physical scanout or a paced audiovisual project.
-The asynchronous benchmark additionally polls submission completion and reports
+The preview benchmark uses 30 warm-up frames and 180 measured samples per trial,
+three repetitions per size, with nearest-rank p95. It measures completion of the
+specific frame/Viewer receipt rather than `diagnostics().pending == 0`, and reports
 `completion_average_ms`/`completion_p95_ms`; queued-event latency alone is not
 comparable with a previous implementation that waited for queue idle.
 For export use `creative-suite-main-editor-render-export-tests --benchmark --vulkan
@@ -188,3 +221,15 @@ must not be added to infer elapsed render time.
 
 [Asynchronous execution results](../performance/VULKAN_ASYNC_RESULTS_WINDOWS_2026-10-16.md)
 record the follow-up native regressions and old/new performance comparison.
+
+
+Delivery diagnostic schema 4 appends `vulkan_present_queued` and
+`vulkan_gpu_completed` without renumbering the existing stages. It also records
+worker-to-queued, queued-to-completed and worker-to-completed timing summaries.
+Vulkan queued events remain incomplete traces across metrics intervals until
+their receipt completes. OpenGL's existing draw/Qt-swap stages retain their meaning.
+Viewer diagnostic counters distinguish submissions, completions, deferrals and
+dropped unsent/stale traces; benchmark output includes them alongside device
+submissions, accounted reservations and explicit transfers.
+See [preview scheduling measurements](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
+for the instrumented baseline, native checks and limits of the results.

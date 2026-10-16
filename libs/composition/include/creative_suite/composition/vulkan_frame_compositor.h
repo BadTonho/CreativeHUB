@@ -22,10 +22,32 @@ public:
     bool supportsPreciseRotation() const noexcept;
     bool valid() const noexcept;
     void attachWindow(QWindow*);
-    // False with an empty cause means worker contention: retry on a later GUI update.
+    // False with an empty cause means a deferred presentation; retry on a later
+    // GUI update (zero extent instead waits for expose/resize).
     // The application supplies normalized RGBA for the area outside the frame.
     bool present(QWindow*, const OpenGlTextureFramePtr&, bool grayscale, std::string& cause,
         std::array<float, 4> surround = {0, 0, 0, 1});
+    enum class PresentStatus { Submitted, Deferred, Failed };
+    enum class PresentDeferral { None, DeviceBusy, ContextBusy, AcquireBusy, ZeroExtent, Recreate };
+    enum class CompletionStatus { Pending, Complete, Failed };
+    // Receipts own only a completion token and a weak device identity. GUI-thread
+    // polling never waits; completion means GPU commands, not physical display.
+    class PresentationReceipt {
+        std::weak_ptr<VulkanDevice> owner_;
+        std::shared_ptr<void> token_;
+        friend class VulkanDevice;
+    };
+    struct PresentationResult {
+        PresentStatus status = PresentStatus::Deferred;
+        PresentDeferral deferral = PresentDeferral::None;
+        PresentationReceipt receipt;
+        std::string cause;
+    };
+    // The final argument simulates an unsignaled, unavailable acquisition in
+    // native regression tests; production callers retain its default.
+    PresentationResult presentFrame(QWindow*, const OpenGlTextureFramePtr&, bool grayscale,
+        std::array<float, 4> surround = {0, 0, 0, 1}, bool defer_acquisition_for_testing = false);
+    CompletionStatus pollPresentation(const PresentationReceipt&, std::string& cause) noexcept;
     void releaseWindow(QWindow*) noexcept;
     std::uint64_t reservedBytes() const noexcept;
     std::uint64_t peakBytes() const noexcept;

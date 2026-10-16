@@ -190,6 +190,7 @@ void PreviewWidget::releaseGpuFrames() {
 
 void PreviewWidget::setDeliveryEpoch(quint64 epoch, bool retry_texture_delivery) noexcept {
     delivery_epoch_ = epoch;
+    if (vulkan_surface_) vulkan_surface_->setDeliveryEpoch(epoch);
     if (retry_texture_delivery && gpu_surface_) gpu_surface_->retryTextureDelivery();
 }
 

@@ -472,6 +472,8 @@ const char* deliveryStageName(
     case Stage::QtFrameSwapped: return "qt_frame_swapped";
     case Stage::CpuPainted: return "cpu_painted";
     case Stage::GpuTextureAccepted: return "gpu_texture_accepted";
+    case Stage::VulkanPresentQueued: return "vulkan_present_queued";
+    case Stage::VulkanGpuCompleted: return "vulkan_gpu_completed";
     case Stage::Count: break;
     }
     return "unknown";
@@ -499,7 +501,7 @@ void appendFrameDeliveryContext(
     logging::Context& context,
     const rendering::PreviewFrameDeliverySnapshot& snapshot,
     timeline::FrameRate frame_rate) {
-    context.emplace_back("diagnostic_schema_version", "3");
+    context.emplace_back("diagnostic_schema_version", "4");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back("trace_capacity", "512");
@@ -513,7 +515,7 @@ void appendFrameDeliveryContext(
     constexpr std::array stage_names{
         "worker_emitted", "mailbox_published", "controller_delivered",
         "window_received", "preview_submitted", "gpu_uploaded", "gpu_drawn",
-        "qt_frame_swapped", "cpu_painted", "gpu_texture_accepted"};
+        "qt_frame_swapped", "cpu_painted", "gpu_texture_accepted", "vulkan_present_queued", "vulkan_gpu_completed"};
     for (std::size_t index = 0; index < stage_names.size(); ++index) {
         context.emplace_back(
             std::string(stage_names[index]) + "_count",
@@ -534,7 +536,7 @@ void appendFrameDeliveryContext(
         "worker_to_mailbox", "mailbox_wait", "controller_to_window",
         "window_to_preview", "preview_to_gpu_upload", "gpu_upload_to_draw",
         "draw_to_qt_swap", "preview_to_cpu_paint", "worker_to_qt_swap",
-        "worker_to_cpu_paint", "preview_to_gpu_texture_acceptance", "gpu_texture_acceptance_to_draw"};
+        "worker_to_cpu_paint", "preview_to_gpu_texture_acceptance", "gpu_texture_acceptance_to_draw", "worker_to_vulkan_queued", "vulkan_queued_to_completed", "worker_to_vulkan_completed"};
     for (std::size_t index = 0; index < timing_names.size(); ++index) {
         appendTimingContext(context, timing_names[index], snapshot.timings[index]);
     }

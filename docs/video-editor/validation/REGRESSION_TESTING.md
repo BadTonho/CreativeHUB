@@ -1603,7 +1603,7 @@ work when a context is available; a skip is not driver acceptance.
 Follow [GPU_EXPORT_RESULTS.md](../gpu/GPU_EXPORT_RESULTS.md#manual-acceptance-checklist)
 for session/snapshot/accessibility, output/audio, PNG producer/consumer, fallback,
 shutdown and platform checks. It records measured results separately from pending
-human acceptance. Export metrics use schema 2; preview schemas remain 9/3
+human acceptance. Export metrics use schema 2; preview schemas are now 9/4
 with additive native video import/conversion counters.
 
 ## Motion Studio linked-composition manual check
@@ -1898,3 +1898,31 @@ reducing to one, CPU reconstruction after collection failure, audio output,
 and cancellation preserving an existing destination. Run the existing native
 preview/timeline/Fusion suites and affected OpenGL/Motion/Image consumers after
 changing this shared boundary. Graphics skips do not satisfy native acceptance.
+
+
+### Vulkan preview pacing and per-frame receipts
+
+Automated coverage present: `creative-suite-composition-vulkan` checks unavailable
+acquisition ten times without empty submissions, recovery, receipt stability after
+context reuse/window retirement, weak device lifetime and completion independent
+of unrelated pending/recording work. `creative-suite-main-editor-preview-performance-metrics`
+checks appended stage IDs, nonterminal queued traces, once-only completion and
+retirement across snapshots, while preserving OpenGL traces.
+`creative-suite-main-editor-vulkan-preview` exercises the production scheduler's
+latest-frame replacement, one in-flight slot, stale epochs, visual invalidation,
+suspend/resume and retry cancellation; native checks cover repeated UpdateRequest
+without resubmission, unchanged/changed grayscale, resize, generation changes,
+workspace animation, hidden/exposed resumption, closing before the completion
+timer fires, and two Viewers fed during a real two-slot software export.
+Native commands require `--require-gpu`, installed Khronos layers and
+`CREATIVE_SUITE_VULKAN_VALIDATION=1; VK_LAYER_VALIDATE_SYNC=1`.
+
+Manual check documented / pending validation: run a layered project with synchronized
+audio, seek rapidly at Full/Half/Quarter, view Fusion nodes concurrently with
+software/NVENC export, minimize/restore, change monitor DPR, switch workspaces,
+then close while processing. Verify the latest generation, correct grayscale,
+borders/orientation, snapshots, no growing queue, preserved destination and logs.
+Repeat on Linux/macOS natively before accepting those platforms; automated Windows
+synthetic delivery does not replace paced audiovisual or driver-loss acceptance.
+[Current native/performance evidence](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
+records results and pending scope separately.

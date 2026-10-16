@@ -76,3 +76,10 @@ readback tickets for Video export. Preview acquisition defers instead of waiting
 for a free swapchain image; normal presentation no longer waits for queue idle.
 The 256 MiB accounted device budget and explicit codec transfers remain unchanged.
 See the Vulkan renderer contract for ownership, cancellation and FIFO recovery.
+
+Each Vulkan Viewer now schedules one tracked presentation plus a latest-frame
+mailbox. Explicit per-frame GPU receipts replace whole-device-idle measurement;
+visual revisions prevent redundant redraws. Qt owns the 1 ms completion timer,
+window events and generation retirement. Unavailable acquisition releases an empty
+context without a queue submission. FIFO presentation and the two-frame export
+pipeline retain their existing contracts and memory limit.
