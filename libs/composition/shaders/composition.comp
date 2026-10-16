@@ -1,0 +1,94 @@
+#version 450
+#ifdef PRECISE_ROTATION
+#extension GL_ARB_gpu_shader_fp64 : require
+#define REAL double
+#define REAL2 dvec2
+#define REAL4 dvec4
+#else
+#define REAL float
+#define REAL2 vec2
+#define REAL4 vec4
+#endif
+layout(local_size_x=16,local_size_y=16) in;
+layout(binding=0,rgba8ui) uniform readonly uimage2D background_image;
+layout(binding=1,rgba8ui) uniform readonly uimage2D foreground_image;
+layout(binding=2,rgba8ui) uniform readonly uimage2D mask_image;
+layout(binding=3,rgba8ui) uniform writeonly uimage2D output_image;
+layout(binding=4,rgba8) uniform writeonly image2D presentation_image;
+layout(push_constant) uniform Parameters {
+    ivec4 control; // operation, blur radius, horizontal, stage
+    REAL2 center; REAL2 extent;
+    REAL2 trig; REAL2 scale_opacity;
+    vec4 color;
+} p;
+uvec4 source(ivec2 pos) { return imageLoad(background_image,pos); }
+uvec4 over(uvec4 bg,uvec4 fg) {
+    uint a=fg.a*255u+bg.a*(255u-fg.a);
+    uvec3 n=fg.rgb*fg.a*255u+bg.rgb*bg.a*(255u-fg.a);
+    return uvec4(a==0u?uvec3(0):(n+uvec3(a/2u))/a,(a+127u)/255u);
+}
+void main() {
+    ivec2 pixel=ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size=imageSize(output_image);
+    if(any(greaterThanEqual(pixel,size)))return;
+    int op=p.control.x;
+    uvec4 c=uvec4(0);
+    if(op==8) { imageStore(output_image,pixel,uvec4(0,0,0,255));return; }
+    if(op==1 || op==7) {
+        ivec2 srcsize=op==7?imageSize(foreground_image):imageSize(background_image);
+        precise REAL2 delta=REAL2(pixel)+REAL(0.5)-p.center;
+        precise REAL2 local=REAL2(p.trig.x*delta.x+p.trig.y*delta.y,
+            -p.trig.y*delta.x+p.trig.x*delta.y);
+        precise REAL2 mapped=(local/p.extent+REAL(0.5))*REAL2(srcsize);
+        ivec2 samplepos=ivec2(floor(mapped));
+        bool inside=all(lessThanEqual(abs(local),p.extent*REAL(0.5)));
+        if(op==7) {
+            c=source(pixel);
+            if(inside) {
+                uvec4 f=imageLoad(foreground_image,clamp(samplepos,ivec2(0),srcsize-1));
+                vec4 bg=vec4(c)/255.0, fg=vec4(f)/255.0;
+                float a=fg.a*float(p.scale_opacity.y);
+                c=uvec4(floor(clamp(vec4(fg.rgb*a+bg.rgb*(1-a),a+bg.a*(1-a)),0,1)*255.0+0.5));
+            }
+        } else if(all(greaterThanEqual(samplepos,ivec2(0))) && all(lessThan(samplepos,srcsize))) {
+            c=source(samplepos); c.a=uint(floor(REAL(c.a)*p.scale_opacity.y+REAL(0.5)));
+        }
+    } else {
+        c=source(pixel);
+        if(op==2) {
+            vec3 rgb=vec3(c.rgb)/255.0;
+            rgb+=p.color.x; rgb=(rgb-vec3(0.5))*p.color.y+vec3(0.5);
+            float luma=dot(rgb,vec3(0.2126,0.7152,0.0722));
+            c.rgb=uvec3(floor(clamp(vec3(luma)+(rgb-vec3(luma))*p.color.z,0,1)*255.0+0.5));
+        } else if(op==3) {
+            ivec2 fs=imageSize(foreground_image);
+            REAL scale=min(REAL(size.x)/REAL(fs.x),REAL(size.y)/REAL(fs.y));
+            ivec2 fitted=max(ivec2(1),ivec2(floor(REAL2(fs)*scale+REAL(0.5))));
+            ivec2 local=pixel-(size-fitted)/2;
+            if(all(greaterThanEqual(local,ivec2(0))) && all(lessThan(local,fitted)))
+                c=over(c,imageLoad(foreground_image,clamp(ivec2(REAL2(local)/scale),ivec2(0),fs-1)));
+        } else if(op==4) c.a=(c.a*imageLoad(mask_image,pixel).r+127u)/255u;
+        else if(op==5) {
+            uint coverage=imageLoad(mask_image,pixel).r;
+            uvec4 fg=imageLoad(foreground_image,pixel);
+            if(coverage==255u)c=fg;
+            else if(coverage!=0u) {
+                uint ba=c.a*(255u-coverage),fa=fg.a*coverage,a=ba+fa;
+                c=uvec4(a==0u?uvec3(0):(c.rgb*ba+fg.rgb*fa+uvec3(a/2u))/a,(a+127u)/255u);
+            }
+        } else if(op==6) {
+            if(p.control.w==0)c.rgb=(c.rgb*c.a+uvec3(127))/255u;
+            else if(p.control.w==7)c.rgb=c.a==0u?uvec3(0):min(uvec3(255),(c.rgb*255u+uvec3(c.a/2u))/c.a);
+            else {
+                uvec4 sum=uvec4(0);ivec2 step=p.control.z!=0?ivec2(1,0):ivec2(0,1);
+                for(int i=-p.control.y;i<=p.control.y;++i)sum+=source(clamp(pixel+step*i,ivec2(0),size-1));
+                uint divisor=uint(p.control.y*2+1);c=(sum+uvec4(divisor/2u))/divisor;
+            }
+        } else if(op==9) {
+            vec4 display=vec4(c)/255.0;
+            if(p.control.w!=0)display.rgb=vec3(dot(display.rgb,vec3(0.2126,0.7152,0.0722)));
+            imageStore(presentation_image,pixel,display);
+        }
+    }
+    imageStore(output_image,pixel,c);
+}

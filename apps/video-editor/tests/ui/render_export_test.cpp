@@ -1,4 +1,5 @@
 #include "media/video_playback.h"
+#include <creative_suite/composition/vulkan_frame_compositor.h>
 #include "media/audio_playback.h"
 #include "media/video_probe.h"
 #include "timeline/timeline_history.h"
@@ -64,13 +65,13 @@ rendering::OfflineExportMetrics last_metrics;
 
 class CheckedNativeGpu final : public rendering::ExportGpuCompositor {
 public:
-    explicit CheckedNativeGpu(QOffscreenSurface* surface) : gpu_(surface,
-        creative_suite::composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext()) {}
+    explicit CheckedNativeGpu(QOffscreenSurface* surface) : gpu_(creative_suite::composition::createGpuFrameCompositor(surface,
+        creative_suite::composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext())) {}
     creative_suite::composition::OpenGlCompositionResult compose(int width, int height,
         const std::vector<creative_suite::composition::CompositionLayer>& layers,
         const creative_suite::composition::OpenGlFrameCompositor::CancellationPredicate& cancel,
         creative_suite::composition::OpenGlCompositionTimings* timings) override {
-        auto result = gpu_.compose(width, height, layers, cancel, timings);
+        auto result = gpu_->compose(width, height, layers, cancel, timings);
         if (result.status != creative_suite::composition::OpenGlCompositionStatus::Complete)
             std::cerr << "Native export adapter: " << result.operation << ": " << result.cause << '\n';
         if (result.frame && compare_before_encoding) {
@@ -84,9 +85,9 @@ public:
                     creative_suite::composition::OpenGlImageOperation copy;
                     copy.kind = creative_suite::composition::OpenGlImageOperationKind::Copy;
                     copy.background.texture = layer.texture_frame;
-                    auto owned = gpu_.processImage(copy, cancel);
+                    auto owned = gpu_->processImage(copy, cancel);
                     require(owned.frame != nullptr, "Cannot copy the shared Fusion source for composition parity.");
-                    auto recovered = gpu_.readback(owned.frame, cancel);
+                    auto recovered = gpu_->readback(owned.frame, cancel);
                     require(recovered.frame.has_value(), "Cannot read the Fusion source for composition parity.");
                     recovered_sources.push_back(std::make_shared<const media::VideoFrame>(std::move(*recovered.frame)));
                 } else if (layer.native_frame) recovered_sources.push_back(layer.native_frame->download_rgba());
@@ -113,9 +114,9 @@ public:
         }
         return result;
     }
-    creative_suite::composition::OpenGlResourceUsage resourceUsage() const noexcept override { return gpu_.resourceUsage(); }
+    creative_suite::composition::OpenGlResourceUsage resourceUsage() const noexcept override { return gpu_->resourceUsage(); }
 private:
-    creative_suite::composition::OpenGlFrameCompositor gpu_;
+    std::unique_ptr<creative_suite::composition::GpuFrameCompositor> gpu_;
 };
 
 void renderJob(const rendering::RenderJob& job, const std::atomic_bool& canceled,
@@ -1308,13 +1309,22 @@ void validateGpuFallback(const OutputChoice& output, const std::filesystem::path
                 metrics.gpu_failures == (unsupported ? 0 : 1), "GPU fallback dropped frames or retried a technical failure.");
         }
     }
-    // Default adapter with no GUI surface must keep exporting through CPU.
+    // OpenGL requires a GUI-created offscreen surface. Vulkan has its own device.
+    const auto saved_backend = job.settings.graphics_backend;
+    job.settings.graphics_backend = creative_suite::composition::GraphicsBackend::OpenGl;
     rendering::OfflineExportOptions unavailable;
     rendering::OfflineExportMetrics unavailable_metrics;
     unavailable.metrics_callback = [&](const auto& metrics) { unavailable_metrics = metrics; };
     rendering::OfflineExportRenderer::render(job, canceled, {}, unavailable);
     require(unavailable_metrics.cpu_frames == 8 && unavailable_metrics.gpu_failures == 1,
         "Missing export context did not latch CPU fallback.");
+    job.settings.graphics_backend = saved_backend;
+    if (saved_backend == creative_suite::composition::GraphicsBackend::Vulkan) {
+        unavailable_metrics = {};
+        rendering::OfflineExportRenderer::render(job, canceled, {}, unavailable);
+        require(unavailable_metrics.gpu_frames == 8 && unavailable_metrics.cpu_frames == 0,
+            "Vulkan export incorrectly required an OpenGL surface or a visible preview.");
+    }
     int factories = 0, calls = 0;
     rendering::OfflineExportOptions retry;
     retry.gpu_factory = [&](QOffscreenSurface*) {
@@ -1649,6 +1659,28 @@ void validatePublishedImage(const OutputChoice& output, const std::filesystem::p
 }
 #endif
 
+void validateVulkanNvenc(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
+    auto job = makeImageJob(output, image, root / "vulkan-nvenc.mkv", 990, 8);
+    job.settings.width = 320; job.settings.height = 180; job.settings.export_audio = false; job.settings.frame_rate = 30;
+    job.settings.container_name = "matroska"; job.settings.video_encoder_name = "h264_nvenc";
+    job.settings.gpu_composition_enabled = true;
+    std::uint64_t rgba_input_bytes = 0;
+    native_options.prepared_frame_callback = [&](const media::VideoFrame& frame, std::int64_t) {
+        rgba_input_bytes += frame.rgba_pixels.size();
+    };
+    std::atomic_bool cancel{false}; renderJob(job, cancel); native_options.prepared_frame_callback = {};
+    require(last_metrics.gpu_frames == 8 && last_metrics.native_encoded_frames == 0 &&
+        rgba_input_bytes == 320ULL*180*4*8, "Vulkan hardware export did not use the covered RGBA codec boundary.");
+    auto decoder = media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path));
+    std::uint64_t decoded = 0;
+    while (auto frame = decoder->decode_next_frame()) {
+        require((*frame)->width == 320 && (*frame)->height == 180, "Vulkan NVENC output dimensions changed."); ++decoded;
+    }
+    require(decoded == 8, "Vulkan NVENC output dropped frames.");
+    std::cout << "native_vulkan_nvenc=passed frames=" << decoded << " rgba_encoder_input_bytes=" << rgba_input_bytes
+        << " readback_bytes=" << last_metrics.readback_bytes << "\n";
+}
+
 void benchmarkExport(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
     compare_before_encoding = false;
     QImage background(1920, 1080, QImage::Format_RGBA8888);
@@ -1663,7 +1695,14 @@ void benchmarkExport(const OutputChoice& output, const std::filesystem::path& im
     const auto background_path = root / "benchmark-background.png", overlay_path = root / "benchmark-overlay.png";
     require(background.save(pathToQString(background_path)) && transparent.save(pathToQString(overlay_path)), "Benchmark fixtures failed.");
     (void)image;
-    for (const auto size : {QSize(1920, 1080), QSize(2560, 1440), QSize(3840, 2160)}) for (bool gpu : {false, true}) {
+    const auto original_backend = creative_suite::composition::sessionGraphicsBackend();
+    const bool compare_renderers = QCoreApplication::arguments().contains("--compare-renderers");
+    const std::vector<creative_suite::composition::GraphicsBackend> backends = compare_renderers
+        ? std::vector{creative_suite::composition::GraphicsBackend::Cpu, creative_suite::composition::GraphicsBackend::OpenGl, creative_suite::composition::GraphicsBackend::Vulkan}
+        : std::vector{creative_suite::composition::GraphicsBackend::Cpu, original_backend};
+    for (const auto size : {QSize(480, 270), QSize(960, 540), QSize(1920, 1080)}) for (int trial = 0; trial <= 3; ++trial) for (auto backend : backends) {
+        const bool gpu = backend != creative_suite::composition::GraphicsBackend::Cpu;
+        creative_suite::composition::setSessionGraphicsBackend(backend);
         auto job = makeImageJob(output, background_path, root / (gpu ? "bench-gpu.mkv" : "bench-cpu.mkv"), 600, 6);
         job.settings.width = size.width(); job.settings.height = size.height();
         job.settings.frame_rate = 30; job.settings.export_audio = false; job.settings.gpu_composition_enabled = gpu;
@@ -1677,6 +1716,8 @@ void benchmarkExport(const OutputChoice& output, const std::filesystem::path& im
         job.project_snapshot.timeline_tracks.insert(job.project_snapshot.timeline_tracks.begin(), track);
         std::atomic_bool cancel{false};
         renderJob(job, cancel);
+        if (trial == 0) continue;
+        std::cout << "export_benchmark_trial=" << trial << " renderer=" << creative_suite::composition::backendName(backend) << "\n";
         const auto& m = last_metrics;
         std::printf("export_benchmark output=%dx%d backend=%s frames=%llu total_ms=%.3f preparation_ms=%.3f composition_ms=%.3f encoding_ms=%.3f upload_ms=%.3f draw_ms=%.3f readback_ms=%.3f upload_bytes=%llu readback_bytes=%llu gpu_peak_bytes=%llu cpu_frame_peak_bytes=%llu sources_peak_bytes=%llu encoder=%s\n",
             size.width(), size.height(), gpu ? "gpu" : "cpu", static_cast<unsigned long long>(m.encoded_frames),
@@ -1686,6 +1727,7 @@ void benchmarkExport(const OutputChoice& output, const std::filesystem::path& im
             static_cast<unsigned long long>(m.peak_known_gpu_bytes), static_cast<unsigned long long>(m.peak_cpu_frame_bytes),
             static_cast<unsigned long long>(m.peak_prepared_source_bytes), job.settings.video_encoder_name.toUtf8().constData());
     }
+    creative_suite::composition::setSessionGraphicsBackend(original_backend);
 }
 
 }  // namespace
@@ -1696,6 +1738,13 @@ int main(int argc, char* argv[]) {
     QSurfaceFormat format; format.setVersion(3, 2); format.setProfile(QSurfaceFormat::CoreProfile);
     QSurfaceFormat::setDefaultFormat(format);
     QApplication application(argc, argv);
+    std::shared_ptr<creative_suite::composition::VulkanDevice> vulkan_device;
+    if (application.arguments().contains("--vulkan")) {
+        std::string cause; vulkan_device = creative_suite::composition::VulkanDevice::create(cause);
+        if (!vulkan_device) { std::cerr << cause << '\n'; return application.arguments().contains("--require-gpu") ? 1 : 77; }
+        creative_suite::composition::setSessionVulkanDevice(vulkan_device);
+        creative_suite::composition::setSessionGraphicsBackend(creative_suite::composition::GraphicsBackend::Vulkan);
+    }
     try {
         QTemporaryDir temporary_directory;
         require(temporary_directory.isValid(), "Could not create a temporary export-test directory.");
@@ -1706,7 +1755,7 @@ int main(int argc, char* argv[]) {
             if (!surface) return 77;
             creative_suite::composition::OpenGlCompositionResult probe;
             std::thread worker([&] {
-                creative_suite::composition::OpenGlFrameCompositor gpu(surface.get()); probe = gpu.compose(8, 8, {});
+                auto gpu = creative_suite::composition::createGpuFrameCompositor(surface.get()); probe = gpu->compose(8, 8, {});
             }); worker.join();
             if (!probe.frame && (probe.operation == "create-context" || probe.operation == "check-context")) return 77;
             require(probe.frame.has_value(), "Native export GPU probe failed on an available context.");
@@ -1724,6 +1773,10 @@ int main(int argc, char* argv[]) {
                 "Could not create a second deterministic still-image fixture.");
 
         const auto output = chooseOutput();
+        if (application.arguments().contains("--nvenc-only")) {
+            require(bool(vulkan_device), "The Vulkan NVENC test requires --vulkan.");
+            validateVulkanNvenc(output, image_path, root); return 0;
+        }
         validateDirectExport(output, image_path, green_image_path, root);
         validateVisualEffectExport(output, image_path, root);
         validateFusionPreviewExportParity(output, image_path, root);

@@ -17,7 +17,7 @@ using NativeInputFrames = std::unordered_map<NodeId, creative_suite::media::Nati
 
 struct EvaluationContext {
     std::int64_t local_frame = 0;
-    creative_suite::composition::OpenGlFrameCompositor* gpu = nullptr;
+    creative_suite::composition::GpuFrameCompositor* gpu = nullptr;
     bool* gpu_used = nullptr;
     std::function<bool()> should_cancel;
     const NativeInputFrames* native_inputs = nullptr;

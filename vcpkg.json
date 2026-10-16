@@ -6,16 +6,40 @@
     "ffmpeg",
     {
       "name": "ffmpeg",
-      "features": ["nvcodec", "amf", "qsv"],
+      "features": [
+        "nvcodec",
+        "amf",
+        "qsv"
+      ],
       "platform": "windows & x64 & !uwp"
     },
     {
       "name": "ffmpeg",
-      "features": ["nvcodec", "vaapi", "qsv"],
+      "features": [
+        "nvcodec",
+        "vaapi",
+        "qsv"
+      ],
       "platform": "linux & (x64 | x86)"
     },
     "qtbase",
     "qtimageformats",
     "qtmultimedia"
-  ]
+  ],
+  "features": {
+    "vulkan": {
+      "description": "Optional Vulkan renderer and build-time SPIR-V compiler",
+      "dependencies": [
+        "vulkan-headers",
+        "vulkan-loader",
+        {
+          "name": "glslang",
+          "host": true,
+          "features": [
+            "tools"
+          ]
+        }
+      ]
+    }
+  }
 }

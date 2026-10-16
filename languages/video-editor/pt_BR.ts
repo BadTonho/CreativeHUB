@@ -3054,4 +3054,17 @@ Erro: </translation>
         <translation>Linha do tempo</translation>
     </message>
 </context>
+<context>
+    <name>RendererSelection</name>
+    <message><source>Automatic</source><translation>Automático</translation></message>
+    <message><source>Vulkan (Experimental)</source><translation>Vulkan (Experimental)</translation></message>
+    <message><source>Graphics renderer</source><translation>Renderizador gráfico</translation></message>
+    <message><source>Choose the graphics API for preview and GPU export. GPU composition and hardware codecs keep their separate settings. Changes to this API require restarting the editor.</source><translation>Escolha a API gráfica para a prévia e a exportação por GPU. A composição por GPU e os codecs por hardware mantêm suas configurações separadas. Alterar esta API exige reiniciar o editor.</translation></message>
+    <message><source>Remember my choice</source><translation>Lembrar minha escolha</translation></message>
+    <message><source>Graphics renderer (next launch)</source><translation>Renderizador gráfico (próxima abertura)</translation></message>
+    <message><source>Active renderer: %1</source><translation>Renderizador ativo: %1</translation></message>
+    <message><source>Ask which renderer to use at startup</source><translation>Perguntar qual renderizador usar ao iniciar</translation></message>
+    <message><source>Use --renderer=auto|opengl|vulkan|cpu once.</source><translation>Use --renderer=auto|opengl|vulkan|cpu apenas uma vez.</translation></message>
+    <message><source>Vulkan is unavailable. The editor will use OpenGL and recover with CPU when necessary.</source><translation>Vulkan está indisponível. O editor usará OpenGL e recorrerá à CPU quando necessário.</translation></message>
+</context>
 </TS>

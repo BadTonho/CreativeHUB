@@ -59,6 +59,7 @@ jobs:
         run: >-
           cmake -S . -B build
           "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_MANIFEST_FEATURES=vulkan
 
       - name: Configure on macOS and Linux
         if: runner.os != 'Windows'
@@ -66,6 +67,7 @@ jobs:
         run: >-
           cmake -S . -B build
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_MANIFEST_FEATURES=vulkan
 
       - name: Build
         run: cmake --build build --config Release --parallel 4

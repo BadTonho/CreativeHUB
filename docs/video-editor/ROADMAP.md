@@ -244,3 +244,11 @@ performance, licensing, and maintenance cost.
 Update this roadmap and the relevant architecture or validation document in
 the same change when implementation, scope, or a technical decision changes.
 Do not mark a gate complete without its required automated and manual evidence.
+
+## Selectable graphics renderer
+
+An experimental Vulkan backend is implemented alongside OpenGL/CPU for Video
+Editor preview, Fusion and RGBA export. Startup selection is application-local;
+GPU composition and codecs retain separate controls. See
+[Vulkan implementation and acceptance](gpu/VULKAN_RENDERER.md).
+Native Linux/macOS and broader manual acceptance remain pending.

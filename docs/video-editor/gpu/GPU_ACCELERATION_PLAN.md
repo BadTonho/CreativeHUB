@@ -246,3 +246,11 @@ evidence, unresolved issues, and the next stage here.
   [GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md). Video Editor remains the first
   consumer. Broader driver/platform and human acceptance, effects/decode/encode
   and Motion/Image integration remain pending.
+
+## Selectable backend implementation
+
+The provisional renderer comparison now has an experimental Vulkan implementation
+behind the shared composition interface. It coexists with OpenGL and CPU;
+Automatic retains the previous behavior. [Vulkan Renderer](VULKAN_RENDERER.md)
+describes scope, lifecycle, codec transfers and the separate acceptance gates.
+This does not select a final suite renderer or promote Vulkan automatically.

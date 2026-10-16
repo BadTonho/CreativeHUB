@@ -73,6 +73,8 @@ if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_IMAGE_EDITOR)
     find_package(Qt6 CONFIG REQUIRED COMPONENTS Gui OpenGL)
     add_library(creative-suite-composition-opengl STATIC
         composition/src/opengl_frame_compositor.cpp
+        composition/src/gpu_frame_compositor.cpp
+        composition/src/vulkan_frame_compositor.cpp
         composition/src/windows_video_interop.cpp
         composition/include/creative_suite/composition/opengl_frame_compositor.h)
     add_library(creative-suite::composition-opengl ALIAS creative-suite-composition-opengl)
@@ -86,6 +88,35 @@ if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_IMAGE_EDITOR)
         target_link_libraries(creative-suite-composition-opengl PRIVATE d3d11 d3dcompiler opengl32)
     endif()
     target_compile_features(creative-suite-composition-opengl PUBLIC cxx_std_20)
+    option(ENABLE_VULKAN_RENDERER "Build the optional Vulkan composition backend" ON)
+    if(ENABLE_VULKAN_RENDERER)
+        find_package(Vulkan QUIET)
+        find_program(CS_GLSLANG NAMES glslangValidator glslang HINTS
+            "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin"
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_HOST_TRIPLET}/tools/glslang")
+        if(Vulkan_INCLUDE_DIR AND CS_GLSLANG)
+            file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders")
+            foreach(variant IN ITEMS composition composition_precise)
+                set(defines)
+                if(variant STREQUAL "composition_precise")
+                    set(defines -DPRECISE_ROTATION=1)
+                endif()
+                set(output "${CMAKE_CURRENT_BINARY_DIR}/shaders/${variant}_spirv.h")
+                add_custom_command(OUTPUT "${output}"
+                    COMMAND "${CS_GLSLANG}" -V --target-env vulkan1.1 ${defines}
+                        --vn ${variant}_spirv -o "${output}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/composition/shaders/composition.comp"
+                    DEPENDS composition/shaders/composition.comp VERBATIM)
+                target_sources(creative-suite-composition-opengl PRIVATE "${output}")
+            endforeach()
+            target_include_directories(creative-suite-composition-opengl PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/shaders")
+            target_compile_definitions(creative-suite-composition-opengl PRIVATE CS_HAS_VULKAN=1)
+            target_include_directories(creative-suite-composition-opengl PRIVATE ${Vulkan_INCLUDE_DIR})
+        else()
+            message(STATUS "Vulkan renderer unavailable: Vulkan headers/loader or glslang tool missing; OpenGL remains available")
+        endif()
+    endif()
+
 endif()
 
 add_library(creative-suite-diagnostics STATIC

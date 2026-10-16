@@ -62,3 +62,11 @@ The current implementation direction is C++20 with Qt 6 Widgets and FFmpeg.
 This is a provisional application direction, not a final project-wide language
 decision. Rust remains available for future isolated modules when a clear
 technical benefit justifies its introduction.
+
+## Graphics backend selection
+
+The application selects its graphics backend at startup and captures the effective
+backend in each render job. GPU composition remains independently configurable.
+OpenGL and Vulkan implement the shared composition boundary; application state,
+Fusion scheduling, codecs and documents remain owned by their existing modules.
+See [the provisional Vulkan contract](../gpu/VULKAN_RENDERER.md).

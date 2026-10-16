@@ -32,7 +32,7 @@ bool RenderQueueController::start(std::vector<RenderJob> jobs) {
     if (jobs.empty() || running_.exchange(true, std::memory_order_acq_rel)) return false;
     joinFinishedThread();
     gpu_surface_.reset();
-    if (std::any_of(jobs.begin(), jobs.end(), [](const auto& job) { return job.settings.gpu_composition_enabled; })) {
+    if (std::any_of(jobs.begin(), jobs.end(), [](const auto& job) { return job.settings.gpu_composition_enabled && job.settings.graphics_backend != creative_suite::composition::GraphicsBackend::Vulkan && job.settings.graphics_backend != creative_suite::composition::GraphicsBackend::Cpu; })) {
         try { gpu_surface_ = creative_suite::composition::OpenGlFrameCompositor::createSurface(); }
         catch (const std::exception& error) {
             logging::Logger::instance().log(logging::Level::Error, "render", "create-export-surface", error.what());

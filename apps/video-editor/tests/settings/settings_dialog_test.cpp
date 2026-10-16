@@ -1,6 +1,7 @@
 #include "settings/settings_dialog.h"
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
+#include "settings/renderer_preferences.h"
 #include <creative_suite/translations/language_preference.h>
 
 #include <QApplication>
@@ -45,6 +46,21 @@ int main(int argc, char* argv[]) {
         QSettings settings;
         settings.clear();
         settings.sync();
+
+        using Backend = settings::GraphicsBackend;
+        require(settings::rendererPreference() == Backend::Automatic && settings::askRendererAtStartup(), "Existing installations must preserve Automatic and show the chooser.");
+        settings::setRendererPreference(Backend::Vulkan); settings::setAskRendererAtStartup(false);
+        require(settings::rendererPreference() == Backend::Vulkan && !settings::askRendererAtStartup(), "Renderer choice did not persist.");
+        auto launch = settings::parseRendererArguments({"editor", "--renderer=cpu"});
+        require(launch.backend == Backend::Cpu && launch.error.isEmpty(), "Renderer override was not parsed.");
+        require(settings::rendererPreference() == Backend::Vulkan, "Command override changed saved preference.");
+        launch = settings::parseRendererArguments({"editor", "--renderer", "opengl", "--choose-renderer"});
+        require(launch.backend == Backend::OpenGl && launch.choose, "Explicit chooser override did not parse.");
+        require(!settings::parseRendererArguments({"editor", "--renderer=invalid"}).error.isEmpty(), "Invalid renderer was accepted.");
+        require(!settings::parseRendererArguments({"editor", "--renderer=cpu", "--renderer=vulkan"}).error.isEmpty(), "Duplicate renderer overrides were accepted.");
+        settings.setValue(settings::kRendererBackendKey, "corrupt");
+        require(settings::rendererPreference() == Backend::Automatic, "Invalid stored renderer must recover to Automatic.");
+        settings.remove(settings::kRendererBackendKey); settings.remove(settings::kAskRendererKey);
 
         require(!settings::hardwareDecodingEnabled(), "Hardware decoding must default to disabled.");
         settings::setHardwareDecodingEnabled(true);

@@ -1871,3 +1871,18 @@ their Video Editor, Image Editor, Motion Studio, and Hub consumers. Explicit
 H.264 and HEVC native pipeline checks also passed after the final relink.
 Native encoder, performance, prolonged preview, and pending physical/platform
 acceptance are recorded separately in [GPU_PIPELINE.md](../gpu/GPU_PIPELINE.md).
+
+## Selectable OpenGL/Vulkan renderer
+
+Automated coverage: `creative-suite-main-editor-renderer-selection`,
+`creative-suite-main-editor-settings-dialog`, `creative-suite-composition-vulkan`,
+`creative-suite-main-editor-vulkan-preview`, `creative-suite-main-editor-vulkan-timeline`
+and `creative-suite-main-editor-vulkan-export`. Native commands use `--require-gpu`;
+skips are not native approval. Scope, command-line recovery and the manual
+startup/playback/Fusion/export/dock/display checklist are documented in
+[Vulkan Renderer](../gpu/VULKAN_RENDERER.md). Native platform and manual acceptance
+remain separately recorded; run existing OpenGL and affected producer/consumer
+regressions after shared interface changes.
+The [Windows evidence and benchmark tables](../performance/VULKAN_RESULTS_WINDOWS_2026-10-15.md)
+record the selected 38-test run without skips and distinguish automated coverage
+from pending manual, driver-loss and other-platform acceptance.

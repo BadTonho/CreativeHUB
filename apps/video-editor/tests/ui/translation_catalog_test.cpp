@@ -41,6 +41,11 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    if (QCoreApplication::translate("RendererSelection", "Graphics renderer") !=
+            QStringLiteral("Renderizador gr\u00e1fico")) {
+        std::fprintf(stderr, "The startup renderer chooser did not use its pt-BR catalog entry.\n");
+        return 1;
+    }
     if (QCoreApplication::translate("RenderWorkspace", "Render Settings") !=
             QStringLiteral("Configurações de renderização")) {
         std::fprintf(stderr, "The Render workspace did not use its pt-BR catalog entry.\n");

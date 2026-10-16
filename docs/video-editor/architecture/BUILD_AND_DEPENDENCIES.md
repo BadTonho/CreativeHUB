@@ -135,3 +135,12 @@ no proprietary driver or CUDA toolkit is bundled. These features retain the
 LGPL shared FFmpeg build and require notices/source obligations for distribution.
 Registry discovery does not establish runtime acceptance. Repeat the explicit
 hardware encoder test on each target device and OS.
+
+## Optional Vulkan composition
+
+`ENABLE_VULKAN_RENDERER` enables optional discovery of Vulkan development files
+and build-time glslang. The optional vcpkg `vulkan` feature supplies headers,
+loader and host shader tools. CI requests this feature on all three platforms.
+Shaders are compiled into generated build-tree headers; no shader compiler is
+required at runtime. The loader is loaded dynamically so OpenGL/CPU startup
+remains possible without Vulkan. See [dependencies and notices](../gpu/VULKAN_RENDERER.md).

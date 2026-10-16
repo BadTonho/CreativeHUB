@@ -219,7 +219,7 @@ private:
     void publishPreviewFrame(rendering::PreviewFramePayload frame, qint64 index,
         quint64 generation, quint64 trace);
     void retireGpuCompositor();
-    creative_suite::composition::OpenGlFrameCompositor* graphGpuBackend();
+    creative_suite::composition::GpuFrameCompositor* graphGpuBackend();
     void ensureGpuMaintenance();
     void collectGpuResources();
     void emitComposedFrame();
@@ -310,8 +310,8 @@ private:
     int composition_canvas_width_ = 1920;
     int composition_canvas_height_ = 1080;
     GpuCompose gpu_compose_;
-    std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor> gpu_compositor_;
-    std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor> gpu_graph_compositor_;
+    std::unique_ptr<creative_suite::composition::GpuFrameCompositor> gpu_compositor_;
+    std::unique_ptr<creative_suite::composition::GpuFrameCompositor> gpu_graph_compositor_;
     QOffscreenSurface* gpu_surface_ = nullptr;
     bool gpu_composition_enabled_ = false;
     bool hardware_decoding_enabled_ = false;
@@ -328,7 +328,7 @@ private:
     QOpenGLContext* gpu_share_context_ = nullptr;
     std::shared_ptr<creative_suite::composition::OpenGlTexturePoolBudget> gpu_texture_budget_ =
         std::make_shared<creative_suite::composition::OpenGlTexturePoolBudget>();
-    std::vector<std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor>> retiring_gpu_compositors_;
+    std::vector<std::unique_ptr<creative_suite::composition::GpuFrameCompositor>> retiring_gpu_compositors_;
     std::unordered_set<const void*> failed_gpu_collectors_;
     QTimer* gpu_maintenance_timer_ = nullptr;
     QTimer* gpu_busy_timer_ = nullptr;

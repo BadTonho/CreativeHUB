@@ -1,4 +1,5 @@
 #include "ui/workspace/workspace_page_transition.h"
+#include "rendering/vulkan_preview_surface.h"
 
 #include <QContextMenuEvent>
 #include <QCoreApplication>
@@ -150,6 +151,7 @@ void WorkspacePageTransition::start(
     }
 
     window_ = window;
+    for (auto* surface : window->findChildren<rendering::VulkanPreviewSurface*>()) surface->suspendForTransition(true);
     if (style_ == settings::WorkspacePageTransitionStyle::WorkspaceContent) {
         startContentTransition(
             window, duration_ms, std::move(apply_page));
@@ -397,6 +399,7 @@ void WorkspacePageTransition::clearTransitionState() {
         content_overlay_.clear();
         delete overlay;
     }
+    if (window_) for (auto* surface : window_->findChildren<rendering::VulkanPreviewSurface*>()) surface->suspendForTransition(false);
     window_.clear();
     apply_page_ = {};
     original_geometry_ = {};

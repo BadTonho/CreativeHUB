@@ -1,6 +1,7 @@
 #pragma once
 
 #include "project/project_document.h"
+#include <creative_suite/composition/graphics_backend.h>
 
 #include <QString>
 
@@ -33,6 +34,7 @@ struct RenderJobSettings {
     double frame_rate = 30.0;
     bool export_audio = true;
     bool gpu_composition_enabled = false;
+    creative_suite::composition::GraphicsBackend graphics_backend = creative_suite::composition::sessionGraphicsBackend();
     bool hardware_decoding_enabled = false;
     double video_bitrate_mbps = 10.0;
     int audio_bitrate_kbps = 192;

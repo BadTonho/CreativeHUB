@@ -1,4 +1,5 @@
 #include "playback/playback_worker.h"
+#include <creative_suite/composition/vulkan_frame_compositor.h>
 #include "rendering/graph_generators.h"
 #include "rendering/preview_performance_metrics.h"
 #include "logging/logger.h"
@@ -25,7 +26,7 @@
 
 using namespace creative_suite::composition;
 namespace {
-void fusionParity(OpenGlFrameCompositor& gpu, QOffscreenSurface* surface) {
+void fusionParity(GpuFrameCompositor& gpu, QOffscreenSurface* surface) {
     using namespace fusion::nodes;
     auto source = std::make_shared<media::VideoFrame>(media::VideoFrame{37, 23, 148, std::vector<std::uint8_t>(148 * 23)});
     for (std::size_t i = 0; i < source->rgba_pixels.size(); ++i)
@@ -98,8 +99,8 @@ void fusionParity(OpenGlFrameCompositor& gpu, QOffscreenSurface* surface) {
     auto limited_graph=makePassthroughGraph();Node limited_mask;limited_mask.id=3;limited_mask.type=NodeType::RectangleMask;
     limited_graph.nodes.push_back(limited_mask);limited_graph.next_id=4;limited_graph.connections.push_back({3,2,2});
     auto budget=std::make_shared<OpenGlTexturePoolBudget>(64ULL*1024*1024,1);
-    OpenGlFrameCompositor limited_gpu(surface,OpenGlPrecisionPolicy::Automatic,nullptr,budget);
-    bool limited_used=true;auto fallback=evaluate(limited_graph,inputs,EvaluationContext{0,&limited_gpu,&limited_used});
+    auto limited_gpu=createGpuFrameCompositor(surface,OpenGlPrecisionPolicy::Automatic,nullptr,budget);
+    bool limited_used=true;auto fallback=evaluate(limited_graph,inputs,EvaluationContext{0,limited_gpu.get(),&limited_used});
     auto reference=evaluate(limited_graph,inputs);
     if (!fallback || !reference || limited_used || fallback->rgba_pixels!=reference->rgba_pixels)
         throw std::runtime_error("Bounded masked graph did not recover the complete CPU result.");
@@ -214,7 +215,10 @@ void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec ima
     direct.renderCompositionFrame(5, 5, 33);
     require(bool(delivered.gpu), "Direct delivery did not retry after off/on.");
     std::string cause; std::int64_t code = 0;
-    require(!delivered.gpu->endUse(nullptr, cause, code), "Lost consumer context was not rejected.");
+    if (sessionGraphicsBackend() == GraphicsBackend::Vulkan)
+        direct.recoverPreviewFrame(delivered, 5, 33, epoch);
+    else
+        require(!delivered.gpu->endUse(nullptr, cause, code), "Lost consumer context was not rejected.");
     QThread::msleep(6); QCoreApplication::processEvents();
     direct.renderCompositionFrame(6, 6, 33);
     require(delivered.rgba && !delivered.gpu && errors == 0,
@@ -230,6 +234,13 @@ int main(int argc, char** argv) {
     QSurfaceFormat::setDefaultFormat(format);
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QGuiApplication app(argc, argv);
+    const bool vulkan = app.arguments().contains("--vulkan");
+    std::shared_ptr<VulkanDevice> vulkan_device;
+    if (vulkan) {
+        std::string cause; vulkan_device = VulkanDevice::create(cause);
+        if (!vulkan_device) { std::cerr << cause << '\n'; return app.arguments().contains("--require-gpu") ? 1 : 77; }
+        setSessionVulkanDevice(vulkan_device); setSessionGraphicsBackend(GraphicsBackend::Vulkan);
+    }
     try {
         QTemporaryDir temp;
         require(temp.isValid(), "Temporary fixture unavailable.");
@@ -273,8 +284,8 @@ int main(int argc, char** argv) {
         bool unsupported_context = false;
         std::unique_ptr<QThread> thread(QThread::create([&] {
             try {
-                OpenGlFrameCompositor probe(surface.get());
-                const auto initial = probe.compose(16, 16, {});
+                auto probe = createGpuFrameCompositor(surface.get());
+                const auto initial = probe->compose(16, 16, {});
                 if (initial.status == OpenGlCompositionStatus::Failed &&
                     (initial.operation == "create-context" || initial.operation == "check-context")) {
                     unsupported_context = true; return;
@@ -339,8 +350,8 @@ int main(int argc, char** argv) {
                 require(toggled_off && toggled_on && failures == 0 && warnings == 0,
                     "Native toggle interrupted playback.");
                 directWorker(surface.get(), image, incoming, text, published, refreshed);
-                OpenGlFrameCompositor graph_gpu(surface.get());
-                fusionParity(graph_gpu,surface.get());
+                auto graph_gpu = createGpuFrameCompositor(surface.get(), OpenGlPrecisionPolicy::Automatic, nullptr, std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,8));
+                fusionParity(*graph_gpu,surface.get());
                 metrics.setEnabled(false);
             } catch (...) { failure = std::current_exception(); }
         }));

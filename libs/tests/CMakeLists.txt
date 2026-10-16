@@ -99,3 +99,17 @@ foreach(shared_test IN ITEMS
         target_compile_options(${shared_test} PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 endforeach()
+
+if(TARGET creative-suite::composition-opengl)
+    add_executable(creative-suite-composition-vulkan-tests vulkan_composition_test.cpp)
+    target_link_libraries(creative-suite-composition-vulkan-tests PRIVATE creative-suite::composition-opengl creative-suite::system-monitor Qt6::Widgets)
+    if(COMMAND creative_suite_deploy_media_runtime)
+        creative_suite_deploy_media_runtime(creative-suite-composition-vulkan-tests)
+    endif()
+    add_creative_suite_test(NAME creative-suite-composition-vulkan SKIP_RETURN_CODE 77 COMMAND creative-suite-composition-vulkan-tests)
+    if(WIN32)
+        set_tests_properties(creative-suite-composition-vulkan PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
+        add_custom_command(TARGET creative-suite-composition-vulkan-tests POST_BUILD
+            COMMAND "${QT_SHORTCUT_TEST_DEPLOY_TOOL}" --no-translations --no-compiler-runtime "$<TARGET_FILE:creative-suite-composition-vulkan-tests>" VERBATIM)
+    endif()
+endif()

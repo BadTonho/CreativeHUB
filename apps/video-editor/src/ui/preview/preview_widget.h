@@ -12,6 +12,7 @@ class PreviewCpuSurface;
 
 namespace rendering {
 class OpenGLPreviewSurface;
+class VulkanPreviewSurface;
 }
 
 class PreviewWidget final : public QWidget {
@@ -46,6 +47,7 @@ private:
 
     QStackedLayout* stack_ = nullptr;
     rendering::OpenGLPreviewSurface* gpu_surface_ = nullptr;
+    rendering::VulkanPreviewSurface* vulkan_surface_ = nullptr;
     PreviewCpuSurface* cpu_surface_ = nullptr;
     media::VideoFramePtr current_frame_;
     rendering::PreviewFramePayload current_payload_;

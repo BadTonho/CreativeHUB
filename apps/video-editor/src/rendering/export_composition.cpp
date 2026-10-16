@@ -2,6 +2,7 @@
 #include "logging/logger.h"
 
 #include <algorithm>
+#include <thread>
 #include <QOpenGLContext>
 
 namespace rendering::detail {
@@ -10,17 +11,17 @@ namespace composition = creative_suite::composition;
 
 class NativeExportGpu final : public ExportGpuCompositor {
 public:
-    explicit NativeExportGpu(QOffscreenSurface* surface) : backend_(surface,
-        composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext()) {}
+    explicit NativeExportGpu(QOffscreenSurface* surface, composition::GraphicsBackend backend) : backend_(composition::createGpuFrameCompositor(surface,
+        composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext(), {}, backend)) {}
     composition::OpenGlCompositionResult compose(int width, int height,
         const std::vector<composition::CompositionLayer>& layers,
         const composition::OpenGlFrameCompositor::CancellationPredicate& cancel,
         composition::OpenGlCompositionTimings* timings) override {
-        return backend_.compose(width, height, layers, cancel, timings);
+        return backend_->compose(width, height, layers, cancel, timings);
     }
-    composition::OpenGlResourceUsage resourceUsage() const noexcept override { return backend_.resourceUsage(); }
+    composition::OpenGlResourceUsage resourceUsage() const noexcept override { return backend_->resourceUsage(); }
 private:
-    composition::OpenGlFrameCompositor backend_;
+    std::unique_ptr<composition::GpuFrameCompositor> backend_;
 };
 
 logging::Context jobContext(const RenderJob& job) {
@@ -55,8 +56,8 @@ ExportMetricsScope::~ExportMetricsScope() {
     try {
         auto context = jobContext(job_);
         context.emplace_back("diagnostic_schema_version", "2");
-        context.emplace_back("requested_backend", metrics.gpu_requested ? "opengl" : "cpu");
-        context.emplace_back("effective_backend", metrics.gpu_frames ? (metrics.cpu_frames ? "mixed" : "opengl")
+        context.emplace_back("requested_backend", metrics.gpu_requested ? std::string(composition::backendName(job_.settings.graphics_backend)) : "cpu");
+        context.emplace_back("effective_backend", metrics.gpu_frames ? (metrics.cpu_frames ? "mixed" : std::string(composition::backendName(job_.settings.graphics_backend)))
                                                                   : (metrics.cpu_frames ? "cpu" : "none"));
         context.emplace_back("outcome", metrics.outcome == ExportOutcome::Completed ? "completed" :
             metrics.outcome == ExportOutcome::Canceled ? "canceled" : "failed");
@@ -94,14 +95,14 @@ ExportComposition::ExportComposition(const RenderJob& job, const OfflineExportOp
     : job_(job), options_(options), metrics_(metrics) {}
 
 bool ExportComposition::nativeDelivery() const noexcept {
-    return job_.settings.gpu_composition_enabled && !failed_ && !cpu_source_recovery_ && options_.gpu_surface && !options_.gpu_factory;
+    return job_.settings.gpu_composition_enabled && !failed_ && !cpu_source_recovery_ && options_.gpu_surface && !options_.gpu_factory && job_.settings.graphics_backend != composition::GraphicsBackend::Vulkan && job_.settings.graphics_backend != composition::GraphicsBackend::Cpu;
 }
 
-composition::OpenGlFrameCompositor* ExportComposition::graphBackend() {
-    if (!job_.settings.gpu_composition_enabled || failed_ || cpu_source_recovery_ || !options_.gpu_surface) return nullptr;
-    if (!graph_gpu_) graph_gpu_ = std::make_unique<composition::OpenGlFrameCompositor>(options_.gpu_surface,
+composition::GpuFrameCompositor* ExportComposition::graphBackend() {
+    if (job_.settings.graphics_backend == composition::GraphicsBackend::Cpu || !job_.settings.gpu_composition_enabled || failed_ || cpu_source_recovery_ || (!options_.gpu_surface && job_.settings.graphics_backend != composition::GraphicsBackend::Vulkan)) return nullptr;
+    if (!graph_gpu_) graph_gpu_ = composition::createGpuFrameCompositor(options_.gpu_surface,
         composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext(),
-        std::make_shared<composition::OpenGlTexturePoolBudget>(256ULL * 1024 * 1024, 8));
+        std::make_shared<composition::OpenGlTexturePoolBudget>(256ULL * 1024 * 1024, 8), job_.settings.graphics_backend);
     return graph_gpu_.get();
 }
 
@@ -137,11 +138,26 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
     if (native_output) native_output->reset();
     if (native_pool && native_output && nativeDelivery()) {
         ExportTimedScope gpu_time(metrics_.gpu_composition_nanoseconds);
-        if (!native_gpu_) native_gpu_ = std::make_unique<composition::OpenGlFrameCompositor>(options_.gpu_surface,
+        if (!native_gpu_) native_gpu_ = composition::createGpuFrameCompositor(options_.gpu_surface,
             composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext());
         composition::OpenGlCompositionTimings timings;
         auto texture = native_gpu_->composeTexture(job_.settings.width, job_.settings.height, layers,
             [&] { return canceled.load(); }, &timings);
+        // Offline export can wait for released targets' GPU fences without
+        // blocking the GUI or discarding the selected native encoding path.
+        const auto capacity_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
+        while (texture.status == composition::OpenGlCompositionStatus::Busy &&
+               std::chrono::steady_clock::now() < capacity_deadline) {
+            if (canceled.load()) throw ExportCanceled{};
+            const auto collected = native_gpu_->collectReleasedTextureFrames();
+            if (collected.status == composition::OpenGlCompositionStatus::Failed) {
+                texture = {collected.status, {}, collected.operation, collected.cause, collected.error_code};
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            texture = native_gpu_->composeTexture(job_.settings.width, job_.settings.height, layers,
+                [&] { return canceled.load(); }, &timings);
+        }
         metrics_.upload_nanoseconds += timings.upload_nanoseconds;
         metrics_.uploaded_bytes += timings.uploaded_bytes;
         metrics_.native_video_imports += timings.native_video_imports;
@@ -161,14 +177,14 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
         if (copied.status == composition::OpenGlCompositionStatus::Cancelled || canceled.load()) throw ExportCanceled{};
         fallback(copied, output_frame, timeline_frame, true);
     }
-    if (job_.settings.gpu_composition_enabled && !failed_ && !cpu_source_recovery_) {
+    if (job_.settings.gpu_composition_enabled && job_.settings.graphics_backend != composition::GraphicsBackend::Cpu && !failed_ && !cpu_source_recovery_) {
         composition::OpenGlCompositionTimings timings;
         composition::OpenGlCompositionResult result;
         {
             ExportTimedScope gpu_time(metrics_.gpu_composition_nanoseconds);
             try {
                 if (!gpu_) gpu_ = options_.gpu_factory ? options_.gpu_factory(options_.gpu_surface)
-                                                       : std::make_unique<NativeExportGpu>(options_.gpu_surface);
+                                                       : std::make_unique<NativeExportGpu>(options_.gpu_surface, job_.settings.graphics_backend);
                 if (gpu_) result = gpu_->compose(job_.settings.width, job_.settings.height, layers,
                     [&] { return canceled.load(std::memory_order_acquire); }, &timings);
                 else result = {composition::OpenGlCompositionStatus::Failed, {}, "create-export-backend", "The export GPU adapter is unavailable."};

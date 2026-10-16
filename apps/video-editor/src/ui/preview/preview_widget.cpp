@@ -1,6 +1,8 @@
 #include "ui/preview/preview_widget.h"
 
 #include "rendering/opengl_preview_surface.h"
+#include "rendering/vulkan_preview_surface.h"
+#include <creative_suite/composition/graphics_backend.h>
 #include "rendering/preview_performance_metrics.h"
 
 #include <QImage>
@@ -58,8 +60,13 @@ PreviewWidget::PreviewWidget(QWidget* parent)
         "background-color: #1c2028; color: #c7d0dc; font-size: 20px;");
     stack_->addWidget(cpu_surface_);
 
-    gpu_enabled_ = qEnvironmentVariableIntValue("CREATIVE_SUITE_DISABLE_GPU_PREVIEW") != 1;
-    if (gpu_enabled_) {
+    gpu_enabled_ = qEnvironmentVariableIntValue("CREATIVE_SUITE_DISABLE_GPU_PREVIEW") != 1 && creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Cpu;
+    if (gpu_enabled_ && creative_suite::composition::sessionGraphicsBackend() == creative_suite::composition::GraphicsBackend::Vulkan) {
+        vulkan_surface_ = new rendering::VulkanPreviewSurface(this);
+        stack_->addWidget(vulkan_surface_);
+        stack_->setCurrentWidget(vulkan_surface_);
+        connect(vulkan_surface_, &rendering::VulkanPreviewSurface::gpuFailure, this, &PreviewWidget::handleGpuFailure);
+    } else if (gpu_enabled_) {
         gpu_surface_ = new rendering::OpenGLPreviewSurface(this);
         stack_->addWidget(gpu_surface_);
         stack_->setCurrentWidget(gpu_surface_);
@@ -131,7 +138,14 @@ void PreviewWidget::setFrame(rendering::PreviewFramePayload frame, quint64 deliv
     current_payload_ = std::move(frame);
     current_frame_ = current_payload_.rgba;
 
+    if (vulkan_surface_ != nullptr && gpu_enabled_) {
+        cpu_surface_->setDeliveryTraceId(0); frame_image_ = {};
+        stack_->setCurrentWidget(vulkan_surface_);
+        vulkan_surface_->setFrame(current_payload_, delivery_trace_id);
+        return;
+    }
     if (gpu_surface_ != nullptr && gpu_enabled_) {
+        stack_->setCurrentWidget(gpu_surface_);
         cpu_surface_->setDeliveryTraceId(0);
         frame_image_ = {};
         gpu_surface_->setFrame(current_payload_, delivery_trace_id);
@@ -164,10 +178,13 @@ void PreviewWidget::clearFrame(const QString& message) {
         cpu_surface_->setText(empty_message_);
     }
     if (gpu_surface_ != nullptr) gpu_surface_->clearFrame();
+    if (vulkan_surface_) vulkan_surface_->clearFrame();
+    if (vulkan_surface_) stack_->setCurrentWidget(cpu_surface_);
 }
 
 void PreviewWidget::releaseGpuFrames() {
     current_payload_.gpu.reset();
+    if (vulkan_surface_) vulkan_surface_->clearFrame();
     if (gpu_surface_) gpu_surface_->clearFrame();
 }
 
@@ -177,11 +194,12 @@ void PreviewWidget::setDeliveryEpoch(quint64 epoch, bool retry_texture_delivery)
 }
 
 bool PreviewWidget::textureDeliveryAvailable() const noexcept {
-    return usesGpuPreview() && gpu_surface_->textureDeliveryAvailable();
+    return usesGpuPreview() && (vulkan_surface_ ? vulkan_surface_->available() : gpu_surface_->textureDeliveryAvailable());
 }
 
 void PreviewWidget::setGrayscaleEnabled(bool enabled) {
     grayscale_enabled_ = enabled;
+    if (vulkan_surface_ && gpu_enabled_) { vulkan_surface_->setGrayscaleEnabled(enabled); return; }
     if (gpu_surface_ != nullptr && gpu_enabled_) {
         gpu_surface_->setGrayscaleEnabled(enabled);
         return;
@@ -194,7 +212,7 @@ bool PreviewWidget::isGrayscaleEnabled() const noexcept {
 }
 
 bool PreviewWidget::usesGpuPreview() const noexcept {
-    return gpu_enabled_ && gpu_surface_ != nullptr;
+    return gpu_enabled_ && (gpu_surface_ != nullptr || (vulkan_surface_ && vulkan_surface_->available()));
 }
 
 void PreviewWidget::resizeEvent(QResizeEvent* event) {
@@ -203,6 +221,11 @@ void PreviewWidget::resizeEvent(QResizeEvent* event) {
 }
 
 void PreviewWidget::handleGpuFailure(const QString& reason, qint64 error_code) {
+    if (vulkan_surface_ && error_code == 0 && current_payload_.rgba) {
+        stack_->setCurrentWidget(cpu_surface_); frame_image_ = {}; ensureCpuImage(); updateCpuPixmap();
+        rendering::PreviewPerformanceMetrics::instance().recordCpuPresentedFrame();
+        return;
+    }
     gpu_enabled_ = false;
     // Keep the previous GPU presentation until asynchronous recovery supplies RGBA.
     if (!current_payload_.gpu && stack_ != nullptr && cpu_surface_ != nullptr) {

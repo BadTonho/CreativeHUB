@@ -1,3 +1,4 @@
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Test Widgets)
 add_executable(creative-suite-main-editor-background-generator-tests background_generator_test.cpp)
 target_link_libraries(creative-suite-main-editor-background-generator-tests PRIVATE creative-suite-main-editor-core)
 target_compile_features(creative-suite-main-editor-background-generator-tests PRIVATE cxx_std_20)
@@ -187,3 +188,18 @@ add_creative_suite_test(
 )
 
 preserve_video_editor_test_working_directory()
+
+add_creative_suite_test(NAME creative-suite-main-editor-vulkan-timeline SKIP_RETURN_CODE 77 COMMAND creative-suite-main-editor-gpu-timeline-tests --vulkan)
+set_tests_properties(creative-suite-main-editor-vulkan-timeline PROPERTIES ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
+# Native acceptance is invoked explicitly with --vulkan; portable CI must not count a missing GPU as acceptance.
+
+foreach(kind IN ITEMS renderer-selection vulkan-preview)
+    string(REPLACE "-" "_" source "${kind}")
+    add_executable(creative-suite-main-editor-${kind}-tests ${source}_test.cpp)
+    target_link_libraries(creative-suite-main-editor-${kind}-tests PRIVATE creative-suite-main-editor-core Qt6::Test)
+    copy_ffmpeg_test_runtime(creative-suite-main-editor-${kind}-tests)
+    deploy_qt_test_runtime(creative-suite-main-editor-${kind}-tests)
+endforeach()
+add_creative_suite_test(NAME creative-suite-main-editor-renderer-selection COMMAND creative-suite-main-editor-renderer-selection-tests)
+set_tests_properties(creative-suite-main-editor-renderer-selection PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+add_creative_suite_test(NAME creative-suite-main-editor-vulkan-preview SKIP_RETURN_CODE 77 COMMAND creative-suite-main-editor-vulkan-preview-tests)

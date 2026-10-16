@@ -383,7 +383,7 @@ void PlaybackController::setFusionNodePreviewTarget(
 void PlaybackController::setGpuCompositionEnabled(bool enabled) {
     if (!available() || enabled == gpu_composition_enabled_) return;
     gpu_composition_enabled_ = enabled;
-    if (enabled && !gpu_surface_) {
+    if (enabled && !gpu_surface_ && creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Vulkan && creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Cpu) {
         try {
             gpu_surface_ = creative_suite::composition::OpenGlFrameCompositor::createSurface();
         } catch (const std::exception& error) {

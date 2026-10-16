@@ -347,6 +347,7 @@ int main(int argc, char* argv[]) {
 
         auto* surface = widget.findChild<rendering::OpenGLPreviewSurface*>();
         require(surface != nullptr, "GPU Preview surface was not constructed.");
+        require(!surface->isHidden(), "The initial placeholder hid the OpenGL surface before context creation.");
         widget.show();
 
         const bool context_reported = waitFor([&] {

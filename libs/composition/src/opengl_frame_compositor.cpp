@@ -1,5 +1,6 @@
 #include <creative_suite/composition/opengl_frame_compositor.h>
 #include "windows_video_interop.h"
+#include <creative_suite/composition/vulkan_frame_compositor.h>
 
 #include <QGuiApplication>
 #include <QOffscreenSurface>
@@ -51,7 +52,7 @@ bool usable(const CompositionLayer& layer) {
         return false;
 #endif
     }
-    if (layer.texture_frame) return layer.texture_frame->valid() &&
+    if (layer.texture_frame) return layer.texture_frame->backend() == GraphicsBackend::OpenGl && layer.texture_frame->valid() &&
         f.width == layer.texture_frame->width() && f.height == layer.texture_frame->height();
     return f.width > 0 && f.height > 0 &&
         static_cast<std::int64_t>(f.stride) >= static_cast<std::int64_t>(f.width) * 4 &&
@@ -253,6 +254,16 @@ struct OpenGlTexturePoolBudget::Impl {
     std::uint64_t byte_limit = maximum_bytes;
     unsigned target_limit = maximum_targets;
 };
+std::uint64_t OpenGlTexturePoolBudget::byteLimit() const noexcept { return impl_->byte_limit; }
+unsigned OpenGlTexturePoolBudget::targetLimit() const noexcept { return impl_->target_limit; }
+bool OpenGlTexturePoolBudget::tryReserve(std::uint64_t bytes) {
+    std::lock_guard lock(impl_->mutex);
+    if (impl_->targets >= impl_->target_limit || bytes > impl_->byte_limit - impl_->bytes) return false;
+    ++impl_->targets; impl_->bytes += bytes; return true;
+}
+void OpenGlTexturePoolBudget::releaseReservation(std::uint64_t bytes) noexcept {
+    std::lock_guard lock(impl_->mutex); --impl_->targets; impl_->bytes -= bytes;
+}
 OpenGlTexturePoolBudget::OpenGlTexturePoolBudget(std::uint64_t byte_limit, unsigned target_limit)
     : impl_(std::make_unique<Impl>()) {
     if (!byte_limit || byte_limit > 256ULL * 1024 * 1024 || !target_limit || target_limit > 8)
@@ -281,13 +292,17 @@ struct OpenGlTextureFrame::State {
 };
 OpenGlTextureFrame::OpenGlTextureFrame(std::shared_ptr<State> state) : state_(std::move(state)) {}
 OpenGlTextureFrame::~OpenGlTextureFrame() = default;
-int OpenGlTextureFrame::width() const noexcept { return state_->width; }
-int OpenGlTextureFrame::height() const noexcept { return state_->height; }
-unsigned OpenGlTextureFrame::texture() const noexcept { return state_->texture; }
-std::uint64_t OpenGlTextureFrame::session() const noexcept { return state_->session; }
-bool OpenGlTextureFrame::valid() const noexcept { return state_->valid.load(); }
+OpenGlTextureFrame::OpenGlTextureFrame(std::shared_ptr<VulkanImage> image) : vulkan_(std::move(image)) {}
+bool OpenGlTextureFrame::bottomLeftOrigin() const noexcept { return !vulkan_; }
+GraphicsBackend OpenGlTextureFrame::backend() const noexcept { return vulkan_ ? GraphicsBackend::Vulkan : GraphicsBackend::OpenGl; }
+int OpenGlTextureFrame::width() const noexcept { return vulkan_ ? vulkan_->width : state_->width; }
+int OpenGlTextureFrame::height() const noexcept { return vulkan_ ? vulkan_->height : state_->height; }
+unsigned OpenGlTextureFrame::texture() const noexcept { return vulkan_ ? 0 : state_->texture; }
+std::uint64_t OpenGlTextureFrame::session() const noexcept { return vulkan_ ? reinterpret_cast<std::uintptr_t>(vulkan_->device.get()) : state_->session; }
+bool OpenGlTextureFrame::valid() const noexcept { return vulkan_ ? vulkan_->device->valid() : state_->valid.load(); }
 bool OpenGlTextureFrame::beginUse(QOpenGLContext* context, std::string& cause, std::int64_t& code) const {
     code = 0;
+    if (vulkan_) { cause = "A Vulkan lease cannot be used by an OpenGL consumer."; return false; }
     std::lock_guard lock(state_->mutex);
     if (!valid() || !context || QOpenGLContext::currentContext() != context ||
         context->shareGroup() != state_->group || state_->unsafe || state_->consumers.size() >= 128) {
@@ -304,6 +319,7 @@ bool OpenGlTextureFrame::beginUse(QOpenGLContext* context, std::string& cause, s
 }
 bool OpenGlTextureFrame::endUse(QOpenGLContext* context, std::string& cause, std::int64_t& code) const {
     code = 0;
+    if (vulkan_) { cause = "A Vulkan lease cannot be used by an OpenGL consumer."; return false; }
     std::lock_guard lock(state_->mutex);
     if (!valid() || !context || QOpenGLContext::currentContext() != context ||
         context->shareGroup() != state_->group) {
@@ -818,7 +834,10 @@ void main() {
             ~InteropGuard() { if (adapter) (void)adapter->end(); }
         } interop_guard{operation.background.native ? video_interop.get() : nullptr};
         if (bound.status != OpenGlCompositionStatus::Complete) return bound;
-        if(operation.kind==OpenGlImageOperationKind::GaussianBlur) {
+        for (const auto* input : {&operation.background, &operation.foreground, &operation.mask})
+        if (input->texture && input->texture->backend() != GraphicsBackend::OpenGl)
+            return {OpenGlCompositionStatus::Unsupported, {}, "check-image-backend", "An OpenGL operation cannot consume a Vulkan image."};
+    if(operation.kind==OpenGlImageOperationKind::GaussianBlur) {
             const auto bytes=static_cast<std::uint64_t>(width)*height*4;
             if(budget->bytes()+bytes>budget->impl_->byte_limit)
                 return result(OpenGlCompositionStatus::Unsupported,"image-blur-budget","Blur scratch exceeds the bounded texture budget.");
@@ -1432,6 +1451,8 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeRasterTexture(
 
 OpenGlCompositionResult OpenGlFrameCompositor::readback(const OpenGlTextureFramePtr& frame,
     const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    if (frame && frame->backend() != GraphicsBackend::OpenGl)
+        return {OpenGlCompositionStatus::Unsupported, {}, "check-image-backend", "OpenGL readback cannot consume a Vulkan image."};
     if (timings) *timings = {};
     auto& p = *impl_;
     struct Guard { Impl& p; ~Guard() { if (p.context) p.context->doneCurrent(); } } guard{p};
@@ -1509,6 +1530,9 @@ OpenGlResourceUsage OpenGlFrameCompositor::resourceUsage() const noexcept { retu
 OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
     const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
     OpenGlCompositionTimings* timings, bool read_output) {
+    if (std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
+            return layer.texture_frame && layer.texture_frame->backend() != GraphicsBackend::OpenGl;
+        })) return result(OpenGlCompositionStatus::Unsupported, "check-image-backend", "An OpenGL compositor cannot consume a Vulkan image.");
     if (std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
             return !layer.effect_stack.empty(); })) {
         auto prepared_layers = layers;

@@ -30,6 +30,8 @@ Detailed subsystem contracts and design notes are listed below; see the [archite
 
 ## GPU pipeline
 
+- [Choose OpenGL, Vulkan or CPU](gpu/VULKAN_RENDERER.md)
+
 - [Acceleration plan](gpu/GPU_ACCELERATION_PLAN.md)
 - [Visual pipeline contract and evidence](gpu/GPU_PIPELINE.md)
 - [Direct preview delivery](gpu/GPU_TEXTURE_DELIVERY.md)

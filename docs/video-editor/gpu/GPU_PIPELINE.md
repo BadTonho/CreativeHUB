@@ -318,3 +318,11 @@ Geometry uploads remain (1082880/1442880/2162880 bytes). This is not a general
 reusing bridges across tracks, native conversion measured 809.131/802.525/
 817.294 ms for the same workloads. CPU totals varied between runs; infer the
 specific conversion improvement, not a stable whole-system speedup.
+
+## Alternate Vulkan composition
+
+The selectable [Vulkan renderer](VULKAN_RENDERER.md) uses RGBA input/output at
+codec boundaries. The D3D11/OpenGL/NVENC direct-surface path described in this
+document remains OpenGL-specific. Vulkan can accelerate the graph/composition
+while retaining explicit downloads/uploads for codecs; these transfers must be
+included in performance results.

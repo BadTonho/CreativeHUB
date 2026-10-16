@@ -170,6 +170,8 @@ add_executable(creative-suite-main-editor-preview-tests
     preview_widget_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/preview/preview_widget.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/preview/preview_widget.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/vulkan_preview_surface.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/vulkan_preview_surface.h
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/opengl_preview_surface.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/opengl_preview_surface.h
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/preview_performance_metrics.cpp
@@ -247,6 +249,8 @@ add_executable(creative-suite-main-editor-opengl-preview-tests
     opengl_preview_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/preview/preview_widget.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/preview/preview_widget.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/vulkan_preview_surface.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/vulkan_preview_surface.h
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/opengl_preview_surface.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/opengl_preview_surface.h
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/preview_performance_metrics.cpp
@@ -450,3 +454,6 @@ deploy_qt_test_runtime(creative-suite-main-editor-translation-catalog-tests)
 add_creative_suite_test(
     NAME creative-suite-main-editor-translation-catalog
     COMMAND creative-suite-main-editor-translation-catalog-tests)
+
+add_creative_suite_test(NAME creative-suite-main-editor-vulkan-export SKIP_RETURN_CODE 77 COMMAND creative-suite-main-editor-render-export-tests --native-gpu --vulkan)
+set_tests_properties(creative-suite-main-editor-vulkan-export PROPERTIES ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1")

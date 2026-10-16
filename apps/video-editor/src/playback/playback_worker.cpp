@@ -496,7 +496,7 @@ void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* s
     clearCompositionCache();
     retireGpuCompositor();
     gpu_surface_ = surface;
-    gpu_composition_enabled_ = enabled;
+    gpu_composition_enabled_ = enabled && creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Cpu;
     gpu_composition_failed_ = false;
     gpu_graph_compositor_.reset();
     gpu_warning_reported_ = false;
@@ -504,10 +504,10 @@ void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* s
     gpu_texture_warning_reported_ = false;
 }
 
-creative_suite::composition::OpenGlFrameCompositor* PlaybackWorker::graphGpuBackend() {
-    if (!gpu_composition_enabled_ || gpu_composition_failed_ || adjustment_cpu_frame_ || !gpu_surface_) return nullptr;
+creative_suite::composition::GpuFrameCompositor* PlaybackWorker::graphGpuBackend() {
+    if (!gpu_composition_enabled_ || gpu_composition_failed_ || adjustment_cpu_frame_ || (!gpu_surface_ && creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Vulkan)) return nullptr;
     if (!gpu_graph_compositor_)
-        gpu_graph_compositor_ = std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(gpu_surface_,
+        gpu_graph_compositor_ = creative_suite::composition::createGpuFrameCompositor(gpu_surface_,
             creative_suite::composition::OpenGlPrecisionPolicy::Automatic,
             gpu_share_context_ ? gpu_share_context_ : QOpenGLContext::globalShareContext(),
             std::make_shared<creative_suite::composition::OpenGlTexturePoolBudget>(256ULL * 1024 * 1024, 8));
@@ -2872,7 +2872,7 @@ PlaybackWorker::decodeCompositionLayers(
             decode_path = rendering::SlowFrameDecodePath::StaticFrame;
         } else if (composition.session != nullptr) {
             std::optional<media::VideoFramePtr> decoded;
-            const bool native_delivery = hardware_decoding_enabled_ && gpu_composition_enabled_ && !gpu_composition_failed_ && !adjustment_cpu_frame_;
+            const bool native_delivery = creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Vulkan && hardware_decoding_enabled_ && gpu_composition_enabled_ && !gpu_composition_failed_ && !adjustment_cpu_frame_;
             const auto acceptNative = [&](const std::optional<creative_suite::media::DecodedVideoFrame>& result) {
                 if (!result) return;
                 native_frame = result->native;
@@ -3076,7 +3076,7 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
                 gpu_result = gpu_compose_(width, height, layers, should_cancel, &gpu_timings);
             } else {
                 if (!gpu_compositor_)
-                    gpu_compositor_ = std::make_unique<OpenGlFrameCompositor>(gpu_surface_,
+                    gpu_compositor_ = createGpuFrameCompositor(gpu_surface_,
                         OpenGlPrecisionPolicy::Automatic,
                         gpu_share_context_ ? gpu_share_context_ : QOpenGLContext::globalShareContext(), gpu_texture_budget_);
                 if (gpu_texture_delivery_enabled_ && !gpu_texture_delivery_failed_) {
@@ -3116,7 +3116,7 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
                         }
                         if (direct.status == OpenGlCompositionStatus::Failed) {
                             retireGpuCompositor();
-                            gpu_compositor_ = std::make_unique<OpenGlFrameCompositor>(gpu_surface_,
+                            gpu_compositor_ = createGpuFrameCompositor(gpu_surface_,
                                 OpenGlPrecisionPolicy::Automatic,
                                 gpu_share_context_ ? gpu_share_context_ : QOpenGLContext::globalShareContext(), gpu_texture_budget_);
                         }

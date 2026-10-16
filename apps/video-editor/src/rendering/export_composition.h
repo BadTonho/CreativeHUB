@@ -33,7 +33,7 @@ private:
 class ExportComposition {
 public:
     ExportComposition(const RenderJob&, const OfflineExportOptions&, OfflineExportMetrics&);
-    composition::OpenGlFrameCompositor* graphBackend();
+    composition::GpuFrameCompositor* graphBackend();
     bool nativeDelivery() const noexcept;
     bool cpuSourceRecovery() const noexcept { return cpu_source_recovery_; }
     int outputWidth() const noexcept { return job_.settings.width; }
@@ -49,8 +49,8 @@ private:
     const OfflineExportOptions& options_;
     OfflineExportMetrics& metrics_;
     std::unique_ptr<ExportGpuCompositor> gpu_;
-    std::unique_ptr<composition::OpenGlFrameCompositor> graph_gpu_;
-    std::unique_ptr<composition::OpenGlFrameCompositor> native_gpu_;
+    std::unique_ptr<composition::GpuFrameCompositor> graph_gpu_;
+    std::unique_ptr<composition::GpuFrameCompositor> native_gpu_;
     bool failed_ = false, warned_ = false;
     bool cpu_source_recovery_ = false;
 };

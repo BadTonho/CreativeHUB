@@ -735,3 +735,11 @@ attempts, fallback, producer/consumer fence submission and viewer wait submissio
 `gpu_texture_acceptance_to_draw` independently of upload. Normal direct frames
 have zero readback bytes, zero viewer upload bytes and no upload delivery stage.
 See [GPU_TEXTURE_DELIVERY.md](../gpu/GPU_TEXTURE_DELIVERY.md).
+
+## Selectable Vulkan backend
+
+Video Editor now selects the graphics API before its main window. Automatic
+retains the established OpenGL policy. The shared compositor interface also has
+an experimental Vulkan implementation for preview, Fusion and RGBA export.
+See [backend selection, ownership and validation](../gpu/VULKAN_RENDERER.md).
+The OpenGL-specific descriptions above describe that backend, not every renderer.

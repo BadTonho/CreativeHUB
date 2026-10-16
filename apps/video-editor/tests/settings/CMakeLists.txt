@@ -2,6 +2,7 @@ find_package(Qt6 CONFIG REQUIRED COMPONENTS Test)
 
 add_executable(creative-suite-main-editor-settings-dialog-tests
     settings_dialog_test.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/settings/renderer_preferences.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/settings_dialog.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/settings_dialog.h
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.cpp
@@ -17,6 +18,7 @@ target_include_directories(creative-suite-main-editor-settings-dialog-tests PRIV
 target_link_libraries(creative-suite-main-editor-settings-dialog-tests PRIVATE
     Qt6::Widgets
     Qt6::Test
+    creative-suite::composition
     creative-suite::shortcuts
     creative-suite::translations
 )

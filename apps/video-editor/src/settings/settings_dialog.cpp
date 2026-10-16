@@ -1,4 +1,5 @@
 #include "settings/settings_dialog.h"
+#include "settings/renderer_preferences.h"
 
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
@@ -153,6 +154,24 @@ QWidget* SettingsDialog::createGeneralPage() {
 
     layout->addWidget(metrics_check);
     layout->addWidget(description);
+
+    auto* renderer_combo = new QComboBox(page);
+    renderer_combo->setObjectName("rendererBackendComboBox");
+    for (auto backend : {GraphicsBackend::Automatic, GraphicsBackend::OpenGl, GraphicsBackend::Vulkan, GraphicsBackend::Cpu})
+        renderer_combo->addItem(rendererDisplayName(backend), int(backend));
+    renderer_combo->setCurrentIndex(renderer_combo->findData(int(rendererPreference())));
+    layout->addWidget(new QLabel(QCoreApplication::translate("RendererSelection", "Graphics renderer (next launch)"), page));
+    layout->addWidget(renderer_combo);
+    auto* effective = new QLabel(QCoreApplication::translate("RendererSelection", "Active renderer: %1").arg(
+        QCoreApplication::instance()->property("graphicsBackend").toString()), page);
+    effective->setObjectName("activeRendererLabel"); layout->addWidget(effective);
+    connect(renderer_combo, &QComboBox::currentIndexChanged, this, [renderer_combo](int) {
+        setRendererPreference(GraphicsBackend(renderer_combo->currentData().toInt()));
+    });
+    auto* ask_renderer = new QCheckBox(QCoreApplication::translate("RendererSelection", "Ask which renderer to use at startup"), page);
+    ask_renderer->setObjectName("askRendererAtStartupCheckBox");
+    ask_renderer->setChecked(askRendererAtStartup()); layout->addWidget(ask_renderer);
+    connect(ask_renderer, &QCheckBox::toggled, this, [](bool enabled) { setAskRendererAtStartup(enabled); });
 
     auto* hardware_check = new QCheckBox(QCoreApplication::translate("SettingsDialog", "Use hardware video decoding for preview (Experimental)"), page);
     hardware_check->setObjectName("hardwareDecodingCheckBox");

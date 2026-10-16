@@ -1,6 +1,7 @@
 #include "main_window/main_window.h"
 
 #include "logging/logger.h"
+#include "settings/renderer_startup.h"
 #include <creative_suite/translations/language_preference.h>
 #include <creative_suite/translations/translation_runtime.h>
 #ifdef Q_OS_WIN
@@ -85,6 +86,8 @@ int main(int argc, char* argv[]) {
             creative_suite::translations::localeForApplicationPreference(
                 QStringLiteral("video-editor"))));
 
+        const auto renderer = settings::initializeRenderer();
+        if (!renderer.proceed) return 0;
         MainWindow window;
 #ifdef Q_OS_WIN
         creative_suite::updater::UpdateCenter updater(

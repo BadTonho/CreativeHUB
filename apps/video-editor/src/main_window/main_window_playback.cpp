@@ -147,7 +147,7 @@ void appendPerformanceContext(
     appendTimingContext(context, "gpu_fence_wait_submission", snapshot.gpu_fence_wait_submission);
     appendTimingContext(context, "gpu_consumer_fence_submission", snapshot.gpu_consumer_fence_submission);
     context.emplace_back("composition_backend", snapshot.gpu_composition_frames > 0
-        ? (snapshot.cpu_composition_frames > 0 ? "mixed" : "opengl")
+        ? (snapshot.cpu_composition_frames > 0 ? "mixed" : creative_suite::composition::backendName(creative_suite::composition::sessionGraphicsBackend()).data())
         : (snapshot.cpu_composition_frames > 0 ? "cpu" : "none"));
     context.emplace_back("cpu_composition_frames", std::to_string(snapshot.cpu_composition_frames));
     context.emplace_back("gpu_composition_frames", std::to_string(snapshot.gpu_composition_frames));
@@ -596,7 +596,7 @@ void appendSlowFrameContext(
     context.emplace_back("diagnostic_schema_version", "9");
     context.emplace_back("delivery_backend", frame.texture_delivery ? "texture" : "rgba");
     context.emplace_back("texture_pool_bytes", std::to_string(frame.texture_pool_bytes));
-    context.emplace_back("composition_backend", frame.gpu_composition ? "opengl" : "cpu");
+    context.emplace_back("composition_backend", frame.gpu_composition ? creative_suite::composition::backendName(creative_suite::composition::sessionGraphicsBackend()).data() : "cpu");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back(
@@ -917,7 +917,7 @@ void MainWindow::flushPreviewPerformanceMetrics() {
         "preview_backend",
         preview_widget_ == nullptr
             ? "N/A"
-            : preview_widget_->usesGpuPreview() ? "opengl" : "cpu_fallback");
+            : preview_widget_->usesGpuPreview() ? creative_suite::composition::backendName(creative_suite::composition::sessionGraphicsBackend()).data() : "cpu_fallback");
 
     const auto source_kind_index = context.size();
     context.emplace_back("source_kind", "N/A");

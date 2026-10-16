@@ -52,6 +52,10 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/settings/settings_dialog.h
     src/settings/shortcut_manager.cpp
     src/settings/shortcut_manager.h
+    src/settings/renderer_preferences.cpp
+    src/settings/renderer_startup.cpp
+    src/rendering/vulkan_preview_surface.cpp
+    src/rendering/vulkan_preview_surface.h
     src/settings/user_preferences.cpp
     src/settings/user_preferences.h
     src/system/performance_usage.h
