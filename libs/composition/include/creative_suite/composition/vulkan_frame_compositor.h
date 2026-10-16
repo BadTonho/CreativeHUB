@@ -10,6 +10,8 @@ struct VulkanImage {
     int width = 0, height = 0;
     std::shared_ptr<class VulkanDevice> device;
     std::shared_ptr<void> allocation;
+    // Backend-private completion token; same-queue consumers synchronize on GPU.
+    std::shared_ptr<void> completion;
 };
 class VulkanDevice final : public std::enable_shared_from_this<VulkanDevice> {
 public:
@@ -28,6 +30,11 @@ public:
     std::uint64_t reservedBytes() const noexcept;
     std::uint64_t peakBytes() const noexcept;
     struct Impl;
+    struct Diagnostics {
+        std::uint64_t submissions = 0, waits = 0, wait_nanoseconds = 0;
+        unsigned pending = 0, peak_pending = 0;
+    };
+    Diagnostics diagnostics() const noexcept;
 private:
     VulkanDevice();
     std::unique_ptr<Impl> impl_;
@@ -43,6 +50,19 @@ public:
         std::shared_ptr<OpenGlTexturePoolBudget> budget = {});
     ~VulkanFrameCompositor() override;
     GraphicsBackend backend() const noexcept override { return GraphicsBackend::Vulkan; }
+    // GUI upload adapter: never waits for a recording context or device lock.
+    OpenGlTextureCompositionResult tryUpload(const media::RgbaFrame&);
+    std::unique_ptr<GpuCommandBatch> beginCommandBatch(const CancellationPredicate& = {}) override;
+    OpenGlCompositionResult prepareAsyncReadback(int, int, std::uint64_t, unsigned = 2,
+        unsigned* = nullptr, bool = false) override;
+    OpenGlReadbackResult submitAsyncReadback(int, int, const std::vector<CompositionLayer>&,
+        const CancellationPredicate& = {}) override;
+    OpenGlReadbackResult submitAsyncReadback(const OpenGlTextureFramePtr&,
+        const CancellationPredicate& = {}) override;
+    OpenGlReadbackResult collectAsyncReadback(OpenGlReadbackTicket,
+        const CancellationPredicate& = {}, bool = false) override;
+    void discardAsyncReadbacks() noexcept override;
+    unsigned asyncReadbackSlotCount() const noexcept override;
     OpenGlCompositionResult compose(int,int,const std::vector<CompositionLayer>&,
         const CancellationPredicate& = {}, OpenGlCompositionTimings* = nullptr) override;
     OpenGlTextureCompositionResult composeTexture(int,int,const std::vector<CompositionLayer>&,
@@ -69,5 +89,7 @@ private:
     OpenGlTextureFramePtr publish(std::shared_ptr<VulkanImage>);
     void checkCapacity(int width, int height);
     std::vector<std::weak_ptr<const OpenGlTextureFrame>> outputs_;
+    struct Readbacks;
+    std::unique_ptr<Readbacks> readbacks_;
 };
 }

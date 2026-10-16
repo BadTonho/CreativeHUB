@@ -743,3 +743,9 @@ retains the established OpenGL policy. The shared compositor interface also has
 an experimental Vulkan implementation for preview, Fusion and RGBA export.
 See [backend selection, ownership and validation](../gpu/VULKAN_RENDERER.md).
 The OpenGL-specific descriptions above describe that backend, not every renderer.
+
+Vulkan now records bounded asynchronous command batches and uses ordered RGBA
+readback tickets for Video export. Preview acquisition defers instead of waiting
+for a free swapchain image; normal presentation no longer waits for queue idle.
+The 256 MiB accounted device budget and explicit codec transfers remain unchanged.
+See the Vulkan renderer contract for ownership, cancellation and FIFO recovery.

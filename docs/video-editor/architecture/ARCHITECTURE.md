@@ -70,3 +70,9 @@ backend in each render job. GPU composition remains independently configurable.
 OpenGL and Vulkan implement the shared composition boundary; application state,
 Fusion scheduling, codecs and documents remain owned by their existing modules.
 See [the provisional Vulkan contract](../gpu/VULKAN_RENDERER.md).
+
+Vulkan now records bounded asynchronous command batches and uses ordered RGBA
+readback tickets for Video export. Preview acquisition defers instead of waiting
+for a free swapchain image; normal presentation no longer waits for queue idle.
+The 256 MiB accounted device budget and explicit codec transfers remain unchanged.
+See the Vulkan renderer contract for ownership, cancellation and FIFO recovery.

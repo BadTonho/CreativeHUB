@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 using namespace creative_suite;
@@ -71,19 +72,68 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
     VulkanFrameCompositor second(device,shared_budget->byteLimit(),shared_budget->targetLimit(),shared_budget);
     require(second.composeTexture(61,47,{{&a}}).status==OpenGlCompositionStatus::Busy,"Retired Vulkan leases escaped the shared pool budget.");
     retired.reset();require(second.composeTexture(61,47,{{&a}}).status==OpenGlCompositionStatus::Complete,"Released shared Vulkan capacity was not reusable.");
+    {
+        VulkanFrameCompositor asynchronous(device);
+        unsigned prepared=0;
+        require(asynchronous.prepareAsyncReadback(std::numeric_limits<int>::max(),2,std::numeric_limits<std::uint64_t>::max()).status==OpenGlCompositionStatus::Unsupported,
+            "An invalid readback canvas reached the Vulkan allocator.");
+        auto ready=asynchronous.prepareAsyncReadback(61,47,61ULL*47*4*2,2,&prepared);
+        require(ready.status==OpenGlCompositionStatus::Complete && prepared==2,"Two bounded Vulkan readback slots were not prepared.");
+        auto first=asynchronous.submitAsyncReadback(61,47,{{&a}});
+        auto last=asynchronous.submitAsyncReadback(61,47,{{&b}});
+        require(first.status==OpenGlCompositionStatus::Complete && last.status==OpenGlCompositionStatus::Complete,"Asynchronous submission failed.");
+        require(first.composition_timings.uploaded_bytes>0 && first.composition_timings.readback_bytes==0,"Asynchronous composition lost transfer diagnostics.");
+        require(asynchronous.submitAsyncReadback(61,47,{{&a}}).status==OpenGlCompositionStatus::Busy,"Readback capacity was not bounded.");
+        require(asynchronous.collectAsyncReadback(last.ticket).status==OpenGlCompositionStatus::Busy,"Out-of-order collection was accepted.");
+        require(asynchronous.collectAsyncReadback(first.ticket,[]{return true;}).status==OpenGlCompositionStatus::Cancelled,"Pending readback ignored cancellation.");
+        auto first_pixels=asynchronous.collectAsyncReadback(first.ticket);auto last_pixels=asynchronous.collectAsyncReadback(last.ticket);
+        require(first_pixels.frame && last_pixels.frame,"Submitted Vulkan pixels were lost.");
+        parity(*FrameCompositor::compose(61,47,{{&a}}),*first_pixels.frame);
+        parity(*FrameCompositor::compose(61,47,{{&b}}),*last_pixels.frame);
+        require(asynchronous.collectAsyncReadback(first.ticket).status==OpenGlCompositionStatus::Unsupported,"A released ticket was accepted.");
+        auto batch=asynchronous.beginCommandBatch();
+        auto before=device->diagnostics();
+        OpenGlImageOperation copy;copy.background.rgba=&a;
+        auto source=asynchronous.processImage(copy);require(bool(source.frame),source.cause);
+        copy.background={nullptr,source.frame};copy.kind=OpenGlImageOperationKind::Color;copy.colors={{10,100,100}};
+        auto effect=asynchronous.processImage(copy);require(bool(effect.frame),effect.cause);
+        require(device->diagnostics().submissions==before.submissions,"An image operation submitted within an open batch.");
+        require(batch && batch->finish().status==OpenGlCompositionStatus::Complete,"Explicit Vulkan batch submission failed.");
+        require(device->diagnostics().submissions==before.submissions+1,"A graph batch did not share one submission.");
+        auto input_ticket=asynchronous.prepareAsyncReadback(a.width,a.height,uint64_t(a.width)*a.height*4,2,&prepared);
+        require(input_ticket.status==OpenGlCompositionStatus::Complete && prepared==1,"Staging memory did not reduce the slot count.");
+        auto ticket=asynchronous.submitAsyncReadback(effect.frame);require(ticket.status==OpenGlCompositionStatus::Complete,"Texture readback submission failed.");
+        require(asynchronous.collectAsyncReadback(ticket.ticket,{},true).status==OpenGlCompositionStatus::Failed,"Injected collection failure was ignored.");
+        asynchronous.discardAsyncReadbacks();
+        require(asynchronous.collectAsyncReadback(ticket.ticket).status==OpenGlCompositionStatus::Unsupported,"Discarded ticket remained live.");
+        require(asynchronous.prepareAsyncReadback(a.width,a.height,uint64_t(a.width)*a.height*4,1).status==OpenGlCompositionStatus::Complete,"Readback reconfiguration failed.");
+        auto replacement=asynchronous.submitAsyncReadback(effect.frame);
+        require(replacement.status==OpenGlCompositionStatus::Complete && replacement.ticket!=ticket.ticket,"Reconfiguration reused an old ticket identity.");
+        require(asynchronous.collectAsyncReadback(ticket.ticket).status==OpenGlCompositionStatus::Unsupported,"A stale ticket collected another frame after reconfiguration.");
+        require(asynchronous.collectAsyncReadback(replacement.ticket).frame.has_value(),"The replacement readback was lost.");
+    }
     QWindow window;device->attachWindow(&window);window.resize(320,180);window.create();std::string cause;
     require(device->present(&window,texture.frame,false,cause),cause);
     QSemaphore locked,resume;OpenGlTextureCompositionResult threaded;
     std::thread worker([&]{VulkanFrameCompositor compositor(device);int calls=0;
-        threaded=compositor.composeTexture(61,47,{{&a}},[&]{if(++calls==2){locked.release();resume.acquire();}return false;});});
+        threaded=compositor.composeTexture(61,47,{{&a}},[&]{if(++calls==3){locked.release();resume.acquire();}return false;});});
     const bool acquired=locked.tryAcquire(1,3000);
-    bool deferred=false;
-    if(acquired){cause="previous";deferred=!device->present(&window,texture.frame,false,cause) && cause.empty();}
+    bool deferred=false,upload_deferred=false;
+    if(acquired){VulkanFrameCompositor gui_upload(device);
+        upload_deferred=gui_upload.tryUpload(a).status==OpenGlCompositionStatus::Busy;
+        cause="previous";deferred=!device->present(&window,texture.frame,false,cause) && cause.empty();}
     resume.release();worker.join();
-    require(acquired && deferred && bool(threaded.frame),"GUI presentation did not defer while the render worker owned the device.");
+    require(acquired && deferred && upload_deferred && bool(threaded.frame),"GUI presentation did not defer while the render worker owned the device.");
     window.resize(240,320);require(device->present(&window,texture.frame,true,cause),cause);device->releaseWindow(&window);
     auto retained=texture.frame;{VulkanFrameCompositor temporary(device);auto f=temporary.composeTexture(9,7,{});retained=f.frame;}
     require(retained && retained->valid(),"A lease did not retain its device after compositor destruction.");
+    {
+        std::string reason;auto owned_device=VulkanDevice::create(reason);require(bool(owned_device),reason);
+        std::weak_ptr<VulkanDevice> weak=owned_device;OpenGlTextureFramePtr lease;
+        {VulkanFrameCompositor producer(owned_device);auto pending=producer.composeTexture(9,7,{});require(bool(pending.frame),pending.cause);lease=std::move(pending.frame);}
+        owned_device.reset();require(!weak.expired(),"A submitted lease did not retain its device.");
+        lease.reset();require(weak.expired(),"A pending submission formed a device ownership cycle.");
+    }
     std::cout<<"native_vulkan_composition=passed direct_readback_bytes="<<timings.readback_bytes<<" reserved_bytes="<<device->reservedBytes()<<"\n";
 }
 void benchmark(const std::shared_ptr<VulkanDevice>& device) {

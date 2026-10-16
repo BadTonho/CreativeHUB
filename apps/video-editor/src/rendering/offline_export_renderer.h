@@ -33,6 +33,8 @@ struct OfflineExportMetrics {
     std::uint64_t decoder_reserved_gpu_bytes = 0, graph_peak_gpu_bytes = 0, encoder_reserved_gpu_bytes = 0;
     std::uint64_t decode_packet_nanoseconds = 0, decode_receive_nanoseconds = 0, decode_conversion_nanoseconds = 0;
     std::uint64_t graph_nanoseconds = 0;
+    std::uint64_t async_readback_submissions = 0, async_readback_wait_nanoseconds = 0;
+    unsigned async_readback_slots = 0, peak_pending_frames = 0;
 };
 
 // Small adapter seam for deterministic export fault tests. Production delegates
@@ -51,6 +53,10 @@ struct OfflineExportOptions {
     // GUI-owned; retain through worker teardown. No surface means CPU fallback
     // when a GPU job is requested. No Qt GUI dependency for CPU-only callers.
     QOffscreenSurface* gpu_surface = nullptr;
+    // Deterministic bounded-pipeline fault seams; production retains the defaults.
+    std::uint64_t async_staging_budget_bytes = 64ULL * 1024 * 1024;
+    std::uint64_t fail_async_collection_for_testing = 0;
+    bool disable_async_readback_for_testing = false;
     std::function<void(const std::string&, std::int64_t)> warning_callback;
     std::function<void(const OfflineExportMetrics&)> metrics_callback;
     std::function<std::unique_ptr<ExportGpuCompositor>(QOffscreenSurface*)> gpu_factory;

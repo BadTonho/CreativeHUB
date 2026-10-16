@@ -102,6 +102,8 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
     using namespace creative_suite::composition;
     const auto order = evaluationOrder(graph);
     if (!order || !context.gpu) return {};
+    try {
+    auto batch=context.gpu->beginCommandBatch(context.should_cancel);
     std::unordered_set<NodeId> required{target};
     std::vector<NodeId> pending{target};
     while (!pending.empty()) {
@@ -271,7 +273,21 @@ creative_suite::composition::OpenGlTextureFramePtr evaluateGpu(const NodeGraph& 
     const auto final = values.find(target);
     if (final == values.end()) return {};
     if (context.gpu_used) *context.gpu_used = true;
+    if(batch){
+        auto result=batch->finish();
+        if(result.status!=OpenGlCompositionStatus::Complete){
+            creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
+                "fusion-gpu",result.operation,result.cause,{{"error_code",std::to_string(result.error_code)},{"fallback","complete-cpu-graph"}});
+            if(context.gpu_used)*context.gpu_used=false;return {};
+        }
+    }
     return final->second;
+    }catch(const std::exception& error){
+        if(!(context.should_cancel && context.should_cancel()))
+            creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
+                "fusion-gpu","record-graph",error.what(),{{"fallback","complete-cpu-graph"}});
+        if(context.gpu_used)*context.gpu_used=false;return {};
+    }
 }
 }
 

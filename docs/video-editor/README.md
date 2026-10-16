@@ -41,6 +41,8 @@ Detailed subsystem contracts and design notes are listed below; see the [archite
 
 ## Validation and evidence
 
+- [Asynchronous Vulkan Windows results](performance/VULKAN_ASYNC_RESULTS_WINDOWS_2026-10-16.md)
+
 - [Regression testing index](validation/REGRESSION_TESTING.md)
 - [Audit dated 2026-10-12](validation/AUDIT_2026-10-12.md)
 - [Windows release media capabilities](validation/MEDIA_CAPABILITIES_WINDOWS_RELEASE.md)

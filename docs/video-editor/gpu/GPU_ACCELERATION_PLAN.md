@@ -254,3 +254,9 @@ behind the shared composition interface. It coexists with OpenGL and CPU;
 Automatic retains the previous behavior. [Vulkan Renderer](VULKAN_RENDERER.md)
 describes scope, lifecycle, codec transfers and the separate acceptance gates.
 This does not select a final suite renderer or promote Vulkan automatically.
+
+Vulkan now records bounded asynchronous command batches and uses ordered RGBA
+readback tickets for Video export. Preview acquisition defers instead of waiting
+for a free swapchain image; normal presentation no longer waits for queue idle.
+The 256 MiB accounted device budget and explicit codec transfers remain unchanged.
+See the Vulkan renderer contract for ownership, cancellation and FIFO recovery.

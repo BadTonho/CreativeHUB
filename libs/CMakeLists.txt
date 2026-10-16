@@ -129,6 +129,10 @@ target_include_directories(creative-suite-diagnostics PUBLIC
 )
 target_compile_features(creative-suite-diagnostics PUBLIC cxx_std_20)
 
+if(TARGET creative-suite-composition-opengl)
+    target_link_libraries(creative-suite-composition-opengl PRIVATE creative-suite::diagnostics)
+endif()
+
 if(BUILD_VIDEO_EDITOR OR BUILD_IMAGE_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_CREATIVE_HUB)
     add_subdirectory(translations)
 endif()

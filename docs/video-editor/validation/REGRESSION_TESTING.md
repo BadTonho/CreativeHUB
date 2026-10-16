@@ -1886,3 +1886,15 @@ regressions after shared interface changes.
 The [Windows evidence and benchmark tables](../performance/VULKAN_RESULTS_WINDOWS_2026-10-15.md)
 record the selected 38-test run without skips and distinguish automated coverage
 from pending manual, driver-loss and other-platform acceptance.
+
+### Asynchronous Vulkan execution
+
+The native shared Vulkan test covers explicit batch submission, two FIFO tickets,
+wrong-order/repeated collection, cancelled collection, retained resources,
+single-slot staging, and injected collection failure. The Vulkan export suite
+also exercises the production FIFO with ordered pixel callbacks/encoded colors,
+one/zero staging slots, mid-job pressure draining two pending frames before
+reducing to one, CPU reconstruction after collection failure, audio output,
+and cancellation preserving an existing destination. Run the existing native
+preview/timeline/Fusion suites and affected OpenGL/Motion/Image consumers after
+changing this shared boundary. Graphics skips do not satisfy native acceptance.

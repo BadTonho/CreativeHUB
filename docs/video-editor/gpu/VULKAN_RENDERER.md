@@ -38,12 +38,30 @@ remain application-owned. Motion and Image Editor continue using OpenGL directly
 
 The application owns the Vulkan session from startup through destruction of every
 window and worker. A GUI-created QVulkanInstance supplies platform surfaces; the
-session owns its logical device, queue, pools, pipelines, and images. Backend calls
-and presentation serialize device/queue access. Completed submissions use fences;
-leases retain their allocations and device. Image reuse occurs only after those
-submissions finish and all consumers release the lease. Presentation defers its
-GUI update instead of blocking on a worker-owned device lock. This first implementation
-uses conservative completion waits; it does not promise asynchronous GPU overlap.
+session owns its logical device, queue, pools, pipelines, and images. Command batches use reusable command/descriptor pools and completion fences;
+up to two submitted contexts per calling thread share a bounded set of six device
+contexts. Queue access is serialized during recording/submission, but normal
+worker completion waits release that lock. Leases retain their device and opaque
+production completion. Same-queue barriers order GPU consumers without CPU waits.
+Submitted contexts retain allocation references without retaining the device,
+avoiding a device/context/lease ownership cycle. Released intermediates can reuse
+the same allocation inside an ordered batch; global reuse waits for completion.
+
+Fusion groups its GPU operations in an optional command scope. Texture results
+can be pending; the synchronous `compose`/`readback` methods still return completed
+RGBA pixels. CPU recovery ends the batch before reading pixels. The OpenGL scope
+is a no-op and its existing synchronous and Motion PBO entry points are retained.
+Images and pooled upload/readback buffers share the existing 256 MiB reservation
+cap. Cached readback heaps remain preferred, and idle allocations are evicted
+before reporting bounded backpressure.
+
+Presentation polls acquisition with a zero timeout, defers when busy, and retains
+source/scratch allocations until its submission fence signals. Acquire semaphores
+are reused after the associated submission completes; presentation wait semaphores
+are indexed by swapchain image, not by a CPU frame slot. Normal presentation does
+not wait for the queue to become idle. Resize, surface recreation and teardown
+retain exceptional idle waits. Qt surfaces/windows remain GUI-owned. A returned
+presentation event means queued presentation, not physical scanout completion.
 
 Vulkan processing uses integer RGBA8 storage images and precompiled SPIR-V shaders.
 Color passes retain per-pass byte rounding, masks retain coverage arithmetic, and
@@ -57,7 +75,8 @@ reservations are bounded to 256 MiB; these are known allocations, not measured V
 Timeline and Fusion can retain their output image through native QWindow
 presentation, embedded in the existing QWidget preview. Normal texture delivery
 does not read pixels back to the CPU. RGBA-only media or CPU-composed frames are
-uploaded for presentation. The existing generation/mailbox checks reject stale
+uploaded for presentation through a nonblocking context/lock attempt. Temporary
+upload contention recovers that presentation through CPU without disabling Vulkan. The existing generation/mailbox checks reject stale
 work. Letterboxing, the existing viewer surround color, grayscale preview, resize
 and display scaling are preserved. The application supplies the surround color;
 the shared device API does not depend on the editor theme.
@@ -66,7 +85,14 @@ the live surface resumes after completion or cancellation.
 
 Each queued job captures the effective backend. Vulkan export owns processing
 resources independently of preview visibility and reads RGBA back for the selected
-encoder. Decoder and encoder settings remain explicit. Direct D3D11/NVENC image
+encoder. Its bounded FIFO prepares the next frame before collecting/encoding the
+oldest, with up to two readback slots within a 64 MiB staging allowance (also
+counted within the device cap). One fitting slot reduces parallelism; unavailable
+staging retains synchronous Vulkan composition. Resource pressure drains pending
+frames before reducing capacity. Callbacks, progress and encoder inputs stay FIFO.
+A technical collection failure rebuilds only unencoded pending frames from original
+sources on CPU. Cancellation stops publication while outstanding allocations remain
+retained for safe cleanup. Decoder and encoder settings remain explicit. Direct D3D11/NVENC image
 sharing is outside this delivery; hardware decode can still deliver RGBA through
 the established media boundary. Cancellation and atomic output publication retain
 their previous contracts. Technical failures latch CPU recovery for the session or
@@ -114,8 +140,9 @@ Benchmark `creative-suite-composition-vulkan-tests --require-gpu --benchmark` in
 Release after builds complete. It warms each backend and interleaves three trials
 at small/medium/heavy resolutions. Composition/readback wall times, transfer bytes
 and known resource reservations are not physical scanout latency or measured VRAM.
-Vulkan draw timing includes its conservative completion waits; stage buckets must
-not be interpreted as equivalent GPU execution timers. Encoder driver-internal
+Vulkan draw timing records CPU command recording/submission; synchronous RGBA
+readback includes completion waits. Stage buckets must not be interpreted as
+equivalent GPU execution timers. Encoder driver-internal
 transfers are not counted by the existing explicit-transfer counters.
 Application playback/export measurements must be recorded separately; no Vulkan
 speedup or automatic-default change is inferred from a synthetic benchmark.
@@ -139,6 +166,25 @@ For native preview latency/throughput use
 `creative-suite-main-editor-vulkan-preview-tests --require-gpu --benchmark`.
 It runs the production preview with worker composition and one request in flight;
 its presentation events are not physical scanout or a paced audiovisual project.
+The asynchronous benchmark additionally polls submission completion and reports
+`completion_average_ms`/`completion_p95_ms`; queued-event latency alone is not
+comparable with a previous implementation that waited for queue idle.
 For export use `creative-suite-main-editor-render-export-tests --benchmark --vulkan
 --require-gpu --compare-renderers`. `--native-gpu --vulkan --require-gpu --nvenc-only`
 checks the available NVIDIA encoder explicitly through RGBA input.
+
+## Asynchronous diagnostics
+
+`CREATIVE_SUITE_VULKAN_SERIAL=1` waits after each command batch and presentation
+and disables the export FIFO for controlled comparisons. It is a developer
+setting, not a user preference or a reproduction of the earlier per-operation
+implementation. `VulkanDevice::diagnostics()` exposes submitted/pending contexts,
+peak pending contexts, and worker wait counts/time. Device destruction writes a
+`vulkan/session_metrics` entry with these counters and memory reservations before
+the final device drain; a pending counter there is not a leak verdict. Export summaries include
+`async_readback_submissions`, `async_readback_wait_ns`, `async_readback_slots` and
+`peak_pending_frames`. Timing buckets remain CPU wall times; overlapped buckets
+must not be added to infer elapsed render time.
+
+[Asynchronous execution results](../performance/VULKAN_ASYNC_RESULTS_WINDOWS_2026-10-16.md)
+record the follow-up native regressions and old/new performance comparison.

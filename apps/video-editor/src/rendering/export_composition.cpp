@@ -80,6 +80,9 @@ ExportMetricsScope::~ExportMetricsScope() {
         add("decoded_downloaded_bytes", metrics.decoded_downloaded_bytes); add("encoding_uploaded_bytes", metrics.encoding_uploaded_bytes);
         add("decoder_reserved_gpu_bytes", metrics.decoder_reserved_gpu_bytes); add("graph_peak_gpu_bytes", metrics.graph_peak_gpu_bytes);
         add("encoder_reserved_gpu_bytes", metrics.encoder_reserved_gpu_bytes);
+        add("async_readback_submissions", metrics.async_readback_submissions);
+        add("async_readback_wait_ns", metrics.async_readback_wait_nanoseconds);
+        add("async_readback_slots", metrics.async_readback_slots);add("peak_pending_frames", metrics.peak_pending_frames);
         add("decode_packet_ns", metrics.decode_packet_nanoseconds); add("decode_receive_ns", metrics.decode_receive_nanoseconds);
         add("decode_conversion_ns", metrics.decode_conversion_nanoseconds); add("graph_ns", metrics.graph_nanoseconds);
         logging::Logger::instance().log(logging::Level::Info, "export", "performance_metrics", "Offline export summary.", context);
@@ -93,6 +96,42 @@ ExportMetricsScope::~ExportMetricsScope() {
 
 ExportComposition::ExportComposition(const RenderJob& job, const OfflineExportOptions& options, OfflineExportMetrics& metrics)
     : job_(job), options_(options), metrics_(metrics) {}
+
+unsigned ExportComposition::prepareAsync() {
+    if(job_.settings.graphics_backend!=composition::GraphicsBackend::Vulkan || !job_.settings.gpu_composition_enabled ||
+       options_.gpu_factory || options_.disable_async_readback_for_testing || qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_SERIAL")==1)return 0;
+    async_gpu_=composition::createGpuFrameCompositor(nullptr,composition::OpenGlPrecisionPolicy::Automatic,nullptr,{},composition::GraphicsBackend::Vulkan);
+    const auto result=async_gpu_->prepareAsyncReadback(job_.settings.width,job_.settings.height,options_.async_staging_budget_bytes,2,&async_slots_);
+    if(result.status!=composition::OpenGlCompositionStatus::Complete){
+        if(result.status==composition::OpenGlCompositionStatus::Failed)fallback(result,0,0);
+        async_gpu_.reset();async_slots_=0;
+    }
+    metrics_.async_readback_slots=async_slots_;return async_slots_;
+}
+composition::OpenGlReadbackResult ExportComposition::collectAsync(composition::GpuReadbackTicket ticket,const std::atomic_bool& canceled) {
+    const bool inject=options_.fail_async_collection_for_testing && ++collections_==options_.fail_async_collection_for_testing;
+    auto result=async_gpu_->collectAsyncReadback(ticket,[&]{return canceled.load();},inject);
+    metrics_.async_readback_wait_nanoseconds+=result.fence_wait_nanoseconds;
+    metrics_.readback_nanoseconds+=result.fence_wait_nanoseconds+result.copy_nanoseconds;
+    if(result.status==composition::OpenGlCompositionStatus::Complete){metrics_.readback_bytes+=result.bytes;++metrics_.gpu_frames;}
+    return result;
+}
+void ExportComposition::stopAsync(const composition::OpenGlReadbackResult& result,std::int64_t output,std::int64_t timeline) {
+    if(async_gpu_)async_gpu_->discardAsyncReadbacks();
+    async_gpu_.reset();async_slots_=0;
+    if(result.status==composition::OpenGlCompositionStatus::Failed)
+        fallback({result.status,{},result.operation,result.cause,result.error_code},output,timeline);
+}
+void ExportComposition::reduceAsync() {
+    if(!async_gpu_)return;
+    async_gpu_->discardAsyncReadbacks();
+    if(async_slots_>1){
+        const auto result=async_gpu_->prepareAsyncReadback(job_.settings.width,job_.settings.height,options_.async_staging_budget_bytes,1,&async_slots_);
+        if(result.status==composition::OpenGlCompositionStatus::Failed)fallback(result,0,0);
+        if(result.status!=composition::OpenGlCompositionStatus::Complete){async_gpu_.reset();async_slots_=0;}
+    }else{async_gpu_.reset();async_slots_=0;}
+    metrics_.async_readback_slots=async_slots_;
+}
 
 bool ExportComposition::nativeDelivery() const noexcept {
     return job_.settings.gpu_composition_enabled && !failed_ && !cpu_source_recovery_ && options_.gpu_surface && !options_.gpu_factory && job_.settings.graphics_backend != composition::GraphicsBackend::Vulkan && job_.settings.graphics_backend != composition::GraphicsBackend::Cpu;
@@ -132,10 +171,34 @@ void ExportComposition::fallback(const composition::OpenGlCompositionResult& res
 std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const std::vector<composition::CompositionLayer>& layers,
     std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,
     creative_suite::media::NativeVideoFramePool* native_pool,
-    creative_suite::media::NativeVideoFramePtr* native_output) {
+    creative_suite::media::NativeVideoFramePtr* native_output, composition::GpuReadbackTicket* async_ticket) {
     if (canceled.load()) throw ExportCanceled{};
     ExportTimedScope total(metrics_.composition_nanoseconds);
     if (native_output) native_output->reset();
+    if(async_ticket)*async_ticket={};
+    if(async_ticket && async_gpu_ && async_slots_ && !failed_ && !cpu_source_recovery_){
+        if(options_.disable_async_readback_for_testing)throw ExportAsyncBackpressure{};
+        composition::OpenGlCompositionTimings timings;
+        const auto start=std::chrono::steady_clock::now();
+        composition::OpenGlReadbackResult submitted;
+        try {
+            auto batch=async_gpu_->beginCommandBatch([&]{return canceled.load();});
+            auto texture=async_gpu_->composeTexture(job_.settings.width,job_.settings.height,layers,[&]{return canceled.load();},&timings);
+            submitted={texture.status,{}, {},texture.operation,texture.cause,texture.error_code};
+            if(texture.status==composition::OpenGlCompositionStatus::Complete)submitted=async_gpu_->submitAsyncReadback(texture.frame,[&]{return canceled.load();});
+        }catch(const std::exception& error){submitted={composition::OpenGlCompositionStatus::Failed,{}, {},"vulkan-export-submit",error.what()};}
+        metrics_.gpu_composition_nanoseconds+=static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count());
+        metrics_.upload_nanoseconds+=timings.upload_nanoseconds;metrics_.draw_submission_nanoseconds+=timings.draw_submission_nanoseconds;
+        metrics_.uploaded_bytes+=timings.uploaded_bytes;
+        metrics_.peak_known_gpu_bytes=std::max(metrics_.peak_known_gpu_bytes,async_gpu_->resourceUsage().peak_known_bytes);
+        if(submitted.status==composition::OpenGlCompositionStatus::Cancelled || canceled.load())throw ExportCanceled{};
+        if(submitted.status==composition::OpenGlCompositionStatus::Busy)throw ExportAsyncBackpressure{};
+        if(submitted.status==composition::OpenGlCompositionStatus::Complete){
+            *async_ticket=submitted.ticket;++metrics_.async_readback_submissions;
+            return creative_suite::media::RgbaFrame{job_.settings.width,job_.settings.height,job_.settings.width*4,{}};
+        }
+        fallback({submitted.status,{},submitted.operation,submitted.cause,submitted.error_code},output_frame,timeline_frame);
+    }
     if (native_pool && native_output && nativeDelivery()) {
         ExportTimedScope gpu_time(metrics_.gpu_composition_nanoseconds);
         if (!native_gpu_) native_gpu_ = composition::createGpuFrameCompositor(options_.gpu_surface,

@@ -4,6 +4,7 @@
 #endif
 #include <creative_suite/composition/vulkan_frame_compositor.h>
 #include <creative_suite/media/native_video_frame.h>
+#include <creative_suite/diagnostics/logger.h>
 #include <QWindow>
 #include <QFile>
 #include <QLibrary>
@@ -22,6 +23,9 @@
 #include <numbers>
 #include <stdexcept>
 #include <atomic>
+#include <thread>
+#include <deque>
+#include <utility>
 
 #ifdef CS_HAS_VULKAN
 #include <vulkan/vulkan.h>
@@ -97,6 +101,7 @@ PFN_vkEndCommandBuffer vkEndCommandBuffer = nullptr;
 PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
 PFN_vkFreeCommandBuffers vkFreeCommandBuffers = nullptr;
 PFN_vkFreeMemory vkFreeMemory = nullptr;
+PFN_vkGetFenceStatus vkGetFenceStatus = nullptr;
 PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements = nullptr;
 PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
 PFN_vkGetImageMemoryRequirements vkGetImageMemoryRequirements = nullptr;
@@ -227,6 +232,8 @@ void loadVulkanApi() {
         if(!vkFreeCommandBuffers)throw Failure("The Vulkan loader lacks vkFreeCommandBuffers.");
         vkFreeMemory = reinterpret_cast<PFN_vkFreeMemory>(loader.resolve("vkFreeMemory"));
         if(!vkFreeMemory)throw Failure("The Vulkan loader lacks vkFreeMemory.");
+        vkGetFenceStatus = reinterpret_cast<PFN_vkGetFenceStatus>(loader.resolve("vkGetFenceStatus"));
+        if(!vkGetFenceStatus)throw Failure("The Vulkan loader lacks vkGetFenceStatus.");
         vkGetBufferMemoryRequirements = reinterpret_cast<PFN_vkGetBufferMemoryRequirements>(loader.resolve("vkGetBufferMemoryRequirements"));
         if(!vkGetBufferMemoryRequirements)throw Failure("The Vulkan loader lacks vkGetBufferMemoryRequirements.");
         vkGetDeviceQueue = reinterpret_cast<PFN_vkGetDeviceQueue>(loader.resolve("vkGetDeviceQueue"));
@@ -298,12 +305,9 @@ struct VulkanDevice::Impl {
     VkDevice device=VK_NULL_HANDLE;
     VkQueue queue=VK_NULL_HANDLE;
     uint32_t family=0;
-    VkCommandPool commands=VK_NULL_HANDLE;
     VkDescriptorSetLayout descriptors=VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool=VK_NULL_HANDLE;
     VkPipelineLayout layout=VK_NULL_HANDLE;
     VkPipeline pipeline=VK_NULL_HANDLE;
-    VkFence fence=VK_NULL_HANDLE;
     VkPhysicalDeviceProperties properties{};
     VkPhysicalDeviceMemoryProperties memory_properties{};
     bool precise=false;
@@ -312,25 +316,53 @@ struct VulkanDevice::Impl {
     std::vector<std::unique_ptr<ImageAllocation>> pool;
     std::uint64_t bytes=0,peak=0;
     static constexpr std::uint64_t limit=256ULL*1024*1024;
+    struct Completion { bool done=false; };
+    struct Context {
+        VkDevice device=VK_NULL_HANDLE;
+        ~Context(){
+            if(fence)vkDestroyFence(device,fence,nullptr);
+            if(descriptors)vkDestroyDescriptorPool(device,descriptors,nullptr);
+            if(pool)vkDestroyCommandPool(device,pool,nullptr);
+        }
+        VkCommandPool pool=VK_NULL_HANDLE;
+        VkCommandBuffer command=VK_NULL_HANDLE;
+        VkDescriptorPool descriptors=VK_NULL_HANDLE;
+        VkFence fence=VK_NULL_HANDLE;
+        std::thread::id owner;
+        unsigned sets=0;
+        bool pending=false,recording=false;
+        unsigned waiters=0;
+        std::shared_ptr<Completion> completion;
+        std::vector<std::shared_ptr<void>> resources;
+        std::vector<std::shared_ptr<void>> images;
+    };
+    std::vector<std::unique_ptr<Context>> contexts;
+    std::map<std::thread::id,Context*> recording;
+    Diagnostics counters;
+    const bool serial=qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_SERIAL")==1;
+    struct Buffer;
+    std::vector<std::unique_ptr<Buffer>> buffer_pool;
     struct Swapchain {
         VkSwapchainKHR handle=VK_NULL_HANDLE;
         VkSurfaceKHR surface=VK_NULL_HANDLE;
         VkExtent2D size{};
-        VkSemaphore acquire=VK_NULL_HANDLE,complete=VK_NULL_HANDLE;
+        std::vector<VkSemaphore> acquire,complete;
+        std::vector<std::shared_ptr<Completion>> acquired;
+        unsigned next=0;
         std::vector<VkImage> images;
     };
     std::map<QWindow*,Swapchain> windows;
     ~Impl() {
         if(!device)return;
         vkDeviceWaitIdle(device);
+        for(auto& c:contexts){c->resources.clear();c->images.clear();}
+        buffer_pool.clear();
+        contexts.clear();
         for(auto& [window,swap]:windows){Q_UNUSED(window);destroy(swap);}
         for(auto& allocation:pool)destroy(*allocation);
         if(pipeline)vkDestroyPipeline(device,pipeline,nullptr);
         if(layout)vkDestroyPipelineLayout(device,layout,nullptr);
-        if(descriptor_pool)vkDestroyDescriptorPool(device,descriptor_pool,nullptr);
         if(descriptors)vkDestroyDescriptorSetLayout(device,descriptors,nullptr);
-        if(fence)vkDestroyFence(device,fence,nullptr);
-        if(commands)vkDestroyCommandPool(device,commands,nullptr);
         vkDestroyDevice(device,nullptr);
     }
     void destroy(ImageAllocation& image) {
@@ -341,8 +373,8 @@ struct VulkanDevice::Impl {
     }
     void destroy(Swapchain& swap) {
         if(swap.handle)vkDestroySwapchainKHR(device,swap.handle,nullptr);
-        if(swap.acquire)vkDestroySemaphore(device,swap.acquire,nullptr);
-        if(swap.complete)vkDestroySemaphore(device,swap.complete,nullptr);
+        for(auto semaphore:swap.acquire)vkDestroySemaphore(device,semaphore,nullptr);
+        for(auto semaphore:swap.complete)vkDestroySemaphore(device,semaphore,nullptr);
         swap={};
     }
     uint32_t memoryType(uint32_t bits,VkMemoryPropertyFlags flags) {
@@ -350,31 +382,88 @@ struct VulkanDevice::Impl {
             if((bits&(1u<<i)) && (memory_properties.memoryTypes[i].propertyFlags&flags)==flags)return i;
         throw Failure("No compatible Vulkan memory type.",0,Status::Unsupported);
     }
-    VkCommandBuffer begin() {
-        if(lost)throw Failure("The Vulkan device was lost.",VK_ERROR_DEVICE_LOST);
-        check(vkResetCommandPool(device,commands,0),"Reset Vulkan command pool.");
-        VkCommandBufferAllocateInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-        info.commandPool=commands;info.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;info.commandBufferCount=1;
-        VkCommandBuffer cmd{};check(vkAllocateCommandBuffers(device,&info,&cmd),"Allocate Vulkan commands.");
-        VkCommandBufferBeginInfo start{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-        start.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        check(vkBeginCommandBuffer(cmd,&start),"Begin Vulkan commands.");return cmd;
+    void reap() {
+        for(auto& c:contexts)if(c->pending){
+            const auto status=vkGetFenceStatus(device,c->fence);
+            if(status==VK_NOT_READY)continue;
+            if(status!=VK_SUCCESS){lost=true;check(status,"Collect Vulkan completion.");}
+            c->pending=false;c->completion->done=true;--counters.pending;
+            c->resources.clear();c->images.clear();
+        }
     }
-    void submit(VkCommandBuffer cmd,VkSemaphore wait=VK_NULL_HANDLE,VkSemaphore signal=VK_NULL_HANDLE) {
-        check(vkEndCommandBuffer(cmd),"End Vulkan commands.");
-        check(vkResetFences(device,1,&fence),"Reset Vulkan completion fence.");
-        VkPipelineStageFlags stage=VK_PIPELINE_STAGE_TRANSFER_BIT;
-        VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-        submit.commandBufferCount=1;submit.pCommandBuffers=&cmd;
-        if(wait){submit.waitSemaphoreCount=1;submit.pWaitSemaphores=&wait;submit.pWaitDstStageMask=&stage;}
-        if(signal){submit.signalSemaphoreCount=1;submit.pSignalSemaphores=&signal;}
-        auto result=vkQueueSubmit(queue,1,&submit,fence);
-        if(result==VK_ERROR_DEVICE_LOST)lost=true;
-        check(result,"Submit Vulkan commands.");
-        result=vkWaitForFences(device,1,&fence,VK_TRUE,10'000'000'000ULL);
-        if(result!=VK_SUCCESS)lost=true;
-        check(result,"Wait for Vulkan completion.");
-        vkFreeCommandBuffers(device,commands,1,&cmd);
+    void wait(Context& c,std::unique_lock<std::recursive_mutex>& lock,
+        const GpuFrameCompositor::CancellationPredicate& cancel={}) {
+        const auto start=Clock::now();++counters.waits;
+        // The context cannot be recycled while its caller owns its completion.
+        auto completion=c.completion;++c.waiters;
+        struct Unpin {Context& context;~Unpin(){--context.waiters;}} unpin{c};
+        while(!completion->done){
+            cancelled(cancel);lock.unlock();
+            const auto result=vkWaitForFences(device,1,&c.fence,VK_TRUE,1'000'000);lock.lock();
+            if(result!=VK_SUCCESS && result!=VK_TIMEOUT){lost=true;check(result,"Wait for Vulkan completion.");}
+            reap();if(lost)throw Failure("The Vulkan device was lost.",VK_ERROR_DEVICE_LOST);
+            if(ns(start)>10'000'000'000ULL){lost=true;throw Failure("Vulkan completion timed out.",VK_TIMEOUT);}
+        }
+        counters.wait_nanoseconds+=ns(start);
+    }
+    Context* current() {const auto i=recording.find(std::this_thread::get_id());return i==recording.end()?nullptr:i->second;}
+    Context* start(bool nonblocking,const GpuFrameCompositor::CancellationPredicate& cancel={}) {
+        std::unique_lock lock(mutex);if(current())return nullptr;
+        if(lost)throw Failure("The Vulkan device was lost.",VK_ERROR_DEVICE_LOST);
+        for(;;){
+            reap();const auto owner=std::this_thread::get_id();Context* available=nullptr;Context* oldest=nullptr;unsigned count=0;
+            for(auto& c:contexts){
+                if(!c->pending && !c->recording && !c->waiters)available=c.get();
+                if(c->owner==owner && c->pending){++count;if(!oldest)oldest=c.get();}
+            }
+            if(count>=2){if(nonblocking)return nullptr;wait(*oldest,lock,cancel);continue;}
+            if(!available && contexts.size()<6){
+                auto c=std::make_unique<Context>();c->device=device;
+                VkCommandPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};pool_info.queueFamilyIndex=family;
+                check(vkCreateCommandPool(device,&pool_info,nullptr,&c->pool),"Create Vulkan command context.");
+                VkCommandBufferAllocateInfo command{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};command.commandPool=c->pool;
+                command.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;command.commandBufferCount=1;
+                check(vkAllocateCommandBuffers(device,&command,&c->command),"Allocate Vulkan command context.");
+                VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};check(vkCreateFence(device,&fence,nullptr,&c->fence),"Create Vulkan context fence.");
+                VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,5*256};
+                VkDescriptorPoolCreateInfo descriptor_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};descriptor_info.maxSets=256;descriptor_info.poolSizeCount=1;descriptor_info.pPoolSizes=&size;
+                check(vkCreateDescriptorPool(device,&descriptor_info,nullptr,&c->descriptors),"Create Vulkan context descriptors.");
+                available=c.get();contexts.push_back(std::move(c));
+            }
+            if(!available){if(nonblocking)return nullptr;
+                for(auto& c:contexts)if(c->pending){oldest=c.get();break;}
+                if(!oldest)throw Failure("All Vulkan recording contexts are occupied.",0,Status::Busy);
+                wait(*oldest,lock,cancel);continue;}
+            check(vkResetCommandPool(device,available->pool,0),"Reset Vulkan context.");
+            check(vkResetDescriptorPool(device,available->descriptors,0),"Reset Vulkan context descriptors.");
+            VkCommandBufferBeginInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};info.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            check(vkBeginCommandBuffer(available->command,&info),"Begin Vulkan context.");
+            available->owner=owner;available->recording=true;available->sets=0;available->completion=std::make_shared<Completion>();
+            recording[owner]=available;return available;
+        }
+    }
+    void retain(const std::shared_ptr<VulkanImage>& image) {
+        if(!image)return;auto* c=current();if(!c)throw Failure("Missing Vulkan recording context.");
+        const auto& allocation=image->allocation;
+        if(std::find(c->images.begin(),c->images.end(),allocation)==c->images.end())c->images.push_back(allocation);
+    }
+    VkCommandBuffer begin() {auto* c=current();if(!c)throw Failure("Missing Vulkan recording context.");return c->command;}
+    // Individual operations append to the current batch. Only finish() submits.
+    void submit(VkCommandBuffer) {}
+    std::shared_ptr<Completion> finish(Context* c,VkSemaphore wait_semaphore=VK_NULL_HANDLE,VkSemaphore signal=VK_NULL_HANDLE) {
+        if(!c)return {};std::unique_lock lock(mutex);
+        if(!c->recording)return c->completion;
+        check(vkEndCommandBuffer(c->command),"End Vulkan command batch.");
+        check(vkResetFences(device,1,&c->fence),"Reset Vulkan context fence.");
+        VkPipelineStageFlags stage=VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        VkSubmitInfo info{VK_STRUCTURE_TYPE_SUBMIT_INFO};info.commandBufferCount=1;info.pCommandBuffers=&c->command;
+        if(wait_semaphore){info.waitSemaphoreCount=1;info.pWaitSemaphores=&wait_semaphore;info.pWaitDstStageMask=&stage;}
+        if(signal){info.signalSemaphoreCount=1;info.pSignalSemaphores=&signal;}
+        const auto result=vkQueueSubmit(queue,1,&info,c->fence);
+        c->recording=false;recording.erase(c->owner);
+        if(result!=VK_SUCCESS){lost=true;check(result,"Submit Vulkan command batch.");}
+        c->pending=true;++counters.submissions;++counters.pending;counters.peak_pending=std::max(counters.peak_pending,counters.pending);
+        auto completion=c->completion;if(serial)this->wait(*c,lock);return completion;
     }
     void barrier(VkCommandBuffer cmd,VkImage image,VkImageLayout old_layout,VkImageLayout new_layout,
         VkAccessFlags source=VK_ACCESS_MEMORY_WRITE_BIT,VkAccessFlags target=VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT) {
@@ -390,6 +479,14 @@ struct VulkanDevice::Impl {
         if(width<=0 || height<=0 || width>int(properties.limits.maxImageDimension2D) ||
             height>int(properties.limits.maxImageDimension2D) || uint64_t(width)*height*4>limit)
             throw Failure("Vulkan image dimensions exceed the resource limit.",0,Status::Unsupported);
+        reap();
+        if(auto* c=current())for(const auto& resident:c->images){
+            auto* a=static_cast<ImageAllocation*>(resident.get());
+            if(resident.use_count()==1 && a->width==width && a->height==height && a->format==format){
+                auto image=std::make_shared<VulkanImage>();image->width=width;image->height=height;
+                image->device=std::move(owner);image->allocation=resident;image->completion=c->completion;return image;
+            }
+        }
         auto found=std::find_if(pool.begin(),pool.end(),[&](const auto& a){return a->width==width && a->height==height && a->format==format;});
         std::unique_ptr<ImageAllocation> allocation;
         if(found!=pool.end()){allocation=std::move(*found);pool.erase(found);}
@@ -401,7 +498,7 @@ struct VulkanDevice::Impl {
             info.tiling=VK_IMAGE_TILING_OPTIMAL;info.usage=VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
             check(vkCreateImage(device,&info,nullptr,&allocation->image),"Create Vulkan image.");
             VkMemoryRequirements req{};vkGetImageMemoryRequirements(device,allocation->image,&req);
-            while(bytes+req.size>limit && !pool.empty()){destroy(*pool.back());pool.pop_back();}
+            trim(req.size);
             if(bytes+req.size>limit){vkDestroyImage(device,allocation->image,nullptr);throw Failure("The bounded Vulkan image pool is occupied.",0,Status::Busy);}
             VkMemoryAllocateInfo memory{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};memory.allocationSize=req.size;
             memory.memoryTypeIndex=memoryType(req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -419,17 +516,18 @@ struct VulkanDevice::Impl {
         auto result=std::make_shared<VulkanImage>();result->width=width;result->height=height;result->device=std::move(owner);
         result->allocation=std::shared_ptr<void>(allocation.release(),[this](void* value){
             std::lock_guard lock(mutex);pool.emplace_back(static_cast<ImageAllocation*>(value));
-        });return result;
+        });result->completion=current()->completion;retain(result);return result;
     }
     struct Buffer {
+        VkDeviceSize capacity=0;bool readable=false;
         Impl& p;VkBuffer buffer=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;void* data=nullptr;VkDeviceSize reserved=0;
-        Buffer(Impl& owner,VkDeviceSize size,bool cpu_read=false):p(owner) {
+        Buffer(Impl& owner,VkDeviceSize size,bool cpu_read=false):capacity(size),readable(cpu_read),p(owner) {
             VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};info.size=size;
             info.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
             check(vkCreateBuffer(p.device,&info,nullptr,&buffer),"Create Vulkan transfer buffer.");
             try {
                 VkMemoryRequirements req{};vkGetBufferMemoryRequirements(p.device,buffer,&req);
-                while(p.bytes+req.size>limit && !p.pool.empty()){p.destroy(*p.pool.back());p.pool.pop_back();}
+                p.trim(req.size);
                 if(p.bytes+req.size>limit)throw Failure("The bounded Vulkan transfer budget is occupied.",0,Status::Busy);
                 VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};allocation.allocationSize=req.size;
                 allocation.memoryTypeIndex=p.memoryType(req.memoryTypeBits,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -447,6 +545,17 @@ struct VulkanDevice::Impl {
         }
         ~Buffer(){p.bytes-=reserved;if(data)vkUnmapMemory(p.device,memory);vkDestroyBuffer(p.device,buffer,nullptr);vkFreeMemory(p.device,memory,nullptr);}
     };
+    void trim(VkDeviceSize needed) {
+        while(bytes+needed>limit && !buffer_pool.empty())buffer_pool.pop_back();
+        while(bytes+needed>limit && !pool.empty()){destroy(*pool.back());pool.pop_back();}
+    }
+    std::shared_ptr<Buffer> buffer(VkDeviceSize size,bool cpu_read=false) {
+        auto found=std::find_if(buffer_pool.begin(),buffer_pool.end(),[&](const auto& b){return b->capacity==size && b->readable==cpu_read;});
+        std::unique_ptr<Buffer> value;
+        if(found!=buffer_pool.end()){value=std::move(*found);buffer_pool.erase(found);}
+        else value=std::make_unique<Buffer>(*this,size,cpu_read);
+        return std::shared_ptr<Buffer>(value.release(),[this](Buffer* b){std::lock_guard lock(mutex);buffer_pool.emplace_back(b);});
+    }
     static ImageAllocation& allocation(const std::shared_ptr<VulkanImage>& image) {
         return *static_cast<ImageAllocation*>(image->allocation.get());
     }
@@ -454,7 +563,7 @@ struct VulkanDevice::Impl {
         if(input.texture) {
             const auto image=input.texture->vulkanImage();
             if(!image || image->device!=owner)throw Failure("The image belongs to another graphics device.",0,Status::Unsupported);
-            return image;
+            retain(image);return image;
         }
         media::RgbaFramePtr recovered;
         const media::RgbaFrame* frame=input.rgba;
@@ -469,12 +578,12 @@ struct VulkanDevice::Impl {
             uint64_t(frame->stride)*frame->height>frame->rgba_pixels.size())
             throw Failure("Invalid Vulkan RGBA input.",0,Status::Unsupported);
         const auto start=Clock::now();auto image=this->image(owner,frame->width,frame->height);
-        Buffer staging(*this,uint64_t(frame->width)*frame->height*4);
-        for(int y=0;y<frame->height;++y)std::memcpy(static_cast<char*>(staging.data)+size_t(y)*frame->width*4,
+        auto staging=buffer(uint64_t(frame->width)*frame->height*4);current()->resources.push_back(staging);
+        for(int y=0;y<frame->height;++y)std::memcpy(static_cast<char*>(staging->data)+size_t(y)*frame->width*4,
             frame->rgba_pixels.data()+size_t(y)*frame->stride,size_t(frame->width)*4);
         auto cmd=begin();auto& a=allocation(image);barrier(cmd,a.image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         VkBufferImageCopy region{};region.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};region.imageExtent={uint32_t(frame->width),uint32_t(frame->height),1};
-        vkCmdCopyBufferToImage(cmd,staging.buffer,a.image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&region);
+        vkCmdCopyBufferToImage(cmd,staging->buffer,a.image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&region);
         barrier(cmd,a.image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);submit(cmd);
         if(timings){timings->upload_nanoseconds+=ns(start);timings->uploaded_bytes+=uint64_t(frame->width)*frame->height*4;++timings->uploaded_layers;}
         return image;
@@ -482,15 +591,15 @@ struct VulkanDevice::Impl {
     void dispatch(const std::shared_ptr<VulkanImage>& bg,const std::shared_ptr<VulkanImage>& fg,
         const std::shared_ptr<VulkanImage>& mask,const std::shared_ptr<VulkanImage>& output,
         const Parameters& parameters,const std::shared_ptr<VulkanImage>& display={}) {
-        check(vkResetDescriptorPool(device,descriptor_pool,0),"Reset Vulkan descriptors.");
+        if(current()->sets++>=256)throw Failure("The bounded Vulkan descriptor batch is full.",0,Status::Busy);
         VkDescriptorSetAllocateInfo allocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-        allocate.descriptorPool=descriptor_pool;allocate.descriptorSetCount=1;allocate.pSetLayouts=&descriptors;
+        allocate.descriptorPool=current()->descriptors;allocate.descriptorSetCount=1;allocate.pSetLayouts=&descriptors;
         VkDescriptorSet set{};check(vkAllocateDescriptorSets(device,&allocate,&set),"Allocate Vulkan descriptors.");
         // All descriptors are valid even for shader branches that do not access them.
         auto dummy=display ? display : image(output->device,1,1,VK_FORMAT_R8G8B8A8_UNORM);
         const std::array<std::shared_ptr<VulkanImage>,5> images{bg,fg?fg:bg,mask?mask:bg,output,dummy};
         std::array<VkDescriptorImageInfo,5> image_info{};std::array<VkWriteDescriptorSet,5> writes{};
-        for(unsigned i=0;i<5;++i){image_info[i].imageView=allocation(images[i]).view;image_info[i].imageLayout=VK_IMAGE_LAYOUT_GENERAL;
+        for(unsigned i=0;i<5;++i){retain(images[i]);image_info[i].imageView=allocation(images[i]).view;image_info[i].imageLayout=VK_IMAGE_LAYOUT_GENERAL;
             writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=set;writes[i].dstBinding=i;
             writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;writes[i].pImageInfo=&image_info[i];}
         vkUpdateDescriptorSets(device,5,writes.data(),0,nullptr);
@@ -514,7 +623,18 @@ struct VulkanDevice::Impl {};
 #endif
 
 VulkanDevice::VulkanDevice():impl_(std::make_unique<Impl>()){}
-VulkanDevice::~VulkanDevice()=default;
+VulkanDevice::~VulkanDevice(){
+#ifdef CS_HAS_VULKAN
+    if(impl_->device)try {
+        const auto stats=diagnostics();
+        creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Info,"vulkan","session_metrics","Vulkan session resource and synchronization summary.",
+            {{"submissions",std::to_string(stats.submissions)},{"worker_waits",std::to_string(stats.waits)},
+             {"worker_wait_ns",std::to_string(stats.wait_nanoseconds)},{"pending_contexts",std::to_string(stats.pending)},
+             {"peak_pending_contexts",std::to_string(stats.peak_pending)},{"reserved_bytes",std::to_string(impl_->bytes)},
+             {"peak_reserved_bytes",std::to_string(impl_->peak)},{"serial_diagnostic",impl_->serial?"true":"false"}});
+    }catch(...){}
+#endif
+}
 std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause) {
     if(qEnvironmentVariableIntValue("CREATIVE_SUITE_DISABLE_VULKAN")==1){cause="Vulkan was disabled by the diagnostic environment setting.";return {};}
 #ifdef CS_HAS_VULKAN
@@ -546,16 +666,10 @@ std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause) {
         info.enabledExtensionCount=1;info.ppEnabledExtensionNames=&extension;info.pEnabledFeatures=&enabled;
         check(vkCreateDevice(p.physical,&info,nullptr,&p.device),"Create Vulkan device.");
         vkGetDeviceQueue(p.device,p.family,0,&p.queue);
-        VkCommandPoolCreateInfo commands{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};commands.queueFamilyIndex=p.family;
-        commands.flags=VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        check(vkCreateCommandPool(p.device,&commands,nullptr,&p.commands),"Create Vulkan command pool.");
-        VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};check(vkCreateFence(p.device,&fence,nullptr,&p.fence),"Create Vulkan completion fence.");
         std::array<VkDescriptorSetLayoutBinding,5> bindings{};
         for(unsigned i=0;i<5;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_COMPUTE_BIT;}
         VkDescriptorSetLayoutCreateInfo descriptor{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};descriptor.bindingCount=5;descriptor.pBindings=bindings.data();
         check(vkCreateDescriptorSetLayout(p.device,&descriptor,nullptr,&p.descriptors),"Create Vulkan descriptor layout.");
-        VkDescriptorPoolSize pool_size{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,5};VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-        pool.maxSets=1;pool.poolSizeCount=1;pool.pPoolSizes=&pool_size;check(vkCreateDescriptorPool(p.device,&pool,nullptr,&p.descriptor_pool),"Create Vulkan descriptor pool.");
         VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT,0,uint32_t(p.precise?sizeof(Parameters):64)};
         VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};layout.setLayoutCount=1;layout.pSetLayouts=&p.descriptors;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&range;
         check(vkCreatePipelineLayout(p.device,&layout,nullptr,&p.layout),"Create Vulkan pipeline layout.");
@@ -610,10 +724,6 @@ std::uint64_t VulkanDevice::peakBytes() const noexcept {
 #endif
 }
 
-VulkanFrameCompositor::VulkanFrameCompositor(std::shared_ptr<VulkanDevice> device,std::uint64_t bytes,unsigned targets,
-    std::shared_ptr<OpenGlTexturePoolBudget> budget)
-    :device_(std::move(device)),byte_limit_(bytes),target_limit_(targets),
-     budget_(budget ? std::move(budget) : std::make_shared<OpenGlTexturePoolBudget>(bytes, targets)) {}
 OpenGlTextureFramePtr VulkanFrameCompositor::publish(std::shared_ptr<VulkanImage> image) {
     const auto bytes=std::uint64_t(image->width)*image->height*4;
     struct Reservation {
@@ -627,8 +737,198 @@ OpenGlTextureFramePtr VulkanFrameCompositor::publish(std::shared_ptr<VulkanImage
     auto frame=std::shared_ptr<OpenGlTextureFrame>(new OpenGlTextureFrame(std::move(image)));
     frame->reservation_=std::move(reservation);outputs_.push_back(frame);return frame;
 }
+namespace {
+class VulkanCommandBatch final : public GpuCommandBatch {
+    std::function<GpuCompositionResult()> submit_;
+public:
+    explicit VulkanCommandBatch(std::function<GpuCompositionResult()> submit):submit_(std::move(submit)){}
+    ~VulkanCommandBatch() override {if(submit_)static_cast<void>(finish());}
+    GpuCompositionResult finish() override {
+        if(!submit_)return {Status::Complete};auto submit=std::exchange(submit_,{});return submit();
+    }
+};
+}
+std::unique_ptr<GpuCommandBatch> VulkanFrameCompositor::beginCommandBatch(const CancellationPredicate& cancel) {
+#ifdef CS_HAS_VULKAN
+    cancelled(cancel);if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
+    auto* context=device_->impl_->start(false,cancel);if(!context)return {};
+    auto token=context->completion;
+    return std::make_unique<VulkanCommandBatch>([device=device_,context,token]{
+        try {std::lock_guard lock(device->impl_->mutex);
+            if(context->completion!=token)return GpuCompositionResult{Status::Complete};
+            device->impl_->finish(context);return GpuCompositionResult{Status::Complete};}
+        catch(const Failure& error){device->impl_->lost=true;
+            creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,"vulkan","submit_batch",error.what(),{{"error_code",std::to_string(error.code)}});
+            return GpuCompositionResult{error.status,{},"vulkan-submit-batch",error.what(),error.code};}
+        catch(const std::exception& error){device->impl_->lost=true;return GpuCompositionResult{Status::Failed,{},"vulkan-submit-batch",error.what()};}
+    });
+#else
+    Q_UNUSED(cancel);return {};
+#endif
+}
+VulkanDevice::Diagnostics VulkanDevice::diagnostics() const noexcept {
+#ifdef CS_HAS_VULKAN
+    std::lock_guard lock(impl_->mutex);return impl_->counters;
+#else
+    return {};
+#endif
+}
+struct VulkanFrameCompositor::Readbacks {
+#ifdef CS_HAS_VULKAN
+    struct Slot {
+        std::shared_ptr<VulkanDevice::Impl::Buffer> buffer;
+        std::shared_ptr<VulkanDevice::Impl::Completion> completion;
+        VulkanDevice::Impl::Context* context=nullptr;
+        std::uint64_t ticket=0;
+    };
+    std::vector<Slot> readback_slots;
+    std::deque<std::uint64_t> order;
+#endif
+    int width=0,height=0;
+};
+VulkanFrameCompositor::VulkanFrameCompositor(std::shared_ptr<VulkanDevice> device,std::uint64_t bytes,unsigned targets,
+    std::shared_ptr<OpenGlTexturePoolBudget> budget)
+    :device_(std::move(device)),byte_limit_(bytes),target_limit_(targets),
+     budget_(budget ? std::move(budget) : std::make_shared<OpenGlTexturePoolBudget>(bytes, targets)) {}
+OpenGlCompositionResult VulkanFrameCompositor::prepareAsyncReadback(int width,int height,std::uint64_t budget,
+    unsigned maximum,unsigned* prepared,bool fail) {
+    if(prepared)*prepared=0;
+    try {
+#ifdef CS_HAS_VULKAN
+        discardAsyncReadbacks();readbacks_.reset();
+        if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
+        if(width<=0 || height<=0 || fail)throw Failure("Vulkan asynchronous readback is unavailable.",0,Status::Unsupported);
+        auto value=std::make_unique<Readbacks>();value->width=width;value->height=height;
+        auto& p=*device_->impl_;std::lock_guard lock(p.mutex);p.reap();
+        const auto size=uint64_t(width)*height*4;
+        if(width>int(p.properties.limits.maxImageDimension2D) || height>int(p.properties.limits.maxImageDimension2D) || size>VulkanDevice::Impl::limit)
+            throw Failure("The Vulkan readback canvas exceeds device or memory limits.",0,Status::Unsupported);
+        maximum=unsigned(std::min<std::uint64_t>({maximum,2,budget/size}));
+        for(unsigned i=0;i<maximum;++i){
+            try {Readbacks::Slot slot;slot.buffer=p.buffer(size,true);value->readback_slots.push_back(std::move(slot));}
+            catch(const Failure& error){if(error.status!=Status::Busy)throw;break;}
+        }
+        if(value->readback_slots.empty())throw Failure("No bounded Vulkan readback slot is available.",0,Status::Unsupported);
+        if(prepared)*prepared=unsigned(value->readback_slots.size());readbacks_=std::move(value);return {Status::Complete};
+#else
+        Q_UNUSED(width);Q_UNUSED(height);Q_UNUSED(budget);Q_UNUSED(maximum);Q_UNUSED(fail);
+        return {Status::Unsupported};
+#endif
+    }catch(const Failure& error){return {error.status,{},"vulkan-prepare-readback",error.what(),error.code};}
+}
+unsigned VulkanFrameCompositor::asyncReadbackSlotCount() const noexcept {
+#ifdef CS_HAS_VULKAN
+    return readbacks_?unsigned(readbacks_->readback_slots.size()):0;
+#else
+    return 0;
+#endif
+}
+OpenGlReadbackResult VulkanFrameCompositor::submitAsyncReadback(int width,int height,
+    const std::vector<CompositionLayer>& layers,const CancellationPredicate& cancel) {
+#ifdef CS_HAS_VULKAN
+    if(!readbacks_ || std::none_of(readbacks_->readback_slots.begin(),readbacks_->readback_slots.end(),[](const auto& slot){return !slot.ticket;}))
+        return {readbacks_?Status::Busy:Status::Unsupported};
+#endif
+    std::unique_ptr<GpuCommandBatch> batch;
+    try {batch=beginCommandBatch(cancel);}catch(const Failure& error){return {error.status,{}, {},"vulkan-begin-readback",error.what(),error.code};}
+    OpenGlCompositionTimings timings;
+    auto frame=composeTexture(width,height,layers,cancel,&timings);
+    OpenGlReadbackResult result{frame.status,{}, {},frame.operation,frame.cause,frame.error_code};
+    if(frame.status==Status::Complete)result=submitAsyncReadback(frame.frame,cancel);
+    result.composition_timings=timings;return result;
+}
+OpenGlReadbackResult VulkanFrameCompositor::submitAsyncReadback(const OpenGlTextureFramePtr& frame,
+    const CancellationPredicate& cancel) {
+    try {
+        cancelled(cancel);
+#ifdef CS_HAS_VULKAN
+        if(!device_ || !device_->valid() || !frame || !frame->vulkanImage() || frame->vulkanImage()->device!=device_)
+            throw Failure("Invalid Vulkan readback lease.",0,Status::Unsupported);
+        if(!readbacks_ || frame->width()!=readbacks_->width || frame->height()!=readbacks_->height)
+            throw Failure("The Vulkan readback pool was not prepared for this canvas.",0,Status::Unsupported);
+        auto& p=*device_->impl_;
+        auto batch=beginCommandBatch(cancel);std::lock_guard lock(p.mutex);
+        auto slot=std::find_if(readbacks_->readback_slots.begin(),readbacks_->readback_slots.end(),[](const auto& item){return item.ticket==0;});
+        if(slot==readbacks_->readback_slots.end())throw Failure("All bounded Vulkan readback readback_slots are occupied.",0,Status::Busy);
+        const auto start=Clock::now();auto image=frame->vulkanImage();p.retain(image);
+        auto* c=p.current();c->resources.push_back(slot->buffer);
+        auto cmd=p.begin();auto& a=p.allocation(image);
+        p.barrier(cmd,a.image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        VkBufferImageCopy region{};region.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
+        region.imageExtent={uint32_t(frame->width()),uint32_t(frame->height()),1};
+        vkCmdCopyImageToBuffer(cmd,a.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,slot->buffer->buffer,1,&region);
+        p.barrier(cmd,a.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);
+        slot->completion=c->completion;slot->context=c;
+        p.finish(c);
+        static std::atomic<std::uint64_t> sequence{0};slot->ticket=++sequence;readbacks_->order.push_back(slot->ticket);
+        OpenGlReadbackResult submitted{Status::Complete,{slot->ticket}};submitted.submission_nanoseconds=ns(start);
+        submitted.bytes=uint64_t(frame->width())*frame->height()*4;return submitted;
+#else
+        Q_UNUSED(frame);throw Failure("Vulkan was not compiled into this build.",0,Status::Unsupported);
+#endif
+    }catch(const Failure& error){return {error.status,{}, {},"vulkan-submit-readback",error.what(),error.code};}
+    catch(const std::exception& error){return {Status::Failed,{}, {},"vulkan-submit-readback",error.what()};}
+}
+OpenGlReadbackResult VulkanFrameCompositor::collectAsyncReadback(OpenGlReadbackTicket ticket,
+    const CancellationPredicate& cancel,bool fail) {
+    try {
+        cancelled(cancel);
+#ifdef CS_HAS_VULKAN
+        if(!readbacks_)throw Failure("No Vulkan readbacks are prepared.",0,Status::Unsupported);
+        auto slot=std::find_if(readbacks_->readback_slots.begin(),readbacks_->readback_slots.end(),[&](const auto& item){return item.ticket==ticket.value && item.ticket;});
+        if(slot==readbacks_->readback_slots.end())throw Failure("Unknown or released Vulkan readback ticket.",0,Status::Unsupported);
+        if(readbacks_->order.front()!=ticket.value)throw Failure("Vulkan readback tickets must be collected FIFO.",0,Status::Busy);
+        if(fail)throw Failure("Injected Vulkan readback collection failure.",-1);
+        auto& p=*device_->impl_;std::unique_lock lock(p.mutex);const auto start=Clock::now();p.reap();
+        if(!slot->completion->done)p.wait(*slot->context,lock,cancel);
+        cancelled(cancel);const auto wait_ns=ns(start);const auto copy=Clock::now();
+        media::RgbaFrame rgba{readbacks_->width,readbacks_->height,readbacks_->width*4,{}};
+        const auto bytes=uint64_t(rgba.stride)*rgba.height;rgba.rgba_pixels.resize(bytes);
+        std::memcpy(rgba.rgba_pixels.data(),slot->buffer->data,bytes);
+        slot->ticket=0;slot->completion.reset();readbacks_->order.pop_front();
+        OpenGlReadbackResult result{Status::Complete,ticket,std::move(rgba)};
+        result.fence_wait_nanoseconds=wait_ns;result.copy_nanoseconds=ns(copy);result.bytes=bytes;return result;
+#else
+        Q_UNUSED(ticket);Q_UNUSED(fail);return {Status::Unsupported};
+#endif
+    }catch(const Failure& error){return {error.status,ticket,{},"vulkan-collect-readback",error.what(),error.code};}
+    catch(const std::exception& error){return {Status::Failed,ticket,{},"vulkan-collect-readback",error.what()};}
+}
+void VulkanFrameCompositor::discardAsyncReadbacks() noexcept {
+#ifdef CS_HAS_VULKAN
+    if(!readbacks_ || !device_)return;
+    try {auto& p=*device_->impl_;std::unique_lock lock(p.mutex);
+        for(auto& slot:readbacks_->readback_slots)if(slot.ticket){if(!slot.completion->done)p.wait(*slot.context,lock);slot.ticket=0;slot.completion.reset();}
+        readbacks_->order.clear();
+    }catch(...){device_->impl_->lost=true;}
+#endif
+}
+OpenGlTextureCompositionResult VulkanFrameCompositor::tryUpload(const media::RgbaFrame& rgba) {
+#ifdef CS_HAS_VULKAN
+    if(!device_ || !device_->valid())return {Status::Failed,{},"vulkan-preview-upload","The Vulkan device is unavailable."};
+    auto& p=*device_->impl_;std::unique_lock lock(p.mutex,std::try_to_lock);
+    if(!lock.owns_lock())return {Status::Busy};
+    VulkanDevice::Impl::Context* context=nullptr;
+    try {
+        context=p.start(true);if(!context)return {Status::Busy};
+        OpenGlImageOperation operation;operation.background.rgba=&rgba;
+        auto result=processImage(operation);p.finish(context);return result;
+    }catch(const Failure& error){
+        if(context)try{p.finish(context);}catch(...){p.lost=true;}
+        return {error.status,{},"vulkan-preview-upload",error.what(),error.code};
+    }catch(const std::exception& error){
+        if(context)try{p.finish(context);}catch(...){p.lost=true;}
+        return {Status::Failed,{},"vulkan-preview-upload",error.what()};
+    }
+#else
+    Q_UNUSED(rgba);return {Status::Unsupported};
+#endif
+}
 OpenGlCompositionResult VulkanFrameCompositor::collectReleasedTextureFrames() {
     if(device_ && !device_->valid())return {Status::Failed,{},"vulkan-device-lost","The Vulkan device is no longer available."};
+#ifdef CS_HAS_VULKAN
+    if(device_){std::lock_guard lock(device_->impl_->mutex);try {device_->impl_->reap();}catch(const Failure& error){return {Status::Failed,{},"vulkan-collect",error.what(),error.code};}}
+#endif
     return {Status::Complete};
 }
 void VulkanFrameCompositor::checkCapacity(int width,int height) {
@@ -640,7 +940,7 @@ void VulkanFrameCompositor::checkCapacity(int width,int height) {
     if(outputs_.size()>=target_limit_ || live_bytes+uint64_t(width)*height*4>byte_limit_ || budget_->targets()>=target_limit_ || budget_->bytes()+uint64_t(width)*height*4>byte_limit_)
         throw Failure("The bounded Vulkan output pool is occupied.",0,Status::Busy);
 }
-VulkanFrameCompositor::~VulkanFrameCompositor()=default;
+VulkanFrameCompositor::~VulkanFrameCompositor(){discardAsyncReadbacks();}
 unsigned VulkanFrameCompositor::texturePoolOccupancy() const {
     return unsigned(std::count_if(outputs_.begin(),outputs_.end(),[](const auto& output){return !output.expired();}));
 }
@@ -654,6 +954,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         cancelled(cancel);
 #ifdef CS_HAS_VULKAN
         if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
+        auto batch=beginCommandBatch(cancel);
         auto& p=*device_->impl_;std::lock_guard lock(p.mutex);
         if(!animation::validTransform(operation.transform) || !std::isfinite(operation.blur_radius_pixels) || operation.blur_radius_pixels<0 || operation.blur_radius_pixels>100)
             throw Failure("Invalid Vulkan image operation.",0,Status::Unsupported);
@@ -694,6 +995,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         }else execute();
         cancelled(cancel);if(timings)timings->draw_submission_nanoseconds+=ns(started);
         auto frame=publish(std::move(bg));
+        if(batch){auto result=batch->finish();if(result.status!=Status::Complete)throw Failure(result.cause,result.error_code,result.status);}
         return {Status::Complete,std::move(frame)};
 #else
         Q_UNUSED(operation);Q_UNUSED(timings);throw Failure("Vulkan was not compiled into this build.",0,Status::Unsupported);
@@ -716,6 +1018,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
 #ifdef CS_HAS_VULKAN
         if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
         checkCapacity(width,height);
+        auto batch=beginCommandBatch(cancel);
         auto& p=*device_->impl_;std::lock_guard lock(p.mutex);
         auto canvas=p.image(device_,width,height);Parameters params;params.control[0]=8;p.dispatch(canvas,{},{},canvas,params);
         for(const auto& layer:layers){
@@ -747,6 +1050,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
             if(timings)timings->draw_submission_nanoseconds+=ns(started);
         }
         cancelled(cancel);auto frame=publish(std::move(canvas));
+        if(batch){auto result=batch->finish();if(result.status!=Status::Complete)throw Failure(result.cause,result.error_code,result.status);}
         return {Status::Complete,std::move(frame)};
 #else
         Q_UNUSED(width);Q_UNUSED(height);Q_UNUSED(layers);Q_UNUSED(timings);throw Failure("Vulkan was not compiled into this build.",0,Status::Unsupported);
@@ -756,27 +1060,15 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
 }
 OpenGlCompositionResult VulkanFrameCompositor::readback(const OpenGlTextureFramePtr& frame,
     const CancellationPredicate& cancel,OpenGlCompositionTimings* timings) {
-    try {
-        cancelled(cancel);
-#ifdef CS_HAS_VULKAN
-        if(!device_ || !device_->valid() || !frame || !frame->vulkanImage() || frame->vulkanImage()->device!=device_)
-            throw Failure("Invalid Vulkan readback lease.",0,Status::Unsupported);
-        auto& p=*device_->impl_;std::lock_guard lock(p.mutex);const auto start=Clock::now();
-        media::RgbaFrame rgba;rgba.width=frame->width();rgba.height=frame->height();rgba.stride=rgba.width*4;
-        const uint64_t size=uint64_t(rgba.stride)*rgba.height;rgba.rgba_pixels.resize(size);
-        VulkanDevice::Impl::Buffer staging(p,size,true);auto& a=p.allocation(frame->vulkanImage());auto cmd=p.begin();
-        p.barrier(cmd,a.image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        VkBufferImageCopy region{};region.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};region.imageExtent={uint32_t(rgba.width),uint32_t(rgba.height),1};
-        vkCmdCopyImageToBuffer(cmd,a.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,staging.buffer,1,&region);
-        p.barrier(cmd,a.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);p.submit(cmd);
-        cancelled(cancel);std::memcpy(rgba.rgba_pixels.data(),staging.data,size);
-        if(timings){timings->readback_bytes+=size;timings->readback_nanoseconds+=ns(start);}
-        return {Status::Complete,std::move(rgba)};
-#else
-        Q_UNUSED(frame);Q_UNUSED(timings);throw Failure("Vulkan was not compiled into this build.",0,Status::Unsupported);
-#endif
-    }catch(const Failure& error){return {error.status,{},"vulkan-readback",error.what(),error.code};}
-    catch(const std::exception& error){return {Status::Failed,{},"vulkan-readback",error.what()};}
+    const auto start=Clock::now();
+    if(!frame)return {Status::Unsupported,{},"vulkan-readback","Missing Vulkan image."};
+    unsigned readback_slots=0;auto prepared=prepareAsyncReadback(frame->width(),frame->height(),uint64_t(frame->width())*frame->height()*4,1,&readback_slots);
+    if(prepared.status!=Status::Complete)return prepared;
+    const auto submitted=submitAsyncReadback(frame,cancel);
+    if(submitted.status!=Status::Complete)return {submitted.status,{},submitted.operation,submitted.cause,submitted.error_code};
+    auto result=collectAsyncReadback(submitted.ticket,cancel);
+    if(timings){timings->readback_bytes+=result.bytes;timings->readback_nanoseconds+=ns(start);}
+    return {result.status,std::move(result.frame),result.operation,result.cause,result.error_code};
 }
 OpenGlCompositionResult VulkanFrameCompositor::compose(int width,int height,const std::vector<CompositionLayer>& layers,
     const CancellationPredicate& cancel,OpenGlCompositionTimings* timings) {
@@ -808,6 +1100,7 @@ void VulkanDevice::releaseWindow(QWindow* window) noexcept {
 bool VulkanDevice::present(QWindow* window,const OpenGlTextureFramePtr& frame,bool grayscale,std::string& cause,
     std::array<float, 4> surround) {
 #ifdef CS_HAS_VULKAN
+    Impl::Context* context=nullptr;
     try {
         if(!valid() || !frame || !frame->vulkanImage() || frame->vulkanImage()->device.get()!=this)
             throw Failure("The Vulkan presentation image or device is unavailable.");
@@ -842,15 +1135,20 @@ bool VulkanDevice::present(QWindow* window,const OpenGlTextureFramePtr& frame,bo
             check(vkGetSwapchainImagesKHR(p.device,swap.handle,&count,nullptr),"Query Vulkan swapchain images.");swap.images.resize(count);
             check(vkGetSwapchainImagesKHR(p.device,swap.handle,&count,swap.images.data()),"Query Vulkan swapchain images.");
             VkSemaphoreCreateInfo semaphore{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-            check(vkCreateSemaphore(p.device,&semaphore,nullptr,&swap.acquire),"Create Vulkan acquire semaphore.");
-            check(vkCreateSemaphore(p.device,&semaphore,nullptr,&swap.complete),"Create Vulkan present semaphore.");
+            swap.acquire.resize(2);swap.acquired.resize(2);swap.complete.resize(count);
+            for(auto& value:swap.acquire)check(vkCreateSemaphore(p.device,&semaphore,nullptr,&value),"Create Vulkan acquire semaphore.");
+            for(auto& value:swap.complete)check(vkCreateSemaphore(p.device,&semaphore,nullptr,&value),"Create Vulkan present semaphore.");
         }
+        p.reap();const auto acquire_slot=swap.next%2;
+        if(swap.acquired[acquire_slot] && !swap.acquired[acquire_slot]->done){cause.clear();return false;}
+        context=p.start(true);if(!context){cause.clear();return false;}
+        uint32_t index=0;const auto acquired=vkAcquireNextImageKHR(p.device,swap.handle,0,swap.acquire[acquire_slot],VK_NULL_HANDLE,&index);
+        if(acquired==VK_NOT_READY || acquired==VK_TIMEOUT){p.finish(context);context=nullptr;cause.clear();return false;}
+        if(acquired==VK_ERROR_OUT_OF_DATE_KHR){p.finish(context);context=nullptr;check(vkDeviceWaitIdle(p.device),"Wait before Vulkan surface recreation.");p.destroy(swap);cause.clear();return false;}
+        if(acquired!=VK_SUBOPTIMAL_KHR)check(acquired,"Acquire Vulkan presentation image.");
         auto bg=frame->vulkanImage();auto scratch=p.image(shared_from_this(),bg->width,bg->height);
         auto display=p.image(shared_from_this(),bg->width,bg->height,VK_FORMAT_R8G8B8A8_UNORM);
         Parameters params;params.control={9,0,0,int(grayscale)};p.dispatch(bg,{},{},scratch,params,display);
-        uint32_t index=0;auto acquired=vkAcquireNextImageKHR(p.device,swap.handle,1'000'000'000ULL,swap.acquire,VK_NULL_HANDLE,&index);
-        if(acquired==VK_ERROR_OUT_OF_DATE_KHR){p.destroy(swap);return true;}
-        if(acquired!=VK_SUBOPTIMAL_KHR)check(acquired,"Acquire Vulkan presentation image.");
         auto cmd=p.begin();p.barrier(cmd,swap.images[index],VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,0);
         VkClearColorValue clear{};std::copy(surround.begin(),surround.end(),clear.float32);
         VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
@@ -865,18 +1163,22 @@ bool VulkanDevice::present(QWindow* window,const OpenGlTextureFramePtr& frame,bo
         vkCmdBlitImage(cmd,image.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,swap.images[index],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&region,VK_FILTER_LINEAR);
         p.barrier(cmd,image.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);
         p.barrier(cmd,swap.images[index],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-        p.submit(cmd,swap.acquire,swap.complete);
-        VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};present.waitSemaphoreCount=1;present.pWaitSemaphores=&swap.complete;
+        swap.acquired[acquire_slot]=p.finish(context,swap.acquire[acquire_slot],swap.complete[index]);context=nullptr;++swap.next;
+        VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};present.waitSemaphoreCount=1;present.pWaitSemaphores=&swap.complete[index];
         present.swapchainCount=1;present.pSwapchains=&swap.handle;present.pImageIndices=&index;
         p.instance.presentAboutToBeQueued(window);const auto result=vkQueuePresentKHR(p.queue,&present);p.instance.presentQueued(window);
-        check(vkQueueWaitIdle(p.queue),"Wait for Vulkan presentation.");
-        if(result==VK_ERROR_OUT_OF_DATE_KHR || result==VK_SUBOPTIMAL_KHR)p.destroy(swap);
+        if(p.serial)check(vkQueueWaitIdle(p.queue),"Wait for serial Vulkan presentation.");
+        if(result==VK_ERROR_OUT_OF_DATE_KHR || result==VK_SUBOPTIMAL_KHR){check(vkDeviceWaitIdle(p.device),"Wait before Vulkan surface recreation.");p.destroy(swap);}
         else check(result,"Present Vulkan image.");
         return true;
-    }catch(const Failure& error){cause=error.what();if(error.code)cause+=" (Vulkan error "+std::to_string(error.code)+")";
+    }catch(const Failure& error){
+        if(context)try{impl_->finish(context);}catch(...){impl_->lost=true;}
+        cause=error.what();if(error.code)cause+=" (Vulkan error "+std::to_string(error.code)+")";
         if(error.code==VK_ERROR_DEVICE_LOST)impl_->lost=true;
         return false;}
-    catch(const std::exception& error){cause=error.what();return false;}
+    catch(const std::exception& error){
+        if(context)try{impl_->finish(context);}catch(...){impl_->lost=true;}
+        cause=error.what();return false;}
 #else
     Q_UNUSED(window);Q_UNUSED(frame);Q_UNUSED(grayscale);Q_UNUSED(surround);cause="Vulkan was not compiled into this build.";return false;
 #endif

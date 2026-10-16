@@ -32,6 +32,8 @@ public:
         const CancellationPredicate& cancel = {},
         OpenGlCompositionTimings* timings = nullptr);
 
+    using GpuFrameCompositor::submitAsyncReadback;
+
     // Configure a bounded PBO pool on the compositor worker. The returned
     // slot count is at most two and accounts for the supplied staging budget.
     // Unsupported means callers should retain the synchronous GPU path.

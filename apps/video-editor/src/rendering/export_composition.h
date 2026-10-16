@@ -35,6 +35,11 @@ public:
     ExportComposition(const RenderJob&, const OfflineExportOptions&, OfflineExportMetrics&);
     composition::GpuFrameCompositor* graphBackend();
     bool nativeDelivery() const noexcept;
+    unsigned prepareAsync();
+    bool gpuFailed() const noexcept { return failed_; }
+    composition::OpenGlReadbackResult collectAsync(composition::GpuReadbackTicket, const std::atomic_bool&);
+    void stopAsync(const composition::OpenGlReadbackResult&, std::int64_t, std::int64_t);
+    void reduceAsync();
     bool cpuSourceRecovery() const noexcept { return cpu_source_recovery_; }
     int outputWidth() const noexcept { return job_.settings.width; }
     int outputHeight() const noexcept { return job_.settings.height; }
@@ -42,7 +47,8 @@ public:
     std::optional<creative_suite::media::RgbaFrame> compose(const std::vector<composition::CompositionLayer>&,
         std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,
         creative_suite::media::NativeVideoFramePool* = nullptr,
-        creative_suite::media::NativeVideoFramePtr* native_output = nullptr);
+        creative_suite::media::NativeVideoFramePtr* native_output = nullptr,
+        composition::GpuReadbackTicket* async_ticket = nullptr);
 private:
     void fallback(const composition::OpenGlCompositionResult&, std::int64_t, std::int64_t, bool rgba_recovery = false);
     const RenderJob& job_;
@@ -51,6 +57,9 @@ private:
     std::unique_ptr<ExportGpuCompositor> gpu_;
     std::unique_ptr<composition::GpuFrameCompositor> graph_gpu_;
     std::unique_ptr<composition::GpuFrameCompositor> native_gpu_;
+    std::unique_ptr<composition::GpuFrameCompositor> async_gpu_;
+    unsigned async_slots_ = 0;
+    std::uint64_t collections_ = 0;
     bool failed_ = false, warned_ = false;
     bool cpu_source_recovery_ = false;
 };
@@ -58,5 +67,6 @@ private:
 // Internal control flow: the renderer must reevaluate original sources when
 // GPU composition cannot consume a native frame or a completed Fusion lease.
 struct CpuCompositionSourcesRequired {};
+struct ExportAsyncBackpressure {};
 
 } // namespace rendering::detail

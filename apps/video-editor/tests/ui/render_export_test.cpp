@@ -1660,6 +1660,7 @@ void validatePublishedImage(const OutputChoice& output, const std::filesystem::p
 #endif
 
 void validateVulkanNvenc(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
+    const auto previous_factory=native_options.gpu_factory;native_options.gpu_factory={};
     auto job = makeImageJob(output, image, root / "vulkan-nvenc.mkv", 990, 8);
     job.settings.width = 320; job.settings.height = 180; job.settings.export_audio = false; job.settings.frame_rate = 30;
     job.settings.container_name = "matroska"; job.settings.video_encoder_name = "h264_nvenc";
@@ -1677,12 +1678,74 @@ void validateVulkanNvenc(const OutputChoice& output, const std::filesystem::path
         require((*frame)->width == 320 && (*frame)->height == 180, "Vulkan NVENC output dimensions changed."); ++decoded;
     }
     require(decoded == 8, "Vulkan NVENC output dropped frames.");
+    native_options.gpu_factory=previous_factory;
+    if(qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_SERIAL")!=1)require(last_metrics.async_readback_submissions==8,"NVENC did not exercise asynchronous Vulkan readback.");
     std::cout << "native_vulkan_nvenc=passed frames=" << decoded << " rgba_encoder_input_bytes=" << rgba_input_bytes
         << " readback_bytes=" << last_metrics.readback_bytes << "\n";
 }
 
+void validateAsyncVulkan(const OutputChoice& output,const std::filesystem::path& image,
+    const std::filesystem::path& green,const std::filesystem::path& root) {
+    using namespace creative_suite::composition;
+    if(sessionGraphicsBackend()!=GraphicsBackend::Vulkan || qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_SERIAL")==1)return;
+    for(int mode=0;mode<6;++mode){
+        auto job=makeImageJob(output,image,root/("async-"+std::to_string(mode)+".mkv"),1100+mode,4);
+        job.settings.frame_rate=30;job.settings.gpu_composition_enabled=true;
+        auto next=job.project_snapshot.timeline_tracks.front().clips.front();next.source_path=green;next.timeline_start_frame=4;
+        job.project_snapshot.timeline_tracks.front().clips.push_back(next);
+        rendering::OfflineExportOptions options;rendering::OfflineExportMetrics metrics;
+        options.metrics_callback=[&](const auto& value){metrics=value;};
+        if(mode==1)options.async_staging_budget_bytes=32*24*4;
+        if(mode==2)options.async_staging_budget_bytes=1;
+        if(mode==3)options.fail_async_collection_for_testing=2;
+        std::atomic_bool cancel{false};std::vector<std::int64_t> order;
+        options.prepared_frame_callback=[&](const auto& frame,std::int64_t timeline){
+            require(timeline==std::int64_t(order.size()),"Asynchronous callbacks were reordered or duplicated.");
+            const auto offset=12*frame.stride+16*4;
+            require(timeline<4?frame.rgba_pixels[offset]>frame.rgba_pixels[offset+1]:frame.rgba_pixels[offset+1]>frame.rgba_pixels[offset],
+                "Asynchronous export reused another frame's pixels.");
+            order.push_back(timeline);if(mode==4 && order.size()==2)cancel=true;
+            if(mode==5)options.disable_async_readback_for_testing=(timeline==0);
+        };
+        if(mode==4){std::ofstream destination(pathFromQString(job.settings.output_path));destination<<"preserve";}
+        bool cancelled=false;std::exception_ptr failure;
+        std::thread worker([&]{try{rendering::OfflineExportRenderer::render(job,cancel,{},options);}
+            catch(const rendering::ExportCanceled&){cancelled=true;}catch(...){failure=std::current_exception();}});worker.join();
+        if(failure)std::rethrow_exception(failure);
+        if(mode==4){
+            require(cancelled && order.size()==2,"Cancellation published further queued frames.");
+            std::ifstream destination(pathFromQString(job.settings.output_path));std::string bytes{std::istreambuf_iterator<char>(destination),{}};
+            require(bytes=="preserve","Asynchronous cancellation replaced the existing destination.");continue;
+        }
+        require(!cancelled && metrics.encoded_frames==8 && order.size()==8,"Asynchronous export lost frames.");
+        if(mode==0)require(metrics.async_readback_slots==2 && metrics.peak_pending_frames==2 && metrics.async_readback_submissions==8,
+            "The production Vulkan export did not pipeline two frames.");
+        if(mode==1)require(metrics.async_readback_slots==1 && metrics.peak_pending_frames==1,"The single-slot memory limit was ignored.");
+        if(mode==2)require(metrics.async_readback_slots==0 && metrics.gpu_frames==8,"Unavailable staging did not retain synchronous Vulkan.");
+        if(mode==5)require(metrics.async_readback_slots==1 && metrics.peak_pending_frames==2 &&
+            metrics.async_readback_submissions==8 && metrics.gpu_failures==0 && metrics.cpu_frames==0,
+            "Mid-job backpressure did not drain two pending frames before reducing parallelism.");
+        if(mode==3)require(metrics.gpu_failures==1 && metrics.gpu_frames==1 && metrics.cpu_frames==7,
+            "Readback failure did not recover only unencoded frames.");
+        auto decoder=media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path));int count=0;
+        while(auto frame=decoder->decode_next_frame()){
+            const auto offset=12*(*frame)->stride+16*4;
+            require(count<4?(*frame)->rgba_pixels[offset]>(*frame)->rgba_pixels[offset+1]:(*frame)->rgba_pixels[offset+1]>(*frame)->rgba_pixels[offset],
+                "Encoded asynchronous frame order changed.");++count;
+        }
+        require(count==8,"The asynchronous output duration changed.");
+    }
+    const auto previous_factory=native_options.gpu_factory;native_options.gpu_factory={};
+    validateFusionPreviewExportParity(output,image,root);
+    validateGapsTextAndKeyframes(output,image,green,root);
+    validateEmbeddedAudioMixing(output,root);
+    native_options.gpu_factory=previous_factory;
+    std::cout<<"native_vulkan_async_export=passed fifo=2 fallback=1 cancellation=1 memory_downgrade=1\n";
+}
+
 void benchmarkExport(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
     compare_before_encoding = false;
+    const auto previous_factory=native_options.gpu_factory;native_options.gpu_factory={};
     QImage background(1920, 1080, QImage::Format_RGBA8888);
     QImage transparent(1280, 720, QImage::Format_RGBA8888);
     for (auto* frame : {&background, &transparent}) for (int y = 0; y < frame->height(); ++y) for (int x = 0; x < frame->width(); ++x) {
@@ -1719,14 +1782,16 @@ void benchmarkExport(const OutputChoice& output, const std::filesystem::path& im
         if (trial == 0) continue;
         std::cout << "export_benchmark_trial=" << trial << " renderer=" << creative_suite::composition::backendName(backend) << "\n";
         const auto& m = last_metrics;
-        std::printf("export_benchmark output=%dx%d backend=%s frames=%llu total_ms=%.3f preparation_ms=%.3f composition_ms=%.3f encoding_ms=%.3f upload_ms=%.3f draw_ms=%.3f readback_ms=%.3f upload_bytes=%llu readback_bytes=%llu gpu_peak_bytes=%llu cpu_frame_peak_bytes=%llu sources_peak_bytes=%llu encoder=%s\n",
+        std::printf("export_benchmark output=%dx%d backend=%s frames=%llu total_ms=%.3f preparation_ms=%.3f composition_ms=%.3f encoding_ms=%.3f upload_ms=%.3f draw_ms=%.3f readback_ms=%.3f upload_bytes=%llu readback_bytes=%llu gpu_peak_bytes=%llu cpu_frame_peak_bytes=%llu sources_peak_bytes=%llu encoder=%s async_slots=%u pending_frames=%u async_submissions=%llu async_wait_ms=%.3f\n",
             size.width(), size.height(), gpu ? "gpu" : "cpu", static_cast<unsigned long long>(m.encoded_frames),
             m.total_nanoseconds / 1e6, m.preparation_nanoseconds / 1e6, m.composition_nanoseconds / 1e6, m.encoding_nanoseconds / 1e6,
             m.upload_nanoseconds / 1e6, m.draw_submission_nanoseconds / 1e6, m.readback_nanoseconds / 1e6,
             static_cast<unsigned long long>(m.uploaded_bytes), static_cast<unsigned long long>(m.readback_bytes),
             static_cast<unsigned long long>(m.peak_known_gpu_bytes), static_cast<unsigned long long>(m.peak_cpu_frame_bytes),
-            static_cast<unsigned long long>(m.peak_prepared_source_bytes), job.settings.video_encoder_name.toUtf8().constData());
+            static_cast<unsigned long long>(m.peak_prepared_source_bytes), job.settings.video_encoder_name.toUtf8().constData(),m.async_readback_slots,m.peak_pending_frames,
+            static_cast<unsigned long long>(m.async_readback_submissions),m.async_readback_wait_nanoseconds/1e6);
     }
+    native_options.gpu_factory=previous_factory;
     creative_suite::composition::setSessionGraphicsBackend(original_backend);
 }
 
@@ -1777,6 +1842,7 @@ int main(int argc, char* argv[]) {
             require(bool(vulkan_device), "The Vulkan NVENC test requires --vulkan.");
             validateVulkanNvenc(output, image_path, root); return 0;
         }
+        validateAsyncVulkan(output, image_path, green_image_path, root);
         validateDirectExport(output, image_path, green_image_path, root);
         validateVisualEffectExport(output, image_path, root);
         validateFusionPreviewExportParity(output, image_path, root);

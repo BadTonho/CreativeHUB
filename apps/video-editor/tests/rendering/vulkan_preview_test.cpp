@@ -54,8 +54,10 @@ void benchmarkPreview() {
             if(backend==c::GraphicsBackend::OpenGl)require(gl && gl->textureDeliveryAvailable(),"OpenGL benchmark sharing is unavailable.");
             auto& metrics=rendering::PreviewPerformanceMetrics::instance();metrics.setEnabled(true);metrics.reset();
             QSemaphore ack;std::atomic_bool done=false,abort=false;std::exception_ptr failure;
-            bool pending=false;int index=0;quint64 trace=0;Clock::time_point requested;
-            std::vector<double> samples;c::OpenGlCompositionTimings transfers;Clock::time_point measured_start,measured_end;
+            bool pending=false,presentation_seen=false;Clock::time_point queued_at;int index=0;quint64 trace=0;Clock::time_point requested;
+            std::vector<double> samples,completion_samples;
+            c::VulkanFrameCompositor collector(c::sessionVulkanDevice());
+            c::OpenGlCompositionTimings transfers;Clock::time_point measured_start,measured_end;
             system_monitor::PerformanceSampler sampler;static_cast<void>(sampler.sample());
             std::thread worker([&]{
                 try {
@@ -81,7 +83,7 @@ void benchmarkPreview() {
                         if(frame>=3){transfers.uploaded_bytes+=timing.uploaded_bytes;transfers.readback_bytes+=timing.readback_bytes;}
                         const auto id=metrics.createFrameDeliveryTrace(1,frame);
                         const bool queued=QMetaObject::invokeMethod(&host,[&,payload=std::move(payload),id,frame,started]()mutable{
-                            trace=id;index=frame;requested=started;pending=true;preview->setFrame(std::move(payload),id);
+                            trace=id;index=frame;requested=started;pending=true;presentation_seen=false;preview->setFrame(std::move(payload),id);
                         },Qt::QueuedConnection);
                         require(queued,"Cannot submit a benchmark preview frame.");ack.acquire();
                     }
@@ -92,15 +94,23 @@ void benchmarkPreview() {
                 QCoreApplication::processEvents(QEventLoop::AllEvents,2);
                 const auto snapshot=metrics.takeSnapshotAndReset();
                 if(pending) {
-                    const bool painted=backend==c::GraphicsBackend::Cpu
+                    const bool event_seen=backend==c::GraphicsBackend::Cpu
                         ? snapshot.frame_delivery.stage_counts[size_t(rendering::PreviewFrameDeliveryStage::CpuPainted)]>0
                         : backend==c::GraphicsBackend::OpenGl ? gl->lastPresentedDeliveryTraceId()==trace
                         : snapshot.frame_delivery.stage_counts[size_t(rendering::PreviewFrameDeliveryStage::QtFrameSwapped)]>0;
+                    if(event_seen && !presentation_seen){presentation_seen=true;queued_at=Clock::now();}
+                    bool painted=presentation_seen;
+                    if(painted && backend==c::GraphicsBackend::Vulkan){
+                        const auto collected=collector.collectReleasedTextureFrames();
+                        require(collected.status==c::GpuCompositionStatus::Complete,"Vulkan benchmark completion polling failed.");
+                        painted=c::sessionVulkanDevice()->diagnostics().pending==0;
+                    }
                     if(painted || Clock::now()-requested>std::chrono::seconds(5)) {
                         if(!painted)abort=true;
                         else if(index>=3){
                             measured_end=Clock::now();if(index==3)measured_start=requested;
-                            samples.push_back(std::chrono::duration<double,std::milli>(measured_end-requested).count());
+                            samples.push_back(std::chrono::duration<double,std::milli>(queued_at-requested).count());
+                            completion_samples.push_back(std::chrono::duration<double,std::milli>(measured_end-requested).count());
                         }
                         if(index==14 || abort)preview->releaseGpuFrames();
                         pending=false;ack.release();
@@ -110,10 +120,12 @@ void benchmarkPreview() {
             }
             worker.join();if(failure)std::rethrow_exception(failure);
             require(!abort && samples.size()==12,"Native preview benchmark did not present every measured frame.");
-            const auto usage=sampler.sample();double sum=0;for(auto value:samples)sum+=value;std::sort(samples.begin(),samples.end());
+            const auto usage=sampler.sample();double completion_sum=0;for(auto value:completion_samples)completion_sum+=value;
+            std::sort(completion_samples.begin(),completion_samples.end());double sum=0;for(auto value:samples)sum+=value;std::sort(samples.begin(),samples.end());
             std::cout<<"preview_benchmark renderer="<<c::backendName(backend)<<" width="<<size.width()<<" height="<<size.height()
                 <<" trial="<<trial<<" average_ms="<<sum/samples.size()<<" p95_ms="<<samples.back()<<" presented_fps="<<samples.size()/std::chrono::duration<double>(measured_end-measured_start).count()
                 <<" upload_bytes="<<transfers.uploaded_bytes<<" readback_bytes="<<transfers.readback_bytes
+                <<" completion_average_ms="<<completion_sum/completion_samples.size()<<" completion_p95_ms="<<completion_samples.back()
                 <<" working_set_bytes="<<usage.process_working_set_bytes.value_or(0)<<" process_cpu_percent="<<usage.process_cpu_percent.value_or(0)<<"\n";
             host.close();
         }

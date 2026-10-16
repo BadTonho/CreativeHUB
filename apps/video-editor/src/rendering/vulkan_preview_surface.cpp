@@ -61,8 +61,8 @@ void VulkanPreviewSurface::setFrame(const PreviewFramePayload& payload,quint64 t
     if(!available()){if(window_ && !failed_)window_->failure(QStringLiteral("The Vulkan device is unavailable; using CPU presentation."));return;}
     auto frame=payload.gpu;
     if(!frame && payload.rgba){
-        c::VulkanFrameCompositor upload(device_);c::OpenGlImageOperation op;op.background.rgba=payload.rgba.get();
-        auto result=upload.processImage(op);
+        c::VulkanFrameCompositor upload(device_);
+        auto result=upload.tryUpload(*payload.rgba);
         if(result.status!=c::OpenGlCompositionStatus::Complete){
             if(result.status==c::OpenGlCompositionStatus::Busy || result.status==c::OpenGlCompositionStatus::Unsupported)
                 emit gpuFailure(QString::fromStdString(result.cause),0);

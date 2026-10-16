@@ -203,6 +203,16 @@ using GpuCompositionTimings = OpenGlCompositionTimings;
 using GpuTextureCompositionResult = OpenGlTextureCompositionResult;
 using GpuImageOperation = OpenGlImageOperation;
 using GpuImageInput = OpenGlImageInput;
+using GpuReadbackTicket = OpenGlReadbackTicket;
+using GpuReadbackResult = OpenGlReadbackResult;
+
+// Worker-owned optional recording scope. finish() submits work, not a CPU wait.
+// Destruction retires any recorded work safely, including cancelled requests.
+class GpuCommandBatch {
+public:
+    virtual ~GpuCommandBatch() = default;
+    virtual GpuCompositionResult finish() = 0;
+};
 
 // Worker-owned processing interface. Inputs are borrowed during calls; output leases
 // are immutable and retain their device. Cancellation never publishes partial output.
@@ -211,6 +221,20 @@ public:
     using CancellationPredicate = std::function<bool()>;
     virtual ~GpuFrameCompositor() = default;
     virtual GraphicsBackend backend() const noexcept = 0;
+    virtual std::unique_ptr<GpuCommandBatch> beginCommandBatch(const CancellationPredicate& = {}) { return {}; }
+    virtual OpenGlCompositionResult prepareAsyncReadback(int, int, std::uint64_t,
+        unsigned = 2, unsigned* prepared_slots = nullptr, bool = false) {
+        if (prepared_slots) *prepared_slots = 0;
+        return {OpenGlCompositionStatus::Unsupported};
+    }
+    virtual OpenGlReadbackResult submitAsyncReadback(int, int, const std::vector<CompositionLayer>&,
+        const CancellationPredicate& = {}) { return {OpenGlCompositionStatus::Unsupported}; }
+    virtual OpenGlReadbackResult submitAsyncReadback(const OpenGlTextureFramePtr&,
+        const CancellationPredicate& = {}) { return {OpenGlCompositionStatus::Unsupported}; }
+    virtual OpenGlReadbackResult collectAsyncReadback(OpenGlReadbackTicket,
+        const CancellationPredicate& = {}, bool = false) { return {OpenGlCompositionStatus::Unsupported}; }
+    virtual void discardAsyncReadbacks() noexcept {}
+    virtual unsigned asyncReadbackSlotCount() const noexcept { return 0; }
     virtual OpenGlCompositionResult compose(int, int, const std::vector<CompositionLayer>&,
         const CancellationPredicate& = {}, OpenGlCompositionTimings* = nullptr) = 0;
     virtual OpenGlTextureCompositionResult composeTexture(int, int, const std::vector<CompositionLayer>&,
