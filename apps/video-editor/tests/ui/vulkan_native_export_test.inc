@@ -116,11 +116,12 @@ void validateIntegratedNvenc(const OutputChoice& output,const std::filesystem::p
         if(mode>=3)require(metrics.native_encoded_frames==0 && !metrics.native_fallback_reason.empty(),"Unqualified/unavailable native path was used.");
         inspectBridgeOutput(job,8);
     }
-    for(const auto mib:{180ULL,250ULL}){
+    // The export boundary now needs three images per flight, rather than four.
+    for(const auto mib:{196ULL,250ULL}){
         auto occupied=device->tryReserveExternal(mib*1024*1024);require(bool(occupied),"Cannot reserve controlled memory pressure.");
         auto pressure=options;pressure.prepared_native_frame_callback={};pressure.prepared_frame_callback={};
         runBridge(job,cancel,pressure);
-        if(mib==180)require(metrics.native_encoded_frames==8 && metrics.native_slots==1 && metrics.peak_pending_frames==1,"Memory pressure did not reduce native flights.");
+        if(mib==196)require(metrics.native_encoded_frames==8 && metrics.native_slots==1 && metrics.peak_pending_frames==1,"Memory pressure did not reduce native flights.");
         else require(metrics.native_encoded_frames==0 && metrics.gpu_failures==0 && metrics.encoded_frames==8,"Capacity pressure became a technical failure.");
     }
     for(const auto codec:{"h264_nvenc","hevc_nvenc"}){

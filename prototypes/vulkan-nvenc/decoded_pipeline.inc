@@ -90,9 +90,22 @@ DecodedMetrics runDecoded(Session& session,const std::filesystem::path& source,c
             std::vector<c::CompositionLayer> layers{video,top};
             if(verify){auto cpu=oracle->decode_frame_at(index);require(bool(cpu),"CPU oracle frame is unavailable.");auto oracle_layers=layers;oracle_layers[0].texture_frame.reset();oracle_layers[0].frame=cpu->get();item.reference=c::FrameCompositor::compose(w,h,oracle_layers);}
             auto batch=compositor.beginCommandBatch();
-            c::OpenGlCompositionTimings timing;auto composed=compositor.composeTexture(w,h,layers,{},&timing);
+            c::OpenGlCompositionTimings timing;
+            // Evaluate the same ordered, byte-rounded passes before creating the
+            // canvas, so the original image lease ends at its last logical use.
+            {c::OpenGlImageOperation operation;operation.kind=c::OpenGlImageOperationKind::Color;
+                operation.background={layers[0].frame,layers[0].texture_frame};
+                auto passes=creative_suite::effects::colorAdjustmentPasses(effects);require(bool(passes),"Unsupported prototype color stack.");operation.colors=*passes;
+                auto processed=compositor.processImage(operation,{},&timing);pipelineComplete(processed);
+                layers[0].texture_frame=std::move(processed.frame);layers[0].effect_stack={};}
+            video.texture_frame.reset();imported.reset();
+            auto composed=compositor.composeTexture(w,h,layers,{},&timing);
             if(composed.status==Status::Busy && !pending.empty()){while(!pending.empty()){auto older=std::move(pending.front());pending.pop_front();encode(std::move(older));}capacity=1;composed=compositor.composeTexture(w,h,layers,{},&timing);}
             pipelineComplete(composed);metrics.source_upload+=timing.uploaded_bytes;
+            const auto memory=session.device->diagnostics();require(memory.active_bytes+memory.pending_bytes+memory.cached_bytes+memory.external_bytes==memory.known_bytes,"Memory classes do not reconcile.");
+            // Descriptors retain allocations until GPU completion; these CPU wrappers
+            // are no longer consumers and must not prevent in-batch reuse.
+            layers.clear();video.texture_frame.reset();imported.reset();
             if(native_output){auto target=session.pool.acquire();require(bool(target),"NVENC retained every bounded destination.");auto submitted=output.submit(composed.frame,target);pipelineComplete(submitted);item.output=submitted.ticket;}
             else {auto submitted=compositor.submitAsyncReadback(composed.frame);pipelineComplete(submitted);item.rgba=submitted.ticket;metrics.output_readback+=std::uint64_t(w)*h*4;}
             if(batch)pipelineComplete(batch->finish());
@@ -143,6 +156,28 @@ void decodedBridgeTests(Session& session,const std::filesystem::path& source){
     complete(bridge.prepare(fresh->native,1));auto reuse=bridge.submit(fresh->native);complete(reuse);bridge.discard();require(bridge.isRetired(),"Pending input shutdown did not retire.");
     auto retained=compositor.readback(a.frame);complete(retained);parity(*cpu,*retained.frame);a.frame.reset();
     require(bridge.collect(reuse.ticket).status==Status::Unsupported,"Discarded input ticket was accepted.");
+    // Exercise the retained legacy import even on sampled-capable hardware.
+    {struct Environment {QByteArray previous=qgetenv("CREATIVE_SUITE_VULKAN_IMPORT_BLIT");
+        ~Environment(){if(previous.isNull())qunsetenv("CREATIVE_SUITE_VULKAN_IMPORT_BLIT");else qputenv("CREATIVE_SUITE_VULKAN_IMPORT_BLIT",previous);}} restore;
+        qputenv("CREATIVE_SUITE_VULKAN_IMPORT_BLIT","1");complete(bridge.prepare(fresh->native,1));
+        const auto before=bridge.metrics();auto legacy=bridge.submit(fresh->native);complete(legacy);complete(bridge.collect(legacy.ticket));
+        auto pixels=compositor.readback(legacy.frame);complete(pixels);parity(**reopened->decode_frame_at(2),*pixels.frame);
+        require(bridge.metrics().legacy_submissions==before.legacy_submissions+1 && bridge.metrics().direct_submissions==before.direct_submissions,"Legacy admission did not select blit conversion.");
+    }
+    {struct Environment {QByteArray previous=qgetenv("CREATIVE_SUITE_VULKAN_FAIL_METADATA");
+        ~Environment(){if(previous.isNull())qunsetenv("CREATIVE_SUITE_VULKAN_FAIL_METADATA");else qputenv("CREATIVE_SUITE_VULKAN_FAIL_METADATA",previous);}} restore;
+        const auto rejectsWithoutLeak=[&](const char* kind,auto operation){
+            const auto before=session.device->totalReservedBytes();qputenv("CREATIVE_SUITE_VULKAN_FAIL_METADATA",kind);
+            bool rejected=false;try{rejected=operation()==Status::Failed;}catch(const std::bad_alloc&){rejected=true;}
+            qunsetenv("CREATIVE_SUITE_VULKAN_FAIL_METADATA");
+            require(rejected && session.device->valid(),"Metadata failure did not reject allocation safely.");
+            require(session.device->totalReservedBytes()==before,"Metadata failure leaked or underflowed the known reservation.");
+        };
+        rejectsWithoutLeak("image",[&]{return compositor.composeTexture(147,79,{}).status;});
+        rejectsWithoutLeak("transfer",[&]{return compositor.prepareAsyncReadback(149,83,1024*1024,1).status;});
+        rejectsWithoutLeak("import",[&]{c::VulkanNativeImportBridge failed(session.device);return failed.prepare(fresh->native,1).status;});
+        rejectsWithoutLeak("export",[&]{auto destination=session.pool.acquire();require(bool(destination),"Metadata fixture pool is occupied.");c::VulkanNativeExportBridge failed(session.device);return failed.prepare(destination,1).status;});
+    }
     for(unsigned submit_fault:{1u,2u,3u,0u}){
         complete(bridge.prepare(fresh->native,1));
         auto submitted=bridge.submit(fresh->native,{},submit_fault);
@@ -152,6 +187,7 @@ void decodedBridgeTests(Session& session,const std::filesystem::path& source){
     }
 }
 int decodedMain(const QStringList& args,const std::filesystem::path& root,const QString& mode,const QString& output_codec){
+    const bool large_test=args.contains("--decode-4k-self-test");
     const bool test=args.contains("--decode-self-test"),benchmark=args.contains("--decode-benchmark");
 #ifndef _WIN32
     throw DecodedUnavailable("The decoded prototype requires Windows D3D11VA and NVENC.");
@@ -160,7 +196,7 @@ int decodedMain(const QStringList& args,const std::filesystem::path& root,const 
     QString supplied,input_mode="native";int cancel_at=-1;
     for(const auto& arg:args){if(arg.startsWith("--decode-source="))supplied=arg.mid(16);if(arg.startsWith("--input="))input_mode=arg.mid(8);if(arg.startsWith("--cancel-after=")){bool valid=false;cancel_at=arg.mid(15).toInt(&valid);require(valid && cancel_at>=0,"Invalid --cancel-after frame index.");}}
     require(input_mode=="native" || input_mode=="rgba","Use --input=native|rgba.");
-    const auto sizes=benchmark?std::vector<std::pair<int,int>>{{1920,1080},{2560,1440},{3840,2160}}:std::vector<std::pair<int,int>>{{320,180}};
+    const auto sizes=large_test?std::vector<std::pair<int,int>>{{3840,2160}}:benchmark?std::vector<std::pair<int,int>>{{1920,1080},{2560,1440},{3840,2160}}:std::vector<std::pair<int,int>>{{320,180}};
     qputenv("CREATIVE_SUITE_NVENC_NATIVE_LATENCY","1");
     for(const auto [w,h]:sizes){
         const auto source=supplied.isEmpty()?root/("decoded-source-"+std::to_string(w)+".mkv"):path(supplied);
@@ -175,14 +211,34 @@ int decodedMain(const QStringList& args,const std::filesystem::path& root,const 
         std::cout<<" input_format=NV12 shared_format=BGRA8 compositor_format=RGBA8_UINT decoder_pool_accounting=separate\n";
         probe.reset();probe_decoder.reset();
         std::unique_ptr<Session> bounded;std::shared_ptr<c::VulkanDevice> ordinary;
-        if(test){bounded=std::make_unique<Session>(320,180,1536ULL*1024,true,1);std::string cause;ordinary=c::VulkanDevice::create(cause);require(bool(ordinary),cause);}
+        if(test){bounded=std::make_unique<Session>(320,180,1024ULL*1024,true,1);std::string cause;ordinary=c::VulkanDevice::create(cause);require(bool(ordinary),cause);}
         std::exception_ptr failure;std::thread worker([&]{try{
+            if(large_test){
+                for(const auto* input_codec:{"h264_nvenc","hevc_nvenc"}){
+                    const auto tagged=root/(std::string("4k-source-")+input_codec+".mkv");
+                    m::test_support::createTaggedVideo(tagged,AVCOL_SPC_BT709,AVCOL_RANGE_MPEG,input_codec,3840,2160,12,true);
+                    for(const auto* out_codec:{"h264_nvenc","hevc_nvenc"}){
+                        const auto file=root/(std::string("4k-")+input_codec+"-"+out_codec+".mkv");
+                        const auto result=runDecoded(session,tagged,file,out_codec,true,true,0,12,true);
+                        require(result.active_slots==1 && result.input.direct_submissions==12 && result.input.bgra_blit_bytes==0,"4K did not use the reduced one-flight native path.");
+                        require(result.known_peak<=256ULL*1024*1024,"4K exceeded its known budget.");
+                        std::cout<<"decoded_4k_case input="<<input_codec<<" output="<<out_codec<<" frames=12 known_peak="<<result.known_peak<<" decoded_downloads=0 output_readback=0\n"<<std::flush;
+                    }
+                    for(bool fail:{false,true}){
+                        const auto destination=root/(std::string("4k-preserve-")+input_codec+".mkv");{std::ofstream old(destination);old<<"preserve-existing";}
+                        bool failed=false;try{auto result=runDecoded(session,tagged,destination,"h264_nvenc",true,true,0,12,false,fail?-1:2,fail?2:-1);require(result.cancelled,"4K did not cancel.");}catch(const m::VideoEncodingError&){failed=true;}
+                        require(failed==fail,"4K encoder failure was swallowed.");std::ifstream old(destination);std::string bytes{std::istreambuf_iterator<char>(old),{}};
+                        require(bytes=="preserve-existing","4K failure/cancel replaced the destination.");
+                    }
+                }
+                std::cout<<"decoded_4k_self_test=passed input_codecs=2 output_codecs=2\n";return;
+            }
             if(test){decodedBridgeTests(session,source);
                 {auto d=hardwareDecoder(source);auto f=d->decode_frame_at_native(0);
                     c::VulkanNativeImportBridge unavailable(ordinary);require(unavailable.prepare(f->native).status==Status::Unsupported,"Ordinary creation enabled input interop.");
                     c::VulkanNativeImportBridge format(session.device);auto bgra=session.pool.acquire();require(format.prepare(bgra).status==Status::Unsupported,"BGRA output was accepted as decoded NV12.");
                     c::VulkanNativeImportBridge limited(bounded->device);
-                    auto occupied=bounded->device->tryReserveExternal(1024ULL*1024);require(bool(occupied),"Cannot reserve pressure fixture.");
+                    auto occupied=bounded->device->tryReserveExternal(512ULL*1024);require(bool(occupied),"Cannot reserve pressure fixture.");
                     require(limited.prepare(f->native).status==Status::Busy,"Input saturation did not report nontechnical Busy.");occupied.reset();
                     complete(limited.prepare(f->native));require(limited.slotCount()==1,"Input pressure did not reduce to one flight.");auto r=limited.submit(f->native);complete(r);complete(limited.collect(r.ticket));}
 
@@ -210,7 +266,7 @@ int decodedMain(const QStringList& args,const std::filesystem::path& root,const 
                     <<" input_mean_ms="<<result.input_mean_ms<<" input_p95_ms="<<result.input_p95_ms<<" input_completion_mean_ms="<<result.input_completion_mean_ms<<" input_completion_p95_ms="<<result.input_completion_p95_ms<<" output_mean_ms="<<result.output_mean_ms<<" output_p95_ms="<<result.output_p95_ms
                     <<" decoded_download_frames="<<result.decode.downloaded_frames<<" decoded_download_bytes="<<result.decode.downloaded_bytes<<" hardware_frames="<<result.decode.hardware_frames
                     <<" source_upload_bytes="<<result.source_upload<<" output_readback_bytes="<<result.output_readback<<" encoder_upload_bytes="<<result.encoder_upload<<" input_submissions="<<result.input.submissions<<" input_collections="<<result.input.collections
-                    <<" input_copy_bytes="<<result.input.nv12_copy_bytes<<" input_blit_bytes="<<result.input.bgra_blit_bytes<<" input_submit_ns="<<result.input.submit_nanoseconds<<" input_wait_ns="<<result.input.wait_nanoseconds<<" conversion_ns="<<result.input.conversion_nanoseconds
+                    <<" input_direct_submissions="<<result.input.direct_submissions<<" input_legacy_submissions="<<result.input.legacy_submissions<<" input_copy_bytes="<<result.input.nv12_copy_bytes<<" input_blit_bytes="<<result.input.bgra_blit_bytes<<" input_submit_ns="<<result.input.submit_nanoseconds<<" input_wait_ns="<<result.input.wait_nanoseconds<<" conversion_ns="<<result.input.conversion_nanoseconds
                     <<" output_blit_bytes="<<result.output.vulkan_blit_bytes<<" output_copy_bytes="<<result.output.d3d_copy_bytes<<" output_submit_ns="<<result.output.submit_nanoseconds<<" output_wait_ns="<<result.output.wait_nanoseconds
                     <<" known_peak="<<result.known_peak<<" decoder_peak="<<result.decode.peak_reserved_gpu_bytes<<" combined_peak_estimate="<<result.known_peak+result.decode.peak_reserved_gpu_bytes<<" active_slots="<<result.active_slots<<" peak_pending="<<result.peak_pending<<"\n"<<std::flush;
                 }catch(const DecodedUnavailable& e){if(!benchmark)throw;std::cout<<"decoded_unavailable input="<<(native_input?"native":"rgba")<<" output="<<(native?"native":"rgba")<<" width="<<width<<" height="<<height<<" trial="<<trial<<" reason="<<e.what()<<"\n"<<std::flush;}

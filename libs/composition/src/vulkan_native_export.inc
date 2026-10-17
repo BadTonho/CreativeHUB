@@ -41,7 +41,7 @@ struct VulkanNativeExportBridge::Impl {
             if(!owner)return;std::lock_guard lock(owner->mutex);
             if(image)vkDestroyImage(owner->device,image,nullptr);
             if(memory)vkFreeMemory(owner->device,memory,nullptr);
-            owner->bytes-=bytes;
+            owner->allocation_bytes.erase(this);owner->bytes-=bytes;
         }
     };
     struct Slot {
@@ -167,10 +167,10 @@ GpuCompositionResult VulkanNativeExportBridge::prepare(const media::NativeVideoF
             throw Failure("Invalid bounded native export dimensions or slot count.",0,Status::Unsupported);
         b.width=view.width;b.height=view.height;
         const auto bytes=std::uint64_t(b.width)*b.height*4;
-        // Include source, UINT scratch, normalized scratch and shared image for
+        // Include source, normalized conversion and shared image for
         // each flight, plus the externally reserved native encoder pool.
-        while(maximum>1 && bytes*4*maximum>p.capacity)--maximum;
-        if(bytes*4>p.capacity)throw Failure("No native export flight fits the known memory budget.",0,Status::Busy);
+        while(maximum>1 && bytes*3*maximum>p.capacity)--maximum;
+        if(bytes*3>p.capacity)throw Failure("No native export flight fits the known memory budget.",0,Status::Busy);
         auto get_properties=reinterpret_cast<PFN_vkGetMemoryWin32HandlePropertiesKHR>(vkGetDeviceProcAddr(p.device,"vkGetMemoryWin32HandlePropertiesKHR"));
         if(!get_properties)throw Failure("The native memory import entry point is unavailable.",0,Status::Unsupported);
         for(unsigned index=0;index<maximum;++index){
@@ -200,7 +200,7 @@ GpuCompositionResult VulkanNativeExportBridge::prepare(const media::NativeVideoF
             VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};allocation.pNext=&import;allocation.allocationSize=requirements.size;
             allocation.memoryTypeIndex=p.memoryType(requirements.memoryTypeBits&bits.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
             check(vkAllocateMemory(p.device,&allocation,nullptr,&imported->memory),"Import shared encoder allocation.");
-            imported->bytes=requirements.size;p.bytes+=requirements.size;p.peak=std::max(p.peak,p.bytes);p.known_peak=std::max(p.known_peak,p.bytes+p.external_reserved);
+            imported->bytes=requirements.size;p.bytes+=requirements.size;p.peak=std::max(p.peak,p.bytes);p.known_peak=std::max(p.known_peak,p.bytes+p.external_reserved);p.registerAllocation(imported.get(),requirements.size,"export");
             check(vkBindImageMemory(p.device,imported->image,imported->memory,0),"Bind shared encoder image.");
             Impl::Slot slot;slot.imported=std::move(imported);
             D3D11_QUERY_DESC event{D3D11_QUERY_EVENT,0};checkHr(b.d3d->CreateQuery(&event,&slot.copy_done),"Create encoder copy completion.");
@@ -239,9 +239,8 @@ VulkanNativeExportResult VulkanNativeExportBridge::submit(const GpuTextureFrameP
         if(slot==b.native_slots.end())return {Status::Busy};
         if(std::any_of(b.native_slots.begin(),b.native_slots.end(),[&](const auto& item){return item.ticket && item.destination==destination;}))return {Status::Busy};
         auto& p=*b.device->impl_;std::lock_guard lock(p.mutex);context=p.current();if(!context)context=p.start(true);if(!context)return {Status::Busy};
-        auto scratch=p.image(b.device,b.width,b.height);
         auto display=p.image(b.device,b.width,b.height,VK_FORMAT_R8G8B8A8_UNORM);
-        Parameters parameters;parameters.control={9,0,0,0};p.dispatch(source->vulkanImage(),{},{},scratch,parameters,display);
+        auto origin=source->vulkanImage();p.retain(origin);p.dispatchBoundary(false,p.allocation(origin).view,display);
         p.current()->resources.push_back(slot->imported);
         auto cmd=p.begin();b.ownership(cmd,slot->imported->image,true);
         auto& allocation=p.allocation(display);p.barrier(cmd,allocation.image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -256,7 +255,7 @@ VulkanNativeExportResult VulkanNativeExportBridge::submit(const GpuTextureFrameP
         const auto submitted_at=Clock::now();
         slot->completion=p.finish(context,VK_NULL_HANDLE,VK_NULL_HANDLE,&sync);b.metrics.submit_nanoseconds+=ns(submitted_at);slot->context=context;context=nullptr;
         static std::atomic_uint64_t next{1};slot->ticket=next.fetch_add(1);slot->source=source;slot->destination=destination;
-        b.order.push_back(slot->ticket);++b.metrics.submissions;b.metrics.peak_pending=std::max(b.metrics.peak_pending,unsigned(b.order.size()));
+        p.traceMemory("delivery");b.order.push_back(slot->ticket);++b.metrics.submissions;b.metrics.peak_pending=std::max(b.metrics.peak_pending,unsigned(b.order.size()));
         b.metrics.vulkan_blit_bytes+=std::uint64_t(b.width)*b.height*4;
         return {Status::Complete,{slot->ticket}};
 #else

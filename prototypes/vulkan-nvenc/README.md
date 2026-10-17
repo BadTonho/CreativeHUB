@@ -102,7 +102,7 @@ confined to the private implementation. It is not a stable cross-platform API.
 
 Each of at most two slots owns a D3D11 BGRA NT-shared/keyed-mutex intermediate,
 a dedicated Vulkan import of the same allocation and a D3D11 event query.
-The compositor's existing integer-to-normalized operation produces RGBA8 UNORM;
+A private export kernel converts integer RGBA8 directly to RGBA8 UNORM;
 a nearest Vulkan blit converts channels into the imported BGRA image. The bridge
 then makes a D3D11 GPU copy into the ordinary encoder pool surface. Thus this
 eliminates full output readback/CPU encoder input, **not GPU copies**. Source
@@ -142,7 +142,7 @@ The encoder writes a temporary file and publishes atomically only after finish.
 The combined known reservation limit is 256 MiB. Vulkan's allocation budget is
 reduced by the existing native pool estimate. Shared import backing is counted
 once using Vulkan requirements, not again as a second D3D texture. A conservative
-four-images-per-flight estimate reduces two slots to one before allocating; live
+three-images-per-flight estimate reduces two slots to one before allocating; live
 allocation checks and eviction of idle Vulkan pools still enforce the cap.
 D3D output surfaces are estimates (width * height * 4 per surface); this is not
 measured driver VRAM and excludes opaque driver/NVENC allocations.
@@ -168,3 +168,24 @@ reservation lease. An unconfirmed GPU consumer causes conservative process-lifet
 retention rather than unsafe reuse/free; editor integration aborts that job and
 logs the error. The [integrated acceptance record](../../docs/video-editor/performance/VULKAN_NATIVE_EXPORT_WINDOWS_2026-10-16.md)
 separates qualified editor results from the historical prototype comparison.
+
+## Reduced-memory 4K diagnostic
+
+Run `--decode-4k-self-test --require-native --output-dir=build/decoded-4k-check`
+for the native H.264/HEVC input/output matrix, pixel and timestamp checks, and
+cancel/encoder-failure destination preservation. CTest registers
+`creative-suite-vulkan-decoded-4k` (300 s); skips never establish native acceptance.
+The benchmark command and its 30/180/three-trial protocol remain unchanged.
+
+Direct sampled BGRA import avoids the normalized input intermediate when supported;
+`CREATIVE_SUITE_VULKAN_IMPORT_BLIT=1` forces the retained legacy GPU conversion.
+The independent export kernel avoids its previous integer scratch. Ordered effects
+run before canvas allocation; CPU wrappers end at last use while GPU resources stay
+retained by their recording/submitted consumers. This does not enable editor input.
+
+For allocation investigation set `CREATIVE_SUITE_VULKAN_MEMORY_TRACE=1` and inspect
+`vulkan-memory` entries under the selected output directory's `logs/`. They separate
+active, pending, idle cached and externally reserved known bytes; the decoder stays
+separate. Disable tracing/validation for timing. See the
+[contract](../../docs/video-editor/gpu/VULKAN_DECODE_PROTOTYPE.md) and
+[4K results](../../docs/video-editor/performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md).

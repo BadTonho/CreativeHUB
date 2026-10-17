@@ -41,13 +41,21 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
     auto copy=lease;lease.reset();require(device->totalReservedBytes()==original+1024*1024,"Copied reservation released early.");
     require(!device->tryReserveExternal(0) && !device->tryReserveExternal(256ULL*1024*1024),"Invalid reservation was admitted.");
     copy.reset();require(device->totalReservedBytes()==original,"Reservation did not retire.");
+    const auto checkMemory=[&]{auto stats=device->diagnostics();
+        require(stats.active_bytes+stats.pending_bytes+stats.cached_bytes+stats.external_bytes==stats.known_bytes,"Known Vulkan memory classes do not reconcile.");
+        require(stats.known_bytes==device->totalReservedBytes() && stats.known_bytes<=256ULL*1024*1024,"Memory diagnostics disagree with admission.");};
+    checkMemory();
     VulkanFrameCompositor gpu(device);auto a=fixture(37,23,false),b=fixture(19,13);
     for(double rotation:{0.,23.,90.,-45.})for(double opacity:{0.,0.37,1.}){
         std::vector<CompositionLayer> layers{{&a},{&b}};layers[1].transform={0.43,0.61,0.78,rotation,opacity};
         auto cpu=FrameCompositor::compose(61,47,layers);auto result=gpu.compose(61,47,layers);
         if(rotation && !device->supportsPreciseRotation()){require(result.status==OpenGlCompositionStatus::Unsupported,"Rotation must recover without shaderFloat64.");continue;}
-        require(result.status==OpenGlCompositionStatus::Complete,result.cause);parity(*cpu,*result.frame);
+        require(result.status==OpenGlCompositionStatus::Complete,result.cause);parity(*cpu,*result.frame);checkMemory();
     }
+    {auto empty=gpu.compose(41,29,{});require(empty.status==OpenGlCompositionStatus::Complete,empty.cause);parity(*FrameCompositor::compose(41,29,{}),*empty.frame);
+        const std::vector<effects::EffectInstance> stack{{"video.brightness",{{"amount",7}},true},{"video.saturation",{{"amount",80}},true}};
+        std::vector<CompositionLayer> layers{{&a},{&b}};layers[0].effect_stack=stack;
+        auto actual=gpu.compose(61,47,layers);require(actual.status==OpenGlCompositionStatus::Complete,actual.cause);parity(*FrameCompositor::compose(61,47,layers),*actual.frame);checkMemory();}
     OpenGlImageOperation op;op.background.rgba=&b;op.kind=OpenGlImageOperationKind::Color;
     op.colors={{13,123,77},{-7,91,118}};
     auto expected=b;for(const auto& color:op.colors)require(effects::applyColorAdjustment(expected,color)==effects::ProcessingResult::Completed,"CPU color failed.");

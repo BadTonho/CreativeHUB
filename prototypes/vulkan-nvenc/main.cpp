@@ -20,6 +20,7 @@ extern "C" {
 #include <fstream>
 #include <iostream>
 #include <numeric>
+#include <new>
 #include <stdexcept>
 #include <thread>
 
@@ -207,6 +208,8 @@ void selfTest(Session& session,const std::filesystem::path& root){
     auto wrong_pixels=fixture(32,24);c::GpuImageOperation wrong_operation;wrong_operation.background.rgba=&wrong_pixels;
     auto wrong_source=compositor.processImage(wrong_operation);require(bool(wrong_source.frame),wrong_source.cause);
     require(bridge.submit(wrong_source.frame,first).status==Status::Unsupported,"Mismatched source geometry was accepted.");
+    // Isolate the two-flight assertion from unrelated asynchronous fixture uploads.
+    auto before=compositor.readback(source.frame);complete(before);parity(a,*before.frame);
     auto one=bridge.submit(source.frame,first),two=bridge.submit(source.frame,second);complete(one);complete(two);
     require(bridge.submit(source.frame,first).status==Status::Busy,"Native flights exceeded their limit.");
     require(bridge.collect(two.ticket).status==Status::Busy,"Native ticket collection escaped FIFO.");
@@ -214,6 +217,7 @@ void selfTest(Session& session,const std::filesystem::path& root){
     require(bridge.collect(one.ticket,[]{return true;}).status==Status::Cancelled,"Pending native collection ignored cancellation.");
     auto collected=bridge.collect(one.ticket);complete(collected);parity(a,*collected.frame->download_rgba());
     auto last=bridge.collect(two.ticket);complete(last);parity(a,*last.frame->download_rgba());
+    auto original=compositor.readback(source.frame);complete(original);parity(a,*original.frame);
     require(bridge.collect(one.ticket).status==Status::Unsupported,"Retired ticket was reused.");
     collected.frame.reset();last.frame.reset();first.reset();second.reset();
     auto target=session.pool.acquire();auto reuse=bridge.submit(source.frame,target);complete(reuse);bridge.discard();
@@ -248,7 +252,7 @@ int main(int argc,char** argv){
     const auto root=path(QDir(directory).absolutePath());std::filesystem::create_directories(root);
     if(!d::Logger::instance().initialize(root/"logs"))return 1;
     try {
-        if(args.contains("--decode-self-test") || args.contains("--decode-benchmark") || std::any_of(args.begin(),args.end(),[](const auto& s){return s.startsWith("--decode-source=");}))
+        if(args.contains("--decode-4k-self-test") || args.contains("--decode-self-test") || args.contains("--decode-benchmark") || std::any_of(args.begin(),args.end(),[](const auto& s){return s.startsWith("--decode-source=");}))
             return decodedMain(args,root,mode,codec);
         if(args.contains("--self-test")){
             QTemporaryDir fixtures(QDir(directory).absoluteFilePath("self-test-XXXXXX"));require(fixtures.isValid(),"Cannot create isolated native fixtures.");

@@ -41,11 +41,14 @@
 #include <thread>
 #include <deque>
 #include <utility>
+#include <new>
 
 #ifdef CS_HAS_VULKAN
 #include <vulkan/vulkan.h>
 #include "composition_spirv.h"
 #include "composition_precise_spirv.h"
+#include "interop_import_spirv.h"
+#include "interop_export_spirv.h"
 #endif
 
 namespace creative_suite::composition {
@@ -95,6 +98,8 @@ PFN_vkCreateFence vkCreateFence = nullptr;
 PFN_vkCreateImage vkCreateImage = nullptr;
 PFN_vkCreateImageView vkCreateImageView = nullptr;
 PFN_vkCreatePipelineLayout vkCreatePipelineLayout = nullptr;
+PFN_vkCreateSampler vkCreateSampler = nullptr;
+PFN_vkDestroySampler vkDestroySampler = nullptr;
 PFN_vkCreateSemaphore vkCreateSemaphore = nullptr;
 PFN_vkCreateShaderModule vkCreateShaderModule = nullptr;
 PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
@@ -158,6 +163,10 @@ void loadVulkanApi() {
 #endif
             loader.setLoadHints(QLibrary::PreventUnloadHint);
             if(!loader.load())throw Failure("The Vulkan runtime loader is unavailable: " + loader.errorString().toStdString());
+        vkCreateSampler=reinterpret_cast<PFN_vkCreateSampler>(loader.resolve("vkCreateSampler"));
+        if(!vkCreateSampler)throw Failure("The Vulkan loader lacks vkCreateSampler.");
+        vkDestroySampler=reinterpret_cast<PFN_vkDestroySampler>(loader.resolve("vkDestroySampler"));
+        if(!vkDestroySampler)throw Failure("The Vulkan loader lacks vkDestroySampler.");
         vkGetPhysicalDeviceProperties2=reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(loader.resolve("vkGetPhysicalDeviceProperties2"));
         if(!vkGetPhysicalDeviceProperties2)throw Failure("The Vulkan loader lacks vkGetPhysicalDeviceProperties2.");
         vkEnumerateDeviceExtensionProperties=reinterpret_cast<PFN_vkEnumerateDeviceExtensionProperties>(loader.resolve("vkEnumerateDeviceExtensionProperties"));
@@ -338,12 +347,27 @@ struct VulkanDevice::Impl {
     VkDescriptorSetLayout descriptors=VK_NULL_HANDLE;
     VkPipelineLayout layout=VK_NULL_HANDLE;
     VkPipeline pipeline=VK_NULL_HANDLE;
+    struct BoundaryPipeline {
+        VkDevice device=VK_NULL_HANDLE;
+        VkDescriptorSetLayout descriptors=VK_NULL_HANDLE;
+        VkPipelineLayout layout=VK_NULL_HANDLE;
+        VkPipeline pipeline=VK_NULL_HANDLE;
+        VkSampler sampler=VK_NULL_HANDLE;
+        ~BoundaryPipeline(){
+            if(pipeline)vkDestroyPipeline(device,pipeline,nullptr);
+            if(layout)vkDestroyPipelineLayout(device,layout,nullptr);
+            if(descriptors)vkDestroyDescriptorSetLayout(device,descriptors,nullptr);
+            if(sampler)vkDestroySampler(device,sampler,nullptr);
+        }
+    };
+    std::unique_ptr<BoundaryPipeline> import_boundary,export_boundary;
     VkPhysicalDeviceProperties properties{};
     VkPhysicalDeviceMemoryProperties memory_properties{};
     bool precise=false;
     std::atomic_bool lost{false};
     mutable std::recursive_mutex mutex;
     std::vector<std::unique_ptr<ImageAllocation>> pool;
+    std::map<const void*,std::uint64_t> allocation_bytes;
     std::uint64_t bytes=0,peak=0,known_peak=0;
     static constexpr std::uint64_t limit=256ULL*1024*1024;
     std::uint64_t capacity=limit,external_reserved=0;
@@ -392,6 +416,7 @@ struct VulkanDevice::Impl {
         contexts.clear();
         for(auto& [window,swap]:windows){Q_UNUSED(window);destroy(swap);}
         for(auto& allocation:pool)destroy(*allocation);
+        import_boundary.reset();export_boundary.reset();
         if(pipeline)vkDestroyPipeline(device,pipeline,nullptr);
         if(layout)vkDestroyPipelineLayout(device,layout,nullptr);
         if(descriptors)vkDestroyDescriptorSetLayout(device,descriptors,nullptr);
@@ -401,7 +426,7 @@ struct VulkanDevice::Impl {
         if(image.view)vkDestroyImageView(device,image.view,nullptr);
         if(image.image)vkDestroyImage(device,image.image,nullptr);
         if(image.memory)vkFreeMemory(device,image.memory,nullptr);
-        bytes-=image.bytes;
+        allocation_bytes.erase(&image);bytes-=image.bytes;
     }
     void destroy(Swapchain& swap) {
         if(swap.handle)vkDestroySwapchainKHR(device,swap.handle,nullptr);
@@ -457,8 +482,8 @@ struct VulkanDevice::Impl {
                 command.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;command.commandBufferCount=1;
                 check(vkAllocateCommandBuffers(device,&command,&c->command),"Allocate Vulkan command context.");
                 VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};check(vkCreateFence(device,&fence,nullptr,&c->fence),"Create Vulkan context fence.");
-                VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,5*256};
-                VkDescriptorPoolCreateInfo descriptor_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};descriptor_info.maxSets=256;descriptor_info.poolSizeCount=1;descriptor_info.pPoolSizes=&size;
+                std::array<VkDescriptorPoolSize,2> sizes{{{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,5*256},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,256}}};
+                VkDescriptorPoolCreateInfo descriptor_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};descriptor_info.maxSets=256;descriptor_info.poolSizeCount=uint32_t(sizes.size());descriptor_info.pPoolSizes=sizes.data();
                 check(vkCreateDescriptorPool(device,&descriptor_info,nullptr,&c->descriptors),"Create Vulkan context descriptors.");
                 available=c.get();contexts.push_back(std::move(c));
             }
@@ -547,6 +572,9 @@ struct VulkanDevice::Impl {
             if(result!=VK_SUCCESS){vkDestroyImage(device,allocation->image,nullptr);check(result,"Allocate Vulkan image memory.");}
             allocation->bytes=req.size;bytes+=req.size;peak=std::max(peak,bytes);known_peak=std::max(known_peak,bytes+external_reserved);
             try {
+                // Charge first: bookkeeping allocation can fail, and destroy()
+                // must release exactly the backing already charged here.
+                registerAllocation(allocation.get(),req.size,"image");
                 check(vkBindImageMemory(device,allocation->image,allocation->memory,0),"Bind Vulkan image memory.");
                 VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};view.image=allocation->image;
                 view.viewType=VK_IMAGE_VIEW_TYPE_2D;view.format=format;view.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
@@ -580,12 +608,41 @@ struct VulkanDevice::Impl {
                 }
                 check(vkAllocateMemory(p.device,&allocation,nullptr,&memory),"Allocate Vulkan transfer memory.");
                 reserved=req.size;p.bytes+=reserved;p.peak=std::max(p.peak,p.bytes);p.known_peak=std::max(p.known_peak,p.bytes+p.external_reserved);
+                p.registerAllocation(this,reserved,"transfer");
                 check(vkBindBufferMemory(p.device,buffer,memory,0),"Bind Vulkan transfer memory.");
                 check(vkMapMemory(p.device,memory,0,size,0,&data),"Map Vulkan transfer memory.");
-            }catch(...){p.bytes-=reserved;if(memory)vkFreeMemory(p.device,memory,nullptr);vkDestroyBuffer(p.device,buffer,nullptr);throw;}
+            }catch(...){p.allocation_bytes.erase(this);p.bytes-=reserved;if(memory)vkFreeMemory(p.device,memory,nullptr);vkDestroyBuffer(p.device,buffer,nullptr);throw;}
         }
-        ~Buffer(){p.bytes-=reserved;if(data)vkUnmapMemory(p.device,memory);vkDestroyBuffer(p.device,buffer,nullptr);vkFreeMemory(p.device,memory,nullptr);}
+        ~Buffer(){p.allocation_bytes.erase(this);p.bytes-=reserved;if(data)vkUnmapMemory(p.device,memory);vkDestroyBuffer(p.device,buffer,nullptr);vkFreeMemory(p.device,memory,nullptr);}
     };
+    void registerAllocation(const void* key,std::uint64_t size,const char* kind) {
+        // Private regression injection: fail metadata only, after backing is charged.
+        if(qgetenv("CREATIVE_SUITE_VULKAN_FAIL_METADATA")==kind)throw std::bad_alloc();
+        allocation_bytes[key]=size;
+    }
+    Diagnostics memoryDiagnostics() const {
+        auto result=counters;
+        // Snapshot without allocating: diagnostics() is a nonthrowing boundary.
+        for(const auto& [key,size]:allocation_bytes){
+            bool pending=false;
+            for(const auto& c:contexts)if(c->pending){
+                const auto matches=[&](const auto& value){return value.get()==key;};
+                if(std::any_of(c->images.begin(),c->images.end(),matches) || std::any_of(c->resources.begin(),c->resources.end(),matches)){pending=true;break;}
+            }
+            if(pending)result.pending_bytes+=size;
+        }
+        for(const auto& image:pool)result.cached_bytes+=image->bytes;
+        for(const auto& buffer:buffer_pool)result.cached_bytes+=buffer->reserved;
+        result.active_bytes=bytes-result.pending_bytes-result.cached_bytes;
+        result.external_bytes=external_reserved;result.known_bytes=bytes+external_reserved;return result;
+    }
+    void traceMemory(const char* stage) const {
+        if(qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_MEMORY_TRACE")!=1)return;
+        const auto m=memoryDiagnostics();
+        creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Info,"vulkan-memory",stage,"Known allocation snapshot; decoder excluded.",
+            {{"active_bytes",std::to_string(m.active_bytes)},{"pending_bytes",std::to_string(m.pending_bytes)},
+             {"cached_bytes",std::to_string(m.cached_bytes)},{"external_bytes",std::to_string(m.external_bytes)},{"known_bytes",std::to_string(m.known_bytes)}});
+    }
     void trim(VkDeviceSize needed) {
         while(bytes+needed>capacity && !buffer_pool.empty())buffer_pool.pop_back();
         while(bytes+needed>capacity && !pool.empty()){destroy(*pool.back());pool.pop_back();}
@@ -628,6 +685,46 @@ struct VulkanDevice::Impl {
         barrier(cmd,a.image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);submit(cmd);
         if(timings){timings->upload_nanoseconds+=ns(start);timings->uploaded_bytes+=uint64_t(frame->width)*frame->height*4;++timings->uploaded_layers;}
         return image;
+    }
+    BoundaryPipeline& boundary(bool importing) {
+        auto& cached=importing?import_boundary:export_boundary;if(cached)return *cached;
+        auto value=std::make_unique<BoundaryPipeline>();value->device=device;
+        std::array<VkDescriptorSetLayoutBinding,2> bindings{};
+        for(unsigned i=0;i<2;++i){bindings[i].binding=i;bindings[i].descriptorType=i==0 && importing?VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_COMPUTE_BIT;}
+        VkDescriptorSetLayoutCreateInfo descriptor{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};descriptor.bindingCount=2;descriptor.pBindings=bindings.data();
+        check(vkCreateDescriptorSetLayout(device,&descriptor,nullptr,&value->descriptors),"Create Vulkan boundary descriptor layout.");
+        VkPipelineLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};layout_info.setLayoutCount=1;layout_info.pSetLayouts=&value->descriptors;
+        check(vkCreatePipelineLayout(device,&layout_info,nullptr,&value->layout),"Create Vulkan boundary pipeline layout.");
+        if(importing){VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+            sampler.magFilter=sampler.minFilter=VK_FILTER_NEAREST;sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;
+            sampler.addressModeU=sampler.addressModeV=sampler.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            check(vkCreateSampler(device,&sampler,nullptr,&value->sampler),"Create Vulkan boundary sampler.");}
+        VkShaderModuleCreateInfo shader_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+        shader_info.codeSize=importing?sizeof(interop_import_spirv):sizeof(interop_export_spirv);
+        shader_info.pCode=importing?interop_import_spirv:interop_export_spirv;
+        VkShaderModule shader{};check(vkCreateShaderModule(device,&shader_info,nullptr,&shader),"Load Vulkan boundary shader.");
+        VkComputePipelineCreateInfo pipeline_info{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+        pipeline_info.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};pipeline_info.stage.stage=VK_SHADER_STAGE_COMPUTE_BIT;
+        pipeline_info.stage.module=shader;pipeline_info.stage.pName="main";pipeline_info.layout=value->layout;
+        const auto result=vkCreateComputePipelines(device,VK_NULL_HANDLE,1,&pipeline_info,nullptr,&value->pipeline);
+        vkDestroyShaderModule(device,shader,nullptr);check(result,"Create Vulkan boundary pipeline.");cached=std::move(value);return *cached;
+    }
+    // The caller retains an external source and records ownership/layout barriers.
+    void dispatchBoundary(bool importing,VkImageView source,const std::shared_ptr<VulkanImage>& output) {
+        auto& conversion=boundary(importing);if(current()->sets++>=256)throw Failure("The bounded Vulkan descriptor batch is full.",0,Status::Busy);
+        VkDescriptorSetAllocateInfo allocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};allocate.descriptorPool=current()->descriptors;
+        allocate.descriptorSetCount=1;allocate.pSetLayouts=&conversion.descriptors;VkDescriptorSet set{};
+        check(vkAllocateDescriptorSets(device,&allocate,&set),"Allocate Vulkan boundary descriptors.");
+        std::array<VkDescriptorImageInfo,2> images{{{conversion.sampler,source,VK_IMAGE_LAYOUT_GENERAL},{VK_NULL_HANDLE,allocation(output).view,VK_IMAGE_LAYOUT_GENERAL}}};
+        std::array<VkWriteDescriptorSet,2> writes{};
+        for(unsigned i=0;i<2;++i){writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=set;writes[i].dstBinding=i;writes[i].descriptorCount=1;
+            writes[i].descriptorType=i==0 && importing?VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;writes[i].pImageInfo=&images[i];}
+        vkUpdateDescriptorSets(device,2,writes.data(),0,nullptr);retain(output);auto cmd=begin();
+        vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,conversion.pipeline);
+        vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,conversion.layout,0,1,&set,0,nullptr);
+        vkCmdDispatch(cmd,(output->width+15)/16,(output->height+15)/16,1);
+        barrier(cmd,allocation(output).image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
     }
     void dispatch(const std::shared_ptr<VulkanImage>& bg,const std::shared_ptr<VulkanImage>& fg,
         const std::shared_ptr<VulkanImage>& mask,const std::shared_ptr<VulkanImage>& output,
@@ -876,7 +973,7 @@ std::unique_ptr<GpuCommandBatch> VulkanFrameCompositor::beginCommandBatch(const 
 }
 VulkanDevice::Diagnostics VulkanDevice::diagnostics() const noexcept {
 #ifdef CS_HAS_VULKAN
-    std::lock_guard lock(impl_->mutex);return impl_->counters;
+    std::lock_guard lock(impl_->mutex);return impl_->memoryDiagnostics();
 #else
     return {};
 #endif
@@ -1090,7 +1187,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         params.geometry={width*t.position_x,height*t.position_y,bg->width*t.scale,bg->height*t.scale};
         params.rotation={std::cos(angle),std::sin(angle),t.scale,t.opacity};
         const auto started=Clock::now();
-        const auto execute=[&]{cancelled(cancel);auto out=p.image(device_,width,height);p.dispatch(bg,fg,mask,out,params);bg=std::move(out);};
+        const auto execute=[&]{cancelled(cancel);auto out=p.image(device_,width,height);p.dispatch(bg,fg,mask,out,params);bg=std::move(out);p.traceMemory("effects");};
         if(operation.kind==OpenGlImageOperationKind::Color){
             for(const auto& color:operation.colors){
                 params.color={float(color.brightness/100),float(color.contrast_percent/100),float(color.saturation_percent/100),0};execute();
@@ -1128,7 +1225,10 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
         checkCapacity(width,height);
         auto batch=beginCommandBatch(cancel);
         auto& p=*device_->impl_;std::lock_guard lock(p.mutex);
-        auto canvas=p.image(device_,width,height);Parameters params;params.control[0]=8;p.dispatch(canvas,{},{},canvas,params);
+        std::shared_ptr<VulkanImage> canvas;Parameters params;
+        // First-layer effects can retire their temporary images before allocating
+        // the canvas. The existing batch allocator reuses only unleased images.
+        const auto initializeCanvas=[&]{if(!canvas){canvas=p.image(device_,width,height);Parameters clear;clear.control[0]=8;p.dispatch(canvas,{},{},canvas,clear);}};
         for(const auto& layer:layers){
             cancelled(cancel);if(!layer.frame || !animation::validTransform(layer.transform))continue;
             if(layer.transform.rotation_degrees!=0 && !p.precise)throw Failure("Precise rotation requires shaderFloat64.",0,Status::Unsupported);
@@ -1149,15 +1249,15 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
                 else {op.kind=OpenGlImageOperationKind::GaussianBlur;op.blur_radius_pixels=value.radius_pixels;}
                 apply(op);
             },effect);
-            auto fg=p.input(source,device_,timings);auto out=p.image(device_,width,height);
+            auto fg=p.input(source,device_,timings);initializeCanvas();auto out=p.image(device_,width,height);
             const auto& t=layer.transform;const double scale=std::min(double(width)/fg->width,double(height)/fg->height)*t.scale;
             const double angle=t.rotation_degrees*std::numbers::pi/180;
             params.control[0]=7;params.geometry={width*t.position_x,height*t.position_y,fg->width*scale,fg->height*scale};
             params.rotation={std::cos(angle),std::sin(angle),scale,t.opacity};
-            const auto started=Clock::now();p.dispatch(canvas,fg,{},out,params);canvas=std::move(out);
+            const auto started=Clock::now();p.dispatch(canvas,fg,{},out,params);canvas=std::move(out);p.traceMemory("composition");
             if(timings)timings->draw_submission_nanoseconds+=ns(started);
         }
-        cancelled(cancel);auto frame=publish(std::move(canvas));
+        cancelled(cancel);initializeCanvas();auto frame=publish(std::move(canvas));
         if(batch){auto result=batch->finish();if(result.status!=Status::Complete)throw Failure(result.cause,result.error_code,result.status);}
         return {Status::Complete,std::move(frame)};
 #else

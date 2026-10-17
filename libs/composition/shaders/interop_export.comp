@@ -1,0 +1,9 @@
+#version 450
+layout(local_size_x=16,local_size_y=16) in;
+layout(binding=0,rgba8ui) uniform readonly uimage2D source_image;
+layout(binding=1,rgba8) uniform writeonly image2D output_image;
+void main() {
+    ivec2 pixel=ivec2(gl_GlobalInvocationID.xy);
+    if(any(greaterThanEqual(pixel,imageSize(output_image))))return;
+    imageStore(output_image,pixel,vec4(imageLoad(source_image,pixel))/255.0);
+}

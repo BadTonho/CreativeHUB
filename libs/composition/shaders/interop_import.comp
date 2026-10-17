@@ -1,0 +1,9 @@
+#version 450
+layout(local_size_x=16,local_size_y=16) in;
+layout(binding=0) uniform sampler2D shared_image;
+layout(binding=1,rgba8ui) uniform writeonly uimage2D output_image;
+void main() {
+    ivec2 pixel=ivec2(gl_GlobalInvocationID.xy);
+    if(any(greaterThanEqual(pixel,imageSize(output_image))))return;
+    imageStore(output_image,pixel,uvec4(floor(clamp(texelFetch(shared_image,pixel,0),0,1)*255.0+0.5)));
+}

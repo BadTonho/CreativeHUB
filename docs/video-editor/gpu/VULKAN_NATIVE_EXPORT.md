@@ -61,7 +61,9 @@ Application-owned pending items carry output index, timeline position and either
 RGBA, an asynchronous readback ticket or a native bridge ticket. Up to two items
 are collected/coded in order. A command scope groups Fusion and composition when
 possible; native submission keeps its production dependency until collection.
-The bridge normalizes integer RGBA8, blits into NT-shared BGRA, transfers external
+The bridge uses a private compute kernel to normalize integer RGBA8 directly into
+one RGBA8_UNORM image, without an unused integer output scratch. It then blits into
+NT-shared BGRA, transfers external
 ownership in GENERAL layout with keyed-mutex synchronization, then makes a D3D11
 GPU copy into the encoder pool. A copy event must finish before handing it to
 NVENC. Thus normal native output has no full-frame CPU readback, but has GPU

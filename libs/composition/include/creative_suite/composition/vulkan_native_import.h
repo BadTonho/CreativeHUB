@@ -34,6 +34,7 @@ public:
     struct Metrics {
         std::uint64_t submissions=0,collections=0,submit_nanoseconds=0,wait_nanoseconds=0;
         std::uint64_t nv12_copy_bytes=0,bgra_blit_bytes=0,conversion_nanoseconds=0;
+        std::uint64_t direct_submissions=0,legacy_submissions=0;
         unsigned peak_pending=0;
         std::int64_t retirement_error_code=0;
     };

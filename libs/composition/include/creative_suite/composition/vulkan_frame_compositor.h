@@ -72,6 +72,9 @@ public:
     struct Diagnostics {
         std::uint64_t submissions = 0, waits = 0, wait_nanoseconds = 0;
         unsigned pending = 0, peak_pending = 0;
+        // Disjoint known allocation classes; pending takes priority over leases.
+        std::uint64_t active_bytes = 0, pending_bytes = 0, cached_bytes = 0;
+        std::uint64_t external_bytes = 0, known_bytes = 0;
     };
     Diagnostics diagnostics() const noexcept;
 private:

@@ -19,7 +19,7 @@ function(creative_suite_attach_msvc_test_diagnostics target_name)
 endfunction()
 
 function(add_creative_suite_test)
-    cmake_parse_arguments(PARSE_ARGV 0 TEST "" "NAME;SKIP_RETURN_CODE" "COMMAND")
+    cmake_parse_arguments(PARSE_ARGV 0 TEST "" "NAME;SKIP_RETURN_CODE;TIMEOUT" "COMMAND")
 
     if(NOT TEST_NAME OR NOT TEST_COMMAND)
         message(FATAL_ERROR "add_creative_suite_test requires NAME and COMMAND")
@@ -45,6 +45,14 @@ function(add_creative_suite_test)
         math(EXPR _test_argument_count "${_test_argument_count} + 1")
     endforeach()
 
+    set(_test_timeout 120)
+    if(DEFINED TEST_TIMEOUT)
+        if(NOT TEST_TIMEOUT MATCHES "^[1-9][0-9]*$")
+            message(FATAL_ERROR "Test TIMEOUT must be a positive integer")
+        endif()
+        set(_test_timeout "${TEST_TIMEOUT}")
+    endif()
+
     set(_test_wrapper_arguments)
     if(TEST_SKIP_RETURN_CODE)
         list(APPEND _test_wrapper_arguments
@@ -57,7 +65,7 @@ function(add_creative_suite_test)
             "-DTEST_TEMP_ROOT=${CMAKE_BINARY_DIR}/ctest-temp"
             "-DTEST_LOG_ROOT=${CMAKE_BINARY_DIR}/ctest-logs"
             "-DTEST_NAME=${TEST_NAME}"
-            "-DTEST_TIMEOUT_SECONDS=120"
+            "-DTEST_TIMEOUT_SECONDS=${_test_timeout}"
             "-DTEST_DEBUG_DIAGNOSTICS=$<IF:$<CONFIG:Debug>,1,0>"
             "-DTEST_ARGUMENT_COUNT=${_test_argument_count}"
             ${_test_argument_definitions}

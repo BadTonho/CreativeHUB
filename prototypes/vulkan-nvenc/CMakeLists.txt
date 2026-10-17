@@ -18,11 +18,16 @@ elseif(WIN32)
         COMMAND "${qt_deploy}" --no-translations --no-compiler-runtime "$<TARGET_FILE:creative-suite-vulkan-nvenc-prototype>" VERBATIM)
 endif()
 if(BUILD_TESTING)
+    add_creative_suite_test(NAME creative-suite-isolated-timeout
+        COMMAND "${CMAKE_COMMAND}" "-DSOURCE_ROOT=${PROJECT_SOURCE_DIR}" -P "${PROJECT_SOURCE_DIR}/cmake/test_support/isolated_timeout_test.cmake")
     add_creative_suite_test(NAME creative-suite-vulkan-nvenc-prototype SKIP_RETURN_CODE 77
         COMMAND creative-suite-vulkan-nvenc-prototype --self-test)
     set_tests_properties(creative-suite-vulkan-nvenc-prototype PROPERTIES TIMEOUT 120)
     add_creative_suite_test(NAME creative-suite-vulkan-decoded-pipeline SKIP_RETURN_CODE 77
         COMMAND creative-suite-vulkan-nvenc-prototype --decode-self-test)
     set_tests_properties(creative-suite-vulkan-decoded-pipeline PROPERTIES TIMEOUT 180)
+    add_creative_suite_test(NAME creative-suite-vulkan-decoded-4k SKIP_RETURN_CODE 77 TIMEOUT 300
+        COMMAND creative-suite-vulkan-nvenc-prototype --decode-4k-self-test)
+    set_tests_properties(creative-suite-vulkan-decoded-4k PROPERTIES TIMEOUT 300 LABELS "gpu;native;4k")
 endif()
 

@@ -263,6 +263,16 @@ replaces the session while Viewers are active. Offline-export schema 3 records
 native delivery separately from RGBA recovery and existing OpenGL diagnostics.
 
 The experimental [decoded-input bridge](VULKAN_DECODE_PROTOTYPE.md) is explicitly
-selected only by the standalone probe. Shader operation 10 converts imported
-normalized bytes into the existing RGBA8_UINT image contract. Application
+selected only by the standalone probe. The retained legacy import uses shader
+operation 10 to convert normalized bytes into the existing RGBA8_UINT contract;
+the reduced-memory sampled path is described below. Application
 importFrame/native-source behavior and renderer selection are unchanged.
+
+### Reduced intermediate accounting
+
+The [native input prototype](VULKAN_DECODE_PROTOTYPE.md) now has optional sampled
+BGRA conversion, retained legacy import and a scratch-free integer-to-normalized
+export kernel. Its explicit input bridge remains outside editor importFrame.
+Known snapshots distinguish active, pending, cache and external reservations without
+waiting; their sum excludes the separately reported decoder pool. See the
+[4K follow-up](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md).

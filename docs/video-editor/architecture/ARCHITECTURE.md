@@ -102,5 +102,17 @@ adds an explicit worker-owned import bridge and reuses the private D3D11 NV12
 converter with OpenGL. The application input boundary still uses its existing
 RGBA recovery; the prototype is not enabled by normal importFrame. Decoder
 reservation estimates remain separate from the 256 MiB Vulkan/bridge/output cap.
-The provisional result and 4K memory limitation are recorded in the
+The original result and historical 4K capacity refusal are recorded in the
 [Windows evidence](../performance/VULKAN_DECODE_PIPELINE_WINDOWS_2026-10-17.md).
+
+## Reduced native prototype intermediates
+
+The standalone decoded-input experiment uses private build-time SPIR-V boundary
+kernels: sampled BGRA -> RGBA8_UINT when supported (legacy blit retained), and
+RGBA8_UINT -> RGBA8_UNORM without an integer scratch. Pipelines are lazy and
+platform details remain private. Ordered effects and canvas allocation release
+unneeded wrappers while existing command barriers and completion leases protect
+GPU use. The decoder remains separate from the 256 MiB known session budget.
+No application input selection, dependency, format or version changes. See the
+[contract](../gpu/VULKAN_DECODE_PROTOTYPE.md) and
+[4K evidence](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md).

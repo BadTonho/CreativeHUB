@@ -366,3 +366,12 @@ normalization. Its D3D11 converter is now shared with the existing OpenGL path.
 Normal application input import remains unchanged. See [Windows results](../performance/VULKAN_DECODE_PIPELINE_WINDOWS_2026-10-17.md)
 for zero full-video transfers in accepted cases, separate decoder reservations,
 matched FIFO/codec parameters and the native 4K memory refusal.
+
+### Reduced intermediate accounting
+
+The [native input prototype](VULKAN_DECODE_PROTOTYPE.md) now has optional sampled
+BGRA conversion, retained legacy import and a scratch-free integer-to-normalized
+export kernel. Its explicit input bridge remains outside editor importFrame.
+Known snapshots distinguish active, pending, cache and external reservations without
+waiting; their sum excludes the separately reported decoder pool. See the
+[4K follow-up](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md).

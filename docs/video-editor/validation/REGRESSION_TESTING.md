@@ -14,7 +14,7 @@ selection is unchanged; no editor input integration is accepted by these tests.
 | Hardware NV12 admission, adapter matching, ordinary Vulkan refusal, rejected format | Decoder/output LUID comparison and independent bridge check; existing prototype wrong-LUID creation test; decoded self-test rejects ordinary creation and BGRA/rejected input |
 | Colors, channels, visible/padded dimensions and array slices | Twelve H.264/HEVC matrix/range combinations, independent tagged patch checks, RGB tolerance 2/exact alpha against CPU and a 322x182 padded source |
 | Two imports, FIFO/stale tickets, source lifetime after decoder destruction | Direct input bridge test submits two retained sources, refuses a third/out-of-order ticket, collects after decoder teardown and reuses/discards slots |
-| Reset/device change, bounded capacity and faults | Backward seeks explicitly re-prepare a changed decoder device; 1.5 MiB test session verifies Busy and reduction to one; injected submit-after-conversion/collect failures retire safely |
+| Reset/device change, bounded capacity and faults | Backward seeks explicitly re-prepare a changed decoder device; 1 MiB test session verifies Busy and reduction to one; injected submit-after-conversion/collect failures retire safely |
 | Full pipeline, cancellation and destination safety | All four input/output combinations with both NVENC output codecs, HEVC input end to end, CPU/native composition parity, decoded mean RGB tolerance 12, dimensions/count/PTS, cancellation and encoder-failure sentinels |
 | OpenGL consumer preservation | Required GPU video-pipeline test retains tagged conversion, decode/Fusion/export and recovery coverage; shared OpenGL and Motion native tests exercise the extracted converter |
 | No input/output downloads in measured native cases | Release decoded benchmark asserts zero decoded downloads/output readbacks/explicit encoder upload; source-overlay uploads and GPU copies remain counted |
@@ -2027,3 +2027,28 @@ Repeat on Linux/macOS natively before accepting those platforms; automated Windo
 synthetic delivery does not replace paced audiovisual or driver-loss acceptance.
 [Current native/performance evidence](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
 records results and pending scope separately.
+
+## Reduced-memory native 4K prototype
+
+Automated coverage present: `prototypes/vulkan-nvenc/decoded_pipeline.inc` and its
+CTest registrations `creative-suite-vulkan-decoded-pipeline` /
+`creative-suite-vulkan-decoded-4k` cover direct and forced legacy conversion,
+FIFO/retained images, saturation/one-flight reduction, failures and cancellation.
+The dedicated 4K matrix requires H.264/HEVC D3D11VA input and H.264/HEVC NVENC output,
+pre-encoder RGB tolerance 2/exact alpha, lossy tolerance 12, count/ordered PTS and
+preservation of an existing destination. Run with `--require-native` and
+synchronization validation; skipped tests do not approve a device.
+`libs/tests/vulkan_composition_test.cpp` checks memory-class reconciliation,
+empty canvas and first-layer effects after deferred canvas allocation. Existing
+native-output qualification, two Viewers, OpenGL/video/color, media, Motion and
+Image shared-consumer regressions remain required, plus a no-Vulkan build.
+See [4K evidence](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md) for execution
+results, separate decoder accounting, benchmark commands and pending platforms.
+
+`creative-suite-isolated-timeout` configures and executes isolated default/custom
+wrappers, verifies 120/300 s forwarding and rejects zero/noninteger timeouts. This
+protects the 4K matrix from a shorter inner-process timeout.
+
+The decoded self-test also injects host metadata allocation failure for images,
+transfers and both imported bridges, asserting exact reservation restoration and
+continued device validity. GPU fault/retirement tests remain separate.

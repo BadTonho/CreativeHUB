@@ -184,3 +184,21 @@ D3DCompile API; Vulkan operation 10 is compiled into the existing SPIR-V variant
 at build time. No package, encoding SDK or private Qt dependency is added. The
 new CTest entry is creative-suite-vulkan-decoded-pipeline. Unsupported-host skips
 are not native acceptance. See [the prototype contract](../gpu/VULKAN_DECODE_PROTOTYPE.md).
+
+## Reduced native prototype intermediates
+
+The standalone decoded-input experiment uses private build-time SPIR-V boundary
+kernels: sampled BGRA -> RGBA8_UINT when supported (legacy blit retained), and
+RGBA8_UINT -> RGBA8_UNORM without an integer scratch. Pipelines are lazy and
+platform details remain private. Ordered effects and canvas allocation release
+unneeded wrappers while existing command barriers and completion leases protect
+GPU use. The decoder remains separate from the 256 MiB known session budget.
+No application input selection, dependency, format or version changes. See the
+[contract](../gpu/VULKAN_DECODE_PROTOTYPE.md) and
+[4K evidence](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md).
+
+The isolated-test helper accepts an optional positive integer TIMEOUT (default
+120 s unchanged). The 4K codec matrix sets 300 s for both its child-process wrapper
+and CTest, so the wrapper cannot silently impose a shorter timeout. Configuration
+must reject zero/noninteger values and generated commands must retain 120 s for
+ordinary tests and 300 s for this matrix.

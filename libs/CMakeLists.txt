@@ -110,6 +110,14 @@ if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_IMAGE_EDITOR)
                     DEPENDS composition/shaders/composition.comp VERBATIM)
                 target_sources(creative-suite-composition-opengl PRIVATE "${output}")
             endforeach()
+            foreach(variant IN ITEMS interop_import interop_export)
+                set(output "${CMAKE_CURRENT_BINARY_DIR}/shaders/${variant}_spirv.h")
+                add_custom_command(OUTPUT "${output}"
+                    COMMAND "${CS_GLSLANG}" -V --target-env vulkan1.1 --vn ${variant}_spirv -o "${output}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/composition/shaders/${variant}.comp"
+                    DEPENDS composition/shaders/${variant}.comp VERBATIM)
+                target_sources(creative-suite-composition-opengl PRIVATE "${output}")
+            endforeach()
             target_include_directories(creative-suite-composition-opengl PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/shaders")
             target_compile_definitions(creative-suite-composition-opengl PRIVATE CS_HAS_VULKAN=1)
             target_include_directories(creative-suite-composition-opengl PRIVATE ${Vulkan_INCLUDE_DIR})

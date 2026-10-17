@@ -303,7 +303,9 @@ The [standalone input experiment](VULKAN_DECODE_PROTOTYPE.md) now exercises
 D3D11VA -> shared D3D11 BGRA -> Vulkan composition -> NVENC without full video
 input/output CPU transfers in the accepted reference-device scenarios. Input
 activation remains external to the editor. The decoder pool is separately
-reported; known Vulkan/bridge/output reservations retain 256 MiB. The current
-4K composed native workload is unavailable under that cap. Reduce intermediate
-pressure and remeasure before proposing editor integration; do not raise the
-limit or infer 4K acceptance from lower-resolution timing gains.
+reported; known Vulkan/bridge/output reservations retain 256 MiB. The original
+4K composed native workload was unavailable under that cap. A subsequent
+[reduced-intermediate step](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md)
+removes redundant conversion images and shortens temporary leases; acceptance and
+measurements are recorded separately from that historical refusal. Do not raise
+the cap or infer editor input acceptance from prototype results.

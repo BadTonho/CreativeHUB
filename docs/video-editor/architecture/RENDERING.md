@@ -770,3 +770,15 @@ The explicit [decoded-input prototype](../gpu/VULKAN_DECODE_PROTOTYPE.md) copies
 NV12 decoder slices to a shared BGRA conversion surface and imports them into
 Vulkan. It reuses OpenGL's private color converter but does not change the
 application input path, Fusion scheduling or existing native output selection.
+
+## Reduced native prototype intermediates
+
+The standalone decoded-input experiment uses private build-time SPIR-V boundary
+kernels: sampled BGRA -> RGBA8_UINT when supported (legacy blit retained), and
+RGBA8_UINT -> RGBA8_UNORM without an integer scratch. Pipelines are lazy and
+platform details remain private. Ordered effects and canvas allocation release
+unneeded wrappers while existing command barriers and completion leases protect
+GPU use. The decoder remains separate from the 256 MiB known session budget.
+No application input selection, dependency, format or version changes. See the
+[contract](../gpu/VULKAN_DECODE_PROTOTYPE.md) and
+[4K evidence](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md).

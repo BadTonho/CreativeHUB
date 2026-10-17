@@ -13,12 +13,14 @@ struct VulkanNativeImportBridge::Impl {
         ComPtr<IDXGIKeyedMutex> mutex;
         ComPtr<ID3D11Query> conversion_done;
         VkImage image=VK_NULL_HANDLE;
+        VkImageView view=VK_NULL_HANDLE;
         VkDeviceMemory memory=VK_NULL_HANDLE;
         std::uint64_t bytes=0;
         ~Shared(){if(owner){std::lock_guard lock(owner->mutex);
+            if(view)vkDestroyImageView(owner->device,view,nullptr);
             if(image)vkDestroyImage(owner->device,image,nullptr);
             if(memory)vkFreeMemory(owner->device,memory,nullptr);
-            owner->bytes-=bytes;}}
+            owner->allocation_bytes.erase(this);owner->bytes-=bytes;}}
     };
     struct Slot {
         std::shared_ptr<Shared> shared;
@@ -31,6 +33,7 @@ struct VulkanNativeImportBridge::Impl {
     };
     std::vector<Slot> input_slots;
     std::deque<std::uint64_t> order;
+    bool direct_sampling=false;
     int width=0,height=0;
     unsigned storage_width=0,storage_height=0;
     void* source_device=nullptr;
@@ -106,19 +109,29 @@ GpuCompositionResult VulkanNativeImportBridge::prepare(const media::NativeVideoF
         }
         VkPhysicalDeviceExternalImageFormatInfo external{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO};external.handleType=VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT;
         VkPhysicalDeviceImageFormatInfo2 query{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2};query.pNext=&external;
-        query.format=VK_FORMAT_B8G8R8A8_UNORM;query.type=VK_IMAGE_TYPE_2D;query.tiling=VK_IMAGE_TILING_OPTIMAL;query.usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        query.format=VK_FORMAT_B8G8R8A8_UNORM;query.type=VK_IMAGE_TYPE_2D;query.tiling=VK_IMAGE_TILING_OPTIMAL;
+        query.usage=VK_IMAGE_USAGE_SAMPLED_BIT;
         VkExternalImageFormatProperties external_props{VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES};
         VkImageFormatProperties2 properties{VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2};properties.pNext=&external_props;
         auto result=vkGetPhysicalDeviceImageFormatProperties2(p.physical,&query,&properties);
         VkFormatProperties bgra{},rgba{};vkGetPhysicalDeviceFormatProperties(p.physical,VK_FORMAT_B8G8R8A8_UNORM,&bgra);vkGetPhysicalDeviceFormatProperties(p.physical,VK_FORMAT_R8G8B8A8_UNORM,&rgba);
-        if(result==VK_ERROR_FORMAT_NOT_SUPPORTED || !(external_props.externalMemoryProperties.externalMemoryFeatures&VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) ||
-            !(bgra.optimalTilingFeatures&VK_FORMAT_FEATURE_BLIT_SRC_BIT) || !(rgba.optimalTilingFeatures&VK_FORMAT_FEATURE_BLIT_DST_BIT))
-            throw Failure("Shared decoder BGRA import/blit is unsupported.",0,Status::Unsupported);
-        check(result,"Query shared decoder format.");
+        if(result!=VK_ERROR_FORMAT_NOT_SUPPORTED)check(result,"Query sampled decoder format.");
+        b.direct_sampling=result==VK_SUCCESS && (external_props.externalMemoryProperties.externalMemoryFeatures&VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) &&
+            (bgra.optimalTilingFeatures&VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) && qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_IMPORT_BLIT")!=1;
+        if(!b.direct_sampling){
+            query.usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            result=vkGetPhysicalDeviceImageFormatProperties2(p.physical,&query,&properties);
+            if(result==VK_ERROR_FORMAT_NOT_SUPPORTED || !(external_props.externalMemoryProperties.externalMemoryFeatures&VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) ||
+                !(bgra.optimalTilingFeatures&VK_FORMAT_FEATURE_BLIT_SRC_BIT) || !(rgba.optimalTilingFeatures&VK_FORMAT_FEATURE_BLIT_DST_BIT))
+                throw Failure("Shared decoder BGRA import/blit is unsupported.",0,Status::Unsupported);
+            check(result,"Query shared decoder format.");
+        }
+        creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Info,"vulkan-native-import","conversion-path",
+            b.direct_sampling?"Direct sampled BGRA to RGBA8_UINT.":"Legacy blit normalization selected: sampled import unavailable or diagnostic override.");
         b.width=view.width;b.height=view.height;b.source_device=view.device;b.storage_width=desc.Width;b.storage_height=desc.Height;
         {
             std::lock_guard lock(p.mutex);const auto rgba_bytes=std::uint64_t(b.width)*b.height*4;
-            const auto flight_bytes=std::uint64_t(desc.Width)*desc.Height*3/2+32+rgba_bytes*3;
+            const auto flight_bytes=std::uint64_t(desc.Width)*desc.Height*3/2+32+rgba_bytes*(b.direct_sampling?2:3);
             p.trim(flight_bytes*maximum);
             while(maximum>1 && p.bytes+flight_bytes*maximum>p.capacity)--maximum;
             if(p.bytes+flight_bytes>p.capacity)throw Failure("No decoder import flight fits the known budget.",0,Status::Busy);
@@ -153,8 +166,11 @@ GpuCompositionResult VulkanNativeImportBridge::prepare(const media::NativeVideoF
             VkMemoryDedicatedAllocateInfo dedicated{VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};dedicated.image=shared->image;
             VkImportMemoryWin32HandleInfoKHR imported{VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR};imported.pNext=&dedicated;imported.handleType=external.handleType;imported.handle=handle.value;
             VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};allocation.pNext=&imported;allocation.allocationSize=req.size;allocation.memoryTypeIndex=p.memoryType(req.memoryTypeBits&bits.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-            check(vkAllocateMemory(p.device,&allocation,nullptr,&shared->memory),"Import decoder shared allocation.");shared->bytes=req.size;p.bytes+=req.size;p.peak=std::max(p.peak,p.bytes);p.known_peak=std::max(p.known_peak,p.bytes+p.external_reserved);
+            check(vkAllocateMemory(p.device,&allocation,nullptr,&shared->memory),"Import decoder shared allocation.");shared->bytes=req.size;p.bytes+=req.size;p.peak=std::max(p.peak,p.bytes);p.known_peak=std::max(p.known_peak,p.bytes+p.external_reserved);p.registerAllocation(shared.get(),req.size,"import");
             check(vkBindImageMemory(p.device,shared->image,shared->memory,0),"Bind decoder shared allocation.");
+            if(b.direct_sampling){VkImageViewCreateInfo view_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};view_info.image=shared->image;
+                view_info.viewType=VK_IMAGE_VIEW_TYPE_2D;view_info.format=query.format;view_info.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+                check(vkCreateImageView(p.device,&view_info,nullptr,&shared->view),"Create sampled decoder view.");}
             Impl::Slot slot;slot.shared=std::move(shared);b.input_slots.push_back(std::move(slot));
         }
         return {Status::Complete};
@@ -184,7 +200,9 @@ VulkanNativeImportResult VulkanNativeImportBridge::submit(const media::NativeVid
         auto& p=*b.device->impl_;std::shared_ptr<VulkanImage> display,output;
         {std::lock_guard lock(p.mutex);if(p.current())throw Failure("Input import requires a separate command submission.",0,Status::Busy);
             context=p.start(true,cancel);if(!context)return {Status::Busy};
-            display=p.image(b.device,b.width,b.height,VK_FORMAT_R8G8B8A8_UNORM);output=p.image(b.device,b.width,b.height);}
+            if(b.direct_sampling)p.boundary(true);
+            else display=p.image(b.device,b.width,b.height,VK_FORMAT_R8G8B8A8_UNORM);
+            output=p.image(b.device,b.width,b.height);}
         const auto converted=Clock::now();
         // A free slot's previous Vulkan read has completed and released key 0.
         slot->source=frame;static std::atomic_uint64_t next{1};slot->ticket=next.fetch_add(1);b.order.push_back(slot->ticket);
@@ -199,21 +217,28 @@ VulkanNativeImportResult VulkanNativeImportBridge::submit(const media::NativeVid
         checkHr(conversion,"Convert decoder NV12 to BGRA.");b.metrics.conversion_nanoseconds+=ns(converted);
         std::lock_guard lock(p.mutex);auto cmd=p.begin();
         const auto ownership=[&](bool acquire){VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-            barrier.oldLayout=acquire?VK_IMAGE_LAYOUT_GENERAL:VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;barrier.newLayout=acquire?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:VK_IMAGE_LAYOUT_GENERAL;
+            const auto owned_layout=b.direct_sampling?VK_IMAGE_LAYOUT_GENERAL:VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.oldLayout=acquire?VK_IMAGE_LAYOUT_GENERAL:owned_layout;barrier.newLayout=acquire?owned_layout:VK_IMAGE_LAYOUT_GENERAL;
             barrier.srcQueueFamilyIndex=acquire?VK_QUEUE_FAMILY_EXTERNAL:p.family;barrier.dstQueueFamilyIndex=acquire?p.family:VK_QUEUE_FAMILY_EXTERNAL;
-            barrier.srcAccessMask=acquire?0:VK_ACCESS_TRANSFER_READ_BIT;barrier.dstAccessMask=acquire?VK_ACCESS_TRANSFER_READ_BIT:0;
+            const VkAccessFlags read=b.direct_sampling?VK_ACCESS_SHADER_READ_BIT:VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.srcAccessMask=acquire?0:read;barrier.dstAccessMask=acquire?read:0;
             barrier.image=slot->shared->image;barrier.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,0,0,nullptr,0,nullptr,1,&barrier);};
         p.current()->resources.push_back(slot->shared);active_slot=&*slot;external_commands=true;ownership(true);
-        auto& a=p.allocation(display);p.barrier(cmd,a.image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        VkImageBlit region{};region.srcSubresource=region.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};region.srcOffsets[1]=region.dstOffsets[1]={b.width,b.height,1};
-        vkCmdBlitImage(cmd,slot->shared->image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,a.image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&region,VK_FILTER_NEAREST);
-        p.barrier(cmd,a.image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);ownership(false);
-        Parameters parameters;parameters.control={10,0,0,0};p.dispatch(output,{},{},output,parameters,display);
+        if(b.direct_sampling){p.dispatchBoundary(true,slot->shared->view,output);}
+        else {
+            auto& a=p.allocation(display);p.barrier(cmd,a.image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            VkImageBlit region{};region.srcSubresource=region.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};region.srcOffsets[1]=region.dstOffsets[1]={b.width,b.height,1};
+            vkCmdBlitImage(cmd,slot->shared->image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,a.image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&region,VK_FILTER_NEAREST);
+            p.barrier(cmd,a.image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);
+            Parameters parameters;parameters.control={10,0,0,0};p.dispatch(output,{},{},output,parameters,display);
+            b.metrics.bgra_blit_bytes+=std::uint64_t(b.width)*b.height*4;
+        }
+        ownership(false);
         if(fail==2)throw Failure("Injected decoder submission failure after recording external commands.");
         const auto submitted=Clock::now();slot->completion=b.submitCommands(*slot,context);context=nullptr;
         b.metrics.submit_nanoseconds+=ns(submitted);slot->output=std::shared_ptr<OpenGlTextureFrame>(new OpenGlTextureFrame(std::move(output)));
-        ++b.metrics.submissions;b.metrics.peak_pending=std::max(b.metrics.peak_pending,unsigned(b.order.size()));
-        b.metrics.nv12_copy_bytes+=std::uint64_t(desc.Width)*desc.Height*3/2;b.metrics.bgra_blit_bytes+=std::uint64_t(b.width)*b.height*4;
+        p.traceMemory("input");++b.metrics.submissions;if(b.direct_sampling)++b.metrics.direct_submissions;else ++b.metrics.legacy_submissions;b.metrics.peak_pending=std::max(b.metrics.peak_pending,unsigned(b.order.size()));
+        b.metrics.nv12_copy_bytes+=std::uint64_t(desc.Width)*desc.Height*3/2;
         return {Status::Complete,{slot->ticket},slot->output};
 #else
         Q_UNUSED(frame);return {Status::Unsupported,{}, {},"The Windows Vulkan decoder bridge is unavailable."};
