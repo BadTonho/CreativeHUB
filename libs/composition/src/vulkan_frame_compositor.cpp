@@ -342,7 +342,7 @@ struct VulkanDevice::Impl {
     std::atomic_bool lost{false};
     mutable std::recursive_mutex mutex;
     std::vector<std::unique_ptr<ImageAllocation>> pool;
-    std::uint64_t bytes=0,peak=0;
+    std::uint64_t bytes=0,peak=0,known_peak=0;
     static constexpr std::uint64_t limit=256ULL*1024*1024;
     std::uint64_t capacity=limit,external_reserved=0;
     bool native_export=false;
@@ -543,7 +543,7 @@ struct VulkanDevice::Impl {
             memory.memoryTypeIndex=memoryType(req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
             auto result=vkAllocateMemory(device,&memory,nullptr,&allocation->memory);
             if(result!=VK_SUCCESS){vkDestroyImage(device,allocation->image,nullptr);check(result,"Allocate Vulkan image memory.");}
-            allocation->bytes=req.size;bytes+=req.size;peak=std::max(peak,bytes);
+            allocation->bytes=req.size;bytes+=req.size;peak=std::max(peak,bytes);known_peak=std::max(known_peak,bytes+external_reserved);
             try {
                 check(vkBindImageMemory(device,allocation->image,allocation->memory,0),"Bind Vulkan image memory.");
                 VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};view.image=allocation->image;
@@ -577,7 +577,7 @@ struct VulkanDevice::Impl {
                     if((req.memoryTypeBits&(1u<<i)) && (p.memory_properties.memoryTypes[i].propertyFlags&flags)==flags){allocation.memoryTypeIndex=i;break;}
                 }
                 check(vkAllocateMemory(p.device,&allocation,nullptr,&memory),"Allocate Vulkan transfer memory.");
-                reserved=req.size;p.bytes+=reserved;p.peak=std::max(p.peak,p.bytes);
+                reserved=req.size;p.bytes+=reserved;p.peak=std::max(p.peak,p.bytes);p.known_peak=std::max(p.known_peak,p.bytes+p.external_reserved);
                 check(vkBindBufferMemory(p.device,buffer,memory,0),"Bind Vulkan transfer memory.");
                 check(vkMapMemory(p.device,memory,0,size,0,&data),"Map Vulkan transfer memory.");
             }catch(...){p.bytes-=reserved;if(memory)vkFreeMemory(p.device,memory,nullptr);vkDestroyBuffer(p.device,buffer,nullptr);throw;}
@@ -686,7 +686,7 @@ std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause,const Crea
 #endif
         loadVulkanApi();
         auto device=std::shared_ptr<VulkanDevice>(new VulkanDevice);auto& p=*device->impl_;
-        p.capacity=options.known_byte_limit-options.external_reserved_bytes;p.external_reserved=options.external_reserved_bytes;
+        p.capacity=options.known_byte_limit-options.external_reserved_bytes;p.external_reserved=options.external_reserved_bytes;p.known_peak=p.external_reserved;
         p.instance.setApiVersion(QVersionNumber(1,1));
         if(qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_VALIDATION")==1)
             p.instance.setLayers({"VK_LAYER_KHRONOS_validation"});
@@ -715,16 +715,18 @@ std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause,const Crea
         queue.queueFamilyIndex=p.family;queue.queueCount=1;queue.pQueuePriorities=&priority;
         std::vector<const char*> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 #ifdef CS_VULKAN_NATIVE_EXPORT
-        if(options.experimental_native_export){
+        if(options.experimental_native_export || options.try_native_export){
             uint32_t extension_count=0;check(vkEnumerateDeviceExtensionProperties(p.physical,nullptr,&extension_count,nullptr),"Enumerate Vulkan device extensions.");
             std::vector<VkExtensionProperties> device_extensions(extension_count);
             check(vkEnumerateDeviceExtensionProperties(p.physical,nullptr,&extension_count,device_extensions.data()),"Enumerate Vulkan device extensions.");
+            bool supported=true;
             for(const auto* required:{VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME}){
                 if(std::none_of(device_extensions.begin(),device_extensions.end(),[&](const auto& value){return std::strcmp(value.extensionName,required)==0;}))
-                    throw Failure(std::string("Missing Vulkan native-export extension: ")+required,0,Status::Unsupported);
-                extensions.push_back(required);
+                    supported=false;
             }
-            p.native_export=true;
+            if(!supported && options.experimental_native_export)
+                throw Failure("Missing Vulkan external-memory/keyed-mutex extensions.",0,Status::Unsupported);
+            if(supported){extensions.push_back(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);extensions.push_back(VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME);p.native_export=true;}
         }
 #endif
         VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};info.queueCreateInfoCount=1;info.pQueueCreateInfos=&queue;
@@ -751,6 +753,45 @@ std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause,const Crea
     catch(const std::exception& error){cause=error.what();return {};}
 #else
     Q_UNUSED(options);cause="This build does not include Vulkan support.";return {};
+#endif
+}
+bool VulkanDevice::supportsNativeExport() const noexcept {
+#ifdef CS_HAS_VULKAN
+    return impl_->native_export && impl_->properties.vendorID==0x10DE;
+#else
+    return false;
+#endif
+}
+std::shared_ptr<void> VulkanDevice::tryReserveExternal(std::uint64_t bytes) {
+#ifdef CS_HAS_VULKAN
+    auto& p=*impl_;std::lock_guard lock(p.mutex);
+    if(!bytes || p.lost || bytes>=p.capacity)return {};
+    p.reap();p.trim(bytes);if(p.bytes+bytes>p.capacity)return {};
+    // Construct the control block before changing accounting (allocation may throw).
+    auto armed=std::make_shared<bool>(false);
+    auto lease=std::shared_ptr<void>(new std::uint8_t{},[owner=shared_from_this(),bytes,armed](void* value){
+        delete static_cast<std::uint8_t*>(value);if(!*armed)return;
+        auto& state=*owner->impl_;std::lock_guard guard(state.mutex);
+        state.capacity+=bytes;state.external_reserved-=bytes;
+    });
+    p.capacity-=bytes;p.external_reserved+=bytes;*armed=true;
+    p.known_peak=std::max(p.known_peak,p.bytes+p.external_reserved);return lease;
+#else
+    Q_UNUSED(bytes);return {};
+#endif
+}
+std::uint64_t VulkanDevice::totalReservedBytes() const noexcept {
+#ifdef CS_HAS_VULKAN
+    std::lock_guard lock(impl_->mutex);return impl_->bytes+impl_->external_reserved;
+#else
+    return 0;
+#endif
+}
+std::uint64_t VulkanDevice::totalPeakBytes() const noexcept {
+#ifdef CS_HAS_VULKAN
+    std::lock_guard lock(impl_->mutex);return impl_->known_peak;
+#else
+    return 0;
 #endif
 }
 QString VulkanDevice::name() const {

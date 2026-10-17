@@ -21,6 +21,8 @@ public:
     // Opt-in research configuration. Normal editor creation keeps these defaults.
     struct CreateOptions {
         bool experimental_native_export = false;
+        // Opportunistic editor request: missing interop must not disable Vulkan.
+        bool try_native_export = false;
         std::optional<std::array<std::uint8_t, 8>> adapter_luid;
         std::uint64_t known_byte_limit = 256ULL * 1024 * 1024;
         std::uint64_t external_reserved_bytes = 0;
@@ -30,6 +32,12 @@ public:
     QString name() const;
     bool supportsPreciseRotation() const noexcept;
     bool valid() const noexcept;
+    bool supportsNativeExport() const noexcept;
+    // Nonblocking admission; empty means occupied/unsupported. The opaque lease
+    // retains this device and must outlive every external consumer/allocation.
+    std::shared_ptr<void> tryReserveExternal(std::uint64_t bytes);
+    std::uint64_t totalReservedBytes() const noexcept;
+    std::uint64_t totalPeakBytes() const noexcept;
     void attachWindow(QWindow*);
     // False with an empty cause means a deferred presentation; retry on a later
     // GUI update (zero extent instead waits for expose/resize).

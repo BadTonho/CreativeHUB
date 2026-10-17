@@ -5,7 +5,8 @@
 
 namespace creative_suite::composition {
 
-// Experimental worker-owned Windows bridge. No application selects it implicitly.
+// Experimental worker-owned Windows bridge. Callers qualify settings/capabilities
+// before selecting native delivery; the bridge itself never changes the codec.
 // Tickets retain their source/destination through GPU completion. The caller keeps
 // the GUI-created device alive until the worker, bridge and encoder have stopped.
 struct VulkanNativeExportTicket { std::uint64_t value=0; };
@@ -19,6 +20,7 @@ struct VulkanNativeExportResult {
 class VulkanNativeExportBridge final {
 public:
     explicit VulkanNativeExportBridge(std::shared_ptr<VulkanDevice>);
+    VulkanNativeExportBridge(std::shared_ptr<VulkanDevice>,std::shared_ptr<void> external_reservation);
     ~VulkanNativeExportBridge();
     static std::optional<std::array<std::uint8_t,8>> adapterLuid(
         const media::NativeVideoFramePtr&,std::string& cause);
@@ -29,11 +31,15 @@ public:
     VulkanNativeExportResult collect(VulkanNativeExportTicket,
         const GpuFrameCompositor::CancellationPredicate& = {});
     void discard() noexcept;
+    // False after unconfirmed retirement: abort the job, never reuse its frames.
+    // Destruction conservatively retains those bounded resources until process exit.
+    bool isRetired() const noexcept;
     unsigned slotCount() const noexcept;
     struct Metrics {
         std::uint64_t submissions=0,collections=0,submit_nanoseconds=0,wait_nanoseconds=0;
         std::uint64_t vulkan_blit_bytes=0,d3d_copy_bytes=0;
         unsigned peak_pending=0;
+        std::int64_t retirement_error_code=0;
     };
     Metrics metrics() const noexcept;
 private:

@@ -291,7 +291,8 @@ std::optional<media::VideoFrame> composeFrame(
     const std::atomic_bool& canceled,
     creative_suite::media::NativeVideoFramePool* native_pool,
     creative_suite::media::NativeVideoFramePtr& native_output,
-    creative_suite::composition::GpuReadbackTicket* async_ticket = nullptr) {
+    creative_suite::composition::GpuReadbackTicket* async_ticket = nullptr,
+    creative_suite::composition::VulkanNativeExportTicket* native_ticket = nullptr) {
     const auto requests = activeClipRequests(clips, transitions, timeline_frame);
     const bool adjustment_cpu = std::any_of(requests.begin(), requests.end(), [&](const auto& request) {
         const auto& clip = *clips[request.clip_index].clip;
@@ -506,7 +507,7 @@ std::optional<media::VideoFrame> composeFrame(
         return frame;
     }
     try {
-        return compositor.compose(layers, output_frame, timeline_frame, canceled, native_pool, &native_output, async_ticket);
+        return compositor.compose(layers, output_frame, timeline_frame, canceled, native_pool, &native_output, async_ticket,native_ticket);
     } catch (const detail::CpuCompositionSourcesRequired&) {
         compositor.setCpuSourceRecovery(true);
         struct RestoreSourceRecovery {
@@ -514,7 +515,7 @@ std::optional<media::VideoFrame> composeFrame(
             ~RestoreSourceRecovery() { compositor.setCpuSourceRecovery(false); }
         } restore{compositor};
         return composeFrame(clips, transitions, timeline_frame, timeline_frame_rate,
-            canvas_width, canvas_height, compositor, output_frame, metrics, canceled, native_pool, native_output, async_ticket);
+            canvas_width, canvas_height, compositor, output_frame, metrics, canceled, native_pool, native_output, async_ticket,native_ticket);
     }
 }
 
@@ -541,17 +542,23 @@ public:
     OutputEncoder(const RenderJob& job,
                   const std::filesystem::path& output_path,
                   double frame_rate,
-                  bool with_audio, bool native_delivery)
-        : native_pool_(makeNativePool(job, native_delivery)),
+                  bool with_audio, bool native_delivery,creative_suite::media::NativeVideoFramePool* prepared_pool,const std::atomic_bool& canceled)
+        : native_pool_(prepared_pool?nullptr:makeNativePool(job, native_delivery)),bounded_pool_(prepared_pool),cancel_(&canceled),
           encoder_(std::make_unique<creative_suite::media::VideoEncoder>(makeSettings(job, output_path,
-              frame_rate, with_audio, native_pool_ ? native_pool_->acquire() : nullptr))) {}
+              frame_rate, with_audio, prepared_pool?prepared_pool->acquire():(native_pool_ ? native_pool_->acquire() : nullptr)))) {}
 
-    creative_suite::media::NativeVideoFramePool* nativePool() { return native_pool_.get(); }
+    creative_suite::media::NativeVideoFramePool* nativePool() { return bounded_pool_?bounded_pool_:native_pool_.get(); }
     std::uint64_t uploadedVideoBytes() const { return encoder_->uploadedVideoBytes(); }
     void writeVideo(const creative_suite::media::NativeVideoFramePtr& frame, std::int64_t index) { encoder_->writeVideo(frame, index); }
 
     void writeVideo(const media::VideoFrame& source, std::int64_t output_frame) {
-        encoder_->writeVideo(source, output_frame);
+        if(bounded_pool_){
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+            auto destination=bounded_pool_->acquire();
+            while(!destination){checkCanceled(*cancel_);if(std::chrono::steady_clock::now()>deadline)throw std::runtime_error("Bounded encoder recovery surface timed out.");
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));destination=bounded_pool_->acquire();}
+            encoder_->writeVideo(source,destination,output_frame);
+        }else encoder_->writeVideo(source, output_frame);
     }
 
     void writeAudio(const std::vector<float>& stereo_samples, int sample_count) {
@@ -607,6 +614,8 @@ private:
     }
 
     std::unique_ptr<creative_suite::media::NativeVideoFramePool> native_pool_;
+    creative_suite::media::NativeVideoFramePool* bounded_pool_=nullptr;
+    const std::atomic_bool* cancel_=nullptr;
     std::unique_ptr<creative_suite::media::VideoEncoder> encoder_;
 };
 
@@ -898,18 +907,21 @@ void OfflineExportRenderer::render(
         if (output_frame_count <= 0 || output_frame_count > 100000000) {
             throw std::runtime_error("The calculated output duration is outside the supported range.");
         }
+        compositor.prepareNative();
         auto encoder = [&] {
             detail::ExportTimedScope encoding(metrics.encoding_nanoseconds);
-            return OutputEncoder(job, temporary, job.settings.frame_rate, job.settings.export_audio, compositor.nativeDelivery());
+            return OutputEncoder(job, temporary, job.settings.frame_rate, job.settings.export_audio, compositor.nativeDelivery(),compositor.nativePool(),cancel_requested);
         }();
         if (auto* pool = encoder.nativePool()) metrics.encoder_reserved_gpu_bytes = pool->reserved_bytes();
         // Queue metadata stays application-owned. A ticket owns the transfer;
         // no borrowed source pixels survive preparation of the next frame.
         struct PendingFrame {
             std::int64_t index=0,timeline=0;
+            std::chrono::steady_clock::time_point started;
             std::optional<media::VideoFrame> frame;
             creative_suite::media::NativeVideoFramePtr native;
             creative_suite::composition::GpuReadbackTicket ticket;
+            creative_suite::composition::VulkanNativeExportTicket native_ticket;
             bool recover=false;
         };
         std::deque<PendingFrame> pending;
@@ -918,20 +930,24 @@ void OfflineExportRenderer::render(
         const auto prepare=[&](PendingFrame& item,bool cpu){
             compositor.setCpuSourceRecovery(cpu);
             struct Restore {detail::ExportComposition& c;~Restore(){c.setCpuSourceRecovery(false);}} restore{compositor};
+            std::unique_ptr<creative_suite::composition::GpuCommandBatch> batch;
+            if(!cpu && compositor.nativePool())if(auto* backend=compositor.graphBackend())batch=backend->beginCommandBatch([&]{return cancel_requested.load();});
             item.frame=composeFrame(clips,transitions,item.timeline,job.project_snapshot.timeline_frame_rate,
                 job.project_snapshot.canvas_width,job.project_snapshot.canvas_height,compositor,item.index,
-                metrics,cancel_requested,encoder.nativePool(),item.native,cpu?nullptr:&item.ticket);
+                metrics,cancel_requested,encoder.nativePool(),item.native,cpu?nullptr:&item.ticket,cpu?nullptr:&item.native_ticket);
         };
         const auto recover_pending=[&](const creative_suite::composition::OpenGlReadbackResult& failure){
-            compositor.stopAsync(failure,pending.front().index,pending.front().timeline);
-            for(auto& item:pending)if(item.ticket.value){item.ticket={};item.frame.reset();item.recover=true;}
+            if(std::any_of(pending.begin(),pending.end(),[](const auto& item){return item.native_ticket.value!=0;}))
+                compositor.stopNative({failure.status,{}, {},failure.cause,failure.error_code},pending.front().index,pending.front().timeline);
+            else compositor.stopAsync(failure,pending.front().index,pending.front().timeline);
+            for(auto& item:pending)if(item.ticket.value || item.native_ticket.value){item.ticket={};item.native_ticket={};item.native.reset();item.frame.reset();item.recover=true;}
             capacity=1;
         };
         while(next_frame<output_frame_count || !pending.empty()) {
             checkCanceled(cancel_requested);
             if(reduce && pending.empty()){compositor.reduceAsync();capacity=1;reduce=false;}
             while(!reduce && pending.size()<capacity && next_frame<output_frame_count){
-                PendingFrame item;item.index=next_frame;
+                PendingFrame item;item.index=next_frame;item.started=std::chrono::steady_clock::now();
                 item.timeline=static_cast<std::int64_t>(std::floor(static_cast<long double>(next_frame)*timeline_fps/job.settings.frame_rate+1.0e-9L));
                 try {prepare(item,false);}
                 catch(const detail::ExportAsyncBackpressure&){
@@ -945,6 +961,13 @@ void OfflineExportRenderer::render(
             if(pending.empty())continue;
             if(compositor.gpuFailed())recover_pending({creative_suite::composition::GpuCompositionStatus::Unsupported});
             auto& oldest=pending.front();
+            if(oldest.native_ticket.value){
+                auto result=compositor.collectNative(oldest.native_ticket,cancel_requested);
+                if(result.status==creative_suite::composition::GpuCompositionStatus::Cancelled || cancel_requested.load())throw ExportCanceled{};
+                if(result.status!=creative_suite::composition::GpuCompositionStatus::Complete || !result.frame)
+                    recover_pending({result.status,{}, {},"vulkan-native-collect",result.cause,result.error_code});
+                else {oldest.native_ticket={};oldest.native=std::move(result.frame);}
+            }
             if(oldest.ticket.value){
                 auto result=compositor.collectAsync(oldest.ticket,cancel_requested);
                 if(result.status==creative_suite::composition::GpuCompositionStatus::Cancelled || cancel_requested.load())throw ExportCanceled{};
@@ -952,6 +975,7 @@ void OfflineExportRenderer::render(
                 else{oldest.ticket={};oldest.frame=std::move(result.frame);}
             }
             if(oldest.recover)prepare(oldest,true);
+            if(options.delivery_callback)options.delivery_callback(oldest.index,std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-oldest.started).count()));
             std::uint64_t queued_pixels=0;
             for(const auto& item:pending)if(item.frame)queued_pixels+=item.frame->rgba_pixels.size();
             metrics.peak_cpu_frame_bytes=std::max(metrics.peak_cpu_frame_bytes,queued_pixels);
@@ -960,6 +984,7 @@ void OfflineExportRenderer::render(
             auto frame=std::move(item.frame);auto native_frame=std::move(item.native);
             if (!frame.has_value()) throw std::runtime_error("Composing an output frame failed.");
             checkCanceled(cancel_requested);
+            if(native_frame && options.prepared_native_frame_callback)options.prepared_native_frame_callback(native_frame,timeline_frame);
             if (!native_frame && options.prepared_frame_callback)
                 options.prepared_frame_callback(*frame, timeline_frame);
             checkCanceled(cancel_requested);
@@ -967,8 +992,11 @@ void OfflineExportRenderer::render(
                 static_cast<std::uint64_t>(frame->rgba_pixels.size()));
             {
                 detail::ExportTimedScope encoding(metrics.encoding_nanoseconds);
+                if(options.fail_encoder_after_for_testing && metrics.encoded_frames==options.fail_encoder_after_for_testing)
+                    throw creative_suite::media::VideoEncodingError("Injected encoder failure.",-1);
                 if (native_frame) { encoder.writeVideo(native_frame, frame_index); ++metrics.native_encoded_frames; }
                 else {
+                    if(compositor.nativePool())metrics.delivery_path="mixed-native-rgba";
                     encoder.writeVideo(*frame, frame_index);
                     metrics.encoding_uploaded_bytes = encoder.uploadedVideoBytes();
                 }

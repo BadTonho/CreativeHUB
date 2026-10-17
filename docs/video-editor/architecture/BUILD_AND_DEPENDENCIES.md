@@ -161,3 +161,18 @@ shipped. The existing native encoder pool flags and release rules are unchanged.
 Build the canonical Video Editor separately to check shared compatibility; never
 copy the research executable into an application output directory. See
 [build/run commands and ownership](../../../prototypes/vulkan-nvenc/README.md).
+
+The Video Editor now reuses the bridge for qualified Vulkan/NVENC jobs independently
+of BUILD_VULKAN_NVENC_PROTOTYPE. Startup requests interop opportunistically;
+unsupported Windows/non-Windows builds retain RGBA. This integration adds no
+package, codec SDK, runtime shader compiler or license obligation. Rebuild shared
+composition/media and affected Video/Motion/Image consumers, including the disabled
+Vulkan/media composition configuration, after changing these contracts. See
+[selection and resource ownership](../gpu/VULKAN_NATIVE_EXPORT.md).
+
+The shared encoder's CREATIVE_SUITE_NVENC_NATIVE_LATENCY diagnostic matches delay
+and lookahead only for controlled comparisons; normal RGBA settings are preserved.
+An unconfirmed cross-API retirement retains its bounded resources/reservation
+until process exit, rather than freeing or reusing memory with unknown consumers.
+Its separate-process regression verifies that the app logs the error code and
+preserves the previous destination. No new dependency is introduced.

@@ -457,3 +457,13 @@ add_creative_suite_test(
 
 add_creative_suite_test(NAME creative-suite-main-editor-vulkan-export SKIP_RETURN_CODE 77 COMMAND creative-suite-main-editor-render-export-tests --native-gpu --vulkan)
 set_tests_properties(creative-suite-main-editor-vulkan-export PROPERTIES ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1")
+
+# Native acceptance additionally runs this with --require-gpu on Windows/NVIDIA.
+add_creative_suite_test(NAME creative-suite-main-editor-vulkan-native-export SKIP_RETURN_CODE 77
+    COMMAND creative-suite-main-editor-render-export-tests --vulkan --native-bridge-only)
+set_tests_properties(creative-suite-main-editor-vulkan-native-export PROPERTIES TIMEOUT 180)
+
+# Unconfirmed-consumer quarantine deliberately lives until this isolated process exits.
+add_creative_suite_test(NAME creative-suite-main-editor-vulkan-native-retirement SKIP_RETURN_CODE 77
+    COMMAND creative-suite-main-editor-render-export-tests --vulkan --native-retirement-only)
+set_tests_properties(creative-suite-main-editor-vulkan-native-retirement PROPERTIES TIMEOUT 60)

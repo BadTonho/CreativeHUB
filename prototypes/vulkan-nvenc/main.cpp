@@ -55,7 +55,7 @@ void parity(const m::RgbaFrame& a,const m::RgbaFrame& b){
 }
 m::VideoEncodingSettings encoding(const std::filesystem::path& output,const std::string& codec,int w,int h){
     m::VideoEncodingSettings result;result.output_path=output;result.container_name="matroska";result.video_encoder_name=codec;
-    result.width=w;result.height=h;result.frame_rate_numerator=30;result.frame_rate_denominator=1;result.video_bitrate_mbps=w<=320?1:20;return result;
+    result.width=w;result.height=h;result.frame_rate_numerator=30;result.frame_rate_denominator=1;result.video_bitrate_mbps=w<=320?(QCoreApplication::arguments().contains("--small-high-bitrate")?10:1):20;return result;
 }
 struct RunOptions {bool native=true;int warm=0,frames=12,cancel_at=-1,fail_at=-1;bool verify=false;};
 struct RunMetrics {
@@ -276,7 +276,7 @@ int main(int argc,char** argv){
             std::thread worker([&]{try{
                 for(int trial=1;trial<=(benchmark?3:1);++trial)for(const bool native:{false,true}){
                     if((mode=="native" && !native)||(mode=="rgba" && native))continue;
-                    RunOptions options;options.native=native;options.warm=benchmark?30:0;options.frames=benchmark?180:12;options.verify=!benchmark;options.cancel_at=cancel_after;
+                    RunOptions options;options.native=native;options.warm=benchmark?30:0;options.frames=benchmark?180:12;options.verify=!benchmark && !args.contains("--small-high-bitrate");options.cancel_at=cancel_after;
                     const auto result=run(session,w,h,codec.toStdString(),root/(std::string(native?"native-":"rgba-")+std::to_string(w)+"-"+std::to_string(trial)+".mkv"),options);
                     if(result.cancelled){std::cout<<"cancelled=1 mode="<<(native?"native":"rgba")<<"\n";stop=true;return;}
                     std::cout<<"benchmark mode="<<(native?"native":"rgba")<<" codec="<<codec.toStdString()<<" width="<<w<<" height="<<h<<" trial="<<trial

@@ -2,6 +2,8 @@
 
 #include "rendering/render_job.h"
 #include <creative_suite/composition/opengl_frame_compositor.h>
+#include <creative_suite/composition/vulkan_frame_compositor.h>
+#include <creative_suite/media/native_video_frame.h>
 
 #include <atomic>
 #include <functional>
@@ -18,6 +20,10 @@ enum class ExportOutcome { Completed, Canceled, Failed };
 struct OfflineExportMetrics {
     ExportOutcome outcome = ExportOutcome::Failed;
     bool gpu_requested = false;
+    std::string delivery_path="rgba", native_fallback_reason;
+    std::uint64_t native_submissions=0,native_collections=0,native_submit_nanoseconds=0,native_wait_nanoseconds=0;
+    std::uint64_t native_blit_bytes=0,native_copy_bytes=0,external_reserved_gpu_bytes=0;
+    unsigned native_slots=0;
     std::uint64_t cpu_frames = 0, gpu_frames = 0, encoded_frames = 0;
     std::uint64_t fallback_frames = 0, gpu_failures = 0;
     std::uint64_t preparation_nanoseconds = 0, composition_nanoseconds = 0;
@@ -53,6 +59,12 @@ struct OfflineExportOptions {
     // GUI-owned; retain through worker teardown. No surface means CPU fallback
     // when a GPU job is requested. No Qt GUI dependency for CPU-only callers.
     QOffscreenSurface* gpu_surface = nullptr;
+    // GUI-created session retained through all export consumers; never replaced.
+    std::shared_ptr<creative_suite::composition::VulkanDevice> vulkan_device;
+    std::uint64_t fail_native_submission_for_testing=0,fail_native_collection_for_testing=0;
+    bool reject_native_format_for_testing=false;
+    std::uint64_t fail_encoder_after_for_testing=0;
+    unsigned native_maximum_frames=2;
     // Deterministic bounded-pipeline fault seams; production retains the defaults.
     std::uint64_t async_staging_budget_bytes = 64ULL * 1024 * 1024;
     std::uint64_t fail_async_collection_for_testing = 0;
@@ -64,6 +76,9 @@ struct OfflineExportOptions {
     // The frame is borrowed only during this worker-thread call. Native-only
     // frames are omitted; observer exceptions follow the export error boundary.
     std::function<void(const creative_suite::media::RgbaFrame&, std::int64_t)> prepared_frame_callback;
+    // Explicit native diagnostic observer; any oracle download belongs to caller.
+    std::function<void(const creative_suite::media::NativeVideoFramePtr&,std::int64_t)> prepared_native_frame_callback;
+    std::function<void(std::int64_t,std::uint64_t)> delivery_callback;
 };
 
 class ExportCanceled final : public std::runtime_error {

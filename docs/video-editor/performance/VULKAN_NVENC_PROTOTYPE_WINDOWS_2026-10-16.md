@@ -1,5 +1,9 @@
 # Vulkan / D3D11 / NVENC prototype: Windows, 2026-10-16
 
+Historical prototype record. The subsequent
+[integrated editor evidence](VULKAN_NATIVE_EXPORT_WINDOWS_2026-10-16.md) records
+the qualified export integration; the status below describes this earlier stage.
+
 Status: **native proof achieved for the tested configuration; provisional and
 external to the Video Editor export flow**. Linux/macOS and other Windows
 adapters/drivers remain pending. The existing editor Vulkan export still uses

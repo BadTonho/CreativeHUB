@@ -84,15 +84,13 @@ window events and generation retirement. Unavailable acquisition releases an emp
 context without a queue submission. FIFO presentation and the two-frame export
 pipeline retain their existing contracts and memory limit.
 
-## Separate native Vulkan export research
+## Experimental Vulkan native NVENC export
 
-The optional [Vulkan/D3D11/NVENC probe](../../../prototypes/vulkan-nvenc/README.md)
-reuses shared composition and media libraries without depending on editor UI. Its
-experimental device factory selects the existing native pool's adapter by LUID and
-enables external-memory/keyed-mutex extensions explicitly. A private Windows
-bridge converts normalized RGBA to imported BGRA, then copies on the GPU into the
-unchanged encoder pool. Worker-owned FIFO tickets retain resources until Vulkan
-and D3D consumers complete; the combined known budget is 256 MiB. This is a
-provisional research boundary, not an editor export integration. Existing renderer
-creation, RGBA export, pool flags, preferences and documents retain their contracts.
-See [native evidence and recommendation](../performance/VULKAN_NVENC_PROTOTYPE_WINDOWS_2026-10-16.md).
+The [qualified Windows export path](../gpu/VULKAN_NATIVE_EXPORT.md) reuses the
+prototype bridge and the session Vulkan device without introducing another engine.
+A shared opaque reservation includes native encoder/recovery allocations in the
+256 MiB known budget. Application FIFO tickets retain GPU results through D3D
+copy completion; bounded RGBA recovery preserves the open encoder. Runtime LUID,
+format and capacity checks supplement the qualified preset matrix. The standalone
+prototype remains an independent diagnostic. Automatic, documents, versions and
+preferences are unchanged; other drivers/platforms require separate acceptance.

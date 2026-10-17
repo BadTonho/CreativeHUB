@@ -35,6 +35,12 @@ void parity(const media::RgbaFrame& a,const media::RgbaFrame& b,int tolerance=2)
     }
 }
 void correctness(const std::shared_ptr<VulkanDevice>& device) {
+    require(!device->supportsNativeExport(),"Ordinary Vulkan creation enabled interop implicitly.");
+    const auto original=device->totalReservedBytes();auto lease=device->tryReserveExternal(1024*1024);
+    require(lease && device->totalReservedBytes()==original+1024*1024,"External reservation was not charged.");
+    auto copy=lease;lease.reset();require(device->totalReservedBytes()==original+1024*1024,"Copied reservation released early.");
+    require(!device->tryReserveExternal(0) && !device->tryReserveExternal(256ULL*1024*1024),"Invalid reservation was admitted.");
+    copy.reset();require(device->totalReservedBytes()==original,"Reservation did not retire.");
     VulkanFrameCompositor gpu(device);auto a=fixture(37,23,false),b=fixture(19,13);
     for(double rotation:{0.,23.,90.,-45.})for(double opacity:{0.,0.37,1.}){
         std::vector<CompositionLayer> layers{{&a},{&b}};layers[1].transform={0.43,0.61,0.78,rotation,opacity};

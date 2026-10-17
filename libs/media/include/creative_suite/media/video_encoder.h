@@ -96,6 +96,9 @@ public:
 
     void writeVideo(const RgbaFrame& source, std::int64_t output_frame);
     void writeVideo(const NativeVideoFramePtr& source, std::int64_t output_frame);
+    // Bounded recovery: destination is an exclusively acquired output-pool lease.
+    // Uses existing FFmpeg conversion/transfer, never allocates another HW frame.
+    void writeVideo(const RgbaFrame&, const NativeVideoFramePtr& destination, std::int64_t output_frame);
     [[nodiscard]] bool acceptsNativeFrames() const noexcept;
     // Explicit FFmpeg uploads only; excludes opaque transfers inside drivers.
     [[nodiscard]] std::uint64_t uploadedVideoBytes() const noexcept;

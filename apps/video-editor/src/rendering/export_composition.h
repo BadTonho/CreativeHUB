@@ -3,6 +3,7 @@
 #include "rendering/offline_export_renderer.h"
 #include <creative_suite/media/native_video_frame.h>
 #include <chrono>
+#include <creative_suite/composition/vulkan_native_export.h>
 
 namespace rendering::detail {
 namespace composition = creative_suite::composition;
@@ -33,6 +34,12 @@ private:
 class ExportComposition {
 public:
     ExportComposition(const RenderJob&, const OfflineExportOptions&, OfflineExportMetrics&);
+    ~ExportComposition();
+    void prepareNative();
+    creative_suite::media::NativeVideoFramePool* nativePool() {return output_pool_.get();}
+    composition::VulkanNativeExportResult collectNative(composition::VulkanNativeExportTicket,const std::atomic_bool&);
+    void stopNative(const composition::VulkanNativeExportResult&,std::int64_t,std::int64_t);
+    void snapshotNativeMetrics();
     composition::GpuFrameCompositor* graphBackend();
     bool nativeDelivery() const noexcept;
     unsigned prepareAsync();
@@ -48,12 +55,18 @@ public:
         std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,
         creative_suite::media::NativeVideoFramePool* = nullptr,
         creative_suite::media::NativeVideoFramePtr* native_output = nullptr,
-        composition::GpuReadbackTicket* async_ticket = nullptr);
+        composition::GpuReadbackTicket* async_ticket = nullptr,
+        composition::VulkanNativeExportTicket* native_ticket = nullptr);
 private:
     void fallback(const composition::OpenGlCompositionResult&, std::int64_t, std::int64_t, bool rgba_recovery = false);
     const RenderJob& job_;
     const OfflineExportOptions& options_;
     OfflineExportMetrics& metrics_;
+    std::shared_ptr<composition::VulkanDevice> device_;
+    std::shared_ptr<void> external_reservation_;
+    std::unique_ptr<creative_suite::media::NativeVideoFramePool> output_pool_;
+    std::unique_ptr<composition::VulkanNativeExportBridge> bridge_;
+    std::uint64_t native_attempts_=0,native_collections_=0;
     std::unique_ptr<ExportGpuCompositor> gpu_;
     std::unique_ptr<composition::GpuFrameCompositor> graph_gpu_;
     std::unique_ptr<composition::GpuFrameCompositor> native_gpu_;

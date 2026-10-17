@@ -277,7 +277,7 @@ setting, project format or automatic renderer selection is introduced.
 compares an instrumented baseline with the scheduler using 30 warm-up frames,
 180 samples and three trials. It records limited small-fixture tail improvement,
 stable heavy latency, resource costs and export preservation without assuming
-Vulkan superiority. Direct D3D11VA/NVENC interop, paced human audiovisual editing,
+Vulkan superiority. Direct Vulkan D3D11VA input import, paced human audiovisual editing,
 other GPU vendors and native Linux/macOS acceptance remain subsequent gates.
 
 ## Vulkan to NVENC research (2026-10-16)
@@ -292,7 +292,7 @@ records pixel/codec/lifetime checks and native-versus-RGBA measurements.
 
 This research eliminates full output readback/CPU encoder input in the measured
 native path but still performs GPU normalization/blit/copy and source uploads.
-The Video Editor export remains on RGBA; Automatic remains OpenGL. Controlled
-editor integration is a separate decision and must retain RGBA recovery and
-qualify codec parameters/devices. D3D11VA input import, Linux/macOS interop and
+The [qualified editor integration](VULKAN_NATIVE_EXPORT.md) now selects the bridge
+for covered Vulkan/NVENC jobs, with bounded RGBA recovery. Automatic remains
+OpenGL; parameters outside the tested preset matrix use the existing RGBA path. D3D11VA input import, Linux/macOS interop and
 other driver acceptance are still pending, not implied by this prototype.

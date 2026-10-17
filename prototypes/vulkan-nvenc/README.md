@@ -1,7 +1,8 @@
 # Experimental Vulkan / D3D11 / NVENC probe
 
-Status: **provisional, Windows-only research executable**. The Video Editor does
-not call this bridge. Its Vulkan export continues using ordered RGBA readbacks;
+Status: **provisional, Windows-only research executable**. The Video Editor now reuses this bridge for
+[qualified Windows export jobs](../../docs/video-editor/gpu/VULKAN_NATIVE_EXPORT.md);
+this standalone CLI remains independent of editor UI. RGBA remains the fallback;
 Automatic, preferences, application versions and project formats are unchanged.
 Linux/macOS interop requires separate investigation.
 
@@ -64,7 +65,10 @@ The compositor's existing integer-to-normalized operation produces RGBA8 UNORM;
 a nearest Vulkan blit converts channels into the imported BGRA image. The bridge
 then makes a D3D11 GPU copy into the ordinary encoder pool surface. Thus this
 eliminates full output readback/CPU encoder input, **not GPU copies**. Source
-fixtures still upload to the GPU. This prototype does not import decoder surfaces.
+fixtures still upload to the GPU. This prototype does not import decoder surfaces. `--small-high-bitrate` selects
+10 Mbps at 320x180 with the high-frequency fixture, without verification downloads,
+for reproducing the earlier parameter-sensitive NVENC failure. It does not expand
+the editor qualification policy.
 
 One worker records composition/bridge commands into the existing single queue.
 A submission acquires key 0, transfers EXTERNAL ownership to Vulkan, writes the
@@ -116,3 +120,9 @@ source uploads, output readbacks and both logical GPU-copy byte counts. GPU-copy
 bytes are payload sizes, not measured memory-bus traffic. Encoder-internal RGBA
 uploads are opaque: the existing explicit-upload counter does not measure them.
 The recommendation and acceptance boundary remain provisional and device-specific.
+
+The shared bridge now exposes retirement confirmation and can retain an external
+reservation lease. An unconfirmed GPU consumer causes conservative process-lifetime
+retention rather than unsafe reuse/free; editor integration aborts that job and
+logs the error. The [integrated acceptance record](../../docs/video-editor/performance/VULKAN_NATIVE_EXPORT_WINDOWS_2026-10-16.md)
+separates qualified editor results from the historical prototype comparison.

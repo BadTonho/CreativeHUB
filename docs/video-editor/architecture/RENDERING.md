@@ -759,3 +759,9 @@ unchanged. The native Viewer retains one in-flight presentation and one latest
 unsent frame; see the Vulkan contract for generation, visual-revision and timer
 ownership. The preview benchmark uses the receipt, 30 warm-up frames, 180 samples
 and three repetitions rather than the earlier whole-device completion heuristic.
+
+Qualified Windows Vulkan/NVENC export additionally uses native bridge tickets in
+that FIFO. Shared external reservation leases include output-pool and recovery
+storage in the session's 256 MiB known budget; preflight capability/parameter
+refusal preserves RGBA with the selected codec. See [native export ownership and
+recovery](../gpu/VULKAN_NATIVE_EXPORT.md); decoder input import remains deferred.

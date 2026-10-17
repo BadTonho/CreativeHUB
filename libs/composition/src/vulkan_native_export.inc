@@ -7,10 +7,11 @@ using Microsoft::WRL::ComPtr;
 void checkHr(HRESULT hr,const char* operation) {
     if(FAILED(hr))throw Failure(operation,static_cast<std::int64_t>(hr));
 }
-std::array<std::uint8_t,8> adapterIdentity(ID3D11Device* device) {
+std::array<std::uint8_t,8> adapterIdentity(ID3D11Device* device,bool require_nvenc=false) {
     ComPtr<IDXGIDevice> dxgi;checkHr(device->QueryInterface(IID_PPV_ARGS(&dxgi)),"Query encoder DXGI device.");
     ComPtr<IDXGIAdapter> adapter;checkHr(dxgi->GetAdapter(&adapter),"Query encoder adapter.");
     DXGI_ADAPTER_DESC desc{};checkHr(adapter->GetDesc(&desc),"Query encoder adapter identity.");
+    if(require_nvenc && desc.VendorId!=0x10DE)throw Failure("Native NVENC sharing requires an NVIDIA encoder adapter.",0,Status::Unsupported);
     std::array<std::uint8_t,8> luid;static_assert(sizeof(desc.AdapterLuid)==luid.size());
     std::memcpy(luid.data(),&desc.AdapterLuid,luid.size());return luid;
 }
@@ -24,7 +25,9 @@ void checkNativeDestination(const media::NativeVideoFramePtr& frame) {
 #endif
 struct VulkanNativeExportBridge::Impl {
     std::shared_ptr<VulkanDevice> device;
+    std::shared_ptr<void> external_reservation;
     Metrics metrics;
+    bool retirement_failed=false;
     bool failed=false;
 #ifdef CS_VULKAN_NATIVE_EXPORT
     struct Imported {
@@ -105,10 +108,19 @@ struct VulkanNativeExportBridge::Impl {
         slot.acquired=false;slot.ready=true;
     }
 #endif
-    explicit Impl(std::shared_ptr<VulkanDevice> value):device(std::move(value)){}
+    explicit Impl(std::shared_ptr<VulkanDevice> value,std::shared_ptr<void> reservation):device(std::move(value)),external_reservation(std::move(reservation)){}
 };
-VulkanNativeExportBridge::VulkanNativeExportBridge(std::shared_ptr<VulkanDevice> device):impl_(std::make_unique<Impl>(std::move(device))){}
-VulkanNativeExportBridge::~VulkanNativeExportBridge(){discard();}
+VulkanNativeExportBridge::VulkanNativeExportBridge(std::shared_ptr<VulkanDevice> device):VulkanNativeExportBridge(std::move(device),{}){}
+VulkanNativeExportBridge::VulkanNativeExportBridge(std::shared_ptr<VulkanDevice> device,std::shared_ptr<void> reservation):impl_(std::make_unique<Impl>(std::move(device),std::move(reservation))){}
+VulkanNativeExportBridge::~VulkanNativeExportBridge(){
+    discard();if(!isRetired()){
+        creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,"vulkan-native-export","retain-unconfirmed-resources",
+            "Native retirement was unconfirmed. Bounded GPU resources and their reservation remain held until process exit.");
+        // Deliberate bounded quarantine: freeing cross-API memory still consumed
+        // by a hung device is unsafe. No destructor runs after QGuiApplication.
+        static_cast<void>(impl_.release());
+    }
+}
 std::optional<std::array<std::uint8_t,8>> VulkanNativeExportBridge::adapterLuid(
     const media::NativeVideoFramePtr& frame,std::string& cause) {
 #ifdef CS_VULKAN_NATIVE_EXPORT
@@ -120,6 +132,7 @@ std::optional<std::array<std::uint8_t,8>> VulkanNativeExportBridge::adapterLuid(
 }
 GpuCompositionResult VulkanNativeExportBridge::prepare(const media::NativeVideoFramePtr& frame,unsigned maximum,bool reject_format) {
     discard();
+    if(!isRetired())return {Status::Failed,{},"prepare-native-export","Previous native resources have not retired safely."};
 #ifdef CS_VULKAN_NATIVE_EXPORT
     impl_->native_slots.clear();
 #endif
@@ -133,7 +146,7 @@ GpuCompositionResult VulkanNativeExportBridge::prepare(const media::NativeVideoF
         auto& p=*b.device->impl_;std::lock_guard lock(p.mutex);
         VkPhysicalDeviceIDProperties id{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
         VkPhysicalDeviceProperties2 properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};properties.pNext=&id;
-        vkGetPhysicalDeviceProperties2(p.physical,&properties);const auto luid=adapterIdentity(b.d3d.Get());
+        vkGetPhysicalDeviceProperties2(p.physical,&properties);const auto luid=adapterIdentity(b.d3d.Get(),true);
         if(!id.deviceLUIDValid || std::memcmp(id.deviceLUID,luid.data(),luid.size()))
             throw Failure("Vulkan and NVENC use different adapters.",0,Status::Unsupported);
         VkPhysicalDeviceExternalImageFormatInfo external{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO};
@@ -157,7 +170,7 @@ GpuCompositionResult VulkanNativeExportBridge::prepare(const media::NativeVideoF
         // Include source, UINT scratch, normalized scratch and shared image for
         // each flight, plus the externally reserved native encoder pool.
         while(maximum>1 && bytes*4*maximum>p.capacity)--maximum;
-        if(bytes*4>p.capacity)throw Failure("No native export flight fits the known memory budget.",0,Status::Unsupported);
+        if(bytes*4>p.capacity)throw Failure("No native export flight fits the known memory budget.",0,Status::Busy);
         auto get_properties=reinterpret_cast<PFN_vkGetMemoryWin32HandlePropertiesKHR>(vkGetDeviceProcAddr(p.device,"vkGetMemoryWin32HandlePropertiesKHR"));
         if(!get_properties)throw Failure("The native memory import entry point is unavailable.",0,Status::Unsupported);
         for(unsigned index=0;index<maximum;++index){
@@ -187,7 +200,7 @@ GpuCompositionResult VulkanNativeExportBridge::prepare(const media::NativeVideoF
             VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};allocation.pNext=&import;allocation.allocationSize=requirements.size;
             allocation.memoryTypeIndex=p.memoryType(requirements.memoryTypeBits&bits.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
             check(vkAllocateMemory(p.device,&allocation,nullptr,&imported->memory),"Import shared encoder allocation.");
-            imported->bytes=requirements.size;p.bytes+=requirements.size;p.peak=std::max(p.peak,p.bytes);
+            imported->bytes=requirements.size;p.bytes+=requirements.size;p.peak=std::max(p.peak,p.bytes);p.known_peak=std::max(p.known_peak,p.bytes+p.external_reserved);
             check(vkBindImageMemory(p.device,imported->image,imported->memory,0),"Bind shared encoder image.");
             Impl::Slot slot;slot.imported=std::move(imported);
             D3D11_QUERY_DESC event{D3D11_QUERY_EVENT,0};checkHr(b.d3d->CreateQuery(&event,&slot.copy_done),"Create encoder copy completion.");
@@ -265,7 +278,8 @@ VulkanNativeExportResult VulkanNativeExportBridge::collect(VulkanNativeExportTic
     try {
         cancelled(cancel);
 #ifdef CS_VULKAN_NATIVE_EXPORT
-        auto& b=*impl_;auto slot=std::find_if(b.native_slots.begin(),b.native_slots.end(),[&](const auto& value){return value.ticket && value.ticket==ticket.value;});
+        auto& b=*impl_;if(b.retirement_failed)return {Status::Failed,{}, {},"Native retirement is unconfirmed."};
+        auto slot=std::find_if(b.native_slots.begin(),b.native_slots.end(),[&](const auto& value){return value.ticket && value.ticket==ticket.value;});
         if(slot==b.native_slots.end())return {Status::Unsupported,{}, {},"Unknown or retired native export ticket."};
         if(b.order.front()!=ticket.value)return {Status::Busy,{}, {},"Native export tickets must be collected FIFO."};
         b.finish(*slot,cancel);cancelled(cancel);
@@ -280,16 +294,29 @@ VulkanNativeExportResult VulkanNativeExportBridge::collect(VulkanNativeExportTic
 }
 void VulkanNativeExportBridge::discard() noexcept {
 #ifdef CS_VULKAN_NATIVE_EXPORT
-    auto& b=*impl_;
+    auto& b=*impl_;if(b.retirement_failed)return;
     for(auto& slot:b.native_slots)if(slot.ticket){
-        try{b.finish(slot,{});}catch(const std::exception& error){b.failed=true;
+        try{
+            if(qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_NATIVE_RETIREMENT_TEST")==1)throw Failure("Injected unconfirmed native retirement.",VK_TIMEOUT);
+            b.finish(slot,{});
+        }catch(const std::exception& error){b.failed=true;b.retirement_failed=true;
             const auto* failure=dynamic_cast<const Failure*>(&error);
-            creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,"vulkan-native-export","discard",error.what(),
-                {{"error_code",std::to_string(failure?failure->code:0)},{"ticket",std::to_string(slot.ticket)}});}
+            b.metrics.retirement_error_code=failure?failure->code:0;
+            try{creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,"vulkan-native-export","discard",error.what(),
+                {{"error_code",std::to_string(b.metrics.retirement_error_code)},{"ticket",std::to_string(slot.ticket)}});}catch(...){
+                creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,"vulkan-native-export","discard",error.what());}
+            continue;}
         slot.source.reset();slot.destination.reset();slot.completion.reset();slot.context=nullptr;slot.ticket=0;
         slot.acquired=slot.copy_issued=slot.ready=false;
     }
-    b.order.clear();
+    if(!b.retirement_failed)b.order.clear();
+#endif
+}
+bool VulkanNativeExportBridge::isRetired() const noexcept {
+#ifdef CS_VULKAN_NATIVE_EXPORT
+    return std::none_of(impl_->native_slots.begin(),impl_->native_slots.end(),[](const auto& slot){return slot.ticket!=0;});
+#else
+    return true;
 #endif
 }
 unsigned VulkanNativeExportBridge::slotCount() const noexcept {

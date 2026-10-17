@@ -336,8 +336,7 @@ See the Vulkan renderer contract for ownership, cancellation and FIFO recovery.
 The next preview increment uses per-submission completion receipts, visual
 revisions and a one-in-flight/latest-unsent Viewer mailbox. It preserves FIFO,
 256 MiB accounting and export parallelism; empty unavailable acquisitions no
-longer enter the GPU queue. Direct Vulkan/D3D11VA/NVENC sharing remains a later
-step. [Preview pacing evidence](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
+longer enter the GPU queue. Vulkan decoder-surface import remains a later step. [Preview pacing evidence](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
 separates corrected instrumentation from scheduling changes; no default promotion
 or generalized performance claim follows from the synthetic results.
 
@@ -346,7 +345,7 @@ or generalized performance claim follows from the synthetic results.
 The optional [research executable](../../../prototypes/vulkan-nvenc/README.md)
 creates the existing two-frame native encoder pool first and imports separate
 shared BGRA intermediates into a matching Vulkan adapter. It deliberately leaves
-the pool's flags/reuse policy and the editor's RGBA export unchanged. A normalized
+the pool's flags/reuse policy unchanged. A normalized
 Vulkan blit plus D3D11 copy avoids full output CPU readback; keyed mutex and
 EXTERNAL/GENERAL transitions protect API ownership. FIFO collection waits for
 D3D completion before the existing encoder receives its leased destination.
@@ -354,4 +353,7 @@ D3D completion before the existing encoder receives its leased destination.
 No new codec SDK, decode import, editor preference or fallback policy is added.
 The [Windows result and provisional recommendation](../performance/VULKAN_NVENC_PROTOTYPE_WINDOWS_2026-10-16.md)
 record correctness, 256 MiB known reservations, explicit copies/transfers and
-three-trial comparison. Do not treat this as native Vulkan export in the editor.
+three-trial comparison. The historical prototype record does not establish editor acceptance;
+[qualified editor integration](VULKAN_NATIVE_EXPORT.md) has its own regression
+and performance gate. Vulkan hardware decoding still crosses the existing RGBA
+boundary; direct decoder-surface import is not part of that integration.

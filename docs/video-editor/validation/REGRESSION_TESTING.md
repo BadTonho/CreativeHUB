@@ -1,5 +1,39 @@
 # Regression Testing
 
+## Integrated Vulkan native NVENC export
+
+**Automated coverage present:** existing registered render-export tests cover
+parameter policy (effective rates/bitrates), recoverable Busy versus technical
+failure and compatible RGBA behavior. The new
+`creative-suite-main-editor-vulkan-native-export` and
+`creative-suite-main-editor-vulkan-native-retirement` entries are registered in
+[UI tests](../../../apps/video-editor/tests/ui/CMakeLists.txt); their shared
+[fixture](../../../apps/video-editor/tests/ui/vulkan_native_export_test.inc)
+exercises the real offline renderer on its worker. Unsupported-host skips are
+not native acceptance. See [the contract](../gpu/VULKAN_NATIVE_EXPORT.md).
+
+| Behavior | Verification |
+| --- | --- |
+| Qualified/custom-equivalent tuples, unqualified 320x180, incompatible codec/backend, forced RGBA, rejected format | Registered export policy/native tests; required native `--qualify-native` checks all 60 preset tuples with H.264/HEVC, decoded dimensions/colors and packet PTS |
+| Opaque reservation lifetime, concurrent leases, budget saturation, one-flight reduction and no premature pool reuse | Shared Vulkan tests; native export tests reserve 180/250 MiB and verify reduction or nontechnical recovery; prototype retains FIFO/ticket and source lifetime coverage |
+| Ordered native/readback/CPU FIFO, faults in submit/collect, callbacks and preserved outputs | Native export fault seams check exact frame positions and decoded temporal markers; native cancellation/encoder failure retain sentinel bytes |
+| Whole-frame CPU recovery into a bounded destination, same encoder/codec, audio and Fusion | Native export faults verify counted uploads and unencoded-frame replay; masked/rotated/ordered-effect Fusion compares CPU/native pixels with existing RGB/alpha tolerances, then lossy decode; trimmed embedded audio RMS and timestamps are verified |
+| Unconfirmed retirement prevents CPU reuse and pool/device destruction | Isolated native-retirement entry checks reservation retention, failed reinitialization, aborted export, preserved destination and app error code; retained resources intentionally live until that process exits |
+| Two Viewers while native export runs, revisions, resize/grayscale, transitions and close | Vulkan preview test `--require-gpu --native-bridge`; native queue destruction with processing pending is in the export test |
+
+Windows Release evidence (2026-10-16): **29/29 scoped CTest entries passed without
+skips**, the required native matrix passed all 60 tuples, and synchronization
+validation reported no VUID/Sync hazards. Both export-only and concurrent-Viewer
+comparisons use 30 warm-up frames, 180 samples and three trials at 1080p/1440p/4K.
+[The result record](../performance/VULKAN_NATIVE_EXPORT_WINDOWS_2026-10-16.md)
+retains every trial, parameter controls, diagnostics and the 4K Viewer-tail limits.
+The shared library also builds with Vulkan/media disabled.
+
+Manual acceptance still pending: representative human editing with real projects,
+additional drivers/adapters, actual device removal/watchdog expiry and native
+Linux/macOS. A simulated unconfirmed retirement does not prove an induced driver
+hang. Native decoder-surface import remains planned, not implemented.
+
 ## Separate Vulkan / NVENC prototype
 
 **Automated coverage present:** [prototype self-test](../../../prototypes/vulkan-nvenc/main.cpp)
@@ -32,9 +66,9 @@ reported no VUID/Sync hazards. Both available NVENC codecs passed the prototype
 self-test. The Vulkan/media-disabled shared build passed. See the report for
 limits, all benchmark trials, executable paths and modification times.
 
-Manual future integration checks (pending, not implemented here): editor job
-selection/recovery, real-project audio, seek/workspace interaction during native
-export and decoder-surface imports. Other Windows adapters/drivers and Linux/macOS
+At the prototype stage, editor selection/recovery and audio were not covered;
+the integrated section above now has separate evidence. Human real-project
+editing and direct decoder-surface imports remain separate pending work. Other Windows adapters/drivers and Linux/macOS
 interop acceptance remain pending. This prototype does not expose a UI control.
 
 ## Fusion Gaussian Blur

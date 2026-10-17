@@ -93,7 +93,7 @@ void validateNativeScheduling(PreviewWidget* preview,QWidget& host,const renderi
     host.show();require(QTest::qWaitForWindowExposed(&host,3000),"Hidden Viewer did not expose again.");
     waitFor([&]{return surface->diagnostics().submitted>hidden;},"Expose did not resume the latest pending frame.");
 }
-void validateConcurrentViewers(const c::GpuTextureFramePtr& frame,const QString& directory) {
+void validateConcurrentViewers(const c::GpuTextureFramePtr& frame,const QString& directory,bool native=false,bool measure=false,QSize extent={},int trial=0) {
     QWidget host;host.resize(700,300);auto* layout=new QVBoxLayout(&host);
     auto* first=new PreviewWidget(&host);auto* second=new PreviewWidget(&host);layout->addWidget(first);layout->addWidget(second);
     host.show();require(QTest::qWaitForWindowExposed(&host,3000),"Two-viewer host was not exposed.");
@@ -105,40 +105,58 @@ void validateConcurrentViewers(const c::GpuTextureFramePtr& frame,const QString&
     job.settings.container_name="matroska";job.settings.video_encoder_name="ffv1";
     job.settings.width=320;job.settings.height=180;job.settings.export_audio=false;
     job.settings.gpu_composition_enabled=true;job.settings.graphics_backend=c::GraphicsBackend::Vulkan;
+    if(native || measure){job.settings.video_encoder_name="h264_nvenc";job.settings.width=measure?extent.width():1280;job.settings.height=measure?extent.height():720;
+        job.settings.video_bitrate_mbps=std::round(10.0*job.settings.width*job.settings.height/(1920.0*1080)*10)/10;}
+    const int frames=measure?210:12;
+    if(measure)qputenv("CREATIVE_SUITE_NVENC_NATIVE_LATENCY","1");
+    if(measure && !native)qputenv("CREATIVE_SUITE_VULKAN_NVENC_RGBA","1");else qunsetenv("CREATIVE_SUITE_VULKAN_NVENC_RGBA");
     project::ProjectTrack track;track.track_id=1;project::ProjectClip clip;
-    clip.source_path=source.toStdWString();clip.kind=timeline::ClipKind::Image;clip.duration_frames=12;track.clips.push_back(clip);
+    clip.source_path=source.toStdWString();clip.kind=timeline::ClipKind::Image;clip.duration_frames=frames;track.clips.push_back(clip);
     job.project_snapshot.timeline_tracks.push_back(track);
     QSemaphore ack;std::atomic_bool done=false,cancel=false;bool pending=false;quint64 first_trace=0,second_trace=0;
     int presented=0;std::exception_ptr failure;rendering::OfflineExportMetrics export_metrics;
     rendering::OfflineExportOptions options;
     options.metrics_callback=[&](const auto& value){export_metrics=value;};
-    options.prepared_frame_callback=[&](const auto&,std::int64_t index){
+    options.native_maximum_frames=measure && extent.width()==3840?1:2;
+    using Clock=std::chrono::steady_clock;Clock::time_point queued,measured_start;int current=0;std::vector<double> samples;
+    const auto delivered=[&](std::int64_t index){
         QMetaObject::invokeMethod(&host,[&,index]{
             auto& metrics=rendering::PreviewPerformanceMetrics::instance();
             first_trace=metrics.createFrameDeliveryTrace(1,index);second_trace=metrics.createFrameDeliveryTrace(1,index);
             rendering::PreviewFramePayload payload;payload.gpu=frame;
+            queued=Clock::now();current=int(index);if(index==30)measured_start=queued;
             first->setFrame(payload,first_trace);second->setFrame(payload,second_trace);pending=true;
         },Qt::QueuedConnection);
         ack.acquire();
     };
+    if(native)options.prepared_native_frame_callback=[&](const auto&,std::int64_t index){delivered(index);};
+    else options.prepared_frame_callback=[&](const auto&,std::int64_t index){delivered(index);};
     std::thread worker([&]{try{rendering::OfflineExportRenderer::render(job,cancel,{},options);}catch(...){failure=std::current_exception();}done=true;});
     QElapsedTimer deadline;deadline.start();
-    while(!done && deadline.elapsed()<15000){
+    while(!done && deadline.elapsed()<(measure?60000:15000)){
         QCoreApplication::processEvents(QEventLoop::AllEvents,2);
         if(pending && first_vk->lastCompletedDeliveryTraceId()==first_trace && second_vk->lastCompletedDeliveryTraceId()==second_trace){
+            if(measure && current>=30)samples.push_back(std::chrono::duration<double,std::milli>(Clock::now()-queued).count());
             ++presented;pending=false;ack.release();
         }
         QThread::msleep(1);
     }
     const bool timed_out=!done;cancel=true;ack.release();worker.join();if(failure)std::rethrow_exception(failure);
-    const bool pipeline=qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_SERIAL")==1 ? export_metrics.async_readback_submissions==0 :
-        export_metrics.async_readback_slots==2 && export_metrics.peak_pending_frames==2;
-    require(!timed_out && pipeline && presented==12 && export_metrics.encoded_frames==12 && export_metrics.gpu_frames==12 &&
+    const bool pipeline=native?(export_metrics.native_encoded_frames==std::uint64_t(frames) && export_metrics.native_slots==options.native_maximum_frames && export_metrics.readback_bytes==0):qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_SERIAL")==1 ? export_metrics.async_readback_submissions==0 :
+        export_metrics.async_readback_slots==options.native_maximum_frames && export_metrics.peak_pending_frames==options.native_maximum_frames;
+    require(!timed_out && pipeline && presented==frames && export_metrics.encoded_frames==std::uint64_t(frames) && export_metrics.gpu_frames==std::uint64_t(frames) &&
             export_metrics.gpu_failures==0,
             "Concurrent viewers/export lost frames, stalled, or lost the asynchronous export path.");
     require(QFileInfo::exists(job.settings.output_path),"Concurrent export did not publish its destination.");
+    if(measure){
+        require(samples.size()==180,"Viewer benchmark samples changed.");double sum=0;for(auto value:samples)sum+=value;std::sort(samples.begin(),samples.end());
+        std::cout<<"viewer_benchmark mode="<<(native?"native":"rgba")<<" width="<<extent.width()<<" height="<<extent.height()<<" trial="<<trial
+            <<" completion_mean_ms="<<sum/180<<" completion_p95_ms="<<samples[170]<<" total_ms="<<std::chrono::duration<double,std::milli>(Clock::now()-measured_start).count()
+            <<" frames_per_viewer="<<presented<<" native_frames="<<export_metrics.native_encoded_frames<<" readback_bytes="<<export_metrics.readback_bytes<<" pending="<<export_metrics.peak_pending_frames<<" known_peak="<<export_metrics.peak_known_gpu_bytes<<"\n"<<std::flush;
+    }
+    qunsetenv("CREATIVE_SUITE_VULKAN_NVENC_RGBA");qunsetenv("CREATIVE_SUITE_NVENC_NATIVE_LATENCY");
     first->releaseGpuFrames();second->releaseGpuFrames();host.close();
-    std::cout<<"native_vulkan_concurrent_viewers=passed viewers=2 frames_per_viewer="<<presented<<" export_frames="<<export_metrics.encoded_frames<<"\n";
+    std::cout<<"native_vulkan_concurrent_viewers=passed viewers=2 frames_per_viewer="<<presented<<" native="<<native<<" export_frames="<<export_metrics.encoded_frames<<"\n";
 }
 void validateCloseInFlight(const c::GpuTextureFramePtr& frame) {
     {
@@ -276,7 +294,7 @@ int main(int argc,char** argv) {
     QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temporary.path());
     if(!logging::Logger::instance().initialize(temporary.path().toStdWString()))return 1;
     if (QGuiApplication::platformName()=="offscreen" || QGuiApplication::platformName()=="minimal") return app.arguments().contains("--require-gpu") ? 1 : 77;
-    std::string cause;auto device=c::VulkanDevice::create(cause);
+    std::string cause;c::VulkanDevice::CreateOptions creation;creation.try_native_export=true;auto device=c::VulkanDevice::create(cause,creation);
     if(!device){std::cerr<<cause<<'\n';return app.arguments().contains("--require-gpu")?1:77;}
     c::setSessionVulkanDevice(device);c::setSessionGraphicsBackend(c::GraphicsBackend::Vulkan);
     try {
@@ -313,6 +331,9 @@ int main(int argc,char** argv) {
         require(device->valid(),"Preview shutdown lost the Vulkan device.");
         if(!app.arguments().contains("--benchmark")) {
             validateConcurrentViewers(retained_frame,temporary.path());
+            if(app.arguments().contains("--native-bridge"))validateConcurrentViewers(retained_frame,temporary.path(),true);
+            if(app.arguments().contains("--native-bridge-benchmark"))for(const auto extent:{QSize(1920,1080),QSize(2560,1440),QSize(3840,2160)})
+                for(int trial=1;trial<=3;++trial)for(bool native:{false,true})validateConcurrentViewers(retained_frame,temporary.path(),native,true,extent,trial);
             validateCloseInFlight(retained_frame);
             // Verify the selected session reaches the real application's views.
             MainWindow application_window;application_window.show();

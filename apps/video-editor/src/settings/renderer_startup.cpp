@@ -40,7 +40,8 @@ RendererStartup initializeRenderer(const RendererLaunchOptions& options) {
     }
     RendererStartup result;auto effective=requested==GraphicsBackend::Automatic?GraphicsBackend::OpenGl:requested;
     if(effective==GraphicsBackend::Vulkan){
-        std::string cause;result.vulkan=c::VulkanDevice::create(cause);
+        std::string cause;c::VulkanDevice::CreateOptions creation;creation.try_native_export=true;
+        result.vulkan=c::VulkanDevice::create(cause,creation);
         if(result.vulkan){
             c::setSessionVulkanDevice(result.vulkan);
             // Verify presentation before choosing Vulkan for the application session.

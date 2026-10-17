@@ -114,17 +114,18 @@ retire old trace credit without releasing pending GPU allocations prematurely.
 Snapshots use the last submitted frame, never an unsent replacement. Export's
 separate two-frame FIFO and the 256 MiB device cap are unchanged.
 
-Each queued job captures the effective backend. Vulkan export owns processing
-resources independently of preview visibility and reads RGBA back for the selected
-encoder. Its bounded FIFO prepares the next frame before collecting/encoding the
+Each queued job captures the effective backend and session device. Vulkan export
+owns processing resources independently of preview visibility. Qualified Windows
+NVENC jobs use the [native bridge](VULKAN_NATIVE_EXPORT.md); other jobs read RGBA
+back for the selected encoder. The RGBA bounded FIFO prepares the next frame before collecting/encoding the
 oldest, with up to two readback slots within a 64 MiB staging allowance (also
 counted within the device cap). One fitting slot reduces parallelism; unavailable
 staging retains synchronous Vulkan composition. Resource pressure drains pending
 frames before reducing capacity. Callbacks, progress and encoder inputs stay FIFO.
 A technical collection failure rebuilds only unencoded pending frames from original
 sources on CPU. Cancellation stops publication while outstanding allocations remain
-retained for safe cleanup. Decoder and encoder settings remain explicit. Direct D3D11/NVENC image
-sharing is outside this delivery; hardware decode can still deliver RGBA through
+retained for safe cleanup. Decoder and encoder settings remain explicit. Native
+decoder-surface import is deferred; hardware decode can still deliver RGBA through
 the established media boundary. Cancellation and atomic output publication retain
 their previous contracts. Technical failures latch CPU recovery for the session or
 job; expected pool occupancy does not become an error entry.
@@ -249,6 +250,14 @@ The bridge retains each source/destination, follows EXTERNAL ownership and GENER
 layout handoff, and counts the shared backing once. Its device capacity subtracts
 the existing output-pool estimate from 256 MiB, reducing to one flight when needed.
 Normal device creation and the app's RGBA path remain compatible. Native decode
-import and editor integration are deferred. The [Windows record](../performance/VULKAN_NVENC_PROTOTYPE_WINDOWS_2026-10-16.md)
+import remains deferred. Qualified editor integration now reuses this bridge; see
+[the native export contract](VULKAN_NATIVE_EXPORT.md). The [Windows record](../performance/VULKAN_NVENC_PROTOTYPE_WINDOWS_2026-10-16.md)
 separates measured throughput, submission time, completed delivery, logical GPU
 copies and explicit CPU transfers; it does not establish cross-platform acceptance.
+
+Startup now explicitly requests native extensions opportunistically. The default
+factory remains unchanged. External reservation leases reduce the same session
+allocation capacity, including preview/Fusion images, the estimated native pool
+and recovery staging. Export retains an explicit device reference and never
+replaces the session while Viewers are active. Offline-export schema 3 records
+native delivery separately from RGBA recovery and existing OpenGL diagnostics.

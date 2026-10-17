@@ -52,6 +52,7 @@ bool RenderQueueController::start(std::vector<RenderJob> jobs) {
                 try {
                     rendering::OfflineExportOptions options;
                     options.gpu_surface = gpu_surface_.get();
+                    options.vulkan_device = creative_suite::composition::sessionVulkanDevice();
                     options.warning_callback = [this, id = static_cast<qulonglong>(job.id)](const auto& message, auto code) {
                         emit jobWarning(id, QString::fromStdString(message), QString::number(code));
                     };

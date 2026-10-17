@@ -1,5 +1,6 @@
 #include "rendering/export_composition.h"
 #include "logging/logger.h"
+#include "rendering/vulkan_nvenc_policy.h"
 
 #include <algorithm>
 #include <thread>
@@ -13,6 +14,7 @@ class NativeExportGpu final : public ExportGpuCompositor {
 public:
     explicit NativeExportGpu(QOffscreenSurface* surface, composition::GraphicsBackend backend) : backend_(composition::createGpuFrameCompositor(surface,
         composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext(), {}, backend)) {}
+    explicit NativeExportGpu(std::shared_ptr<composition::VulkanDevice> device):backend_(std::make_unique<composition::VulkanFrameCompositor>(std::move(device))){}
     composition::OpenGlCompositionResult compose(int width, int height,
         const std::vector<composition::CompositionLayer>& layers,
         const composition::OpenGlFrameCompositor::CancellationPredicate& cancel,
@@ -54,14 +56,24 @@ ExportMetricsScope::~ExportMetricsScope() {
     metrics.total_nanoseconds = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now() - start_).count());
     try {
+        metrics.delivery_path=metrics.encoded_frames==0?"none":metrics.native_encoded_frames==0?"rgba":
+            metrics.native_encoded_frames<metrics.encoded_frames?"mixed-native-rgba":
+            job_.settings.graphics_backend==composition::GraphicsBackend::Vulkan?"vulkan-d3d11-nvenc":"opengl-d3d11-nvenc";
         auto context = jobContext(job_);
-        context.emplace_back("diagnostic_schema_version", "2");
+        context.emplace_back("diagnostic_schema_version", "3");
         context.emplace_back("requested_backend", metrics.gpu_requested ? std::string(composition::backendName(job_.settings.graphics_backend)) : "cpu");
         context.emplace_back("effective_backend", metrics.gpu_frames ? (metrics.cpu_frames ? "mixed" : std::string(composition::backendName(job_.settings.graphics_backend)))
                                                                   : (metrics.cpu_frames ? "cpu" : "none"));
         context.emplace_back("outcome", metrics.outcome == ExportOutcome::Completed ? "completed" :
             metrics.outcome == ExportOutcome::Canceled ? "canceled" : "failed");
         const auto add = [&](const char* name, std::uint64_t value) { context.emplace_back(name, std::to_string(value)); };
+        context.emplace_back("requested_delivery_path",metrics.gpu_requested && job_.settings.graphics_backend==composition::GraphicsBackend::Vulkan &&
+            (job_.settings.video_encoder_name=="h264_nvenc" || job_.settings.video_encoder_name=="hevc_nvenc")?"native-if-qualified":"existing");
+        context.emplace_back("delivery_path",metrics.delivery_path);context.emplace_back("native_fallback_reason",metrics.native_fallback_reason);
+        add("native_submissions",metrics.native_submissions);add("native_collections",metrics.native_collections);
+        add("native_submit_ns",metrics.native_submit_nanoseconds);add("native_wait_ns",metrics.native_wait_nanoseconds);
+        add("native_blit_bytes",metrics.native_blit_bytes);add("native_copy_bytes",metrics.native_copy_bytes);
+        add("external_reserved_gpu_bytes",metrics.external_reserved_gpu_bytes);add("native_slots",metrics.native_slots);
         add("cpu_frames", metrics.cpu_frames); add("gpu_frames", metrics.gpu_frames);
         add("encoded_frames", metrics.encoded_frames); add("fallback_frames", metrics.fallback_frames);
         add("gpu_failures", metrics.gpu_failures);
@@ -95,13 +107,77 @@ ExportMetricsScope::~ExportMetricsScope() {
 }
 
 ExportComposition::ExportComposition(const RenderJob& job, const OfflineExportOptions& options, OfflineExportMetrics& metrics)
-    : job_(job), options_(options), metrics_(metrics) {}
+    : job_(job), options_(options), metrics_(metrics),device_(options.vulkan_device?options.vulkan_device:composition::sessionVulkanDevice()) {}
 
+ExportComposition::~ExportComposition(){if(bridge_)bridge_->discard();snapshotNativeMetrics();}
+void ExportComposition::snapshotNativeMetrics(){
+    if(bridge_){const auto values=bridge_->metrics();metrics_.native_submissions=values.submissions;metrics_.native_collections=values.collections;
+        metrics_.native_submit_nanoseconds=values.submit_nanoseconds;metrics_.native_wait_nanoseconds=values.wait_nanoseconds;
+        metrics_.native_blit_bytes=values.vulkan_blit_bytes;metrics_.native_copy_bytes=values.d3d_copy_bytes;}
+    if(device_)metrics_.peak_known_gpu_bytes=std::max(metrics_.peak_known_gpu_bytes,device_->totalPeakBytes());
+}
+void ExportComposition::prepareNative(){
+    if(job_.settings.graphics_backend!=composition::GraphicsBackend::Vulkan || !job_.settings.gpu_composition_enabled ||
+       (job_.settings.video_encoder_name!="h264_nvenc" && job_.settings.video_encoder_name!="hevc_nvenc"))return;
+    if(!qualifiedVulkanNvenc(job_.settings)){metrics_.native_fallback_reason="unqualified-settings";return;}
+    if(qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_NVENC_RGBA")==1 || options_.gpu_factory){metrics_.native_fallback_reason="diagnostic-rgba";return;}
+    if(!device_ || !device_->supportsNativeExport()){metrics_.native_fallback_reason="native-interop-unavailable";return;}
+    try{
+        const auto bytes=std::uint64_t(job_.settings.width)*job_.settings.height*4;
+        auto maximum=std::clamp(options_.native_maximum_frames,1u,2u);
+        // One additional estimated D3D staging allocation supports bounded RGBA recovery.
+        for(;;){
+            while(maximum){external_reservation_=device_->tryReserveExternal(bytes*(maximum+1));if(external_reservation_)break;--maximum;}
+            if(!maximum){metrics_.native_fallback_reason="external-budget-busy";return;}
+            output_pool_=std::make_unique<creative_suite::media::NativeVideoFramePool>(job_.settings.width,job_.settings.height,maximum);
+            auto frame=output_pool_->acquire();bridge_=std::make_unique<composition::VulkanNativeExportBridge>(device_,external_reservation_);
+            auto result=bridge_->prepare(frame,maximum,options_.reject_native_format_for_testing);frame.reset();
+            if(maximum>1 && (result.status==composition::GpuCompositionStatus::Busy ||
+                (result.status==composition::GpuCompositionStatus::Complete && bridge_->slotCount()<maximum))){
+                bridge_.reset();output_pool_.reset();external_reservation_.reset();maximum=1;continue;
+            }
+            if(result.status!=composition::GpuCompositionStatus::Complete){
+                metrics_.native_fallback_reason=result.cause;
+                if(result.status==composition::GpuCompositionStatus::Failed)fallback(result,0,0);
+                bridge_.reset();output_pool_.reset();external_reservation_.reset();return;
+            }
+            break;
+        }
+        async_gpu_=std::make_unique<composition::VulkanFrameCompositor>(device_,128ULL*1024*1024,3);
+        metrics_.external_reserved_gpu_bytes=bytes*(maximum+1);metrics_.native_slots=bridge_->slotCount();metrics_.delivery_path="vulkan-d3d11-nvenc";
+        snapshotNativeMetrics();
+    }catch(const std::exception& error){
+        metrics_.native_fallback_reason=error.what();
+        logging::Logger::instance().log(logging::Level::Error,"export-gpu","prepare-native-export",error.what(),jobContext(job_));
+        bridge_.reset();output_pool_.reset();external_reservation_.reset();
+    }
+}
+composition::VulkanNativeExportResult ExportComposition::collectNative(composition::VulkanNativeExportTicket ticket,const std::atomic_bool& cancel){
+    if(options_.fail_native_collection_for_testing && ++native_collections_==options_.fail_native_collection_for_testing)
+        return {composition::GpuCompositionStatus::Failed,{}, {},"Injected native collection failure."};
+    auto result=bridge_->collect(ticket,[&]{return cancel.load();});snapshotNativeMetrics();
+    if(result.status==composition::GpuCompositionStatus::Complete)++metrics_.gpu_frames;
+    return result;
+}
+void ExportComposition::stopNative(const composition::VulkanNativeExportResult& result,std::int64_t output,std::int64_t timeline){
+    if(bridge_){bridge_->discard();snapshotNativeMetrics();
+        if(!bridge_->isRetired()){
+            logging::Logger::instance().log(logging::Level::Error,"export-gpu","retire-native-export","Native GPU retirement was unconfirmed; resources remain retained until process exit.",
+                {{"job_id",std::to_string(job_.id)},{"error_code",std::to_string(bridge_->metrics().retirement_error_code)}});
+            if(!failed_){failed_=true;++metrics_.gpu_failures;}
+            metrics_.native_fallback_reason="native-retirement-unconfirmed";
+            throw std::runtime_error("Native GPU resources did not retire safely; restart the editor.");
+        }
+        bridge_.reset();}
+    async_gpu_.reset();if(!result.cause.empty())metrics_.native_fallback_reason=result.cause;metrics_.delivery_path="native-then-rgba";
+    if(result.status==composition::GpuCompositionStatus::Failed)fallback({result.status,{},"vulkan-native-export",result.cause,result.error_code},output,timeline);
+}
 unsigned ExportComposition::prepareAsync() {
+    if(bridge_)return bridge_->slotCount();
     if(job_.settings.graphics_backend!=composition::GraphicsBackend::Vulkan || !job_.settings.gpu_composition_enabled ||
        options_.gpu_factory || options_.disable_async_readback_for_testing || qEnvironmentVariableIntValue("CREATIVE_SUITE_VULKAN_SERIAL")==1)return 0;
-    async_gpu_=composition::createGpuFrameCompositor(nullptr,composition::OpenGlPrecisionPolicy::Automatic,nullptr,{},composition::GraphicsBackend::Vulkan);
-    const auto result=async_gpu_->prepareAsyncReadback(job_.settings.width,job_.settings.height,options_.async_staging_budget_bytes,2,&async_slots_);
+    async_gpu_=std::make_unique<composition::VulkanFrameCompositor>(device_);
+    const auto result=async_gpu_->prepareAsyncReadback(job_.settings.width,job_.settings.height,options_.async_staging_budget_bytes,std::clamp(options_.native_maximum_frames,1u,2u),&async_slots_);
     if(result.status!=composition::OpenGlCompositionStatus::Complete){
         if(result.status==composition::OpenGlCompositionStatus::Failed)fallback(result,0,0);
         async_gpu_.reset();async_slots_=0;
@@ -117,12 +193,14 @@ composition::OpenGlReadbackResult ExportComposition::collectAsync(composition::G
     return result;
 }
 void ExportComposition::stopAsync(const composition::OpenGlReadbackResult& result,std::int64_t output,std::int64_t timeline) {
+    if(bridge_){stopNative({result.status,{}, {},result.cause,result.error_code},output,timeline);return;}
     if(async_gpu_)async_gpu_->discardAsyncReadbacks();
     async_gpu_.reset();async_slots_=0;
     if(result.status==composition::OpenGlCompositionStatus::Failed)
         fallback({result.status,{},result.operation,result.cause,result.error_code},output,timeline);
 }
 void ExportComposition::reduceAsync() {
+    if(bridge_){stopNative({composition::GpuCompositionStatus::Unsupported,{}, {},"Native resource capacity unavailable."},0,0);return;}
     if(!async_gpu_)return;
     async_gpu_->discardAsyncReadbacks();
     if(async_slots_>1){
@@ -139,6 +217,8 @@ bool ExportComposition::nativeDelivery() const noexcept {
 
 composition::GpuFrameCompositor* ExportComposition::graphBackend() {
     if (job_.settings.graphics_backend == composition::GraphicsBackend::Cpu || !job_.settings.gpu_composition_enabled || failed_ || cpu_source_recovery_ || (!options_.gpu_surface && job_.settings.graphics_backend != composition::GraphicsBackend::Vulkan)) return nullptr;
+    if(!graph_gpu_ && job_.settings.graphics_backend==composition::GraphicsBackend::Vulkan)
+        graph_gpu_=std::make_unique<composition::VulkanFrameCompositor>(device_,256ULL*1024*1024,8);
     if (!graph_gpu_) graph_gpu_ = composition::createGpuFrameCompositor(options_.gpu_surface,
         composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext(),
         std::make_shared<composition::OpenGlTexturePoolBudget>(256ULL * 1024 * 1024, 8), job_.settings.graphics_backend);
@@ -171,11 +251,36 @@ void ExportComposition::fallback(const composition::OpenGlCompositionResult& res
 std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const std::vector<composition::CompositionLayer>& layers,
     std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,
     creative_suite::media::NativeVideoFramePool* native_pool,
-    creative_suite::media::NativeVideoFramePtr* native_output, composition::GpuReadbackTicket* async_ticket) {
+    creative_suite::media::NativeVideoFramePtr* native_output, composition::GpuReadbackTicket* async_ticket,composition::VulkanNativeExportTicket* native_ticket) {
     if (canceled.load()) throw ExportCanceled{};
     ExportTimedScope total(metrics_.composition_nanoseconds);
     if (native_output) native_output->reset();
     if(async_ticket)*async_ticket={};
+    if(native_ticket)*native_ticket={};
+    if(native_ticket && bridge_ && !failed_ && !cpu_source_recovery_){
+        ExportTimedScope gpu_time(metrics_.gpu_composition_nanoseconds);
+        composition::OpenGlCompositionTimings timing;composition::VulkanNativeExportResult submitted;
+        auto target=output_pool_->acquire();if(!target)throw ExportAsyncBackpressure{};
+        try{
+            auto batch=async_gpu_->beginCommandBatch([&]{return canceled.load();});
+            auto source=async_gpu_->composeTexture(job_.settings.width,job_.settings.height,layers,[&]{return canceled.load();},&timing);
+            submitted={source.status,{}, {},source.cause,source.error_code};
+            if(source.frame){
+                if(options_.fail_native_submission_for_testing && ++native_attempts_==options_.fail_native_submission_for_testing)
+                    submitted={composition::GpuCompositionStatus::Failed,{}, {},"Injected native submission failure."};
+                else submitted=bridge_->submit(source.frame,target,[&]{return canceled.load();});
+            }
+        }catch(const std::exception& error){submitted={composition::GpuCompositionStatus::Failed,{}, {},error.what()};}
+        metrics_.uploaded_bytes+=timing.uploaded_bytes;metrics_.upload_nanoseconds+=timing.upload_nanoseconds;metrics_.draw_submission_nanoseconds+=timing.draw_submission_nanoseconds;
+        snapshotNativeMetrics();
+        if(submitted.status==composition::GpuCompositionStatus::Cancelled || canceled.load())throw ExportCanceled{};
+        if(submitted.status==composition::GpuCompositionStatus::Busy)throw ExportAsyncBackpressure{};
+        if(submitted.status==composition::GpuCompositionStatus::Complete){*native_ticket=submitted.ticket;return creative_suite::media::RgbaFrame{job_.settings.width,job_.settings.height,job_.settings.width*4,{}};}
+        // Do not retire older tickets until the application marks their frames for replay.
+        if(submitted.status==composition::GpuCompositionStatus::Failed){metrics_.native_fallback_reason=submitted.cause;fallback({submitted.status,{},"vulkan-native-submit",submitted.cause,submitted.error_code},output_frame,timeline_frame);}
+        else throw CpuCompositionSourcesRequired{};
+    }
+
     if(async_ticket && async_gpu_ && async_slots_ && !failed_ && !cpu_source_recovery_){
         if(options_.disable_async_readback_for_testing)throw ExportAsyncBackpressure{};
         composition::OpenGlCompositionTimings timings;
@@ -199,7 +304,7 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
         }
         fallback({submitted.status,{},submitted.operation,submitted.cause,submitted.error_code},output_frame,timeline_frame);
     }
-    if (native_pool && native_output && nativeDelivery()) {
+    if (native_pool && native_output && nativeDelivery() && job_.settings.graphics_backend!=composition::GraphicsBackend::Vulkan) {
         ExportTimedScope gpu_time(metrics_.gpu_composition_nanoseconds);
         if (!native_gpu_) native_gpu_ = composition::createGpuFrameCompositor(options_.gpu_surface,
             composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext());
@@ -233,7 +338,7 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
             if (destination) copied = native_gpu_->copyToNative(texture.frame, destination, [&] { return canceled.load(); });
             else copied = {composition::OpenGlCompositionStatus::Busy, {}, "native-output-pool", "All native encoding frames are retained."};
             if (copied.status == composition::OpenGlCompositionStatus::Complete) {
-                *native_output = std::move(destination); ++metrics_.gpu_frames;
+                *native_output = std::move(destination); ++metrics_.gpu_frames;metrics_.delivery_path="opengl-d3d11-nvenc";
                 return creative_suite::media::RgbaFrame{job_.settings.width, job_.settings.height, job_.settings.width * 4};
             }
         }
@@ -246,6 +351,7 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
         {
             ExportTimedScope gpu_time(metrics_.gpu_composition_nanoseconds);
             try {
+                if(!gpu_ && job_.settings.graphics_backend==composition::GraphicsBackend::Vulkan && !options_.gpu_factory)gpu_=std::make_unique<NativeExportGpu>(device_);
                 if (!gpu_) gpu_ = options_.gpu_factory ? options_.gpu_factory(options_.gpu_surface)
                                                        : std::make_unique<NativeExportGpu>(options_.gpu_surface, job_.settings.graphics_backend);
                 if (gpu_) result = gpu_->compose(job_.settings.width, job_.settings.height, layers,
@@ -269,6 +375,7 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
             result.frame->rgba_pixels.size() >= static_cast<std::size_t>(result.frame->stride) * result.frame->height) {
             ++metrics_.gpu_frames; return std::move(result.frame);
         }
+        if(result.status==composition::GpuCompositionStatus::Busy)result={composition::GpuCompositionStatus::Unsupported,{},"gpu-capacity","The bounded GPU capacity is occupied."};
         if (result.status != composition::OpenGlCompositionStatus::Unsupported && result.status != composition::OpenGlCompositionStatus::Failed)
             result = {composition::OpenGlCompositionStatus::Failed, {}, "compose-export", "The GPU adapter returned an incomplete RGBA frame or an unexpected status."};
         fallback(result, output_frame, timeline_frame);

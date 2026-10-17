@@ -16,6 +16,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <cstdlib>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -331,6 +332,12 @@ struct VideoEncoder::Impl {
             if (!video_codec->hw_frames_ctx) throw std::runtime_error("Retaining VAAPI encoding frames failed.");
             video_codec->pix_fmt = AV_PIX_FMT_VAAPI;
         }
+        // Diagnostic comparison only: match the bounded native input's latency
+        // options for RGBA. Ordinary software-input codec settings stay unchanged.
+        const auto* match_native_latency=std::getenv("CREATIVE_SUITE_NVENC_NATIVE_LATENCY");
+        if(settings.video_encoder_name.ends_with("_nvenc") && match_native_latency && std::string_view(match_native_latency)=="1"){
+            av_dict_set(&options,"delay","0",0);av_dict_set(&options,"rc-lookahead","0",0);
+        }
         if (settings.native_frame_template) {
             if (!settings.video_encoder_name.ends_with("_nvenc") ||
                 settings.native_frame_template->d3d11_view().format != NativeVideoFormat::Bgra8 ||
@@ -492,7 +499,8 @@ VideoEncoder::~VideoEncoder() = default;
 VideoEncoder::VideoEncoder(VideoEncoder&&) noexcept = default;
 VideoEncoder& VideoEncoder::operator=(VideoEncoder&&) noexcept = default;
 
-void VideoEncoder::writeVideo(const RgbaFrame& source, std::int64_t output_frame) {
+void VideoEncoder::writeVideo(const RgbaFrame& source, std::int64_t output_frame) {writeVideo(source,{},output_frame);}
+void VideoEncoder::writeVideo(const RgbaFrame& source,const NativeVideoFramePtr& destination,std::int64_t output_frame) {
     if (impl_ == nullptr || impl_->finished) {
         throw std::logic_error("The video encoder is not writable.");
     }
@@ -507,6 +515,7 @@ void VideoEncoder::writeVideo(const RgbaFrame& source, std::int64_t output_frame
         throw std::invalid_argument("The source frame does not match the output settings.");
     }
     const bool native = impl_->video_codec->hw_frames_ctx != nullptr;
+    if(destination && !native)throw std::invalid_argument("Bounded recovery requires a native encoder context.");
     const auto software_format = native ? reinterpret_cast<const AVHWFramesContext*>(
         impl_->video_codec->hw_frames_ctx->data)->sw_format : impl_->video_codec->pix_fmt;
     FramePtr software;
@@ -538,7 +547,15 @@ void VideoEncoder::writeVideo(const RgbaFrame& source, std::int64_t output_frame
         throw std::runtime_error("Converting an output video frame failed.");
     }
     if (native) {
-        check(av_hwframe_get_buffer(impl_->video_codec->hw_frames_ctx, hardware.get(), 0), "Allocating native fallback storage");
+        if(destination){
+            const auto* target=static_cast<const AVFrame*>(destination->retained_frame());
+            const auto* context=reinterpret_cast<const AVHWFramesContext*>(target->hw_frames_ctx->data);
+            const auto* output=reinterpret_cast<const AVHWFramesContext*>(impl_->video_codec->hw_frames_ctx->data);
+            if(!acceptsNativeFrames() || destination->width()!=impl_->settings.width || destination->height()!=impl_->settings.height ||
+               context->device_ctx!=output->device_ctx || context->sw_format!=AV_PIX_FMT_BGRA || !target->buf[0] || av_buffer_get_ref_count(target->buf[0])!=1)
+                throw std::invalid_argument("The bounded recovery destination is incompatible or still consumed.");
+            hardware.reset(av_frame_clone(target));if(!hardware)throw std::runtime_error("Retaining the recovery destination failed.");
+        }else check(av_hwframe_get_buffer(impl_->video_codec->hw_frames_ctx, hardware.get(), 0), "Allocating native fallback storage");
         check(av_hwframe_transfer_data(hardware.get(), converted, 0), "Uploading native fallback pixels");
         impl_->uploaded_video_bytes += static_cast<std::uint64_t>(av_image_get_buffer_size(
             software_format, impl_->settings.width, impl_->settings.height, 1));

@@ -155,3 +155,14 @@ Schema 2 includes `decode_packet_ns`, `decode_receive_ns`,
 worker and does not add its samples to preview diagnostics. These wall-time
 stages may nest inside preparation/graph time; do not sum them as independent
 GPU execution times.
+
+## Qualified Vulkan native delivery
+
+Windows jobs selecting Vulkan, GPU export and H.264/HEVC NVENC can use the
+[qualified native bridge](VULKAN_NATIVE_EXPORT.md). Existing settings select the
+path; no new UI or persistence field is needed. The session device, native output
+pool and bridge share a known 256 MiB budget through external reservation leases.
+The existing FIFO supports both native and RGBA tickets, with ordered bounded
+recovery of only unencoded frames and unchanged audio/atomic publication. Outside
+the preset qualification matrix or without matching runtime capabilities, use
+RGBA with the selected encoder. Native encoding errors remain fatal.

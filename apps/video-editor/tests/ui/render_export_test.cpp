@@ -1,10 +1,12 @@
 #include "media/video_playback.h"
 #include <creative_suite/composition/vulkan_frame_compositor.h>
+#include <creative_suite/composition/vulkan_native_export.h>
 #include "media/audio_playback.h"
 #include "media/video_probe.h"
 #include "timeline/timeline_history.h"
 #include "video_fixture.h"
 #include "rendering/offline_export_renderer.h"
+#include "rendering/vulkan_nvenc_policy.h"
 #include "rendering/render_output_capabilities.h"
 #include "workspaces/render/queue/render_queue_controller.h"
 #include "logging/logger.h"
@@ -1300,7 +1302,8 @@ void validateGpuFallback(const OutputChoice& output, const std::filesystem::path
             require(was_canceled && warnings == 0 && metrics.outcome == rendering::ExportOutcome::Canceled &&
                 contents == "previous output", "GPU cancellation damaged previous output or reported an error.");
         } else {
-            const bool unsupported = statuses[0] == Status::Unsupported;
+            // Temporary capacity now recovers this frame without latching a device failure.
+            const bool unsupported = statuses[0] == Status::Unsupported || statuses[0] == Status::Busy;
             const bool mid_failure = statuses[0] == Status::Complete;
             require(!was_canceled && warning_logged && warning_code_valid && metrics.outcome == rendering::ExportOutcome::Completed && warnings == 1 &&
                 metrics.encoded_frames == 8 && metrics.cpu_frames + metrics.gpu_frames == 8 &&
@@ -1365,8 +1368,9 @@ void validateGpuFallback(const OutputChoice& output, const std::filesystem::path
         "Cancellation after frame submission omitted its partial summary.");
 }
 
-void validateActiveQueueShutdown(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
+void validateActiveQueueShutdown(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root,bool native=false) {
     auto job = makeImageJob(output, image, root / "closed-queue.mkv", 450, 100000);
+    if(native){job.settings.video_encoder_name="h264_nvenc";job.settings.container_name="matroska";job.settings.width=1280;job.settings.height=720;job.settings.frame_rate=30;job.settings.video_bitrate_mbps=4.4;job.settings.gpu_composition_enabled=true;}
     std::ofstream(job.settings.output_path.toStdString(), std::ios::binary) << "previous output";
     QEventLoop loop;
     bool first_frame = false;
@@ -1743,6 +1747,8 @@ void validateAsyncVulkan(const OutputChoice& output,const std::filesystem::path&
     std::cout<<"native_vulkan_async_export=passed fifo=2 fallback=1 cancellation=1 memory_downgrade=1\n";
 }
 
+#include "vulkan_native_export_test.inc"
+
 void benchmarkExport(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
     compare_before_encoding = false;
     const auto previous_factory=native_options.gpu_factory;native_options.gpu_factory={};
@@ -1805,7 +1811,8 @@ int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     std::shared_ptr<creative_suite::composition::VulkanDevice> vulkan_device;
     if (application.arguments().contains("--vulkan")) {
-        std::string cause; vulkan_device = creative_suite::composition::VulkanDevice::create(cause);
+        std::string cause;creative_suite::composition::VulkanDevice::CreateOptions creation;creation.try_native_export=true;
+        vulkan_device = creative_suite::composition::VulkanDevice::create(cause,creation);
         if (!vulkan_device) { std::cerr << cause << '\n'; return application.arguments().contains("--require-gpu") ? 1 : 77; }
         creative_suite::composition::setSessionVulkanDevice(vulkan_device);
         creative_suite::composition::setSessionGraphicsBackend(creative_suite::composition::GraphicsBackend::Vulkan);
@@ -1837,7 +1844,24 @@ int main(int argc, char* argv[]) {
         require(source.save(pathToQString(green_image_path)),
                 "Could not create a second deterministic still-image fixture.");
 
+        validateNvencPolicy();
         const auto output = chooseOutput();
+        if(!application.arguments().contains("--require-gpu") &&
+            (application.arguments().contains("--native-retirement-only") || application.arguments().contains("--native-bridge-only"))){
+            if(!vulkan_device || !vulkan_device->supportsNativeExport())return 77;
+            creative_suite::media::NativeVideoFramePool pool(320,180,2);auto frame=pool.acquire();
+            creative_suite::composition::VulkanNativeExportBridge probe(vulkan_device);auto available=probe.prepare(frame);
+            if(available.status==creative_suite::composition::GpuCompositionStatus::Unsupported)return 77;
+            require(available.status==creative_suite::composition::GpuCompositionStatus::Complete,"Native availability probe failed technically.");
+        }
+        if(application.arguments().contains("--native-retirement-only")){validateUnconfirmedRetirement(output,image_path,root);return 0;}
+        if(application.arguments().contains("--native-bridge-only") || application.arguments().contains("--qualify-native") || application.arguments().contains("--native-bridge-benchmark")){
+            require(bool(vulkan_device),"Native bridge tests require --vulkan.");
+            if(!vulkan_device->supportsNativeExport())return application.arguments().contains("--require-gpu")?1:77;
+            if(application.arguments().contains("--native-bridge-benchmark"))benchmarkIntegratedNvenc(output,image_path,root);
+            else validateIntegratedNvenc(output,image_path,green_image_path,root,application.arguments().contains("--qualify-native"));
+            return 0;
+        }
         if (application.arguments().contains("--nvenc-only")) {
             require(bool(vulkan_device), "The Vulkan NVENC test requires --vulkan.");
             validateVulkanNvenc(output, image_path, root); return 0;
