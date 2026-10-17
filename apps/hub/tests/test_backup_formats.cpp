@@ -375,6 +375,21 @@ void testMotionDocuments(const QString& root) {
     const auto restored_hierarchy=Store::load(fsPath(hierarchy_backup.restored));
     CS_TEST_CHECK(restored_hierarchy==project);
     CS_TEST_CHECK(std::filesystem::exists(restored_hierarchy.layers.front().source_path));
+    CS_TEST_CHECK(hierarchy.setLayerAnchorPoint(null_id,{-10.5,35.25}));
+    CS_TEST_CHECK(hierarchy.setLayerAnchorPoint(id,{4.5,-2}));
+    CS_TEST_CHECK(hierarchy.setLayerAnchorKeyframe(id,AnchorProperty::X,0,4.5));
+    CS_TEST_CHECK(hierarchy.setLayerAnchorKeyframe(id,AnchorProperty::X,30,40));
+    CS_TEST_CHECK(hierarchy.setLayerAnchorKeyframeInterpolation(id,AnchorProperty::X,0,
+        creative_suite::animation::InterpolationMode::CubicBezier,{.42,0,1,1}));
+    project.layers=hierarchy.layers();
+    const auto anchor_path=QDir(QFileInfo(assets).absolutePath()).filePath("anchor.motion");
+    Store::save(fsPath(anchor_path),project);
+    CS_TEST_CHECK(QJsonDocument::fromJson(readBytes(anchor_path)).object().value("version").toInt()==11);
+    const auto anchor_backup=backup(QDir(root).filePath("motion-anchor-v11"),anchor_path);
+    CS_TEST_CHECK(Store::load(fsPath(anchor_backup.vault))==project);
+    const auto restored_anchor=Store::load(fsPath(anchor_backup.restored));
+    CS_TEST_CHECK(restored_anchor==project);
+    CS_TEST_CHECK(std::filesystem::exists(restored_anchor.layers.front().source_path));
 }
 #endif
 

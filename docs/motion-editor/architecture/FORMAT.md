@@ -5,7 +5,7 @@ mask reference. Editable interchange now accepts `.cscomp` v3 ordered Color/Blur
 stages; no Motion schema change is required. See [contract](../../COMPOSITION_INTERCHANGE.md).
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 10 schema may change before a stable release. This format is separate
+version 11 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 ## File identity and versioning
@@ -15,22 +15,22 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `10`. |
+| `version` | integer | Current schema version is `11`. |
 | `revision` | decimal string | Monotonic saved revision used to reject stale linked writes. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1 through 10. Version 1 text and shape layers
+Motion Studio reads versions 1 through 11. Version 1 text and shape layers
 had no typed content, so they open with the current default text or rectangle content
 for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
-older document writes it as version 10. Versions 1 through 5 load without linked
+older document writes it as version 11. Versions 1 through 5 load without linked
 Image Editor metadata. Motion Studio rejects malformed data, an
 unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
 
-Hub snapshots preserve versions 1–10 and rebase relative media and linked-image
+Hub snapshots preserve versions 1–11 and rebase relative media and linked-image
 references to their original absolute locations. Relative-directory escape
 restrictions are retained. Native save behavior is unchanged and media are not
 bundled. See [Hub backups](../../hub/BACKUPS.md) and the producer/consumer
@@ -58,7 +58,8 @@ Each `layers` entry stores:
   `source_frame_count`, `source_duration_frames`, and
   `maximum_timeline_duration_frames`;
 - the source frame rate, visibility, base 2D transform, and stored transform
-  keyframes for position X/Y, scale, rotation, and opacity.
+  keyframes for position X/Y, scale, rotation, and opacity;
+- optional Motion-owned pixel `anchor_point` values and scalar curves (v11).
 
 Version 6 adds an optional `linked_image` object to Image layers. It contains
 `document_path`, `published_output_path`, and `source_snapshot_path`, each a
@@ -173,7 +174,7 @@ UTF-8 JSON wrapper uses format identifier
 `creative-suite.motion-studio-recovery` and wrapper version `1`. Its fields are
 `format`, `version`, `target_document_path`, `session_id`, and `document`. The
 `document` value uses the same validated payload described above and may be
-version 1 through 10; preview caches and Undo/Redo history are not included. The
+version 1 through 11; preview caches and Undo/Redo history are not included. The
 wrapper remains version 1 and its nested document is written atomically with
 `QSaveFile`.
 
@@ -280,6 +281,45 @@ empty. Position, uniform scale, rotation, and their curves remain editable.
 Parenting does not change layer order or local curves. Parent opacity,
 visibility, activity, effects, and masks are not inherited. Pixel-space
 resolution, pose-preserving edits, and pending manual checks are defined in
-[Layer hierarchy](../features/HIERARCHY.md). Hub supports v10 snapshots.
+[Layer hierarchy](../features/HIERARCHY.md). Hub supports these records through v11 snapshots.
 `.cscomp` v3 cannot represent Nulls, parents, or nonidentity compensation, so
 export rejects them with layer-specific issues rather than flattening them.
+
+## Version 11 animated Anchor Point
+
+Every layer, including a Null, may contain an optional `anchor_point` object:
+
+```json
+"anchor_point": {
+  "x_pixels": -12.5,
+  "y_pixels": 6.25,
+  "keyframes": {
+    "x_pixels": [
+      {"frame": "0", "value": -12.5, "interpolation": "linear",
+       "easing": {"x1": 0.3333333333333333, "y1": 0.3333333333333333,
+                  "x2": 0.6666666666666666, "y2": 0.6666666666666666}},
+      {"frame": "30", "value": 24.5, "interpolation": "linear",
+       "easing": {"x1": 0.3333333333333333, "y1": 0.3333333333333333,
+                  "x2": 0.6666666666666666, "y2": 0.6666666666666666}}
+    ]
+  }
+}
+```
+
+`x_pixels` and `y_pixels` are required finite numbers when the object is present.
+The optional `keyframes` object accepts optional arrays for those two axes,
+using the existing scalar frame/value/interpolation/easing representation,
+ordering and validation. Both curves count toward the 2,000,000 total keyframe
+limit. Unknown object fields or axes, malformed curves and Anchor records in
+versions before v11 are rejected. Omitted axes in `keyframes` mean empty curves;
+omitting `anchor_point` means zero base values and empty curves. The writer omits
+the entire object only when both bases are zero and both curves are empty.
+Versions 1–10 migrate to those defaults.
+
+Pixels are relative to the local center, after initial canvas fit but before
+editable scale/rotation. Local geometry includes `T(-Anchor)` and feeds the
+existing hierarchy/Transform stage. See [Anchor Point](../features/ANCHOR_POINT.md)
+for editing and compensation semantics. Save, autosave and recovery retain these
+fields; the recovery wrapper stays at version 1. Hub accepts native v11, rebases
+existing media fields without changing Anchor or parenting, and rejects v12.
+`.cscomp` remains v3 and refuses nonzero base Anchor or nonempty Anchor curves.

@@ -351,7 +351,7 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
             layer->duration_frames,
             layer->maximum_timeline_duration_frames,
             layer->keyframes,
-            layer->effects});
+            layer->effects, layer->anchor_keyframes});
         if (layer->kind != model::LayerKind::Null && layer->timeline_start_frame >= 0 && layer->duration_frames > 0) {
             const auto end_frame = layer->duration_frames >
                     maximum_frame - layer->timeline_start_frame
@@ -807,6 +807,13 @@ void TimelineNavigator::updateControls()
         zoom_out_action_->setEnabled(controls_->zoomOutButton()->isEnabled());
     }
 }
+
+void TimelineNavigator::setAnchorKeyframeSelectedHandler(std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)> handler)
+{ layer_tracks_->setAnchorKeyframeSelectedHandler(std::move(handler)); }
+void TimelineNavigator::setAnchorKeyframeMoveHandler(std::function<bool(model::LayerId, model::AnchorProperty, std::int64_t, std::int64_t)> handler)
+{ layer_tracks_->setAnchorKeyframeMoveHandler(std::move(handler)); }
+void TimelineNavigator::setAnchorCurveSegmentSelectedHandler(std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)> handler)
+{ layer_tracks_->setAnchorCurveSegmentSelectedHandler(std::move(handler)); }
 
 } // namespace motion::ui
 

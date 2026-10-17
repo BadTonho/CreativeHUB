@@ -275,8 +275,18 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             if (fail_on_media_error) throw std::runtime_error("Missing layer hierarchy snapshot node.");
             return {};
         }
-        const auto effective_transform = request.hierarchy ? resolved_entry->second :
+        auto effective_transform = request.hierarchy ? resolved_entry->second :
             creative_suite::animation::evaluateTransform(layer.transform, layer.keyframes, layer.local_frame);
+        if (!request.hierarchy) {
+            const model::AnchorPoint anchor{
+                creative_suite::animation::evaluateScalar(layer.anchor_point.x_pixels,layer.anchor_keyframes[0],layer.local_frame),
+                creative_suite::animation::evaluateScalar(layer.anchor_point.y_pixels,layer.anchor_keyframes[1],layer.local_frame)};
+            if (anchor != model::AnchorPoint{}) {
+                const auto geometry = model::geometryOffset(effective_transform,request.canvas_size,anchor);
+                effective_transform.position_x=geometry.translation_x_pixels/request.canvas_size.width;
+                effective_transform.position_y=geometry.translation_y_pixels/request.canvas_size.height;
+            }
+        }
         creative_suite::media::RgbaFramePtr frame;
         if (layer.kind == model::LayerKind::Image) {
             frame = layer.still_frame;

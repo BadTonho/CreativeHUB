@@ -41,6 +41,7 @@ public:
         model::CanvasSize canvas_size,
         std::optional<QPointF> selected_layer_anchor);
     void setSelectedLayerAnchor(std::optional<QPointF> selected_layer_anchor);
+    [[nodiscard]] std::optional<QPointF> selectedLayerAnchor() const noexcept { return selected_layer_anchor_; }
     void setRenderedFrame(creative_suite::media::RgbaFramePtr frame,
                           std::uint64_t request_generation = 0);
     [[nodiscard]] creative_suite::media::RgbaFramePtr renderedFrame() const noexcept;

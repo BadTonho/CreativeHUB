@@ -96,6 +96,8 @@ void MainWindow::requestPreview(bool playback_tick)
         snapshot.source_mask=layer.source_mask;snapshot.transform_mask=layer.transform_mask;
         snapshot.source_frame_rate = layer.source_frame_rate;
         snapshot.transform = layer.transform;
+        snapshot.anchor_point = layer.anchor_point;
+        snapshot.anchor_keyframes = layer.anchor_keyframes;
         snapshot.keyframes = layer.keyframes;
         snapshot.content = layer.content;
         snapshot.effects = layer.effects;

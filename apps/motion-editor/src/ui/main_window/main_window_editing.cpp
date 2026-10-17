@@ -318,7 +318,9 @@ void MainWindow::refreshCurveEditor()
             return;
         }
     }
-    const auto& keys = mask
+    const auto* anchor_keys = curve_selection_->anchor_property
+        ? &found->anchor_keyframes[static_cast<std::size_t>(*curve_selection_->anchor_property)] : nullptr;
+    const auto& keys = anchor_keys ? *anchor_keys : mask
         ? mask->keyframes[curve_selection_->mask_property]
         : (effect_curve
             ? *effect_keys
@@ -330,7 +332,10 @@ void MainWindow::refreshCurveEditor()
         curve_selection_->segment_start_frame = keys.front().frame;
     }
     const auto segment=keys.size()>=2?std::optional<std::int64_t>(curve_selection_->segment_start_frame):std::nullopt;
-    if(mask){const std::array<QString,5> names{{MotionUiTranslation::tr("Center X"),MotionUiTranslation::tr("Center Y"),MotionUiTranslation::tr("Width"),MotionUiTranslation::tr("Height"),MotionUiTranslation::tr("Rotation")}};
+    if (anchor_keys) {
+        curve_editor_->setScalarCurve(found->id,*curve_selection_->anchor_property==model::AnchorProperty::X
+            ?MotionUiTranslation::tr("Anchor X (px)"):MotionUiTranslation::tr("Anchor Y (px)"),keys,segment);
+    } else if(mask){const std::array<QString,5> names{{MotionUiTranslation::tr("Center X"),MotionUiTranslation::tr("Center Y"),MotionUiTranslation::tr("Width"),MotionUiTranslation::tr("Height"),MotionUiTranslation::tr("Rotation")}};
         curve_editor_->setScalarCurve(mask->id,MotionUiTranslation::tr("Mask #%1 / %2 (composition frames)").arg(mask->id).arg(names[curve_selection_->mask_property]),keys,segment);
     } else if (effect_curve) {
         QString prop_label;
@@ -383,17 +388,7 @@ void MainWindow::applyCurvePreset(int preset_index)
     finishPendingTransformEdit();
     const auto [interpolation, easing] = easingForPreset(preset_index);
     const auto before = captureEditState();
-    const bool changed=curve_selection_->mask_id
-        ? document_->setMaskKeyframeInterpolation(curve_selection_->mask_id,curve_selection_->mask_property,curve_selection_->segment_start_frame,interpolation,easing)
-        : (curve_selection_->effect_index.has_value()
-            ? document_->setEffectKeyframeInterpolation(
-                curve_selection_->layer_id,
-                *curve_selection_->effect_index,
-                curve_selection_->effect_property,
-                curve_selection_->segment_start_frame,
-                interpolation,
-                easing)
-            : document_->setLayerKeyframeInterpolation(curve_selection_->layer_id,curve_selection_->property,curve_selection_->segment_start_frame,interpolation,easing));
+    const bool changed=applySelectedCurveInterpolation(curve_selection_->segment_start_frame,interpolation,easing);
     if (!changed) {
         refreshCurveEditor();
         return;
@@ -411,17 +406,7 @@ void MainWindow::applyCurveEasing(
     if (!document_ || !curve_selection_) return;
     finishPendingTransformEdit();
     auto before = captureEditState();
-    const bool changed=curve_selection_->mask_id
-        ? document_->setMaskKeyframeInterpolation(curve_selection_->mask_id,curve_selection_->mask_property,local_start_frame,InterpolationMode::CubicBezier,easing)
-        : (curve_selection_->effect_index.has_value()
-            ? document_->setEffectKeyframeInterpolation(
-                curve_selection_->layer_id,
-                *curve_selection_->effect_index,
-                curve_selection_->effect_property,
-                local_start_frame,
-                InterpolationMode::CubicBezier,
-                easing)
-            : document_->setLayerKeyframeInterpolation(curve_selection_->layer_id,curve_selection_->property,local_start_frame,InterpolationMode::CubicBezier,easing));
+    const bool changed=applySelectedCurveInterpolation(local_start_frame,InterpolationMode::CubicBezier,easing);
     if (!changed) {
         refreshCurveEditor();
         return;
@@ -601,13 +586,16 @@ void MainWindow::syncTransformInspector()
         if (!hierarchy_snapshot_ || !hierarchy_snapshot_->matches(document_->canvasSize(), document_->layers()))
             hierarchy_snapshot_ = std::make_shared<const model::LayerTransformHierarchy>(document_->canvasSize(), document_->layers());
         evaluated = hierarchy_snapshot_->evaluate(frame).at(selected->id);
+        const auto pivot=model::resolvedAnchorPosition(evaluated,model::evaluateLayerAnchor(*selected,
+            frame<selected->timeline_start_frame?0:frame-selected->timeline_start_frame),document_->canvasSize());
+        evaluated.position_x=pivot[0];evaluated.position_y=pivot[1];
     } catch (const std::exception& error) {
         creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
             "motion_document", "evaluate_selected_hierarchy", error.what());
         if (viewer_) viewer_->setSelectedLayerAnchor(std::nullopt);
         return;
     }
-    if (viewer_ != nullptr) viewer_->setSelectedLayerAnchor(selected->visible && selected->kind != model::LayerKind::Null
+    if (viewer_ != nullptr) viewer_->setSelectedLayerAnchor(selected->visible
         ? std::optional<QPointF>(QPointF(evaluated.position_x, evaluated.position_y))
         : std::nullopt);
 }

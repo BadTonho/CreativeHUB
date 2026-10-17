@@ -43,38 +43,52 @@ std::filesystem::path pathFromQString(const QString& value)
     return std::filesystem::path(std::u8string(first, first + utf8.size()));
 }
 
-using TransformProperty = creative_suite::animation::TransformProperty;
+enum class TrackProperty { PositionX, PositionY, Scale, Rotation, Opacity, AnchorX, AnchorY };
 
-constexpr std::array<creative_suite::animation::TransformProperty, 5> kTimelineProperties{{
-    creative_suite::animation::TransformProperty::PositionX,
-    creative_suite::animation::TransformProperty::PositionY,
-    creative_suite::animation::TransformProperty::Scale,
-    creative_suite::animation::TransformProperty::Rotation,
-    creative_suite::animation::TransformProperty::Opacity,
+constexpr std::array<TrackProperty, 7> kTimelineProperties{{
+    TrackProperty::PositionX,
+    TrackProperty::PositionY,
+    TrackProperty::Scale,
+    TrackProperty::Rotation,
+    TrackProperty::Opacity,
+    TrackProperty::AnchorX,
+    TrackProperty::AnchorY,
 }};
 
-QString propertyName(creative_suite::animation::TransformProperty property)
+const creative_suite::animation::ScalarKeyframes& trackKeys(const TimelineLayerRow& row, TrackProperty property)
 {
-    using P = creative_suite::animation::TransformProperty;
+    if (property == TrackProperty::AnchorX) return row.anchor_keyframes[0];
+    if (property == TrackProperty::AnchorY) return row.anchor_keyframes[1];
+    return creative_suite::animation::keyframesFor(row.keyframes,
+        static_cast<creative_suite::animation::TransformProperty>(property));
+}
+
+QString propertyName(TrackProperty property)
+{
+    using P = TrackProperty;
     switch (property) {
     case P::PositionX: return MotionUiTranslation::tr("Position X");
     case P::PositionY: return MotionUiTranslation::tr("Position Y");
     case P::Scale: return MotionUiTranslation::tr("Scale");
     case P::Rotation: return MotionUiTranslation::tr("Rotation");
     case P::Opacity: return MotionUiTranslation::tr("Opacity");
+    case P::AnchorX: return MotionUiTranslation::tr("Anchor X (px)");
+    case P::AnchorY: return MotionUiTranslation::tr("Anchor Y (px)");
     }
     return {};
 }
 
-QColor propertyColor(creative_suite::animation::TransformProperty property)
+QColor propertyColor(TrackProperty property)
 {
-    using P = creative_suite::animation::TransformProperty;
+    using P = TrackProperty;
     switch (property) {
     case P::PositionX: return QColor(100, 190, 255);
     case P::PositionY: return QColor(130, 225, 180);
     case P::Scale: return QColor(210, 160, 255);
     case P::Rotation: return QColor(255, 190, 90);
     case P::Opacity: return QColor(255, 125, 150);
+    case P::AnchorX: return QColor(130, 200, 240);
+    case P::AnchorY: return QColor(120, 220, 190);
     }
     return QColor(255, 255, 255);
 }
@@ -126,7 +140,7 @@ struct VisualTimelineRow {
     };
     std::size_t layer_index = 0;
     Kind kind = Kind::Layer;
-    std::optional<creative_suite::animation::TransformProperty> property;
+    std::optional<TrackProperty> property;
     std::size_t effect_index = 0;
     std::optional<model::EffectParameterProperty> effect_property;
 };
@@ -224,10 +238,28 @@ public:
     std::function<void(model::LayerId, std::size_t)> layer_reorder;
     std::function<void(model::LayerId, bool)> layer_visibility;
     std::function<void(model::LayerId)> layer_remove;
-    std::function<void(model::LayerId, TransformProperty, std::int64_t)> keyframe_selected;
-    std::function<bool(model::LayerId, TransformProperty, std::int64_t, std::int64_t)>
+    std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)> anchor_keyframe_selected;
+    std::function<bool(model::LayerId, model::AnchorProperty, std::int64_t, std::int64_t)> anchor_keyframe_move;
+    std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)> anchor_curve_segment_selected;
+    void selectTrackCurve(model::LayerId id, TrackProperty property, std::int64_t frame) {
+        if (property >= TrackProperty::AnchorX) {
+            if (anchor_curve_segment_selected) anchor_curve_segment_selected(id, property == TrackProperty::AnchorX ? model::AnchorProperty::X : model::AnchorProperty::Y, frame);
+        } else if (curve_segment_selected) curve_segment_selected(id,static_cast<creative_suite::animation::TransformProperty>(property),frame);
+    }
+    void selectTrackKey(model::LayerId id, TrackProperty property, std::int64_t frame) {
+        if (property >= TrackProperty::AnchorX) {
+            if (anchor_keyframe_selected) anchor_keyframe_selected(id, property == TrackProperty::AnchorX ? model::AnchorProperty::X : model::AnchorProperty::Y, frame);
+        } else if (keyframe_selected) keyframe_selected(id,static_cast<creative_suite::animation::TransformProperty>(property),frame);
+    }
+    void moveTrackKey(model::LayerId id, TrackProperty property, std::int64_t from, std::int64_t to) {
+        if (property >= TrackProperty::AnchorX) {
+            if (anchor_keyframe_move) (void)anchor_keyframe_move(id,property == TrackProperty::AnchorX ? model::AnchorProperty::X : model::AnchorProperty::Y,from,to);
+        } else if (keyframe_move) (void)keyframe_move(id,static_cast<creative_suite::animation::TransformProperty>(property),from,to);
+    }
+    std::function<void(model::LayerId, creative_suite::animation::TransformProperty, std::int64_t)> keyframe_selected;
+    std::function<bool(model::LayerId, creative_suite::animation::TransformProperty, std::int64_t, std::int64_t)>
         keyframe_move;
-    std::function<void(model::LayerId, TransformProperty, std::int64_t)>
+    std::function<void(model::LayerId, creative_suite::animation::TransformProperty, std::int64_t)>
         curve_segment_selected;
     std::function<void(model::LayerId, std::size_t, EffectParameterProperty, std::int64_t)>
         effect_keyframe_selected;
@@ -418,8 +450,7 @@ protected:
                 const int lane_center_y = top + kTimelineRowHeight / 2;
                 painter.setPen(QPen(QColor(68, 74, 83), 1));
                 painter.drawLine(mapping.axisLeft(), lane_center_y, width(), lane_center_y);
-                const auto& keyframes = creative_suite::animation::keyframesFor(
-                    row.keyframes, property);
+                const auto& keyframes = trackKeys(row, property);
                 for (const auto& keyframe : keyframes) {
                     if (keyframe.frame < 0 || keyframe.frame >= row.duration_frames) continue;
                     const auto composition_frame = row.start_frame + keyframe.frame;
@@ -549,17 +580,16 @@ protected:
         if (visual.kind == VisualTimelineRow::Kind::Property) {
             const auto property = *visual.property;
             const int lane_center_y = row_index * kTimelineRowHeight + kTimelineRowHeight / 2;
-            const auto& keyframes = creative_suite::animation::keyframesFor(
-                row.keyframes, property);
+            const auto& keyframes = trackKeys(row, property);
             for (std::size_t key_index = 0; key_index < keyframes.size(); ++key_index) {
                 const auto& keyframe = keyframes[key_index];
                 if (keyframe.frame < 0 || keyframe.frame >= row.duration_frames) continue;
                 const int marker_x = viewMapping().xForFrame(row.start_frame + keyframe.frame);
                 if (std::abs(position.x() - marker_x) <= 8 &&
                     std::abs(position.y() - lane_center_y) <= 9) {
-                    if (curve_segment_selected && keyframes.size() >= 2) {
+                    if ((curve_segment_selected || anchor_curve_segment_selected) && keyframes.size() >= 2) {
                         const auto segment_index = std::min(key_index, keyframes.size() - 2);
-                        curve_segment_selected(row.id, property,
+                        selectTrackCurve(row.id, property,
                                                keyframes[segment_index].frame);
                     }
                     interaction_mode_ = InteractionMode::MoveKeyframe;
@@ -570,7 +600,7 @@ protected:
                     return;
                 }
             }
-            if (curve_segment_selected && keyframes.size() >= 2) {
+            if ((curve_segment_selected || anchor_curve_segment_selected) && keyframes.size() >= 2) {
                 const auto clicked_local_frame = std::max<std::int64_t>(0,
                     frameAtX(position.x()) - row.start_frame);
                 const auto upper = std::upper_bound(keyframes.begin(), keyframes.end(),
@@ -581,7 +611,7 @@ protected:
                     ? std::size_t{0}
                     : std::min(static_cast<std::size_t>(
                         std::distance(keyframes.begin(), upper) - 1), keyframes.size() - 2);
-                curve_segment_selected(row.id, property,
+                selectTrackCurve(row.id, property,
                                        keyframes[segment_index].frame);
             }
             interaction_mode_ = InteractionMode::None;
@@ -786,9 +816,9 @@ protected:
             layer_resize(id, value);
         } else if (mode == InteractionMode::MoveKeyframe) {
             if (moved && value != old_keyframe) {
-                if (keyframe_move) keyframe_move(id, property, old_keyframe, value);
-            } else if (keyframe_selected) {
-                keyframe_selected(id, property, old_keyframe);
+                moveTrackKey(id, property, old_keyframe, value);
+            } else {
+                selectTrackKey(id, property, old_keyframe);
             }
         } else if (mode == InteractionMode::MoveEffectKeyframe) {
             if (moved && value != old_keyframe) {
@@ -918,7 +948,7 @@ private:
                 {index, VisualTimelineRow::Kind::TransformGroup, std::nullopt});
             if (expanded_transform_groups_.contains(layer_id)) {
                 for (const auto property : kTimelineProperties) {
-                    if (rows_[index].kind == model::LayerKind::Null && property == TransformProperty::Opacity) continue;
+                    if (rows_[index].kind == model::LayerKind::Null && property == TrackProperty::Opacity) continue;
                     visual_rows_.push_back({index, VisualTimelineRow::Kind::Property, property});
                 }
             }
@@ -1023,7 +1053,7 @@ private:
     model::LayerId selected_layer_id_ = 0;
     InteractionMode interaction_mode_ = InteractionMode::None;
     model::LayerId interaction_layer_id_ = 0;
-    TransformProperty interaction_property_ = TransformProperty::PositionX;
+    TrackProperty interaction_property_ = TrackProperty::PositionX;
     std::size_t interaction_effect_index_ = 0;
     EffectParameterProperty interaction_effect_property_ =
         EffectParameterProperty::GaussianBlurRadius;
@@ -1129,6 +1159,13 @@ void TimelineLayerTracks::setZoomStepHandler(std::function<void(int)> handler)
 { impl_->canvas->zoom_step_requested = std::move(handler); }
 void TimelineLayerTracks::setViewportWidthChangedHandler(std::function<void(int)> handler)
 { impl_->canvas->viewport_width_changed = std::move(handler); }
+
+void TimelineLayerTracks::setAnchorKeyframeSelectedHandler(std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)> handler)
+{ impl_->canvas->anchor_keyframe_selected = std::move(handler); }
+void TimelineLayerTracks::setAnchorKeyframeMoveHandler(std::function<bool(model::LayerId, model::AnchorProperty, std::int64_t, std::int64_t)> handler)
+{ impl_->canvas->anchor_keyframe_move = std::move(handler); }
+void TimelineLayerTracks::setAnchorCurveSegmentSelectedHandler(std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)> handler)
+{ impl_->canvas->anchor_curve_segment_selected = std::move(handler); }
 
 } // namespace motion::ui
 

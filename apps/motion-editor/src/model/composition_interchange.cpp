@@ -21,6 +21,10 @@ x::Document exportComposition(const MotionProjectData &project) {
     std::vector<x::Issue> issues;
     d.masks=project.masks;
     for (const auto &layer : project.layers) {
+        if (layer.anchor_point != AnchorPoint{} || !layer.anchor_keyframes[0].empty() || !layer.anchor_keyframes[1].empty()) {
+            issues.push_back({layer.id,"Anchor points and anchor animation are not supported by composition interchange."});
+            continue;
+        }
         if (layer.kind == LayerKind::Null || layer.parent_id || layer.parent_offset != ParentTransformOffset{}) {
             issues.push_back({layer.id, "Null layers and parent transforms are not supported by composition interchange."});
             continue;

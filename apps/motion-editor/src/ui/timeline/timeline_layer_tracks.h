@@ -26,6 +26,7 @@ struct TimelineLayerRow {
     std::int64_t maximum_duration_frames = 0;
     creative_suite::animation::TransformKeyframes keyframes;
     std::vector<model::LayerEffect> effects;
+    model::AnchorKeyframes anchor_keyframes;
 };
 
 class TimelineLayerTracks final : public QWidget {
@@ -70,6 +71,9 @@ public:
         std::function<void(model::LayerId,
                            creative_suite::animation::TransformProperty,
                            std::int64_t)> handler);
+    void setAnchorKeyframeSelectedHandler(std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)>);
+    void setAnchorKeyframeMoveHandler(std::function<bool(model::LayerId, model::AnchorProperty, std::int64_t, std::int64_t)>);
+    void setAnchorCurveSegmentSelectedHandler(std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)>);
     void setEffectKeyframeSelectedHandler(
         std::function<void(model::LayerId,
                            std::size_t,

@@ -2,11 +2,24 @@
 
 Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
-`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion11.
+`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion12.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v10 hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v11 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v11 Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v12 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Motion hierarchy backup verification
+
+### Motion Anchor Point, 2026-10-17
+
+Windows Release passed both backup gates with native Motion v11, base and Bezier
+Anchor curves, an anchored Null, parent compensation, masks/effects and
+linked-image references. Actual Motion persistence reopens vault and relocated
+restore documents; the manager rejects future v12. The final 16-test Motion/Hub
+integration selection passed in 10.55 seconds. Hub Release is at
+`build/apps/hub/Release/creative-suite-hub.exe`, modified 17:06:21 UTC−03:00
+(825,344 bytes). Native UI/platform acceptance remains pending. See
+[Anchor evidence](../../motion-editor/features/ANCHOR_POINT.md#automated-windows-evidence).
+
+### Earlier hierarchy delivery
 
 Motion hierarchy evidence (2026-10-17, Windows Release): both backup gates
 passed with `.motion` v10 Null layers, parent IDs, compensation, animated
@@ -60,6 +73,14 @@ Follow the repository-wide requirements in
 [`../REGRESSION_POLICY.md`](../../REGRESSION_POLICY.md).
 
 ## Coverage index
+
+Motion Anchor backup coverage uses `test_backup_formats.cpp`
+(`hub-backup-format-test`) with actual v11 writer/reader round trips of base and
+Bezier-animated Anchor, an anchored Null, parent IDs/compensation, masks/effects
+and linked-image paths. `hub-backup-manager-test` rejects v12. Vault and relocated
+restore comparisons protect retained data and media references; native backup UI
+and platform acceptance remain pending in [Backups](../BACKUPS.md) and the
+[Anchor checklist](../../motion-editor/features/ANCHOR_POINT.md#pending-manual-checks).
 
 All plain C++ Hub tests and the shared updater catalog test use
 `CS_TEST_CHECK` from `cmake/test_support/test_check.h`. Their conditions remain

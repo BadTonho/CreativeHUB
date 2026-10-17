@@ -1968,5 +1968,29 @@ Este é um ambiente inicial de trabalho para a suíte criativa de código aberto
         <source>%1 [#%2]</source>
         <translation>%1 [#%2]</translation>
     </message>
+    <message>
+        <source>Anchor X (px)</source>
+        <translation>Âncora X (px)</translation>
+    </message>
+    <message>
+        <source>Anchor Y (px)</source>
+        <translation>Âncora Y (px)</translation>
+    </message>
+    <message>
+        <source>Pixels from the fitted layer center, before editable scale and rotation.</source>
+        <translation>Pixels a partir do centro da camada ajustada, antes da escala e rotação editáveis.</translation>
+    </message>
+    <message>
+        <source>Reposition Anchor Without Moving...</source>
+        <translation>Reposicionar pivô sem mover...</translation>
+    </message>
+    <message>
+        <source>Reposition Anchor Without Moving</source>
+        <translation>Reposicionar pivô sem mover</translation>
+    </message>
+    <message>
+        <source>Keeps the layer and its children in place at the current frame. Animated affected properties receive keyframes at this frame.</source>
+        <translation>Mantém a camada e suas filhas no lugar no quadro atual. Propriedades animadas afetadas recebem keyframes neste quadro.</translation>
+    </message>
 </context>
 </TS>

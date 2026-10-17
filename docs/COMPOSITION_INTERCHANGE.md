@@ -102,6 +102,12 @@ profiles preserve the processing dimensions. See [Gaussian Blur](video-editor/fe
 
 ## Native persistence and backups
 
+Motion's native [Anchor Point](motion-editor/features/ANCHOR_POINT.md) is not
+represented by `.cscomp` v1–v3. Export refuses any layer with a nonzero base
+Anchor or nonempty Anchor curve, naming the layer. Default Anchor follows the
+existing compatibility rules, including refusal of Nulls, parents and
+nonidentity binding compensation; the exchange format remains v3.
+
 CSP v31 and Motion v8 persist optional presentation records. Motion v8 adds a shared
 mask collection and source/effect/transform associations; CSP v30 already stores
 the equivalent graph masks. CSP v31 additionally persists the static
@@ -109,8 +115,8 @@ Gaussian Blur node; versions through 30 reject that node. Older supported
 projects retain their existing rendering defaults; readers predating these
 versions reject the newer files. Motion v7 introduced composition
 name/duration and fractional font-size metadata. Autosave and recovery use the
-same native serializers. Hub backups accept CSP 1–31 and Motion 1–10, retain
-presentation, hierarchy, compensation and effect-curve records, and rebase existing media/Input paths. CSP 32 and Motion 11
+same native serializers. Hub backups accept CSP 1–31 and Motion 1–11, retain
+presentation, Anchor bases/curves, hierarchy, compensation and effect-curve records, and rebase existing media/Input paths. CSP 32 and Motion 12
 are rejected. Application versions and the existing linked-handoff v1 protocol
 are unchanged.
 

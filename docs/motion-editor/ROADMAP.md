@@ -156,8 +156,9 @@ readiness checks remain in this roadmap and
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
 | Per-app language selection loads the downloaded/bundled pt-BR catalog before the editor window and falls back to English | `motion_editor_translation_test.cpp` (`creative-suite-motion-editor-translation-catalog`) checks the General Settings selector, saved preference resolution, bundled loading, regional Portuguese selection, visible menu text, placeholders, missing-text fallback, and unsupported-locale fallback; shared `creative-suite-translations` checks preference isolation and manifest integrity | Startup-before-window code path and automated preference/catalog checks are present. Native Windows/macOS/Linux locale and clipping checks remain pending in [translation acceptance](../TRANSLATIONS_AND_LANGUAGE_PACKS.md#regression-and-acceptance). |
-| Hub snapshot references and restoration across versions 1–10 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Motion persistence producer and consumer | Automated coverage present for Media Pool, layer sources, linked-image sidecars, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
-| Layer parenting and Null controls | `layer_transform_hierarchy_test.cpp` (`creative-suite-motion-editor-hierarchy`): graph validation, pixel-space evaluation, current-pose preservation, Undo/Redo, native v10/recovery/migration, Inspector, CPU preview/export, and `.cscomp` rejection; `gpu_composition_test.cpp` covers the inherited-transform GPU/CPU boundary; `hub-backup-format-test` reopens v10 parented documents. | [Manual hierarchy checklist](features/HIERARCHY.md#pending-manual-checks); native platforms and benchmarks remain pending. |
+| Hub snapshot references and restoration across versions 1–11 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Motion persistence producer and consumer | Automated coverage present for Media Pool, layer sources, linked-image sidecars, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
+| Animated pixel Anchor Point | `layer_anchor_test.cpp` (`creative-suite-motion-editor-anchor`): geometry, compensation/history, parenting, Inspector/timeline/Graph Editor/dialog/marker, v11/recovery/v1–v10 migration, preview/export parity and interchange refusal; GPU and Hub backup tests cover their affected boundaries. | [Feature guide and pending manual checklist](features/ANCHOR_POINT.md); native visual/platform/GPU acceptance and benchmarks remain pending. |
+| Layer parenting and Null controls | `layer_transform_hierarchy_test.cpp` (`creative-suite-motion-editor-hierarchy`): graph validation, pixel-space evaluation, current-pose preservation, Undo/Redo, native parenting/recovery/migration, Inspector, CPU preview/export, and `.cscomp` rejection; `gpu_composition_test.cpp` covers the inherited-transform GPU/CPU boundary; `hub-backup-format-test` reopens parented documents with the current v11 reader. | [Manual hierarchy checklist](features/HIERARCHY.md#pending-manual-checks); native platforms and benchmarks remain pending. |
 | Composition model, validation, layer data, and timing | `composition_document_test.cpp` (`creative-suite-motion-editor-document`) | Pending manual composition and supported-layer checks remain part of MVP acceptance. |
 | Undo/Redo and edit history | `composition_history_test.cpp` (`creative-suite-motion-editor-history`) | Pending manual validation: confirm interactive edit sequences during the broader Windows UI checklist. |
 | `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Windows invalid-file and path results remain part of Windows acceptance. |
@@ -469,7 +470,7 @@ compositing capabilities that remain outside the current Motion Studio baseline
 Pool with bins, basic 2D Transform keyframes with Linear and bounded cubic
 Bezier easing in the Graph Editor, ordered Gaussian Blur and Color
 Adjustment effects with layer-local parameter keyframes and Cubic Bezier easing, stage-level animated Rectangle/Ellipse masks, RMS audio-to-keyframe
-baking, layer parenting and Null controls, `.motion` v10 persistence, `.cscomp` v3 interchange, and opaque video
+baking, layer parenting, Null controls and animated Anchor Point, `.motion` v11 persistence, `.cscomp` v3 interchange, and opaque video
 export). They are candidates, not approved release commitments. Keep
 implementation modular, local-first, and gated by measured rendering and memory
 costs.
@@ -486,9 +487,9 @@ costs.
   - Track mattes (*Alpha Matte*, *Alpha Inverted*, *Luma Matte*, *Luma Inverted*)
     using arbitrary layers as transparency or luminance mattes.
 - **Transforms, viewer gizmos, and animation curves:**
-  - Independent, animatable *Anchor Point* (`Anchor X`, `Anchor Y`) and a *Pan
-    Behind* tool to reposition a layer's pivot in the Viewer without shifting
-    its visual canvas position.
+  - *Pan Behind* and direct Viewer pivot dragging. Animated *Anchor X/Y* and
+    compensated Inspector repositioning are implemented in native v11; see
+    [Anchor Point](features/ANCHOR_POINT.md).
   - Non-uniform scale (`Scale X` and `Scale Y` unlinked for squash-and-stretch).
   - Interactive Viewer handles/gizmos for direct canvas manipulation of position,
     scale, rotation, anchor point, and mask/shape control points.
@@ -569,7 +570,7 @@ architectural complexity:
    interchange deferred):** keyframe support for Gaussian Blur radius and Color
    Adjustment properties across the document model, timeline, Graph Editor,
    preview, and export.
-2. **Layer hierarchy and transform ergonomics:** Inspector parenting and Null layers are implemented in native v10. Next candidates are independent animatable Anchor Point, unlinked `Scale X`/`Scale Y`, a timeline pick-whip, and interactive Viewer transform handles. Manual acceptance remains pending.
+2. **Layer hierarchy and transform ergonomics:** Inspector parenting and Null layers are implemented in native v10. Animated Anchor Point and compensated Inspector repositioning are implemented in native v11. Next candidates are unlinked `Scale X`/`Scale Y`, Pan Behind, a timeline pick-whip, and interactive Viewer transform handles. Manual acceptance remains pending.
 3. **Blending modes and Track Mattes:** per-layer blend modes and Alpha/Luma
    track mattes in the CPU and OpenGL compositors.
 4. **Pen tool (cubic Bezier paths) and Trim Paths:** freeform vector masks and

@@ -11,7 +11,10 @@ namespace motion::model {
                                                   const ParentTransformOffset& right);
 [[nodiscard]] ParentTransformOffset inverseOffset(const ParentTransformOffset& value);
 [[nodiscard]] ParentTransformOffset geometryOffset(
-    const creative_suite::animation::Transform2D& transform, CanvasSize canvas);
+    const creative_suite::animation::Transform2D& transform, CanvasSize canvas, AnchorPoint anchor = {});
+// Resolve the local pivot into the selected layer's existing Viewer marker.
+[[nodiscard]] std::array<double, 2> resolvedAnchorPosition(
+    const creative_suite::animation::Transform2D& resolved, AnchorPoint anchor, CanvasSize canvas);
 
 // Immutable, media-free snapshot. Construction validates IDs, references and
 // cycles; evaluation is iterative O(layers), independent of visibility/activity.
@@ -31,6 +34,8 @@ private:
         std::int64_t start;
         creative_suite::animation::Transform2D transform;
         creative_suite::animation::TransformKeyframes keyframes;
+        AnchorPoint anchor;
+        AnchorKeyframes anchor_keys;
     };
     CanvasSize canvas_;
     std::vector<Node> nodes_;

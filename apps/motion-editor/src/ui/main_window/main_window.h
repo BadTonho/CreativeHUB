@@ -139,6 +139,12 @@ private:
     void syncTransformInspector();
     void changeSelectedLayerParent(model::LayerId parent);
     void removeCompositionLayer(model::LayerId id);
+    void editSelectedLayerAnchor(std::size_t axis);
+    void toggleSelectedAnchorKeyframe(std::size_t axis);
+    void repositionSelectedAnchor();
+    void selectAnchorCurveSegment(model::LayerId, model::AnchorProperty, std::int64_t local_frame);
+    [[nodiscard]] bool applySelectedCurveInterpolation(std::int64_t,
+        creative_suite::animation::InterpolationMode, const creative_suite::animation::CubicBezierEasing&);
     void refreshCurveEditor();
     void selectCurveSegment(
         model::LayerId id,
@@ -253,6 +259,7 @@ private:
         std::optional<std::size_t> effect_index;
         model::EffectParameterProperty effect_property =
             model::EffectParameterProperty::GaussianBlurRadius;
+        std::optional<model::AnchorProperty> anchor_property;
     };
     std::optional<CurveSelection> curve_selection_;
     std::shared_ptr<const std::vector<model::Mask>> mask_snapshot_;

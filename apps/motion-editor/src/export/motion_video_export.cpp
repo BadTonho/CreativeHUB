@@ -465,6 +465,8 @@ void MotionVideoExporter::exportVideo(
                 active.source_mask=layer.source_mask;active.transform_mask=layer.transform_mask;
                 active.source_frame_rate = layer.source_frame_rate;
                 active.transform = layer.transform;
+                active.anchor_point = layer.anchor_point;
+                active.anchor_keyframes = layer.anchor_keyframes;
                 active.keyframes = layer.keyframes;
                 active.content = layer.content;
                 active.effects = layer.effects;

@@ -306,7 +306,27 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
         connect(key_button, &QToolButton::clicked, this,
                 [this, index] { emit keyframeToggleRequested(static_cast<int>(index)); });
     }
+    for (std::size_t axis=0;axis<2;++axis) {
+        auto* row=new QWidget(controls_.transform_inspector);
+        auto* layout=new QHBoxLayout(row);layout->setContentsMargins(0,0,0,0);
+        auto* field=new QDoubleSpinBox(row);field->setRange(-1e9,1e9);field->setDecimals(6);field->setKeyboardTracking(false);
+        field->setObjectName(axis==0?QStringLiteral("motion-anchor-x"):QStringLiteral("motion-anchor-y"));
+        field->setToolTip(MotionUiTranslation::tr("Pixels from the fitted layer center, before editable scale and rotation."));
+        controls_.anchor_fields[axis]=field;layout->addWidget(field,1);
+        auto* key=new QToolButton(row);key->setText(QStringLiteral("◇"));
+        key->setObjectName(axis==0?QStringLiteral("motion-anchor-keyframe-x"):QStringLiteral("motion-anchor-keyframe-y"));
+        controls_.anchor_key_buttons[axis]=key;layout->addWidget(key);
+        transform_form->addRow(axis==0?MotionUiTranslation::tr("Anchor X (px)"):MotionUiTranslation::tr("Anchor Y (px)"),row);
+        connect(field,&QDoubleSpinBox::valueChanged,this,[this,axis]{emit anchorValueEdited(static_cast<int>(axis));});
+        connect(field,&QDoubleSpinBox::editingFinished,this,&InspectorWidget::transformEditFinished);
+        connect(key,&QToolButton::clicked,this,[this,axis]{emit anchorKeyframeToggleRequested(static_cast<int>(axis));});
+    }
     transform_layout->addLayout(transform_form);
+    controls_.reposition_anchor=new QPushButton(MotionUiTranslation::tr("Reposition Anchor Without Moving..."),controls_.transform_inspector);
+    controls_.reposition_anchor->setObjectName(QStringLiteral("motion-reposition-anchor"));
+    controls_.reposition_anchor->setEnabled(false);
+    connect(controls_.reposition_anchor,&QPushButton::clicked,this,&InspectorWidget::anchorRepositionRequested);
+    transform_layout->addWidget(controls_.reposition_anchor);
     transform_layout->addStretch(1);
     addTab(controls_.transform_inspector, MotionUiTranslation::tr("Transform"));
 
@@ -578,6 +598,11 @@ void InspectorWidget::syncParenting(const model::CompositionDocument* document, 
     controls_.parent_layer->setCurrentIndex(controls_.parent_layer->findData(QVariant::fromValue<qulonglong>(parent)));
 }
 
+double InspectorWidget::anchorFieldValue(std::size_t axis) const noexcept
+{
+    return axis<2?controls_.anchor_fields[axis]->value():0;
+}
+
 void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
                                 std::int64_t composition_frame,
                                 int selected_effect_row)
@@ -643,6 +668,7 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
 
     if (layer == nullptr) {
         controls_.transform_inspector->setEnabled(false);
+        controls_.reposition_anchor->setEnabled(false);
         return;
     }
     const auto raw_local_frame = composition_frame - layer->timeline_start_frame;
@@ -652,6 +678,18 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
     const auto evaluated = creative_suite::animation::evaluateTransform(
         layer->transform, layer->keyframes, local_frame);
     const bool inside = raw_local_frame >= 0 && raw_local_frame < layer->duration_frames;
+    controls_.reposition_anchor->setEnabled(inside);
+    const auto anchor=model::evaluateLayerAnchor(*layer,local_frame);
+    for(std::size_t axis=0;axis<2;++axis) {
+        const auto& keys=layer->anchor_keyframes[axis];
+        const bool key_here=inside && std::any_of(keys.begin(),keys.end(),[raw_local_frame](const auto& key){return key.frame==raw_local_frame;});
+        const QSignalBlocker blocker(controls_.anchor_fields[axis]);
+        controls_.anchor_fields[axis]->setValue(axis==0?anchor.x_pixels:anchor.y_pixels);
+        controls_.anchor_fields[axis]->setReadOnly(!keys.empty() && !key_here);
+        controls_.anchor_key_buttons[axis]->setEnabled(inside);
+        controls_.anchor_key_buttons[axis]->setText(key_here?QStringLiteral("◆"):QStringLiteral("◇"));
+        controls_.anchor_key_buttons[axis]->setToolTip(key_here?MotionUiTranslation::tr("Remove the keyframe at the current frame"):MotionUiTranslation::tr("Add a keyframe at the current frame"));
+    }
     constexpr std::array properties{
         creative_suite::animation::TransformProperty::PositionX,
         creative_suite::animation::TransformProperty::PositionY,

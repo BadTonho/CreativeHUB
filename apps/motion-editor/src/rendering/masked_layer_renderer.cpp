@@ -1,5 +1,6 @@
 #include "masked_layer_renderer.h"
 #include "layer_effect_processor.h"
+#include "model/layer_transform_hierarchy.h"
 #include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/composition_exchange/raster.h>
 #include <algorithm>
@@ -28,6 +29,16 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
     const bool intrinsic=layer.kind==model::LayerKind::Text || layer.kind==model::LayerKind::Shape;
     const auto profile=layer.presentation?layer.presentation->profile:x::Profile::MotionLayer;
     auto transform=resolved_transform?*resolved_transform:a::evaluateTransform(layer.transform,layer.keyframes,layer.local_frame);
+    if (!resolved_transform) {
+        const model::AnchorPoint anchor{
+            a::evaluateScalar(layer.anchor_point.x_pixels,layer.anchor_keyframes[0],layer.local_frame),
+            a::evaluateScalar(layer.anchor_point.y_pixels,layer.anchor_keyframes[1],layer.local_frame)};
+        if (anchor != model::AnchorPoint{}) {
+            const auto geometry=model::geometryOffset(transform,request.canvas_size,anchor);
+            transform.position_x=geometry.translation_x_pixels/request.canvas_size.width;
+            transform.position_y=geometry.translation_y_pixels/request.canvas_size.height;
+        }
+    }
     if(request.mask_view_layer==layer.id) {
         auto id=request.mask_view_target==-2?layer.source_mask:request.mask_view_target==-1?layer.transform_mask:
             request.mask_view_target>=0 && std::size_t(request.mask_view_target)<layer.effects.size()?std::visit([](const auto& e){return e.mask;},layer.effects[request.mask_view_target]):0;

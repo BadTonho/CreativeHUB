@@ -78,6 +78,9 @@ private:
         int layer_content_tab_index = -1;
         std::array<QDoubleSpinBox*, 5> transform_fields{};
         std::array<QToolButton*, 5> transform_key_buttons{};
+        std::array<QDoubleSpinBox*, 2> anchor_fields{};
+        std::array<QToolButton*, 2> anchor_key_buttons{};
+        QPushButton* reposition_anchor = nullptr;
     };
 
 public:
@@ -96,6 +99,7 @@ public:
     void syncParenting(const model::CompositionDocument* document, model::LayerId selected);
     [[nodiscard]] int effectCount() const noexcept;
     [[nodiscard]] double transformFieldValue(std::size_t property_index) const noexcept;
+    [[nodiscard]] double anchorFieldValue(std::size_t axis) const noexcept;
     [[nodiscard]] double effectFieldValue(model::EffectParameterProperty property) const noexcept;
     [[nodiscard]] model::TextLayerContent editedTextContent(
         model::TextLayerContent value) const;
@@ -104,6 +108,9 @@ public:
     [[nodiscard]] model::LayerEffect editedEffect(model::LayerEffect value) const;
 
 signals:
+    void anchorValueEdited(int axis);
+    void anchorKeyframeToggleRequested(int axis);
+    void anchorRepositionRequested();
     void parentLayerChanged(qulonglong parent);
     void layerContentEdited();
     void layerContentEditFinished();

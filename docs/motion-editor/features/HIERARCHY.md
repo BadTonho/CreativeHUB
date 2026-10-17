@@ -1,8 +1,9 @@
 # Layer Hierarchy and Null Controls
 
-Status: implemented development workflow, native `.motion` v10. Manual visual,
+Status: implemented development workflow, current native `.motion` v11. Manual visual,
 platform, and performance acceptance remain pending. This delivery does not add
-an Anchor Point property, non-uniform scale, pick-whip, or Viewer handles.
+non-uniform scale, pick-whip, or Viewer handles. Animated pixel Anchor Point is
+implemented separately; see [Anchor Point](ANCHOR_POINT.md).
 
 ## Editing
 
@@ -10,7 +11,7 @@ Use **Layer > New Null** to add a control at the current frame. It starts at the
 canvas center, scale 1, rotation 0, and lasts five seconds. No default keyboard
 shortcut is assigned. Null clips have a diamond marker and a neutral color in
 the timeline; their Transform tracks and Graph Editor support Position X/Y,
-uniform Scale, and Rotation. Nulls have no visual source, opacity animation,
+uniform Scale, Rotation and Anchor X/Y. Nulls have no visual source, opacity animation,
 effects, masks, or raster cache. Audio-to-keyframe baking excludes Null opacity.
 They do not extend playback/export duration; Null-only compositions cannot export.
 
@@ -34,19 +35,19 @@ rejected, including on document open; a failed open retains the active document.
 
 The Motion-owned `LayerTransformHierarchy` is an immutable snapshot containing
 IDs, parent relationships, compensation, start frames, local transforms and
-curves. It contains no media, pixels, effects or application UI. Construction
+curves, including Anchor bases and curves. It contains no media, pixels, effects or application UI. Construction
 validates the graph and orders it iteratively; frame evaluation is O(layers)
 without recursion. Preview and export share this resolver. Requests retain all
 ancestor transform data while only visible, active drawable layers are decoded.
 
-Each local geometry transform `L` uses the layer center in canvas pixels,
-uniform scale and degrees, before source aspect-fit or intrinsic text/shape
-compensation. With parent global transform `P` and binding compensation `B`,
+Each local geometry transform is `L = T(Position_px) * R * S * T(-Anchor_px)`,
+using canvas pixels, uniform scale and degrees, before source aspect-fit or
+intrinsic text/shape compensation. With parent global transform `P` and binding compensation `B`,
 the resolved geometry is `W = P * B * L`. Unparented `P` is identity. At a parent
 edit, set `B = inverse(P_new) * W_before * inverse(L)` at that composition frame.
 The four-number similarity transform avoids introducing shear or changing the
 shared animation/compositor APIs. Non-finite, zero-scale or overflowing results
-are rejected. Unparented identity-compensation layers retain the old exact path.
+are rejected. Unparented identity-compensation layers with zero Anchor retain the old exact path.
 
 Each ancestor uses `max(0, composition_frame - layer_start)` and existing curve
 endpoint clamping even when hidden, outside its clip duration, or offline.
@@ -62,8 +63,9 @@ well as local geometry. Nulls never produce image-processing work.
 stores Nulls, parent IDs and optional compensation, including detached offsets.
 Save, autosave/recovery and Hub backups preserve the graph; v1–v9 documents load
 without parenting. Recovery wrapper version and application versions are unchanged.
-Hub accepts Motion v10 and rejects v11. `.cscomp` stays at v3: exporting Nulls,
-parent references or nonidentity offsets fails with layer-specific issues;
+Current v11 also preserves Anchor values/curves and loads v1–v10 with zero Anchor.
+Hub accepts Motion v11 and rejects v12. `.cscomp` stays at v3: exporting Nulls,
+parent references, nonidentity offsets or nondefault Anchor fails with layer-specific issues;
 there is no silent flattening or partial publication. Linked opaque video
 publication uses the same hierarchy-aware video exporter and existing protocol.
 
@@ -71,11 +73,11 @@ publication uses the same hierarchy-aware video exporter and existing protocol.
 
 `creative-suite-motion-editor-hierarchy` covers graph validity and deep chains,
 non-square pixel-space transforms, independent parent clocks, hidden/offline
-ancestors, pose-preserving edits/deletion, history, Null restrictions, v10
-save/recovery, v1–v9 migration, invalid-file preservation, the Inspector, CPU
+ancestors, pose-preserving edits/deletion, history, Null restrictions, native
+save/recovery, v1–v9 hierarchy migration, invalid-file preservation, the Inspector, CPU
 effects/masks and lossless export parity. The existing GPU composition test
 uses a hidden Null ancestor to protect shared CPU/GPU and fallback behavior.
-`hub-backup-format-test` restores a v10 hierarchy through the native reader;
+`hub-backup-format-test` restores the hierarchy through the current v11 reader;
 `hub-backup-manager-test` protects unsupported-version rejection. Motion's
 existing document/history/persistence/recovery/preview/export/UI/translation
 and audio suites retain surrounding coverage.

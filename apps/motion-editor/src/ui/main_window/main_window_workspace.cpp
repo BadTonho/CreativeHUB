@@ -70,6 +70,9 @@ void MainWindow::createWorkspace()
         }
     });
     inspector_ = new InspectorWidget(this);
+    connect(inspector_,&InspectorWidget::anchorValueEdited,this,[this](int axis){editSelectedLayerAnchor(static_cast<std::size_t>(axis));});
+    connect(inspector_,&InspectorWidget::anchorKeyframeToggleRequested,this,[this](int axis){toggleSelectedAnchorKeyframe(static_cast<std::size_t>(axis));});
+    connect(inspector_,&InspectorWidget::anchorRepositionRequested,this,&MainWindow::repositionSelectedAnchor);
     connect(inspector_, &InspectorWidget::parentLayerChanged, this,
             [this](qulonglong parent) { changeSelectedLayerParent(static_cast<model::LayerId>(parent)); });
     inspector_->masksInspector()->setHandlers(
@@ -181,6 +184,26 @@ void MainWindow::createWorkspace()
             requestPreview();
             return true;
         });
+    timeline_->setAnchorKeyframeSelectedHandler([this](model::LayerId id,model::AnchorProperty property,std::int64_t frame) {
+        if(!document_ || !timeline_)return;
+        const auto found=std::find_if(document_->layers().begin(),document_->layers().end(),[id](const auto& l){return l.id==id;});
+        if(found==document_->layers().end() || frame<0 || frame>=found->duration_frames)return;
+        const auto composition_frame=found->timeline_start_frame+frame;
+        selectLayer(id);selectAnchorCurveSegment(id,property,frame);timeline_->setCurrentFrame(composition_frame);
+    });
+    timeline_->setAnchorCurveSegmentSelectedHandler([this](model::LayerId id,model::AnchorProperty property,std::int64_t frame) {
+        selectLayer(id);selectAnchorCurveSegment(id,property,frame);
+    });
+    timeline_->setAnchorKeyframeMoveHandler([this](model::LayerId id,model::AnchorProperty property,std::int64_t from,std::int64_t to) {
+        finishPendingTransformEdit();if(!document_)return false;
+        try {
+            auto before=captureEditState();
+            if(!document_->moveLayerAnchorKeyframe(id,property,from,to))return false;
+            (void)recordCompositionEdit(std::move(before));
+            selectAnchorCurveSegment(id,property,to);
+            updateDocumentState();refreshTimeline();syncTransformInspector();requestPreview();return true;
+        }catch(const std::exception& error){reportDocumentError("move_anchor_keyframe",document_path_.value_or(std::filesystem::path{}),error);return false;}
+    });
     timeline_->setEffectKeyframeSelectedHandler(
         [this](model::LayerId id,
                std::size_t effect_index,

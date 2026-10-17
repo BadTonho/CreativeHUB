@@ -23,7 +23,7 @@ shared.
 Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
 autosave preferences, and the recovery-management dialog. The store reuses the
 native document serializer and its atomic `QSaveFile` validation while writing
-the native `.motion` document at version 4. A recovery payload stores the complete
+the native `.motion` document at version 11 (recovery wrapper version 1). A recovery payload stores the complete
 composition and Media Pool plus the original document path and session ID; it
 does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
 
@@ -73,7 +73,7 @@ In/Out presets. Presets and completed handle drags each create one Undo action.
 Graph panel visibility and segment selection are UI state and are not saved.
 
 A layer disclosure reveals its Transform group, whose own disclosure reveals
-five property tracks. The layer name is omitted from the left header and stays
+seven property tracks (six on Nulls, which omit Opacity). The layer name is omitted from the left header and stays
 on the timeline clip. Markers are mapped to composition time by adding the
 layer start frame. Clicking a marker seeks, and dragging moves it within the
 layer duration. Collision-safe movement and key removal are application-owned
@@ -83,6 +83,19 @@ between keys. `.motion` v3 stores interpolation and normalized control points;
 v1 and v2 keys migrate as Linear. Layer expansion is UI state, starts collapsed
 on New/Open, and is not persisted. Adding a key from the inspector expands
 both levels.
+
+### Motion-owned Anchor and hierarchy
+
+`AnchorPoint`, `AnchorProperty` and the two local pixel curves belong to Motion;
+they reuse shared `ScalarKeyframes` without extending shared `Transform2D`,
+`TransformKeyframes` or `TransformProperty`. The immutable Motion hierarchy
+snapshot evaluates Anchor with local transforms in the worker, including hidden,
+inactive and offline ancestors. It returns an effective rendered center to the
+existing CPU/OpenGL Transform stage before media fit. Zero Anchor retains the
+old exact path; Anchor edits reuse media and text/shape rasters. The compensated
+dialog updates Anchor/Position in one document/history transaction, leaving
+binding offsets unchanged. See [Anchor Point](../features/ANCHOR_POINT.md) and
+[hierarchy](../features/HIERARCHY.md) for geometry and thread ownership.
 
 ### Layer effects
 
@@ -214,7 +227,7 @@ validation.
   This CPU rasterization is provisional and does not establish a final renderer.
 - The shared animation evaluator drives transform keyframes in Motion Studio
   preview, playback, and export. Basic key insertion, removal, marker seeking,
-  and marker movement are implemented for the five transform properties. The
+  and marker movement are implemented for the five shared transform properties and two Motion-owned Anchor axes. The
   Graph Editor and easing presets are Motion Studio-owned; shared Linear and
   bounded cubic Bezier segment evaluation is available to all consumers. More
   interpolation modes and overshoot-capable curves remain open.

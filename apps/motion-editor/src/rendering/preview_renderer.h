@@ -39,6 +39,8 @@ struct PreviewLayerSnapshot {
     creative_suite::media::RgbaFramePtr still_frame;
     std::optional<creative_suite::composition_exchange::Presentation> presentation;
     model::MaskId source_mask=0, transform_mask=0;
+    model::AnchorPoint anchor_point;
+    model::AnchorKeyframes anchor_keyframes;
 };
 
 struct PreviewRequest {

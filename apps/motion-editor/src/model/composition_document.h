@@ -80,6 +80,18 @@ struct ParentTransformOffset {
 
 [[nodiscard]] bool validParentOffset(const ParentTransformOffset&) noexcept;
 
+enum class AnchorProperty : std::uint8_t { X, Y };
+
+// Pixels relative to the center of the canvas-fitted layer, before editable
+// scale/rotation. This space does not require online media or source dimensions.
+struct AnchorPoint {
+    double x_pixels = 0.0;
+    double y_pixels = 0.0;
+    friend bool operator==(const AnchorPoint&, const AnchorPoint&) = default;
+};
+using AnchorKeyframes = std::array<creative_suite::animation::ScalarKeyframes, 2>;
+[[nodiscard]] bool validAnchorPoint(const AnchorPoint&) noexcept;
+
 using ColorRgba = std::array<std::uint8_t, 4>;
 
 enum class TextAlignment : std::uint8_t {
@@ -221,9 +233,13 @@ struct CompositionLayer {
     MaskId source_mask = 0, transform_mask = 0;
     LayerId parent_id = 0;
     ParentTransformOffset parent_offset;
+    AnchorPoint anchor_point;
+    AnchorKeyframes anchor_keyframes;
 
     friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
+
+[[nodiscard]] AnchorPoint evaluateLayerAnchor(const CompositionLayer&, std::int64_t local_frame) noexcept;
 
 enum class AddMediaLayerResult {
     Added,
@@ -271,6 +287,16 @@ public:
     [[nodiscard]] bool canSetLayerParent(LayerId child, LayerId parent) const noexcept;
     // Keeps the current global pose and all local keyframes. Zero clears the parent.
     [[nodiscard]] bool setLayerParent(LayerId child, LayerId parent, std::int64_t composition_frame);
+    [[nodiscard]] bool setLayerAnchorPoint(LayerId, AnchorPoint);
+    [[nodiscard]] bool replaceLayerAnchorKeyframes(LayerId, AnchorProperty, creative_suite::animation::ScalarKeyframes);
+    [[nodiscard]] bool setLayerAnchorKeyframe(LayerId, AnchorProperty, std::int64_t local_frame, double);
+    [[nodiscard]] bool removeLayerAnchorKeyframe(LayerId, AnchorProperty, std::int64_t local_frame);
+    [[nodiscard]] bool moveLayerAnchorKeyframe(LayerId, AnchorProperty, std::int64_t from, std::int64_t to);
+    [[nodiscard]] bool setLayerAnchorKeyframeInterpolation(LayerId, AnchorProperty, std::int64_t local_frame,
+        creative_suite::animation::InterpolationMode, const creative_suite::animation::CubicBezierEasing&);
+    // Atomic current-frame edit. Animated affected properties get keys at this
+    // frame; existing keys and binding compensation stay intact.
+    [[nodiscard]] bool repositionLayerAnchorKeepingPose(LayerId, AnchorPoint, std::int64_t composition_frame);
     // Moves the layer to its final index in the back-to-front layer order.
     [[nodiscard]] bool moveLayer(LayerId id, std::size_t final_index) noexcept;
     [[nodiscard]] bool moveLayerInTimeline(

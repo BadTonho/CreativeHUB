@@ -135,6 +135,11 @@ int main(int argc, char* argv[])
                "Missing catalog entries must fall back to English source text.")) {
         return 1;
     }
+    if (!check(motion::ui::MotionUiTranslation::tr("Anchor X (px)") == QStringLiteral("Âncora X (px)") &&
+                   motion::ui::MotionUiTranslation::tr("Anchor Y (px)") == QStringLiteral("Âncora Y (px)") &&
+                   motion::ui::MotionUiTranslation::tr("Reposition Anchor Without Moving...") == QStringLiteral("Reposicionar pivô sem mover...") &&
+                   motion::ui::MotionUiTranslation::tr("Pixels from the fitted layer center, before editable scale and rotation.") != QStringLiteral("Pixels from the fitted layer center, before editable scale and rotation."),
+               "Anchor units, explanation and reposition action use the bundled pt-BR catalog.")) return 1;
 
     const auto english = runtime.installForApplication(
         application, QStringLiteral("motion-editor"),

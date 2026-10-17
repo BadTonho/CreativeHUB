@@ -558,6 +558,7 @@ void validateDocument(const MotionProjectData& document,
         keyframe_count += layer.keyframes.position_x.size() +
             layer.keyframes.position_y.size() + layer.keyframes.scale.size() +
             layer.keyframes.rotation.size() + layer.keyframes.opacity.size();
+        keyframe_count += layer.anchor_keyframes[0].size() + layer.anchor_keyframes[1].size();
         for (const auto& effect : layer.effects) {
             std::visit([&keyframe_count](const auto& value) {
                 using Effect = std::decay_t<decltype(value)>;
@@ -698,6 +699,14 @@ QJsonObject writeLayer(const CompositionLayer& layer,
     QJsonObject object;
     object.insert(QStringLiteral("id"), encodedUInt64(layer.id));
     object.insert(QStringLiteral("kind"), layerKindName(layer.kind));
+    if (layer.anchor_point != model::AnchorPoint{} || !layer.anchor_keyframes[0].empty() || !layer.anchor_keyframes[1].empty()) {
+        QJsonObject anchor{{"x_pixels",layer.anchor_point.x_pixels},{"y_pixels",layer.anchor_point.y_pixels}};
+        QJsonObject keys;
+        if (!layer.anchor_keyframes[0].empty()) keys.insert("x_pixels",writeKeyframes(layer.anchor_keyframes[0]));
+        if (!layer.anchor_keyframes[1].empty()) keys.insert("y_pixels",writeKeyframes(layer.anchor_keyframes[1]));
+        if (!keys.isEmpty()) anchor.insert("keyframes",keys);
+        object.insert("anchor_point",anchor);
+    }
     if (layer.parent_id) object.insert("parent_id", encodedUInt64(layer.parent_id));
     if (layer.parent_offset != model::ParentTransformOffset{}) {
         const auto& offset = layer.parent_offset;
@@ -837,6 +846,23 @@ CompositionLayer parseLayer(const QJsonValue& value,
     }
     layer.id = requiredUInt64(object, "id", document_path);
     layer.kind = parseLayerKind(requiredString(object, "kind", document_path), document_path);
+    if (object.contains("anchor_point")) {
+        if (document_version < 11) fail(MotionDocumentErrorCode::InvalidValue,document_path,
+            QStringLiteral("Anchor points require document version 11."));
+        const auto anchor = requiredObject(object,"anchor_point",document_path);
+        for (auto it=anchor.begin();it!=anchor.end();++it)
+            if(it.key()!="x_pixels" && it.key()!="y_pixels" && it.key()!="keyframes")
+                fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Unknown anchor point field."));
+        layer.anchor_point={requiredNumber(anchor,"x_pixels",document_path),requiredNumber(anchor,"y_pixels",document_path)};
+        if (anchor.contains("keyframes")) {
+            const auto keys=requiredObject(anchor,"keyframes",document_path);
+            for(auto it=keys.begin();it!=keys.end();++it)
+                if(it.key()!="x_pixels" && it.key()!="y_pixels")
+                    fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Unknown anchor keyframe property."));
+            if(keys.contains("x_pixels"))layer.anchor_keyframes[0]=parseKeyframes(requiredArray(keys,"x_pixels",document_path),document_path,keyframe_count,document_version);
+            if(keys.contains("y_pixels"))layer.anchor_keyframes[1]=parseKeyframes(requiredArray(keys,"y_pixels",document_path),document_path,keyframe_count,document_version);
+        }
+    }
     if (document_version < 10 && (layer.kind == LayerKind::Null ||
         object.contains("parent_id") || object.contains("parent_offset")))
         fail(MotionDocumentErrorCode::InvalidValue, document_path,

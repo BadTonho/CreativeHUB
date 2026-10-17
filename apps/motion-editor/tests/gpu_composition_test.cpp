@@ -91,13 +91,16 @@ motion::ui::PreviewRequest request()
     motion::ui::PreviewRequest result{{32, 32}, {24, 1},
             {std::move(image), std::move(shape), std::move(text)}};
     std::vector<motion::model::CompositionLayer> hierarchy;
-    for (const auto& layer : result.layers) {
+    for (auto& layer : result.layers) {
+        layer.anchor_point={3.25,-2.5};layer.anchor_keyframes[0]={{0,3.25},{24,8}};
         motion::model::CompositionLayer node{layer.id,layer.kind,"Layer"};
         node.transform=layer.transform;node.keyframes=layer.keyframes;
+        node.anchor_point=layer.anchor_point;node.anchor_keyframes=layer.anchor_keyframes;
         node.parent_id=10;hierarchy.push_back(std::move(node));
     }
     motion::model::CompositionLayer parent{10,motion::model::LayerKind::Null,"Control"};
     parent.transform={.1,.05,.8,12,1};parent.visible=false;
+    parent.anchor_point={-1,4};
     hierarchy.push_back(parent);
     result.hierarchy=std::make_shared<const motion::model::LayerTransformHierarchy>(result.canvas_size,hierarchy);
     return result;

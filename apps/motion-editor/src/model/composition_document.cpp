@@ -156,7 +156,10 @@ bool validLayer(const CompositionLayer& layer) noexcept
         !validTransform(layer.transform) ||
         !validTransformKeyframes(layer.keyframes) ||
         !validContentForKind(layer.kind, layer.content) ||
-        !validLayerEffects(layer.effects) || !validParentOffset(layer.parent_offset)) {
+        !validLayerEffects(layer.effects) || !validParentOffset(layer.parent_offset) ||
+        !validAnchorPoint(layer.anchor_point) ||
+        !creative_suite::animation::validScalarKeyframes(layer.anchor_keyframes[0]) ||
+        !creative_suite::animation::validScalarKeyframes(layer.anchor_keyframes[1])) {
         return false;
     }
     if (layer.kind == LayerKind::Null &&
@@ -709,7 +712,8 @@ bool CompositionDocument::setLayerParent(LayerId child, LayerId parent, std::int
         frame < layer->timeline_start_frame ? 0 : frame - layer->timeline_start_frame);
     const auto desired = geometryOffset(global.at(child), canvas_size_);
     const auto relative = parent ? composeOffsets(inverseOffset(geometryOffset(global.at(parent), canvas_size_)), desired) : desired;
-    const auto offset = composeOffsets(relative, inverseOffset(geometryOffset(local, canvas_size_)));
+    const auto offset = composeOffsets(relative, inverseOffset(geometryOffset(local, canvas_size_,
+        evaluateLayerAnchor(*layer, frame < layer->timeline_start_frame ? 0 : frame - layer->timeline_start_frame))));
     layer->parent_id = parent;
     layer->parent_offset = offset;
     return true;
@@ -732,7 +736,8 @@ bool CompositionDocument::removeLayer(LayerId id, std::int64_t frame)
             const auto local = creative_suite::animation::evaluateTransform(child.transform, child.keyframes,
                 frame < child.timeline_start_frame ? 0 : frame - child.timeline_start_frame);
             detached.emplace_back(&child, composeOffsets(geometryOffset(global.at(child.id), canvas_size_),
-                inverseOffset(geometryOffset(local, canvas_size_))));
+                inverseOffset(geometryOffset(local, canvas_size_, evaluateLayerAnchor(child,
+                    frame < child.timeline_start_frame ? 0 : frame - child.timeline_start_frame)))));
         }
     }
     for (auto& [child, offset] : detached) { child->parent_id = 0; child->parent_offset = offset; }
