@@ -10,7 +10,7 @@ Linux/macOS interop requires separate investigation.
 
 Use the existing Qt/FFmpeg/Vulkan development environment from
 [the build guide](../../docs/video-editor/architecture/BUILD_AND_DEPENDENCIES.md).
-No additional encoding SDK, shader compiler at runtime, or dependency is added.
+No additional encoding SDK or package is added. Vulkan shaders are compiled during build.
 `BUILD_VULKAN_NVENC_PROTOTYPE` defaults to **OFF**. The existing optional Vulkan
 backend and native FFmpeg/D3D11 media integration must be available to run natively.
 
@@ -35,6 +35,47 @@ self-tests and normal runs perform explicit verification outside benchmarks.
 An existing destination is preserved. Self-tests use an isolated temporary folder.
 Initialization unavailability returns 77, or 1 with `--require-native`; subsequent
 technical/encoder errors return 1. Native mode never changes to RGBA or another codec.
+
+## Decoded input prototype
+
+The new input experiment remains **outside the editor input flow**. The existing
+output bridge is already integrated separately. See the
+[input contract](../../docs/video-editor/gpu/VULKAN_DECODE_PROTOTYPE.md).
+
+```powershell
+& $probe --decode-self-test --require-native --output-dir=build/decoded-check
+& $probe --decode-source=source.mkv --input=native --mode=native --codec=h264_nvenc --require-native
+& $probe --decode-source=source.mkv --input=rgba --mode=native --codec=hevc_nvenc --require-native
+& $probe --decode-source=source.mkv --input=native --mode=rgba --require-native
+& $probe --decode-benchmark --require-native --output-dir=build/decoded-benchmark
+```
+
+Normal decoded-source runs process and verify the first 12 frames. Sources must
+provide actual identity-oriented H.264/HEVC 8-bit NV12 hardware decoding; native
+input cannot silently use the media library's software/orientation recovery.
+P010 and HDR are excluded. Independent input/output selections isolate each
+boundary. Existing commands without decode arguments retain their behavior.
+
+`--decode-self-test` generates its fixtures, compares all 12 codec/matrix/range
+combinations, exercises seek/device changes, array slices/aligned storage,
+two tickets, pressure/one-slot reduction, cancellation and injected input faults.
+It checks all four input/output combinations with both NVENC output codecs,
+HEVC input end to end, output pixels, frame order/timestamps and destination
+preservation. CTest registers `creative-suite-vulkan-decoded-pipeline`; an
+unsupported-host skip is not native acceptance.
+
+`--decode-benchmark` interleaves RGBA input/output and native input/output at
+1080p/1440p/4K, three trials, 30 drained warm-up frames plus 180 measured frames.
+Both use one application frame in flight and matched NVENC latency diagnostics.
+It prints unavailable cases and reasons rather than falling back or exceeding
+256 MiB. Transfer/stage counters include all 210 frames; wall time includes
+encoder finalization and atomic publication. The decoder pool is separately
+reported, including a combined high-water estimate; this is not total measured
+VRAM. See [Windows results](../../docs/video-editor/performance/VULKAN_DECODE_PIPELINE_WINDOWS_2026-10-17.md).
+
+The private NV12 converter reuses the existing D3D11 HLSL and Windows
+`D3DCompile` dependency. Vulkan shaders remain compiled to SPIR-V during build;
+no additional compiler package, codec SDK or runtime dependency is introduced.
 CTest `creative-suite-vulkan-nvenc-prototype` runs `--self-test`, allows 77 on
 unsupported hosts, and is not evidence of native acceptance when skipped.
 
@@ -48,7 +89,7 @@ Remove-Item Env:CREATIVE_SUITE_VULKAN_VALIDATION
 Remove-Item Env:VK_LAYER_VALIDATE_SYNC
 ```
 
-## Provisional interop contract
+## Provisional output interop contract
 
 The encoder's **unchanged** two-frame BGRA native pool is created first. Its DXGI
 adapter LUID selects the Vulkan device; the experimental creation overload enables
@@ -65,7 +106,8 @@ The compositor's existing integer-to-normalized operation produces RGBA8 UNORM;
 a nearest Vulkan blit converts channels into the imported BGRA image. The bridge
 then makes a D3D11 GPU copy into the ordinary encoder pool surface. Thus this
 eliminates full output readback/CPU encoder input, **not GPU copies**. Source
-fixtures still upload to the GPU. This prototype does not import decoder surfaces. `--small-high-bitrate` selects
+fixtures in the original synthetic modes still upload to the GPU; decoded modes
+use the separate input bridge above. `--small-high-bitrate` selects
 10 Mbps at 320x180 with the high-frequency fixture, without verification downloads,
 for reproducing the earlier parameter-sensitive NVENC failure. It does not expand
 the editor qualification policy.

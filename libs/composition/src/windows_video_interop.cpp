@@ -1,4 +1,5 @@
 #include "windows_video_interop.h"
+#include "windows_nv12_converter.h"
 #include <QOpenGLContext>
 #include <QOpenGLFunctions_3_2_Core>
 #if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
@@ -20,32 +21,11 @@ namespace creative_suite::composition::detail {
 #if defined(_WIN32) && defined(CS_NATIVE_VIDEO_INTEROP)
 using Microsoft::WRL::ComPtr;
 namespace {
-constexpr char vertex_source[] = R"(
-float4 main(uint id : SV_VertexID) : SV_Position {
-    float2 p = float2((id << 1) & 2, id & 2);
-    return float4(p * float2(2, -2) + float2(-1, 1), 0, 1);
-})";
-constexpr char pixel_source[] = R"(
-Texture2D<float> luma : register(t0);
-Texture2D<float2> chroma : register(t1);
-cbuffer Conversion : register(b0) { int4 coefficients; int4 range; };
-float4 main(float4 position : SV_Position) : SV_Target {
-    int2 pixel = int2(position.xy);
-    int y = int(round(luma.Load(int3(pixel, 0)) * 255));
-    int2 uv = int2(round(chroma.Load(int3(pixel / 2, 0)) * 255)) - 128;
-    // Match the baseline swscale planar 8-bit converter: each signed
-    // fixed-point term truncates before addition, including both green terms.
-    y = ((y - range.y) * 8 * range.x) >> 16;
-    int3 rgb = y + int3((uv.y * 8 * coefficients.x) >> 16,
-        ((uv.x * 8 * coefficients.z) >> 16) + ((uv.y * 8 * coefficients.w) >> 16),
-        (uv.x * 8 * coefficients.y) >> 16);
-    return float4(clamp(rgb, 0, 255) / 255.0, 1);
-})";
 OpenGlCompositionResult failed(const char* operation, std::string cause, HRESULT code) {
     return {OpenGlCompositionStatus::Failed, {}, operation, std::move(cause), code};
 }
 }
-struct WindowsVideoInterop::Impl {
+struct WindowsVideoInterop::Impl : WindowsNv12Converter {
     QOpenGLContext* context;
     QOpenGLFunctions_3_2_Core* gl;
     using OpenDevice = HANDLE(WINAPI*)(void*);
@@ -59,17 +39,7 @@ struct WindowsVideoInterop::Impl {
     Unregister unregister_object = nullptr;
     Lock lock_objects = nullptr, unlock_objects = nullptr;
     HANDLE interop_device = nullptr, object = nullptr;
-    ComPtr<ID3D11Device> device;
-    ComPtr<ID3D11DeviceContext> commands;
-    ComPtr<ID3D11Texture2D> nv12, rgba;
-    ComPtr<ID3D11ShaderResourceView> y_view, uv_view;
-    ComPtr<ID3D11RenderTargetView> target;
-    ComPtr<ID3D11VertexShader> vertex;
-    ComPtr<ID3D11PixelShader> pixel;
-    ComPtr<ID3D11Buffer> constants;
     GLuint texture = 0;
-    int width = 0, height = 0;
-    unsigned storage_width = 0, storage_height = 0;
     bool locked = false;
     bool available = false;
     struct ExportTarget {
@@ -103,10 +73,10 @@ struct WindowsVideoInterop::Impl {
         storage_width = storage_height = 0;
     }
     ~Impl() {
-        for (auto& target : export_targets) {
-            if (target.object) unregister_object(target.connection, target.object);
-            if (target.name) gl->glDeleteTextures(1, &target.name);
-            if (target.connection) close_device(target.connection);
+        for (auto& export_target : export_targets) {
+            if (export_target.object) unregister_object(export_target.connection, export_target.object);
+            if (export_target.name) gl->glDeleteTextures(1, &export_target.name);
+            if (export_target.connection) close_device(export_target.connection);
         }
         clear();
     }
@@ -116,34 +86,8 @@ struct WindowsVideoInterop::Impl {
         storage_width = source.Width; storage_height = source.Height;
         interop_device = open_device(device.Get());
         if (!interop_device) return HRESULT_FROM_WIN32(GetLastError());
-        D3D11_TEXTURE2D_DESC description{};
-        description.Width = source.Width; description.Height = source.Height;
-        description.MipLevels = description.ArraySize = 1;
-        description.Format = DXGI_FORMAT_NV12; description.SampleDesc.Count = 1;
-        description.Usage = D3D11_USAGE_DEFAULT; description.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        auto result = device->CreateTexture2D(&description, nullptr, &nv12); if (FAILED(result)) return result;
-        D3D11_SHADER_RESOURCE_VIEW_DESC shader_view{};
-        shader_view.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D; shader_view.Texture2D.MipLevels = 1;
-        shader_view.Format = DXGI_FORMAT_R8_UNORM;
-        result = device->CreateShaderResourceView(nv12.Get(), &shader_view, &y_view); if (FAILED(result)) return result;
-        shader_view.Format = DXGI_FORMAT_R8G8_UNORM;
-        result = device->CreateShaderResourceView(nv12.Get(), &shader_view, &uv_view); if (FAILED(result)) return result;
-        description.Width = width; description.Height = height;
-        description.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-        description.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-        result = device->CreateTexture2D(&description, nullptr, &rgba); if (FAILED(result)) return result;
-        result = device->CreateRenderTargetView(rgba.Get(), nullptr, &target); if (FAILED(result)) return result;
-        ComPtr<ID3DBlob> code, errors;
-        result = D3DCompile(vertex_source, sizeof(vertex_source), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, &code, &errors);
-        if (FAILED(result)) return result;
-        result = device->CreateVertexShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &vertex); if (FAILED(result)) return result;
-        code.Reset(); errors.Reset();
-        result = D3DCompile(pixel_source, sizeof(pixel_source), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, &code, &errors);
-        if (FAILED(result)) return result;
-        result = device->CreatePixelShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &pixel); if (FAILED(result)) return result;
-        D3D11_BUFFER_DESC buffer{}; buffer.ByteWidth = 32;
-        buffer.Usage = D3D11_USAGE_DEFAULT; buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-        result = device->CreateBuffer(&buffer, nullptr, &constants); if (FAILED(result)) return result;
+        auto result = WindowsNv12Converter::create(view,source);
+        if(FAILED(result))return result;
         gl->glGenTextures(1, &texture); gl->glBindTexture(GL_TEXTURE_2D, texture);
         gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -198,27 +142,7 @@ OpenGlCompositionResult WindowsVideoInterop::begin(const media::NativeVideoFrame
             p.storage_width != description.Width || p.storage_height != description.Height || !p.object)
             result = p.create(view, description);
         if (FAILED(result)) return;
-        p.commands->ClearState();
-        p.commands->CopySubresourceRegion(p.nv12.Get(), 0, 0, 0, 0, source,
-            D3D11CalcSubresource(0, view.array_slice, description.MipLevels), nullptr);
-        ID3D11RenderTargetView* target = p.target.Get();
-        p.commands->OMSetRenderTargets(1, &target, nullptr);
-        D3D11_VIEWPORT viewport{}; viewport.Width = float(view.width); viewport.Height = float(view.height); viewport.MaxDepth = 1;
-        p.commands->RSSetViewports(1, &viewport);
-        p.commands->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        p.commands->VSSetShader(p.vertex.Get(), nullptr, 0); p.commands->PSSetShader(p.pixel.Get(), nullptr, 0);
-        ID3D11ShaderResourceView* planes[]{p.y_view.Get(), p.uv_view.Get()};
-        p.commands->PSSetShaderResources(0, 2, planes);
-        const double scale = view.full_range ? 224.0 / 255.0 : 1.0;
-        int values[8]{};
-        for (int i = 0; i < 4; ++i)
-            values[i] = static_cast<int>(std::lround(view.yuv_coefficients[i] * scale / 8.0)) * (i >= 2 ? -1 : 1);
-        values[4] = view.full_range ? 8192 : 9539;
-        values[5] = view.full_range ? 0 : 16;
-        p.commands->UpdateSubresource(p.constants.Get(), 0, nullptr, values, 0, 0);
-        ID3D11Buffer* constants = p.constants.Get(); p.commands->PSSetConstantBuffers(0, 1, &constants);
-        p.commands->Draw(3, 0); p.commands->ClearState(); p.commands->Flush();
-        result = p.device->GetDeviceRemovedReason();
+        result = p.convert(view);
     });
     if (FAILED(result)) return failed("convert-native-video", "Creating or converting the native video texture failed.", result);
     if (!p.lock_objects(p.interop_device, 1, &p.object))

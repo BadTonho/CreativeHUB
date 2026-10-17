@@ -176,3 +176,11 @@ An unconfirmed cross-API retirement retains its bounded resources/reservation
 until process exit, rather than freeing or reusing memory with unknown consumers.
 Its separate-process regression verifies that the app logs the error code and
 preserves the previous destination. No new dependency is introduced.
+
+The existing optional Vulkan/NVENC probe also builds the decoded-input experiment.
+The shared private WindowsNv12Converter is used by both OpenGL and the explicit
+Vulkan input bridge. Its HLSL continues using the already linked Windows system
+D3DCompile API; Vulkan operation 10 is compiled into the existing SPIR-V variants
+at build time. No package, encoding SDK or private Qt dependency is added. The
+new CTest entry is creative-suite-vulkan-decoded-pipeline. Unsupported-host skips
+are not native acceptance. See [the prototype contract](../gpu/VULKAN_DECODE_PROTOTYPE.md).

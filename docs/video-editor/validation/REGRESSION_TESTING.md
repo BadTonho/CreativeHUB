@@ -1,5 +1,35 @@
 # Regression Testing
 
+## Standalone D3D11VA / Vulkan / NVENC input prototype
+
+**Automated coverage present:** `creative-suite-vulkan-decoded-pipeline`, registered
+in [prototype CMake](../../../prototypes/vulkan-nvenc/CMakeLists.txt), runs the
+real decoder/import/composition/output fixture in
+[decoded_pipeline.inc](../../../prototypes/vulkan-nvenc/decoded_pipeline.inc).
+See [the contract](../gpu/VULKAN_DECODE_PROTOTYPE.md). Normal application input
+selection is unchanged; no editor input integration is accepted by these tests.
+
+| Behavior | Verification |
+| --- | --- |
+| Hardware NV12 admission, adapter matching, ordinary Vulkan refusal, rejected format | Decoder/output LUID comparison and independent bridge check; existing prototype wrong-LUID creation test; decoded self-test rejects ordinary creation and BGRA/rejected input |
+| Colors, channels, visible/padded dimensions and array slices | Twelve H.264/HEVC matrix/range combinations, independent tagged patch checks, RGB tolerance 2/exact alpha against CPU and a 322x182 padded source |
+| Two imports, FIFO/stale tickets, source lifetime after decoder destruction | Direct input bridge test submits two retained sources, refuses a third/out-of-order ticket, collects after decoder teardown and reuses/discards slots |
+| Reset/device change, bounded capacity and faults | Backward seeks explicitly re-prepare a changed decoder device; 1.5 MiB test session verifies Busy and reduction to one; injected submit-after-conversion/collect failures retire safely |
+| Full pipeline, cancellation and destination safety | All four input/output combinations with both NVENC output codecs, HEVC input end to end, CPU/native composition parity, decoded mean RGB tolerance 12, dimensions/count/PTS, cancellation and encoder-failure sentinels |
+| OpenGL consumer preservation | Required GPU video-pipeline test retains tagged conversion, decode/Fusion/export and recovery coverage; shared OpenGL and Motion native tests exercise the extracted converter |
+| No input/output downloads in measured native cases | Release decoded benchmark asserts zero decoded downloads/output readbacks/explicit encoder upload; source-overlay uploads and GPU copies remain counted |
+
+The [Windows record](../performance/VULKAN_DECODE_PIPELINE_WINDOWS_2026-10-17.md)
+separates native acceptance from unavailable 4K runs, transfer/counter boundaries,
+decoder memory and portable builds. Unsupported-host skips do not count as native
+acceptance. Actual driver removal/watchdog expiry, human editing, editor input
+integration, other adapters/drivers and Linux/macOS interoperability remain pending.
+Windows Release verification on 2026-10-17: **31/31 scoped CTest entries passed
+without skips**, 14 required native executions passed with synchronization
+validation and no VUID/Sync hazards, and the expected native 4K refusal preserved
+an existing destination with no partial output. The disabled Vulkan/media shared
+build passed. The report retains the separate acceptance/performance boundaries.
+
 ## Integrated Vulkan native NVENC export
 
 **Automated coverage present:** existing registered render-export tests cover

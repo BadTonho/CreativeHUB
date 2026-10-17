@@ -15,6 +15,8 @@
 #endif
 #include <creative_suite/composition/vulkan_frame_compositor.h>
 #include <creative_suite/composition/vulkan_native_export.h>
+#include <creative_suite/composition/vulkan_native_import.h>
+#include "windows_nv12_converter.h"
 #include <creative_suite/media/native_video_frame.h>
 #include <creative_suite/diagnostics/logger.h>
 #include <QWindow>
@@ -1346,3 +1348,4 @@ VulkanDevice::CompletionStatus VulkanDevice::pollPresentation(const Presentation
 }
 
 #include "vulkan_native_export.inc"
+#include "vulkan_native_import.inc"

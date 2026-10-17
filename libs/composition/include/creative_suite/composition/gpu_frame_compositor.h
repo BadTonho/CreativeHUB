@@ -101,6 +101,7 @@ public:
 private:
     friend class OpenGlFrameCompositor;
     friend class VulkanFrameCompositor;
+    friend class VulkanNativeImportBridge;
     struct State;
     explicit OpenGlTextureFrame(std::shared_ptr<State>);
     std::shared_ptr<State> state_;

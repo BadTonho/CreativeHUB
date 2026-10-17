@@ -79,6 +79,7 @@ private:
     std::unique_ptr<Impl> impl_;
     friend class VulkanFrameCompositor;
     friend class VulkanNativeExportBridge;
+    friend class VulkanNativeImportBridge;
 };
 void setSessionVulkanDevice(const std::shared_ptr<VulkanDevice>&);
 std::shared_ptr<VulkanDevice> sessionVulkanDevice();

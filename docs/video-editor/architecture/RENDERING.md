@@ -765,3 +765,8 @@ that FIFO. Shared external reservation leases include output-pool and recovery
 storage in the session's 256 MiB known budget; preflight capability/parameter
 refusal preserves RGBA with the selected codec. See [native export ownership and
 recovery](../gpu/VULKAN_NATIVE_EXPORT.md); decoder input import remains deferred.
+
+The explicit [decoded-input prototype](../gpu/VULKAN_DECODE_PROTOTYPE.md) copies
+NV12 decoder slices to a shared BGRA conversion surface and imports them into
+Vulkan. It reuses OpenGL's private color converter but does not change the
+application input path, Fusion scheduling or existing native output selection.

@@ -14,7 +14,7 @@ layout(binding=0,rgba8ui) uniform readonly uimage2D background_image;
 layout(binding=1,rgba8ui) uniform readonly uimage2D foreground_image;
 layout(binding=2,rgba8ui) uniform readonly uimage2D mask_image;
 layout(binding=3,rgba8ui) uniform writeonly uimage2D output_image;
-layout(binding=4,rgba8) uniform writeonly image2D presentation_image;
+layout(binding=4,rgba8) uniform image2D presentation_image;
 layout(push_constant) uniform Parameters {
     ivec4 control; // operation, blur radius, horizontal, stage
     REAL2 center; REAL2 extent;
@@ -33,6 +33,7 @@ void main() {
     if(any(greaterThanEqual(pixel,size)))return;
     int op=p.control.x;
     uvec4 c=uvec4(0);
+    if(op==10) { imageStore(output_image,pixel,uvec4(floor(clamp(imageLoad(presentation_image,pixel),0,1)*255.0+0.5)));return; }
     if(op==8) { imageStore(output_image,pixel,uvec4(0,0,0,255));return; }
     if(op==1 || op==7) {
         ivec2 srcsize=op==7?imageSize(foreground_image):imageSize(background_image);

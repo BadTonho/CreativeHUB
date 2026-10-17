@@ -277,7 +277,7 @@ setting, project format or automatic renderer selection is introduced.
 compares an instrumented baseline with the scheduler using 30 warm-up frames,
 180 samples and three trials. It records limited small-fixture tail improvement,
 stable heavy latency, resource costs and export preservation without assuming
-Vulkan superiority. Direct Vulkan D3D11VA input import, paced human audiovisual editing,
+Vulkan superiority. Editor integration of Vulkan D3D11VA input import, paced human audiovisual editing,
 other GPU vendors and native Linux/macOS acceptance remain subsequent gates.
 
 ## Vulkan to NVENC research (2026-10-16)
@@ -294,5 +294,16 @@ This research eliminates full output readback/CPU encoder input in the measured
 native path but still performs GPU normalization/blit/copy and source uploads.
 The [qualified editor integration](VULKAN_NATIVE_EXPORT.md) now selects the bridge
 for covered Vulkan/NVENC jobs, with bounded RGBA recovery. Automatic remains
-OpenGL; parameters outside the tested preset matrix use the existing RGBA path. D3D11VA input import, Linux/macOS interop and
+OpenGL; parameters outside the tested preset matrix use the existing RGBA path. Editor D3D11VA input integration, Linux/macOS interop and
 other driver acceptance are still pending, not implied by this prototype.
+
+## Native decoded-input prototype (2026-10-17)
+
+The [standalone input experiment](VULKAN_DECODE_PROTOTYPE.md) now exercises
+D3D11VA -> shared D3D11 BGRA -> Vulkan composition -> NVENC without full video
+input/output CPU transfers in the accepted reference-device scenarios. Input
+activation remains external to the editor. The decoder pool is separately
+reported; known Vulkan/bridge/output reservations retain 256 MiB. The current
+4K composed native workload is unavailable under that cap. Reduce intermediate
+pressure and remeasure before proposing editor integration; do not raise the
+limit or infer 4K acceptance from lower-resolution timing gains.

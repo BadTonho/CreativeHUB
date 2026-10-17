@@ -336,7 +336,7 @@ See the Vulkan renderer contract for ownership, cancellation and FIFO recovery.
 The next preview increment uses per-submission completion receipts, visual
 revisions and a one-in-flight/latest-unsent Viewer mailbox. It preserves FIFO,
 256 MiB accounting and export parallelism; empty unavailable acquisitions no
-longer enter the GPU queue. Vulkan decoder-surface import remains a later step. [Preview pacing evidence](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
+longer enter the GPU queue. Editor integration of Vulkan decoder-surface import remains a later step. [Preview pacing evidence](../performance/VULKAN_PREVIEW_PACING_WINDOWS_2026-10-16.md)
 separates corrected instrumentation from scheduling changes; no default promotion
 or generalized performance claim follows from the synthetic results.
 
@@ -357,3 +357,12 @@ three-trial comparison. The historical prototype record does not establish edito
 [qualified editor integration](VULKAN_NATIVE_EXPORT.md) has its own regression
 and performance gate. Vulkan hardware decoding still crosses the existing RGBA
 boundary; direct decoder-surface import is not part of that integration.
+
+## Separate Vulkan decoded-input experiment
+
+The [prototype contract](VULKAN_DECODE_PROTOTYPE.md) describes explicit NV12
+input submission, per-slot keyed-mutex ownership and byte-preserving Vulkan
+normalization. Its D3D11 converter is now shared with the existing OpenGL path.
+Normal application input import remains unchanged. See [Windows results](../performance/VULKAN_DECODE_PIPELINE_WINDOWS_2026-10-17.md)
+for zero full-video transfers in accepted cases, separate decoder reservations,
+matched FIFO/codec parameters and the native 4K memory refusal.

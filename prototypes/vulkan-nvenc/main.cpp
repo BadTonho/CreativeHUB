@@ -1,4 +1,6 @@
 #include <creative_suite/composition/vulkan_native_export.h>
+#include <creative_suite/composition/vulkan_native_import.h>
+#include "video_fixture.h"
 #include <creative_suite/media/video_encoder.h>
 #include <creative_suite/media/video_playback.h>
 #include <creative_suite/diagnostics/logger.h>
@@ -34,7 +36,7 @@ struct ProbeUnavailable : std::runtime_error { using std::runtime_error::runtime
 struct Session {
     m::NativeVideoFramePool pool;
     std::shared_ptr<c::VulkanDevice> device;
-    explicit Session(int w,int h,std::uint64_t limit=256ULL*1024*1024,bool native=true) try :pool(w,h,2){
+    explicit Session(int w,int h,std::uint64_t limit=256ULL*1024*1024,bool native=true,unsigned maximum_frames=2) try :pool(w,h,maximum_frames){
         auto frame=pool.acquire();std::string cause;auto luid=c::VulkanNativeExportBridge::adapterLuid(frame,cause);require(bool(luid),cause);
         c::VulkanDevice::CreateOptions options;options.adapter_luid=luid;options.experimental_native_export=native;
         options.external_reserved_bytes=pool.reserved_bytes();options.known_byte_limit=limit;
@@ -236,6 +238,7 @@ void selfTest(Session& session,const std::filesystem::path& root){
     std::cout<<"native_export_self_test=passed codecs=h264_nvenc,hevc_nvenc parity_readbacks=explicit_unmeasured\n";
 }
 }
+#include "decoded_pipeline.inc"
 int main(int argc,char** argv){
     QGuiApplication application(argc,argv);const auto args=application.arguments();
     const bool required=args.contains("--require-native");
@@ -245,6 +248,8 @@ int main(int argc,char** argv){
     const auto root=path(QDir(directory).absolutePath());std::filesystem::create_directories(root);
     if(!d::Logger::instance().initialize(root/"logs"))return 1;
     try {
+        if(args.contains("--decode-self-test") || args.contains("--decode-benchmark") || std::any_of(args.begin(),args.end(),[](const auto& s){return s.startsWith("--decode-source=");}))
+            return decodedMain(args,root,mode,codec);
         if(args.contains("--self-test")){
             QTemporaryDir fixtures(QDir(directory).absoluteFilePath("self-test-XXXXXX"));require(fixtures.isValid(),"Cannot create isolated native fixtures.");
             Session session(320,180);std::exception_ptr failure;
@@ -289,6 +294,7 @@ int main(int argc,char** argv){
             }catch(...){failure=std::current_exception();}});worker.join();if(failure)std::rethrow_exception(failure);if(stop)break;
         }
         return 0;
-    }catch(const ProbeUnavailable& error){d::Logger::instance().log(d::Level::Error,"vulkan-nvenc-prototype","initialize",error.what());std::cerr<<error.what()<<"\n";return required?1:77;}
+    }catch(const DecodedUnavailable& error){std::cerr<<"Decoded pipeline unavailable: "<<error.what()<<"\n";return required?1:77;}
+    catch(const ProbeUnavailable& error){d::Logger::instance().log(d::Level::Error,"vulkan-nvenc-prototype","initialize",error.what());std::cerr<<error.what()<<"\n";return required?1:77;}
     catch(const std::exception& error){d::Logger::instance().log(d::Level::Error,"vulkan-nvenc-prototype","run",error.what());std::cerr<<error.what()<<"\n";return 1;}
 }

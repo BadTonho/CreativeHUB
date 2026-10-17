@@ -75,6 +75,7 @@ if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_IMAGE_EDITOR)
         composition/src/opengl_frame_compositor.cpp
         composition/src/gpu_frame_compositor.cpp
         composition/src/vulkan_frame_compositor.cpp
+        composition/src/windows_nv12_converter.cpp
         composition/src/windows_video_interop.cpp
         composition/include/creative_suite/composition/opengl_frame_compositor.h)
     add_library(creative-suite::composition-opengl ALIAS creative-suite-composition-opengl)

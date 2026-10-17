@@ -83,7 +83,7 @@ inline void checked(int result, const char* operation) {
     throw std::runtime_error(std::string(operation) + ": " + text);
 }
 inline void createTaggedVideo(const std::filesystem::path& path, AVColorSpace matrix,
-    AVColorRange range, const char* encoder_name = "ffv1") {
+    AVColorRange range, const char* encoder_name = "ffv1", int frame_width=320,int frame_height=180,int frames=3,bool temporal=false) {
     struct Resources {
         AVFormatContext* format = nullptr; AVCodecContext* encoder = nullptr;
         AVFrame* frame = nullptr; AVPacket* packet = nullptr;
@@ -101,7 +101,7 @@ inline void createTaggedVideo(const std::filesystem::path& path, AVColorSpace ma
     writer.encoder = avcodec_alloc_context3(codec);
     if (!stream || !writer.encoder) throw std::runtime_error("Allocating tagged stream failed.");
     auto& encoder = *writer.encoder;
-    encoder.width = 320; encoder.height = 180; encoder.pix_fmt = AV_PIX_FMT_YUV420P;
+    encoder.width = frame_width; encoder.height = frame_height; encoder.pix_fmt = AV_PIX_FMT_YUV420P;
     encoder.time_base = {1, 30}; encoder.framerate = {30, 1};
     encoder.colorspace = matrix; encoder.color_range = range;
     encoder.bit_rate = 4000000; encoder.gop_size = 12; encoder.max_b_frames = 0;
@@ -127,14 +127,14 @@ inline void createTaggedVideo(const std::filesystem::path& path, AVColorSpace ma
             av_packet_unref(writer.packet);
         }
     };
-    for (int index = 0; index < 3; ++index) {
+    for (int index = 0; index < frames; ++index) {
         checked(av_frame_make_writable(writer.frame), "Preparing tagged pixels");
         for (int plane = 0; plane < 3; ++plane) {
             const int divisor = plane == 0 ? 1 : 2;
             const int width = encoder.width / divisor, height = encoder.height / divisor;
             for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x)
                 writer.frame->data[plane][y * writer.frame->linesize[plane] + x] =
-                    static_cast<std::uint8_t>(patches[(y >= height / 2) * 2 + (x >= width / 2)][plane]);
+                    static_cast<std::uint8_t>(patches[((y >= height / 2) * 2 + (x >= width / 2) + (temporal?index%3:0))%4][plane]);
         }
         writer.frame->pts = index;
         checked(avcodec_send_frame(&encoder, writer.frame), "Sending tagged frame"); drain();

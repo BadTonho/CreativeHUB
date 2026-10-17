@@ -94,3 +94,13 @@ copy completion; bounded RGBA recovery preserves the open encoder. Runtime LUID,
 format and capacity checks supplement the qualified preset matrix. The standalone
 prototype remains an independent diagnostic. Automatic, documents, versions and
 preferences are unchanged; other drivers/platforms require separate acceptance.
+
+## Native decoded-input research
+
+The [separate D3D11VA/Vulkan/NVENC prototype](../gpu/VULKAN_DECODE_PROTOTYPE.md)
+adds an explicit worker-owned import bridge and reuses the private D3D11 NV12
+converter with OpenGL. The application input boundary still uses its existing
+RGBA recovery; the prototype is not enabled by normal importFrame. Decoder
+reservation estimates remain separate from the 256 MiB Vulkan/bridge/output cap.
+The provisional result and 4K memory limitation are recorded in the
+[Windows evidence](../performance/VULKAN_DECODE_PIPELINE_WINDOWS_2026-10-17.md).

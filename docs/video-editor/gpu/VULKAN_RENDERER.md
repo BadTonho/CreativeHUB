@@ -261,3 +261,8 @@ allocation capacity, including preview/Fusion images, the estimated native pool
 and recovery staging. Export retains an explicit device reference and never
 replaces the session while Viewers are active. Offline-export schema 3 records
 native delivery separately from RGBA recovery and existing OpenGL diagnostics.
+
+The experimental [decoded-input bridge](VULKAN_DECODE_PROTOTYPE.md) is explicitly
+selected only by the standalone probe. Shader operation 10 converts imported
+normalized bytes into the existing RGBA8_UINT image contract. Application
+importFrame/native-source behavior and renderer selection are unchanged.
