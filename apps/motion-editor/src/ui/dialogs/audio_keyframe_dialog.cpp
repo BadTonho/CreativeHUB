@@ -45,7 +45,7 @@ QString propertyName(Property property)
 
 AudioKeyframeDialog::AudioKeyframeDialog(
     const QString& layer_name,
-    QWidget* parent)
+    QWidget* parent, bool allow_opacity)
     : QDialog(parent)
 {
     setObjectName(QStringLiteral("motion-audio-keyframe-dialog"));
@@ -81,6 +81,7 @@ AudioKeyframeDialog::AudioKeyframeDialog(
     property_ = new QComboBox(this);
     property_->setObjectName(QStringLiteral("motion-audio-keyframe-property"));
     for (const auto property : kProperties) {
+        if (!allow_opacity && property == Property::Opacity) continue;
         property_->addItem(propertyName(property), static_cast<int>(property));
     }
     property_->setCurrentIndex(2);

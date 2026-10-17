@@ -21,6 +21,10 @@ x::Document exportComposition(const MotionProjectData &project) {
     std::vector<x::Issue> issues;
     d.masks=project.masks;
     for (const auto &layer : project.layers) {
+        if (layer.kind == LayerKind::Null || layer.parent_id || layer.parent_offset != ParentTransformOffset{}) {
+            issues.push_back({layer.id, "Null layers and parent transforms are not supported by composition interchange."});
+            continue;
+        }
         constexpr auto limit = std::int64_t(1) << 50;
         if (layer.timeline_start_frame < 0 || layer.timeline_start_frame >= limit ||
             layer.duration_frames <= 0 || layer.duration_frames >= limit) {

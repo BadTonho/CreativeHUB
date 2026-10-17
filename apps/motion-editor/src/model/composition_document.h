@@ -64,7 +64,21 @@ enum class LayerKind : std::uint8_t {
     Shape,
     Image,
     Video,
+    Null,
 };
+
+// A canvas-pixel similarity transform. Identity also applies to unparented
+// layers; a retained offset preserves animation when a parent is removed.
+struct ParentTransformOffset {
+    double translation_x_pixels = 0.0;
+    double translation_y_pixels = 0.0;
+    double scale = 1.0;
+    double rotation_degrees = 0.0;
+
+    friend bool operator==(const ParentTransformOffset&, const ParentTransformOffset&) = default;
+};
+
+[[nodiscard]] bool validParentOffset(const ParentTransformOffset&) noexcept;
 
 using ColorRgba = std::array<std::uint8_t, 4>;
 
@@ -205,6 +219,8 @@ struct CompositionLayer {
     std::vector<LayerEffect> effects;
     std::optional<creative_suite::composition_exchange::Presentation> presentation;
     MaskId source_mask = 0, transform_mask = 0;
+    LayerId parent_id = 0;
+    ParentTransformOffset parent_offset;
 
     friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
@@ -250,7 +266,11 @@ public:
         const creative_suite::media::VideoMetadata& metadata,
         std::int64_t timeline_start_frame,
         LayerId* added_id = nullptr);
-    [[nodiscard]] bool removeLayer(LayerId id) noexcept;
+    // Detaches direct children without changing their pose at composition_frame.
+    [[nodiscard]] bool removeLayer(LayerId id, std::int64_t composition_frame = 0);
+    [[nodiscard]] bool canSetLayerParent(LayerId child, LayerId parent) const noexcept;
+    // Keeps the current global pose and all local keyframes. Zero clears the parent.
+    [[nodiscard]] bool setLayerParent(LayerId child, LayerId parent, std::int64_t composition_frame);
     // Moves the layer to its final index in the back-to-front layer order.
     [[nodiscard]] bool moveLayer(LayerId id, std::size_t final_index) noexcept;
     [[nodiscard]] bool moveLayerInTimeline(

@@ -1948,5 +1948,25 @@ Este é um ambiente inicial de trabalho para a suíte criativa de código aberto
         <source>Timeline</source>
         <translation>Linha do tempo</translation>
     </message>
+    <message>
+        <source>New Null</source>
+        <translation>Nova Null</translation>
+    </message>
+    <message>
+        <source>Null %1</source>
+        <translation>Null %1</translation>
+    </message>
+    <message>
+        <source>Parent &amp; Link</source>
+        <translation>Pai e vínculo</translation>
+    </message>
+    <message>
+        <source>No parent</source>
+        <translation>Sem pai</translation>
+    </message>
+    <message>
+        <source>%1 [#%2]</source>
+        <translation>%1 [#%2]</translation>
+    </message>
 </context>
 </TS>

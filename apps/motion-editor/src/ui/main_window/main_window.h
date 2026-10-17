@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/composition_document.h"
+#include "model/layer_transform_hierarchy.h"
 #include "model/motion_project_data.h"
 #include <creative_suite/motion_handoff/request.h>
 #include "application/history/composition_history.h"
@@ -136,6 +137,8 @@ private:
                                 const std::filesystem::path& path,
                                 bool published_output);
     void syncTransformInspector();
+    void changeSelectedLayerParent(model::LayerId parent);
+    void removeCompositionLayer(model::LayerId id);
     void refreshCurveEditor();
     void selectCurveSegment(
         model::LayerId id,
@@ -186,6 +189,7 @@ private:
     QAction* generate_audio_keyframes_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
     QAction* new_text_layer_action_ = nullptr;
+    QAction* new_null_layer_action_ = nullptr;
     QAction* new_rectangle_layer_action_ = nullptr;
     QAction* new_ellipse_layer_action_ = nullptr;
     QAction* edit_image_in_image_editor_action_ = nullptr;
@@ -252,6 +256,7 @@ private:
     };
     std::optional<CurveSelection> curve_selection_;
     std::shared_ptr<const std::vector<model::Mask>> mask_snapshot_;
+    std::shared_ptr<const model::LayerTransformHierarchy> hierarchy_snapshot_;
     model::LayerId mask_view_layer_=0;
     int mask_view_target_=-2;
     QProgressDialog* open_progress_ = nullptr;

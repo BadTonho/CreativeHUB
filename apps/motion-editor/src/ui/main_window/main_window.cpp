@@ -158,6 +158,12 @@ MainWindow::MainWindow(QWidget* parent,
     connect(import_media_action_, &QAction::triggered, this, [this] { openMedia(); });
 
     auto* layer_menu = menuBar()->addMenu(MotionUiTranslation::tr("Layer"));
+    new_null_layer_action_ = layer_menu->addAction(MotionUiTranslation::tr("New Null"));
+    new_null_layer_action_->setObjectName(QStringLiteral("motion-new-null-layer-action"));
+    new_null_layer_action_->setEnabled(false);
+    connect(new_null_layer_action_, &QAction::triggered, this, [this] {
+        createContentLayer(model::LayerKind::Null, model::ShapeKind::Rectangle);
+    });
     new_text_layer_action_ = layer_menu->addAction(MotionUiTranslation::tr("New Text"));
     new_text_layer_action_->setObjectName(QStringLiteral("motion-new-text-layer-action"));
     new_text_layer_action_->setEnabled(false);

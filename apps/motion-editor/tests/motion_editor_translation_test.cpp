@@ -126,6 +126,10 @@ int main(int argc, char* argv[])
             static_cast<int>(LanguagePreference::PortugueseBrazil)));
     }
 
+    if (!check(motion::ui::MotionUiTranslation::tr("New Null") == QStringLiteral("Nova Null") &&
+                   motion::ui::MotionUiTranslation::tr("Parent & Link") == QStringLiteral("Pai e vínculo") &&
+                   motion::ui::MotionUiTranslation::tr("No parent") == QStringLiteral("Sem pai"),
+               "Parenting and Null labels use the bundled pt-BR catalog.")) return 1;
     if (!check(motion::ui::MotionUiTranslation::tr("A future source string") ==
                    QStringLiteral("A future source string"),
                "Missing catalog entries must fall back to English source text.")) {

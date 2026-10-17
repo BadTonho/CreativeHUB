@@ -54,7 +54,7 @@ Motion-owned viewer, with a bounded mailbox and RGBA/CPU recovery; see
 [GPU_TEXTURE_PREVIEW.md](gpu/GPU_TEXTURE_PREVIEW.md). Offline export
 uses the same opt-in path and reads back RGBA for the existing CPU encoder.
 Manual Save, Save As, and Open use a versioned `.motion` document that includes
-the Media Pool. The writer emits schema v9 and reads versions 1–9; migrations
+the Media Pool. The writer emits schema v10 and reads versions 1–10; migrations
 and compatibility behavior are specified in [FORMAT.md](architecture/FORMAT.md). The
 separate recovery wrapper remains at version 1 and contains a nested native
 document. Undo/Redo and configurable autosave and recovery cover the
@@ -74,6 +74,13 @@ The timeline UI is split into controls, ruler, and layer-track components;
 This document records the agreed starting scope; it does not finalize a
 renderer, programming language, native file extension, codec, or implementation
 architecture.
+
+[Layer parenting and Null controls](features/HIERARCHY.md) are an implemented
+expansion: the Inspector selects a parent, local curves remain intact, and
+link/unlink/reparent/delete retain the pose at the current composition frame.
+Nulls control transforms without producing pixels. Native v10, recovery and Hub
+backups preserve the graph; independent `.cscomp` export refuses unsupported
+hierarchies. Manual UI/platform and performance acceptance remain pending.
 
 ## Intended Users and Workflows
 
@@ -277,7 +284,7 @@ The blur duration is wall-clock time, including pool scheduling and pass barrier
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
-The native `.motion` writer emits schema v9 and reads versions 1–9, including
+The native `.motion` writer emits schema v10 and reads versions 1–10, including
 layer-local keyframes and Cubic Bezier easing on Gaussian Blur and Color
 Adjustment parameters. Migration
 details are maintained in [FORMAT.md](architecture/FORMAT.md); the recovery wrapper remains
@@ -371,8 +378,8 @@ unchanged.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The current implementation writes version 9 JSON documents and reads
-  versions 1 through 9, identified by
+- The current implementation writes version 10 JSON documents and reads
+  versions 1 through 10, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
   in [FORMAT.md](architecture/FORMAT.md).

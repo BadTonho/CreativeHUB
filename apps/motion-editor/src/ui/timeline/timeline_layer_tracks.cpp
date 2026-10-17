@@ -359,6 +359,7 @@ protected:
                     case model::LayerKind::Video: clip_color = QColor(57, 132, 101); break;
                     case model::LayerKind::Text: clip_color = QColor(91, 89, 174); break;
                     case model::LayerKind::Shape: clip_color = QColor(164, 104, 52); break;
+                    case model::LayerKind::Null: clip_color = QColor(110, 115, 125); break;
                     }
                     if (!row.visible) clip_color = clip_color.darker(190);
                     painter.setPen(QPen(selected ? QColor(255, 183, 54) : clip_color.lighter(125),
@@ -367,7 +368,8 @@ protected:
                     painter.drawRoundedRect(clip_rect, 3, 3);
                     painter.setPen(QColor(245, 247, 250));
                     painter.drawText(clip_rect.adjusted(6, 0, -8, 0),
-                                     Qt::AlignLeft | Qt::AlignVCenter, row.name);
+                                     Qt::AlignLeft | Qt::AlignVCenter, row.kind == model::LayerKind::Null
+                                         ? QStringLiteral("◇ ") + row.name : row.name);
 
                     if (interaction_layer_id_ == row.id &&
                         (interaction_mode_ == InteractionMode::Move ||
@@ -916,6 +918,7 @@ private:
                 {index, VisualTimelineRow::Kind::TransformGroup, std::nullopt});
             if (expanded_transform_groups_.contains(layer_id)) {
                 for (const auto property : kTimelineProperties) {
+                    if (rows_[index].kind == model::LayerKind::Null && property == TransformProperty::Opacity) continue;
                     visual_rows_.push_back({index, VisualTimelineRow::Kind::Property, property});
                 }
             }

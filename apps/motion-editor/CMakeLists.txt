@@ -15,6 +15,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/model/composition_interchange.cpp
     src/model/composition_document.cpp
     src/model/composition_document.h
+    src/model/layer_transform_hierarchy.cpp
+    src/model/layer_transform_hierarchy.h
     src/model/motion_project_data.h
     src/persistence/motion_recovery_store.cpp
     src/persistence/motion_recovery_store.h

@@ -253,6 +253,7 @@ QString layerKindName(LayerKind kind)
     case LayerKind::Shape: return QStringLiteral("shape");
     case LayerKind::Image: return QStringLiteral("image");
     case LayerKind::Video: return QStringLiteral("video");
+    case LayerKind::Null: return QStringLiteral("null");
     }
     return {};
 }
@@ -264,6 +265,7 @@ LayerKind parseLayerKind(const QString& value,
     if (value == QLatin1String("shape")) return LayerKind::Shape;
     if (value == QLatin1String("image")) return LayerKind::Image;
     if (value == QLatin1String("video")) return LayerKind::Video;
+    if (value == QLatin1String("null")) return LayerKind::Null;
     fail(MotionDocumentErrorCode::InvalidValue, path,
          QStringLiteral("The document contains an unsupported layer kind."));
 }
@@ -696,6 +698,14 @@ QJsonObject writeLayer(const CompositionLayer& layer,
     QJsonObject object;
     object.insert(QStringLiteral("id"), encodedUInt64(layer.id));
     object.insert(QStringLiteral("kind"), layerKindName(layer.kind));
+    if (layer.parent_id) object.insert("parent_id", encodedUInt64(layer.parent_id));
+    if (layer.parent_offset != model::ParentTransformOffset{}) {
+        const auto& offset = layer.parent_offset;
+        object.insert("parent_offset", QJsonObject{
+            {"translation_x_pixels", offset.translation_x_pixels},
+            {"translation_y_pixels", offset.translation_y_pixels},
+            {"scale", offset.scale}, {"rotation_degrees", offset.rotation_degrees}});
+    }
     object.insert(QStringLiteral("name"), stringFromUtf8(layer.name));
     if (layer.presentation) object.insert("presentation", creative_suite::composition_exchange::presentationJson(*layer.presentation));
     object.insert(QStringLiteral("source_path"), layer.source_path.empty()
@@ -827,6 +837,20 @@ CompositionLayer parseLayer(const QJsonValue& value,
     }
     layer.id = requiredUInt64(object, "id", document_path);
     layer.kind = parseLayerKind(requiredString(object, "kind", document_path), document_path);
+    if (document_version < 10 && (layer.kind == LayerKind::Null ||
+        object.contains("parent_id") || object.contains("parent_offset")))
+        fail(MotionDocumentErrorCode::InvalidValue, document_path,
+             QStringLiteral("Null layers and parenting require document version 10."));
+    if (object.contains("parent_id")) layer.parent_id = requiredUInt64(object, "parent_id", document_path);
+    if (object.contains("parent_offset")) {
+        if (!object.value("parent_offset").isObject())
+            fail(MotionDocumentErrorCode::InvalidValue, document_path, QStringLiteral("Invalid parent compensation."));
+        const auto offset = object.value("parent_offset").toObject();
+        layer.parent_offset = {requiredNumber(offset, "translation_x_pixels", document_path),
+            requiredNumber(offset, "translation_y_pixels", document_path),
+            requiredNumber(offset, "scale", document_path),
+            requiredNumber(offset, "rotation_degrees", document_path)};
+    }
     layer.name = requiredString(object, "name", document_path).toUtf8().toStdString();
     if (layer.name.size() > static_cast<std::size_t>(kMaximumStringBytes)) {
         fail(MotionDocumentErrorCode::InvalidValue, document_path,

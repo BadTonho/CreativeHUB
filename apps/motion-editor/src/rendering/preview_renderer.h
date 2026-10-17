@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/composition_document.h"
+#include "model/layer_transform_hierarchy.h"
 #include "preview_frame.h"
 #include "../diagnostics/performance_metrics.h"
 
@@ -49,6 +50,7 @@ struct PreviewRequest {
     std::int64_t composition_frame=0;
     model::LayerId mask_view_layer=0;
     int mask_view_target=-2;
+    std::shared_ptr<const model::LayerTransformHierarchy> hierarchy;
 };
 
 class CompositionFrameRenderer;

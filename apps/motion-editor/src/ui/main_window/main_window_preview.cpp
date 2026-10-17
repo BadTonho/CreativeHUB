@@ -66,10 +66,21 @@ void MainWindow::requestPreview(bool playback_tick)
     request.frame_rate = document_->frameRate();
     const auto frame = timeline_->currentFrame();
     request.composition_frame=frame;
+    try {
+        if (!hierarchy_snapshot_ || !hierarchy_snapshot_->matches(document_->canvasSize(), document_->layers()))
+            hierarchy_snapshot_ = std::make_shared<const model::LayerTransformHierarchy>(
+                document_->canvasSize(), document_->layers());
+    } catch (const std::exception& error) {
+        creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
+            "motion_preview", "prepare_hierarchy", error.what());
+        return;
+    }
+    request.hierarchy = hierarchy_snapshot_;
     if(!mask_snapshot_ || *mask_snapshot_!=document_->masks())mask_snapshot_=std::make_shared<const std::vector<model::Mask>>(document_->masks());
     request.masks=mask_snapshot_;
     request.mask_view_layer=mask_view_layer_;request.mask_view_target=mask_view_target_;
     for (const auto& layer : document_->layers()) {
+        if (layer.kind == model::LayerKind::Null) continue;
         if (mask_view_layer_!=layer.id && (!layer.visible || layer.duration_frames <= 0 || frame < layer.timeline_start_frame ||
             frame - layer.timeline_start_frame >= layer.duration_frames)) {
             continue;

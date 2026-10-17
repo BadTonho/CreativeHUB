@@ -146,17 +146,9 @@ void MainWindow::showLayerContextMenu(model::LayerId id,
         connect(edit, &QAction::triggered, this, &MainWindow::editSelectedLayerImage);
     }
     auto* remove = menu.addAction(MotionUiTranslation::tr("Remove Layer"));
+    remove->setObjectName(QStringLiteral("motion-context-remove-layer-action"));
     connect(remove, &QAction::triggered, this, [this, id] {
-        if (!document_) return;
-        finishPendingTransformEdit();
-        auto before = captureEditState();
-        if (!document_->removeLayer(id)) return;
-        (void)recordCompositionEdit(std::move(before));
-        if (selected_layer_id_ == id) selected_layer_id_ = 0;
-        updateDocumentState();
-        refreshTimeline();
-        syncTransformInspector();
-        requestPreview();
+        removeCompositionLayer(id);
     });
     menu.exec(global_position);
 }

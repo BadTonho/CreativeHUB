@@ -8,6 +8,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
+#include <string>
+#include <vector>
 
 class QEvent;
 class QObject;
@@ -39,6 +42,7 @@ private:
     struct Controls {
         MediaDetailsWidget* media_details = nullptr;
         QWidget* transform_inspector = nullptr;
+        QComboBox* parent_layer = nullptr;
         QWidget* effects_inspector = nullptr;
         QListWidget* layer_effect_list = nullptr;
         QPushButton* add_layer_effect_button = nullptr;
@@ -89,6 +93,7 @@ public:
                    std::int64_t composition_frame,
                    int selected_effect_row);
     void syncSelectedEffect(const model::CompositionLayer* layer, int row);
+    void syncParenting(const model::CompositionDocument* document, model::LayerId selected);
     [[nodiscard]] int effectCount() const noexcept;
     [[nodiscard]] double transformFieldValue(std::size_t property_index) const noexcept;
     [[nodiscard]] double effectFieldValue(model::EffectParameterProperty property) const noexcept;
@@ -99,6 +104,7 @@ public:
     [[nodiscard]] model::LayerEffect editedEffect(model::LayerEffect value) const;
 
 signals:
+    void parentLayerChanged(qulonglong parent);
     void layerContentEdited();
     void layerContentEditFinished();
     void layerColorSelectionRequested(bool text_color, bool stroke_color);
@@ -119,6 +125,12 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    struct ParentChoice {
+        model::LayerId id, parent;
+        std::string name;
+    };
+    std::optional<model::LayerId> parenting_selected_;
+    std::vector<ParentChoice> parenting_choices_;
     Controls controls_;
     MaskInspectorWidget* masks_=nullptr;
     std::int64_t last_composition_frame_ = 0;

@@ -352,7 +352,7 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
             layer->maximum_timeline_duration_frames,
             layer->keyframes,
             layer->effects});
-        if (layer->timeline_start_frame >= 0 && layer->duration_frames > 0) {
+        if (layer->kind != model::LayerKind::Null && layer->timeline_start_frame >= 0 && layer->duration_frames > 0) {
             const auto end_frame = layer->duration_frames >
                     maximum_frame - layer->timeline_start_frame
                 ? maximum_frame

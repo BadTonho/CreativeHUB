@@ -1,6 +1,13 @@
 add_executable(creative-suite-motion-editor-document-tests
     composition_document_test.cpp
 )
+
+add_executable(creative-suite-motion-editor-hierarchy-tests layer_transform_hierarchy_test.cpp)
+target_link_libraries(creative-suite-motion-editor-hierarchy-tests PRIVATE creative-suite-motion-editor-core Qt6::Widgets)
+target_compile_features(creative-suite-motion-editor-hierarchy-tests PRIVATE cxx_std_20)
+add_creative_suite_test(NAME creative-suite-motion-editor-hierarchy COMMAND creative-suite-motion-editor-hierarchy-tests)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-hierarchy-tests)
+set_tests_properties(creative-suite-motion-editor-hierarchy PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 target_link_libraries(creative-suite-motion-editor-document-tests PRIVATE
     creative-suite-motion-editor-core
 )

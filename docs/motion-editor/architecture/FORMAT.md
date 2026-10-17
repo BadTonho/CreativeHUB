@@ -5,7 +5,7 @@ mask reference. Editable interchange now accepts `.cscomp` v3 ordered Color/Blur
 stages; no Motion schema change is required. See [contract](../../COMPOSITION_INTERCHANGE.md).
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 9 schema may change before a stable release. This format is separate
+version 10 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 ## File identity and versioning
@@ -15,22 +15,22 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `9`. |
+| `version` | integer | Current schema version is `10`. |
 | `revision` | decimal string | Monotonic saved revision used to reject stale linked writes. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1 through 9. Version 1 text and shape layers
+Motion Studio reads versions 1 through 10. Version 1 text and shape layers
 had no typed content, so they open with the current default text or rectangle content
 for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
-older document writes it as version 9. Versions 1 through 5 load without linked
+older document writes it as version 10. Versions 1 through 5 load without linked
 Image Editor metadata. Motion Studio rejects malformed data, an
 unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
 
-Hub snapshots preserve versions 1–9 and rebase relative media and linked-image
+Hub snapshots preserve versions 1–10 and rebase relative media and linked-image
 references to their original absolute locations. Relative-directory escape
 restrictions are retained. Native save behavior is unchanged and media are not
 bundled. See [Hub backups](../../hub/BACKUPS.md) and the producer/consumer
@@ -173,7 +173,7 @@ UTF-8 JSON wrapper uses format identifier
 `creative-suite.motion-studio-recovery` and wrapper version `1`. Its fields are
 `format`, `version`, `target_document_path`, `session_id`, and `document`. The
 `document` value uses the same validated payload described above and may be
-version 1 through 9; preview caches and Undo/Redo history are not included. The
+version 1 through 10; preview caches and Undo/Redo history are not included. The
 wrapper remains version 1 and its nested document is written atomically with
 `QSaveFile`.
 
@@ -260,3 +260,26 @@ as transform keyframes, and counts toward the document keyframe limit. Unknown
 property keys, out-of-range values, and `keyframes` fields in documents before
 version 9 are rejected. `.cscomp` interchange remains unchanged and rejects
 layers with animated effect parameters.
+
+
+## Version 10 layer parenting and Null controls
+
+Version 10 adds `kind: "null"` and optional layer fields `parent_id` (a layer ID
+encoded as a decimal string; zero means no parent) and `parent_offset` (an object with finite
+`translation_x_pixels`, `translation_y_pixels`, positive `scale`, and
+`rotation_degrees`). Missing fields mean no parent and identity compensation.
+An offset may remain on a layer with no parent. Versions 1–9 migrate to these
+defaults; Nulls and parenting fields declared before v10 are rejected.
+Self-links, cycles, missing parents, and invalid offsets are rejected before
+applying the document. Save, autosave, and recovery preserve these records;
+the recovery wrapper remains version 1. Older Motion readers reject v10.
+
+A Null has no source, linked image, presentation, typed visual content, effects,
+or masks. Its source metadata is zero, opacity is 1, and its opacity track is
+empty. Position, uniform scale, rotation, and their curves remain editable.
+Parenting does not change layer order or local curves. Parent opacity,
+visibility, activity, effects, and masks are not inherited. Pixel-space
+resolution, pose-preserving edits, and pending manual checks are defined in
+[Layer hierarchy](../features/HIERARCHY.md). Hub supports v10 snapshots.
+`.cscomp` v3 cannot represent Nulls, parents, or nonidentity compensation, so
+export rejects them with layer-specific issues rather than flattening them.

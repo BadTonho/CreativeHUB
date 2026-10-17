@@ -14,7 +14,7 @@ bool hasLayerMasks(const PreviewLayerSnapshot& layer) noexcept {
 }
 MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFramePtr source,
     const PreviewRequest& request,c::ShapeMaskRasterCache& cache,c::OpenGlFrameCompositor* gpu,
-    const std::function<bool()>& cancel) {
+    const std::function<bool()>& cancel, const a::Transform2D* resolved_transform) {
     c::OpenGlCompositionTimings timings;
     const auto canceled=[&]{return cancel && cancel();};
     const auto coverage=[&](model::MaskId id,int width,int height) {
@@ -27,7 +27,7 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
     };
     const bool intrinsic=layer.kind==model::LayerKind::Text || layer.kind==model::LayerKind::Shape;
     const auto profile=layer.presentation?layer.presentation->profile:x::Profile::MotionLayer;
-    auto transform=a::evaluateTransform(layer.transform,layer.keyframes,layer.local_frame);
+    auto transform=resolved_transform?*resolved_transform:a::evaluateTransform(layer.transform,layer.keyframes,layer.local_frame);
     if(request.mask_view_layer==layer.id) {
         auto id=request.mask_view_target==-2?layer.source_mask:request.mask_view_target==-1?layer.transform_mask:
             request.mask_view_target>=0 && std::size_t(request.mask_view_target)<layer.effects.size()?std::visit([](const auto& e){return e.mask;},layer.effects[request.mask_view_target]):0;

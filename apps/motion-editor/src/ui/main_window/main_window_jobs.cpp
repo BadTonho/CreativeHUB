@@ -173,7 +173,8 @@ void MainWindow::generateKeyframesFromAudio()
     if (selected == document_->layers().end() || selected->duration_frames <= 0) return;
 
     AudioKeyframeDialog dialog(QString::fromUtf8(
-        selected->name.data(), static_cast<qsizetype>(selected->name.size())), this);
+        selected->name.data(), static_cast<qsizetype>(selected->name.size())), this,
+        selected->kind != model::LayerKind::Null);
     if (dialog.exec() != QDialog::Accepted) return;
     const auto settings = dialog.settings();
 

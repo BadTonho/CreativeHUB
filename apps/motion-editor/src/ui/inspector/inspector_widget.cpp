@@ -34,6 +34,8 @@
 #include <QDropEvent>
 
 #include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
 #include <variant>
 
 namespace motion::ui {
@@ -267,6 +269,12 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     transform_title->setObjectName(QStringLiteral("motion-transform-inspector-title"));
     transform_layout->addWidget(transform_title);
     auto* transform_form = new QFormLayout;
+    controls_.parent_layer = new QComboBox(controls_.transform_inspector);
+    controls_.parent_layer->setObjectName(QStringLiteral("motion-parent-layer"));
+    transform_form->addRow(MotionUiTranslation::tr("Parent & Link"), controls_.parent_layer);
+    connect(controls_.parent_layer, &QComboBox::activated, this, [this](int index) {
+        emit parentLayerChanged(controls_.parent_layer->itemData(index).toULongLong());
+    });
     for (std::size_t index = 0; index < kTransformObjectNames.size(); ++index) {
         auto* row = new QWidget(controls_.transform_inspector);
         auto* row_layout = new QHBoxLayout(row);
@@ -532,6 +540,44 @@ double InspectorWidget::effectFieldValue(model::EffectParameterProperty property
     return 0.0;
 }
 
+void InspectorWidget::syncParenting(const model::CompositionDocument* document, model::LayerId selected)
+{
+    // Playback changes the displayed values, not the parent menu. Avoid
+    // rebuilding widgets and descendant maps on every playhead update.
+    if (parenting_selected_ == selected && document && parenting_choices_.size() == document->layers().size() &&
+        std::equal(parenting_choices_.begin(), parenting_choices_.end(), document->layers().begin(),
+            [](const auto& choice, const auto& layer) {
+                return choice.id == layer.id && choice.parent == layer.parent_id && choice.name == layer.name;
+            })) return;
+    parenting_selected_ = selected;
+    parenting_choices_.clear();
+    if (document) for (const auto& layer : document->layers())
+        parenting_choices_.push_back({layer.id,layer.parent_id,layer.name});
+    const QSignalBlocker blocker(controls_.parent_layer);
+    controls_.parent_layer->clear();
+    controls_.parent_layer->addItem(MotionUiTranslation::tr("No parent"), QVariant::fromValue<qulonglong>(0));
+    controls_.parent_layer->setEnabled(document != nullptr && selected != 0);
+    if (!document || !selected) return;
+    std::unordered_map<model::LayerId, std::vector<model::LayerId>> children;
+    for (const auto& layer : document->layers()) children[layer.parent_id].push_back(layer.id);
+    std::unordered_set<model::LayerId> excluded{selected};
+    std::vector<model::LayerId> pending{selected};
+    for (std::size_t i = 0; i < pending.size(); ++i) {
+        const auto found = children.find(pending[i]);
+        if (found == children.end()) continue;
+        for (const auto child : found->second) if (excluded.insert(child).second) pending.push_back(child);
+    }
+    model::LayerId parent = 0;
+    for (const auto& layer : document->layers()) {
+        if (layer.id == selected) parent = layer.parent_id;
+        if (excluded.contains(layer.id)) continue;
+        controls_.parent_layer->addItem(MotionUiTranslation::tr("%1 [#%2]")
+            .arg(fromUtf8(layer.name)).arg(static_cast<qulonglong>(layer.id)),
+            QVariant::fromValue<qulonglong>(layer.id));
+    }
+    controls_.parent_layer->setCurrentIndex(controls_.parent_layer->findData(QVariant::fromValue<qulonglong>(parent)));
+}
+
 void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
                                 std::int64_t composition_frame,
                                 int selected_effect_row)
@@ -572,7 +618,7 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
         controls_.layer_content_pages->setCurrentIndex(0);
     }
 
-    const bool has_layer = layer != nullptr;
+    const bool has_layer = layer != nullptr && layer->kind != model::LayerKind::Null;
     controls_.effects_inspector->setEnabled(has_layer);
     setTabEnabled(controls_.effects_tab_index, has_layer);
     const QSignalBlocker list_blocker(controls_.layer_effect_list);
@@ -619,7 +665,9 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
         const QSignalBlocker blocker(controls_.transform_fields[i]);
         controls_.transform_fields[i]->setValue(transformValue(evaluated, properties[i]));
         controls_.transform_fields[i]->setReadOnly(!keys.empty() && !key_here);
-        controls_.transform_key_buttons[i]->setEnabled(inside);
+        const bool supported = layer->kind != model::LayerKind::Null || i != 4;
+        controls_.transform_fields[i]->setEnabled(supported);
+        controls_.transform_key_buttons[i]->setEnabled(inside && supported);
         controls_.transform_key_buttons[i]->setText(key_here ? QStringLiteral("◆")
                                                                : QStringLiteral("◇"));
         controls_.transform_key_buttons[i]->setToolTip(key_here

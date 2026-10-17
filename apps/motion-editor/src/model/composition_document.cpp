@@ -1,4 +1,5 @@
 #include "composition_document.h"
+#include "layer_transform_hierarchy.h"
 
 #include <creative_suite/media/media_library.h>
 
@@ -65,6 +66,7 @@ bool validLayerKind(LayerKind kind) noexcept
     case LayerKind::Shape:
     case LayerKind::Image:
     case LayerKind::Video:
+    case LayerKind::Null:
         return true;
     }
     return false;
@@ -132,6 +134,7 @@ bool validContentForKind(LayerKind kind, const LayerContent& content) noexcept
     }
     case LayerKind::Image:
     case LayerKind::Video:
+    case LayerKind::Null:
         return std::holds_alternative<std::monostate>(content);
     }
     return false;
@@ -153,9 +156,15 @@ bool validLayer(const CompositionLayer& layer) noexcept
         !validTransform(layer.transform) ||
         !validTransformKeyframes(layer.keyframes) ||
         !validContentForKind(layer.kind, layer.content) ||
-        !validLayerEffects(layer.effects)) {
+        !validLayerEffects(layer.effects) || !validParentOffset(layer.parent_offset)) {
         return false;
     }
+    if (layer.kind == LayerKind::Null &&
+        (!layer.source_path.empty() || layer.linked_image || layer.presentation ||
+         layer.source_frame_count || layer.source_start_frame || layer.source_duration_frames ||
+         layer.maximum_timeline_duration_frames || layer.source_frame_rate != 0 ||
+         !layer.effects.empty() || layer.source_mask || layer.transform_mask ||
+         layer.transform.opacity != 1 || !layer.keyframes.opacity.empty())) return false;
     if (layer.duration_frames > 0 &&
         (layer.kind == LayerKind::Image || layer.kind == LayerKind::Video) &&
         layer.source_path.empty()) {
@@ -519,6 +528,7 @@ CompositionDocument::CompositionDocument(
         greatest_id = std::max(greatest_id, layer.id);
     }
     layers_ = std::move(layers);
+    (void)LayerTransformHierarchy(canvas_size_, layers_);
     std::unordered_set<MaskId> mask_ids;
     if(masks.size()>4096)throw std::invalid_argument("Too many masks.");
     for(const auto& m:masks) {
@@ -580,7 +590,7 @@ bool CompositionDocument::addContentLayer(
     std::int64_t timeline_start_frame,
     LayerId* added_id)
 {
-    if ((kind != LayerKind::Text && kind != LayerKind::Shape) ||
+    if ((kind != LayerKind::Text && kind != LayerKind::Shape && kind != LayerKind::Null) ||
         timeline_start_frame < 0) {
         return false;
     }
@@ -677,14 +687,55 @@ AddMediaLayerResult CompositionDocument::addMediaLayer(
     return AddMediaLayerResult::Added;
 }
 
-bool CompositionDocument::removeLayer(LayerId id) noexcept
+bool CompositionDocument::canSetLayerParent(LayerId child, LayerId parent) const noexcept
+{
+    if (!findLayer(child)) return false;
+    for (std::size_t depth = 0; parent != 0; ++depth) {
+        if (parent == child || depth >= layers_.size()) return false;
+        const auto* layer = findLayer(parent);
+        if (!layer) return false;
+        parent = layer->parent_id;
+    }
+    return true;
+}
+
+bool CompositionDocument::setLayerParent(LayerId child, LayerId parent, std::int64_t frame)
+{
+    if (frame < 0 || !canSetLayerParent(child, parent)) return false;
+    auto* layer = findLayer(child);
+    if (layer->parent_id == parent) return false;
+    const auto global = LayerTransformHierarchy(canvas_size_, layers_).evaluate(frame);
+    const auto local = creative_suite::animation::evaluateTransform(layer->transform, layer->keyframes,
+        frame < layer->timeline_start_frame ? 0 : frame - layer->timeline_start_frame);
+    const auto desired = geometryOffset(global.at(child), canvas_size_);
+    const auto relative = parent ? composeOffsets(inverseOffset(geometryOffset(global.at(parent), canvas_size_)), desired) : desired;
+    const auto offset = composeOffsets(relative, inverseOffset(geometryOffset(local, canvas_size_)));
+    layer->parent_id = parent;
+    layer->parent_offset = offset;
+    return true;
+}
+
+bool CompositionDocument::removeLayer(LayerId id, std::int64_t frame)
 {
     const auto layer = std::find_if(layers_.begin(), layers_.end(), [id](const auto& item) {
         return item.id == id;
     });
-    if (layer == layers_.end()) {
+    if (layer == layers_.end() || frame < 0) {
         return false;
     }
+    // Stage every compensation before mutating; a numerical failure must leave
+    // the parent and every child intact.
+    std::vector<std::pair<CompositionLayer*, ParentTransformOffset>> detached;
+    if (std::any_of(layers_.begin(), layers_.end(), [id](const auto& l) { return l.parent_id == id; })) {
+        const auto global = LayerTransformHierarchy(canvas_size_, layers_).evaluate(frame);
+        for (auto& child : layers_) if (child.parent_id == id) {
+            const auto local = creative_suite::animation::evaluateTransform(child.transform, child.keyframes,
+                frame < child.timeline_start_frame ? 0 : frame - child.timeline_start_frame);
+            detached.emplace_back(&child, composeOffsets(geometryOffset(global.at(child.id), canvas_size_),
+                inverseOffset(geometryOffset(local, canvas_size_))));
+        }
+    }
+    for (auto& [child, offset] : detached) { child->parent_id = 0; child->parent_offset = offset; }
     layers_.erase(layer);
     collectUnreferencedMasks();
     return true;
@@ -835,7 +886,7 @@ bool CompositionDocument::setLayerTransform(
         return false;
     }
     auto* layer = findLayer(id);
-    if (layer == nullptr) {
+    if (layer == nullptr || (layer->kind == LayerKind::Null && transform.opacity != 1)) {
         return false;
     }
     layer->transform = transform;
@@ -880,7 +931,8 @@ bool CompositionDocument::setLayerEffects(
     const std::vector<LayerEffect>& effects)
 {
     auto* layer = findLayer(id);
-    if (layer == nullptr || !validLayerEffects(effects)) return false;
+    if (layer == nullptr || !validLayerEffects(effects) ||
+        (layer->kind == LayerKind::Null && !effects.empty())) return false;
     for(const auto& effect:effects)if(!std::visit([&](const auto& e){return !e.mask || findMask(e.mask);},effect))return false;
     layer->effects = effects;
     collectUnreferencedMasks();
@@ -894,6 +946,7 @@ bool CompositionDocument::replaceLayerKeyframes(
 {
     auto* layer = findLayer(id);
     if (layer == nullptr) return false;
+    if (layer->kind == LayerKind::Null && property == creative_suite::animation::TransformProperty::Opacity) return false;
     auto candidate = layer->keyframes;
     auto* target = mutableKeyframesFor(candidate, property);
     if (target == nullptr) return false;
@@ -911,6 +964,7 @@ bool CompositionDocument::setLayerKeyframe(
 {
     auto* layer = findLayer(id);
     return layer != nullptr
+        && !(layer->kind == LayerKind::Null && property == creative_suite::animation::TransformProperty::Opacity)
         && creative_suite::animation::setKeyframe(
             layer->keyframes, property, local_frame, value);
 }
@@ -1162,7 +1216,7 @@ void CompositionDocument::collectUnreferencedMasks() noexcept {
 
 bool CompositionDocument::associateMask(LayerId id,int target,MaskId mask) {
     auto* layer=findLayer(id);
-    if(!layer || (mask && !findMask(mask)) || target < -2 || (target>=0 && std::size_t(target)>=layer->effects.size()))return false;
+    if(!layer || layer->kind==LayerKind::Null || (mask && !findMask(mask)) || target < -2 || (target>=0 && std::size_t(target)>=layer->effects.size()))return false;
     if(maskForTarget(id,target)==mask)return false;
     if(target==-2)layer->source_mask=mask;
     else if(target==-1)layer->transform_mask=mask;
@@ -1170,7 +1224,7 @@ bool CompositionDocument::associateMask(LayerId id,int target,MaskId mask) {
     collectUnreferencedMasks();return true;
 }
 MaskId CompositionDocument::createMask(LayerId id,int target,creative_suite::composition::ShapeMaskKind kind) {
-    if(!findLayer(id)||target < -2 || (target>=0 && std::size_t(target)>=findLayer(id)->effects.size()) ||
+    if(!findLayer(id)||findLayer(id)->kind==LayerKind::Null||target < -2 || (target>=0 && std::size_t(target)>=findLayer(id)->effects.size()) ||
        masks_.size()>=4096 || next_mask_id_>std::uint64_t(INT64_MAX) ||
        (kind!=creative_suite::composition::ShapeMaskKind::Rectangle && kind!=creative_suite::composition::ShapeMaskKind::Ellipse))return 0;
     const auto next=next_mask_id_++;

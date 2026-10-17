@@ -384,6 +384,7 @@ void MotionVideoExporter::exportVideo(
 
     std::int64_t duration_frames = 0;
     for (const auto& layer : snapshot.layers) {
+        if (layer.kind == model::LayerKind::Null) continue;
         if (layer.timeline_start_frame < 0 || layer.duration_frames <= 0 ||
             layer.timeline_start_frame >
                 std::numeric_limits<std::int64_t>::max() - layer.duration_frames) {
@@ -436,6 +437,7 @@ void MotionVideoExporter::exportVideo(
         const auto output_frame_bytes = static_cast<std::uint64_t>(snapshot.canvas_size.width) *
             static_cast<std::uint64_t>(snapshot.canvas_size.height) * 4;
         const auto mask_snapshot=std::make_shared<const std::vector<model::Mask>>(snapshot.masks);
+        const auto hierarchy = std::make_shared<const model::LayerTransformHierarchy>(snapshot.canvas_size, snapshot.layers);
         const auto make_request = [&](std::int64_t output_frame) {
             const auto composition_frame = std::min(
                 duration_frames - 1,
@@ -445,7 +447,9 @@ void MotionVideoExporter::exportVideo(
             request.frame_rate = snapshot.frame_rate;
             request.black_canvas_when_empty = true;
             request.masks=mask_snapshot;request.composition_frame=composition_frame;
+            request.hierarchy = hierarchy;
             for (const auto& layer : snapshot.layers) {
+                if (layer.kind == model::LayerKind::Null) continue;
                 if (!layer.visible || composition_frame < layer.timeline_start_frame ||
                     composition_frame - layer.timeline_start_frame >= layer.duration_frames) {
                     continue;

@@ -2,9 +2,18 @@
 
 Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
-`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion9.
+`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion11.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v8 presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v9 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v10 hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v11 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+
+## Motion hierarchy backup verification
+
+Motion hierarchy evidence (2026-10-17, Windows Release): both backup gates
+passed with `.motion` v10 Null layers, parent IDs, compensation, animated
+transforms, shared masks/effects and linked-image media. The actual Motion
+reader reopened the vault and relocated restore. Hub Release was rebuilt at
+16:34:20 UTC−03:00; native backup UI acceptance remains pending. See
+[Motion hierarchy evidence](../../motion-editor/features/HIERARCHY.md#automated-windows-evidence--2026-10-17).
 
 ## Background Generator backup verification
 

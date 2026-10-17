@@ -88,8 +88,19 @@ motion::ui::PreviewRequest request()
     text_content.color = {240, 220, 40, 180};
     text.content = text_content;
 
-    return {{32, 32}, {24, 1},
+    motion::ui::PreviewRequest result{{32, 32}, {24, 1},
             {std::move(image), std::move(shape), std::move(text)}};
+    std::vector<motion::model::CompositionLayer> hierarchy;
+    for (const auto& layer : result.layers) {
+        motion::model::CompositionLayer node{layer.id,layer.kind,"Layer"};
+        node.transform=layer.transform;node.keyframes=layer.keyframes;
+        node.parent_id=10;hierarchy.push_back(std::move(node));
+    }
+    motion::model::CompositionLayer parent{10,motion::model::LayerKind::Null,"Control"};
+    parent.transform={.1,.05,.8,12,1};parent.visible=false;
+    hierarchy.push_back(parent);
+    result.hierarchy=std::make_shared<const motion::model::LayerTransformHierarchy>(result.canvas_size,hierarchy);
+    return result;
 }
 
 } // namespace

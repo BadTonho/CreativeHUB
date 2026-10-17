@@ -70,6 +70,8 @@ void MainWindow::createWorkspace()
         }
     });
     inspector_ = new InspectorWidget(this);
+    connect(inspector_, &InspectorWidget::parentLayerChanged, this,
+            [this](qulonglong parent) { changeSelectedLayerParent(static_cast<model::LayerId>(parent)); });
     inspector_->masksInspector()->setHandlers(
         [this](MaskInspectorWidget::Edit edit) {
             finishPendingTransformEdit();if(!document_)return;
@@ -275,16 +277,7 @@ void MainWindow::createWorkspace()
         }
     });
     timeline_->setLayerRemoveHandler([this](model::LayerId id) {
-        finishPendingTransformEdit();
-        if (!document_) return;
-        auto before = captureEditState();
-        if (!document_->removeLayer(id)) return;
-        (void)recordCompositionEdit(std::move(before));
-        updateDocumentState();
-        if (selected_layer_id_ == id) selected_layer_id_ = 0;
-        refreshTimeline();
-        syncTransformInspector();
-        requestPreview();
+        removeCompositionLayer(id);
     });
     connect(timeline_, &TimelineNavigator::currentFrameChanged,
             this, [this] {

@@ -593,6 +593,7 @@ void MainWindow::updateDocumentState()
     }
     if (import_media_action_ != nullptr) import_media_action_->setEnabled(has_document);
     if (new_text_layer_action_ != nullptr) new_text_layer_action_->setEnabled(has_document);
+    if (new_null_layer_action_ != nullptr) new_null_layer_action_->setEnabled(has_document);
     if (new_rectangle_layer_action_ != nullptr)
         new_rectangle_layer_action_->setEnabled(has_document);
     if (new_ellipse_layer_action_ != nullptr)
@@ -616,7 +617,8 @@ void MainWindow::updateDocumentState()
     if (save_composition_as_action_ != nullptr)
         save_composition_as_action_->setEnabled(has_document);
     if (export_video_action_ != nullptr) {
-        const bool has_layers = has_document && !document_->layers().empty();
+        const bool has_layers = has_document && std::any_of(document_->layers().begin(), document_->layers().end(),
+            [](const auto& layer) { return layer.kind != model::LayerKind::Null && layer.duration_frames > 0; });
         export_video_action_->setEnabled(
             has_layers && !export_worker_ && !audio_keyframe_worker_);
     }

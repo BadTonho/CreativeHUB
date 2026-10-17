@@ -24,7 +24,7 @@ struct AudioKeyframeDialogSettings final {
 
 class AudioKeyframeDialog final : public QDialog {
 public:
-    AudioKeyframeDialog(const QString& layer_name, QWidget* parent = nullptr);
+    AudioKeyframeDialog(const QString& layer_name, QWidget* parent = nullptr, bool allow_opacity = true);
 
     [[nodiscard]] AudioKeyframeDialogSettings settings() const;
 

@@ -68,3 +68,9 @@ transfer back. Compare rotated, transparent media with source and transform
 masks on native drivers. Windows automated coverage does not establish native
 macOS/Linux acceptance. Pen/polygon masks, combinations, tracking, Merge/Output
 masks, animated Soft Edge/Invert, and direct Viewer editing remain outside v1.
+
+
+Layer hierarchy resolves inherited geometry before this existing Transform
+stage. Transform masks keep their composition-space coverage and continue to
+limit the complete resolved transform. Parent masks/effects are not copied to
+children; Null controls cannot own masks. See [Layer hierarchy](HIERARCHY.md).

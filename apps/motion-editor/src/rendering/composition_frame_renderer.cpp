@@ -255,8 +255,28 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     composition_layers.reserve(request.layers.size());
     owned_frames.reserve(request.layers.size());
     composition_layer_ids.reserve(request.layers.size());
+    std::unordered_map<model::LayerId, creative_suite::animation::Transform2D> resolved;
+    try {
+        if (request.hierarchy) resolved = request.hierarchy->evaluate(request.composition_frame);
+    } catch (const std::exception& error) {
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Error, "motion_preview", "evaluate_hierarchy", error.what());
+        if (fail_on_media_error) throw;
+        return {};
+    }
     for (const auto& layer : request.layers) {
         if ((should_cancel && should_cancel())) return {};
+        if (layer.kind == model::LayerKind::Null) continue;
+        const auto resolved_entry = resolved.find(layer.id);
+        if (request.hierarchy && resolved_entry == resolved.end()) {
+            creative_suite::diagnostics::Logger::instance().log(
+                creative_suite::diagnostics::Level::Error, "motion_preview", "evaluate_hierarchy",
+                "The render layer is absent from its hierarchy snapshot.", {{"layer_id", std::to_string(layer.id)}});
+            if (fail_on_media_error) throw std::runtime_error("Missing layer hierarchy snapshot node.");
+            return {};
+        }
+        const auto effective_transform = request.hierarchy ? resolved_entry->second :
+            creative_suite::animation::evaluateTransform(layer.transform, layer.keyframes, layer.local_frame);
         creative_suite::media::RgbaFramePtr frame;
         if (layer.kind == model::LayerKind::Image) {
             frame = layer.still_frame;
@@ -432,7 +452,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             if(try_gpu_effects && !gpu_compositor_)gpu_compositor_=std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(
                 gpu_surface_,creative_suite::composition::OpenGlPrecisionPolicy::Automatic,texture_share_context_,texture_budget_);
             MaskedLayerFrame processed;
-            try {processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel);}
+            try {processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel,&effective_transform);}
             catch(const std::exception& e) {
                 if(should_cancel && should_cancel())return {};
                 creative_suite::diagnostics::Logger::instance().log(try_gpu_effects?creative_suite::diagnostics::Level::Warning:creative_suite::diagnostics::Level::Error,
@@ -553,8 +573,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             }
         }
         owned_frames.push_back(frame);
-        auto transform = creative_suite::animation::evaluateTransform(
-            layer.transform, layer.keyframes, layer.local_frame);
+        auto transform = effective_transform;
         if (layer.kind == model::LayerKind::Text ||
             layer.kind == model::LayerKind::Shape) {
             const double fit_scale = std::min(

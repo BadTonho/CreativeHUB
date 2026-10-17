@@ -20,7 +20,7 @@ stack. Full-canvas Motion rectangles without strokes map to Background nodes.
 Text content, font, alignment, size, RGBA, layout, transforms and linear/Bézier
 curves remain editable. Media are referenced, not copied or embedded.
 
-Masks on Merge/Output, animated effect parameters, shared image branches, disconnected
+Motion Null layers, parenting, nonidentity parent compensation, masks on Merge/Output, animated effect parameters, shared image branches, disconnected
 nodes, processing after Merge, multiple Transform stages, nested foreground
 compositions, linked image documents, other shapes, and clip-level effects or
 non-neutral transforms are refused with an item-specific report. No partial
@@ -109,8 +109,8 @@ Gaussian Blur node; versions through 30 reject that node. Older supported
 projects retain their existing rendering defaults; readers predating these
 versions reject the newer files. Motion v7 introduced composition
 name/duration and fractional font-size metadata. Autosave and recovery use the
-same native serializers. Hub backups accept CSP 1–31 and Motion 1–8, retain
-presentation records and rebase existing media/Input paths. CSP 32 and Motion 9
+same native serializers. Hub backups accept CSP 1–31 and Motion 1–10, retain
+presentation, hierarchy, compensation and effect-curve records, and rebase existing media/Input paths. CSP 32 and Motion 11
 are rejected. Application versions and the existing linked-handoff v1 protocol
 are unchanged.
 

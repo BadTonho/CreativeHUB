@@ -360,6 +360,21 @@ void testMotionDocuments(const QString& root) {
     const auto interchange_backup = backup(QDir(root).filePath("motion-interchange-v9"), interchange_path);
     CS_TEST_CHECK(Store::load(fsPath(interchange_backup.vault)) == project);
     CS_TEST_CHECK(Store::load(fsPath(interchange_backup.restored)) == project);
+    CompositionDocument hierarchy(1920,1080,{30,1},project.layers,project.masks);
+    LayerId null_id=0;
+    CS_TEST_CHECK(hierarchy.addContentLayer(LayerKind::Null,"Control",0,&null_id));
+    auto control=hierarchy.layers().back().transform;control.position_x=.25;control.rotation_degrees=30;
+    CS_TEST_CHECK(hierarchy.setLayerTransform(null_id,control));
+    CS_TEST_CHECK(hierarchy.setLayerKeyframe(null_id,creative_suite::animation::TransformProperty::Rotation,15,70));
+    CS_TEST_CHECK(hierarchy.setLayerParent(id,null_id,7));
+    project.layers=hierarchy.layers();
+    const auto hierarchy_path=QDir(QFileInfo(assets).absolutePath()).filePath("hierarchy.motion");
+    Store::save(fsPath(hierarchy_path),project);
+    const auto hierarchy_backup=backup(QDir(root).filePath("motion-parenting-v10"),hierarchy_path);
+    CS_TEST_CHECK(Store::load(fsPath(hierarchy_backup.vault))==project);
+    const auto restored_hierarchy=Store::load(fsPath(hierarchy_backup.restored));
+    CS_TEST_CHECK(restored_hierarchy==project);
+    CS_TEST_CHECK(std::filesystem::exists(restored_hierarchy.layers.front().source_path));
 }
 #endif
 

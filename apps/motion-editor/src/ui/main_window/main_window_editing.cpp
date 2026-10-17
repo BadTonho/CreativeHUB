@@ -477,7 +477,9 @@ void MainWindow::createContentLayer(model::LayerKind kind, model::ShapeKind shap
             return content != nullptr && content->shape == shape;
         }));
     QString name;
-    if (kind == model::LayerKind::Text) {
+    if (kind == model::LayerKind::Null) {
+        name = MotionUiTranslation::tr("Null %1").arg(same_kind_count + 1);
+    } else if (kind == model::LayerKind::Text) {
         name = QStringLiteral("Text %1").arg(same_kind_count + 1);
     } else {
         name = QStringLiteral("%1 %2")
@@ -507,10 +509,48 @@ void MainWindow::createContentLayer(model::LayerKind kind, model::ShapeKind shap
     (void)recordCompositionEdit(std::move(before));
     refreshTimeline();
     syncTransformInspector();
-    inspector_->selectLayerTab();
+    if (kind == model::LayerKind::Null) inspector_->selectTransformTab();
+    else inspector_->selectLayerTab();
     updateDocumentState();
     requestPreview();
 }
+void MainWindow::removeCompositionLayer(model::LayerId id)
+{
+    finishPendingTransformEdit();
+    if (!document_) return;
+    try {
+        auto before = captureEditState();
+        if (!document_->removeLayer(id, timeline_ ? timeline_->currentFrame() : 0)) return;
+        (void)recordCompositionEdit(std::move(before));
+        if (selected_layer_id_ == id) selected_layer_id_ = 0;
+        updateDocumentState();
+        refreshTimeline();
+        syncTransformInspector();
+        requestPreview();
+    } catch (const std::exception& error) {
+        reportDocumentError("remove_layer", document_path_.value_or(std::filesystem::path{}), error);
+    }
+}
+
+void MainWindow::changeSelectedLayerParent(model::LayerId parent)
+{
+    finishPendingTransformEdit();
+    finishPendingContentEdit();
+    if (!document_ || !timeline_) return;
+    try {
+        auto before = captureEditState();
+        if (document_->setLayerParent(selected_layer_id_, parent, timeline_->currentFrame())) {
+            (void)recordCompositionEdit(std::move(before));
+            refreshTimeline();
+            updateDocumentState();
+            requestPreview();
+        }
+    } catch (const std::exception& error) {
+        reportDocumentError("set_layer_parent", document_path_.value_or(std::filesystem::path{}), error);
+    }
+    syncTransformInspector();
+}
+
 void MainWindow::syncTransformInspector()
 {
     const model::CompositionLayer* selected = nullptr;
@@ -542,7 +582,9 @@ void MainWindow::syncTransformInspector()
     if (inspector_ != nullptr) {
         inspector_->syncLayer(selected, timeline_ != nullptr ? timeline_->currentFrame() : 0,
                               effect_row);
-        inspector_->masksInspector()->sync(document_?&*document_:nullptr,selected_layer_id_,timeline_?timeline_->currentFrame():0);
+        inspector_->syncParenting(document_ ? &*document_ : nullptr, selected_layer_id_);
+        inspector_->masksInspector()->sync(document_?&*document_:nullptr,
+            selected && selected->kind != model::LayerKind::Null ? selected_layer_id_ : 0,timeline_?timeline_->currentFrame():0);
     }
     if (selected == nullptr) {
         if (viewer_ != nullptr) viewer_->setSelectedLayerAnchor(std::nullopt);
@@ -553,9 +595,19 @@ void MainWindow::syncTransformInspector()
     const auto local_frame = selected->duration_frames > 0
         ? std::clamp(raw_local_frame, std::int64_t{0}, selected->duration_frames - 1)
         : std::int64_t{0};
-    const auto evaluated = creative_suite::animation::evaluateTransform(
+    auto evaluated = creative_suite::animation::evaluateTransform(
         selected->transform, selected->keyframes, local_frame);
-    if (viewer_ != nullptr) viewer_->setSelectedLayerAnchor(selected->visible
+    try {
+        if (!hierarchy_snapshot_ || !hierarchy_snapshot_->matches(document_->canvasSize(), document_->layers()))
+            hierarchy_snapshot_ = std::make_shared<const model::LayerTransformHierarchy>(document_->canvasSize(), document_->layers());
+        evaluated = hierarchy_snapshot_->evaluate(frame).at(selected->id);
+    } catch (const std::exception& error) {
+        creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
+            "motion_document", "evaluate_selected_hierarchy", error.what());
+        if (viewer_) viewer_->setSelectedLayerAnchor(std::nullopt);
+        return;
+    }
+    if (viewer_ != nullptr) viewer_->setSelectedLayerAnchor(selected->visible && selected->kind != model::LayerKind::Null
         ? std::optional<QPointF>(QPointF(evaluated.position_x, evaluated.position_y))
         : std::nullopt);
 }
