@@ -462,25 +462,124 @@ gate.
 
 #### Candidate feature backlog — unprioritized
 
-The items below refine the future research areas; they are candidates, not
-approved release commitments. Keep implementation modular, local-first, and
-gated by measured rendering and memory costs.
+The items below refine the future research areas and record motion-design and
+compositing capabilities that remain outside the current Motion Studio baseline
+(which already includes 2D image/video/text/rectangle/ellipse layers, a Media
+Pool with bins, basic 2D Transform keyframes with Linear and bounded cubic
+Bezier easing in the Graph Editor, ordered static Gaussian Blur and Color
+Adjustment effects, stage-level animated Rectangle/Ellipse masks, RMS audio-to-keyframe
+baking, `.motion` v8 persistence, `.cscomp` v3 interchange, and opaque video
+export). They are candidates, not approved release commitments. Keep
+implementation modular, local-first, and gated by measured rendering and memory
+costs.
 
-- **2D animation:** editable Bezier shape paths and path operations; trim and
-  repeat controls; shape/text animation presets; per-character and per-word
-  text animation; parenting, null/control layers, reusable rigs, and
-  expression-driven links between animatable properties.
-- **Tracking and compositing:** point, planar, and camera tracking; stabilization;
-  rotoscoping and tracked masks; mattes; chroma/luma keying; edge refinement.
-- **3D:** spatial layer transforms; cameras and lights; shadows and materials;
-  3D text and shape depth; compositing 2D and 3D layers in one composition.
-- **Effects and rendering:** motion blur; glow and distortion families; particle
-  systems; reusable effect graphs and presets; render queue, output templates,
-  and per-composition caching.
-- **Audio-driven animation:** expand the in-progress envelope tool only after
-  its manual acceptance; consider frequency-band analysis and reusable
-  audio-to-property mappings while keeping audio playback and mixing a
-  separately reviewed scope.
+- **Hierarchy, structure, and layer compositing:**
+  - Layer parenting (*Parent & Link* / pick-whip hierarchy) so child layers
+    inherit parent transforms.
+  - Null / control layers for grouping and driving multiple layers without
+    visible render output.
+  - Pre-composing (nested compositions treated as reusable single layers).
+  - Adjustment layers that apply their effects and masks to all underlying
+    layers in the stack.
+  - Dedicated solid layers with composition-sized creation presets.
+  - Layer blending modes (*Multiply*, *Screen*, *Overlay*, *Add*, *Soft Light*,
+    *Difference*, etc.) beyond standard normal/alpha-over blending.
+  - Track mattes (*Alpha Matte*, *Alpha Inverted*, *Luma Matte*, *Luma Inverted*)
+    using arbitrary layers as transparency or luminance mattes.
+- **Transforms, viewer gizmos, and animation curves:**
+  - Independent, animatable *Anchor Point* (`Anchor X`, `Anchor Y`) and a *Pan
+    Behind* tool to reposition a layer's pivot in the Viewer without shifting
+    its visual canvas position.
+  - Non-uniform scale (`Scale X` and `Scale Y` unlinked for squash-and-stretch).
+  - Interactive Viewer handles/gizmos for direct canvas manipulation of position,
+    scale, rotation, anchor point, and mask/shape control points.
+  - Additional keyframe interpolation modes: *Toggle Hold*, *Roving* keyframes,
+    spatial Bezier motion paths editable directly in the Viewer, and Graph
+    Editor curves with overshoot (values beyond 0%–100%) and separate *Value
+    Graph* vs. *Speed Graph* views.
+  - Property links and lightweight expressions/drivers (e.g., `wiggle`, `loopOut`,
+    time-driven formulas, and cross-property bindings).
+- **Vectors, shape layers, and advanced masks:**
+  - Editable cubic Bezier vector paths (*Pen tool*) for freeform shapes and 2D
+    alpha masks.
+  - Keyframe animation of shape and mask content properties: path vertices and
+    tangents, rectangle/ellipse dimensions, corner roundness, stroke width, fill
+    and stroke RGBA, gradients (linear/radial), dashed strokes, and animated
+    mask feather (*Soft Edge*) and expansion.
+  - Procedural shape operators: *Trim Paths* (`Start`, `End`, `Offset`),
+    *Repeater*, *Merge Paths*, *Offset Paths*, *Round Corners*, *Wiggle Paths*,
+    and *Pucker & Bloat*.
+  - Multiple masks per stage with boolean combine modes (*Add*, *Subtract*,
+    *Intersect*, *Lighten*, *Darken*, *Difference*).
+- **Text animation:**
+  - Animatable text properties (*Source Text* keyframes, tracking/letter
+    spacing, line spacing, fill/stroke colors, and stroke width).
+  - Per-character, per-word, and per-line *Text Animators* with *Range
+    Selectors* (`Start`, `End`, `Offset`, shape/smoothness) driving position,
+    scale, rotation, opacity, or blur without splitting glyphs into separate
+    layers.
+  - Text on a Bezier path.
+- **Effects and rendering:**
+  - Keyframe animation for effect parameters (starting with Gaussian Blur radius
+    and Color Adjustment brightness/contrast/saturation in the timeline and
+    Graph Editor).
+  - Native per-layer and composition-wide *Motion Blur* based on transform and
+    path velocity.
+  - Expanded effect families:
+    - *Color and light:* Glow, Curves, Levels, Hue/Saturation, Tint/Tritone,
+      LUTs, Vignette.
+    - *Layer styles and shading:* Drop Shadow, Inner Shadow, Outer/Inner Glow,
+      Bevel, Stroke.
+    - *Distortion and stylization:* Turbulent Displace, Wave Warp, Corner Pin,
+      Displacement Map, Mirror, Chromatic Aberration, Posterize Time.
+    - *Generators:* Fractal Noise, 4-Color Gradient, Grid, Checkerboard, Audio
+      Spectrum / Audio Waveform.
+    - *Keying and compositing:* Chroma Key, Luma Key, Spill Suppressor, edge
+      refinement.
+    - *Particles:* 2D particle emitter systems.
+- **Timing, audio, and timeline workflow:**
+  - Interactive *Source In / Out* slip/slide trimming in the UI and *Split
+    Layer at Playhead*.
+  - *Time Stretch*, reverse playback, *Freeze Frame*, and keyframeable *Time
+    Remapping*.
+  - Audio playback/scrubbing, timeline waveform display, frequency-band
+    audio-to-property mappings, and mixed audio export (expanding beyond the
+    current offline RMS envelope baker).
+  - Timeline and layer markers for beat and cue synchronization.
+  - Viewer guides, rulers, safe margins (*Title/Action Safe*), grids, and canvas
+    snapping.
+- **3D layers, camera, and tracking:**
+  - 2.5D/3D layer transforms (`Position Z`, 3D orientation/rotation), cameras
+    (with depth of field), lights (*Point*, *Spot*, *Ambient*, *Parallel*),
+    shadows, and 3D text/shape extrusion.
+  - Point tracking, planar tracking, warp stabilization, and tracked/rotoscoped
+    masks.
+- **Export and pipeline:**
+  - Alpha-channel (transparent background) video and image-sequence export
+    (e.g., ProRes 4444, VP9 alpha, PNG sequence).
+  - *Render Queue* for batch jobs, reusable output templates/presets, and
+    per-composition RAM/disk frame-cache indicators in the timeline ruler.
+
+##### Suggested practical implementation sequence (highest workflow impact first)
+
+When scheduling new feature development from the candidate backlog, prioritize
+the following sequence for maximum motion-design utility relative to
+architectural complexity:
+
+1. **Animated effect parameters:** keyframe support for existing and future
+   effect parameters (Gaussian Blur radius, Color Adjustment properties) across
+   the document model, timeline, Graph Editor, preview, export, and `.cscomp`
+   interchange.
+2. **Layer hierarchy and transform ergonomics:** layer parenting, Null layers,
+   independent animatable Anchor Point, unlinked `Scale X`/`Scale Y`, and
+   interactive Viewer transform handles.
+3. **Blending modes and Track Mattes:** per-layer blend modes and Alpha/Luma
+   track mattes in the CPU and OpenGL compositors.
+4. **Pen tool (cubic Bezier paths) and Trim Paths:** freeform vector masks and
+   shapes with animated path vertices and procedural stroke trimming (aligned
+   with Milestone 3).
+5. **Drop Shadow, Glow, and Alpha-channel export:** core motion-graphics shading
+   effects paired with transparent-background export for overlay workflows.
 
 ## Status legend
 
