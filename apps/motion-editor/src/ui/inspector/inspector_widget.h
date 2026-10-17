@@ -47,9 +47,13 @@ private:
         QPushButton* remove_effect_button = nullptr;
         QStackedWidget* effect_parameter_pages = nullptr;
         QDoubleSpinBox* blur_radius_field = nullptr;
+        QToolButton* blur_radius_key_button = nullptr;
         QDoubleSpinBox* effect_brightness_field = nullptr;
+        QToolButton* effect_brightness_key_button = nullptr;
         QDoubleSpinBox* effect_contrast_field = nullptr;
+        QToolButton* effect_contrast_key_button = nullptr;
         QDoubleSpinBox* effect_saturation_field = nullptr;
+        QToolButton* effect_saturation_key_button = nullptr;
         int effects_tab_index = -1;
         QWidget* layer_content_inspector = nullptr;
         QStackedWidget* layer_content_pages = nullptr;
@@ -87,6 +91,7 @@ public:
     void syncSelectedEffect(const model::CompositionLayer* layer, int row);
     [[nodiscard]] int effectCount() const noexcept;
     [[nodiscard]] double transformFieldValue(std::size_t property_index) const noexcept;
+    [[nodiscard]] double effectFieldValue(model::EffectParameterProperty property) const noexcept;
     [[nodiscard]] model::TextLayerContent editedTextContent(
         model::TextLayerContent value) const;
     [[nodiscard]] model::ShapeLayerContent editedShapeContent(
@@ -107,6 +112,7 @@ signals:
     void effectEnabledChanged(int row, bool enabled);
     void effectParametersEdited();
     void effectParametersEditFinished();
+    void effectKeyframeToggleRequested(int property_index);
     void effectReorderRequested(qulonglong source_index, int insertion_row);
 
 protected:
@@ -115,6 +121,7 @@ protected:
 private:
     Controls controls_;
     MaskInspectorWidget* masks_=nullptr;
+    std::int64_t last_composition_frame_ = 0;
 };
 
 } // namespace motion::ui

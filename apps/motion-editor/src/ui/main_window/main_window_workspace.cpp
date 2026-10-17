@@ -107,6 +107,8 @@ void MainWindow::createWorkspace()
             this, &MainWindow::editSelectedEffectParameters);
     connect(inspector_, &InspectorWidget::effectParametersEditFinished,
             this, &MainWindow::finishPendingEffectEdit);
+    connect(inspector_, &InspectorWidget::effectKeyframeToggleRequested,
+            this, &MainWindow::toggleSelectedEffectKeyframe);
     connect(inspector_, &InspectorWidget::effectReorderRequested, this,
             [this](qulonglong source, int insertion) {
                 reorderEffectsFromList(static_cast<std::size_t>(source), insertion);
@@ -164,6 +166,55 @@ void MainWindow::createWorkspace()
             auto before = captureEditState();
             if (!document_ || !document_->moveLayerKeyframe(
                     id, property, from_local_frame, to_local_frame)) {
+                if (statusBar() != nullptr) {
+                    statusBar()->showMessage(
+                        MotionUiTranslation::tr("A keyframe already exists at that frame."), 4000);
+                }
+                return false;
+            }
+            (void)recordCompositionEdit(std::move(before));
+            updateDocumentState();
+            refreshTimeline();
+            syncTransformInspector();
+            requestPreview();
+            return true;
+        });
+    timeline_->setEffectKeyframeSelectedHandler(
+        [this](model::LayerId id,
+               std::size_t effect_index,
+               model::EffectParameterProperty property,
+               std::int64_t local_frame) {
+            if (!document_ || timeline_ == nullptr) return;
+            const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+                [id](const auto& layer) { return layer.id == id; });
+            if (found == document_->layers().end() || local_frame < 0 ||
+                local_frame >= found->duration_frames) return;
+            selectLayer(id);
+            selectEffectRow(static_cast<int>(effect_index));
+            selectEffectCurveSegment(id, effect_index, property, local_frame);
+            const auto composition_frame = found->timeline_start_frame + local_frame;
+            timeline_->setCurrentFrame(composition_frame);
+        });
+    timeline_->setEffectCurveSegmentSelectedHandler(
+        [this](model::LayerId id,
+               std::size_t effect_index,
+               model::EffectParameterProperty property,
+               std::int64_t local_frame) {
+            selectLayer(id);
+            selectEffectRow(static_cast<int>(effect_index));
+            selectEffectCurveSegment(id, effect_index, property, local_frame);
+        });
+    timeline_->setEffectKeyframeMoveHandler(
+        [this](model::LayerId id,
+               std::size_t effect_index,
+               model::EffectParameterProperty property,
+               std::int64_t from_local_frame,
+               std::int64_t to_local_frame) {
+            finishPendingTransformEdit();
+            if (!document_) return false;
+            auto before = captureEditState();
+            if (!document_ || !document_->moveEffectKeyframe(
+                    id, effect_index, property, from_local_frame, to_local_frame)) {
                 if (statusBar() != nullptr) {
                     statusBar()->showMessage(
                         MotionUiTranslation::tr("A keyframe already exists at that frame."), 4000);

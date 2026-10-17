@@ -216,19 +216,58 @@ std::optional<std::int64_t> sourceFrameForTimelineFrame(
         : mapped;
 }
 
+namespace {
+
+[[nodiscard]] bool validEffectParameterValue(
+    EffectParameterProperty property,
+    double value) noexcept
+{
+    if (!std::isfinite(value)) return false;
+    switch (property) {
+    case EffectParameterProperty::GaussianBlurRadius:
+        return value >= 0.0 && value <= 100.0;
+    case EffectParameterProperty::ColorBrightness:
+        return value >= -100.0 && value <= 100.0;
+    case EffectParameterProperty::ColorContrastPercent:
+    case EffectParameterProperty::ColorSaturationPercent:
+        return value >= 0.0 && value <= 200.0;
+    }
+    return false;
+}
+
+[[nodiscard]] bool validEffectKeyframes(
+    const creative_suite::animation::ScalarKeyframes& keyframes,
+    EffectParameterProperty property) noexcept
+{
+    return creative_suite::animation::validScalarKeyframes(keyframes) &&
+        std::all_of(keyframes.begin(), keyframes.end(), [property](const auto& keyframe) {
+            return validEffectParameterValue(property, keyframe.value);
+        });
+}
+
+} // namespace
+
 bool validLayerEffect(const LayerEffect& effect) noexcept
 {
     if (const auto* blur = std::get_if<GaussianBlurEffect>(&effect)) {
-        return std::isfinite(blur->radius_pixels) &&
-            blur->radius_pixels >= 0.0 && blur->radius_pixels <= 100.0;
+        return validEffectParameterValue(
+                   EffectParameterProperty::GaussianBlurRadius, blur->radius_pixels) &&
+            validEffectKeyframes(
+                blur->radius_keyframes, EffectParameterProperty::GaussianBlurRadius);
     }
     if (const auto* color = std::get_if<ColorAdjustmentEffect>(&effect)) {
-        return std::isfinite(color->brightness) &&
-            color->brightness >= -100.0 && color->brightness <= 100.0 &&
-            std::isfinite(color->contrast_percent) &&
-            color->contrast_percent >= 0.0 && color->contrast_percent <= 200.0 &&
-            std::isfinite(color->saturation_percent) &&
-            color->saturation_percent >= 0.0 && color->saturation_percent <= 200.0;
+        return validEffectParameterValue(
+                   EffectParameterProperty::ColorBrightness, color->brightness) &&
+            validEffectParameterValue(
+                EffectParameterProperty::ColorContrastPercent, color->contrast_percent) &&
+            validEffectParameterValue(
+                EffectParameterProperty::ColorSaturationPercent, color->saturation_percent) &&
+            validEffectKeyframes(
+                color->brightness_keyframes, EffectParameterProperty::ColorBrightness) &&
+            validEffectKeyframes(
+                color->contrast_keyframes, EffectParameterProperty::ColorContrastPercent) &&
+            validEffectKeyframes(
+                color->saturation_keyframes, EffectParameterProperty::ColorSaturationPercent);
     }
     return false;
 }
@@ -237,6 +276,186 @@ bool validLayerEffects(const std::vector<LayerEffect>& effects) noexcept
 {
     return effects.size() <= kMaximumLayerEffectCount &&
         std::all_of(effects.begin(), effects.end(), validLayerEffect);
+}
+
+bool effectHasProperty(
+    const LayerEffect& effect,
+    EffectParameterProperty property) noexcept
+{
+    return effectKeyframesFor(effect, property) != nullptr;
+}
+
+const creative_suite::animation::ScalarKeyframes* effectKeyframesFor(
+    const LayerEffect& effect,
+    EffectParameterProperty property) noexcept
+{
+    if (const auto* blur = std::get_if<GaussianBlurEffect>(&effect)) {
+        return property == EffectParameterProperty::GaussianBlurRadius
+            ? &blur->radius_keyframes
+            : nullptr;
+    }
+    if (const auto* color = std::get_if<ColorAdjustmentEffect>(&effect)) {
+        switch (property) {
+        case EffectParameterProperty::ColorBrightness:
+            return &color->brightness_keyframes;
+        case EffectParameterProperty::ColorContrastPercent:
+            return &color->contrast_keyframes;
+        case EffectParameterProperty::ColorSaturationPercent:
+            return &color->saturation_keyframes;
+        case EffectParameterProperty::GaussianBlurRadius:
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+creative_suite::animation::ScalarKeyframes* mutableEffectKeyframesFor(
+    LayerEffect& effect,
+    EffectParameterProperty property) noexcept
+{
+    if (auto* blur = std::get_if<GaussianBlurEffect>(&effect)) {
+        return property == EffectParameterProperty::GaussianBlurRadius
+            ? &blur->radius_keyframes
+            : nullptr;
+    }
+    if (auto* color = std::get_if<ColorAdjustmentEffect>(&effect)) {
+        switch (property) {
+        case EffectParameterProperty::ColorBrightness:
+            return &color->brightness_keyframes;
+        case EffectParameterProperty::ColorContrastPercent:
+            return &color->contrast_keyframes;
+        case EffectParameterProperty::ColorSaturationPercent:
+            return &color->saturation_keyframes;
+        case EffectParameterProperty::GaussianBlurRadius:
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+double evaluateEffectParameter(
+    const LayerEffect& effect,
+    EffectParameterProperty property,
+    std::int64_t local_frame) noexcept
+{
+    if (const auto* blur = std::get_if<GaussianBlurEffect>(&effect)) {
+        if (property == EffectParameterProperty::GaussianBlurRadius) {
+            return std::clamp(
+                creative_suite::animation::evaluateScalar(
+                    blur->radius_pixels, blur->radius_keyframes, local_frame),
+                0.0, 100.0);
+        }
+        return 0.0;
+    }
+    if (const auto* color = std::get_if<ColorAdjustmentEffect>(&effect)) {
+        switch (property) {
+        case EffectParameterProperty::ColorBrightness:
+            return std::clamp(
+                creative_suite::animation::evaluateScalar(
+                    color->brightness, color->brightness_keyframes, local_frame),
+                -100.0, 100.0);
+        case EffectParameterProperty::ColorContrastPercent:
+            return std::clamp(
+                creative_suite::animation::evaluateScalar(
+                    color->contrast_percent, color->contrast_keyframes, local_frame),
+                0.0, 200.0);
+        case EffectParameterProperty::ColorSaturationPercent:
+            return std::clamp(
+                creative_suite::animation::evaluateScalar(
+                    color->saturation_percent, color->saturation_keyframes, local_frame),
+                0.0, 200.0);
+        case EffectParameterProperty::GaussianBlurRadius:
+            return 0.0;
+        }
+    }
+    return 0.0;
+}
+
+bool hasEffectKeyframeAtFrame(
+    const LayerEffect& effect,
+    EffectParameterProperty property,
+    std::int64_t local_frame) noexcept
+{
+    const auto* keyframes = effectKeyframesFor(effect, property);
+    if (keyframes == nullptr || local_frame < 0) return false;
+    const auto it = std::lower_bound(
+        keyframes->begin(), keyframes->end(), local_frame,
+        [](const creative_suite::animation::Keyframe& keyframe, std::int64_t frame) {
+            return keyframe.frame < frame;
+        });
+    return it != keyframes->end() && it->frame == local_frame;
+}
+
+bool layerEffectHasKeyframes(const LayerEffect& effect) noexcept
+{
+    if (const auto* blur = std::get_if<GaussianBlurEffect>(&effect)) {
+        return !blur->radius_keyframes.empty();
+    }
+    if (const auto* color = std::get_if<ColorAdjustmentEffect>(&effect)) {
+        return !color->brightness_keyframes.empty() ||
+            !color->contrast_keyframes.empty() ||
+            !color->saturation_keyframes.empty();
+    }
+    return false;
+}
+
+GaussianBlurEffect evaluateGaussianBlurEffect(
+    const GaussianBlurEffect& effect,
+    std::int64_t local_frame)
+{
+    GaussianBlurEffect evaluated = effect;
+    evaluated.radius_pixels = std::clamp(
+        creative_suite::animation::evaluateScalar(
+            effect.radius_pixels, effect.radius_keyframes, local_frame),
+        0.0, 100.0);
+    evaluated.radius_keyframes.clear();
+    return evaluated;
+}
+
+ColorAdjustmentEffect evaluateColorAdjustmentEffect(
+    const ColorAdjustmentEffect& effect,
+    std::int64_t local_frame)
+{
+    ColorAdjustmentEffect evaluated = effect;
+    evaluated.brightness = std::clamp(
+        creative_suite::animation::evaluateScalar(
+            effect.brightness, effect.brightness_keyframes, local_frame),
+        -100.0, 100.0);
+    evaluated.contrast_percent = std::clamp(
+        creative_suite::animation::evaluateScalar(
+            effect.contrast_percent, effect.contrast_keyframes, local_frame),
+        0.0, 200.0);
+    evaluated.saturation_percent = std::clamp(
+        creative_suite::animation::evaluateScalar(
+            effect.saturation_percent, effect.saturation_keyframes, local_frame),
+        0.0, 200.0);
+    evaluated.brightness_keyframes.clear();
+    evaluated.contrast_keyframes.clear();
+    evaluated.saturation_keyframes.clear();
+    return evaluated;
+}
+
+LayerEffect evaluateLayerEffect(
+    const LayerEffect& effect,
+    std::int64_t local_frame)
+{
+    if (const auto* blur = std::get_if<GaussianBlurEffect>(&effect)) {
+        return evaluateGaussianBlurEffect(*blur, local_frame);
+    }
+    return evaluateColorAdjustmentEffect(
+        std::get<ColorAdjustmentEffect>(effect), local_frame);
+}
+
+std::vector<LayerEffect> evaluateLayerEffects(
+    const std::vector<LayerEffect>& effects,
+    std::int64_t local_frame)
+{
+    std::vector<LayerEffect> evaluated;
+    evaluated.reserve(effects.size());
+    for (const auto& effect : effects) {
+        evaluated.push_back(evaluateLayerEffect(effect, local_frame));
+    }
+    return evaluated;
 }
 
 TextLayerContent defaultTextLayerContent(CanvasSize canvas_size)
@@ -752,6 +971,122 @@ bool CompositionDocument::moveLayerKeyframe(
     }
     if (frames == nullptr || from_local_frame == to_local_frame) return false;
 
+    const auto source = std::lower_bound(
+        frames->begin(), frames->end(), from_local_frame,
+        [](const Keyframe& keyframe, std::int64_t frame) {
+            return keyframe.frame < frame;
+        });
+    if (source == frames->end() || source->frame != from_local_frame) return false;
+
+    const auto destination = std::lower_bound(
+        frames->begin(), frames->end(), to_local_frame,
+        [](const Keyframe& keyframe, std::int64_t frame) {
+            return keyframe.frame < frame;
+        });
+    if (destination != frames->end() && destination->frame == to_local_frame) return false;
+
+    source->frame = to_local_frame;
+    std::sort(frames->begin(), frames->end(), [](const Keyframe& left, const Keyframe& right) {
+        return left.frame < right.frame;
+    });
+    return true;
+}
+
+bool CompositionDocument::replaceEffectKeyframes(
+    LayerId id,
+    std::size_t effect_index,
+    EffectParameterProperty property,
+    const creative_suite::animation::ScalarKeyframes& keyframes)
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || effect_index >= layer->effects.size()) return false;
+    auto candidate = layer->effects[effect_index];
+    auto* target = mutableEffectKeyframesFor(candidate, property);
+    if (target == nullptr) return false;
+    *target = keyframes;
+    if (!validLayerEffect(candidate)) return false;
+    layer->effects[effect_index] = std::move(candidate);
+    return true;
+}
+
+bool CompositionDocument::setEffectKeyframe(
+    LayerId id,
+    std::size_t effect_index,
+    EffectParameterProperty property,
+    std::int64_t local_frame,
+    double value) noexcept
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || effect_index >= layer->effects.size() ||
+        local_frame < 0 ||
+        (layer->duration_frames > 0 && local_frame >= layer->duration_frames) ||
+        !validEffectParameterValue(property, value)) {
+        return false;
+    }
+    auto* target = mutableEffectKeyframesFor(layer->effects[effect_index], property);
+    return target != nullptr &&
+        creative_suite::animation::setKeyframe(*target, local_frame, value);
+}
+
+bool CompositionDocument::setEffectKeyframeInterpolation(
+    LayerId id,
+    std::size_t effect_index,
+    EffectParameterProperty property,
+    std::int64_t local_frame,
+    creative_suite::animation::InterpolationMode interpolation,
+    const creative_suite::animation::CubicBezierEasing& easing) noexcept
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || effect_index >= layer->effects.size() ||
+        local_frame < 0 ||
+        !creative_suite::animation::validKeyframeInterpolation(interpolation, easing)) {
+        return false;
+    }
+    auto* target = mutableEffectKeyframesFor(layer->effects[effect_index], property);
+    if (target == nullptr) return false;
+    const auto it = std::lower_bound(
+        target->begin(), target->end(), local_frame,
+        [](const creative_suite::animation::Keyframe& keyframe, std::int64_t frame) {
+            return keyframe.frame < frame;
+        });
+    if (it == target->end() || it->frame != local_frame) return false;
+    it->interpolation = interpolation;
+    it->easing = easing;
+    return true;
+}
+
+bool CompositionDocument::removeEffectKeyframe(
+    LayerId id,
+    std::size_t effect_index,
+    EffectParameterProperty property,
+    std::int64_t local_frame) noexcept
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || effect_index >= layer->effects.size()) return false;
+    auto* target = mutableEffectKeyframesFor(layer->effects[effect_index], property);
+    return target != nullptr &&
+        creative_suite::animation::removeKeyframe(*target, local_frame);
+}
+
+bool CompositionDocument::moveEffectKeyframe(
+    LayerId id,
+    std::size_t effect_index,
+    EffectParameterProperty property,
+    std::int64_t from_local_frame,
+    std::int64_t to_local_frame) noexcept
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || effect_index >= layer->effects.size() ||
+        from_local_frame < 0 || to_local_frame < 0 ||
+        layer->duration_frames <= 0 || from_local_frame >= layer->duration_frames ||
+        to_local_frame >= layer->duration_frames ||
+        from_local_frame == to_local_frame) {
+        return false;
+    }
+    auto* frames = mutableEffectKeyframesFor(layer->effects[effect_index], property);
+    if (frames == nullptr) return false;
+
+    using creative_suite::animation::Keyframe;
     const auto source = std::lower_bound(
         frames->begin(), frames->end(), from_local_frame,
         [](const Keyframe& keyframe, std::int64_t frame) {

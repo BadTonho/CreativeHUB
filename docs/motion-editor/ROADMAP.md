@@ -156,7 +156,7 @@ readiness checks remain in this roadmap and
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
 | Per-app language selection loads the downloaded/bundled pt-BR catalog before the editor window and falls back to English | `motion_editor_translation_test.cpp` (`creative-suite-motion-editor-translation-catalog`) checks the General Settings selector, saved preference resolution, bundled loading, regional Portuguese selection, visible menu text, placeholders, missing-text fallback, and unsupported-locale fallback; shared `creative-suite-translations` checks preference isolation and manifest integrity | Startup-before-window code path and automated preference/catalog checks are present. Native Windows/macOS/Linux locale and clipping checks remain pending in [translation acceptance](../TRANSLATIONS_AND_LANGUAGE_PACKS.md#regression-and-acceptance). |
-| Hub snapshot references and restoration across versions 1–8 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Motion persistence producer and consumer | Automated coverage present for Media Pool, layer sources, linked-image sidecars, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
+| Hub snapshot references and restoration across versions 1–9 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Motion persistence producer and consumer | Automated coverage present for Media Pool, layer sources, linked-image sidecars, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
 | Composition model, validation, layer data, and timing | `composition_document_test.cpp` (`creative-suite-motion-editor-document`) | Pending manual composition and supported-layer checks remain part of MVP acceptance. |
 | Undo/Redo and edit history | `composition_history_test.cpp` (`creative-suite-motion-editor-history`) | Pending manual validation: confirm interactive edit sequences during the broader Windows UI checklist. |
 | `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Windows invalid-file and path results remain part of Windows acceptance. |
@@ -466,9 +466,9 @@ The items below refine the future research areas and record motion-design and
 compositing capabilities that remain outside the current Motion Studio baseline
 (which already includes 2D image/video/text/rectangle/ellipse layers, a Media
 Pool with bins, basic 2D Transform keyframes with Linear and bounded cubic
-Bezier easing in the Graph Editor, ordered static Gaussian Blur and Color
-Adjustment effects, stage-level animated Rectangle/Ellipse masks, RMS audio-to-keyframe
-baking, `.motion` v8 persistence, `.cscomp` v3 interchange, and opaque video
+Bezier easing in the Graph Editor, ordered Gaussian Blur and Color
+Adjustment effects with layer-local parameter keyframes and Cubic Bezier easing, stage-level animated Rectangle/Ellipse masks, RMS audio-to-keyframe
+baking, `.motion` v9 persistence, `.cscomp` v3 interchange, and opaque video
 export). They are candidates, not approved release commitments. Keep
 implementation modular, local-first, and gated by measured rendering and memory
 costs.
@@ -520,9 +520,9 @@ costs.
     layers.
   - Text on a Bezier path.
 - **Effects and rendering:**
-  - Keyframe animation for effect parameters (starting with Gaussian Blur radius
-    and Color Adjustment brightness/contrast/saturation in the timeline and
-    Graph Editor).
+  - `.cscomp` interchange support for animated effect parameters (native `.motion`
+    v9, timeline, Graph Editor, preview, and export support are implemented for
+    Gaussian Blur radius and Color Adjustment brightness/contrast/saturation).
   - Native per-layer and composition-wide *Motion Blur* based on transform and
     path velocity.
   - Expanded effect families:
@@ -566,10 +566,10 @@ When scheduling new feature development from the candidate backlog, prioritize
 the following sequence for maximum motion-design utility relative to
 architectural complexity:
 
-1. **Animated effect parameters:** keyframe support for existing and future
-   effect parameters (Gaussian Blur radius, Color Adjustment properties) across
-   the document model, timeline, Graph Editor, preview, export, and `.cscomp`
-   interchange.
+1. **Animated effect parameters (implemented in native `.motion` v9; `.cscomp`
+   interchange deferred):** keyframe support for Gaussian Blur radius and Color
+   Adjustment properties across the document model, timeline, Graph Editor,
+   preview, and export.
 2. **Layer hierarchy and transform ergonomics:** layer parenting, Null layers,
    independent animatable Anchor Point, unlinked `Scale X`/`Scale Y`, and
    interactive Viewer transform handles.

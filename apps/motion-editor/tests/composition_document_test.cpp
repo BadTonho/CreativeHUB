@@ -1,8 +1,10 @@
 #include "model/composition_document.h"
+#include "model/composition_interchange.h"
 
 #include <creative_suite/media/media_library.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -385,6 +387,76 @@ int main()
                 keyframesFor(animated_document.layers().front().keyframes,
                              TransformProperty::PositionX) == std::vector<Keyframe>{{10, 0.8}},
             "an individual layer keyframe can be removed");
+
+    require(animated_document.setLayerEffects(
+                88, {GaussianBlurEffect{true, 4.0},
+                     ColorAdjustmentEffect{true, 10.0, 100.0, 100.0}}),
+            "animated fixture accepts blur and color adjustment effects");
+    require(!animated_document.setEffectKeyframe(
+                88, 0, EffectParameterProperty::ColorBrightness, 0, 10.0),
+            "effect keyframe mutation rejects a property that does not belong to that effect kind");
+    require(!animated_document.setEffectKeyframe(
+                88, 0, EffectParameterProperty::GaussianBlurRadius, -1, 5.0) &&
+                !animated_document.setEffectKeyframe(
+                    88, 0, EffectParameterProperty::GaussianBlurRadius, 20, 5.0) &&
+                !animated_document.setEffectKeyframe(
+                    88, 0, EffectParameterProperty::GaussianBlurRadius, 0, 100.5) &&
+                !animated_document.setEffectKeyframe(
+                    88, 1, EffectParameterProperty::ColorBrightness, 0, -101.0) &&
+                !animated_document.setEffectKeyframe(
+                    88, 1, EffectParameterProperty::ColorContrastPercent, 0, 200.1) &&
+                !animated_document.setEffectKeyframe(
+                    88, 1, EffectParameterProperty::ColorSaturationPercent, 0, -0.1),
+            "effect keyframe mutation validates local frame bounds and parameter ranges");
+    require(animated_document.setEffectKeyframe(
+                88, 0, EffectParameterProperty::GaussianBlurRadius, 0, 2.0) &&
+                animated_document.setEffectKeyframe(
+                    88, 0, EffectParameterProperty::GaussianBlurRadius, 10, 12.0) &&
+                animated_document.setEffectKeyframe(
+                    88, 1, EffectParameterProperty::ColorBrightness, 0, -20.0) &&
+                animated_document.setEffectKeyframe(
+                    88, 1, EffectParameterProperty::ColorBrightness, 10, 40.0),
+            "valid effect keyframes are stored on blur and color adjustment effects");
+    const auto evaluated_linear_mid =
+        evaluateLayerEffects(animated_document.layers().front().effects, 5);
+    require(std::abs(std::get<GaussianBlurEffect>(evaluated_linear_mid[0]).radius_pixels - 7.0) < 1e-6 &&
+                std::get<GaussianBlurEffect>(evaluated_linear_mid[0]).radius_keyframes.empty() &&
+                std::abs(std::get<ColorAdjustmentEffect>(evaluated_linear_mid[1]).brightness - 10.0) < 1e-6,
+            "evaluateLayerEffects interpolates animated effect parameters at local frames and strips keyframe tracks");
+    require(animated_document.setEffectKeyframeInterpolation(
+                88, 0, EffectParameterProperty::GaussianBlurRadius, 0,
+                InterpolationMode::CubicBezier, {0.42, 0.0, 1.0, 1.0}),
+            "effect keyframe accepts CubicBezier easing controls");
+    const auto evaluated_bezier_mid =
+        evaluateLayerEffects(animated_document.layers().front().effects, 5);
+    require(std::get<GaussianBlurEffect>(evaluated_bezier_mid[0]).radius_pixels < 6.0 &&
+                std::get<GaussianBlurEffect>(evaluated_bezier_mid[0]).radius_pixels > 4.0,
+            "CubicBezier easing changes the intermediate evaluated blur radius");
+    require(animated_document.moveEffectKeyframe(
+                88, 0, EffectParameterProperty::GaussianBlurRadius, 0, 2) &&
+                !animated_document.moveEffectKeyframe(
+                    88, 0, EffectParameterProperty::GaussianBlurRadius, 2, 10) &&
+                !animated_document.moveEffectKeyframe(
+                    88, 0, EffectParameterProperty::GaussianBlurRadius, 2, 20),
+            "effect keyframes move within layer duration and reject collisions or out-of-range frames");
+    require(animated_document.removeEffectKeyframe(
+                88, 0, EffectParameterProperty::GaussianBlurRadius, 2) &&
+                effectKeyframesFor(animated_document.layers().front().effects[0],
+                                   EffectParameterProperty::GaussianBlurRadius)->size() == 1,
+            "removing an effect keyframe leaves the remaining key intact");
+    MotionProjectData interchange_project;
+    interchange_project.composition = {{640, 360}, fractional_rate};
+    interchange_project.layers = animated_document.layers();
+    bool interchange_rejected = false;
+    try {
+        (void)exportComposition(interchange_project);
+    } catch (const creative_suite::composition_exchange::Unsupported& error) {
+        interchange_rejected = std::string(error.what()).find(
+            "Animated effect parameters are not supported by composition interchange.") !=
+            std::string::npos;
+    }
+    require(interchange_rejected,
+            "composition interchange explicitly rejects animated effect parameters");
 
     require(document.removeLayer(back), "existing layer can be removed");
     require(!document.removeLayer(back), "removed layer cannot be removed again");

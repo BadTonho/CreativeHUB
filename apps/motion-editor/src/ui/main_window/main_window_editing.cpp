@@ -249,6 +249,44 @@ void MainWindow::selectCurveSegment(
     curve_selection_ = CurveSelection{id, property, segment_start};
     refreshCurveEditor();
 }
+void MainWindow::selectEffectCurveSegment(
+    model::LayerId id,
+    std::size_t effect_index,
+    model::EffectParameterProperty property,
+    std::int64_t local_start_frame)
+{
+    if (!document_) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [id](const auto& layer) { return layer.id == id; });
+    if (found == document_->layers().end() || effect_index >= found->effects.size() ||
+        !model::effectHasProperty(found->effects[effect_index], property)) {
+        return;
+    }
+    const auto* keys_ptr = model::effectKeyframesFor(found->effects[effect_index], property);
+    if (keys_ptr == nullptr) return;
+    const auto& keys = *keys_ptr;
+    std::int64_t segment_start = 0;
+    if (keys.size() >= 2) {
+        const auto upper = std::upper_bound(keys.begin(), keys.end(), local_start_frame,
+            [](std::int64_t frame, const auto& keyframe) {
+                return frame < keyframe.frame;
+            });
+        const auto segment_index = upper == keys.begin()
+            ? std::size_t{0}
+            : std::min(static_cast<std::size_t>(
+                std::distance(keys.begin(), upper) - 1), keys.size() - 2);
+        segment_start = keys[segment_index].frame;
+    }
+    curve_selection_ = CurveSelection{
+        id,
+        TransformProperty::PositionX,
+        segment_start,
+        0,
+        0,
+        effect_index,
+        property};
+    refreshCurveEditor();
+}
 void MainWindow::refreshCurveEditor()
 {
     if (curve_editor_ == nullptr) return;
@@ -267,8 +305,25 @@ void MainWindow::refreshCurveEditor()
     }
     const auto* mask=curve_selection_->mask_id?document_->findMask(curve_selection_->mask_id):nullptr;
     if(curve_selection_->mask_id && (!mask || curve_selection_->mask_property>=5)){resetCurveEditor();return;}
-    const auto& keys = mask?mask->keyframes[curve_selection_->mask_property]:creative_suite::animation::keyframesFor(
-        found->keyframes, curve_selection_->property);
+    const bool effect_curve = curve_selection_->effect_index.has_value();
+    const creative_suite::animation::ScalarKeyframes* effect_keys = nullptr;
+    if (effect_curve) {
+        if (*curve_selection_->effect_index < found->effects.size()) {
+            effect_keys = model::effectKeyframesFor(
+                found->effects[*curve_selection_->effect_index],
+                curve_selection_->effect_property);
+        }
+        if (effect_keys == nullptr) {
+            resetCurveEditor();
+            return;
+        }
+    }
+    const auto& keys = mask
+        ? mask->keyframes[curve_selection_->mask_property]
+        : (effect_curve
+            ? *effect_keys
+            : creative_suite::animation::keyframesFor(
+                found->keyframes, curve_selection_->property));
     if (keys.size() >= 2 && std::none_of(keys.begin(), keys.end(), [this](const auto& keyframe) {
             return keyframe.frame == curve_selection_->segment_start_frame;
         })) {
@@ -277,6 +332,29 @@ void MainWindow::refreshCurveEditor()
     const auto segment=keys.size()>=2?std::optional<std::int64_t>(curve_selection_->segment_start_frame):std::nullopt;
     if(mask){const std::array<QString,5> names{{MotionUiTranslation::tr("Center X"),MotionUiTranslation::tr("Center Y"),MotionUiTranslation::tr("Width"),MotionUiTranslation::tr("Height"),MotionUiTranslation::tr("Rotation")}};
         curve_editor_->setScalarCurve(mask->id,MotionUiTranslation::tr("Mask #%1 / %2 (composition frames)").arg(mask->id).arg(names[curve_selection_->mask_property]),keys,segment);
+    } else if (effect_curve) {
+        QString prop_label;
+        switch (curve_selection_->effect_property) {
+        case model::EffectParameterProperty::GaussianBlurRadius:
+            prop_label = MotionUiTranslation::tr("Radius (sigma)");
+            break;
+        case model::EffectParameterProperty::ColorBrightness:
+            prop_label = MotionUiTranslation::tr("Brightness");
+            break;
+        case model::EffectParameterProperty::ColorContrastPercent:
+            prop_label = MotionUiTranslation::tr("Contrast");
+            break;
+        case model::EffectParameterProperty::ColorSaturationPercent:
+            prop_label = MotionUiTranslation::tr("Saturation");
+            break;
+        }
+        curve_editor_->setScalarCurve(
+            found->id,
+            MotionUiTranslation::tr("Effect %1: %2")
+                .arg(static_cast<qlonglong>(*curve_selection_->effect_index + 1))
+                .arg(prop_label),
+            keys,
+            segment);
     } else curve_editor_->setCurve(found->id,curve_selection_->property,keys,segment);
     const auto selected_key = std::lower_bound(keys.begin(), keys.end(),
         curve_selection_->segment_start_frame, [](const auto& item, std::int64_t frame) {
@@ -307,7 +385,15 @@ void MainWindow::applyCurvePreset(int preset_index)
     const auto before = captureEditState();
     const bool changed=curve_selection_->mask_id
         ? document_->setMaskKeyframeInterpolation(curve_selection_->mask_id,curve_selection_->mask_property,curve_selection_->segment_start_frame,interpolation,easing)
-        : document_->setLayerKeyframeInterpolation(curve_selection_->layer_id,curve_selection_->property,curve_selection_->segment_start_frame,interpolation,easing);
+        : (curve_selection_->effect_index.has_value()
+            ? document_->setEffectKeyframeInterpolation(
+                curve_selection_->layer_id,
+                *curve_selection_->effect_index,
+                curve_selection_->effect_property,
+                curve_selection_->segment_start_frame,
+                interpolation,
+                easing)
+            : document_->setLayerKeyframeInterpolation(curve_selection_->layer_id,curve_selection_->property,curve_selection_->segment_start_frame,interpolation,easing));
     if (!changed) {
         refreshCurveEditor();
         return;
@@ -327,7 +413,15 @@ void MainWindow::applyCurveEasing(
     auto before = captureEditState();
     const bool changed=curve_selection_->mask_id
         ? document_->setMaskKeyframeInterpolation(curve_selection_->mask_id,curve_selection_->mask_property,local_start_frame,InterpolationMode::CubicBezier,easing)
-        : document_->setLayerKeyframeInterpolation(curve_selection_->layer_id,curve_selection_->property,local_start_frame,InterpolationMode::CubicBezier,easing);
+        : (curve_selection_->effect_index.has_value()
+            ? document_->setEffectKeyframeInterpolation(
+                curve_selection_->layer_id,
+                *curve_selection_->effect_index,
+                curve_selection_->effect_property,
+                local_start_frame,
+                InterpolationMode::CubicBezier,
+                easing)
+            : document_->setLayerKeyframeInterpolation(curve_selection_->layer_id,curve_selection_->property,local_start_frame,InterpolationMode::CubicBezier,easing));
     if (!changed) {
         refreshCurveEditor();
         return;
@@ -516,6 +610,7 @@ void MainWindow::addLayerEffect(int kind)
     if (!document_->setLayerEffects(selected_layer_id_, effects)) return;
     selected_effect_ = std::pair{selected_layer_id_, new_index};
     (void)recordCompositionEdit(std::move(before));
+    refreshTimeline();
     syncEffectsInspector(&*found);
     inspector_->selectEffectsTab();
     updateDocumentState();
@@ -553,6 +648,7 @@ void MainWindow::applySelectedEffectStack(
     } else {
         (void)recordCompositionEdit(std::move(*before));
     }
+    refreshTimeline();
     syncEffectsInspector(&*found);
     updateDocumentState();
     requestPreview();
@@ -565,10 +661,80 @@ void MainWindow::editSelectedEffectParameters()
         [this](const auto& layer) { return layer.id == selected_layer_id_; });
     if (found == document_->layers().end() || selected_effect_->second >= found->effects.size())
         return;
+    const auto raw_local_frame = (timeline_ != nullptr ? timeline_->currentFrame() : 0) -
+        found->timeline_start_frame;
+    const bool in_layer_bounds = raw_local_frame >= 0 && raw_local_frame < found->duration_frames;
     auto effects = found->effects;
-    effects[selected_effect_->second] = inspector_->editedEffect(
-        std::move(effects[selected_effect_->second]));
+    auto& effect = effects[selected_effect_->second];
+    effect = inspector_->editedEffect(std::move(effect));
+    const auto update_keyframe_if_at_frame = [&](model::EffectParameterProperty property) {
+        if (!model::effectHasProperty(effect, property)) return;
+        auto* keyframes = model::mutableEffectKeyframesFor(effect, property);
+        if (keyframes == nullptr || keyframes->empty() || !in_layer_bounds) return;
+        const auto key = std::lower_bound(
+            keyframes->begin(), keyframes->end(), raw_local_frame,
+            [](const creative_suite::animation::Keyframe& item, std::int64_t frame) {
+                return item.frame < frame;
+            });
+        if (key != keyframes->end() && key->frame == raw_local_frame) {
+            key->value = inspector_->effectFieldValue(property);
+        }
+    };
+    update_keyframe_if_at_frame(model::EffectParameterProperty::GaussianBlurRadius);
+    update_keyframe_if_at_frame(model::EffectParameterProperty::ColorBrightness);
+    update_keyframe_if_at_frame(model::EffectParameterProperty::ColorContrastPercent);
+    update_keyframe_if_at_frame(model::EffectParameterProperty::ColorSaturationPercent);
+    if (effects == found->effects) {
+        syncEffectsInspector(&*found);
+        return;
+    }
     applySelectedEffectStack(std::move(effects), true);
+}
+void MainWindow::toggleSelectedEffectKeyframe(int property_index)
+{
+    finishPendingTransformEdit();
+    if (!document_ || !selected_effect_.has_value() ||
+        selected_effect_->first != selected_layer_id_ || timeline_ == nullptr ||
+        property_index < 0 || property_index > 3) {
+        return;
+    }
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end() ||
+        selected_effect_->second >= found->effects.size()) {
+        return;
+    }
+    const auto local_frame = timeline_->currentFrame() - found->timeline_start_frame;
+    if (local_frame < 0 || local_frame >= found->duration_frames) return;
+
+    const auto effect_index = selected_effect_->second;
+    const auto property = static_cast<model::EffectParameterProperty>(property_index);
+    if (!model::effectHasProperty(found->effects[effect_index], property)) return;
+
+    auto before = captureEditState();
+    const bool has_key = model::hasEffectKeyframeAtFrame(
+        found->effects[effect_index], property, local_frame);
+    bool changed = false;
+    if (has_key) {
+        changed = document_->removeEffectKeyframe(
+            selected_layer_id_, effect_index, property, local_frame);
+    } else {
+        const auto value = model::evaluateEffectParameter(
+            found->effects[effect_index], property, local_frame);
+        changed = document_->setEffectKeyframe(
+            selected_layer_id_, effect_index, property, local_frame, value);
+        if (changed) {
+            timeline_->setLayerExpanded(selected_layer_id_, true);
+            timeline_->setEffectsGroupExpanded(selected_layer_id_, true);
+        }
+    }
+    if (!changed) return;
+    selectEffectCurveSegment(selected_layer_id_, effect_index, property, local_frame);
+    (void)recordCompositionEdit(std::move(before));
+    updateDocumentState();
+    refreshTimeline();
+    syncTransformInspector();
+    requestPreview();
 }
 void MainWindow::reorderEffectsFromList(std::size_t source_index, int insertion_row)
 {
@@ -601,7 +767,14 @@ void MainWindow::reorderEffectsFromList(std::size_t source_index, int insertion_
         return;
     }
     selected_effect_ = std::pair{selected_layer_id_, destination_index};
+    if (curve_selection_ && curve_selection_->layer_id == selected_layer_id_ &&
+        curve_selection_->effect_index.has_value()) {
+        if (*curve_selection_->effect_index == source_index) {
+            curve_selection_->effect_index = destination_index;
+        }
+    }
     (void)recordCompositionEdit(std::move(before));
+    refreshTimeline();
     syncEffectsInspector(&*found);
     updateDocumentState();
     requestPreview();
@@ -622,7 +795,16 @@ void MainWindow::moveSelectedEffect(int direction)
     std::swap(effects[from], effects[to]);
     if (!document_->setLayerEffects(selected_layer_id_, effects)) return;
     selected_effect_ = std::pair{selected_layer_id_, to};
+    if (curve_selection_ && curve_selection_->layer_id == selected_layer_id_ &&
+        curve_selection_->effect_index.has_value()) {
+        if (*curve_selection_->effect_index == from) {
+            curve_selection_->effect_index = to;
+        } else if (*curve_selection_->effect_index == to) {
+            curve_selection_->effect_index = from;
+        }
+    }
     (void)recordCompositionEdit(std::move(before));
+    refreshTimeline();
     syncEffectsInspector(&*found);
     updateDocumentState();
     requestPreview();
@@ -644,8 +826,17 @@ void MainWindow::removeSelectedEffect()
     } else {
         selected_effect_.reset();
     }
+    if (curve_selection_ && curve_selection_->layer_id == selected_layer_id_ &&
+        curve_selection_->effect_index.has_value()) {
+        if (*curve_selection_->effect_index == removed) {
+            curve_selection_.reset();
+        } else if (*curve_selection_->effect_index > removed) {
+            curve_selection_->effect_index = *curve_selection_->effect_index - 1;
+        }
+    }
     if (!document_->setLayerEffects(selected_layer_id_, effects)) return;
     (void)recordCompositionEdit(std::move(before));
+    refreshTimeline();
     syncEffectsInspector(&*found);
     updateDocumentState();
     requestPreview();

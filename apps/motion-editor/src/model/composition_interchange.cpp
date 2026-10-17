@@ -67,6 +67,11 @@ x::Document exportComposition(const MotionProjectData &project) {
                      "Only full-canvas rectangles without a stroke can become Background nodes."});
         }
         for(const auto& effect:layer.effects) {
+            if(layerEffectHasKeyframes(effect)) {
+                issues.push_back(
+                    {layer.id,
+                     "Animated effect parameters are not supported by composition interchange."});
+            }
             if(const auto* c=std::get_if<ColorAdjustmentEffect>(&effect))
                 l.effects.emplace_back(x::ColorEffect{{c->brightness,c->contrast_percent,c->saturation_percent},c->enabled,c->mask});
             else {

@@ -685,18 +685,21 @@ int main(int argc, char* argv[])
 
     motion::ui::PreviewLayerSnapshot effected_image;
     effected_image.kind = motion::model::LayerKind::Image;
+    effected_image.local_frame = 2;
     effected_image.still_frame = solidFrame(40, 80, 120);
     effected_image.effects.emplace_back(
         motion::model::GaussianBlurEffect{true, 1.0});
     effected_image.effects.emplace_back(
-        motion::model::ColorAdjustmentEffect{true, 20.0, 100.0, 100.0});
+        motion::model::ColorAdjustmentEffect{
+            true, 0.0, 100.0, 100.0, 0,
+            {{0, 0.0}, {4, 40.0}}});
     const auto effected_generation = renderer.submit(
         motion::ui::PreviewRequest{{4, 4}, {24, 1}, {effected_image}});
     require(waitFor([&] { return applied_generation == effected_generation; }) &&
                 applied_frame != nullptr && applied_frame->rgba_pixels[0] == 91 &&
                 applied_frame->rgba_pixels[1] == 131 &&
                 applied_frame->rgba_pixels[2] == 171,
-            "the preview worker applies layer effects before the shared compositor");
+            "the preview worker evaluates animated layer effect keyframes before the shared compositor");
 
     motion::ui::PreviewLayerSnapshot rectangle_layer;
     rectangle_layer.id = 600;

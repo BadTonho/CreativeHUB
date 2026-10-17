@@ -107,10 +107,18 @@ using LayerContent = std::variant<std::monostate, TextLayerContent, ShapeLayerCo
 using Mask = creative_suite::composition_exchange::Mask;
 using MaskId = creative_suite::composition_exchange::MaskId;
 
+enum class EffectParameterProperty : std::uint8_t {
+    GaussianBlurRadius,
+    ColorBrightness,
+    ColorContrastPercent,
+    ColorSaturationPercent,
+};
+
 struct GaussianBlurEffect {
     bool enabled = true;
     double radius_pixels = 10.0;
     MaskId mask = 0;
+    creative_suite::animation::ScalarKeyframes radius_keyframes;
 
     friend bool operator==(const GaussianBlurEffect&, const GaussianBlurEffect&) = default;
 };
@@ -121,6 +129,9 @@ struct ColorAdjustmentEffect {
     double contrast_percent = 100.0;
     double saturation_percent = 100.0;
     MaskId mask = 0;
+    creative_suite::animation::ScalarKeyframes brightness_keyframes;
+    creative_suite::animation::ScalarKeyframes contrast_keyframes;
+    creative_suite::animation::ScalarKeyframes saturation_keyframes;
 
     friend bool operator==(const ColorAdjustmentEffect&,
                            const ColorAdjustmentEffect&) = default;
@@ -138,6 +149,36 @@ struct LinkedImageDocument {
 
 [[nodiscard]] bool validLayerEffect(const LayerEffect& effect) noexcept;
 [[nodiscard]] bool validLayerEffects(const std::vector<LayerEffect>& effects) noexcept;
+[[nodiscard]] bool effectHasProperty(
+    const LayerEffect& effect,
+    EffectParameterProperty property) noexcept;
+[[nodiscard]] const creative_suite::animation::ScalarKeyframes* effectKeyframesFor(
+    const LayerEffect& effect,
+    EffectParameterProperty property) noexcept;
+[[nodiscard]] creative_suite::animation::ScalarKeyframes* mutableEffectKeyframesFor(
+    LayerEffect& effect,
+    EffectParameterProperty property) noexcept;
+[[nodiscard]] double evaluateEffectParameter(
+    const LayerEffect& effect,
+    EffectParameterProperty property,
+    std::int64_t local_frame) noexcept;
+[[nodiscard]] bool hasEffectKeyframeAtFrame(
+    const LayerEffect& effect,
+    EffectParameterProperty property,
+    std::int64_t local_frame) noexcept;
+[[nodiscard]] bool layerEffectHasKeyframes(const LayerEffect& effect) noexcept;
+[[nodiscard]] GaussianBlurEffect evaluateGaussianBlurEffect(
+    const GaussianBlurEffect& effect,
+    std::int64_t local_frame);
+[[nodiscard]] ColorAdjustmentEffect evaluateColorAdjustmentEffect(
+    const ColorAdjustmentEffect& effect,
+    std::int64_t local_frame);
+[[nodiscard]] LayerEffect evaluateLayerEffect(
+    const LayerEffect& effect,
+    std::int64_t local_frame);
+[[nodiscard]] std::vector<LayerEffect> evaluateLayerEffects(
+    const std::vector<LayerEffect>& effects,
+    std::int64_t local_frame);
 
 [[nodiscard]] TextLayerContent defaultTextLayerContent(CanvasSize canvas_size);
 [[nodiscard]] ShapeLayerContent defaultShapeLayerContent(
@@ -262,6 +303,35 @@ public:
     [[nodiscard]] bool moveLayerKeyframe(
         LayerId id,
         creative_suite::animation::TransformProperty property,
+        std::int64_t from_local_frame,
+        std::int64_t to_local_frame) noexcept;
+    [[nodiscard]] bool replaceEffectKeyframes(
+        LayerId id,
+        std::size_t effect_index,
+        EffectParameterProperty property,
+        const creative_suite::animation::ScalarKeyframes& keyframes);
+    [[nodiscard]] bool setEffectKeyframe(
+        LayerId id,
+        std::size_t effect_index,
+        EffectParameterProperty property,
+        std::int64_t local_frame,
+        double value) noexcept;
+    [[nodiscard]] bool setEffectKeyframeInterpolation(
+        LayerId id,
+        std::size_t effect_index,
+        EffectParameterProperty property,
+        std::int64_t local_frame,
+        creative_suite::animation::InterpolationMode interpolation,
+        const creative_suite::animation::CubicBezierEasing& easing) noexcept;
+    [[nodiscard]] bool removeEffectKeyframe(
+        LayerId id,
+        std::size_t effect_index,
+        EffectParameterProperty property,
+        std::int64_t local_frame) noexcept;
+    [[nodiscard]] bool moveEffectKeyframe(
+        LayerId id,
+        std::size_t effect_index,
+        EffectParameterProperty property,
         std::int64_t from_local_frame,
         std::int64_t to_local_frame) noexcept;
 

@@ -5,7 +5,7 @@ mask reference. Editable interchange now accepts `.cscomp` v3 ordered Color/Blur
 stages; no Motion schema change is required. See [contract](../../COMPOSITION_INTERCHANGE.md).
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 8 schema may change before a stable release. This format is separate
+version 9 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 ## File identity and versioning
@@ -15,22 +15,22 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `8`. |
+| `version` | integer | Current schema version is `9`. |
 | `revision` | decimal string | Monotonic saved revision used to reject stale linked writes. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1 through 8. Version 1 text and shape layers
+Motion Studio reads versions 1 through 9. Version 1 text and shape layers
 had no typed content, so they open with the current default text or rectangle content
 for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
-older document writes it as version 8. Versions 1 through 5 load without linked
+older document writes it as version 9. Versions 1 through 5 load without linked
 Image Editor metadata. Motion Studio rejects malformed data, an
 unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
 
-Hub snapshots preserve versions 1–8 and rebase relative media and linked-image
+Hub snapshots preserve versions 1–9 and rebase relative media and linked-image
 references to their original absolute locations. Relative-directory escape
 restrictions are retained. Native save behavior is unchanged and media are not
 bundled. See [Hub backups](../../hub/BACKUPS.md) and the producer/consumer
@@ -173,7 +173,7 @@ UTF-8 JSON wrapper uses format identifier
 `creative-suite.motion-studio-recovery` and wrapper version `1`. Its fields are
 `format`, `version`, `target_document_path`, `session_id`, and `document`. The
 `document` value uses the same validated payload described above and may be
-version 1 through 8; preview caches and Undo/Redo history are not included. The
+version 1 through 9; preview caches and Undo/Redo history are not included. The
 wrapper remains version 1 and its nested document is written atomically with
 `QSaveFile`.
 
@@ -247,3 +247,16 @@ IDs, dangling references, unused definitions and invalid geometry/curves are
 rejected before applying a document. Mask fields are rejected before v8.
 Save, autosave and recovery use the same records. Geometry defaults and the
 Inspector workflow are in [Masks](../features/MASKS.md).
+
+## Version 9 animated effect parameters
+
+Each `effects` entry may include an optional `keyframes` object when one or more
+parameter curves are non-empty. A `gaussian_blur` entry accepts
+`radius_pixels` (`[0, 100]`); a `color_adjustment` entry accepts `brightness`
+(`[-100, 100]`), `contrast_percent` (`[0, 200]`), and `saturation_percent`
+(`0` through `200`). Each property array uses the same layer-local `frame`,
+`value`, `interpolation` (`linear` or `cubic_bezier`), and `easing` object format
+as transform keyframes, and counts toward the document keyframe limit. Unknown
+property keys, out-of-range values, and `keyframes` fields in documents before
+version 9 are rejected. `.cscomp` interchange remains unchanged and rejects
+layers with animated effect parameters.

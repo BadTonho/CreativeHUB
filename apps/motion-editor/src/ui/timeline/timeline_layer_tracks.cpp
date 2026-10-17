@@ -79,11 +79,56 @@ QColor propertyColor(creative_suite::animation::TransformProperty property)
     return QColor(255, 255, 255);
 }
 
+using EffectParameterProperty = model::EffectParameterProperty;
+
+QString effectPropertyName(std::size_t effect_index, EffectParameterProperty property)
+{
+    using P = EffectParameterProperty;
+    QString prop_label;
+    switch (property) {
+    case P::GaussianBlurRadius:
+        prop_label = MotionUiTranslation::tr("Radius (sigma)");
+        break;
+    case P::ColorBrightness:
+        prop_label = MotionUiTranslation::tr("Brightness");
+        break;
+    case P::ColorContrastPercent:
+        prop_label = MotionUiTranslation::tr("Contrast");
+        break;
+    case P::ColorSaturationPercent:
+        prop_label = MotionUiTranslation::tr("Saturation");
+        break;
+    }
+    return MotionUiTranslation::tr("Effect %1: %2")
+        .arg(static_cast<qlonglong>(effect_index + 1))
+        .arg(prop_label);
+}
+
+QColor effectPropertyColor(EffectParameterProperty property)
+{
+    using P = EffectParameterProperty;
+    switch (property) {
+    case P::GaussianBlurRadius: return QColor(115, 205, 235);
+    case P::ColorBrightness: return QColor(245, 205, 110);
+    case P::ColorContrastPercent: return QColor(195, 155, 245);
+    case P::ColorSaturationPercent: return QColor(245, 140, 175);
+    }
+    return QColor(255, 255, 255);
+}
+
 struct VisualTimelineRow {
-    enum class Kind : std::uint8_t { Layer, TransformGroup, Property };
+    enum class Kind : std::uint8_t {
+        Layer,
+        TransformGroup,
+        Property,
+        EffectsGroup,
+        EffectProperty,
+    };
     std::size_t layer_index = 0;
     Kind kind = Kind::Layer;
     std::optional<creative_suite::animation::TransformProperty> property;
+    std::size_t effect_index = 0;
+    std::optional<model::EffectParameterProperty> effect_property;
 };
 class LayerRowsCanvas final : public QWidget {
 public:
@@ -109,6 +154,9 @@ public:
         std::erase_if(expanded_transform_groups_, [&existing](model::LayerId id) {
             return !existing.contains(id);
         });
+        std::erase_if(expanded_effects_groups_, [&existing](model::LayerId id) {
+            return !existing.contains(id);
+        });
         rebuildVisualRows();
     }
 
@@ -131,10 +179,22 @@ public:
         rebuildVisualRows();
     }
 
+    void setEffectsGroupExpanded(model::LayerId id, bool expanded)
+    {
+        if (findRow(id) == nullptr) return;
+        if (expanded && expanded_layers_.contains(id)) {
+            expanded_effects_groups_.insert(id);
+        } else {
+            expanded_effects_groups_.erase(id);
+        }
+        rebuildVisualRows();
+    }
+
     void collapseAllLayerTracks()
     {
         expanded_layers_.clear();
         expanded_transform_groups_.clear();
+        expanded_effects_groups_.clear();
         rebuildVisualRows();
     }
 
@@ -169,6 +229,16 @@ public:
         keyframe_move;
     std::function<void(model::LayerId, TransformProperty, std::int64_t)>
         curve_segment_selected;
+    std::function<void(model::LayerId, std::size_t, EffectParameterProperty, std::int64_t)>
+        effect_keyframe_selected;
+    std::function<bool(model::LayerId,
+                       std::size_t,
+                       EffectParameterProperty,
+                       std::int64_t,
+                       std::int64_t)>
+        effect_keyframe_move;
+    std::function<void(model::LayerId, std::size_t, EffectParameterProperty, std::int64_t)>
+        effect_curve_segment_selected;
     std::function<void(int)> zoom_step_requested;
     std::function<void(int)> viewport_width_changed;
 
@@ -226,13 +296,18 @@ protected:
             const bool layer_row = visual.kind == VisualTimelineRow::Kind::Layer;
             const bool transform_group =
                 visual.kind == VisualTimelineRow::Kind::TransformGroup;
-            const bool property_track = visual.kind == VisualTimelineRow::Kind::Property;
+            const bool effects_group =
+                visual.kind == VisualTimelineRow::Kind::EffectsGroup;
+            const bool group_row = transform_group || effects_group;
+            const bool property_track =
+                visual.kind == VisualTimelineRow::Kind::Property ||
+                visual.kind == VisualTimelineRow::Kind::EffectProperty;
             const QRect row_rect(0, top, width(), kTimelineRowHeight);
             const bool selected = row.id == selected_layer_id_;
             QColor row_background;
             if (property_track) {
                 row_background = QColor(34, 38, 45);
-            } else if (transform_group) {
+            } else if (group_row) {
                 row_background = QColor(39, 43, 50);
             } else if (selected) {
                 row_background = QColor(64, 69, 78);
@@ -243,7 +318,7 @@ protected:
             painter.fillRect(row_rect, row_background);
             painter.fillRect(QRect(0, top, kTimelineHeaderWidth, kTimelineRowHeight),
                 property_track ? QColor(39, 43, 50)
-                    : (transform_group ? QColor(47, 51, 58) : QColor(43, 47, 54)));
+                    : (group_row ? QColor(47, 51, 58) : QColor(43, 47, 54)));
             painter.setPen(QPen(QColor(63, 68, 76), 1));
             painter.drawLine(0, top + kTimelineRowHeight - 1,
                              width(), top + kTimelineRowHeight - 1);
@@ -312,8 +387,10 @@ protected:
                             std::max(2, preview_right - preview_left), kTimelineRowHeight - 6), 3, 3);
                     }
                 }
-            } else if (transform_group) {
-                const bool expanded = expanded_transform_groups_.contains(row.id);
+            } else if (group_row) {
+                const bool expanded = transform_group
+                    ? expanded_transform_groups_.contains(row.id)
+                    : expanded_effects_groups_.contains(row.id);
                 QPolygon disclosure;
                 if (expanded) {
                     disclosure << QPoint(50, top + 13) << QPoint(60, top + 13)
@@ -328,8 +405,10 @@ protected:
                 painter.setPen(QColor(228, 231, 235));
                 painter.drawText(QRect(66, top, kTimelineHeaderWidth - 72, kTimelineRowHeight),
                                  Qt::AlignLeft | Qt::AlignVCenter,
-                                 MotionUiTranslation::tr("Transform"));
-            } else {
+                                 transform_group
+                                     ? MotionUiTranslation::tr("Transform")
+                                     : MotionUiTranslation::tr("Effects"));
+            } else if (visual.kind == VisualTimelineRow::Kind::Property) {
                 const auto property = *visual.property;
                 painter.setPen(propertyColor(property));
                 painter.drawText(QRect(68, top, kTimelineHeaderWidth - 74, kTimelineRowHeight),
@@ -367,6 +446,57 @@ protected:
                                 << QPoint(x, lane_center_y + 7) << QPoint(x - 7, lane_center_y);
                         painter.setPen(QPen(QColor(255, 183, 54), 2));
                         painter.setBrush(propertyColor(property));
+                        painter.drawPolygon(diamond);
+                    }
+                }
+            } else if (visual.kind == VisualTimelineRow::Kind::EffectProperty &&
+                       visual.effect_index < row.effects.size()) {
+                const auto effect_index = visual.effect_index;
+                const auto effect_property = *visual.effect_property;
+                const auto color = effectPropertyColor(effect_property);
+                painter.setPen(color);
+                painter.drawText(QRect(68, top, kTimelineHeaderWidth - 74, kTimelineRowHeight),
+                                 Qt::AlignLeft | Qt::AlignVCenter,
+                                 effectPropertyName(effect_index, effect_property));
+                const int lane_center_y = top + kTimelineRowHeight / 2;
+                painter.setPen(QPen(QColor(68, 74, 83), 1));
+                painter.drawLine(mapping.axisLeft(), lane_center_y, width(), lane_center_y);
+                const auto* keyframes = model::effectKeyframesFor(
+                    row.effects[effect_index], effect_property);
+                if (keyframes != nullptr) {
+                    for (const auto& keyframe : *keyframes) {
+                        if (keyframe.frame < 0 || keyframe.frame >= row.duration_frames) continue;
+                        const auto composition_frame = row.start_frame + keyframe.frame;
+                        if (composition_frame < view_start_frame_ ||
+                            composition_frame > mapping.viewEndFrame()) continue;
+                        if (interaction_mode_ == InteractionMode::MoveEffectKeyframe &&
+                            interaction_layer_id_ == row.id &&
+                            interaction_effect_index_ == effect_index &&
+                            interaction_effect_property_ == effect_property &&
+                            keyframe.frame == interaction_keyframe_frame_ &&
+                            preview_value_ != interaction_keyframe_frame_) continue;
+                        const int x = mapping.xForFrame(composition_frame);
+                        QPolygon diamond;
+                        diamond << QPoint(x, lane_center_y - 6) << QPoint(x + 6, lane_center_y)
+                                << QPoint(x, lane_center_y + 6) << QPoint(x - 6, lane_center_y);
+                        painter.setPen(QPen(color.lighter(135), 1));
+                        painter.setBrush(color);
+                        painter.drawPolygon(diamond);
+                    }
+                }
+                if (interaction_mode_ == InteractionMode::MoveEffectKeyframe &&
+                    interaction_layer_id_ == row.id &&
+                    interaction_effect_index_ == effect_index &&
+                    interaction_effect_property_ == effect_property) {
+                    const auto composition_frame = row.start_frame + preview_value_;
+                    if (composition_frame >= view_start_frame_ &&
+                        composition_frame <= mapping.viewEndFrame()) {
+                        const int x = mapping.xForFrame(composition_frame);
+                        QPolygon diamond;
+                        diamond << QPoint(x, lane_center_y - 7) << QPoint(x + 7, lane_center_y)
+                                << QPoint(x, lane_center_y + 7) << QPoint(x - 7, lane_center_y);
+                        painter.setPen(QPen(QColor(255, 183, 54), 2));
+                        painter.setBrush(color);
                         painter.drawPolygon(diamond);
                     }
                 }
@@ -457,6 +587,59 @@ protected:
             event->accept();
             return;
         }
+        if (visual.kind == VisualTimelineRow::Kind::EffectProperty &&
+            visual.effect_index < row.effects.size()) {
+            const auto effect_index = visual.effect_index;
+            const auto effect_property = *visual.effect_property;
+            const int lane_center_y = row_index * kTimelineRowHeight + kTimelineRowHeight / 2;
+            const auto* keyframes_ptr = model::effectKeyframesFor(
+                row.effects[effect_index], effect_property);
+            if (keyframes_ptr != nullptr) {
+                const auto& keyframes = *keyframes_ptr;
+                for (std::size_t key_index = 0; key_index < keyframes.size(); ++key_index) {
+                    const auto& keyframe = keyframes[key_index];
+                    if (keyframe.frame < 0 || keyframe.frame >= row.duration_frames) continue;
+                    const int marker_x = viewMapping().xForFrame(row.start_frame + keyframe.frame);
+                    if (std::abs(position.x() - marker_x) <= 8 &&
+                        std::abs(position.y() - lane_center_y) <= 9) {
+                        if (effect_curve_segment_selected && keyframes.size() >= 2) {
+                            const auto segment_index = std::min(key_index, keyframes.size() - 2);
+                            effect_curve_segment_selected(row.id,
+                                                          effect_index,
+                                                          effect_property,
+                                                          keyframes[segment_index].frame);
+                        }
+                        interaction_mode_ = InteractionMode::MoveEffectKeyframe;
+                        interaction_effect_index_ = effect_index;
+                        interaction_effect_property_ = effect_property;
+                        interaction_keyframe_frame_ = keyframe.frame;
+                        preview_value_ = keyframe.frame;
+                        event->accept();
+                        return;
+                    }
+                }
+                if (effect_curve_segment_selected && keyframes.size() >= 2) {
+                    const auto clicked_local_frame = std::max<std::int64_t>(0,
+                        frameAtX(position.x()) - row.start_frame);
+                    const auto upper = std::upper_bound(keyframes.begin(), keyframes.end(),
+                        clicked_local_frame, [](std::int64_t frame, const auto& keyframe) {
+                            return frame < keyframe.frame;
+                        });
+                    const auto segment_index = upper == keyframes.begin()
+                        ? std::size_t{0}
+                        : std::min(static_cast<std::size_t>(
+                            std::distance(keyframes.begin(), upper) - 1), keyframes.size() - 2);
+                    effect_curve_segment_selected(row.id,
+                                                  effect_index,
+                                                  effect_property,
+                                                  keyframes[segment_index].frame);
+                }
+            }
+            interaction_mode_ = InteractionMode::None;
+            interaction_layer_id_ = 0;
+            event->accept();
+            return;
+        }
         if (visual.kind == VisualTimelineRow::Kind::Layer && position.x() < 48) {
             setLayerExpanded(row.id, !expanded_layers_.contains(row.id));
             interaction_layer_id_ = 0;
@@ -467,6 +650,15 @@ protected:
             if (position.x() < 64) {
                 setTransformGroupExpanded(
                     row.id, !expanded_transform_groups_.contains(row.id));
+            }
+            interaction_layer_id_ = 0;
+            event->accept();
+            return;
+        }
+        if (visual.kind == VisualTimelineRow::Kind::EffectsGroup) {
+            if (position.x() < 64) {
+                setEffectsGroupExpanded(
+                    row.id, !expanded_effects_groups_.contains(row.id));
             }
             interaction_layer_id_ = 0;
             event->accept();
@@ -509,7 +701,8 @@ protected:
                     target_row_ = static_cast<int>(
                         visual_rows_[static_cast<std::size_t>(visual_index)].layer_index);
                 }
-            } else if (interaction_mode_ == InteractionMode::MoveKeyframe) {
+            } else if (interaction_mode_ == InteractionMode::MoveKeyframe ||
+                       interaction_mode_ == InteractionMode::MoveEffectKeyframe) {
                 if (const auto* row = findRow(interaction_layer_id_);
                     row != nullptr && row->duration_frames > 0) {
                     const auto composition_frame = frameAtX(x);
@@ -576,6 +769,8 @@ protected:
         const auto value = preview_value_;
         const auto target = target_row_;
         const auto property = interaction_property_;
+        const auto effect_index = interaction_effect_index_;
+        const auto effect_property = interaction_effect_property_;
         const auto old_keyframe = interaction_keyframe_frame_;
         const bool moved = (event->position().toPoint() - press_position_).manhattanLength() >= 4;
         interaction_mode_ = InteractionMode::None;
@@ -592,6 +787,14 @@ protected:
                 if (keyframe_move) keyframe_move(id, property, old_keyframe, value);
             } else if (keyframe_selected) {
                 keyframe_selected(id, property, old_keyframe);
+            }
+        } else if (mode == InteractionMode::MoveEffectKeyframe) {
+            if (moved && value != old_keyframe) {
+                if (effect_keyframe_move) {
+                    effect_keyframe_move(id, effect_index, effect_property, old_keyframe, value);
+                }
+            } else if (effect_keyframe_selected) {
+                effect_keyframe_selected(id, effect_index, effect_property, old_keyframe);
             }
         }
         event->accept();
@@ -677,7 +880,14 @@ protected:
     }
 
 private:
-    enum class InteractionMode { None, Move, Resize, Reorder, MoveKeyframe };
+    enum class InteractionMode {
+        None,
+        Move,
+        Resize,
+        Reorder,
+        MoveKeyframe,
+        MoveEffectKeyframe,
+    };
 
     [[nodiscard]] int rowAtY(int y) const noexcept
     {
@@ -697,16 +907,55 @@ private:
     void rebuildVisualRows()
     {
         visual_rows_.clear();
-        visual_rows_.reserve(rows_.size() * 7);
+        visual_rows_.reserve(rows_.size() * 8);
         for (std::size_t index = 0; index < rows_.size(); ++index) {
             const auto layer_id = rows_[index].id;
             visual_rows_.push_back({index, VisualTimelineRow::Kind::Layer, std::nullopt});
-            if (!expanded_layers_.contains(rows_[index].id)) continue;
+            if (!expanded_layers_.contains(layer_id)) continue;
             visual_rows_.push_back(
                 {index, VisualTimelineRow::Kind::TransformGroup, std::nullopt});
-            if (!expanded_transform_groups_.contains(layer_id)) continue;
-            for (const auto property : kTimelineProperties) {
-                visual_rows_.push_back({index, VisualTimelineRow::Kind::Property, property});
+            if (expanded_transform_groups_.contains(layer_id)) {
+                for (const auto property : kTimelineProperties) {
+                    visual_rows_.push_back({index, VisualTimelineRow::Kind::Property, property});
+                }
+            }
+            if (!rows_[index].effects.empty()) {
+                visual_rows_.push_back(
+                    {index, VisualTimelineRow::Kind::EffectsGroup, std::nullopt});
+                if (expanded_effects_groups_.contains(layer_id)) {
+                    for (std::size_t effect_index = 0;
+                         effect_index < rows_[index].effects.size();
+                         ++effect_index) {
+                        const auto& effect = rows_[index].effects[effect_index];
+                        if (std::holds_alternative<model::GaussianBlurEffect>(effect)) {
+                            visual_rows_.push_back({
+                                index,
+                                VisualTimelineRow::Kind::EffectProperty,
+                                std::nullopt,
+                                effect_index,
+                                model::EffectParameterProperty::GaussianBlurRadius});
+                        } else if (std::holds_alternative<model::ColorAdjustmentEffect>(effect)) {
+                            visual_rows_.push_back({
+                                index,
+                                VisualTimelineRow::Kind::EffectProperty,
+                                std::nullopt,
+                                effect_index,
+                                model::EffectParameterProperty::ColorBrightness});
+                            visual_rows_.push_back({
+                                index,
+                                VisualTimelineRow::Kind::EffectProperty,
+                                std::nullopt,
+                                effect_index,
+                                model::EffectParameterProperty::ColorContrastPercent});
+                            visual_rows_.push_back({
+                                index,
+                                VisualTimelineRow::Kind::EffectProperty,
+                                std::nullopt,
+                                effect_index,
+                                model::EffectParameterProperty::ColorSaturationPercent});
+                        }
+                    }
+                }
             }
         }
         const auto row_count = static_cast<int>(visual_rows_.size());
@@ -763,6 +1012,7 @@ private:
     std::vector<VisualTimelineRow> visual_rows_;
     std::unordered_set<model::LayerId> expanded_layers_;
     std::unordered_set<model::LayerId> expanded_transform_groups_;
+    std::unordered_set<model::LayerId> expanded_effects_groups_;
     std::int64_t visible_end_frame_ = 0;
     std::int64_t current_frame_ = 0;
     std::int64_t view_start_frame_ = 0;
@@ -771,6 +1021,9 @@ private:
     InteractionMode interaction_mode_ = InteractionMode::None;
     model::LayerId interaction_layer_id_ = 0;
     TransformProperty interaction_property_ = TransformProperty::PositionX;
+    std::size_t interaction_effect_index_ = 0;
+    EffectParameterProperty interaction_effect_property_ =
+        EffectParameterProperty::GaussianBlurRadius;
     std::int64_t interaction_keyframe_frame_ = 0;
     QPoint press_position_;
     std::int64_t grabbed_frame_offset_ = 0;
@@ -813,6 +1066,8 @@ void TimelineLayerTracks::setLayerExpanded(model::LayerId id, bool expanded)
 { impl_->canvas->setLayerExpanded(id, expanded); }
 void TimelineLayerTracks::setTransformGroupExpanded(model::LayerId id, bool expanded)
 { impl_->canvas->setTransformGroupExpanded(id, expanded); }
+void TimelineLayerTracks::setEffectsGroupExpanded(model::LayerId id, bool expanded)
+{ impl_->canvas->setEffectsGroupExpanded(id, expanded); }
 void TimelineLayerTracks::collapseAllLayerTracks()
 { impl_->canvas->collapseAllLayerTracks(); }
 void TimelineLayerTracks::setViewState(std::int64_t end, std::int64_t current,
@@ -855,6 +1110,18 @@ void TimelineLayerTracks::setCurveSegmentSelectedHandler(
     std::function<void(model::LayerId, creative_suite::animation::TransformProperty,
                        std::int64_t)> handler)
 { impl_->canvas->curve_segment_selected = std::move(handler); }
+void TimelineLayerTracks::setEffectKeyframeSelectedHandler(
+    std::function<void(model::LayerId, std::size_t, model::EffectParameterProperty,
+                       std::int64_t)> handler)
+{ impl_->canvas->effect_keyframe_selected = std::move(handler); }
+void TimelineLayerTracks::setEffectKeyframeMoveHandler(
+    std::function<bool(model::LayerId, std::size_t, model::EffectParameterProperty,
+                       std::int64_t, std::int64_t)> handler)
+{ impl_->canvas->effect_keyframe_move = std::move(handler); }
+void TimelineLayerTracks::setEffectCurveSegmentSelectedHandler(
+    std::function<void(model::LayerId, std::size_t, model::EffectParameterProperty,
+                       std::int64_t)> handler)
+{ impl_->canvas->effect_curve_segment_selected = std::move(handler); }
 void TimelineLayerTracks::setZoomStepHandler(std::function<void(int)> handler)
 { impl_->canvas->zoom_step_requested = std::move(handler); }
 void TimelineLayerTracks::setViewportWidthChangedHandler(std::function<void(int)> handler)

@@ -54,7 +54,7 @@ Motion-owned viewer, with a bounded mailbox and RGBA/CPU recovery; see
 [GPU_TEXTURE_PREVIEW.md](gpu/GPU_TEXTURE_PREVIEW.md). Offline export
 uses the same opt-in path and reads back RGBA for the existing CPU encoder.
 Manual Save, Save As, and Open use a versioned `.motion` document that includes
-the Media Pool. The writer emits schema v8 and reads versions 1–8; migrations
+the Media Pool. The writer emits schema v9 and reads versions 1–9; migrations
 and compatibility behavior are specified in [FORMAT.md](architecture/FORMAT.md). The
 separate recovery wrapper remains at version 1 and contains a nested native
 document. Undo/Redo and configurable autosave and recovery cover the
@@ -277,7 +277,9 @@ The blur duration is wall-clock time, including pool scheduling and pass barrier
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
-The native `.motion` writer emits schema v8 and reads versions 1–8. Migration
+The native `.motion` writer emits schema v9 and reads versions 1–9, including
+layer-local keyframes and Cubic Bezier easing on Gaussian Blur and Color
+Adjustment parameters. Migration
 details are maintained in [FORMAT.md](architecture/FORMAT.md); the recovery wrapper remains
 at version 1 and contains the validated native document. Other interpolation
 modes, overshoot-capable curves, and advanced effects remain open. Final
@@ -369,14 +371,14 @@ unchanged.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The current implementation writes version 8 JSON documents and reads
-  versions 1 through 8, identified by
+- The current implementation writes version 9 JSON documents and reads
+  versions 1 through 9, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
   in [FORMAT.md](architecture/FORMAT.md).
 - Older text, shape, keyframe, effect, and linked-image records migrate as
   specified in [FORMAT.md](architecture/FORMAT.md); saving an older document writes version
-  8.
+  9.
   An unsupported future schema version is
   rejected without replacing the current composition or overwriting or
   normalizing the original file.

@@ -349,12 +349,15 @@ void testMotionDocuments(const QString& root) {
     const auto mask=masked.createMask(project.layers.front().id,-2,creative_suite::composition::ShapeMaskKind::Ellipse);
     CS_TEST_CHECK(mask && masked.associateMask(project.layers.front().id,-1,mask));
     CS_TEST_CHECK(masked.setMaskKeyframe(mask,0,15,.25));
+    CS_TEST_CHECK(masked.setLayerEffects(project.layers.front().id, {GaussianBlurEffect{true, 4.0}}));
+    CS_TEST_CHECK(masked.setEffectKeyframe(
+        project.layers.front().id, 0, EffectParameterProperty::GaussianBlurRadius, 10, 12.0));
     project.layers=masked.layers();project.masks=masked.masks();
     project.composition.name = "Interchange";
     project.composition.duration = 180;
     const auto interchange_path = QDir(QFileInfo(assets).absolutePath()).filePath("interchange.motion");
     Store::save(fsPath(interchange_path), project);
-    const auto interchange_backup = backup(QDir(root).filePath("motion-interchange-v8"), interchange_path);
+    const auto interchange_backup = backup(QDir(root).filePath("motion-interchange-v9"), interchange_path);
     CS_TEST_CHECK(Store::load(fsPath(interchange_backup.vault)) == project);
     CS_TEST_CHECK(Store::load(fsPath(interchange_backup.restored)) == project);
 }

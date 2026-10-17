@@ -25,6 +25,7 @@ struct TimelineLayerRow {
     std::int64_t duration_frames = 0;
     std::int64_t maximum_duration_frames = 0;
     creative_suite::animation::TransformKeyframes keyframes;
+    std::vector<model::LayerEffect> effects;
 };
 
 class TimelineLayerTracks final : public QWidget {
@@ -38,6 +39,7 @@ public:
     void setRows(std::vector<TimelineLayerRow> rows);
     void setLayerExpanded(model::LayerId id, bool expanded);
     void setTransformGroupExpanded(model::LayerId id, bool expanded);
+    void setEffectsGroupExpanded(model::LayerId id, bool expanded);
     void collapseAllLayerTracks();
     void setViewState(std::int64_t end_frame,
                       std::int64_t current_frame,
@@ -67,6 +69,22 @@ public:
     void setCurveSegmentSelectedHandler(
         std::function<void(model::LayerId,
                            creative_suite::animation::TransformProperty,
+                           std::int64_t)> handler);
+    void setEffectKeyframeSelectedHandler(
+        std::function<void(model::LayerId,
+                           std::size_t,
+                           model::EffectParameterProperty,
+                           std::int64_t)> handler);
+    void setEffectKeyframeMoveHandler(
+        std::function<bool(model::LayerId,
+                           std::size_t,
+                           model::EffectParameterProperty,
+                           std::int64_t,
+                           std::int64_t)> handler);
+    void setEffectCurveSegmentSelectedHandler(
+        std::function<void(model::LayerId,
+                           std::size_t,
+                           model::EffectParameterProperty,
                            std::int64_t)> handler);
 
     void setZoomStepHandler(std::function<void(int)> handler);

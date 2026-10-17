@@ -352,6 +352,28 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     auto* blur_page = new QWidget(controls_.effect_parameter_pages);
     blur_page->setObjectName(QStringLiteral("motion-gaussian-blur-parameters"));
     auto* blur_form = new QFormLayout(blur_page);
+    const auto make_effect_key_button = [this](QWidget* parent, const QString& object_name,
+                                               model::EffectParameterProperty property) {
+        auto* button = new QToolButton(parent);
+        button->setObjectName(object_name);
+        button->setText(QStringLiteral("◇"));
+        button->setFixedWidth(26);
+        button->setToolTip(
+            MotionUiTranslation::tr("Add or remove a keyframe at the current frame"));
+        connect(button, &QToolButton::clicked, this, [this, property] {
+            emit effectKeyframeToggleRequested(static_cast<int>(property));
+        });
+        return button;
+    };
+    const auto make_effect_row = [](QWidget* parent, QDoubleSpinBox* field, QToolButton* button) {
+        auto* row = new QWidget(parent);
+        auto* layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(6);
+        layout->addWidget(field, 1);
+        layout->addWidget(button);
+        return row;
+    };
     controls_.blur_radius_field = new QDoubleSpinBox(blur_page);
     controls_.blur_radius_field->setObjectName(QStringLiteral("motion-effect-blur-radius"));
     controls_.blur_radius_field->setRange(0.0, 100.0);
@@ -359,7 +381,12 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     controls_.blur_radius_field->setSingleStep(0.5);
     controls_.blur_radius_field->setSuffix(QStringLiteral(" px"));
     controls_.blur_radius_field->setKeyboardTracking(false);
-    blur_form->addRow(MotionUiTranslation::tr("Radius (sigma)"), controls_.blur_radius_field);
+    controls_.blur_radius_key_button = make_effect_key_button(
+        blur_page, QStringLiteral("motion-effect-keyframe-blur-radius"),
+        model::EffectParameterProperty::GaussianBlurRadius);
+    blur_form->addRow(
+        MotionUiTranslation::tr("Radius (sigma)"),
+        make_effect_row(blur_page, controls_.blur_radius_field, controls_.blur_radius_key_button));
     controls_.effect_parameter_pages->addWidget(blur_page);
     auto* color_page = new QWidget(controls_.effect_parameter_pages);
     color_page->setObjectName(QStringLiteral("motion-color-adjustment-parameters"));
@@ -369,21 +396,39 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     controls_.effect_brightness_field->setRange(-100.0, 100.0);
     controls_.effect_brightness_field->setDecimals(1);
     controls_.effect_brightness_field->setKeyboardTracking(false);
-    color_form->addRow(MotionUiTranslation::tr("Brightness"), controls_.effect_brightness_field);
+    controls_.effect_brightness_key_button = make_effect_key_button(
+        color_page, QStringLiteral("motion-effect-keyframe-brightness"),
+        model::EffectParameterProperty::ColorBrightness);
+    color_form->addRow(
+        MotionUiTranslation::tr("Brightness"),
+        make_effect_row(
+            color_page, controls_.effect_brightness_field, controls_.effect_brightness_key_button));
     controls_.effect_contrast_field = new QDoubleSpinBox(color_page);
     controls_.effect_contrast_field->setObjectName(QStringLiteral("motion-effect-contrast"));
     controls_.effect_contrast_field->setRange(0.0, 200.0);
     controls_.effect_contrast_field->setDecimals(1);
     controls_.effect_contrast_field->setSuffix(QStringLiteral(" %"));
     controls_.effect_contrast_field->setKeyboardTracking(false);
-    color_form->addRow(MotionUiTranslation::tr("Contrast"), controls_.effect_contrast_field);
+    controls_.effect_contrast_key_button = make_effect_key_button(
+        color_page, QStringLiteral("motion-effect-keyframe-contrast"),
+        model::EffectParameterProperty::ColorContrastPercent);
+    color_form->addRow(
+        MotionUiTranslation::tr("Contrast"),
+        make_effect_row(
+            color_page, controls_.effect_contrast_field, controls_.effect_contrast_key_button));
     controls_.effect_saturation_field = new QDoubleSpinBox(color_page);
     controls_.effect_saturation_field->setObjectName(QStringLiteral("motion-effect-saturation"));
     controls_.effect_saturation_field->setRange(0.0, 200.0);
     controls_.effect_saturation_field->setDecimals(1);
     controls_.effect_saturation_field->setSuffix(QStringLiteral(" %"));
     controls_.effect_saturation_field->setKeyboardTracking(false);
-    color_form->addRow(MotionUiTranslation::tr("Saturation"), controls_.effect_saturation_field);
+    controls_.effect_saturation_key_button = make_effect_key_button(
+        color_page, QStringLiteral("motion-effect-keyframe-saturation"),
+        model::EffectParameterProperty::ColorSaturationPercent);
+    color_form->addRow(
+        MotionUiTranslation::tr("Saturation"),
+        make_effect_row(
+            color_page, controls_.effect_saturation_field, controls_.effect_saturation_key_button));
     controls_.effect_parameter_pages->addWidget(color_page);
     effects_layout->addWidget(controls_.effect_parameter_pages);
     controls_.effects_tab_index = addTab(controls_.effects_inspector, MotionUiTranslation::tr("Effects"));
@@ -472,11 +517,26 @@ double InspectorWidget::transformFieldValue(std::size_t property_index) const no
     return property_index < controls_.transform_fields.size()
         ? controls_.transform_fields[property_index]->value() : 0.0;
 }
+double InspectorWidget::effectFieldValue(model::EffectParameterProperty property) const noexcept
+{
+    switch (property) {
+    case model::EffectParameterProperty::GaussianBlurRadius:
+        return controls_.blur_radius_field->value();
+    case model::EffectParameterProperty::ColorBrightness:
+        return controls_.effect_brightness_field->value();
+    case model::EffectParameterProperty::ColorContrastPercent:
+        return controls_.effect_contrast_field->value();
+    case model::EffectParameterProperty::ColorSaturationPercent:
+        return controls_.effect_saturation_field->value();
+    }
+    return 0.0;
+}
 
 void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
                                 std::int64_t composition_frame,
                                 int selected_effect_row)
 {
+    last_composition_frame_ = composition_frame;
     controls_.transform_inspector->setEnabled(layer != nullptr);
     const auto* text = layer ? std::get_if<model::TextLayerContent>(&layer->content) : nullptr;
     const auto* shape = layer ? std::get_if<model::ShapeLayerContent>(&layer->content) : nullptr;
@@ -581,20 +641,47 @@ void InspectorWidget::syncSelectedEffect(const model::CompositionLayer* layer, i
         controls_.effect_parameter_pages->setCurrentIndex(0);
         return;
     }
+    const auto raw_local_frame = last_composition_frame_ - layer->timeline_start_frame;
+    const auto local_frame = layer->duration_frames > 0
+        ? std::clamp(raw_local_frame, std::int64_t{0}, layer->duration_frames - 1)
+        : std::int64_t{0};
+    const bool inside = raw_local_frame >= 0 && raw_local_frame < layer->duration_frames;
     const auto& effect = layer->effects[static_cast<std::size_t>(row)];
-    if (const auto* blur = std::get_if<model::GaussianBlurEffect>(&effect)) {
+    const auto sync_parameter = [&](QDoubleSpinBox* field,
+                                    QToolButton* key_button,
+                                    model::EffectParameterProperty property) {
+        const auto* keys = model::effectKeyframesFor(effect, property);
+        const bool has_keys = keys != nullptr && !keys->empty();
+        const bool key_here = inside &&
+            model::hasEffectKeyframeAtFrame(effect, property, raw_local_frame);
+        const QSignalBlocker blocker(field);
+        field->setValue(model::evaluateEffectParameter(effect, property, local_frame));
+        field->setReadOnly(has_keys && !key_here);
+        key_button->setEnabled(inside);
+        const QSignalBlocker key_blocker(key_button);
+        key_button->setCheckable(true);
+        key_button->setChecked(key_here);
+        key_button->setText(key_here ? QStringLiteral("◆") : QStringLiteral("◇"));
+        key_button->setToolTip(key_here
+            ? MotionUiTranslation::tr("Remove the keyframe at the current frame")
+            : MotionUiTranslation::tr("Add a keyframe at the current frame"));
+    };
+    if (std::holds_alternative<model::GaussianBlurEffect>(effect)) {
         controls_.effect_parameter_pages->setCurrentIndex(1);
-        const QSignalBlocker blocker(controls_.blur_radius_field);
-        controls_.blur_radius_field->setValue(blur->radius_pixels);
+        sync_parameter(controls_.blur_radius_field,
+                       controls_.blur_radius_key_button,
+                       model::EffectParameterProperty::GaussianBlurRadius);
     } else {
-        const auto& color = std::get<model::ColorAdjustmentEffect>(effect);
         controls_.effect_parameter_pages->setCurrentIndex(2);
-        const QSignalBlocker a(controls_.effect_brightness_field);
-        const QSignalBlocker b(controls_.effect_contrast_field);
-        const QSignalBlocker c(controls_.effect_saturation_field);
-        controls_.effect_brightness_field->setValue(color.brightness);
-        controls_.effect_contrast_field->setValue(color.contrast_percent);
-        controls_.effect_saturation_field->setValue(color.saturation_percent);
+        sync_parameter(controls_.effect_brightness_field,
+                       controls_.effect_brightness_key_button,
+                       model::EffectParameterProperty::ColorBrightness);
+        sync_parameter(controls_.effect_contrast_field,
+                       controls_.effect_contrast_key_button,
+                       model::EffectParameterProperty::ColorContrastPercent);
+        sync_parameter(controls_.effect_saturation_field,
+                       controls_.effect_saturation_key_button,
+                       model::EffectParameterProperty::ColorSaturationPercent);
     }
 }
 
@@ -621,11 +708,19 @@ model::ShapeLayerContent InspectorWidget::editedShapeContent(model::ShapeLayerCo
 model::LayerEffect InspectorWidget::editedEffect(model::LayerEffect value) const
 {
     if (auto* blur = std::get_if<model::GaussianBlurEffect>(&value)) {
-        blur->radius_pixels = controls_.blur_radius_field->value();
+        if (blur->radius_keyframes.empty()) {
+            blur->radius_pixels = controls_.blur_radius_field->value();
+        }
     } else if (auto* color = std::get_if<model::ColorAdjustmentEffect>(&value)) {
-        color->brightness = controls_.effect_brightness_field->value();
-        color->contrast_percent = controls_.effect_contrast_field->value();
-        color->saturation_percent = controls_.effect_saturation_field->value();
+        if (color->brightness_keyframes.empty()) {
+            color->brightness = controls_.effect_brightness_field->value();
+        }
+        if (color->contrast_keyframes.empty()) {
+            color->contrast_percent = controls_.effect_contrast_field->value();
+        }
+        if (color->saturation_keyframes.empty()) {
+            color->saturation_percent = controls_.effect_saturation_field->value();
+        }
     }
     return value;
 }

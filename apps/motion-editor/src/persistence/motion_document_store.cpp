@@ -335,6 +335,13 @@ model::ColorRgba parseColor(const QJsonValue& value,
     return color;
 }
 
+QJsonArray writeKeyframes(const std::vector<creative_suite::animation::Keyframe>& keyframes);
+std::vector<creative_suite::animation::Keyframe> parseKeyframes(
+    const QJsonArray& array,
+    const std::filesystem::path& path,
+    std::size_t& keyframe_count,
+    int document_version);
+
 QJsonArray writeEffects(const std::vector<model::LayerEffect>& effects)
 {
     QJsonArray array;
@@ -347,11 +354,28 @@ QJsonArray writeEffects(const std::vector<model::LayerEffect>& effects)
             if constexpr (std::is_same_v<Effect, model::GaussianBlurEffect>) {
                 object.insert(QStringLiteral("type"), QStringLiteral("gaussian_blur"));
                 object.insert(QStringLiteral("radius_pixels"), value.radius_pixels);
+                if (!value.radius_keyframes.empty()) {
+                    QJsonObject keyframes;
+                    keyframes.insert(QStringLiteral("radius_pixels"),
+                                     writeKeyframes(value.radius_keyframes));
+                    object.insert(QStringLiteral("keyframes"), keyframes);
+                }
             } else {
                 object.insert(QStringLiteral("type"), QStringLiteral("color_adjustment"));
                 object.insert(QStringLiteral("brightness"), value.brightness);
                 object.insert(QStringLiteral("contrast_percent"), value.contrast_percent);
                 object.insert(QStringLiteral("saturation_percent"), value.saturation_percent);
+                if (!value.brightness_keyframes.empty() || !value.contrast_keyframes.empty() ||
+                    !value.saturation_keyframes.empty()) {
+                    QJsonObject keyframes;
+                    keyframes.insert(QStringLiteral("brightness"),
+                                     writeKeyframes(value.brightness_keyframes));
+                    keyframes.insert(QStringLiteral("contrast_percent"),
+                                     writeKeyframes(value.contrast_keyframes));
+                    keyframes.insert(QStringLiteral("saturation_percent"),
+                                     writeKeyframes(value.saturation_keyframes));
+                    object.insert(QStringLiteral("keyframes"), keyframes);
+                }
             }
         }, effect);
         array.append(object);
@@ -361,7 +385,9 @@ QJsonArray writeEffects(const std::vector<model::LayerEffect>& effects)
 
 std::vector<model::LayerEffect> parseEffects(const QJsonArray& array,
                                             const std::filesystem::path& path,
-                                            std::size_t& effect_count, int document_version)
+                                            std::size_t& effect_count,
+                                            std::size_t& keyframe_count,
+                                            int document_version)
 {
     if (effect_count + static_cast<std::size_t>(array.size()) >
         static_cast<std::size_t>(kMaximumEffectCount)) {
@@ -379,6 +405,10 @@ std::vector<model::LayerEffect> parseEffects(const QJsonArray& array,
         const auto object = value.toObject();
         const auto type = requiredString(object, "type", path);
         if(object.contains("mask") && document_version<8)fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Masks require version 8."));
+        if (object.contains(QStringLiteral("keyframes")) && document_version < 9) {
+            fail(MotionDocumentErrorCode::InvalidValue, path,
+                 QStringLiteral("Effect keyframes require version 9."));
+        }
         const auto mask=object.contains("mask")?requiredInt64(object,"mask",path):0;
         if(mask<0)fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Invalid mask reference."));
         const auto enabled = requiredBool(object, "enabled", path);
@@ -387,7 +417,21 @@ std::vector<model::LayerEffect> parseEffects(const QJsonArray& array,
             blur.enabled = enabled;
             blur.mask=mask;
             blur.radius_pixels = requiredNumber(object, "radius_pixels", path);
-            effects.emplace_back(blur);
+            if (object.contains(QStringLiteral("keyframes"))) {
+                const auto keyframes = requiredObject(object, "keyframes", path);
+                for (auto it = keyframes.begin(); it != keyframes.end(); ++it) {
+                    if (it.key() != QLatin1String("radius_pixels")) {
+                        fail(MotionDocumentErrorCode::InvalidValue, path,
+                             QStringLiteral("The document contains an unsupported Gaussian Blur keyframe property."));
+                    }
+                }
+                if (keyframes.contains(QStringLiteral("radius_pixels"))) {
+                    blur.radius_keyframes = parseKeyframes(
+                        requiredArray(keyframes, "radius_pixels", path),
+                        path, keyframe_count, document_version);
+                }
+            }
+            effects.emplace_back(std::move(blur));
         } else if (type == QLatin1String("color_adjustment")) {
             model::ColorAdjustmentEffect color;
             color.enabled = enabled;
@@ -395,7 +439,33 @@ std::vector<model::LayerEffect> parseEffects(const QJsonArray& array,
             color.brightness = requiredNumber(object, "brightness", path);
             color.contrast_percent = requiredNumber(object, "contrast_percent", path);
             color.saturation_percent = requiredNumber(object, "saturation_percent", path);
-            effects.emplace_back(color);
+            if (object.contains(QStringLiteral("keyframes"))) {
+                const auto keyframes = requiredObject(object, "keyframes", path);
+                for (auto it = keyframes.begin(); it != keyframes.end(); ++it) {
+                    if (it.key() != QLatin1String("brightness") &&
+                        it.key() != QLatin1String("contrast_percent") &&
+                        it.key() != QLatin1String("saturation_percent")) {
+                        fail(MotionDocumentErrorCode::InvalidValue, path,
+                             QStringLiteral("The document contains an unsupported Color Adjustment keyframe property."));
+                    }
+                }
+                if (keyframes.contains(QStringLiteral("brightness"))) {
+                    color.brightness_keyframes = parseKeyframes(
+                        requiredArray(keyframes, "brightness", path),
+                        path, keyframe_count, document_version);
+                }
+                if (keyframes.contains(QStringLiteral("contrast_percent"))) {
+                    color.contrast_keyframes = parseKeyframes(
+                        requiredArray(keyframes, "contrast_percent", path),
+                        path, keyframe_count, document_version);
+                }
+                if (keyframes.contains(QStringLiteral("saturation_percent"))) {
+                    color.saturation_keyframes = parseKeyframes(
+                        requiredArray(keyframes, "saturation_percent", path),
+                        path, keyframe_count, document_version);
+                }
+            }
+            effects.emplace_back(std::move(color));
         } else {
             fail(MotionDocumentErrorCode::InvalidValue, path,
                  QStringLiteral("The document contains an unsupported layer effect."));
@@ -486,6 +556,18 @@ void validateDocument(const MotionProjectData& document,
         keyframe_count += layer.keyframes.position_x.size() +
             layer.keyframes.position_y.size() + layer.keyframes.scale.size() +
             layer.keyframes.rotation.size() + layer.keyframes.opacity.size();
+        for (const auto& effect : layer.effects) {
+            std::visit([&keyframe_count](const auto& value) {
+                using Effect = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<Effect, model::GaussianBlurEffect>) {
+                    keyframe_count += value.radius_keyframes.size();
+                } else {
+                    keyframe_count += value.brightness_keyframes.size() +
+                        value.contrast_keyframes.size() +
+                        value.saturation_keyframes.size();
+                }
+            }, effect);
+        }
         if (keyframe_count > static_cast<std::size_t>(kMaximumKeyframeCount)) {
             fail(MotionDocumentErrorCode::InvalidValue, path,
                  QStringLiteral("The document contains too many keyframes."));
@@ -839,7 +921,8 @@ CompositionLayer parseLayer(const QJsonValue& value,
     }
     if (document_version >= 4) {
         layer.effects = parseEffects(requiredArray(object, "effects", document_path),
-                                     document_path, effect_count, document_version);
+                                     document_path, effect_count, keyframe_count,
+                                     document_version);
     }
     return layer;
 }

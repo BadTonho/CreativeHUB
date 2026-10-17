@@ -141,6 +141,11 @@ private:
         model::LayerId id,
         creative_suite::animation::TransformProperty property,
         std::int64_t local_start_frame);
+    void selectEffectCurveSegment(
+        model::LayerId id,
+        std::size_t effect_index,
+        model::EffectParameterProperty property,
+        std::int64_t local_start_frame);
     void applyCurvePreset(int preset_index);
     void applyCurveEasing(
         std::int64_t local_start_frame,
@@ -152,6 +157,7 @@ private:
                                      int selected_row);
     void addLayerEffect(int kind);
     void editSelectedEffectParameters();
+    void toggleSelectedEffectKeyframe(int property_index);
     void applySelectedEffectStack(std::vector<model::LayerEffect> effects,
                                   bool coalesce_parameters = false);
     void reorderEffectsFromList(std::size_t source_index, int insertion_row);
@@ -240,6 +246,9 @@ private:
         std::int64_t segment_start_frame = 0;
         model::MaskId mask_id = 0;
         std::size_t mask_property = 0;
+        std::optional<std::size_t> effect_index;
+        model::EffectParameterProperty effect_property =
+            model::EffectParameterProperty::GaussianBlurRadius;
     };
     std::optional<CurveSelection> curve_selection_;
     std::shared_ptr<const std::vector<model::Mask>> mask_snapshot_;

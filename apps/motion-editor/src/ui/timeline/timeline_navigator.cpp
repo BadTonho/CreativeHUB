@@ -350,7 +350,8 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
             layer->timeline_start_frame,
             layer->duration_frames,
             layer->maximum_timeline_duration_frames,
-            layer->keyframes});
+            layer->keyframes,
+            layer->effects});
         if (layer->timeline_start_frame >= 0 && layer->duration_frames > 0) {
             const auto end_frame = layer->duration_frames >
                     maximum_frame - layer->timeline_start_frame
@@ -385,6 +386,11 @@ void TimelineNavigator::setLayerExpanded(model::LayerId id, bool expanded)
 void TimelineNavigator::setTransformGroupExpanded(model::LayerId id, bool expanded)
 {
     layer_tracks_->setTransformGroupExpanded(id, expanded);
+}
+
+void TimelineNavigator::setEffectsGroupExpanded(model::LayerId id, bool expanded)
+{
+    layer_tracks_->setEffectsGroupExpanded(id, expanded);
 }
 
 void TimelineNavigator::setGraphEditorOpen(bool open)
@@ -465,6 +471,34 @@ void TimelineNavigator::setCurveSegmentSelectedHandler(
                        std::int64_t)> handler)
 {
     layer_tracks_->setCurveSegmentSelectedHandler(std::move(handler));
+}
+
+void TimelineNavigator::setEffectKeyframeSelectedHandler(
+    std::function<void(model::LayerId,
+                       std::size_t,
+                       model::EffectParameterProperty,
+                       std::int64_t)> handler)
+{
+    layer_tracks_->setEffectKeyframeSelectedHandler(std::move(handler));
+}
+
+void TimelineNavigator::setEffectKeyframeMoveHandler(
+    std::function<bool(model::LayerId,
+                       std::size_t,
+                       model::EffectParameterProperty,
+                       std::int64_t,
+                       std::int64_t)> handler)
+{
+    layer_tracks_->setEffectKeyframeMoveHandler(std::move(handler));
+}
+
+void TimelineNavigator::setEffectCurveSegmentSelectedHandler(
+    std::function<void(model::LayerId,
+                       std::size_t,
+                       model::EffectParameterProperty,
+                       std::int64_t)> handler)
+{
+    layer_tracks_->setEffectCurveSegmentSelectedHandler(std::move(handler));
 }
 
 void TimelineNavigator::seekToFrame(std::int64_t frame)

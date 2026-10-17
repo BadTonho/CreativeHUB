@@ -1495,6 +1495,70 @@ void testMotionLayerEffects()
     effects->item(0)->setCheckState(Qt::Checked);
     require(window.isWindowModified(), "a later effect edit still marks the document dirty");
 
+    auto* timeline = findWidget<motion::ui::TimelineNavigator>(
+        &window, "motion-timeline");
+    auto* blur_radius = findWidget<QDoubleSpinBox>(&window, "motion-effect-blur-radius");
+    auto* blur_radius_key = findWidget<QToolButton>(
+        &window, "motion-effect-keyframe-blur-radius");
+    auto* curve_preset = findWidget<QComboBox>(&window, "motion-curve-editor-preset");
+    effects->setCurrentRow(1);
+    QCoreApplication::processEvents();
+    require(blur_radius_key->isEnabled() && !blur_radius_key->isChecked() &&
+                !blur_radius->isReadOnly() && blur_radius->value() == 10.0,
+            "selecting Gaussian Blur enables its radius keyframe toggle at the static value");
+    timeline->setCurrentFrame(10);
+    blur_radius_key->click();
+    require(blur_radius_key->isChecked() && !blur_radius->isReadOnly() &&
+                std::get<motion::model::GaussianBlurEffect>(
+                    window.compositionDocument()->layers().back().effects[1])
+                        .radius_keyframes ==
+                    std::vector<creative_suite::animation::Keyframe>{{10, 10.0}},
+            "toggling the effect keyframe button stores a keyframe at the current local frame");
+    blur_radius->setValue(25.0);
+    require(std::get<motion::model::GaussianBlurEffect>(
+                window.compositionDocument()->layers().back().effects[1]).radius_pixels == 10.0 &&
+                std::get<motion::model::GaussianBlurEffect>(
+                    window.compositionDocument()->layers().back().effects[1])
+                        .radius_keyframes ==
+                    std::vector<creative_suite::animation::Keyframe>{{10, 25.0}},
+            "editing an effect parameter at a keyframe updates that keyframe while preserving the base value");
+    timeline->setCurrentFrame(0);
+    require(!blur_radius_key->isChecked() && blur_radius->isReadOnly() &&
+                std::abs(blur_radius->value() - 25.0) < 1e-6,
+            "an animated effect parameter is read-only at unkeyed frames");
+    blur_radius_key->click();
+    blur_radius->setValue(5.0);
+    require(blur_radius_key->isChecked() && !blur_radius->isReadOnly() &&
+                std::get<motion::model::GaussianBlurEffect>(
+                    window.compositionDocument()->layers().back().effects[1])
+                        .radius_keyframes ==
+                    std::vector<creative_suite::animation::Keyframe>{{0, 5.0}, {10, 25.0}},
+            "adding a keyframe at frame zero creates an interpolated effect segment");
+    timeline->setCurrentFrame(5);
+    require(blur_radius->isReadOnly() && std::abs(blur_radius->value() - 15.0) < 1e-6,
+            "the Effects inspector displays the linearly interpolated effect value between keyframes");
+    require(curve_preset->isEnabled() && curve_preset->currentIndex() == 0,
+            "the Graph Editor loads the active effect keyframe segment");
+    curve_preset->setCurrentIndex(1);
+    const auto& eased_blur = std::get<motion::model::GaussianBlurEffect>(
+        window.compositionDocument()->layers().back().effects[1]);
+    require(eased_blur.radius_keyframes.front().interpolation ==
+                creative_suite::animation::InterpolationMode::CubicBezier &&
+                blur_radius->value() < 15.0 && blur_radius->value() > 5.0,
+            "applying a Graph Editor curve preset eases the animated effect parameter");
+    action(window, "motion-undo-action")->trigger();
+    require(std::get<motion::model::GaussianBlurEffect>(
+                window.compositionDocument()->layers().back().effects[1])
+                    .radius_keyframes.front().interpolation ==
+                creative_suite::animation::InterpolationMode::Linear,
+            "Undo restores Linear interpolation on the effect keyframe segment");
+    action(window, "motion-redo-action")->trigger();
+    require(std::get<motion::model::GaussianBlurEffect>(
+                window.compositionDocument()->layers().back().effects[1])
+                    .radius_keyframes.front().interpolation ==
+                creative_suite::animation::InterpolationMode::CubicBezier,
+            "Redo reapplies the CubicBezier preset on the effect keyframe segment");
+
     QTimer::singleShot(0, [] {
         auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
         require(prompt != nullptr, "dirty effect composition asks before closing");

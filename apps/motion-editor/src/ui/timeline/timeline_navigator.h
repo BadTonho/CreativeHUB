@@ -42,6 +42,7 @@ public:
     void setSelectedLayerId(model::LayerId id);
     void setLayerExpanded(model::LayerId id, bool expanded);
     void setTransformGroupExpanded(model::LayerId id, bool expanded);
+    void setEffectsGroupExpanded(model::LayerId id, bool expanded);
     void setGraphEditorOpen(bool open);
     [[nodiscard]] std::int64_t currentFrame() const noexcept;
     [[nodiscard]] bool isPlaying() const noexcept;
@@ -82,6 +83,22 @@ public:
     void setCurveSegmentSelectedHandler(
         std::function<void(model::LayerId,
                            creative_suite::animation::TransformProperty,
+                           std::int64_t)> handler);
+    void setEffectKeyframeSelectedHandler(
+        std::function<void(model::LayerId,
+                           std::size_t,
+                           model::EffectParameterProperty,
+                           std::int64_t)> handler);
+    void setEffectKeyframeMoveHandler(
+        std::function<bool(model::LayerId,
+                           std::size_t,
+                           model::EffectParameterProperty,
+                           std::int64_t,
+                           std::int64_t)> handler);
+    void setEffectCurveSegmentSelectedHandler(
+        std::function<void(model::LayerId,
+                           std::size_t,
+                           model::EffectParameterProperty,
                            std::int64_t)> handler);
 
 signals:

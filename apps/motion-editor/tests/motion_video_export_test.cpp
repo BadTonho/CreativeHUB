@@ -164,7 +164,7 @@ MotionExportSnapshot makeSnapshot(const std::filesystem::path& source_video)
 
     auto image = imageLayer(3, 4);
     image.effects.emplace_back(motion::model::ColorAdjustmentEffect{
-        true, 20.0, 100.0, 100.0});
+        true, 20.0, 100.0, 100.0, 0, {{0, 20.0}, {3, 50.0}}});
     image.effects.emplace_back(motion::model::GaussianBlurEffect{true, 10.0});
     snapshot.still_frames.emplace(image.id, solidFrame(20, 180, 30));
     snapshot.layers.push_back(std::move(image));
@@ -496,8 +496,10 @@ int main(int argc, char* argv[])
             static_cast<std::size_t>(1) * 4U;
         require(decoded[3]->rgba_pixels[background_offset] > 50 &&
                     decoded[3]->rgba_pixels[background_offset + 1] > 210 &&
-                    decoded[3]->rgba_pixels[background_offset + 2] > 60,
-                "Color Adjustment is included in exported still-layer pixels");
+                    decoded[3]->rgba_pixels[background_offset + 2] > 60 &&
+                    decoded[5]->rgba_pixels[background_offset] >
+                        decoded[3]->rgba_pixels[background_offset] + 30,
+                "animated Color Adjustment keyframes are evaluated per exported frame");
         const auto linked_image_offset = static_cast<std::size_t>(41) * decoded[3]->stride +
             static_cast<std::size_t>(54) * 4U;
         require(decoded[3]->rgba_pixels[linked_image_offset] > 130 &&

@@ -67,6 +67,16 @@ void testUndoRedoAndSelection()
     require(document.moveLayerKeyframe(
                 front, creative_suite::animation::TransformProperty::PositionX, 4, 6),
             "keyframe movement succeeds");
+    require(document.setLayerEffects(front, {motion::model::GaussianBlurEffect{true, 3.0}}) &&
+                document.setEffectKeyframe(
+                    front, 0, motion::model::EffectParameterProperty::GaussianBlurRadius, 2, 9.0) &&
+                document.setEffectKeyframeInterpolation(
+                    front, 0, motion::model::EffectParameterProperty::GaussianBlurRadius, 2,
+                    creative_suite::animation::InterpolationMode::CubicBezier,
+                    {0.42, 0.0, 1.0, 1.0}) &&
+                document.moveEffectKeyframe(
+                    front, 0, motion::model::EffectParameterProperty::GaussianBlurRadius, 2, 4),
+            "effect keyframe and easing mutations succeed");
     history.recordBeforeEdit(before);
     auto restored = history.undo(state(document));
     require(restored.has_value() && restored->selected_layer_id == front &&
@@ -78,8 +88,9 @@ void testUndoRedoAndSelection()
                 restored->document.layers()[1].duration_frames == 10 &&
                 restored->document.layers()[1].transform.position_x == 0.5 &&
                 restored->document.layers()[1].keyframes.position_x.empty() &&
+                restored->document.layers()[1].effects.empty() &&
                 !history.canUndo() && history.canRedo(),
-            "Undo restores layer order, timing, visibility, transforms, keyframes, and selection");
+            "Undo restores layer order, timing, visibility, transforms, keyframes, effects, and selection");
 
     auto redone = history.redo(*restored);
     require(redone.has_value() && redone->document.layers()[0].id == front &&
@@ -91,8 +102,14 @@ void testUndoRedoAndSelection()
                     std::vector<creative_suite::animation::Keyframe>{
                         {6, 0.75, creative_suite::animation::InterpolationMode::CubicBezier,
                          {0.42, 0.0, 1.0, 1.0}}} &&
+                redone->document.layers()[0].effects.size() == 1 &&
+                std::get<motion::model::GaussianBlurEffect>(
+                    redone->document.layers()[0].effects[0]).radius_keyframes ==
+                    std::vector<creative_suite::animation::Keyframe>{
+                        {4, 9.0, creative_suite::animation::InterpolationMode::CubicBezier,
+                         {0.42, 0.0, 1.0, 1.0}}} &&
                 !history.canRedo() && history.canUndo(),
-            "Redo reapplies the complete composition edit state");
+            "Redo reapplies the complete composition edit state including effect keyframes");
 }
 
 void testBranchAndBoundedHistory()

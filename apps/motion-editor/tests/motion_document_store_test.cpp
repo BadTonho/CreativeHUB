@@ -222,8 +222,8 @@ int main(int argc, char** argv)
                 round_trip_video->maximum_timeline_duration_frames == 53,
             "video source-in, selected duration, and available source tail round-trip");
     const auto json = readBytes(document_path);
-    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 8,
-            "documents with linked images are written using schema version 8");
+    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 9,
+            "documents are written using schema version 9");
     const auto round_trip_image = std::find_if(
         round_trip.layers.begin(), round_trip.layers.end(), [](const auto& layer) {
             return layer.kind == motion::model::LayerKind::Image;
@@ -334,10 +334,10 @@ int main(int argc, char** argv)
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v1);
     const auto saved_legacy_v1 = motion::persistence::MotionDocumentStore::load(document_path);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 8 &&
+                .value(QStringLiteral("version")).toInt() == 9 &&
                 std::none_of(saved_legacy_v1.layers.begin(), saved_legacy_v1.layers.end(),
                     [](const auto& layer) { return layer.linked_image.has_value(); }),
-            "saving v1 upgrades to v6 while legacy links remain absent");
+            "saving v1 upgrades to v9 while legacy links remain absent");
 
     auto legacy_v2 = valid_json;
     legacy_v2.insert(QStringLiteral("version"), 2);
@@ -375,8 +375,8 @@ int main(int argc, char** argv)
             "version 2 keys migrate with Linear interpolation");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v2);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 8,
-            "saving a loaded v2 project upgrades it to v6");
+                .value(QStringLiteral("version")).toInt() == 9,
+            "saving a loaded v2 project upgrades it to v9");
 
     auto legacy_v3 = valid_json;
     legacy_v3.insert(QStringLiteral("version"), 3);
@@ -400,8 +400,8 @@ int main(int argc, char** argv)
             "version 3 documents retain curves and migrate with empty effect stacks");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v3);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 8,
-            "saving a loaded v3 project upgrades it to v6");
+                .value(QStringLiteral("version")).toInt() == 9,
+            "saving a loaded v3 project upgrades it to v9");
 
     auto legacy_v4 = valid_json;
     legacy_v4.insert(QStringLiteral("version"), 4);
@@ -424,8 +424,8 @@ int main(int argc, char** argv)
             "version 4 video layers migrate with a zero source-in frame");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v4);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 8,
-            "saving a loaded v4 project upgrades it to v6");
+                .value(QStringLiteral("version")).toInt() == 9,
+            "saving a loaded v4 project upgrades it to v9");
 
     auto legacy_v5 = valid_json;
     legacy_v5.insert(QStringLiteral("version"), 5);
@@ -436,8 +436,8 @@ int main(int argc, char** argv)
             "v5 documents ignore v6-only linked image metadata");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v5);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 8,
-            "saving a loaded v5 project upgrades it to v6");
+                .value(QStringLiteral("version")).toInt() == 9,
+            "saving a loaded v5 project upgrades it to v9");
 
     creative_suite::motion_handoff::Request request;
     request.origin_kind = QStringLiteral("timeline_clip");
@@ -642,6 +642,61 @@ int main(int argc, char** argv)
     requireDocumentError([&] {
         motion::persistence::MotionDocumentStore::save(document_path, invalid_keyframes);
     }, "unsorted duplicate keyframes are rejected");
+
+    auto animated_effects = populated;
+    animated_effects.layers.front().effects = {
+        motion::model::GaussianBlurEffect{
+            true,
+            4.5,
+            0,
+            {
+                {0, 1.0, creative_suite::animation::InterpolationMode::CubicBezier, {0.42, 0.0, 0.58, 1.0}},
+                {15, 24.0},
+            }},
+        motion::model::ColorAdjustmentEffect{
+            true,
+            -10.0,
+            115.0,
+            95.0,
+            0,
+            {{0, -40.0}, {12, 35.0}},
+            {{2, 80.0}, {18, 160.0}},
+            {{5, 20.0}, {20, 180.0}},
+        },
+    };
+    motion::persistence::MotionDocumentStore::save(document_path, animated_effects);
+    const auto animated_round_trip = motion::persistence::MotionDocumentStore::load(document_path);
+    require(animated_round_trip == animated_effects,
+            "animated Gaussian Blur and Color Adjustment effect keyframes and curves round-trip");
+
+    auto v8_with_effect_keys = QJsonDocument::fromJson(readBytes(document_path)).object();
+    v8_with_effect_keys.insert(QStringLiteral("version"), 8);
+    requireInvalidLoad(v8_with_effect_keys,
+                       "v8 documents reject v9 effect keyframe payloads");
+
+    auto invalid_effect_key = QJsonDocument::fromJson(readBytes(document_path)).object();
+    auto invalid_effect_key_layers = invalid_effect_key.value(QStringLiteral("layers")).toArray();
+    auto first_effect_layer = invalid_effect_key_layers[0].toObject();
+    auto first_layer_effects = first_effect_layer.value(QStringLiteral("effects")).toArray();
+    auto blur_effect = first_layer_effects[0].toObject();
+    auto blur_keyframes = blur_effect.value(QStringLiteral("keyframes")).toObject();
+    blur_keyframes.insert(QStringLiteral("brightness"), QJsonArray{});
+    blur_effect.insert(QStringLiteral("keyframes"), blur_keyframes);
+    first_layer_effects[0] = blur_effect;
+    first_effect_layer.insert(QStringLiteral("effects"), first_layer_effects);
+    invalid_effect_key_layers[0] = first_effect_layer;
+    invalid_effect_key.insert(QStringLiteral("layers"), invalid_effect_key_layers);
+    requireInvalidLoad(invalid_effect_key,
+                       "unknown or mismatched effect keyframe property names are rejected");
+
+    auto out_of_range_effect_key = animated_effects;
+    std::get<motion::model::GaussianBlurEffect>(
+        out_of_range_effect_key.layers.front().effects.front())
+        .radius_keyframes.back()
+        .value = 100.5;
+    requireDocumentError([&] {
+        motion::persistence::MotionDocumentStore::save(document_path, out_of_range_effect_key);
+    }, "out-of-range effect keyframe values are rejected on save");
 
     std::cout << "Motion document store tests passed\n";
     return EXIT_SUCCESS;

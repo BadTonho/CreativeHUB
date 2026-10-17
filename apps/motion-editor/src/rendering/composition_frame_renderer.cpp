@@ -457,12 +457,16 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             }
             composition_layer_ids.push_back(layer.id);continue;
         }
+        const bool effects_valid = model::validLayerEffects(layer.effects);
+        const auto evaluated_effects = effects_valid
+            ? model::evaluateLayerEffects(layer.effects, layer.local_frame)
+            : layer.effects;
         std::vector<creative_suite::effects::ColorAdjustmentParameters> gpu_adjustments;
         std::vector<creative_suite::composition::GpuCompositionEffect> gpu_effects;
-        const bool has_enabled_effects = hasEnabledLayerEffects(layer.effects);
+        const bool has_enabled_effects = hasEnabledLayerEffects(evaluated_effects);
         const bool gpu_color_only_stack = try_gpu_effects && has_enabled_effects &&
-            model::validLayerEffects(layer.effects) &&
-            std::all_of(layer.effects.begin(), layer.effects.end(), [](const auto& effect) {
+            effects_valid &&
+            std::all_of(evaluated_effects.begin(), evaluated_effects.end(), [](const auto& effect) {
                 return std::visit([](const auto& value) {
                     using Effect = std::decay_t<decltype(value)>;
                     return !value.enabled ||
@@ -470,14 +474,14 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 }, effect);
             });
         const bool gpu_ordered_stack = try_gpu_effects && has_enabled_effects &&
-            model::validLayerEffects(layer.effects) &&
-            std::any_of(layer.effects.begin(), layer.effects.end(), [](const auto& effect) {
+            effects_valid &&
+            std::any_of(evaluated_effects.begin(), evaluated_effects.end(), [](const auto& effect) {
                 const auto* blur = std::get_if<model::GaussianBlurEffect>(&effect);
                 return blur && blur->enabled;
             });
         if (gpu_color_only_stack) {
-            gpu_adjustments.reserve(layer.effects.size());
-            for (const auto& effect : layer.effects) {
+            gpu_adjustments.reserve(evaluated_effects.size());
+            for (const auto& effect : evaluated_effects) {
                 if (const auto* color = std::get_if<model::ColorAdjustmentEffect>(&effect);
                     color && color->enabled) {
                     gpu_adjustments.push_back({color->brightness,
@@ -485,8 +489,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 }
             }
         } else if (gpu_ordered_stack) {
-            gpu_effects.reserve(layer.effects.size());
-            for (const auto& effect : layer.effects) {
+            gpu_effects.reserve(evaluated_effects.size());
+            for (const auto& effect : evaluated_effects) {
                 std::visit([&](const auto& value) {
                     using Effect = std::decay_t<decltype(value)>;
                     if (!value.enabled) return;
@@ -504,12 +508,12 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             }
         } else if (gpu_composition_enabled_ && has_enabled_effects) {
             cpu_color_adjustment_fallbacks += static_cast<std::uint64_t>(
-                std::count_if(layer.effects.begin(), layer.effects.end(), [](const auto& effect) {
+                std::count_if(evaluated_effects.begin(), evaluated_effects.end(), [](const auto& effect) {
                     return std::holds_alternative<model::ColorAdjustmentEffect>(effect) &&
                         std::get<model::ColorAdjustmentEffect>(effect).enabled;
                 }));
             cpu_gaussian_blur_fallbacks += static_cast<std::uint64_t>(
-                std::count_if(layer.effects.begin(), layer.effects.end(), [](const auto& effect) {
+                std::count_if(evaluated_effects.begin(), evaluated_effects.end(), [](const auto& effect) {
                     return std::holds_alternative<model::GaussianBlurEffect>(effect) &&
                         std::get<model::GaussianBlurEffect>(effect).enabled;
                 }));
@@ -530,7 +534,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                         diagnostics::PerformanceMetrics::instance().recordEffectTiming(
                             kind, duration_nanoseconds);
                     };
-                if (!applyLayerEffects(*processed, layer.effects, should_cancel,
+                if (!applyLayerEffects(*processed, evaluated_effects, should_cancel,
                                        effect_timing_recorder)) {
                     return {};
                 }
@@ -579,7 +583,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                     ++gpu_gaussian_blur_count;
             }
             pending_gpu_effects.push_back({composition_index, layer.id, frame,
-                layer.effects});
+                evaluated_effects});
         }
     }
 

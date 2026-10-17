@@ -34,6 +34,9 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
         if(id)return {coverage(id,request.mask_view_target==-1?request.canvas_size.width:source->width,
             request.mask_view_target==-1?request.canvas_size.height:source->height),{}};
     }
+    const auto evaluated_effects=model::validLayerEffects(layer.effects)
+        ? model::evaluateLayerEffects(layer.effects,layer.local_frame)
+        : layer.effects;
     if(gpu) {
         c::OpenGlImageInput current{source.get()};
         const auto process=[&](c::OpenGlImageOperation operation) {
@@ -51,7 +54,7 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
             operation.background=blend?original:current;if(blend)operation.foreground=current;operation.mask={mask.get()};return process(std::move(operation));
         };
         if(layer.source_mask){current={nullptr,apply(layer.source_mask,{},false)};if(canceled())return {};}
-        for(const auto& effect:layer.effects) {
+        for(const auto& effect:evaluated_effects) {
             if(canceled())return {};
             if(!std::visit([](const auto& e){return e.enabled;},effect))continue;
             auto original=current;
@@ -80,7 +83,7 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
     }
     auto frame=std::make_shared<m::RgbaFrame>(*source);
     if(layer.source_mask) {auto mask=coverage(layer.source_mask,frame->width,frame->height);if(!mask||!c::applyMask(*frame,*mask,cancel))return {};}
-    for(const auto& effect:layer.effects) {
+    for(const auto& effect:evaluated_effects) {
         if(canceled())return {};
         if(!std::visit([](const auto& e){return e.enabled;},effect))continue;
         const auto id=std::visit([](const auto& e){return e.mask;},effect);
