@@ -126,6 +126,11 @@ int main(int argc, char* argv[])
             static_cast<int>(LanguagePreference::PortugueseBrazil)));
     }
 
+    if (!check(motion::ui::MotionUiTranslation::tr("Scale X (%)") == QStringLiteral("Escala X (%)") &&
+                   motion::ui::MotionUiTranslation::tr("Scale Y (%)") == QStringLiteral("Escala Y (%)") &&
+                   motion::ui::MotionUiTranslation::tr("Link scale axes") == QStringLiteral("Vincular eixos de escala") &&
+                   motion::ui::MotionUiTranslation::tr("Scale X and Y (%)") == QStringLiteral("Escala X e Y (%)"),
+               "Scale axis and uniform audio labels use pt-BR.")) return 1;
     if (!check(motion::ui::MotionUiTranslation::tr("New Null") == QStringLiteral("Nova Null") &&
                    motion::ui::MotionUiTranslation::tr("Parent & Link") == QStringLiteral("Pai e vínculo") &&
                    motion::ui::MotionUiTranslation::tr("No parent") == QStringLiteral("Sem pai"),

@@ -193,7 +193,7 @@ void testPersistence(const QString& root)
     check(doc.setLayerParent(2,1,0),"bind persisted child");
     auto data=project(doc);const auto file=root+"/hierarchy.motion";
     Store::save(path(file),data);check(Store::load(path(file))==data,"native v10 round trip");
-    check(readJson(file).value("version").toInt()==11,"writer uses v11");
+    check(readJson(file).value("version").toInt()==12,"writer uses v11");
     Store::saveRecovery(path(root+"/snapshot"),path(file),"hierarchy",data);
     check(Store::loadRecovery(path(root+"/snapshot")).document==data,"recovery retains graph and compensation");
     check(doc.setLayerParent(2,0,0),"detach persisted child");data=project(doc);

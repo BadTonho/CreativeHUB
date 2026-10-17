@@ -70,6 +70,9 @@ void MainWindow::createWorkspace()
         }
     });
     inspector_ = new InspectorWidget(this);
+    connect(inspector_,&InspectorWidget::scaleValueEdited,this,[this](int axis){editSelectedScaleAxis(static_cast<std::size_t>(axis));});
+    connect(inspector_,&InspectorWidget::scaleKeyframeToggleRequested,this,[this](int axis){toggleSelectedScaleAxisKeyframe(static_cast<std::size_t>(axis));});
+    connect(inspector_,&InspectorWidget::scaleLinkChanged,this,&MainWindow::setSelectedScaleLinked);
     connect(inspector_,&InspectorWidget::anchorValueEdited,this,[this](int axis){editSelectedLayerAnchor(static_cast<std::size_t>(axis));});
     connect(inspector_,&InspectorWidget::anchorKeyframeToggleRequested,this,[this](int axis){toggleSelectedAnchorKeyframe(static_cast<std::size_t>(axis));});
     connect(inspector_,&InspectorWidget::anchorRepositionRequested,this,&MainWindow::repositionSelectedAnchor);
@@ -203,6 +206,26 @@ void MainWindow::createWorkspace()
             selectAnchorCurveSegment(id,property,to);
             updateDocumentState();refreshTimeline();syncTransformInspector();requestPreview();return true;
         }catch(const std::exception& error){reportDocumentError("move_anchor_keyframe",document_path_.value_or(std::filesystem::path{}),error);return false;}
+    });
+    timeline_->setScaleAxisKeyframeSelectedHandler([this](model::LayerId id,model::ScaleAxis property,std::int64_t frame) {
+        if(!document_ || !timeline_)return;
+        const auto found=std::find_if(document_->layers().begin(),document_->layers().end(),[id](const auto& l){return l.id==id;});
+        if(found==document_->layers().end() || frame<0 || frame>=found->duration_frames)return;
+        const auto composition_frame=found->timeline_start_frame+frame;
+        selectLayer(id);selectScaleAxisCurveSegment(id,property,frame);timeline_->setCurrentFrame(composition_frame);
+    });
+    timeline_->setScaleAxisCurveSegmentSelectedHandler([this](model::LayerId id,model::ScaleAxis property,std::int64_t frame) {
+        selectLayer(id);selectScaleAxisCurveSegment(id,property,frame);
+    });
+    timeline_->setScaleAxisKeyframeMoveHandler([this](model::LayerId id,model::ScaleAxis property,std::int64_t from,std::int64_t to) {
+        finishPendingTransformEdit();if(!document_)return false;
+        try {
+            auto before=captureEditState();
+            if(!document_->moveLayerScaleAxisKeyframe(id,property,from,to))return false;
+            (void)recordCompositionEdit(std::move(before));
+            selectScaleAxisCurveSegment(id,property,to);
+            updateDocumentState();refreshTimeline();syncTransformInspector();requestPreview();return true;
+        }catch(const std::exception& error){reportDocumentError("move_scale_keyframe",document_path_.value_or(std::filesystem::path{}),error);return false;}
     });
     timeline_->setEffectKeyframeSelectedHandler(
         [this](model::LayerId id,

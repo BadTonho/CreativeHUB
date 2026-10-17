@@ -98,6 +98,7 @@ void MainWindow::requestPreview(bool playback_tick)
         snapshot.transform = layer.transform;
         snapshot.anchor_point = layer.anchor_point;
         snapshot.anchor_keyframes = layer.anchor_keyframes;
+        snapshot.scale_y = layer.scale_y;
         snapshot.keyframes = layer.keyframes;
         snapshot.content = layer.content;
         snapshot.effects = layer.effects;

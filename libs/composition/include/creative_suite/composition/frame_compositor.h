@@ -1,6 +1,7 @@
 #pragma once
 
 #include <creative_suite/animation/animation.h>
+#include <creative_suite/composition/affine_transform.h>
 #include <creative_suite/effects/effects.h>
 #include <creative_suite/media/video_frame.h>
 
@@ -124,7 +125,15 @@ struct CompositionLayer {
     // CPU recovery must materialize pixels before submitting this layer.
     std::shared_ptr<const OpenGlTextureFrame> texture_frame;
     std::shared_ptr<const media::NativeVideoFrame> native_frame;
+    // Overrides transform geometry and aspect fit; transform.opacity still applies.
+    std::optional<AffineTransform2D> source_to_canvas;
 };
+
+// Transparent nearest-neighbor Transform-stage raster, without an extra fit.
+// Invalid geometry throws; cancellation returns nullopt and publishes no pixels.
+[[nodiscard]] std::optional<media::RgbaFrame> transformAffineFrame(const media::RgbaFrame&,
+    int width,int height,const AffineTransform2D&,double opacity,
+    const std::function<bool()>& cancel = {});
 
 struct CompositionLayerTimings {
     std::uint64_t setup_nanoseconds = 0;

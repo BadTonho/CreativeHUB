@@ -139,7 +139,7 @@ constexpr std::array<const char*, 5> kTransformObjectNames{{
     "motion-transform-position-x", "motion-transform-position-y",
     "motion-transform-scale", "motion-transform-rotation", "motion-transform-opacity"}};
 const std::array<QString, 5> kTransformLabels{{
-    MotionUiTranslation::tr("Position X (normalized)"), MotionUiTranslation::tr("Position Y (normalized)"), MotionUiTranslation::tr("Scale"),
+    MotionUiTranslation::tr("Position X (normalized)"), MotionUiTranslation::tr("Position Y (normalized)"), MotionUiTranslation::tr("Scale X (%)"),
     MotionUiTranslation::tr("Rotation (degrees)"), MotionUiTranslation::tr("Opacity (0-1)")}};
 
 double transformValue(const creative_suite::animation::Transform2D& transform,
@@ -285,7 +285,7 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
         field->setDecimals(6);
         field->setKeyboardTracking(false);
         if (index < 2) field->setRange(-1'000'000.0, 1'000'000.0);
-        else if (index == 2) field->setRange(0.000001, 1'000'000.0);
+        else if (index == 2) field->setRange(0.0001, 100'000'000.0);
         else if (index == 3) field->setRange(-1'000'000'000.0, 1'000'000'000.0);
         else field->setRange(0.0, 1.0);
         controls_.transform_fields[index] = field;
@@ -300,11 +300,28 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
         row_layout->addWidget(key_button);
         transform_form->addRow(kTransformLabels[index], row);
         connect(field, &QDoubleSpinBox::valueChanged, this,
-                [this, index](double) { emit transformValueEdited(static_cast<int>(index)); });
+                [this, index](double) { if(index==2)emit scaleValueEdited(0);else emit transformValueEdited(static_cast<int>(index)); });
         connect(field, &QDoubleSpinBox::editingFinished,
                 this, &InspectorWidget::transformEditFinished);
         connect(key_button, &QToolButton::clicked, this,
-                [this, index] { emit keyframeToggleRequested(static_cast<int>(index)); });
+                [this, index] { if(index==2)emit scaleKeyframeToggleRequested(0);else emit keyframeToggleRequested(static_cast<int>(index)); });
+        if(index==2) {
+            controls_.scale_link=new QToolButton(row);controls_.scale_link->setCheckable(true);controls_.scale_link->setText(QStringLiteral("↔"));
+            controls_.scale_link->setObjectName(QStringLiteral("motion-scale-link"));
+            controls_.scale_link->setAccessibleName(MotionUiTranslation::tr("Link scale axes"));
+            controls_.scale_link->setToolTip(MotionUiTranslation::tr("Link scale values while editing; keyframes remain independent."));
+            row_layout->addWidget(controls_.scale_link);
+            connect(controls_.scale_link,&QToolButton::toggled,this,&InspectorWidget::scaleLinkChanged);
+            auto* y_row=new QWidget(controls_.transform_inspector);auto* y_layout=new QHBoxLayout(y_row);y_layout->setContentsMargins(0,0,0,0);
+            controls_.scale_y_field=new QDoubleSpinBox(y_row);controls_.scale_y_field->setDecimals(6);controls_.scale_y_field->setRange(.0001,100'000'000.);
+            controls_.scale_y_field->setKeyboardTracking(false);controls_.scale_y_field->setObjectName(QStringLiteral("motion-scale-y"));
+            y_layout->addWidget(controls_.scale_y_field,1);controls_.scale_y_key=new QToolButton(y_row);controls_.scale_y_key->setText(QStringLiteral("◇"));
+            controls_.scale_y_key->setObjectName(QStringLiteral("motion-scale-keyframe-y"));y_layout->addWidget(controls_.scale_y_key);
+            transform_form->addRow(MotionUiTranslation::tr("Scale Y (%)"),y_row);
+            connect(controls_.scale_y_field,&QDoubleSpinBox::valueChanged,this,[this]{emit scaleValueEdited(1);});
+            connect(controls_.scale_y_field,&QDoubleSpinBox::editingFinished,this,&InspectorWidget::transformEditFinished);
+            connect(controls_.scale_y_key,&QToolButton::clicked,this,[this]{emit scaleKeyframeToggleRequested(1);});
+        }
     }
     for (std::size_t axis=0;axis<2;++axis) {
         auto* row=new QWidget(controls_.transform_inspector);
@@ -543,7 +560,7 @@ int InspectorWidget::effectCount() const noexcept { return controls_.layer_effec
 double InspectorWidget::transformFieldValue(std::size_t property_index) const noexcept
 {
     return property_index < controls_.transform_fields.size()
-        ? controls_.transform_fields[property_index]->value() : 0.0;
+        ? controls_.transform_fields[property_index]->value()/(property_index==2?100.:1.) : 0.0;
 }
 double InspectorWidget::effectFieldValue(model::EffectParameterProperty property) const noexcept
 {
@@ -596,6 +613,10 @@ void InspectorWidget::syncParenting(const model::CompositionDocument* document, 
             QVariant::fromValue<qulonglong>(layer.id));
     }
     controls_.parent_layer->setCurrentIndex(controls_.parent_layer->findData(QVariant::fromValue<qulonglong>(parent)));
+}
+
+double InspectorWidget::scaleFieldValue(std::size_t axis) const noexcept {
+    return (axis==0?controls_.transform_fields[2]->value():controls_.scale_y_field->value())/100.;
 }
 
 double InspectorWidget::anchorFieldValue(std::size_t axis) const noexcept
@@ -696,13 +717,27 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
         creative_suite::animation::TransformProperty::Scale,
         creative_suite::animation::TransformProperty::Rotation,
         creative_suite::animation::TransformProperty::Opacity};
+    const auto& y_keys=model::layerScaleKeys(*layer,model::ScaleAxis::Y);
+    const bool y_key_here=inside && std::any_of(y_keys.begin(),y_keys.end(),[raw_local_frame](const auto& k){return k.frame==raw_local_frame;});
+    const bool y_editable=y_keys.empty() || y_key_here;
+    const bool x_key_here=inside && std::any_of(layer->keyframes.scale.begin(),layer->keyframes.scale.end(),[raw_local_frame](const auto& k){return k.frame==raw_local_frame;});
+    const bool x_editable=layer->keyframes.scale.empty() || x_key_here;
+    {const QSignalBlocker block(controls_.scale_y_field);controls_.scale_y_field->setValue(model::evaluateLayerScale(*layer,local_frame)[1]*100.);
+        controls_.scale_y_field->setReadOnly(!y_editable || (layer->scale_linked&&!x_editable));}
+    {const QSignalBlocker block(controls_.scale_link);controls_.scale_link->setChecked(layer->scale_linked);}
+    controls_.scale_y_key->setEnabled(inside);controls_.scale_y_key->setText(y_key_here?QStringLiteral("◆"):QStringLiteral("◇"));
+    controls_.scale_y_key->setToolTip(y_key_here?MotionUiTranslation::tr("Remove the keyframe at the current frame"):MotionUiTranslation::tr("Add a keyframe at the current frame"));
+    const auto scale_help=layer->scale_linked && (!x_editable||!y_editable)
+        ?MotionUiTranslation::tr("Add a keyframe on each animated axis or unlink the axes to edit this frame.")
+        :MotionUiTranslation::tr("100% keeps the fitted size. Linked edits preserve the current proportion.");
+    controls_.scale_y_field->setToolTip(scale_help);controls_.transform_fields[2]->setToolTip(scale_help);
     for (std::size_t i = 0; i < controls_.transform_fields.size(); ++i) {
         const auto& keys = creative_suite::animation::keyframesFor(layer->keyframes, properties[i]);
         const bool key_here = inside && std::any_of(keys.begin(), keys.end(),
             [raw_local_frame](const auto& key) { return key.frame == raw_local_frame; });
         const QSignalBlocker blocker(controls_.transform_fields[i]);
-        controls_.transform_fields[i]->setValue(transformValue(evaluated, properties[i]));
-        controls_.transform_fields[i]->setReadOnly(!keys.empty() && !key_here);
+        controls_.transform_fields[i]->setValue(transformValue(evaluated, properties[i])*(i==2?100.:1.));
+        controls_.transform_fields[i]->setReadOnly((!keys.empty() && !key_here) || (i==2 && layer->scale_linked && !y_editable));
         const bool supported = layer->kind != model::LayerKind::Null || i != 4;
         controls_.transform_fields[i]->setEnabled(supported);
         controls_.transform_key_buttons[i]->setEnabled(inside && supported);

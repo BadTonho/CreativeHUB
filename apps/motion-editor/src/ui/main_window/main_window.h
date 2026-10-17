@@ -140,6 +140,10 @@ private:
     void changeSelectedLayerParent(model::LayerId parent);
     void removeCompositionLayer(model::LayerId id);
     void editSelectedLayerAnchor(std::size_t axis);
+    void editSelectedScaleAxis(std::size_t axis);
+    void toggleSelectedScaleAxisKeyframe(std::size_t axis);
+    void setSelectedScaleLinked(bool linked);
+    void selectScaleAxisCurveSegment(model::LayerId,model::ScaleAxis,std::int64_t local_frame);
     void toggleSelectedAnchorKeyframe(std::size_t axis);
     void repositionSelectedAnchor();
     void selectAnchorCurveSegment(model::LayerId, model::AnchorProperty, std::int64_t local_frame);
@@ -260,8 +264,10 @@ private:
         model::EffectParameterProperty effect_property =
             model::EffectParameterProperty::GaussianBlurRadius;
         std::optional<model::AnchorProperty> anchor_property;
+        std::optional<model::ScaleAxis> scale_axis;
     };
     std::optional<CurveSelection> curve_selection_;
+    double active_scale_ratio_=1;
     std::shared_ptr<const std::vector<model::Mask>> mask_snapshot_;
     std::shared_ptr<const model::LayerTransformHierarchy> hierarchy_snapshot_;
     model::LayerId mask_view_layer_=0;

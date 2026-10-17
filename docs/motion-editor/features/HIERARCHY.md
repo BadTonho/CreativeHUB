@@ -1,8 +1,8 @@
 # Layer Hierarchy and Null Controls
 
-Status: implemented development workflow, current native `.motion` v11. Manual visual,
-platform, and performance acceptance remain pending. This delivery does not add
-non-uniform scale, pick-whip, or Viewer handles. Animated pixel Anchor Point is
+Status: implemented development workflow, current native `.motion` v12. Manual visual,
+platform, and performance acceptance remain pending. Pick-whip and Viewer handles remain deferred. Independent
+[Scale X/Y](SCALE_AXES.md) retains complete affine inheritance. Animated pixel Anchor Point is
 implemented separately; see [Anchor Point](ANCHOR_POINT.md).
 
 ## Editing
@@ -11,7 +11,7 @@ Use **Layer > New Null** to add a control at the current frame. It starts at the
 canvas center, scale 1, rotation 0, and lasts five seconds. No default keyboard
 shortcut is assigned. Null clips have a diamond marker and a neutral color in
 the timeline; their Transform tracks and Graph Editor support Position X/Y,
-uniform Scale, Rotation and Anchor X/Y. Nulls have no visual source, opacity animation,
+Scale X/Y, Rotation and Anchor X/Y. Nulls have no visual source, opacity animation,
 effects, masks, or raster cache. Audio-to-keyframe baking excludes Null opacity.
 They do not extend playback/export duration; Null-only compositions cannot export.
 
@@ -21,8 +21,8 @@ so duplicate names are distinct. The selected layer and all its descendants are
 excluded. Any layer, including a Null, can parent another layer. Hierarchy and
 back-to-front compositing order are independent; reordering changes only drawing.
 
-Linking, reparenting, or unlinking preserves the global position, rotation and
-scale at the current composition frame. Local fields and authored curves remain
+Linking, reparenting, or unlinking preserves complete global geometry at the
+current composition frame. Local fields and authored curves remain
 unchanged. Preservation applies to that frame; animation at other times follows
 the new hierarchy. The Inspector continues to edit local values. A compensation
 can remain after choosing No parent. Deleting a parent detaches only its direct
@@ -35,18 +35,20 @@ rejected, including on document open; a failed open retains the active document.
 
 The Motion-owned `LayerTransformHierarchy` is an immutable snapshot containing
 IDs, parent relationships, compensation, start frames, local transforms and
-curves, including Anchor bases and curves. It contains no media, pixels, effects or application UI. Construction
+curves, including Anchor and Scale Y bases/curves and affine compensation. It
+contains no media, pixels, effects or application UI. Construction
 validates the graph and orders it iteratively; frame evaluation is O(layers)
 without recursion. Preview and export share this resolver. Requests retain all
 ancestor transform data while only visible, active drawable layers are decoded.
 
-Each local geometry transform is `L = T(Position_px) * R * S * T(-Anchor_px)`,
-using canvas pixels, uniform scale and degrees, before source aspect-fit or
+Each local geometry transform is `L = T(Position_px) * R * S(X,Y) * T(-Anchor_px)`,
+using canvas pixels, independent positive scale axes and degrees, before source aspect-fit or
 intrinsic text/shape compensation. With parent global transform `P` and binding compensation `B`,
 the resolved geometry is `W = P * B * L`. Unparented `P` is identity. At a parent
 edit, set `B = inverse(P_new) * W_before * inverse(L)` at that composition frame.
-The four-number similarity transform avoids introducing shear or changing the
-shared animation/compositor APIs. Non-finite, zero-scale or overflowing results
+Six-coefficient affine transforms retain inherited shear. Uniform legacy
+geometry keeps its exact four-number similarity path; shared animation types
+remain unchanged and compositors accept an optional source-pixel matrix. Non-finite, zero-scale or overflowing results
 are rejected. Unparented identity-compensation layers with zero Anchor retain the old exact path.
 
 Each ancestor uses `max(0, composition_frame - layer_start)` and existing curve
@@ -63,9 +65,10 @@ well as local geometry. Nulls never produce image-processing work.
 stores Nulls, parent IDs and optional compensation, including detached offsets.
 Save, autosave/recovery and Hub backups preserve the graph; v1–v9 documents load
 without parenting. Recovery wrapper version and application versions are unchanged.
-Current v11 also preserves Anchor values/curves and loads v1–v10 with zero Anchor.
-Hub accepts Motion v11 and rejects v12. `.cscomp` stays at v3: exporting Nulls,
-parent references, nonidentity offsets or nondefault Anchor fails with layer-specific issues;
+Current v12 also preserves Anchor, Scale Y and affine bindings. Versions 1–10
+load zero Anchor; versions 1–11 load Y following X and linking enabled.
+Hub accepts Motion v12 and rejects v13. `.cscomp` stays at v3: exporting Nulls,
+parent references, nonidentity offsets, affine bindings, unequal scale or nondefault Anchor fails with layer-specific issues;
 there is no silent flattening or partial publication. Linked opaque video
 publication uses the same hierarchy-aware video exporter and existing protocol.
 
@@ -77,7 +80,7 @@ ancestors, pose-preserving edits/deletion, history, Null restrictions, native
 save/recovery, v1–v9 hierarchy migration, invalid-file preservation, the Inspector, CPU
 effects/masks and lossless export parity. The existing GPU composition test
 uses a hidden Null ancestor to protect shared CPU/GPU and fallback behavior.
-`hub-backup-format-test` restores the hierarchy through the current v11 reader;
+`hub-backup-format-test` restores the hierarchy through the current v12 reader;
 `hub-backup-manager-test` protects unsupported-version rejection. Motion's
 existing document/history/persistence/recovery/preview/export/UI/translation
 and audio suites retain surrounding coverage.

@@ -1,4 +1,5 @@
 #pragma once
+#include <creative_suite/composition/affine_transform.h>
 
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/composition_exchange/document.h>
@@ -91,6 +92,15 @@ struct AnchorPoint {
 };
 using AnchorKeyframes = std::array<creative_suite::animation::ScalarKeyframes, 2>;
 [[nodiscard]] bool validAnchorPoint(const AnchorPoint&) noexcept;
+
+enum class ScaleAxis : std::uint8_t { X, Y };
+struct ScaleChannel {
+    double value=1;
+    creative_suite::animation::ScalarKeyframes keyframes;
+    friend bool operator==(const ScaleChannel&,const ScaleChannel&)=default;
+};
+[[nodiscard]] bool validScaleChannel(const ScaleChannel&) noexcept;
+[[nodiscard]] bool validParentAffine(const creative_suite::composition::AffineTransform2D&) noexcept;
 
 using ColorRgba = std::array<std::uint8_t, 4>;
 
@@ -235,11 +245,18 @@ struct CompositionLayer {
     ParentTransformOffset parent_offset;
     AnchorPoint anchor_point;
     AnchorKeyframes anchor_keyframes;
+    // Absent Y follows the legacy Scale base/curve exactly; X retains that storage.
+    std::optional<ScaleChannel> scale_y;
+    bool scale_linked=true;
+    std::optional<creative_suite::composition::AffineTransform2D> parent_affine;
 
     friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
 
 [[nodiscard]] AnchorPoint evaluateLayerAnchor(const CompositionLayer&, std::int64_t local_frame) noexcept;
+[[nodiscard]] double layerScaleBase(const CompositionLayer&,ScaleAxis) noexcept;
+[[nodiscard]] const creative_suite::animation::ScalarKeyframes& layerScaleKeys(const CompositionLayer&,ScaleAxis) noexcept;
+[[nodiscard]] std::array<double,2> evaluateLayerScale(const CompositionLayer&,std::int64_t local_frame) noexcept;
 
 enum class AddMediaLayerResult {
     Added,
@@ -288,6 +305,18 @@ public:
     // Keeps the current global pose and all local keyframes. Zero clears the parent.
     [[nodiscard]] bool setLayerParent(LayerId child, LayerId parent, std::int64_t composition_frame);
     [[nodiscard]] bool setLayerAnchorPoint(LayerId, AnchorPoint);
+    [[nodiscard]] bool setLayerScaleLinked(LayerId,bool);
+    [[nodiscard]] bool setLayerScaleAxisBase(LayerId,ScaleAxis,double);
+    [[nodiscard]] bool replaceLayerScaleAxisKeyframes(LayerId,ScaleAxis,creative_suite::animation::ScalarKeyframes);
+    [[nodiscard]] bool setLayerScaleAxisKeyframe(LayerId,ScaleAxis,std::int64_t,double);
+    [[nodiscard]] bool removeLayerScaleAxisKeyframe(LayerId,ScaleAxis,std::int64_t);
+    [[nodiscard]] bool moveLayerScaleAxisKeyframe(LayerId,ScaleAxis,std::int64_t,std::int64_t);
+    [[nodiscard]] bool setLayerScaleAxisKeyframeInterpolation(LayerId,ScaleAxis,std::int64_t,
+        creative_suite::animation::InterpolationMode,const creative_suite::animation::CubicBezierEasing&);
+    // Inspector edit: respects per-axis keyed/read-only rules, optionally edits
+    // both axes proportionally in one staged transaction. Values are factors.
+    [[nodiscard]] bool editLayerScaleAxis(LayerId,ScaleAxis,double,std::int64_t composition_frame,
+        std::optional<double> linked_y_over_x = {});
     [[nodiscard]] bool replaceLayerAnchorKeyframes(LayerId, AnchorProperty, creative_suite::animation::ScalarKeyframes);
     [[nodiscard]] bool setLayerAnchorKeyframe(LayerId, AnchorProperty, std::int64_t local_frame, double);
     [[nodiscard]] bool removeLayerAnchorKeyframe(LayerId, AnchorProperty, std::int64_t local_frame);

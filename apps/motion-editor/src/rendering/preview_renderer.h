@@ -41,6 +41,7 @@ struct PreviewLayerSnapshot {
     model::MaskId source_mask=0, transform_mask=0;
     model::AnchorPoint anchor_point;
     model::AnchorKeyframes anchor_keyframes;
+    std::optional<model::ScaleChannel> scale_y;
 };
 
 struct PreviewRequest {

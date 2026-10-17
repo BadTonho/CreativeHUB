@@ -559,6 +559,7 @@ void validateDocument(const MotionProjectData& document,
             layer.keyframes.position_y.size() + layer.keyframes.scale.size() +
             layer.keyframes.rotation.size() + layer.keyframes.opacity.size();
         keyframe_count += layer.anchor_keyframes[0].size() + layer.anchor_keyframes[1].size();
+        if(layer.scale_y)keyframe_count+=layer.scale_y->keyframes.size();
         for (const auto& effect : layer.effects) {
             std::visit([&keyframe_count](const auto& value) {
                 using Effect = std::decay_t<decltype(value)>;
@@ -707,6 +708,16 @@ QJsonObject writeLayer(const CompositionLayer& layer,
         if (!keys.isEmpty()) anchor.insert("keyframes",keys);
         object.insert("anchor_point",anchor);
     }
+    if(layer.scale_y) {
+        QJsonObject channel{{"value",layer.scale_y->value}};
+        if(!layer.scale_y->keyframes.empty())channel.insert("keyframes",writeKeyframes(layer.scale_y->keyframes));
+        object.insert("scale_y",channel);
+    }
+    if(!layer.scale_linked)object.insert("scale_linked",false);
+    if(layer.parent_affine) {
+        const auto& m=*layer.parent_affine;
+        object.insert("parent_affine",QJsonObject{{"a",m.a},{"b",m.b},{"c",m.c},{"d",m.d},{"tx",m.tx},{"ty",m.ty}});
+    }
     if (layer.parent_id) object.insert("parent_id", encodedUInt64(layer.parent_id));
     if (layer.parent_offset != model::ParentTransformOffset{}) {
         const auto& offset = layer.parent_offset;
@@ -846,6 +857,23 @@ CompositionLayer parseLayer(const QJsonValue& value,
     }
     layer.id = requiredUInt64(object, "id", document_path);
     layer.kind = parseLayerKind(requiredString(object, "kind", document_path), document_path);
+    if(document_version<12 && (object.contains("scale_y") || object.contains("scale_linked") || object.contains("parent_affine")))
+        fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Axis scale and affine bindings require document version 12."));
+    if(object.contains("scale_y")) {
+        const auto channel=requiredObject(object,"scale_y",document_path);
+        for(auto it=channel.begin();it!=channel.end();++it)if(it.key()!="value" && it.key()!="keyframes")
+            fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Unknown Y scale field."));
+        layer.scale_y=model::ScaleChannel{requiredNumber(channel,"value",document_path),{}};
+        if(channel.contains("keyframes"))layer.scale_y->keyframes=parseKeyframes(requiredArray(channel,"keyframes",document_path),document_path,keyframe_count,document_version);
+    }
+    if(object.contains("scale_linked"))layer.scale_linked=requiredBool(object,"scale_linked",document_path);
+    if(object.contains("parent_affine")) {
+        if(object.contains("parent_offset"))fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Conflicting parent compensation representations."));
+        const auto m=requiredObject(object,"parent_affine",document_path);
+        for(auto it=m.begin();it!=m.end();++it)if(it.key()!="a" && it.key()!="b" && it.key()!="c" && it.key()!="d" && it.key()!="tx" && it.key()!="ty")
+            fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Unknown affine binding field."));
+        layer.parent_affine=creative_suite::composition::AffineTransform2D{requiredNumber(m,"a",document_path),requiredNumber(m,"b",document_path),requiredNumber(m,"c",document_path),requiredNumber(m,"d",document_path),requiredNumber(m,"tx",document_path),requiredNumber(m,"ty",document_path)};
+    }
     if (object.contains("anchor_point")) {
         if (document_version < 11) fail(MotionDocumentErrorCode::InvalidValue,document_path,
             QStringLiteral("Anchor points require document version 11."));

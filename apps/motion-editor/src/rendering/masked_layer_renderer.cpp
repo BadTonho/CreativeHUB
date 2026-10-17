@@ -15,7 +15,7 @@ bool hasLayerMasks(const PreviewLayerSnapshot& layer) noexcept {
 }
 MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFramePtr source,
     const PreviewRequest& request,c::ShapeMaskRasterCache& cache,c::OpenGlFrameCompositor* gpu,
-    const std::function<bool()>& cancel, const a::Transform2D* resolved_transform) {
+    const std::function<bool()>& cancel, const a::Transform2D* resolved_transform,const c::AffineTransform2D* resolved_world) {
     c::OpenGlCompositionTimings timings;
     const auto canceled=[&]{return cancel && cancel();};
     const auto coverage=[&](model::MaskId id,int width,int height) {
@@ -29,11 +29,17 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
     const bool intrinsic=layer.kind==model::LayerKind::Text || layer.kind==model::LayerKind::Shape;
     const auto profile=layer.presentation?layer.presentation->profile:x::Profile::MotionLayer;
     auto transform=resolved_transform?*resolved_transform:a::evaluateTransform(layer.transform,layer.keyframes,layer.local_frame);
+    std::optional<c::AffineTransform2D> local_world;
     if (!resolved_transform) {
         const model::AnchorPoint anchor{
             a::evaluateScalar(layer.anchor_point.x_pixels,layer.anchor_keyframes[0],layer.local_frame),
             a::evaluateScalar(layer.anchor_point.y_pixels,layer.anchor_keyframes[1],layer.local_frame)};
-        if (anchor != model::AnchorPoint{}) {
+        const auto sy=layer.scale_y?a::evaluateScalar(layer.scale_y->value,layer.scale_y->keyframes,layer.local_frame):transform.scale;
+        if(sy!=transform.scale) {
+            model::CompositionLayer local{layer.id,model::LayerKind::Null,""};local.transform=transform;
+            local.scale_y=model::ScaleChannel{sy,{}};local.anchor_point=anchor;
+            local_world=model::localLayerGeometry(local,request.canvas_size,0);resolved_world=&*local_world;
+        } else if (anchor != model::AnchorPoint{}) {
             const auto geometry=model::geometryOffset(transform,request.canvas_size,anchor);
             transform.position_x=geometry.translation_x_pixels/request.canvas_size.width;
             transform.position_y=geometry.translation_y_pixels/request.canvas_size.height;
@@ -79,15 +85,20 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
             const auto id=std::visit([](const auto& e){return e.mask;},effect);
             if(id)current={nullptr,apply(id,original,true)};
         }
-        const auto transformOp=[&](a::Transform2D value) {
+        const auto transformOp=[&](a::Transform2D value,bool use_affine=false) {
             c::OpenGlImageOperation op;op.kind=c::OpenGlImageOperationKind::Transform;op.background=current;
             op.output_width=request.canvas_size.width;op.output_height=request.canvas_size.height;
             if(profile==x::Profile::MotionLayer && !intrinsic)value.scale*=std::min(double(op.output_width)/current.width(),double(op.output_height)/current.height());
-            op.transform=value;return op;
+            op.transform=value;
+            if(use_affine && resolved_world) {
+                const auto fit=profile==x::Profile::MotionLayer && !intrinsic?std::min(double(op.output_width)/current.width(),double(op.output_height)/current.height()):1.;
+                op.source_to_canvas=model::sourcePixelGeometry(*resolved_world,current.width(),current.height(),fit);
+            }
+            return op;
         };
         c::OpenGlImageInput original;
         if(layer.transform_mask)original={nullptr,process(transformOp({}))};
-        auto transformed=process(transformOp(transform));current={nullptr,std::move(transformed)};
+        auto transformed=process(transformOp(transform,true));current={nullptr,std::move(transformed)};
         if(canceled())return {};
         if(layer.transform_mask)current={nullptr,apply(layer.transform_mask,original,true)};
         return {{},current.texture,timings};
@@ -102,7 +113,14 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
         if(!applyLayerEffects(*frame,{effect},cancel))return {};
         if(id){auto mask=coverage(id,frame->width,frame->height);if(!mask||!c::maskedBlend(*original,*frame,*mask,cancel))return {};}
     }
-    auto processed=x::transformFrame(*frame,request.canvas_size.width,request.canvas_size.height,transform,profile,intrinsic,cancel);
+    std::optional<m::RgbaFrame> affine_frame;
+    if(resolved_world) {
+        const auto fit=profile==x::Profile::MotionLayer && !intrinsic?std::min(double(request.canvas_size.width)/frame->width,double(request.canvas_size.height)/frame->height):1.;
+        affine_frame=c::transformAffineFrame(*frame,request.canvas_size.width,request.canvas_size.height,
+            model::sourcePixelGeometry(*resolved_world,frame->width,frame->height,fit),transform.opacity,cancel);
+        if(!affine_frame)return {};
+    }
+    auto processed=resolved_world?std::move(*affine_frame):x::transformFrame(*frame,request.canvas_size.width,request.canvas_size.height,transform,profile,intrinsic,cancel);
     if(layer.transform_mask) {
         auto original=x::transformFrame(*frame,request.canvas_size.width,request.canvas_size.height,{},profile,intrinsic,cancel);
         auto mask=coverage(layer.transform_mask,processed.width,processed.height);

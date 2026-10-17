@@ -5,7 +5,7 @@ mask reference. Editable interchange now accepts `.cscomp` v3 ordered Color/Blur
 stages; no Motion schema change is required. See [contract](../../COMPOSITION_INTERCHANGE.md).
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 11 schema may change before a stable release. This format is separate
+version 12 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 ## File identity and versioning
@@ -15,22 +15,22 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `11`. |
+| `version` | integer | Current schema version is `12`. |
 | `revision` | decimal string | Monotonic saved revision used to reject stale linked writes. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1 through 11. Version 1 text and shape layers
+Motion Studio reads versions 1 through 12. Version 1 text and shape layers
 had no typed content, so they open with the current default text or rectangle content
 for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
-older document writes it as version 11. Versions 1 through 5 load without linked
+older document writes it as version 12. Versions 1 through 5 load without linked
 Image Editor metadata. Motion Studio rejects malformed data, an
 unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
 
-Hub snapshots preserve versions 1–11 and rebase relative media and linked-image
+Hub snapshots preserve versions 1–12 and rebase relative media and linked-image
 references to their original absolute locations. Relative-directory escape
 restrictions are retained. Native save behavior is unchanged and media are not
 bundled. See [Hub backups](../../hub/BACKUPS.md) and the producer/consumer
@@ -59,7 +59,8 @@ Each `layers` entry stores:
   `maximum_timeline_duration_frames`;
 - the source frame rate, visibility, base 2D transform, and stored transform
   keyframes for position X/Y, scale, rotation, and opacity;
-- optional Motion-owned pixel `anchor_point` values and scalar curves (v11).
+- optional Motion-owned pixel `anchor_point` values and scalar curves (v11);
+- optional `scale_y`, `scale_linked`, and `parent_affine` records (v12).
 
 Version 6 adds an optional `linked_image` object to Image layers. It contains
 `document_path`, `published_output_path`, and `source_snapshot_path`, each a
@@ -281,7 +282,7 @@ empty. Position, uniform scale, rotation, and their curves remain editable.
 Parenting does not change layer order or local curves. Parent opacity,
 visibility, activity, effects, and masks are not inherited. Pixel-space
 resolution, pose-preserving edits, and pending manual checks are defined in
-[Layer hierarchy](../features/HIERARCHY.md). Hub supports these records through v11 snapshots.
+[Layer hierarchy](../features/HIERARCHY.md). Hub supports these records through v12 snapshots.
 `.cscomp` v3 cannot represent Nulls, parents, or nonidentity compensation, so
 export rejects them with layer-specific issues rather than flattening them.
 
@@ -320,6 +321,33 @@ Pixels are relative to the local center, after initial canvas fit but before
 editable scale/rotation. Local geometry includes `T(-Anchor)` and feeds the
 existing hierarchy/Transform stage. See [Anchor Point](../features/ANCHOR_POINT.md)
 for editing and compensation semantics. Save, autosave and recovery retain these
-fields; the recovery wrapper stays at version 1. Hub accepts native v11, rebases
-existing media fields without changing Anchor or parenting, and rejects v12.
+fields; the recovery wrapper stays at version 1. Hub accepts native v12, rebases
+existing media fields without changing Anchor or parenting, and rejects v13.
 `.cscomp` remains v3 and refuses nonzero base Anchor or nonempty Anchor curves.
+
+## Version 12 independent scale and affine bindings
+
+X retains `transform.scale` and `keyframes.scale`. Optional layer `scale_y`
+contains required positive finite `value` and optional `keyframes` scalar array,
+using the existing frame/value/interpolation/easing schema. Unknown channel
+fields, nonpositive values and malformed curves are rejected. An absent Y
+channel follows X exactly, including its curve. Y keys count toward the existing
+2,000,000 total keyframe limit. No general scale multiplier is introduced.
+
+Optional boolean `scale_linked` defaults to true; the writer emits false when
+unlinked. It controls only value editing, never evaluation or independent key
+operations. Optional `parent_affine` contains exactly six required finite numbers
+`a`, `b`, `c`, `d`, `tx`, `ty`, mapping `(x,y)` to
+`(a*x+c*y+tx, b*x+d*y+ty)`. It requires a finite inverse and positive determinant.
+The translation is in composition pixels. `parent_affine` and `parent_offset`
+are mutually exclusive serialized representations, even for an identity offset.
+Legacy uniform compensation is retained unless an operation needs an affine
+binding. Detached layers may retain either compensation representation.
+
+All three fields are rejected in declared versions before v12. Versions 1–11
+load without Y/affine overrides and with linking enabled, without resampling
+curves or converting offsets. Save, autosave and recovery preserve the new
+records; recovery wrapper remains v1. Hub accepts 1–12 and rejects 13. See
+[Scale axes](../features/SCALE_AXES.md) for editing, matrices and pending checks.
+`.cscomp` v3 accepts scale only when X/Y bases and curves are identical; it
+rejects affine compensation and the existing incompatible features explicitly.

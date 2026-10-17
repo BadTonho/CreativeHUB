@@ -43,7 +43,7 @@ OpenGlCompositionResult result(OpenGlCompositionStatus status,
     return {status, {}, operation, std::move(cause), code, layer_index};
 }
 bool usable(const CompositionLayer& layer) {
-    if (!layer.frame || !animation::validTransform(layer.transform)) return false;
+    if (!layer.frame || !animation::validTransform(layer.transform) || (layer.source_to_canvas && !validAffine(*layer.source_to_canvas))) return false;
     const auto& f = *layer.frame;
     if (layer.native_frame) {
 #ifdef CS_NATIVE_VIDEO_INTEROP
@@ -76,6 +76,10 @@ uniform int color_adjustment_count;
 uniform GEOMETRY_VEC2 center;
 uniform GEOMETRY_VEC2 displayed_size;
 uniform GEOMETRY_VEC2 rotation_cs;
+uniform bool use_affine;
+uniform GEOMETRY_VEC2 affine_x;
+uniform GEOMETRY_VEC2 affine_y;
+uniform GEOMETRY_VEC2 affine_translation;
 uniform float opacity;
 uniform bool axis_aligned;
 layout(std140) uniform SourceLookupX { ivec4 lookup_x[1024]; };
@@ -94,7 +98,12 @@ vec3 adjustColor(vec3 rgb, vec4 parameters) {
 void main() {
     ivec2 size = textureSize(source_image, 0);
     ivec2 pixel;
-    if (axis_aligned) {
+    if (use_affine) {
+        PRECISE GEOMETRY_VEC2 point=GEOMETRY_VEC2(gl_FragCoord.x,canvas_height-gl_FragCoord.y);
+        PRECISE GEOMETRY_VEC2 source_point=affine_x*point.x+affine_y*point.y+affine_translation;
+        if(any(isnan(source_point)) || any(isinf(source_point)) || any(lessThan(source_point,GEOMETRY_VEC2(0))) || any(greaterThanEqual(source_point,GEOMETRY_VEC2(size))))discard;
+        pixel=ivec2(floor(source_point));
+    } else if (axis_aligned) {
         pixel = ivec2(mappedX(int(gl_FragCoord.x)),
             mappedY(int(canvas_height - gl_FragCoord.y)));
         if (any(lessThan(pixel, ivec2(0)))) discard;
@@ -125,6 +134,10 @@ uniform int operation;
 uniform int canvas_height;
 uniform GEOMETRY_VEC2 center;
 uniform GEOMETRY_VEC2 rotation_cs;
+uniform bool use_affine;
+uniform GEOMETRY_VEC2 affine_x;
+uniform GEOMETRY_VEC2 affine_y;
+uniform GEOMETRY_VEC2 affine_translation;
 uniform GEOMETRY_VEC2 scale_opacity;
 uniform GEOMETRY_VEC2 merge_scale;
 uniform ivec2 merge_origin;
@@ -147,7 +160,12 @@ void main() {
         PRECISE GEOMETRY_VEC2 d = GEOMETRY_VEC2(pixel) + 0.5 - center;
         PRECISE GEOMETRY_VEC2 local = GEOMETRY_VEC2(rotation_cs.x * d.x + rotation_cs.y * d.y,
             -rotation_cs.y * d.x + rotation_cs.x * d.y);
-        pixel = ivec2(floor(local / scale_opacity.x + GEOMETRY_VEC2(size) * 0.5));
+        if(use_affine) {
+            PRECISE GEOMETRY_VEC2 point=GEOMETRY_VEC2(pixel)+0.5;
+            PRECISE GEOMETRY_VEC2 source_point=affine_x*point.x+affine_y*point.y+affine_translation;
+            if(any(isnan(source_point)) || any(isinf(source_point)) || any(lessThan(source_point,GEOMETRY_VEC2(0))) || any(greaterThanEqual(source_point,GEOMETRY_VEC2(size)))) {color=vec4(0);return;}
+            pixel=ivec2(floor(source_point));
+        } else pixel = ivec2(floor(local / scale_opacity.x + GEOMETRY_VEC2(size) * 0.5));
         if (any(lessThan(pixel, ivec2(0))) || any(greaterThanEqual(pixel, size))) { color = vec4(0); return; }
         color = background(pixel);
         color.a = float(floor(GEOMETRY_VEC2(floor(color.a * 255.0 + 0.5), 0).x * scale_opacity.y + 0.5)) / 255.0;
@@ -771,6 +789,8 @@ void main() {
         if (operation.kind == OpenGlImageOperationKind::Transform &&
             operation.transform.rotation_degrees != 0 && !precise_geometry)
             return result(OpenGlCompositionStatus::Unsupported, "check-precision", "Rotated intermediates require precise GPU geometry.");
+        if(operation.source_to_canvas && (operation.kind!=OpenGlImageOperationKind::Transform || !precise_geometry || !validAffine(*operation.source_to_canvas)))
+            return result(OpenGlCompositionStatus::Unsupported,"affine-image-transform","Affine Transform requires finite inverse geometry and precise GPU sampling.");
         struct Uses {
             QOpenGLContext* context;
             std::vector<OpenGlTextureFramePtr> frames;
@@ -903,6 +923,11 @@ void main() {
                 const GLdouble values[]{x, y}; uniform2dv(image_program->uniformLocation(name), 1, values);
             } else image_program->setUniformValue(name, QVector2D(float(x), float(y)));
         };
+        image_program->setUniformValue("use_affine",operation.source_to_canvas.has_value());
+        if(operation.source_to_canvas) {
+            const auto inverse=requireInverseAffine(*operation.source_to_canvas);
+            geometry("affine_x",inverse.a,inverse.b);geometry("affine_y",inverse.c,inverse.d);geometry("affine_translation",inverse.tx,inverse.ty);
+        }
         const auto& transform = operation.transform;
         const double angle = transform.rotation_degrees * std::numbers::pi / 180.0;
         geometry("center", transform.position_x * width, transform.position_y * height);
@@ -1631,13 +1656,13 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     "Ordered GPU effects exceed the 64 MiB per-worker temporary texture limit.",
                     0, static_cast<int>(layer_index));
             if (usable(layer) && layer.transform.opacity > 0 &&
-                layer.transform.rotation_degrees != 0 && !p.precise_geometry)
+                (layer.transform.rotation_degrees != 0 || layer.source_to_canvas) && !p.precise_geometry)
                 return result(OpenGlCompositionStatus::Unsupported, "check-precision",
-                    "Exact rotated nearest sampling requires ARB_gpu_shader_fp64 and ARB_gpu_shader5.");
+                    "Exact rotated or affine nearest sampling requires ARB_gpu_shader_fp64 and ARB_gpu_shader5.");
             if (usable(layer) && !bounded(layer.frame->width, layer.frame->height, p.texture_limit))
                 return result(OpenGlCompositionStatus::Unsupported, "check-limits",
                     "Source exceeds the device texture limit or 256 MiB texture budget.");
-            if (usable(layer) && layer.transform.rotation_degrees == 0.0 &&
+            if (usable(layer) && !layer.source_to_canvas && layer.transform.rotation_degrees == 0.0 &&
                 (width > 4096 || height > 4096))
                 return result(OpenGlCompositionStatus::Unsupported, "check-limits",
                     "Exact nearest sampling exceeds the 4096-entry lookup budget for an axis.");
@@ -1698,6 +1723,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
             if (!usable(layer) || layer.transform.opacity == 0) continue;
             const auto& f = *layer.frame;
+            if(layer.source_to_canvas && !affinePixelBounds(*layer.source_to_canvas,f.width,f.height,width,height))continue;
             struct NativeUse {
                 detail::WindowsVideoInterop* adapter = nullptr;
                 ~NativeUse() { if (adapter) (void)adapter->end(); }
@@ -1932,7 +1958,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             const double displayed_width = f.width * fit * t.scale;
             const double displayed_height = f.height * fit * t.scale;
             const double radians = t.rotation_degrees * std::numbers::pi / 180.0;
-            const bool axis = t.rotation_degrees == 0.0;
+            const bool axis = t.rotation_degrees == 0.0 && !layer.source_to_canvas;
             p.program->setUniformValue("axis_aligned", axis);
             if (axis) {
                 // Double-precision geometry matches the CPU's nearest sampling
@@ -1969,6 +1995,11 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     p.program->setUniformValue(name, QVector2D(static_cast<float>(x), static_cast<float>(y)));
                 }
             };
+            p.program->setUniformValue("use_affine",layer.source_to_canvas.has_value());
+            if(layer.source_to_canvas) {
+                const auto inverse=requireInverseAffine(*layer.source_to_canvas);
+                set_geometry("affine_x",inverse.a,inverse.b);set_geometry("affine_y",inverse.c,inverse.d);set_geometry("affine_translation",inverse.tx,inverse.ty);
+            }
             set_geometry("center", t.position_x * width, t.position_y * height);
             set_geometry("displayed_size", displayed_width, displayed_height);
             set_geometry("rotation_cs", std::cos(radians), std::sin(radians));

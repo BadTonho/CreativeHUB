@@ -87,6 +87,9 @@ public:
     void setAnchorKeyframeSelectedHandler(std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)>);
     void setAnchorKeyframeMoveHandler(std::function<bool(model::LayerId, model::AnchorProperty, std::int64_t, std::int64_t)>);
     void setAnchorCurveSegmentSelectedHandler(std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)>);
+    void setScaleAxisKeyframeSelectedHandler(std::function<void(model::LayerId, model::ScaleAxis, std::int64_t)>);
+    void setScaleAxisKeyframeMoveHandler(std::function<bool(model::LayerId, model::ScaleAxis, std::int64_t, std::int64_t)>);
+    void setScaleAxisCurveSegmentSelectedHandler(std::function<void(model::LayerId, model::ScaleAxis, std::int64_t)>);
     void setEffectKeyframeSelectedHandler(
         std::function<void(model::LayerId,
                            std::size_t,

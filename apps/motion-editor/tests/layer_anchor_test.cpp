@@ -134,7 +134,7 @@ void persistence(const QString& root)
     layer.anchor_keyframes[0]={{0,-2.5,InterpolationMode::CubicBezier,{.42,0,1,1}},{20,30}};
     CompositionDocument doc(64,32,{30,1},{layer,control});auto p=project(doc);
     const auto file=root+"/anchor.motion";Store::save(path(file),p);
-    check(Store::load(path(file))==p && read(file).value("version").toInt()==11,"v11 full round trip");
+    check(Store::load(path(file))==p && read(file).value("version").toInt()==12,"current-format Anchor full round trip");
     Store::saveRecovery(path(root+"/recovery"),path(file),"anchor",p);
     check(Store::loadRecovery(path(root+"/recovery")).document==p,"recovery wrapper preserves anchor");
     auto encoded=read(file);auto layers=encoded.value("layers").toArray();auto first=layers[0].toObject();
@@ -256,7 +256,7 @@ void ui(const QString& root)
     check(viewer->selectedLayerAnchor() && near(viewer->selectedLayerAnchor()->x(),after[0].transform.position_x) && near(viewer->selectedLayerAnchor()->y(),after[0].transform.position_y),"Viewer follows repositioned pivot");
     widget<QAction>(w,"motion-undo-action")->trigger();check(w.compositionDocument()->layers()==before,"one Undo compound edit");widget<QAction>(w,"motion-redo-action")->trigger();check(w.compositionDocument()->layers()==after,"Redo compound edit");
     widget<QSlider>(w,"motion-timeline-zoom-slider")->setValue(widget<QSlider>(w,"motion-timeline-zoom-slider")->maximum());
-    auto* rows=widget<QWidget>(w,"motion-timeline-layer-rows");const int from=timeline->frameToViewportX(15),to=timeline->frameToViewportX(24),y=7*34+17;
+    auto* rows=widget<QWidget>(w,"motion-timeline-layer-rows");const int from=timeline->frameToViewportX(15),to=timeline->frameToViewportX(24),y=8*34+17;
     const auto destination=timeline->frameAtViewportX(to);
     QMouseEvent press(QEvent::MouseButtonPress,QPointF(from,y),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(rows,&press);
     QMouseEvent move(QEvent::MouseMove,QPointF(to,y),Qt::NoButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(rows,&move);

@@ -435,3 +435,13 @@ validation.
 Do not add target dates until project capacity and cross-platform packaging
 have been validated. Update this roadmap when a milestone, dependency, or
 decision changes.
+
+## Shared affine compositor regression boundary
+
+Image raster defaults remain unchanged by the optional shared Motion affine contract. Shared CPU/OpenGL/Vulkan tests and Image raster/mask/core/export-UI regressions protect composition and Transform consumers. Native visual/platform acceptance remains separate.
+
+The standalone export-UI test target explicitly links the translations library
+used by the shared window source; this keeps its scoped Release build complete.
+
+The selected consumer and shared gates passed in the 2026-10-17 Release run;
+see [Scale boundary evidence](../motion-editor/features/SCALE_AXES.md#automated-windows-evidence--2026-10-17).

@@ -138,6 +138,8 @@ struct OpenGlImageOperation {
     // Zero preserves the source-sized legacy image-operation contract.
     int output_width = 0, output_height = 0;
     double blur_radius_pixels = 0;
+    // Only Transform accepts this source-pixel to output-pixel override.
+    std::optional<AffineTransform2D> source_to_canvas;
 };
 
 // Optional raster contract: top-down ARGB32 premultiplied content and ARGB32

@@ -90,9 +90,9 @@ both levels.
 they reuse shared `ScalarKeyframes` without extending shared `Transform2D`,
 `TransformKeyframes` or `TransformProperty`. The immutable Motion hierarchy
 snapshot evaluates Anchor with local transforms in the worker, including hidden,
-inactive and offline ancestors. It returns an effective rendered center to the
-existing CPU/OpenGL Transform stage before media fit. Zero Anchor retains the
-old exact path; Anchor edits reuse media and text/shape rasters. The compensated
+inactive and offline ancestors. Uniform geometry returns an effective rendered
+center; independent scales use the full affine matrix described below. Zero
+Anchor with uniform legacy geometry retains the old exact path; Anchor edits reuse media and text/shape rasters. The compensated
 dialog updates Anchor/Position in one document/history transaction, leaving
 binding offsets unchanged. See [Anchor Point](../features/ANCHOR_POINT.md) and
 [hierarchy](../features/HIERARCHY.md) for geometry and thread ownership.
@@ -193,7 +193,7 @@ loads another editor's executable or installation.
 - Each source `RgbaFrame` owns RGBA8 pixels with byte stride and straight alpha;
   a composition layer borrows the frame for the duration of the call. The
   compositor performs no color-space conversion.
-- Each source is aspect-fit to the output canvas, then uniformly scaled and
+- Legacy sources are aspect-fit to the output canvas, then uniformly scaled and
   rotated about its center. Position is normalized to canvas width and height;
   nearest-neighbor sampling is used.
 - Layers are composited source-over in vector order, back-to-front. The output
@@ -227,7 +227,7 @@ validation.
   This CPU rasterization is provisional and does not establish a final renderer.
 - The shared animation evaluator drives transform keyframes in Motion Studio
   preview, playback, and export. Basic key insertion, removal, marker seeking,
-  and marker movement are implemented for the five shared transform properties and two Motion-owned Anchor axes. The
+  and marker movement are implemented for the shared Position/Rotation/Opacity properties, Motion-owned Scale X/Y and two Anchor axes. The
   Graph Editor and easing presets are Motion Studio-owned; shared Linear and
   bounded cubic Bezier segment evaluation is available to all consumers. More
   interpolation modes and overshoot-capable curves remain open.
@@ -362,3 +362,22 @@ Motion Studio consumer regressions. Manual Windows interaction validation is
 still pending; export-specific steps are in [ROADMAP.md](../ROADMAP.md).
 The `.motion` extension and current C++/Qt 6 implementation remain provisional;
 the final application technology is not selected.
+
+### Motion-owned scale axes and additive affine composition
+
+Motion retains shared uniform animation types and owns the optional Y channel,
+link state and editing APIs. X reuses the existing Scale records; absent Y follows
+X, materializing its prior curve before independent changes. Legacy uniform APIs,
+including audio baking, adapt both axes atomically. Other property edits preserve Y.
+The timeline exposes eight transform tracks (seven for Nulls without opacity).
+Graph Editor scale values and Inspector/audio fields are percentages.
+
+The immutable iterative hierarchy retains six-coefficient matrices, including
+binding shear, without decomposition. Uniform legacy geometry retains its prior
+exact route. Shared composition owns Qt-independent `AffineTransform2D` and an
+optional source-pixel-to-canvas-pixel override on composition/Transform inputs.
+CPU and precise OpenGL reuse their existing sampling/blending/effects/masks;
+Vulkan explicitly refuses the override and uses existing recovery. Source fit and
+Anchor occur once; scale edits add no image pass or decode/raster invalidation.
+This is an additive shared compositor contract; Video/Image keep legacy defaults.
+See [Scale axes](../features/SCALE_AXES.md) and [format v12](FORMAT.md).

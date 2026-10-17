@@ -54,7 +54,7 @@ Motion-owned viewer, with a bounded mailbox and RGBA/CPU recovery; see
 [GPU_TEXTURE_PREVIEW.md](gpu/GPU_TEXTURE_PREVIEW.md). Offline export
 uses the same opt-in path and reads back RGBA for the existing CPU encoder.
 Manual Save, Save As, and Open use a versioned `.motion` document that includes
-the Media Pool. The writer emits schema v11 and reads versions 1–11; migrations
+the Media Pool. The writer emits schema v12 and reads versions 1–12; migrations
 and compatibility behavior are specified in [FORMAT.md](architecture/FORMAT.md). The
 separate recovery wrapper remains at version 1 and contains a nested native
 document. Undo/Redo and configurable autosave and recovery cover the
@@ -78,7 +78,7 @@ architecture.
 [Layer parenting and Null controls](features/HIERARCHY.md) are an implemented
 expansion: the Inspector selects a parent, local curves remain intact, and
 link/unlink/reparent/delete retain the pose at the current composition frame.
-Nulls control transforms without producing pixels. Native v11, recovery and Hub
+Nulls control transforms without producing pixels. Native v12, recovery and Hub
 backups preserve the graph; independent `.cscomp` export refuses unsupported
 hierarchies. Manual UI/platform and performance acceptance remain pending.
 
@@ -86,10 +86,19 @@ hierarchies. Manual UI/platform and performance acceptance remain pending.
 including Nulls: local pixel X/Y fields, Transform tracks, Graph Editor curves,
 and a dialog that preserves current-frame geometry by compensating Position in
 one Undo/Redo. Hierarchy resolution includes Anchor, the Viewer marks the actual
-pivot, and native v11/recovery/Hub backups preserve its curves. Versions 1–10
+pivot, and native v12/recovery/Hub backups preserve its curves. Versions 1–10
 load with zero Anchor. `.cscomp` v3 explicitly refuses nondefault Anchor. Pan
-Behind, Viewer dragging, independent Scale X/Y and audio-to-Anchor remain planned;
+Behind, Viewer dragging and audio-to-Anchor remain planned;
 manual visual/platform acceptance and benchmarks remain pending.
+
+[Independent animated Scale X/Y](features/SCALE_AXES.md) is implemented with
+percentage fields, per-layer proportional linking, independent curves and a
+uniform audio bake. Full affine inheritance preserves shear through parents and
+Nulls, parenting and compensated Anchor edits. Native v12, recovery and Hub retain
+Y/link/affine data; `.cscomp` v3 requires identical scale bases/curves. Shared
+CPU/precise OpenGL implement the optional pixel matrix; Vulkan requests fallback.
+Uniform legacy rendering remains exact. Manual/GPU/platform acceptance and
+benchmarks remain pending.
 
 ## Intended Users and Workflows
 
@@ -293,7 +302,7 @@ The blur duration is wall-clock time, including pool scheduling and pass barrier
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
-The native `.motion` writer emits schema v11 and reads versions 1–11, including
+The native `.motion` writer emits schema v12 and reads versions 1–12, including
 layer-local keyframes and Cubic Bezier easing on Gaussian Blur and Color
 Adjustment parameters. Migration
 details are maintained in [FORMAT.md](architecture/FORMAT.md); the recovery wrapper remains

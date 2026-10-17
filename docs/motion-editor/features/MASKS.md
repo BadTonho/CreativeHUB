@@ -74,3 +74,11 @@ Layer hierarchy resolves inherited geometry and the animated [Anchor Point](ANCH
 stage. Transform masks keep their composition-space coverage and continue to
 limit the complete resolved transform. Parent masks/effects are not copied to
 children; Null controls cannot own masks. See [Layer hierarchy](HIERARCHY.md).
+
+Independent [Scale X/Y](SCALE_AXES.md) extends the same Transform stage with a
+source-pixel affine override, retaining inherited shear. CPU and precise OpenGL
+apply it once; Vulkan refuses it for fallback. Source/effect coverage remains in
+its prior space and Transform coverage remains in composition pixels; masks do
+not inherit a parent's masks or link state. `creative-suite-motion-editor-scale`
+compares animated affine effects and all mask stages with independent reference
+sampling and encoded export frames. Native visual/GPU acceptance remains pending.

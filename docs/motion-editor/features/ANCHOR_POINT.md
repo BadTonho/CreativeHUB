@@ -1,6 +1,6 @@
 # Animated Anchor Point
 
-Status: implemented in native `.motion` v11. Manual visual acceptance, native
+Status: introduced in native `.motion` v11; current format is v12. Manual visual acceptance, native
 platform/GPU qualification, and representative performance measurements remain
 pending. Application versions are unchanged.
 
@@ -37,8 +37,8 @@ to the operation frame; other frames follow the resulting animation.
 The existing Viewer marker indicates the actual resolved pivot, including its
 parent hierarchy, including selected visible Nulls. This is a Viewer overlay;
 Nulls still contribute no image pixels or export duration.
-No shortcuts, Pan Behind tool, Viewer dragging, independent Scale X/Y, or
-audio-to-Anchor generation are introduced.
+No shortcuts, Pan Behind tool, Viewer dragging or audio-to-Anchor generation
+are introduced. Independent [Scale X/Y](SCALE_AXES.md) is implemented separately.
 
 ## Geometry and ownership
 
@@ -47,20 +47,20 @@ document editing APIs. Shared `Transform2D`, `TransformKeyframes` and
 `TransformProperty` remain unchanged. For canvas width/height `C`, local
 geometry is:
 
-`L = T(Position * C) * R * S * T(-Anchor_pixels)`
+`L = T(Position * C) * R * S(X,Y) * T(-Anchor_pixels)`
 
 Hierarchy resolution remains `W = Parent * Binding * L`. Linking, changing or
 removing a parent, and detaching children during deletion, use this full local
 geometry. The compensated pivot action uses
-`delta_Position_pixels = R * S * (new_Anchor - evaluated_Anchor)` and then
-divides X/Y by canvas width/height. It leaves `parent_offset` intact. Calculated
+`delta_Position_pixels = R * S(X,Y) * (new_Anchor - evaluated_Anchor)` and then
+divides X/Y by canvas width/height. It leaves legacy/affine binding and scale link state intact. Calculated
 geometry is checked before publishing the compensated edit; numeric failures
 leave the document untouched and the UI logs the technical cause.
 
 The immutable `LayerTransformHierarchy` snapshot includes Anchor values and
 curves in its change detection. Workers evaluate these with the same local
 clocks and endpoint behavior as other properties, including hidden, inactive
-and offline ancestors. The resolver returns the effective rendered center to
+and offline ancestors. For affine geometry, the resolver returns the full matrix to
 the existing Transform stage, before media-size compensation. Anchor is applied
 once in preview, playback and export. Source/effect masks retain their existing
 spaces; Transform masks continue to limit the complete resolved transform.
@@ -76,7 +76,7 @@ Anchor path retains the previous transform arithmetic and pixel behavior.
 optional `anchor_point` data, including local scalar curves. Versions 1–10
 load with zero Anchor and empty curves; pre-v11 files containing Anchor records
 are rejected. Save, autosave and recovery preserve the data, with recovery
-wrapper version 1. Hub backup/restoration accepts v11 and rejects v12, retaining
+wrapper version 1. Hub backup/restoration accepts current v12 and rejects v13, retaining
 Anchor, hierarchy and external media paths through relocation.
 
 `.cscomp` remains at v3. A nonzero base Anchor or any nonempty Anchor curve

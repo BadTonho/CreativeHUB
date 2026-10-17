@@ -24,6 +24,7 @@
 #include <QThread>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QToolButton>
 
 #include <algorithm>
 #include <cmath>
@@ -378,6 +379,9 @@ int main(int argc, char** argv)
             "every other transform property also has existing keyframes");
     require(document.setLayerKeyframe(layer_id, TransformProperty::Scale, 0, 1.25),
             "the destination property receives an existing keyframe");
+    require(document.setLayerScaleAxisBase(layer_id,motion::model::ScaleAxis::Y,.6) &&
+                document.setLayerScaleAxisKeyframe(layer_id,motion::model::ScaleAxis::Y,5,.9),
+            "audio destination starts with independent Y base and keys");
     const auto before_audio_generation = document;
     require(document.replaceLayerKeyframes(layer_id, TransformProperty::Scale, scale_keys),
             "generated keys replace the selected property track");
@@ -392,6 +396,8 @@ int main(int argc, char** argv)
                 changed_layer.keyframes.opacity ==
                     before_audio_generation.layers().front().keyframes.opacity,
             "replacing scale preserves Position Y, rotation, and opacity keyframes");
+    require(!changed_layer.scale_y && motion::model::layerScaleKeys(changed_layer,motion::model::ScaleAxis::Y)==scale_keys,
+            "audio uniformly replaces X and Y in one transaction");
     require(changed_layer.keyframes.scale == scale_keys,
             "the selected property contains only the generated keyframes");
 
@@ -430,7 +436,7 @@ int main(int argc, char** argv)
     require(property != nullptr && minimum != nullptr && maximum != nullptr,
             "the audio keyframe dialog exposes its transform controls");
     require(property->currentData().toInt() == static_cast<int>(TransformProperty::Scale) &&
-                near(minimum->value(), 1.0) && near(maximum->value(), 2.0),
+                near(minimum->value(), 100.0) && near(maximum->value(), 200.0),
             "scale is the default property with its documented value range");
     property->setCurrentIndex(static_cast<int>(TransformProperty::PositionX));
     require(near(minimum->value(), 0.0) && near(maximum->value(), 1.0),
@@ -498,6 +504,30 @@ int main(int argc, char** argv)
     action->trigger();
     require(window.compositionDocument()->layers() == before_dialog_cancel,
             "canceling audio keyframe setup leaves the composition unchanged");
+
+    auto* axis_link=window.findChild<QToolButton*>(QStringLiteral("motion-scale-link"));
+    auto* scale_y=window.findChild<QDoubleSpinBox*>(QStringLiteral("motion-scale-y"));
+    require(axis_link&&scale_y,"independent scale controls available for audio bake");axis_link->click();
+    scale_y->setValue(50);QMetaObject::invokeMethod(scale_y,"editingFinished");
+    const auto before_uniform_bake=window.compositionDocument()->layers();
+    QTimer::singleShot(0,[&]{
+        auto* dialog=QApplication::activeModalWidget();require(dialog,"audio bake dialog");
+        auto* note=dialog->findChild<QLabel*>(QStringLiteral("motion-audio-scale-note"));
+        require(note&&note->text().contains(QStringLiteral("both axis curves")),"audio dialog explains uniform replacement");
+        dialog->findChild<QLineEdit*>(QStringLiteral("motion-audio-keyframe-path"))->setText(QString::fromUtf8(pathToUtf8(audio_path)));
+        dialog->findChild<QDialogButtonBox*>(QStringLiteral("motion-audio-keyframe-buttons"))->button(QDialogButtonBox::Ok)->click();
+    });action->trigger();
+    QElapsedTimer bake_timer;bake_timer.start();
+    while(window.compositionDocument()->layers().front().keyframes.scale.empty()&&bake_timer.elapsed()<10000){
+        QCoreApplication::processEvents(QEventLoop::AllEvents,25);QThread::msleep(1);
+    }
+    const auto baked_layers=window.compositionDocument()->layers();
+    require(!baked_layers.front().keyframes.scale.empty()&&!baked_layers.front().scale_y&&!baked_layers.front().scale_linked,
+        "audio command replaces both curves uniformly without changing link state");
+    window.findChild<QAction*>(QStringLiteral("motion-undo-action"))->trigger();
+    require(window.compositionDocument()->layers()==before_uniform_bake,"one Undo restores independent axes before audio");
+    window.findChild<QAction*>(QStringLiteral("motion-redo-action"))->trigger();
+    require(window.compositionDocument()->layers()==baked_layers,"one Redo restores uniform bake");
 
     return EXIT_SUCCESS;
 }

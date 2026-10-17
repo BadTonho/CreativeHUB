@@ -6,6 +6,18 @@
 
 namespace motion::model {
 
+using AffineTransform=creative_suite::composition::AffineTransform2D;
+struct ResolvedLayerTransform : creative_suite::animation::Transform2D {
+    AffineTransform world;
+    bool affine=false;
+};
+[[nodiscard]] AffineTransform affineOffset(const ParentTransformOffset&);
+[[nodiscard]] AffineTransform localGeometry(const creative_suite::animation::Transform2D&,double scale_y,CanvasSize,AnchorPoint);
+[[nodiscard]] AffineTransform localLayerGeometry(const CompositionLayer&,CanvasSize,std::int64_t local_frame);
+// Source pixels -> canvas pixels. W already contains Anchor and parenting.
+[[nodiscard]] AffineTransform sourcePixelGeometry(const AffineTransform& world,int source_width,int source_height,double fit);
+[[nodiscard]] std::array<double,2> resolvedAnchorPosition(const ResolvedLayerTransform&,AnchorPoint,CanvasSize);
+
 // Pixel-space composition, left * right. Invalid/overflowing geometry throws.
 [[nodiscard]] ParentTransformOffset composeOffsets(const ParentTransformOffset& left,
                                                   const ParentTransformOffset& right);
@@ -23,7 +35,7 @@ class LayerTransformHierarchy {
 public:
     LayerTransformHierarchy(CanvasSize canvas, const std::vector<CompositionLayer>& layers);
     [[nodiscard]] bool matches(CanvasSize canvas, const std::vector<CompositionLayer>& layers) const noexcept;
-    [[nodiscard]] std::unordered_map<LayerId, creative_suite::animation::Transform2D>
+    [[nodiscard]] std::unordered_map<LayerId, ResolvedLayerTransform>
         evaluate(std::int64_t composition_frame) const;
 
 private:
@@ -36,6 +48,8 @@ private:
         creative_suite::animation::TransformKeyframes keyframes;
         AnchorPoint anchor;
         AnchorKeyframes anchor_keys;
+        std::optional<ScaleChannel> scale_y;
+        std::optional<AffineTransform> parent_affine;
     };
     CanvasSize canvas_;
     std::vector<Node> nodes_;

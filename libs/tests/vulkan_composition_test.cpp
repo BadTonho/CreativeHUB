@@ -46,6 +46,13 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
         require(stats.known_bytes==device->totalReservedBytes() && stats.known_bytes<=256ULL*1024*1024,"Memory diagnostics disagree with admission.");};
     checkMemory();
     VulkanFrameCompositor gpu(device);auto a=fixture(37,23,false),b=fixture(19,13);
+    CompositionLayer affine{&a};affine.source_to_canvas=AffineTransform2D{1,0,.5,2,3,4};
+    require(gpu.compose(61,47,{affine}).status==OpenGlCompositionStatus::Unsupported,
+        "Vulkan silently ignored the affine override.");
+    OpenGlImageOperation affine_stage;affine_stage.kind=OpenGlImageOperationKind::Transform;
+    affine_stage.background={&a};affine_stage.output_width=61;affine_stage.output_height=47;affine_stage.source_to_canvas=affine.source_to_canvas;
+    require(gpu.processImage(affine_stage).status==OpenGlCompositionStatus::Unsupported,
+        "Vulkan silently ignored affine Transform geometry.");
     for(double rotation:{0.,23.,90.,-45.})for(double opacity:{0.,0.37,1.}){
         std::vector<CompositionLayer> layers{{&a},{&b}};layers[1].transform={0.43,0.61,0.78,rotation,opacity};
         auto cpu=FrameCompositor::compose(61,47,layers);auto result=gpu.compose(61,47,layers);

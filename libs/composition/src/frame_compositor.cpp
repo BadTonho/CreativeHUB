@@ -11,6 +11,10 @@
 
 namespace creative_suite::composition {
 namespace {
+bool affineFrameValid(const media::RgbaFrame& f) {
+    return f.width>0 && f.height>0 && f.width<=std::numeric_limits<int>::max()/4 &&
+        f.stride>=f.width*4 && std::uint64_t(f.stride)*f.height<=f.rgba_pixels.size();
+}
 bool maskFrameValid(const media::RgbaFrame& f) {
     return f.width>0 && f.height>0 && f.width<=16384 && f.height<=16384 &&
         f.stride>=f.width*4 && f.rgba_pixels.size()>=static_cast<std::size_t>(f.stride)*f.height;
@@ -575,6 +579,7 @@ bool PreparedAlphaCoverageGeometry::matches(
     int target_canvas_width,
     int target_canvas_height,
     const CompositionLayer& layer) const noexcept {
+    if(layer.source_to_canvas)return false;
     if (layer.frame == nullptr || layer.alpha_coverage == nullptr) return false;
     const auto& frame = *layer.frame;
     const auto& transform = layer.transform;
@@ -623,6 +628,7 @@ AlphaCoveragePtr FrameCompositor::buildAlphaCoverage(
 
 bool FrameCompositor::canUseAlphaCoverageFastPath(
     const CompositionLayer& layer) noexcept {
+    if(layer.source_to_canvas)return false;
     return layer.frame != nullptr &&
         layer.alpha_coverage != nullptr &&
         animation::validTransform(layer.transform) &&
@@ -737,6 +743,22 @@ std::optional<media::RgbaFrame> FrameCompositor::compose(
         if (layer.frame == nullptr || !animation::validTransform(layer.transform) ||
             layer.frame->width <= 0 || layer.frame->height <= 0) {
             record_layer_elapsed();
+            continue;
+        }
+
+        if (layer.source_to_canvas) {
+            const auto inverse=inverseAffine(*layer.source_to_canvas);
+            const auto bounds=affinePixelBounds(*layer.source_to_canvas,layer.frame->width,layer.frame->height,width,height);
+            if(!inverse || !bounds || !affineFrameValid(*layer.frame)){record_layer_elapsed();continue;}
+            if(layer_timings)layer_timings->raster_path=CompositionRasterPath::GeneralFallback;
+            record_layer_elapsed();const auto started=layer_timings?Clock::now():Clock::time_point{};
+            for(int y=(*bounds)[2];y<=(*bounds)[3];++y)for(int x=(*bounds)[0];x<=(*bounds)[1];++x) {
+                const auto p=inverse->map(x+.5,y+.5);
+                if(!std::isfinite(p[0])||!std::isfinite(p[1])||p[0]<0||p[1]<0||p[0]>=layer.frame->width||p[1]>=layer.frame->height)continue;
+                auto color=sampleNearest(*layer.frame,p[0],p[1]);color.alpha*=layer.transform.opacity;
+                blend(output.rgba_pixels.data()+std::size_t(y)*output.stride+std::size_t(x)*4,color);
+            }
+            if(layer_timings)layer_timings->raster_blend_nanoseconds=elapsedNanoseconds(started);
             continue;
         }
 
@@ -878,4 +900,27 @@ std::optional<media::RgbaFrame> FrameCompositor::compose(
     return output;
 }
 
+std::optional<media::RgbaFrame> transformAffineFrame(const media::RgbaFrame& source,int width,int height,
+    const AffineTransform2D& matrix,double opacity,const std::function<bool()>& cancel) {
+    if(!affineFrameValid(source)||width<=0||height<=0||
+        std::uint64_t(width)*height>16'777'216||!std::isfinite(opacity)||opacity<0||opacity>1)
+        throw std::invalid_argument("Invalid affine raster dimensions, source or opacity.");
+    if(cancel && cancel())return {};
+    const auto inverse=requireInverseAffine(matrix);
+    media::RgbaFrame output;output.width=width;output.height=height;output.stride=width*4;
+    output.rgba_pixels.resize(std::size_t(output.stride)*height,0);
+    const auto bounds=affinePixelBounds(matrix,source.width,source.height,width,height);
+    if(!bounds)return output;
+    for(int y=(*bounds)[2];y<=(*bounds)[3];++y) {
+        if(cancel&&cancel())return {};
+        for(int x=(*bounds)[0];x<=(*bounds)[1];++x) {
+            const auto p=inverse.map(x+.5,y+.5);
+            if(!std::isfinite(p[0])||!std::isfinite(p[1])||p[0]<0||p[1]<0||p[0]>=source.width||p[1]>=source.height)continue;
+            const auto* in=source.rgba_pixels.data()+std::size_t(int(std::floor(p[1])))*source.stride+std::size_t(int(std::floor(p[0])))*4;
+            auto* out=output.rgba_pixels.data()+std::size_t(y)*output.stride+std::size_t(x)*4;
+            std::copy_n(in,4,out);out[3]=std::uint8_t(std::lround(in[3]*opacity));
+        }
+    }
+    return output;
+}
 } // namespace creative_suite::composition

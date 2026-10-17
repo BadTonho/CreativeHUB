@@ -1992,5 +1992,37 @@ Este é um ambiente inicial de trabalho para a suíte criativa de código aberto
         <source>Keeps the layer and its children in place at the current frame. Animated affected properties receive keyframes at this frame.</source>
         <translation>Mantém a camada e suas filhas no lugar no quadro atual. Propriedades animadas afetadas recebem keyframes neste quadro.</translation>
     </message>
+    <message>
+        <source>Scale X (%)</source>
+        <translation>Escala X (%)</translation>
+    </message>
+    <message>
+        <source>Scale Y (%)</source>
+        <translation>Escala Y (%)</translation>
+    </message>
+    <message>
+        <source>Link scale axes</source>
+        <translation>Vincular eixos de escala</translation>
+    </message>
+    <message>
+        <source>Link scale values while editing; keyframes remain independent.</source>
+        <translation>Vincula os valores de escala durante a edição; os keyframes permanecem independentes.</translation>
+    </message>
+    <message>
+        <source>Add a keyframe on each animated axis or unlink the axes to edit this frame.</source>
+        <translation>Adicione um keyframe em cada eixo animado ou desvincule os eixos para editar este quadro.</translation>
+    </message>
+    <message>
+        <source>100% keeps the fitted size. Linked edits preserve the current proportion.</source>
+        <translation>100% mantém o tamanho ajustado. A edição vinculada preserva a proporção atual.</translation>
+    </message>
+    <message>
+        <source>Scale X and Y (%)</source>
+        <translation>Escala X e Y (%)</translation>
+    </message>
+    <message>
+        <source>Scale replaces both axis curves with the same animation, regardless of the link.</source>
+        <translation>Escala substitui as curvas dos dois eixos pela mesma animação, independentemente do vínculo.</translation>
+    </message>
 </context>
 </TS>

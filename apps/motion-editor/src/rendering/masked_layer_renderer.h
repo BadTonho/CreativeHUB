@@ -30,5 +30,6 @@ inline void addMaskTimings(creative_suite::composition::OpenGlCompositionTimings
     creative_suite::composition::ShapeMaskRasterCache&,
     creative_suite::composition::OpenGlFrameCompositor*,
     const std::function<bool()>& cancel,
-    const creative_suite::animation::Transform2D* resolved_transform = nullptr);
+    const creative_suite::animation::Transform2D* resolved_transform = nullptr,
+    const creative_suite::composition::AffineTransform2D* resolved_world = nullptr);
 }

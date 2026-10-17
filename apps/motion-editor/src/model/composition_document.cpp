@@ -158,6 +158,8 @@ bool validLayer(const CompositionLayer& layer) noexcept
         !validContentForKind(layer.kind, layer.content) ||
         !validLayerEffects(layer.effects) || !validParentOffset(layer.parent_offset) ||
         !validAnchorPoint(layer.anchor_point) ||
+        (layer.scale_y && !validScaleChannel(*layer.scale_y)) ||
+        (layer.parent_affine && (!validParentAffine(*layer.parent_affine) || layer.parent_offset!=ParentTransformOffset{})) ||
         !creative_suite::animation::validScalarKeyframes(layer.anchor_keyframes[0]) ||
         !creative_suite::animation::validScalarKeyframes(layer.anchor_keyframes[1])) {
         return false;
@@ -708,6 +710,15 @@ bool CompositionDocument::setLayerParent(LayerId child, LayerId parent, std::int
     auto* layer = findLayer(child);
     if (layer->parent_id == parent) return false;
     const auto global = LayerTransformHierarchy(canvas_size_, layers_).evaluate(frame);
+    if(global.at(child).affine || (parent && global.at(parent).affine)) {
+        namespace c=creative_suite::composition;
+        const auto local_frame=frame<layer->timeline_start_frame?0:frame-layer->timeline_start_frame;
+        auto relative=global.at(child).world;
+        if(parent)relative=c::composeAffine(c::requireInverseAffine(global.at(parent).world),relative);
+        const auto binding=c::composeAffine(relative,c::requireInverseAffine(localLayerGeometry(*layer,canvas_size_,local_frame)));
+        if(!validParentAffine(binding))throw std::runtime_error("Invalid affine parent binding for layer "+std::to_string(child));
+        layer->parent_id=parent;layer->parent_offset={};layer->parent_affine=binding;return true;
+    }
     const auto local = creative_suite::animation::evaluateTransform(layer->transform, layer->keyframes,
         frame < layer->timeline_start_frame ? 0 : frame - layer->timeline_start_frame);
     const auto desired = geometryOffset(global.at(child), canvas_size_);
@@ -715,7 +726,7 @@ bool CompositionDocument::setLayerParent(LayerId child, LayerId parent, std::int
     const auto offset = composeOffsets(relative, inverseOffset(geometryOffset(local, canvas_size_,
         evaluateLayerAnchor(*layer, frame < layer->timeline_start_frame ? 0 : frame - layer->timeline_start_frame))));
     layer->parent_id = parent;
-    layer->parent_offset = offset;
+    layer->parent_offset = offset;layer->parent_affine.reset();
     return true;
 }
 
@@ -729,18 +740,26 @@ bool CompositionDocument::removeLayer(LayerId id, std::int64_t frame)
     }
     // Stage every compensation before mutating; a numerical failure must leave
     // the parent and every child intact.
-    std::vector<std::pair<CompositionLayer*, ParentTransformOffset>> detached;
+    struct Detached {CompositionLayer* child;ParentTransformOffset legacy;std::optional<AffineTransform> affine;};
+    std::vector<Detached> detached;
     if (std::any_of(layers_.begin(), layers_.end(), [id](const auto& l) { return l.parent_id == id; })) {
         const auto global = LayerTransformHierarchy(canvas_size_, layers_).evaluate(frame);
         for (auto& child : layers_) if (child.parent_id == id) {
+            if(global.at(child.id).affine) {
+                namespace c=creative_suite::composition;
+                const auto local_frame=frame<child.timeline_start_frame?0:frame-child.timeline_start_frame;
+                const auto binding=c::composeAffine(global.at(child.id).world,c::requireInverseAffine(localLayerGeometry(child,canvas_size_,local_frame)));
+                if(!validParentAffine(binding))throw std::runtime_error("Invalid affine detach for layer "+std::to_string(child.id));
+                detached.push_back({&child,{},binding});continue;
+            }
             const auto local = creative_suite::animation::evaluateTransform(child.transform, child.keyframes,
                 frame < child.timeline_start_frame ? 0 : frame - child.timeline_start_frame);
-            detached.emplace_back(&child, composeOffsets(geometryOffset(global.at(child.id), canvas_size_),
+            detached.push_back({&child, composeOffsets(geometryOffset(global.at(child.id), canvas_size_),
                 inverseOffset(geometryOffset(local, canvas_size_, evaluateLayerAnchor(child,
-                    frame < child.timeline_start_frame ? 0 : frame - child.timeline_start_frame)))));
+                    frame < child.timeline_start_frame ? 0 : frame - child.timeline_start_frame)))),{}});
         }
     }
-    for (auto& [child, offset] : detached) { child->parent_id = 0; child->parent_offset = offset; }
+    for(auto& item:detached){item.child->parent_id=0;item.child->parent_offset=item.legacy;item.child->parent_affine=item.affine;}
     layers_.erase(layer);
     collectUnreferencedMasks();
     return true;
@@ -894,6 +913,7 @@ bool CompositionDocument::setLayerTransform(
     if (layer == nullptr || (layer->kind == LayerKind::Null && transform.opacity != 1)) {
         return false;
     }
+    if(layer->transform.scale!=transform.scale)layer->scale_y.reset(); // Legacy uniform edit.
     layer->transform = transform;
     return true;
 }
@@ -958,6 +978,7 @@ bool CompositionDocument::replaceLayerKeyframes(
     *target = keyframes;
     if (!creative_suite::animation::validTransformKeyframes(candidate)) return false;
     layer->keyframes = std::move(candidate);
+    if(property==creative_suite::animation::TransformProperty::Scale)layer->scale_y.reset();
     return true;
 }
 
@@ -968,10 +989,11 @@ bool CompositionDocument::setLayerKeyframe(
     double value) noexcept
 {
     auto* layer = findLayer(id);
-    return layer != nullptr
+    const bool changed=layer != nullptr
         && !(layer->kind == LayerKind::Null && property == creative_suite::animation::TransformProperty::Opacity)
-        && creative_suite::animation::setKeyframe(
-            layer->keyframes, property, local_frame, value);
+        && creative_suite::animation::setKeyframe(layer->keyframes, property, local_frame, value);
+    if(changed && property==creative_suite::animation::TransformProperty::Scale)layer->scale_y.reset();
+    return changed;
 }
 
 bool CompositionDocument::setLayerKeyframeInterpolation(
@@ -982,8 +1004,9 @@ bool CompositionDocument::setLayerKeyframeInterpolation(
     const creative_suite::animation::CubicBezierEasing& easing) noexcept
 {
     auto* layer = findLayer(id);
-    return layer != nullptr && creative_suite::animation::setKeyframeInterpolation(
-        layer->keyframes, property, local_frame, interpolation, easing);
+    const bool changed=layer != nullptr && creative_suite::animation::setKeyframeInterpolation(layer->keyframes,property,local_frame,interpolation,easing);
+    if(changed && property==creative_suite::animation::TransformProperty::Scale)layer->scale_y.reset();
+    return changed;
 }
 
 bool CompositionDocument::removeLayerKeyframe(
@@ -992,8 +1015,9 @@ bool CompositionDocument::removeLayerKeyframe(
     std::int64_t local_frame) noexcept
 {
     auto* layer = findLayer(id);
-    return layer != nullptr && creative_suite::animation::removeKeyframe(
-        layer->keyframes, property, local_frame);
+    const bool changed=layer != nullptr && creative_suite::animation::removeKeyframe(layer->keyframes,property,local_frame);
+    if(changed && property==creative_suite::animation::TransformProperty::Scale)layer->scale_y.reset();
+    return changed;
 }
 
 bool CompositionDocument::moveLayerKeyframe(
@@ -1044,6 +1068,7 @@ bool CompositionDocument::moveLayerKeyframe(
         });
     if (destination != frames->end() && destination->frame == to_local_frame) return false;
 
+    if(property==creative_suite::animation::TransformProperty::Scale)layer->scale_y.reset();
     source->frame = to_local_frame;
     std::sort(frames->begin(), frames->end(), [](const Keyframe& left, const Keyframe& right) {
         return left.frame < right.frame;

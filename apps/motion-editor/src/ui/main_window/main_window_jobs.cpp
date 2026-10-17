@@ -31,6 +31,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <type_traits>
 #include <vector>
 
 namespace motion::ui {
@@ -184,7 +185,16 @@ void MainWindow::generateKeyframesFromAudio()
         other_keyframes = count > maximum_keyframes - other_keyframes
             ? maximum_keyframes : other_keyframes + count;
     };
+    for(const auto& mask:document_->masks())for(const auto& keys:mask.keyframes)add_other_keyframes(keys.size());
     for (const auto& layer : document_->layers()) {
+        add_other_keyframes(layer.anchor_keyframes[0].size());add_other_keyframes(layer.anchor_keyframes[1].size());
+        for(const auto& effect:layer.effects)std::visit([&](const auto& e){
+            using E=std::decay_t<decltype(e)>;
+            if constexpr(std::is_same_v<E,model::GaussianBlurEffect>)add_other_keyframes(e.radius_keyframes.size());
+            else {add_other_keyframes(e.brightness_keyframes.size());add_other_keyframes(e.contrast_keyframes.size());add_other_keyframes(e.saturation_keyframes.size());}
+        },effect);
+        if(layer.scale_y && (layer.id!=selected->id || settings.property!=TransformProperty::Scale))
+            add_other_keyframes(layer.scale_y->keyframes.size());
         if (layer.id != selected->id) {
             add_other_keyframes(layer.keyframes.position_x.size());
             add_other_keyframes(layer.keyframes.position_y.size());
@@ -209,7 +219,7 @@ void MainWindow::generateKeyframesFromAudio()
     const auto analysis_limit = std::min<std::uint64_t>(
         static_cast<std::uint64_t>(selected->duration_frames),
         static_cast<std::uint64_t>(available_keyframes) + 1U);
-    if (analysis_limit == 0) {
+    if (available_keyframes == 0 || analysis_limit == 0) {
         QMessageBox::warning(this, MotionUiTranslation::tr("Audio Keyframes"),
             MotionUiTranslation::tr("This composition has reached its supported keyframe limit."));
         return;

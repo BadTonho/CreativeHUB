@@ -81,6 +81,9 @@ private:
         std::array<QDoubleSpinBox*, 2> anchor_fields{};
         std::array<QToolButton*, 2> anchor_key_buttons{};
         QPushButton* reposition_anchor = nullptr;
+        QDoubleSpinBox* scale_y_field = nullptr;
+        QToolButton* scale_y_key = nullptr;
+        QToolButton* scale_link = nullptr;
     };
 
 public:
@@ -100,6 +103,7 @@ public:
     [[nodiscard]] int effectCount() const noexcept;
     [[nodiscard]] double transformFieldValue(std::size_t property_index) const noexcept;
     [[nodiscard]] double anchorFieldValue(std::size_t axis) const noexcept;
+    [[nodiscard]] double scaleFieldValue(std::size_t axis) const noexcept;
     [[nodiscard]] double effectFieldValue(model::EffectParameterProperty property) const noexcept;
     [[nodiscard]] model::TextLayerContent editedTextContent(
         model::TextLayerContent value) const;
@@ -108,6 +112,9 @@ public:
     [[nodiscard]] model::LayerEffect editedEffect(model::LayerEffect value) const;
 
 signals:
+    void scaleValueEdited(int axis);
+    void scaleKeyframeToggleRequested(int axis);
+    void scaleLinkChanged(bool linked);
     void anchorValueEdited(int axis);
     void anchorKeyframeToggleRequested(int axis);
     void anchorRepositionRequested();

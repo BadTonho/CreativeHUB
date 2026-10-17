@@ -21,6 +21,12 @@ x::Document exportComposition(const MotionProjectData &project) {
     std::vector<x::Issue> issues;
     d.masks=project.masks;
     for (const auto &layer : project.layers) {
+        if(layer.scale_y && (layer.scale_y->value!=layer.transform.scale || layer.scale_y->keyframes!=layer.keyframes.scale)) {
+            issues.push_back({layer.id,"Independent scale axes cannot be represented by composition interchange without rewriting curves."});continue;
+        }
+        if(layer.parent_affine) {
+            issues.push_back({layer.id,"Affine parent compensation is not supported by composition interchange."});continue;
+        }
         if (layer.anchor_point != AnchorPoint{} || !layer.anchor_keyframes[0].empty() || !layer.anchor_keyframes[1].empty()) {
             issues.push_back({layer.id,"Anchor points and anchor animation are not supported by composition interchange."});
             continue;

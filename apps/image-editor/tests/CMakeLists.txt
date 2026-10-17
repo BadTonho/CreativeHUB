@@ -376,6 +376,7 @@ target_include_directories(creative-suite-image-editor-export-ui-tests PRIVATE
     ../src/ui/layers
 )
 target_link_libraries(creative-suite-image-editor-export-ui-tests PRIVATE
+    creative-suite::translations
     creative-suite-image-editor-rendering
     creative-suite::shortcuts
     creative-suite::system-monitor

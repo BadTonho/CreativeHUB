@@ -28,6 +28,7 @@
 #include <iterator>
 #include <limits>
 #include <string>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -230,6 +231,7 @@ void MainWindow::selectCurveSegment(
     std::int64_t local_start_frame)
 {
     if (!document_) return;
+    if(property==TransformProperty::Scale){selectScaleAxisCurveSegment(id,model::ScaleAxis::X,local_start_frame);return;}
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
         [id](const auto& layer) { return layer.id == id; });
     if (found == document_->layers().end()) return;
@@ -320,7 +322,8 @@ void MainWindow::refreshCurveEditor()
     }
     const auto* anchor_keys = curve_selection_->anchor_property
         ? &found->anchor_keyframes[static_cast<std::size_t>(*curve_selection_->anchor_property)] : nullptr;
-    const auto& keys = anchor_keys ? *anchor_keys : mask
+    const auto* scale_keys=curve_selection_->scale_axis?&model::layerScaleKeys(*found,*curve_selection_->scale_axis):nullptr;
+    const auto& keys = scale_keys?*scale_keys:anchor_keys ? *anchor_keys : mask
         ? mask->keyframes[curve_selection_->mask_property]
         : (effect_curve
             ? *effect_keys
@@ -332,7 +335,11 @@ void MainWindow::refreshCurveEditor()
         curve_selection_->segment_start_frame = keys.front().frame;
     }
     const auto segment=keys.size()>=2?std::optional<std::int64_t>(curve_selection_->segment_start_frame):std::nullopt;
-    if (anchor_keys) {
+    if(scale_keys) {
+        auto percentages=keys;for(auto& key:percentages)key.value*=100.;
+        curve_editor_->setScalarCurve(found->id,*curve_selection_->scale_axis==model::ScaleAxis::X
+            ?MotionUiTranslation::tr("Scale X (%)"):MotionUiTranslation::tr("Scale Y (%)"),percentages,segment);
+    } else if (anchor_keys) {
         curve_editor_->setScalarCurve(found->id,*curve_selection_->anchor_property==model::AnchorProperty::X
             ?MotionUiTranslation::tr("Anchor X (px)"):MotionUiTranslation::tr("Anchor Y (px)"),keys,segment);
     } else if(mask){const std::array<QString,5> names{{MotionUiTranslation::tr("Center X"),MotionUiTranslation::tr("Center Y"),MotionUiTranslation::tr("Width"),MotionUiTranslation::tr("Height"),MotionUiTranslation::tr("Rotation")}};
@@ -513,7 +520,7 @@ void MainWindow::removeCompositionLayer(model::LayerId id)
         syncTransformInspector();
         requestPreview();
     } catch (const std::exception& error) {
-        reportDocumentError("remove_layer", document_path_.value_or(std::filesystem::path{}), error);
+        reportDocumentError("remove_layer", document_path_.value_or(std::filesystem::path{}), std::runtime_error("Layer "+std::to_string(id)+": "+error.what()));
     }
 }
 
@@ -531,7 +538,7 @@ void MainWindow::changeSelectedLayerParent(model::LayerId parent)
             requestPreview();
         }
     } catch (const std::exception& error) {
-        reportDocumentError("set_layer_parent", document_path_.value_or(std::filesystem::path{}), error);
+        reportDocumentError("set_layer_parent", document_path_.value_or(std::filesystem::path{}), std::runtime_error("Layer "+std::to_string(selected_layer_id_)+", parent "+std::to_string(parent)+": "+error.what()));
     }
     syncTransformInspector();
 }
@@ -585,8 +592,9 @@ void MainWindow::syncTransformInspector()
     try {
         if (!hierarchy_snapshot_ || !hierarchy_snapshot_->matches(document_->canvasSize(), document_->layers()))
             hierarchy_snapshot_ = std::make_shared<const model::LayerTransformHierarchy>(document_->canvasSize(), document_->layers());
-        evaluated = hierarchy_snapshot_->evaluate(frame).at(selected->id);
-        const auto pivot=model::resolvedAnchorPosition(evaluated,model::evaluateLayerAnchor(*selected,
+        const auto resolved = hierarchy_snapshot_->evaluate(frame).at(selected->id);
+        evaluated=resolved;
+        const auto pivot=model::resolvedAnchorPosition(resolved,model::evaluateLayerAnchor(*selected,
             frame<selected->timeline_start_frame?0:frame-selected->timeline_start_frame),document_->canvasSize());
         evaluated.position_x=pivot[0];evaluated.position_y=pivot[1];
     } catch (const std::exception& error) {

@@ -2052,3 +2052,10 @@ protects the 4K matrix from a shorter inner-process timeout.
 The decoded self-test also injects host metadata allocation failure for images,
 transfers and both imported bridges, asserting exact reservation restoration and
 continued device validity. GPU fault/retirement tests remain separate.
+
+## Shared affine compositor regression boundary
+
+Video defaults retain uniform geometry. Shared CPU/OpenGL/Vulkan composition tests cover the optional Motion affine contract; Video transform/text/Fusion/GPU timeline and render-export regressions protect the unaffected default. No new Video UI or schema is introduced.
+
+The selected consumer and shared gates passed in the 2026-10-17 Release run;
+see [Scale boundary evidence](../../motion-editor/features/SCALE_AXES.md#automated-windows-evidence--2026-10-17).

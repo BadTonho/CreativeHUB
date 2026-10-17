@@ -384,12 +384,30 @@ void testMotionDocuments(const QString& root) {
     project.layers=hierarchy.layers();
     const auto anchor_path=QDir(QFileInfo(assets).absolutePath()).filePath("anchor.motion");
     Store::save(fsPath(anchor_path),project);
-    CS_TEST_CHECK(QJsonDocument::fromJson(readBytes(anchor_path)).object().value("version").toInt()==11);
+    CS_TEST_CHECK(QJsonDocument::fromJson(readBytes(anchor_path)).object().value("version").toInt()==12);
     const auto anchor_backup=backup(QDir(root).filePath("motion-anchor-v11"),anchor_path);
     CS_TEST_CHECK(Store::load(fsPath(anchor_backup.vault))==project);
     const auto restored_anchor=Store::load(fsPath(anchor_backup.restored));
     CS_TEST_CHECK(restored_anchor==project);
     CS_TEST_CHECK(std::filesystem::exists(restored_anchor.layers.front().source_path));
+    CS_TEST_CHECK(hierarchy.setLayerScaleAxisBase(null_id,ScaleAxis::Y,.45));
+    CS_TEST_CHECK(hierarchy.setLayerScaleLinked(id,false));
+    CS_TEST_CHECK(hierarchy.setLayerScaleAxisKeyframe(id,ScaleAxis::Y,0,1.25));
+    CS_TEST_CHECK(hierarchy.setLayerScaleAxisKeyframe(id,ScaleAxis::Y,30,.75));
+    CS_TEST_CHECK(hierarchy.setLayerScaleAxisKeyframeInterpolation(id,ScaleAxis::Y,0,
+        creative_suite::animation::InterpolationMode::CubicBezier,{.42,0,1,1}));
+    CS_TEST_CHECK(hierarchy.setLayerParent(id,0,7));
+    CS_TEST_CHECK(hierarchy.setLayerParent(id,null_id,7));
+    CS_TEST_CHECK(hierarchy.layers().front().parent_affine.has_value());
+    project.layers=hierarchy.layers();
+    const auto scale_path=QDir(QFileInfo(assets).absolutePath()).filePath("scale.motion");
+    Store::save(fsPath(scale_path),project);
+    const auto scale_backup=backup(QDir(root).filePath("motion-scale-v12"),scale_path);
+    CS_TEST_CHECK(Store::load(fsPath(scale_backup.vault))==project);
+    const auto restored_scale=Store::load(fsPath(scale_backup.restored));
+    CS_TEST_CHECK(restored_scale==project);
+    CS_TEST_CHECK(std::filesystem::exists(restored_scale.layers.front().source_path));
+
 }
 #endif
 

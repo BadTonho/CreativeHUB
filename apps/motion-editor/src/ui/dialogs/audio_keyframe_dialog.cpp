@@ -34,7 +34,7 @@ QString propertyName(Property property)
     switch (property) {
     case Property::PositionX: return MotionUiTranslation::tr("Position X (canvas ratio)");
     case Property::PositionY: return MotionUiTranslation::tr("Position Y (canvas ratio)");
-    case Property::Scale: return MotionUiTranslation::tr("Scale");
+    case Property::Scale: return MotionUiTranslation::tr("Scale X and Y (%)");
     case Property::Rotation: return MotionUiTranslation::tr("Rotation (degrees)");
     case Property::Opacity: return MotionUiTranslation::tr("Opacity");
     }
@@ -59,6 +59,10 @@ AudioKeyframeDialog::AudioKeyframeDialog(
         this);
     description->setWordWrap(true);
     layout->addWidget(description);
+    auto* scale_note = new QLabel(MotionUiTranslation::tr("Scale replaces both axis curves with the same animation, regardless of the link."), this);
+    scale_note->setObjectName(QStringLiteral("motion-audio-scale-note"));
+    scale_note->setWordWrap(true);
+    layout->addWidget(scale_note);
 
     auto* selected_layer = new QLabel(
         MotionUiTranslation::tr("Selected layer: %1").arg(layer_name), this);
@@ -142,6 +146,7 @@ AudioKeyframeDialogSettings AudioKeyframeDialog::settings() const
     result.property = static_cast<Property>(property_->currentData().toInt());
     result.minimum_value = minimum_value_->value();
     result.maximum_value = maximum_value_->value();
+    if(result.property==Property::Scale){result.minimum_value/=100.;result.maximum_value/=100.;}
     return result;
 }
 
@@ -184,9 +189,10 @@ void AudioKeyframeDialog::setPropertyDefaults(int property_index)
         maximum = 1.0;
         break;
     case Property::Scale:
-        minimum = 1.0;
-        maximum = 2.0;
-        allowed_minimum = 0.000001;
+        minimum = 100.0;
+        maximum = 200.0;
+        allowed_minimum = 0.0001;
+        allowed_maximum = 100'000'000.;
         break;
     case Property::Rotation:
         minimum = 0.0;

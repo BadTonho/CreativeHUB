@@ -1161,6 +1161,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
         auto batch=beginCommandBatch(cancel);
         auto& p=*device_->impl_;std::lock_guard lock(p.mutex);
+        if(operation.source_to_canvas)throw Failure("Affine image Transform is not implemented by Vulkan.",0,Status::Unsupported);
         if(!animation::validTransform(operation.transform) || !std::isfinite(operation.blur_radius_pixels) || operation.blur_radius_pixels<0 || operation.blur_radius_pixels>100)
             throw Failure("Invalid Vulkan image operation.",0,Status::Unsupported);
         if(operation.transform.rotation_degrees!=0 && !p.precise)throw Failure("Precise rotation requires shaderFloat64.",0,Status::Unsupported);
@@ -1223,6 +1224,8 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
 #ifdef CS_HAS_VULKAN
         if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
         checkCapacity(width,height);
+        if(std::any_of(layers.begin(),layers.end(),[](const auto& layer){return layer.source_to_canvas.has_value();}))
+            throw Failure("Affine layer geometry is not implemented by Vulkan.",0,Status::Unsupported);
         auto batch=beginCommandBatch(cancel);
         auto& p=*device_->impl_;std::lock_guard lock(p.mutex);
         std::shared_ptr<VulkanImage> canvas;Parameters params;
@@ -1230,7 +1233,8 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
         // the canvas. The existing batch allocator reuses only unleased images.
         const auto initializeCanvas=[&]{if(!canvas){canvas=p.image(device_,width,height);Parameters clear;clear.control[0]=8;p.dispatch(canvas,{},{},canvas,clear);}};
         for(const auto& layer:layers){
-            cancelled(cancel);if(!layer.frame || !animation::validTransform(layer.transform))continue;
+            cancelled(cancel);
+            if(!layer.frame || !animation::validTransform(layer.transform))continue;
             if(layer.transform.rotation_degrees!=0 && !p.precise)throw Failure("Precise rotation requires shaderFloat64.",0,Status::Unsupported);
             OpenGlImageInput source{layer.frame,layer.texture_frame,layer.native_frame};
             OpenGlTextureFramePtr processed;

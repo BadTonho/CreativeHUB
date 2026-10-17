@@ -100,6 +100,17 @@ parameters, fractional radii and shared mask references remain editable.
 Radius follows receiver pixels and is not rescaled with FPS; native source
 profiles preserve the processing dimensions. See [Gaussian Blur](video-editor/features/GAUSSIAN_BLUR.md).
 
+## Independent Motion scale compatibility
+
+Motion v12 adds [Scale X/Y](motion-editor/features/SCALE_AXES.md), while `.cscomp`
+remains v3. Export emits uniform Scale only when both axes have identical bases
+and full scalar curves, including frame/value/easing. An absent Y channel follows
+X and qualifies. Unequal bases or distinct curves are refused with layer IDs;
+affine bindings are also refused, alongside existing incompatible hierarchy,
+Anchor and effect animation. No implicit flattening or curve sampling occurs.
+`creative-suite-motion-editor-scale` covers acceptance/refusal; backup tests use
+the native v12 producer/consumer to preserve all new records after relocation.
+
 ## Native persistence and backups
 
 Motion's native [Anchor Point](motion-editor/features/ANCHOR_POINT.md) is not
@@ -115,8 +126,8 @@ Gaussian Blur node; versions through 30 reject that node. Older supported
 projects retain their existing rendering defaults; readers predating these
 versions reject the newer files. Motion v7 introduced composition
 name/duration and fractional font-size metadata. Autosave and recovery use the
-same native serializers. Hub backups accept CSP 1–31 and Motion 1–11, retain
-presentation, Anchor bases/curves, hierarchy, compensation and effect-curve records, and rebase existing media/Input paths. CSP 32 and Motion 12
+same native serializers. Hub backups accept CSP 1–31 and Motion 1–12, retain
+presentation, Scale Y/link/affine binding, Anchor bases/curves, hierarchy, compensation and effect-curve records, and rebase existing media/Input paths. CSP 32 and Motion 13
 are rejected. Application versions and the existing linked-handoff v1 protocol
 are unchanged.
 

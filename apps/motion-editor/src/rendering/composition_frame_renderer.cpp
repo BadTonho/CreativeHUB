@@ -255,7 +255,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     composition_layers.reserve(request.layers.size());
     owned_frames.reserve(request.layers.size());
     composition_layer_ids.reserve(request.layers.size());
-    std::unordered_map<model::LayerId, creative_suite::animation::Transform2D> resolved;
+    std::unordered_map<model::LayerId, model::ResolvedLayerTransform> resolved;
     try {
         if (request.hierarchy) resolved = request.hierarchy->evaluate(request.composition_frame);
     } catch (const std::exception& error) {
@@ -275,13 +275,20 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             if (fail_on_media_error) throw std::runtime_error("Missing layer hierarchy snapshot node.");
             return {};
         }
-        auto effective_transform = request.hierarchy ? resolved_entry->second :
+        auto effective_transform = request.hierarchy ? static_cast<const creative_suite::animation::Transform2D&>(resolved_entry->second) :
             creative_suite::animation::evaluateTransform(layer.transform, layer.keyframes, layer.local_frame);
+        std::optional<model::AffineTransform> effective_world;
+        if(request.hierarchy && resolved_entry->second.affine)effective_world=resolved_entry->second.world;
         if (!request.hierarchy) {
             const model::AnchorPoint anchor{
                 creative_suite::animation::evaluateScalar(layer.anchor_point.x_pixels,layer.anchor_keyframes[0],layer.local_frame),
                 creative_suite::animation::evaluateScalar(layer.anchor_point.y_pixels,layer.anchor_keyframes[1],layer.local_frame)};
-            if (anchor != model::AnchorPoint{}) {
+            const auto sy=layer.scale_y?creative_suite::animation::evaluateScalar(layer.scale_y->value,layer.scale_y->keyframes,layer.local_frame):effective_transform.scale;
+            if(sy!=effective_transform.scale) {
+                model::CompositionLayer local{layer.id,model::LayerKind::Null,""};local.transform=effective_transform;
+                local.scale_y=model::ScaleChannel{sy,{}};local.anchor_point=anchor;
+                effective_world=model::localLayerGeometry(local,request.canvas_size,0);
+            } else if (anchor != model::AnchorPoint{}) {
                 const auto geometry = model::geometryOffset(effective_transform,request.canvas_size,anchor);
                 effective_transform.position_x=geometry.translation_x_pixels/request.canvas_size.width;
                 effective_transform.position_y=geometry.translation_y_pixels/request.canvas_size.height;
@@ -462,7 +469,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             if(try_gpu_effects && !gpu_compositor_)gpu_compositor_=std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(
                 gpu_surface_,creative_suite::composition::OpenGlPrecisionPolicy::Automatic,texture_share_context_,texture_budget_);
             MaskedLayerFrame processed;
-            try {processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel,&effective_transform);}
+            try {processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel,&effective_transform,effective_world?&*effective_world:nullptr);}
             catch(const std::exception& e) {
                 if(should_cancel && should_cancel())return {};
                 creative_suite::diagnostics::Logger::instance().log(try_gpu_effects?creative_suite::diagnostics::Level::Warning:creative_suite::diagnostics::Level::Error,
@@ -584,8 +591,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         }
         owned_frames.push_back(frame);
         auto transform = effective_transform;
-        if (layer.kind == model::LayerKind::Text ||
-            layer.kind == model::LayerKind::Shape) {
+        if (!effective_world && (layer.kind == model::LayerKind::Text ||
+            layer.kind == model::LayerKind::Shape)) {
             const double fit_scale = std::min(
                 static_cast<double>(request.canvas_size.width) / frame->width,
                 static_cast<double>(request.canvas_size.height) / frame->height);
@@ -598,6 +605,11 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         const auto composition_index = composition_layers.size();
         composition_layers.push_back(CompositionLayer{frame.get(), transform, {}, {},
             std::move(gpu_adjustments), std::move(gpu_effects)});
+        if(effective_world) {
+            const bool intrinsic=layer.kind==model::LayerKind::Text || layer.kind==model::LayerKind::Shape;
+            const auto fit=intrinsic || fusion_presentation?1.:std::min(double(request.canvas_size.width)/frame->width,double(request.canvas_size.height)/frame->height);
+            composition_layers.back().source_to_canvas=model::sourcePixelGeometry(*effective_world,frame->width,frame->height,fit);
+        }
         composition_layer_ids.push_back(layer.id);
         if (!composition_layers.back().gpu_color_adjustments.empty() ||
             !composition_layers.back().gpu_effects.empty()) {

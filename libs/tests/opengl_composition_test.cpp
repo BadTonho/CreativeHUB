@@ -42,9 +42,9 @@ void compare(OpenGlFrameCompositor& gpu, int width, int height,
     auto output = gpu.compose(width, height, layers, {}, &timings);
     if (output.status == OpenGlCompositionStatus::Unsupported && output.operation == "check-precision") {
         require(!output.frame && std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
-            return layer.transform.rotation_degrees != 0;
+            return layer.transform.rotation_degrees != 0 || layer.source_to_canvas.has_value();
         }), "Unexpected precision fallback.");
-        std::cout << "LIMITED: " << name << ": rotated GPU parity pending; " << output.cause << '\n';
+        std::cout << "LIMITED: " << name << ": precise GPU parity pending; " << output.cause << '\n';
         return;
     }
     require(output.status == OpenGlCompositionStatus::Complete && output.frame.has_value(),
@@ -72,6 +72,26 @@ void compare(OpenGlFrameCompositor& gpu, int width, int height,
         name + ": on-demand texture readback differs from RGBA composition");
 }
 void parity(OpenGlFrameCompositor& gpu) {
+    {
+        auto affine_source=fixture(13,7,true,4);
+        CompositionLayer affine_layer{&affine_source};
+        affine_layer.source_to_canvas=AffineTransform2D{1.75,.35,.7,.625,8.125,4.25};
+        affine_layer.transform={.9,.1,3,0,.73};
+        compare(gpu,53,39,{affine_layer},"sheared source-pixel affine override");
+        OpenGlImageOperation affine_operation;
+        affine_operation.kind=OpenGlImageOperationKind::Transform;
+        affine_operation.background={&affine_source};affine_operation.output_width=53;affine_operation.output_height=39;
+        affine_operation.transform.opacity=.73;affine_operation.source_to_canvas=affine_layer.source_to_canvas;
+        auto affine_result=gpu.processImage(affine_operation);
+        if(affine_result.status==OpenGlCompositionStatus::Unsupported) {
+            require(!affine_result.frame && affine_result.operation=="affine-image-transform","Affine stage fallback contract changed.");
+        } else {
+            require(affine_result.status==OpenGlCompositionStatus::Complete && affine_result.frame,"Affine image Transform failed.");
+            auto rgba=gpu.readback(affine_result.frame);
+            auto expected=transformAffineFrame(affine_source,53,39,*affine_layer.source_to_canvas,.73);
+            require(rgba.frame && expected && rgba.frame->rgba_pixels==expected->rgba_pixels,"Affine Transform CPU/OpenGL parity failed.");
+        }
+    } // Release the affine result lease before exercising the bounded mask pool.
     // Generic mask operations accept coverage uploaded separately and retain
     // resident image intermediates until the caller explicitly requests RGBA.
     auto original=fixture(16,12,true), processed=fixture(16,12,true), mask=fixture(16,12,false);
@@ -662,6 +682,9 @@ int main(int argc, char** argv) {
                         require(limited.status == OpenGlCompositionStatus::Unsupported &&
                             limited.operation == "check-precision" && !limited.frame,
                             "Core-only rotation did not request CPU fallback.");
+                        CompositionLayer affine{&f};affine.source_to_canvas=AffineTransform2D{};
+                        require(baseline.compose(53,39,{affine}).status==OpenGlCompositionStatus::Unsupported,
+                            "Core-only affine geometry did not request CPU fallback.");
                         compare(baseline, 53, 39, {{&f}}, "GPU reuse after precision fallback");
                     }
                     if (measure && activation == 0) benchmark(gpu);

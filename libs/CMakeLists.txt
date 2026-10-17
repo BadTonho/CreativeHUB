@@ -44,6 +44,7 @@ target_compile_features(creative-suite-effects PUBLIC cxx_std_20)
 
 add_library(creative-suite-composition STATIC
     composition/src/frame_compositor.cpp
+    composition/include/creative_suite/composition/affine_transform.h
     composition/include/creative_suite/composition/frame_compositor.h
       composition/include/creative_suite/composition/shape_mask.h
 )

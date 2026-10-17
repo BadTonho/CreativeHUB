@@ -94,13 +94,14 @@ motion::ui::PreviewRequest request()
     for (auto& layer : result.layers) {
         layer.anchor_point={3.25,-2.5};layer.anchor_keyframes[0]={{0,3.25},{24,8}};
         motion::model::CompositionLayer node{layer.id,layer.kind,"Layer"};
-        node.transform=layer.transform;node.keyframes=layer.keyframes;
+        layer.scale_y=motion::model::ScaleChannel{.6,{{0,.6},{24,.9}}};layer.transform.rotation_degrees=27;
+        node.transform=layer.transform;node.keyframes=layer.keyframes;node.scale_y=layer.scale_y;
         node.anchor_point=layer.anchor_point;node.anchor_keyframes=layer.anchor_keyframes;
         node.parent_id=10;hierarchy.push_back(std::move(node));
     }
     motion::model::CompositionLayer parent{10,motion::model::LayerKind::Null,"Control"};
     parent.transform={.1,.05,.8,12,1};parent.visible=false;
-    parent.anchor_point={-1,4};
+    parent.anchor_point={-1,4};parent.scale_y=motion::model::ScaleChannel{1.3,{}};
     hierarchy.push_back(parent);
     result.hierarchy=std::make_shared<const motion::model::LayerTransformHierarchy>(result.canvas_size,hierarchy);
     return result;
@@ -319,6 +320,29 @@ int main(int argc, char* argv[])
                     mixed_snapshot->gpu_gaussian_blur_fallbacks ==
                         (gpu_backend_available ? 0U : 2U),
                 "ordered mixed effects use GPU when available and record CPU fallback otherwise");
+        metrics.reset();
+        auto masked_request=mixed_request;
+        motion::model::Mask mask;mask.id=1;mask.kind=creative_suite::composition::ShapeMaskKind::Ellipse;
+        mask.parameters.width=.8;mask.parameters.height=.65;
+        masked_request.masks=std::make_shared<const std::vector<motion::model::Mask>>(std::vector{mask});
+        masked_request.layers.front().source_mask=1;masked_request.layers.front().transform_mask=1;
+        std::get<motion::model::ColorAdjustmentEffect>(masked_request.layers.front().effects.front()).mask=1;
+        QObject mask_receiver;creative_suite::media::RgbaFramePtr masked_frame;std::uint64_t mask_generation=0;
+        motion::ui::PreviewRenderer masked_renderer(&mask_receiver,
+            [&](std::uint64_t generation,motion::ui::PreviewRequestMode,std::uint64_t,creative_suite::media::RgbaFramePtr frame){mask_generation=generation;masked_frame=std::move(frame);},
+            {},&metrics,true,surface.get());
+        const auto wanted_mask=masked_renderer.submit(masked_request);
+        require(waitFor([&]{return mask_generation==wanted_mask;})&&masked_frame,"affine masked GPU preview completes");
+        motion::ui::CompositionFrameRenderer masked_cpu(false);const auto masked_reference=masked_cpu.render(masked_request);
+        require(masked_reference&&masked_reference->rgba_pixels.size()==masked_frame->rgba_pixels.size(),"affine masked CPU reference");
+        for(std::size_t i=0;i<masked_frame->rgba_pixels.size();++i)
+            require(std::abs(int(masked_frame->rgba_pixels[i])-int(masked_reference->rgba_pixels[i]))<=(i%4==3?0:2),
+                "affine hierarchy with Source/Effect/Transform masks agrees on CPU/GPU");
+        masked_renderer.stopAndWait();
+        const auto masked_metrics=metrics.takeSnapshotAndReset();
+        require(masked_metrics&&(!gpu_backend_available || (masked_metrics->gpu_composition_frames==1&&masked_metrics->gpu_composition_fallbacks==0)),
+            "native affine masked preview cannot silently pass through CPU fallback");
+
     }
 
     return EXIT_SUCCESS;

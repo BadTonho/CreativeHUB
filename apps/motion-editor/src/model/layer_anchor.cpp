@@ -15,8 +15,7 @@ bool validProperty(AnchorProperty property) noexcept
 }
 void validateGeometry(const CompositionLayer& layer, CanvasSize canvas, std::int64_t local_frame)
 {
-    const auto transform = a::evaluateTransform(layer.transform, layer.keyframes, local_frame);
-    (void)geometryOffset(transform, canvas, evaluateLayerAnchor(layer, local_frame));
+    (void)localLayerGeometry(layer, canvas, local_frame);
 }
 }
 
@@ -36,7 +35,7 @@ bool CompositionDocument::setLayerAnchorPoint(LayerId id, AnchorPoint point)
     auto* layer = findLayer(id);
     if (!layer || !validAnchorPoint(point) || point == layer->anchor_point) return false;
     // Validate the base geometry as well as the stored finite values.
-    (void)geometryOffset(layer->transform, canvas_size_, point);
+    (void)localGeometry(layer->transform,layerScaleBase(*layer,ScaleAxis::Y),canvas_size_,point);
     layer->anchor_point = point;
     return true;
 }
@@ -49,7 +48,7 @@ bool CompositionDocument::replaceLayerAnchorKeyframes(LayerId id, AnchorProperty
     if (target == keys) return false;
     auto candidate = *layer;
     candidate.anchor_keyframes[static_cast<std::size_t>(property)] = std::move(keys);
-    (void)geometryOffset(candidate.transform, canvas_size_, candidate.anchor_point);
+    (void)localGeometry(candidate.transform,layerScaleBase(candidate,ScaleAxis::Y),canvas_size_,candidate.anchor_point);
     for (const auto& key : candidate.anchor_keyframes[static_cast<std::size_t>(property)])
         validateGeometry(candidate, canvas_size_, key.frame);
     // Removing the final key exposes the base; removing an interior key changes
@@ -115,8 +114,13 @@ bool CompositionDocument::repositionLayerAnchorKeepingPose(LayerId id, AnchorPoi
     const auto transform = a::evaluateTransform(layer->transform, layer->keyframes, local);
     const auto radians = std::remainder(transform.rotation_degrees, 360.0) * std::numbers::pi / 180.0;
     const auto dx = point.x_pixels - previous.x_pixels, dy = point.y_pixels - previous.y_pixels;
-    const auto x = transform.position_x + transform.scale * (std::cos(radians)*dx - std::sin(radians)*dy) / canvas_size_.width;
-    const auto y = transform.position_y + transform.scale * (std::sin(radians)*dx + std::cos(radians)*dy) / canvas_size_.height;
+    const auto scale=evaluateLayerScale(*layer,local);
+    const auto x = transform.position_x + (scale[0]==scale[1]
+        ?transform.scale*(std::cos(radians)*dx-std::sin(radians)*dy)
+        :std::cos(radians)*scale[0]*dx-std::sin(radians)*scale[1]*dy)/canvas_size_.width;
+    const auto y = transform.position_y + (scale[0]==scale[1]
+        ?transform.scale*(std::sin(radians)*dx+std::cos(radians)*dy)
+        :std::sin(radians)*scale[0]*dx+std::cos(radians)*scale[1]*dy)/canvas_size_.height;
     if (!std::isfinite(x) || !std::isfinite(y))
         throw std::runtime_error("Anchor repositioning exceeds finite position limits for layer " + std::to_string(id));
     auto candidate = *layer;

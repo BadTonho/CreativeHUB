@@ -222,8 +222,8 @@ int main(int argc, char** argv)
                 round_trip_video->maximum_timeline_duration_frames == 53,
             "video source-in, selected duration, and available source tail round-trip");
     const auto json = readBytes(document_path);
-    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 11,
-            "documents are written using schema version 11");
+    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 12,
+            "documents are written using schema version 12");
     const auto round_trip_image = std::find_if(
         round_trip.layers.begin(), round_trip.layers.end(), [](const auto& layer) {
             return layer.kind == motion::model::LayerKind::Image;
@@ -334,10 +334,10 @@ int main(int argc, char** argv)
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v1);
     const auto saved_legacy_v1 = motion::persistence::MotionDocumentStore::load(document_path);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 11 &&
+                .value(QStringLiteral("version")).toInt() == 12 &&
                 std::none_of(saved_legacy_v1.layers.begin(), saved_legacy_v1.layers.end(),
                     [](const auto& layer) { return layer.linked_image.has_value(); }),
-            "saving v1 upgrades to v11 while legacy links remain absent");
+            "saving v1 upgrades to v12 while legacy links remain absent");
 
     auto legacy_v2 = valid_json;
     legacy_v2.insert(QStringLiteral("version"), 2);
@@ -375,8 +375,8 @@ int main(int argc, char** argv)
             "version 2 keys migrate with Linear interpolation");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v2);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 11,
-            "saving a loaded v2 project upgrades it to v11");
+                .value(QStringLiteral("version")).toInt() == 12,
+            "saving a loaded v2 project upgrades it to v12");
 
     auto legacy_v3 = valid_json;
     legacy_v3.insert(QStringLiteral("version"), 3);
@@ -400,8 +400,8 @@ int main(int argc, char** argv)
             "version 3 documents retain curves and migrate with empty effect stacks");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v3);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 11,
-            "saving a loaded v3 project upgrades it to v11");
+                .value(QStringLiteral("version")).toInt() == 12,
+            "saving a loaded v3 project upgrades it to v12");
 
     auto legacy_v4 = valid_json;
     legacy_v4.insert(QStringLiteral("version"), 4);
@@ -424,8 +424,8 @@ int main(int argc, char** argv)
             "version 4 video layers migrate with a zero source-in frame");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v4);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 11,
-            "saving a loaded v4 project upgrades it to v11");
+                .value(QStringLiteral("version")).toInt() == 12,
+            "saving a loaded v4 project upgrades it to v12");
 
     auto legacy_v5 = valid_json;
     legacy_v5.insert(QStringLiteral("version"), 5);
@@ -436,8 +436,8 @@ int main(int argc, char** argv)
             "v5 documents ignore v6-only linked image metadata");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v5);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 11,
-            "saving a loaded v5 project upgrades it to v11");
+                .value(QStringLiteral("version")).toInt() == 12,
+            "saving a loaded v5 project upgrades it to v12");
 
     creative_suite::motion_handoff::Request request;
     request.origin_kind = QStringLiteral("timeline_clip");

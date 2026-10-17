@@ -4,9 +4,21 @@ Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
 `hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion12.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v11 Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v12 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v12 Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v13 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Motion hierarchy backup verification
+
+### Motion scale axes and affine compensation
+
+`hub-backup-format-test` writes native v12 with independent Y/Bezier keys, link
+state, affine compensation, Anchor, Null hierarchy, masks/effects and linked
+media. It reopens vault and relocated restore with the Motion reader and verifies
+media paths. `hub-backup-manager-test` rejects future v13. Manual acceptance:
+back up a v12 project in Hub, restore to another directory, reopen in Motion and
+compare animation/links/media; visual and other-platform checks remain pending.
+Both backup gates passed in the 2026-10-17 Release regression selection. See
+[Scale evidence](../../motion-editor/features/SCALE_AXES.md#automated-windows-evidence--2026-10-17)
+and [pending checks](../../motion-editor/features/SCALE_AXES.md#pending-manual-checks).
 
 ### Motion Anchor Point, 2026-10-17
 
@@ -75,9 +87,9 @@ Follow the repository-wide requirements in
 ## Coverage index
 
 Motion Anchor backup coverage uses `test_backup_formats.cpp`
-(`hub-backup-format-test`) with actual v11 writer/reader round trips of base and
+(`hub-backup-format-test`) with the current v12 writer/reader round trips of base and
 Bezier-animated Anchor, an anchored Null, parent IDs/compensation, masks/effects
-and linked-image paths. `hub-backup-manager-test` rejects v12. Vault and relocated
+and linked-image paths. `hub-backup-manager-test` rejects v13. Vault and relocated
 restore comparisons protect retained data and media references; native backup UI
 and platform acceptance remain pending in [Backups](../BACKUPS.md) and the
 [Anchor checklist](../../motion-editor/features/ANCHOR_POINT.md#pending-manual-checks).

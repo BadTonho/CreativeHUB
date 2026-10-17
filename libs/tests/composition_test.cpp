@@ -48,6 +48,30 @@ int main() {
     using namespace creative_suite;
 
     try {
+        // This source-pixel override must bypass aspect-fit and all legacy fast paths.
+        const auto affine_source=frame(2,2,{255,0,0,255, 0,255,0,255, 0,0,255,255, 255,255,255,255});
+        composition::CompositionLayer affine_layer{&affine_source};
+        affine_layer.transform={.1,.9,8,0,1}; // ignored geometry
+        affine_layer.source_to_canvas=composition::AffineTransform2D{2,0,1,1,1,1};
+        const auto affine=composition::FrameCompositor::compose(9,6,{affine_layer});
+        require(affine && pixelEquals(*affine,1,1,255,0,0,255) && pixelEquals(*affine,4,1,0,255,0,255) &&
+            pixelEquals(*affine,3,2,0,0,255,255) && pixelEquals(*affine,5,2,255,255,255,255) &&
+            pixelEquals(*affine,0,0,0,0,0,255),"Known sheared affine source sampling failed.");
+        require(!composition::FrameCompositor::canUseAlphaCoverageFastPath(affine_layer),"Affine override entered legacy fast path.");
+        const auto stage=composition::transformAffineFrame(affine_source,9,6,*affine_layer.source_to_canvas,.5);
+        require(stage && pixelEquals(*stage,1,1,255,0,0,128) && pixelEquals(*stage,0,0,0,0,0,0),
+            "Affine Transform stage changed sampling or transparency.");
+        require(!composition::transformAffineFrame(affine_source,9,6,{1,0,0,1,1e200,1e200},1,[]{return true;}),
+            "Cancelled off-canvas Transform produced an image.");
+        require(!composition::validAffine({0,0,0,1,0,0}) &&
+            !composition::validAffine({1,0,0,1,std::numeric_limits<double>::infinity(),0}),"Invalid affine accepted.");
+        auto panorama=frame(20000,1,std::vector<std::uint8_t>(80000,255));
+        composition::CompositionLayer wide{&panorama};wide.source_to_canvas=composition::AffineTransform2D{.0002,0,0,1,0,0};
+        const auto wide_output=composition::FrameCompositor::compose(5,2,{wide});
+        require(wide_output&&pixelEquals(*wide_output,0,0,255,255,255,255),"Affine CPU composition imposed a new source-dimension limit.");
+        bool singular=false;try{(void)composition::transformAffineFrame(affine_source,9,6,{0,0,0,1,0,0},1);}catch(const std::exception&){singular=true;}
+        require(singular,"Singular affine Transform did not report an error.");
+
         auto original=frame(3,1,{255,0,0,0, 100,20,40,128, 7,8,9,255});
         auto processed=frame(3,1,{0,0,255,255, 30,40,50,180, 99,88,77,0});
         const auto processed_source=processed;
