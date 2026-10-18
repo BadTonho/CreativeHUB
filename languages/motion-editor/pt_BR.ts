@@ -4,6 +4,14 @@
 <context>
     <name>MotionUiTranslation</name>
     <message>
+        <source>Drag X, Y or XY to scale the layer. The Inspector link controls proportions. Positive limits stop the drag; Escape cancels.</source>
+        <translation>Arraste X, Y ou XY para ajustar a escala da camada. O vínculo do Inspector controla as proporções. O arraste para nos limites positivos; Escape cancela.</translation>
+    </message>
+    <message>
+        <source>The layer could not be scaled. Check the Motion Studio log for details.</source>
+        <translation>Não foi possível ajustar a escala da camada. Consulte o log do Motion Studio para obter detalhes.</translation>
+    </message>
+    <message>
         <source>Drag the curved-arrow handle to rotate the layer. Full turns are preserved. Press Escape to cancel.</source>
         <translation>Arraste a alça com seta curva para girar a camada. Voltas completas são preservadas. Pressione Escape para cancelar.</translation>
     </message>

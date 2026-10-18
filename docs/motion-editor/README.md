@@ -15,6 +15,7 @@ This directory groups approved scope and open work with the native format, featu
 | Dragging pivots without moving content | [Pan Behind](features/PAN_BEHIND.md) |
 | Moving layers directly in the Viewer | [Position drag](features/POSITION_DRAG.md) |
 | Rotating layers directly in the Viewer | [Rotation drag](features/ROTATION_DRAG.md) |
+| Scaling layers directly in the Viewer | [Scale X/Y drag](features/SCALE_DRAG.md) |
 | Keyboard shortcuts | [Shortcuts](SHORTCUTS.md) |
 | Native document schema and migrations | [Document format](architecture/FORMAT.md) |
 | Shared-library ownership and reuse boundaries | [Reuse plan](architecture/REUSE_PLAN.md) |

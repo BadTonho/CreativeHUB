@@ -1,5 +1,6 @@
 #pragma once
 #include "model/layer_rotation.h"
+#include "model/layer_scale_drag.h"
 
 #include "model/composition_document.h"
 #include "model/layer_transform_hierarchy.h"
@@ -168,6 +169,12 @@ private:
     void cancelRotationDrag();
     void commitRotationDrag();
     void logRotationDragFailure(const char*,model::LayerId,std::int64_t,const std::exception&);
+    bool beginScaleDrag(model::ScaleDragControl,QPointF lever);
+    bool previewScaleDrag(QPointF delta);
+    void cancelScaleDrag();
+    void commitScaleDrag();
+    void logScaleDragFailure(const char*,model::LayerId,std::int64_t,const std::exception&);
+    void syncScaleGuideAxes(const model::AffineTransform&,std::array<double,2>);
     void commitAnchorReposition(model::LayerId id, model::AnchorPoint anchor, std::int64_t frame);
     void logPanBehindFailure(const char* operation, model::LayerId id, std::int64_t frame,
         const std::exception& error);
@@ -323,12 +330,24 @@ private:
         model::CanvasSize canvas;
         double initial, preview;
         model::AffineTransform outer;
+        std::array<double,2> scales;
         model::RotationDragCalculation calculation;
         std::shared_ptr<const PreviewRequest> snapshot;
         std::uint64_t session;
         bool submitted=false;
     };
     std::optional<RotationDragGesture> rotation_drag_;
+    struct ScaleDragGesture {
+        model::LayerId id;
+        std::int64_t frame;
+        model::CanvasSize canvas;
+        std::array<double,2> initial,preview;
+        model::ScaleDragCalculation calculation;
+        std::shared_ptr<const PreviewRequest> snapshot;
+        std::uint64_t session;
+        bool submitted=false;
+    };
+    std::optional<ScaleDragGesture> scale_drag_;
     struct ParentPickWhipGesture { model::LayerId child; std::int64_t frame; };
     std::optional<ParentPickWhipGesture> parent_pick_whip_;
     double active_scale_ratio_=1;

@@ -152,3 +152,12 @@ monotonic session identities and paint validation; presentation recovery
 resubmits the active override. No gesture-specific readback or texture lease is
 added. Portable fallback coverage and native GPU acceptance remain separate;
 the known Windows OpenGL presentation failure remains open.
+
+## Viewer Scale gesture
+
+[Scale drag](../features/SCALE_DRAG.md) uses the same bounded shared-scene
+queue and RGBA/texture validation as Position/Rotation. Recovery resubmits the
+current two-axis override; ending the gesture invalidates transient deliveries.
+No new readback, raster or GPU image contract is introduced. Native GPU
+acceptance and the known OpenGL presentation failure remain separate from
+portable fallback coverage.

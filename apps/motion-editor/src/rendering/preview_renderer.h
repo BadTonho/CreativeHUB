@@ -66,6 +66,7 @@ struct PreviewRequest {
     std::shared_ptr<const PreviewSceneSnapshot> scene;
     std::optional<model::LayerPositionOverride> position_override;
     std::optional<model::LayerRotationOverride> rotation_override;
+    std::optional<model::LayerScaleOverride> scale_override;
     std::uint64_t gesture_session = 0;
     [[nodiscard]] bool validSceneStorage() const noexcept {
         return !scene || (layers.empty() && !masks && !hierarchy);

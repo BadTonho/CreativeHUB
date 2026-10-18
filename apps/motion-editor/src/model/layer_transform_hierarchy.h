@@ -37,7 +37,7 @@ public:
     [[nodiscard]] bool matches(CanvasSize canvas, const std::vector<CompositionLayer>& layers) const noexcept;
     [[nodiscard]] std::unordered_map<LayerId, ResolvedLayerTransform>
         evaluate(std::int64_t composition_frame, std::optional<LayerPositionOverride> position = {},
-            std::optional<LayerRotationOverride> rotation = {}) const;
+            std::optional<LayerRotationOverride> rotation = {}, std::optional<LayerScaleOverride> scale = {}) const;
 
 private:
     struct Node {

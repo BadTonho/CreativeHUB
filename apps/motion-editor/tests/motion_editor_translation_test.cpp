@@ -156,7 +156,9 @@ int main(int argc, char* argv[])
 
     {
         motion::ui::CompositionViewer viewer;
-        if (!check(viewer.toolTip().startsWith(QStringLiteral("Arraste o pivô para reposicioná-lo sem mover a camada. Pressione Escape para cancelar.")) &&
+        if (!check(viewer.toolTip().contains(QStringLiteral("Arraste X, Y ou XY para ajustar a escala da camada. O vínculo do Inspector controla as proporções. O arraste para nos limites positivos; Escape cancela.")) &&
+                   motion::ui::MotionUiTranslation::tr("The layer could not be scaled. Check the Motion Studio log for details.") == QStringLiteral("Não foi possível ajustar a escala da camada. Consulte o log do Motion Studio para obter detalhes.") &&
+                   viewer.toolTip().startsWith(QStringLiteral("Arraste o pivô para reposicioná-lo sem mover a camada. Pressione Escape para cancelar.")) &&
                    viewer.toolTip().contains(QStringLiteral("Arraste a alça de quatro direções para mover a camada. Pressione Escape para cancelar.")) &&
                    viewer.toolTip().contains(QStringLiteral("Arraste a alça com seta curva para girar a camada. Voltas completas são preservadas. Pressione Escape para cancelar.")) &&
                    motion::ui::MotionUiTranslation::tr("The layer could not be rotated. Check the Motion Studio log for details.") ==
@@ -183,7 +185,9 @@ int main(int argc, char* argv[])
 
     {
         motion::ui::CompositionViewer viewer;
-        if (!check(viewer.toolTip().startsWith(QStringLiteral("Drag the pivot to reposition it without moving the layer. Press Escape to cancel.")) &&
+        if (!check(viewer.toolTip().contains(QStringLiteral("Drag X, Y or XY to scale the layer. The Inspector link controls proportions. Positive limits stop the drag; Escape cancels.")) &&
+                   motion::ui::MotionUiTranslation::tr("The layer could not be scaled. Check the Motion Studio log for details.") == QStringLiteral("The layer could not be scaled. Check the Motion Studio log for details.") &&
+                   viewer.toolTip().startsWith(QStringLiteral("Drag the pivot to reposition it without moving the layer. Press Escape to cancel.")) &&
                    viewer.toolTip().contains(QStringLiteral("Drag the four-way handle to move the layer. Press Escape to cancel.")) &&
                    viewer.toolTip().contains(QStringLiteral("Drag the curved-arrow handle to rotate the layer. Full turns are preserved. Press Escape to cancel.")) &&
                    motion::ui::MotionUiTranslation::tr("The layer could not be rotated. Check the Motion Studio log for details.") ==

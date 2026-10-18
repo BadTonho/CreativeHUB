@@ -182,7 +182,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     if (texture_busy) *texture_busy = false;
     if (async_ticket) async_ticket->reset();
     if (async_failure) *async_failure = false;
-    if (!request.validSceneStorage() || ((request.position_override || request.rotation_override) && !request.sceneHierarchy()))
+    if (!request.validSceneStorage() || ((request.position_override || request.rotation_override || request.scale_override) && !request.sceneHierarchy()))
         throw std::invalid_argument("Transform preview requires an exclusive scene and a hierarchy snapshot.");
 
     if (request.sceneLayers().empty()) {
@@ -259,7 +259,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     composition_layer_ids.reserve(request.sceneLayers().size());
     std::unordered_map<model::LayerId, model::ResolvedLayerTransform> resolved;
     try {
-        if (request.sceneHierarchy()) resolved = request.sceneHierarchy()->evaluate(request.composition_frame,request.position_override,request.rotation_override);
+        if (request.sceneHierarchy()) resolved = request.sceneHierarchy()->evaluate(request.composition_frame,request.position_override,request.rotation_override,request.scale_override);
     } catch (const std::exception& error) {
         creative_suite::diagnostics::Logger::instance().log(
             creative_suite::diagnostics::Level::Error, "motion_preview", "evaluate_hierarchy", error.what());

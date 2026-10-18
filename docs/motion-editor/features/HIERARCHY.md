@@ -2,8 +2,9 @@
 
 Status: implemented development workflow, current native `.motion` v12. Manual visual,
 platform, and performance acceptance remain pending. The timeline
-[Parent & Link pick-whip](PARENT_PICK_WHIP.md) is implemented; Viewer scale
-handles remain deferred. The [Rotation handle](ROTATION_DRAG.md) rotates locally
+[Parent & Link pick-whip](PARENT_PICK_WHIP.md) and
+[Viewer scale handles](SCALE_DRAG.md) are implemented. Scale handles support
+positive linked/free scaling. The [Rotation handle](ROTATION_DRAG.md) rotates locally
 around the real pivot, including inherited shear and full turns. The
 [Position handle](POSITION_DRAG.md)
 moves the selected subtree through full parent/binding geometry. Independent

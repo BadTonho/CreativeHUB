@@ -36,6 +36,11 @@ cancels only the draft and preserves history/Redo. Redo is unavailable during
 capture. Start from the curved-arrow handle; full turns are preserved and no
 global shortcut or tool mode is added.
 
+During [Viewer Scale drag](features/SCALE_DRAG.md), **Escape** or **Undo** cancels
+only the draft and preserves history/Redo. Redo is unavailable during capture.
+Drag X, Y or XY; the Inspector link controls proportions. Positive limits hold
+the gesture rather than cancelling it. No modifiers or global shortcut are added.
+
 ## Customize shortcuts
 
 Open **Settings > Keyboard Shortcuts** to edit an action's key sequence. Changes are applied after confirmation; cancel closes without applying them. The dialog can reset assignments to defaults, and duplicate nonempty shortcuts are rejected. Shortcut assignments are saved in the application's settings.

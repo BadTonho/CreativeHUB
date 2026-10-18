@@ -582,6 +582,8 @@ bool MainWindow::documentIsDirty() const
 }
 void MainWindow::updateDocumentState()
 {
+    if(scale_drag_&&!panBehindAvailable())cancelScaleDrag();
+    if(viewer_)viewer_->setScaleDragEnabled(panBehindAvailable());
     if (rotation_drag_ && !panBehindAvailable()) cancelRotationDrag();
     if (viewer_) viewer_->setRotationDragEnabled(panBehindAvailable());
     if (position_drag_ && !panBehindAvailable()) cancelPositionDrag();

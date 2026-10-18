@@ -58,6 +58,9 @@ void MainWindow::createWorkspace()
     media_pool_->setContentChangedHandler([this] { updateDocumentState(); });
     viewer_ = new CompositionViewer(this);
     viewer_->setObjectName(QStringLiteral("motion-composition-viewer"));
+    viewer_->setScaleDragHandlers({[this](model::ScaleDragControl control,QPointF lever) { return beginScaleDrag(control,lever); },
+        [this](QPointF delta) { return previewScaleDrag(delta); },
+        [this] { commitScaleDrag(); },[this] { cancelScaleDrag(); }});
     viewer_->setRotationDragHandlers({[this](QPointF press,double scale) { return beginRotationDrag(press,scale); },
         [this](QPointF pointer) { return previewRotationDrag(pointer); },
         [this] { commitRotationDrag(); },[this] { cancelRotationDrag(); }});
@@ -455,6 +458,10 @@ void MainWindow::createWorkspace()
             const bool may_present = preview_renderer_ && preview_renderer_->canPresentFrame(frame) &&
                 (!frame.playback || (timeline_ && timeline_->isPlaying()));
             if (may_present && viewer_) {
+                if(frame.render_failed&&scale_drag_&&frame.gesture_session==scale_drag_->session) {
+                    const auto id=scale_drag_->id;const auto current=scale_drag_->frame;cancelScaleDrag();
+                    logScaleDragFailure("scale_drag_render",id,current,std::runtime_error("Gesture frame rendering failed."));return;
+                }
                 if (frame.render_failed && rotation_drag_ && frame.gesture_session==rotation_drag_->session) {
                     const auto id=rotation_drag_->id;const auto current=rotation_drag_->frame;
                     cancelRotationDrag();

@@ -4,6 +4,7 @@
 #include "rendering/preview_frame.h"
 #include "position_drag_handle.h"
 #include "rotation_drag_handle.h"
+#include "scale_drag_handle.h"
 
 #include <creative_suite/media/video_frame.h>
 
@@ -67,6 +68,12 @@ public:
     void setRotationDirection(std::optional<QPointF>);
     void cancelRotationDrag();
     [[nodiscard]] bool rotationDragActive() const noexcept;
+    void setScaleDragHandlers(ScaleDragHandlers);
+    void setScaleDragEnabled(bool);
+    void setScaleDirections(std::optional<std::array<QPointF,3>>);
+    void setScaleIndicator(std::optional<QPointF>);
+    void cancelScaleDrag();
+    [[nodiscard]] bool scaleDragActive() const noexcept;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -91,6 +98,7 @@ private:
     GpuCompositionSurface* gpu_surface_ = nullptr;
     PositionDragHandle* position_handle_ = nullptr;
     RotationDragHandle* rotation_handle_ = nullptr;
+    ScaleDragHandle* scale_handle_ = nullptr;
     PreviewFrame preview_frame_;
     std::function<void(bool)> recovery_handler_;
     std::function<bool(const PreviewFrame&)> frame_validator_;

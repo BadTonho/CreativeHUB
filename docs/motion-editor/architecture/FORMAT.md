@@ -23,6 +23,11 @@ transient. No native, recovery, interchange or Hub format change is introduced.
 Rotation bases/keys, including full turns. Its pointer angles, override and
 preview session are transient; native v12/recovery v1 remain unchanged.
 
+[Scale drag](../features/SCALE_DRAG.md) persists only confirmed existing X/Y bases
+and curves. Independent edits may materialize the optional Y channel; its copied
+keys count toward the same total-key limit. Controls, clamps, overrides and
+sessions are transient. Native v12/recovery v1 and `.cscomp` v3 are unchanged.
+
 ## File identity and versioning
 
 Motion Studio documents are UTF-8 JSON objects with these root fields:

@@ -36,8 +36,11 @@ adds no history. A full turn is an edit even if its last-frame pixels match.
 Escape and Undo cancel only the gesture, preserving history and Redo. Redo is
 unavailable during capture. Frame, selection, document, layer structure, layout,
 Viewer size, capture loss, hiding and deactivation cancel. Other edits, save and
-close cancel before proceeding. Playback remains paused. Scale handles, angular
+close cancel before proceeding. Playback remains paused. Angular
 snapping/constraints, content selection and Viewer zoom/pan remain deferred.
+
+[Scale drag](SCALE_DRAG.md) shares immutable scenes and unique gesture sessions
+with Position/Rotation. Only one Viewer gesture is active at a time.
 
 ## Geometry and document boundary
 

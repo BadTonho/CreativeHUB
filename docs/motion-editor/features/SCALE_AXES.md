@@ -169,5 +169,8 @@ No installers, commits or publication were produced.
    medium and heavy project measurements separately. No benchmark or visual
    acceptance is implied by automated correctness checks.
 
-Scale Viewer handles, zero/mirrored scales and per-axis audio generation remain
-future work. No installers, commits or publication are part of this delivery.
+[Scale Viewer handles](SCALE_DRAG.md) are implemented as a separate release-only
+transaction, including key insertion between existing keys. Normal Inspector
+read-only rules above remain unchanged. Zero/mirrored scales and per-axis audio
+generation remain future work. No installers, commits or publication are part of
+this delivery.

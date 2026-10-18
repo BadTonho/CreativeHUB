@@ -32,7 +32,7 @@ bool MainWindow::beginRotationDrag(QPointF press, double logical_to_canvas)
         const auto canvas=document_->canvasSize();
         model::RotationDragCalculation calculation(initial,inverse,pivot[0]*canvas.width,pivot[1]*canvas.height,
             press.x(),press.y(),8*logical_to_canvas);
-        rotation_drag_=RotationDragGesture{id,frame,canvas,initial,initial,outer,std::move(calculation),
+        rotation_drag_=RotationDragGesture{id,frame,canvas,initial,initial,outer,model::evaluateLayerScale(layer,local),std::move(calculation),
             std::make_shared<const PreviewRequest>(std::move(request)),++viewer_gesture_session_};
         inspector_->previewLayerRotation(initial);updateHistoryActions();return true;
     }catch(const std::exception& error){logRotationDragFailure("rotation_drag_begin",id,frame,error);return false;}
@@ -51,6 +51,7 @@ bool MainWindow::previewRotationDrag(QPointF pointer)
         inspector_->previewLayerRotation(value);
         const auto direction=model::rotationGuideDirection(g.outer,value);
         viewer_->setRotationDirection(QPointF(direction[0],direction[1]));
+        syncScaleGuideAxes(creative_suite::composition::composeAffine(g.outer,model::affineOffset({0,0,1,value})),g.scales);
         if(changed)requestPreview();return true;
     }catch(const std::exception& error){
         const auto id=g.id;const auto frame=g.frame;cancelRotationDrag();

@@ -103,7 +103,7 @@ handle and live asynchronous content/Inspector preview, with release-only atomic
 commit. Static axes update bases and animated axes can insert keys between keys.
 Immutable scene snapshots and bounded gesture scheduling preserve document and
 autosave isolation while retaining affine inheritance and existing caches.
-Scale handles remain candidates; manual/native GPU/platform acceptance
+Scale handles are described below; manual/native GPU/platform acceptance
 and benchmarks remain pending.
 
 [Viewer Rotation drag](features/ROTATION_DRAG.md) provides a separate curved-arrow
@@ -114,6 +114,15 @@ follow complete affine geometry. Document/history/autosave stay isolated until
 commit. It reuses Position's scene/queue with unique session IDs. Native v12,
 recovery v1 and interchange rules are unchanged. Manual/platform/native GPU
 acceptance and benchmarks remain pending.
+
+[Viewer Scale X/Y drag](features/SCALE_DRAG.md) adds X/Y/XY controls near the pivot,
+linked proportions or free diagonal scaling, positive range clamping, live
+content/Inspector preview and one release-only history operation. Static bases
+and animated keys, including between keys, are applied atomically; independent
+edits materialize implicit Y without resampling or exceeding the key budget.
+It reuses the gesture scene/queue and existing rendering/cache contracts. Native
+v12/recovery v1 and application versions are unchanged. Manual/platform/native
+GPU acceptance and benchmarks remain pending.
 
 [Independent animated Scale X/Y](features/SCALE_AXES.md) is implemented with
 percentage fields, per-layer proportional linking, independent curves and a

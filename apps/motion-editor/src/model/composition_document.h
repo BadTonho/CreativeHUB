@@ -33,6 +33,12 @@ struct LayerRotationOverride {
     friend bool operator==(const LayerRotationOverride&, const LayerRotationOverride&) = default;
 };
 
+struct LayerScaleOverride {
+    LayerId layer_id = 0;
+    double x = 1, y = 1;
+    friend bool operator==(const LayerScaleOverride&, const LayerScaleOverride&) = default;
+};
+
 struct CanvasSize {
     int width;
     int height;
@@ -367,6 +373,9 @@ public:
     [[nodiscard]] bool setLayerPositionAtFrame(LayerId, double x, double y, std::int64_t composition_frame);
     // Atomic Rotation base/key edit with the same frame/key-budget policy.
     [[nodiscard]] bool setLayerRotationAtFrame(LayerId, double degrees, std::int64_t composition_frame);
+    // Final local factors; linkage is already applied by the caller. Inserts
+    // only changed animated axes and counts materialized Y keys atomically.
+    [[nodiscard]] bool setLayerScaleAtFrame(LayerId, double x, double y, std::int64_t composition_frame);
     [[nodiscard]] bool setLayerTransform(
         LayerId id,
         const creative_suite::animation::Transform2D& transform) noexcept;

@@ -133,6 +133,15 @@ Rotation curve. Viewer capture and Inspector drafts never alter documents,
 autosave or shared animation/compositor interfaces. Source caches and mask stages
 retain their owners. Recovery and paint validation cover both gesture kinds.
 
+[Viewer Scale drag](../features/SCALE_DRAG.md) reuses that queue, immutable scene
+and unique session allocator. A Motion-owned pure calculation projects constrained
+controls or inverts parent/binding/local-rotation axes for free XY. Positive
+clamping keeps linkage intact. A two-axis override applies even when Y is absent;
+the atomic frame operation materializes previous Y data only when needed and
+counts copied/new keys together. No media dimensions, document copies or raster
+work are needed per pointer movement; existing effects/masks/compositors remain
+in their owners. The Viewer owns capture/drawing; MainWindow owns edits/history.
+
 ### Layer effects
 
 Motion Studio owns the effect types, model validation, ordered per-layer

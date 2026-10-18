@@ -360,6 +360,8 @@ MainWindow::MainWindow(QWidget* parent,
 }
 MainWindow::~MainWindow()
 {
+    cancelScaleDrag();
+    if (viewer_) viewer_->setScaleDragHandlers({});
     cancelRotationDrag();
     if (viewer_) viewer_->setRotationDragHandlers({});
     cancelPositionDrag();

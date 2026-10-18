@@ -617,6 +617,14 @@ double InspectorWidget::anchorFieldValue(std::size_t axis) const noexcept
     return axis<2?controls_.anchor_fields[axis]->value():0;
 }
 
+void InspectorWidget::previewLayerScale(double x,double y)
+{
+    const QSignalBlocker a(controls_.transform_fields[2]),b(controls_.scale_y_field);
+    controls_.transform_fields[2]->setValue(x*100);controls_.scale_y_field->setValue(y*100);
+    controls_.transform_fields[2]->setReadOnly(true);controls_.scale_y_field->setReadOnly(true);
+    controls_.transform_key_buttons[2]->setEnabled(false);controls_.scale_y_key->setEnabled(false);
+}
+
 void InspectorWidget::previewLayerRotation(double degrees)
 {
     const QSignalBlocker blocker(controls_.transform_fields[3]);

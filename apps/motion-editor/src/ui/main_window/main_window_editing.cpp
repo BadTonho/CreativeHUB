@@ -154,6 +154,7 @@ bool MainWindow::recordCompositionEdit(CompositionEditState before)
 }
 void MainWindow::finishPendingTransformEdit()
 {
+    cancelScaleDrag();
     cancelRotationDrag();
     cancelPositionDrag();
     cancelParentPickWhip();
@@ -190,12 +191,13 @@ void MainWindow::updateHistoryActions()
 {
     const bool has_document = document_.has_value();
     if (undo_action_ != nullptr)
-        undo_action_->setEnabled(has_document && (rotation_drag_ || position_drag_ || pan_behind_ || parent_pick_whip_ || composition_history_.canUndo()));
+        undo_action_->setEnabled(has_document && (scale_drag_ || rotation_drag_ || position_drag_ || pan_behind_ || parent_pick_whip_ || composition_history_.canUndo()));
     if (redo_action_ != nullptr)
-        redo_action_->setEnabled(has_document && !rotation_drag_ && !position_drag_ && !pan_behind_ && !parent_pick_whip_ && composition_history_.canRedo());
+        redo_action_->setEnabled(has_document && !scale_drag_ && !rotation_drag_ && !position_drag_ && !pan_behind_ && !parent_pick_whip_ && composition_history_.canRedo());
 }
 void MainWindow::undoComposition()
 {
+    if (scale_drag_) { cancelScaleDrag(); return; }
     if (rotation_drag_) { cancelRotationDrag(); return; }
     if (position_drag_) { cancelPositionDrag(); return; }
     if (parent_pick_whip_) { cancelParentPickWhip(); return; }
@@ -211,7 +213,7 @@ void MainWindow::undoComposition()
 }
 void MainWindow::redoComposition()
 {
-    if (rotation_drag_ || position_drag_ || pan_behind_ || parent_pick_whip_) return;
+    if (scale_drag_ || rotation_drag_ || position_drag_ || pan_behind_ || parent_pick_whip_) return;
     finishPendingTransformEdit();
     if (!document_) return;
     auto state = composition_history_.redo(captureEditState());
@@ -535,6 +537,13 @@ void MainWindow::removeCompositionLayer(model::LayerId id)
 
 void MainWindow::syncTransformInspector()
 {
+    if (scale_drag_) {
+        if (panBehindAvailable() && timeline_->currentFrame() == scale_drag_->frame && selected_layer_id_ == scale_drag_->id) {
+            inspector_->previewLayerScale(scale_drag_->preview[0],scale_drag_->preview[1]);return;
+        }
+        cancelScaleDrag();
+    }
+    if(viewer_)viewer_->setScaleDragEnabled(panBehindAvailable());
     if (rotation_drag_) {
         if (panBehindAvailable() && timeline_->currentFrame() == rotation_drag_->frame && selected_layer_id_ == rotation_drag_->id) {
             inspector_->previewLayerRotation(rotation_drag_->preview);
@@ -594,7 +603,7 @@ void MainWindow::syncTransformInspector()
             selected && selected->kind != model::LayerKind::Null ? selected_layer_id_ : 0,timeline_?timeline_->currentFrame():0);
     }
     if (selected == nullptr) {
-        if (viewer_ != nullptr) { viewer_->setSelectedLayerAnchor(std::nullopt);viewer_->setRotationDirection({}); }
+        if (viewer_ != nullptr) { viewer_->setSelectedLayerAnchor(std::nullopt);viewer_->setRotationDirection({});viewer_->setScaleDirections({}); }
         return;
     }
     const auto frame = timeline_ != nullptr ? timeline_->currentFrame() : 0;
@@ -616,6 +625,9 @@ void MainWindow::syncTransformInspector()
             const auto direction = model::rotationGuideDirection(outer,evaluated.rotation_degrees);
             if(viewer_)viewer_->setRotationDirection(QPointF(direction[0],direction[1]));
         } else if(viewer_)viewer_->setRotationDirection({});
+        auto scale_outer=outer;scale_outer.tx=scale_outer.ty=0;
+        syncScaleGuideAxes(creative_suite::composition::composeAffine(scale_outer,
+            model::affineOffset({0,0,1,evaluated.rotation_degrees})),model::evaluateLayerScale(*selected,local_frame));
         evaluated=resolved;
         const auto pivot=model::resolvedAnchorPosition(resolved,model::evaluateLayerAnchor(*selected,
             frame<selected->timeline_start_frame?0:frame-selected->timeline_start_frame),document_->canvasSize());
@@ -623,7 +635,7 @@ void MainWindow::syncTransformInspector()
     } catch (const std::exception& error) {
         creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
             "motion_document", "evaluate_selected_hierarchy", error.what());
-        if (viewer_) { viewer_->setSelectedLayerAnchor(std::nullopt);viewer_->setRotationDirection({}); }
+        if (viewer_) { viewer_->setSelectedLayerAnchor(std::nullopt);viewer_->setRotationDirection({});viewer_->setScaleDirections({}); }
         return;
     }
     if (viewer_ != nullptr) viewer_->setSelectedLayerAnchor(selected->visible
@@ -926,7 +938,7 @@ void MainWindow::editSelectedLayerContent()
     const model::LayerContent proposed = is_text
         ? model::LayerContent{inspector_->editedTextContent(std::get<model::TextLayerContent>(found->content))}
         : model::LayerContent{inspector_->editedShapeContent(std::get<model::ShapeLayerContent>(found->content))};
-    const bool cancelled_viewer_draft = rotation_drag_ || position_drag_ || pan_behind_;
+    const bool cancelled_viewer_draft = scale_drag_ || rotation_drag_ || position_drag_ || pan_behind_;
 
     const bool coalescing = active_content_edit_layer_ == selected_layer_id_;
     std::optional<CompositionEditState> before;

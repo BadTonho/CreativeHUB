@@ -99,7 +99,7 @@ protected:
         if (!available()) return;
         auto frame = owner_->preview_frame_;
         if (frame.valid() && owner_->frame_validator_ && !owner_->frame_validator_(frame) &&
-            !((owner_->positionDragActive() || owner_->rotationDragActive()) && !frame.gesture_session)) {
+            !((owner_->scaleDragActive() || owner_->positionDragActive() || owner_->rotationDragActive()) && !frame.gesture_session)) {
             if (owner_->rendered_frame_paint_pending_)
                 diagnostics::PerformanceMetrics::instance().recordStaleResult(frame.generation);
             owner_->clearPreviewFrame();
@@ -178,6 +178,8 @@ private:
 };
 
 CompositionViewer::~CompositionViewer() {
+    delete scale_handle_;
+    scale_handle_ = nullptr;
     delete rotation_handle_;
     rotation_handle_ = nullptr;
     delete position_handle_;
@@ -267,15 +269,23 @@ CompositionViewer::CompositionViewer(QWidget* parent)
         return QPointF(canvas.left()+selected_layer_anchor_->x()*canvas.width(),
             canvas.top()+selected_layer_anchor_->y()*canvas.height());
     }, [this] { return canvasRect(); }, [this] { return canvas_size_; });
+    scale_handle_ = new ScaleDragHandle(this, [this]() -> std::optional<QPointF> {
+        if (!selected_layer_anchor_) return {};
+        const auto canvas = canvasRect();if (canvas.isEmpty()) return {};
+        return QPointF(canvas.left()+selected_layer_anchor_->x()*canvas.width(),
+            canvas.top()+selected_layer_anchor_->y()*canvas.height());
+    }, [this] { return canvasRect(); }, [this] { return canvas_size_; });
     setToolTip(MotionUiTranslation::tr("Drag the pivot to reposition it without moving the layer. Press Escape to cancel.") + QLatin1Char('\n') +
         MotionUiTranslation::tr("Drag the four-way handle to move the layer. Press Escape to cancel.") + QLatin1Char('\n') +
-        MotionUiTranslation::tr("Drag the curved-arrow handle to rotate the layer. Full turns are preserved. Press Escape to cancel."));
+        MotionUiTranslation::tr("Drag the curved-arrow handle to rotate the layer. Full turns are preserved. Press Escape to cancel.") + QLatin1Char('\n') +
+        MotionUiTranslation::tr("Drag X, Y or XY to scale the layer. The Inspector link controls proportions. Positive limits stop the drag; Escape cancels."));
 }
 
 void CompositionViewer::setComposition(
     model::CanvasSize canvas_size,
     std::optional<QPointF> selected_layer_anchor)
 {
+    cancelScaleDrag();
     cancelRotationDrag();
     cancelPositionDrag();
     cancelPanBehind();
@@ -330,6 +340,17 @@ void CompositionViewer::setRotationDirection(std::optional<QPointF> d) {
 }
 void CompositionViewer::cancelRotationDrag() { if(rotation_handle_)rotation_handle_->cancel(); }
 bool CompositionViewer::rotationDragActive() const noexcept { return rotation_handle_ && rotation_handle_->active(); }
+void CompositionViewer::setScaleDragHandlers(ScaleDragHandlers h) { scale_handle_->setHandlers(std::move(h)); }
+void CompositionViewer::setScaleDragEnabled(bool enabled) { scale_handle_->setEnabled(enabled); }
+void CompositionViewer::setScaleDirections(std::optional<std::array<QPointF,3>> d) {
+    scale_handle_->setDirections(d);if(gpu_surface_)gpu_surface_->update();update();
+}
+void CompositionViewer::setScaleIndicator(std::optional<QPointF> p) {
+    scale_handle_->setIndicator(p);if(gpu_surface_)gpu_surface_->update();update();
+}
+void CompositionViewer::cancelScaleDrag() { if(scale_handle_)scale_handle_->cancel(); }
+bool CompositionViewer::scaleDragActive() const noexcept { return scale_handle_ && scale_handle_->active(); }
+
 
 
 void CompositionViewer::setPanBehindHandlers(std::function<bool()> begin,
@@ -525,6 +546,7 @@ void CompositionViewer::paintOverlay(QPainter& painter) {
     painter.drawText(QRectF(16.0, 12.0, width() - 32.0, 20.0),
         Qt::AlignLeft | Qt::AlignVCenter,
         MotionUiTranslation::tr("%1 x %2 px").arg(canvas_size_.width).arg(canvas_size_.height));
+    if (scale_handle_) scale_handle_->paint(painter);
     if (rotation_handle_) rotation_handle_->paint(painter);
     if (position_handle_) position_handle_->paint(painter);
     if (!selected_layer_anchor_) return;
@@ -549,7 +571,7 @@ void CompositionViewer::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     paintBackground(painter);
     if (preview_frame_.valid() && frame_validator_ && !frame_validator_(preview_frame_) &&
-        !((positionDragActive() || rotationDragActive()) && !preview_frame_.gesture_session)) {
+        !((scaleDragActive() || positionDragActive() || rotationDragActive()) && !preview_frame_.gesture_session)) {
         if (rendered_frame_paint_pending_)
             diagnostics::PerformanceMetrics::instance().recordStaleResult(preview_frame_.generation);
         clearPreviewFrame();
