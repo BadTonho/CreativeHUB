@@ -11,6 +11,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace motion::ui {
 namespace a=creative_suite::animation;
@@ -101,11 +102,9 @@ void MainWindow::repositionSelectedAnchor()
         fields[0]->value()==initial_values[0]?point.x_pixels:fields[0]->value(),
         fields[1]->value()==initial_values[1]?point.y_pixels:fields[1]->value()};
     try {
-        auto before=captureEditState();
-        if(!document_->repositionLayerAnchorKeepingPose(id,requested,frame))return;
-        (void)recordCompositionEdit(std::move(before));
-        updateDocumentState();refreshTimeline();syncTransformInspector();requestPreview();
-    }catch(const std::exception& error){reportDocumentError("reposition_anchor",document_path_.value_or(std::filesystem::path{}),error);}
+        commitAnchorReposition(id,requested,frame);
+    }catch(const std::exception& error){reportDocumentError("reposition_anchor",document_path_.value_or(std::filesystem::path{}),
+        std::runtime_error("Layer "+std::to_string(id)+", frame "+std::to_string(frame)+": "+error.what()));}
 }
 
 void MainWindow::selectAnchorCurveSegment(model::LayerId id,model::AnchorProperty property,std::int64_t frame)

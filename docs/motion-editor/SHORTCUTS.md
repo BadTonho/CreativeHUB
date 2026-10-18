@@ -17,6 +17,11 @@ These are the default shortcuts currently registered by Motion Studio. Standard 
 
 Loop toggle, timeline zoom in, and timeline zoom out have no default keyboard shortcut. They can be assigned in **Settings > Keyboard Shortcuts**.
 
+During a [Pan Behind](features/PAN_BEHIND.md) pivot drag, **Escape** cancels the
+gesture locally. **Undo** also cancels the draft without undoing an earlier
+edit; Redo is unavailable until the gesture ends. No global Pan Behind shortcut
+is registered. Start it by dragging the selected layer's existing Viewer marker.
+
 ## Customize shortcuts
 
 Open **Settings > Keyboard Shortcuts** to edit an action's key sequence. Changes are applied after confirmation; cancel closes without applying them. The dialog can reset assignments to defaults, and duplicate nonempty shortcuts are rejected. Shortcut assignments are saved in the application's settings.

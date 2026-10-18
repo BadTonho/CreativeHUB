@@ -582,6 +582,7 @@ bool MainWindow::documentIsDirty() const
 }
 void MainWindow::updateDocumentState()
 {
+    if (viewer_) viewer_->setPanBehindEnabled(panBehindAvailable());
     const bool has_document = document_.has_value();
     const bool dirty = documentIsDirty();
     bool selected_layer_exists = false;
@@ -913,6 +914,7 @@ void MainWindow::finishLinkedHandoffInitialization()
 }
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    finishPendingTransformEdit();
     if (!confirmReplaceDocument()) {
         event->ignore();
         return;

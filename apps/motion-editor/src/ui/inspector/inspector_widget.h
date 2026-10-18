@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../model/composition_document.h"
+#include "../../model/anchor_reposition.h"
 
 #include <QTabWidget>
 
@@ -100,6 +101,8 @@ public:
                    int selected_effect_row);
     void syncSelectedEffect(const model::CompositionLayer* layer, int row);
     void syncParenting(const model::CompositionDocument* document, model::LayerId selected);
+    // Presentation only; signals are blocked and normal syncLayer restores editability.
+    void previewAnchorReposition(const model::AnchorRepositionValues& values);
     [[nodiscard]] int effectCount() const noexcept;
     [[nodiscard]] double transformFieldValue(std::size_t property_index) const noexcept;
     [[nodiscard]] double anchorFieldValue(std::size_t axis) const noexcept;

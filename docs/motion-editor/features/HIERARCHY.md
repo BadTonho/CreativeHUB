@@ -4,6 +4,8 @@ Status: implemented development workflow, current native `.motion` v12. Manual v
 platform, and performance acceptance remain pending. Pick-whip and Viewer handles remain deferred. Independent
 [Scale X/Y](SCALE_AXES.md) retains complete affine inheritance. Animated pixel Anchor Point is
 implemented separately; see [Anchor Point](ANCHOR_POINT.md).
+The [Pan Behind](PAN_BEHIND.md) pivot gesture uses the full inherited affine
+matrix and preserves layer/descendant geometry while retaining parent bindings.
 
 ## Editing
 

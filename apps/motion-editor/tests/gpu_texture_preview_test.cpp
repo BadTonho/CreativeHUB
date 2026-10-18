@@ -9,6 +9,8 @@
 #include <QDialogButtonBox>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QMouseEvent>
+#include <QDoubleSpinBox>
 #include <QSettings>
 #include <QTimer>
 #include <creative_suite/diagnostics/logger.h>
@@ -162,6 +164,39 @@ void applicationChecks() {
     timeline->setCurrentFrame(10);
     require(waitFor([&] { return viewer->lastPresentedGeneration() > previous; }) && !timeline->isPlaying(),
         "a paused seek refreshes direct preview");
+    {
+        const auto before = window->compositionDocument()->layers();
+        const auto generation = viewer->lastPresentedGeneration();
+        const auto available = QRectF(viewer->rect()).adjusted(24,42,-24,-24);
+        const double fit = std::min(available.width()/320, available.height()/180);
+        const QSizeF fitted(320*fit,180*fit);
+        const QRectF canvas(available.center()-QPointF(fitted.width()/2,fitted.height()/2),fitted);
+        const auto pivot = *viewer->selectedLayerAnchor();
+        const QPointF start(canvas.left()+pivot.x()*canvas.width()+4,canvas.top()+pivot.y()*canvas.height());
+        const auto send = [&](QEvent::Type type,QPointF p,Qt::MouseButton button,Qt::MouseButtons buttons) {
+            QMouseEvent event(type,p,viewer->mapToGlobal(p),button,buttons,Qt::NoModifier);
+            QApplication::sendEvent(viewer,&event);
+        };
+        auto* gl = viewer->findChild<QOpenGLWidget*>();
+        require(gl && gl->isVisible() && gl->testAttribute(Qt::WA_TransparentForMouseEvents) &&
+            !viewer->childAt(start.toPoint()), "native texture child leaves pivot input to the Viewer");
+        send(QEvent::MouseButtonPress,start,Qt::LeftButton,Qt::LeftButton);
+        auto& collector=motion::diagnostics::PerformanceMetrics::instance();collector.setEnabled(true);collector.reset();
+        send(QEvent::MouseMove,start+QPointF(24,16),Qt::NoButton,Qt::LeftButton);
+        QApplication::processEvents();
+        require(viewer->panBehindActive() && window->compositionDocument()->layers()==before &&
+            viewer->lastPresentedGeneration()==generation && !viewer->renderedFrame(),
+            "native pivot preview retains the GPU lease and untouched document");
+        const auto counters=collector.takeSnapshotAndReset();
+        require(!counters || (!counters->requests && !counters->gpu_composition_readback_bytes),
+            "native pivot moves issue no render request or readback");
+        send(QEvent::MouseButtonRelease,start+QPointF(24,16),Qt::LeftButton,Qt::NoButton);
+        require(window->compositionDocument()->layers()!=before, "native texture gesture commits on release");
+        command("motion-undo-action")->trigger();
+        require(window->compositionDocument()->layers()==before, "native texture pivot has one Undo");
+        require(waitFor([&] { return viewer->lastPresentedGeneration()>generation; }), "native preview refreshes after pivot commit/Undo");
+        std::cout << "native_pan_behind=passed; per_move_requests=0; per_move_readback_bytes=0\n";
+    }
     command("motion-loop-action")->setChecked(true);
     const auto end = window->compositionDocument()->layers().front().duration_frames;
     timeline->setCurrentFrame(end-2);
@@ -217,6 +252,8 @@ void nativeChecks() {
         (void)worker_ptr->submit(request);
     });
     viewer.show();
+    viewer.raise();
+    viewer.activateWindow();
     require(waitFor([&] { return viewer.texturePresentationAvailable(); }), "native viewer shares textures");
     bool direct = false;
     PreviewRenderer worker(&receiver, {}, {}, &metrics, true, surface.get(),
@@ -231,8 +268,13 @@ void nativeChecks() {
             frame.cancellation_generation);
     });
     auto generation = worker.submit(request);
-    require(waitFor([&] { return viewer.lastPresentedGeneration() == generation; }) && direct,
-        "native preview must present a GPU lease rather than CPU fallback");
+    const bool presented = waitFor([&] { return viewer.lastPresentedGeneration() == generation; });
+    if (!presented || !direct) {
+        std::cerr << "native_texture_diagnostics: expected=" << generation
+                  << " presented=" << viewer.lastPresentedGeneration() << " direct=" << direct
+                  << " available=" << viewer.texturePresentationAvailable() << " recovered=" << recovered << '\n';
+    }
+    require(presented && direct, "native preview must present a GPU lease rather than CPU fallback");
     auto* gl = viewer.findChild<QOpenGLWidget*>();
     require(gl != nullptr, "GPU surface remains inside the existing viewer");
     const auto gpu_image = gl->grabFramebuffer(); // Readback is test inspection only.
@@ -348,5 +390,10 @@ int main(int argc, char** argv) {
         if (native) { nativeChecks(); applicationChecks(); }
         std::cout << "Motion GPU texture preview " << (native ? "native" : "portable") << " tests passed.\n";
         return 0;
-    } catch (const std::exception& e) { std::cerr << "FAIL: " << e.what() << '\n'; return 1; }
+    } catch (const std::exception& e) {
+        std::cerr << "FAIL: " << e.what() << '\n';
+        std::ifstream log(creative_suite::diagnostics::Logger::instance().log_path());
+        if (log) std::cerr << log.rdbuf();
+        return 1;
+    }
 }

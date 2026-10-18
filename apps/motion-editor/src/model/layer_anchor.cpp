@@ -1,4 +1,5 @@
 #include "composition_document.h"
+#include "anchor_reposition.h"
 #include "layer_transform_hierarchy.h"
 
 #include <algorithm>
@@ -103,6 +104,28 @@ bool CompositionDocument::setLayerAnchorKeyframeInterpolation(LayerId id, Anchor
     return replaceLayerAnchorKeyframes(id, property, std::move(keys));
 }
 
+AnchorRepositionValues compensatedAnchorValues(const a::Transform2D& transform, double scale_y,
+    CanvasSize canvas, AnchorPoint previous, AnchorPoint point)
+{
+    if (!validAnchorPoint(previous) || !validAnchorPoint(point) || canvas.width <= 0 || canvas.height <= 0)
+        throw std::runtime_error("Anchor repositioning requires finite values and a positive canvas.");
+    const auto radians = std::remainder(transform.rotation_degrees, 360.0) * std::numbers::pi / 180.0;
+    const auto dx = point.x_pixels - previous.x_pixels, dy = point.y_pixels - previous.y_pixels;
+    const auto x = transform.position_x + (transform.scale==scale_y
+        ?transform.scale*(std::cos(radians)*dx-std::sin(radians)*dy)
+        :std::cos(radians)*transform.scale*dx-std::sin(radians)*scale_y*dy)/canvas.width;
+    const auto y = transform.position_y + (transform.scale==scale_y
+        ?transform.scale*(std::sin(radians)*dx+std::cos(radians)*dy)
+        :std::sin(radians)*transform.scale*dx+std::cos(radians)*scale_y*dy)/canvas.height;
+    if (!std::isfinite(x) || !std::isfinite(y))
+        throw std::runtime_error("Anchor repositioning exceeds finite position limits.");
+    auto compensated = transform;
+    compensated.position_x = x;
+    compensated.position_y = y;
+    (void)localGeometry(compensated, scale_y, canvas, point);
+    return {point, x, y};
+}
+
 bool CompositionDocument::repositionLayerAnchorKeepingPose(LayerId id, AnchorPoint point, std::int64_t frame)
 {
     auto* layer = findLayer(id);
@@ -112,17 +135,8 @@ bool CompositionDocument::repositionLayerAnchorKeepingPose(LayerId id, AnchorPoi
     const auto previous = evaluateLayerAnchor(*layer, local);
     if (point == previous) return false;
     const auto transform = a::evaluateTransform(layer->transform, layer->keyframes, local);
-    const auto radians = std::remainder(transform.rotation_degrees, 360.0) * std::numbers::pi / 180.0;
-    const auto dx = point.x_pixels - previous.x_pixels, dy = point.y_pixels - previous.y_pixels;
-    const auto scale=evaluateLayerScale(*layer,local);
-    const auto x = transform.position_x + (scale[0]==scale[1]
-        ?transform.scale*(std::cos(radians)*dx-std::sin(radians)*dy)
-        :std::cos(radians)*scale[0]*dx-std::sin(radians)*scale[1]*dy)/canvas_size_.width;
-    const auto y = transform.position_y + (scale[0]==scale[1]
-        ?transform.scale*(std::sin(radians)*dx+std::cos(radians)*dy)
-        :std::sin(radians)*scale[0]*dx+std::cos(radians)*scale[1]*dy)/canvas_size_.height;
-    if (!std::isfinite(x) || !std::isfinite(y))
-        throw std::runtime_error("Anchor repositioning exceeds finite position limits for layer " + std::to_string(id));
+    const auto values = compensatedAnchorValues(transform, evaluateLayerScale(*layer,local)[1],
+        canvas_size_, previous, point);
     auto candidate = *layer;
     const auto set = [local](auto& keys, double& base, double old_value, double new_value) {
         if (old_value == new_value) return;
@@ -131,8 +145,8 @@ bool CompositionDocument::repositionLayerAnchorKeepingPose(LayerId id, AnchorPoi
     };
     set(candidate.anchor_keyframes[0],candidate.anchor_point.x_pixels,previous.x_pixels,point.x_pixels);
     set(candidate.anchor_keyframes[1],candidate.anchor_point.y_pixels,previous.y_pixels,point.y_pixels);
-    set(candidate.keyframes.position_x,candidate.transform.position_x,transform.position_x,x);
-    set(candidate.keyframes.position_y,candidate.transform.position_y,transform.position_y,y);
+    set(candidate.keyframes.position_x,candidate.transform.position_x,transform.position_x,values.position_x);
+    set(candidate.keyframes.position_y,candidate.transform.position_y,transform.position_y,values.position_y);
     if (!a::validTransform(candidate.transform) || !a::validTransformKeyframes(candidate.keyframes) ||
         !validAnchorPoint(candidate.anchor_point)) return false;
     validateGeometry(candidate, canvas_size_, local);

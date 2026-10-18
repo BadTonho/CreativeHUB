@@ -169,5 +169,5 @@ No installers, commits or publication were produced.
    medium and heavy project measurements separately. No benchmark or visual
    acceptance is implied by automated correctness checks.
 
-Viewer dragging, zero/mirrored scales and per-axis audio generation remain
+Scale Viewer handles, zero/mirrored scales and per-axis audio generation remain
 future work. No installers, commits or publication are part of this delivery.

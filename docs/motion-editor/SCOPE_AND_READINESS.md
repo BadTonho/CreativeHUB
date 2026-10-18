@@ -87,8 +87,11 @@ including Nulls: local pixel X/Y fields, Transform tracks, Graph Editor curves,
 and a dialog that preserves current-frame geometry by compensating Position in
 one Undo/Redo. Hierarchy resolution includes Anchor, the Viewer marks the actual
 pivot, and native v12/recovery/Hub backups preserve its curves. Versions 1–10
-load with zero Anchor. `.cscomp` v3 explicitly refuses nondefault Anchor. Pan
-Behind, Viewer dragging and audio-to-Anchor remain planned;
+load with zero Anchor. `.cscomp` v3 explicitly refuses nondefault Anchor.
+[Pan Behind](features/PAN_BEHIND.md) adds direct pivot dragging with a live
+Inspector draft, release-only atomic commit and cancellation without history.
+It reuses v12 Anchor/Position and the current affine hierarchy without new image
+work. Other Viewer transform handles and audio-to-Anchor remain planned;
 manual visual/platform acceptance and benchmarks remain pending.
 
 [Independent animated Scale X/Y](features/SCALE_AXES.md) is implemented with

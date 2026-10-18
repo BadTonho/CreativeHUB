@@ -18,6 +18,8 @@ class QPaintEvent;
 class QContextMenuEvent;
 class QPainter;
 class QResizeEvent;
+class QMouseEvent;
+class QKeyEvent;
 
 namespace motion::ui {
 
@@ -46,15 +48,32 @@ public:
                           std::uint64_t request_generation = 0);
     [[nodiscard]] creative_suite::media::RgbaFramePtr renderedFrame() const noexcept;
     void setLayerContextMenuHandler(std::function<void(const QPoint&)> handler);
+    // Displacements are canvas pixels from the initial press, in logical UI
+    // coordinates. Callbacks never own media; false rejects/cancels the gesture.
+    void setPanBehindHandlers(std::function<bool()> begin,
+        std::function<bool(const QPointF&)> preview, std::function<void()> commit,
+        std::function<void()> cancel);
+    void setPanBehindEnabled(bool enabled);
+    void cancelPanBehind();
+    [[nodiscard]] bool panBehindActive() const noexcept { return pivot_pressed_; }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    bool event(QEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private:
     friend class GpuCompositionSurface;
     [[nodiscard]] QRectF canvasRect() const;
+    [[nodiscard]] bool hitPivot(QPointF point) const;
+    bool previewPanBehind(QPointF point);
+    void releasePivotCapture();
     void paintBackground(QPainter& painter);
     void paintOverlay(QPainter& painter);
     void recordPaint(bool texture);
@@ -71,6 +90,15 @@ private:
     std::uint64_t rendered_frame_generation_ = 0;
     bool rendered_frame_paint_pending_ = false;
     std::function<void(const QPoint&)> layer_context_menu_handler_;
+    std::function<bool()> begin_pan_behind_;
+    std::function<bool(const QPointF&)> preview_pan_behind_;
+    std::function<void()> commit_pan_behind_, cancel_pan_behind_;
+    bool pan_behind_enabled_ = false;
+    bool pivot_pressed_ = false;
+    bool pivot_dragged_ = false;
+    QPointF pivot_press_;
+    QRectF pivot_canvas_;
+    QWidget* pivot_window_ = nullptr;
 };
 
 } // namespace motion::ui

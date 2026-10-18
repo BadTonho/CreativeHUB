@@ -37,8 +37,10 @@ to the operation frame; other frames follow the resulting animation.
 The existing Viewer marker indicates the actual resolved pivot, including its
 parent hierarchy, including selected visible Nulls. This is a Viewer overlay;
 Nulls still contribute no image pixels or export duration.
-No shortcuts, Pan Behind tool, Viewer dragging or audio-to-Anchor generation
-are introduced. Independent [Scale X/Y](SCALE_AXES.md) is implemented separately.
+The marker supports [Pan Behind dragging](PAN_BEHIND.md), using the same
+compensated edit with live Inspector values and commit on release. No global
+shortcut or separate tool is added. Audio-to-Anchor remains deferred.
+Independent [Scale X/Y](SCALE_AXES.md) is implemented separately.
 
 ## Geometry and ownership
 

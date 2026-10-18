@@ -8,6 +8,10 @@ stages; no Motion schema change is required. See [contract](../../COMPOSITION_IN
 version 12 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
+[Pan Behind](../features/PAN_BEHIND.md) persists only confirmed Anchor/Position
+values through existing fields. Its live Viewer/Inspector draft is not document
+data; native v12 and recovery wrapper v1 remain unchanged.
+
 ## File identity and versioning
 
 Motion Studio documents are UTF-8 JSON objects with these root fields:

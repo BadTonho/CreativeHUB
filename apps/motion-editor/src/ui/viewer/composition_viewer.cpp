@@ -15,6 +15,9 @@
 #include <QOpenGLShaderProgram>
 #include <QResizeEvent>
 #include <QTimer>
+#include <QApplication>
+#include <QMouseEvent>
+#include <QKeyEvent>
 #include <creative_suite/diagnostics/logger.h>
 #include <chrono>
 
@@ -174,6 +177,7 @@ private:
 };
 
 CompositionViewer::~CompositionViewer() {
+    releasePivotCapture();
     recovery_handler_ = {};
     clearPreviewFrame();
     delete gpu_surface_;
@@ -229,6 +233,7 @@ std::uint64_t CompositionViewer::lastPresentedGeneration() const noexcept {
     return last_presented_generation_;
 }
 void CompositionViewer::resizeEvent(QResizeEvent* event) {
+    cancelPanBehind();
     QWidget::resizeEvent(event);
     if (gpu_surface_) gpu_surface_->setGeometry(rect());
 }
@@ -239,12 +244,16 @@ CompositionViewer::CompositionViewer(QWidget* parent)
     setObjectName(QStringLiteral("motion-composition-viewer"));
     setMinimumSize(180, 240);
     setAutoFillBackground(false);
+    setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
+    setToolTip(MotionUiTranslation::tr("Drag the pivot to reposition it without moving the layer. Press Escape to cancel."));
 }
 
 void CompositionViewer::setComposition(
     model::CanvasSize canvas_size,
     std::optional<QPointF> selected_layer_anchor)
 {
+    cancelPanBehind();
     clearPreviewFrame();
     canvas_size_ = canvas_size;
     selected_layer_anchor_ = std::move(selected_layer_anchor);
@@ -283,6 +292,147 @@ void CompositionViewer::setLayerContextMenuHandler(
     std::function<void(const QPoint&)> handler)
 {
     layer_context_menu_handler_ = std::move(handler);
+}
+
+void CompositionViewer::setPanBehindHandlers(std::function<bool()> begin,
+    std::function<bool(const QPointF&)> preview, std::function<void()> commit,
+    std::function<void()> cancel)
+{
+    cancelPanBehind();
+    begin_pan_behind_ = std::move(begin);
+    preview_pan_behind_ = std::move(preview);
+    commit_pan_behind_ = std::move(commit);
+    cancel_pan_behind_ = std::move(cancel);
+}
+
+void CompositionViewer::setPanBehindEnabled(bool enabled)
+{
+    pan_behind_enabled_ = enabled;
+    if (!enabled) { cancelPanBehind(); unsetCursor(); }
+}
+
+bool CompositionViewer::hitPivot(QPointF point) const
+{
+    if (!pan_behind_enabled_ || !selected_layer_anchor_) return false;
+    const auto canvas = canvasRect();
+    if (canvas.isEmpty()) return false;
+    const QPointF pivot(canvas.left() + selected_layer_anchor_->x() * canvas.width(),
+        canvas.top() + selected_layer_anchor_->y() * canvas.height());
+    if (!std::isfinite(pivot.x()) || !std::isfinite(pivot.y()) || !rect().contains(pivot.toPoint())) return false;
+    const auto delta = point - pivot;
+    return delta.x()*delta.x() + delta.y()*delta.y() <= 100.0;
+}
+
+void CompositionViewer::releasePivotCapture()
+{
+    // Clear state before releasing: UngrabMouse and controller callbacks can reenter.
+    pivot_pressed_ = false;
+    pivot_dragged_ = false;
+    if (pivot_window_) pivot_window_->removeEventFilter(this);
+    pivot_window_ = nullptr;
+    if (QWidget::mouseGrabber() == this) releaseMouse();
+    unsetCursor();
+}
+
+void CompositionViewer::cancelPanBehind()
+{
+    if (!pivot_pressed_) return;
+    releasePivotCapture();
+    if (cancel_pan_behind_) cancel_pan_behind_();
+}
+
+bool CompositionViewer::event(QEvent* event)
+{
+    if (event->type() == QEvent::UngrabMouse || event->type() == QEvent::Hide ||
+        event->type() == QEvent::WindowDeactivate) cancelPanBehind();
+    if (event->type() == QEvent::ShortcutOverride && pivot_pressed_) {
+        const auto* key = static_cast<QKeyEvent*>(event);
+        if (key->key() == Qt::Key_Escape || key->matches(QKeySequence::Undo) || key->matches(QKeySequence::Redo)) {
+            event->accept();
+            return true;
+        }
+    }
+    return QWidget::event(event);
+}
+
+bool CompositionViewer::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == pivot_window_ && (event->type() == QEvent::WindowDeactivate ||
+        event->type() == QEvent::Hide || event->type() == QEvent::Close)) cancelPanBehind();
+    return QWidget::eventFilter(watched, event);
+}
+
+void CompositionViewer::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton && hitPivot(event->position()) && begin_pan_behind_) {
+        setFocus(Qt::MouseFocusReason);
+        if (begin_pan_behind_()) {
+            pivot_press_ = event->position();
+            pivot_canvas_ = canvasRect();
+            pivot_pressed_ = true;
+            pivot_dragged_ = false;
+            pivot_window_ = window();
+            pivot_window_->installEventFilter(this);
+            setCursor(Qt::ClosedHandCursor);
+            grabMouse();
+            event->accept();
+            return;
+        }
+    }
+    QWidget::mousePressEvent(event);
+}
+
+bool CompositionViewer::previewPanBehind(QPointF point)
+{
+    const auto delta = point - pivot_press_;
+    if (!pivot_dragged_ && std::abs(delta.x()) + std::abs(delta.y()) < QApplication::startDragDistance()) return true;
+    pivot_dragged_ = true;
+    const QPointF pixels(delta.x() * canvas_size_.width / pivot_canvas_.width(),
+        delta.y() * canvas_size_.height / pivot_canvas_.height());
+    if (!preview_pan_behind_ || !preview_pan_behind_(pixels)) {
+        cancelPanBehind();
+        return false;
+    }
+    return pivot_pressed_;
+}
+
+void CompositionViewer::mouseMoveEvent(QMouseEvent* event)
+{
+    if (pivot_pressed_) {
+        if (!(event->buttons() & Qt::LeftButton)) cancelPanBehind();
+        else (void)previewPanBehind(event->position());
+        event->accept();
+        return;
+    }
+    if (hitPivot(event->position())) setCursor(Qt::SizeAllCursor);
+    else unsetCursor();
+    QWidget::mouseMoveEvent(event);
+}
+
+void CompositionViewer::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (pivot_pressed_ && event->button() == Qt::LeftButton) {
+        if (previewPanBehind(event->position())) {
+            const bool commit = pivot_dragged_;
+            releasePivotCapture();
+            if (commit && commit_pan_behind_) commit_pan_behind_();
+            else if (cancel_pan_behind_) cancel_pan_behind_();
+        }
+        event->accept();
+        return;
+    }
+    QWidget::mouseReleaseEvent(event);
+}
+
+void CompositionViewer::keyPressEvent(QKeyEvent* event)
+{
+    if (pivot_pressed_) {
+        if (event->key() == Qt::Key_Escape || event->matches(QKeySequence::Undo)) {
+            cancelPanBehind(); event->accept(); return;
+        }
+        if (event->matches(QKeySequence::Redo)) { event->accept(); return; }
+    }
+    QWidget::keyPressEvent(event);
 }
 
 QRectF CompositionViewer::canvasRect() const

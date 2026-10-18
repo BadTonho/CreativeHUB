@@ -97,6 +97,13 @@ dialog updates Anchor/Position in one document/history transaction, leaving
 binding offsets unchanged. See [Anchor Point](../features/ANCHOR_POINT.md) and
 [hierarchy](../features/HIERARCHY.md) for geometry and thread ownership.
 
+[Pan Behind](../features/PAN_BEHIND.md) keeps pointer capture/mapping in the
+Viewer and an evaluated, media-free gesture snapshot in MainWindow. Motion's
+pure compensated-Anchor calculation serves the dialog, draft and final document
+operation. Inspector preview signals are blocked and only release mutates the
+document/history; autosave reads committed values. Overlay-only moves reuse the
+displayed RGBA frame/GPU texture without worker requests or shared API changes.
+
 ### Layer effects
 
 Motion Studio owns the effect types, model validation, ordered per-layer

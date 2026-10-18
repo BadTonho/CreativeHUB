@@ -2,6 +2,7 @@
 
 #include "model/composition_document.h"
 #include "model/layer_transform_hierarchy.h"
+#include "model/anchor_reposition.h"
 #include "model/motion_project_data.h"
 #include <creative_suite/motion_handoff/request.h>
 #include "application/history/composition_history.h"
@@ -146,6 +147,14 @@ private:
     void selectScaleAxisCurveSegment(model::LayerId,model::ScaleAxis,std::int64_t local_frame);
     void toggleSelectedAnchorKeyframe(std::size_t axis);
     void repositionSelectedAnchor();
+    [[nodiscard]] bool panBehindAvailable() const;
+    bool beginPanBehind();
+    bool previewPanBehind(const QPointF& canvas_delta);
+    void commitPanBehind();
+    void cancelPanBehind();
+    void commitAnchorReposition(model::LayerId id, model::AnchorPoint anchor, std::int64_t frame);
+    void logPanBehindFailure(const char* operation, model::LayerId id, std::int64_t frame,
+        const std::exception& error);
     void selectAnchorCurveSegment(model::LayerId, model::AnchorProperty, std::int64_t local_frame);
     [[nodiscard]] bool applySelectedCurveInterpolation(std::int64_t,
         creative_suite::animation::InterpolationMode, const creative_suite::animation::CubicBezierEasing&);
@@ -267,6 +276,17 @@ private:
         std::optional<model::ScaleAxis> scale_axis;
     };
     std::optional<CurveSelection> curve_selection_;
+    struct PanBehindGesture {
+        model::LayerId layer_id;
+        std::int64_t frame;
+        model::CanvasSize canvas;
+        creative_suite::animation::Transform2D local;
+        double scale_y;
+        model::AnchorPoint initial_anchor;
+        model::AffineTransform world, inverse_linear;
+        model::AnchorRepositionValues preview;
+    };
+    std::optional<PanBehindGesture> pan_behind_;
     double active_scale_ratio_=1;
     std::shared_ptr<const std::vector<model::Mask>> mask_snapshot_;
     std::shared_ptr<const model::LayerTransformHierarchy> hierarchy_snapshot_;

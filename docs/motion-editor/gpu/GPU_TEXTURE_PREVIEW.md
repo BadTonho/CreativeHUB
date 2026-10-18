@@ -98,6 +98,15 @@ without sharing, selected-layer guide/context-menu preservation, and actual
 MainWindow Play/Pause/Loop and destruction during playback. A graphical
 test skip or CPU fallback does not qualify native acceptance.
 
+[Pan Behind](../features/PAN_BEHIND.md) uses the same mouse-transparent OpenGL
+child and Viewer overlay. A gesture retains the held texture and changes only
+the pivot/Inspector draft until release; moves submit no render request or GPU
+readback. The native MainWindow test includes this interaction and one Undo.
+The 2026-10-18 attempt failed earlier, while waiting for the standalone Viewer's
+first shared-texture presentation, so native Pan Behind remains unverified.
+See the feature guide for the current portable/fallback results and pending
+native gate; the 2026-10-10 evidence above remains historical.
+
 The explicitly invoked `creative-suite-motion-editor-gpu-preview-benchmark`
 generates a 10-second FFV1 video and two raster images in temporary storage.
 Its 1920 x 1080 composition contains two image layers, video, text and an ellipse;

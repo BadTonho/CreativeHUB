@@ -624,6 +624,23 @@ double InspectorWidget::anchorFieldValue(std::size_t axis) const noexcept
     return axis<2?controls_.anchor_fields[axis]->value():0;
 }
 
+void InspectorWidget::previewAnchorReposition(const model::AnchorRepositionValues& values)
+{
+    const std::array anchors{values.anchor.x_pixels, values.anchor.y_pixels};
+    const std::array positions{values.position_x, values.position_y};
+    for (std::size_t axis = 0; axis < 2; ++axis) {
+        const QSignalBlocker anchor_block(controls_.anchor_fields[axis]);
+        const QSignalBlocker position_block(controls_.transform_fields[axis]);
+        controls_.anchor_fields[axis]->setValue(anchors[axis]);
+        controls_.transform_fields[axis]->setValue(positions[axis]);
+        controls_.anchor_fields[axis]->setReadOnly(true);
+        controls_.transform_fields[axis]->setReadOnly(true);
+        controls_.anchor_key_buttons[axis]->setEnabled(false);
+        controls_.transform_key_buttons[axis]->setEnabled(false);
+    }
+    controls_.reposition_anchor->setEnabled(false);
+}
+
 void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
                                 std::int64_t composition_frame,
                                 int selected_effect_row)

@@ -17,6 +17,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/model/composition_document.h
     src/model/layer_transform_hierarchy.cpp
     src/model/layer_anchor.cpp
+    src/model/anchor_reposition.h
     src/model/layer_scale.cpp
     src/model/layer_transform_hierarchy.h
     src/model/motion_project_data.h
@@ -55,6 +56,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/main_window/main_window_workspace.cpp
     src/ui/main_window/main_window_editing.cpp
     src/ui/main_window/main_window_anchor.cpp
+    src/ui/main_window/main_window_pan_behind.cpp
     src/ui/main_window/main_window_scale.cpp
     src/ui/main_window/main_window_preview.cpp
     src/ui/main_window/main_window_support.cpp

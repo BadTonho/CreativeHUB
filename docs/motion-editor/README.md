@@ -11,6 +11,7 @@ This directory groups approved scope and open work with the native format, featu
 | Layer parenting and Null controls | [Layer hierarchy](features/HIERARCHY.md) |
 | Independent animated scales and proportional linking | [Scale X/Y](features/SCALE_AXES.md) |
 | Animated pixel pivots and compensated repositioning | [Anchor Point](features/ANCHOR_POINT.md) |
+| Dragging pivots without moving content | [Pan Behind](features/PAN_BEHIND.md) |
 | Keyboard shortcuts | [Shortcuts](SHORTCUTS.md) |
 | Native document schema and migrations | [Document format](architecture/FORMAT.md) |
 | Shared-library ownership and reuse boundaries | [Reuse plan](architecture/REUSE_PLAN.md) |

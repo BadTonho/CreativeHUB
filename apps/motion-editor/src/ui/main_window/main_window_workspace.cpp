@@ -58,6 +58,9 @@ void MainWindow::createWorkspace()
     media_pool_->setContentChangedHandler([this] { updateDocumentState(); });
     viewer_ = new CompositionViewer(this);
     viewer_->setObjectName(QStringLiteral("motion-composition-viewer"));
+    viewer_->setPanBehindHandlers([this] { return beginPanBehind(); },
+        [this](const QPointF& delta) { return previewPanBehind(delta); },
+        [this] { commitPanBehind(); }, [this] { cancelPanBehind(); });
     viewer_->setLayerContextMenuHandler([this](const QPoint& global_position) {
         if (!document_ || selected_layer_id_ == 0) return;
         const auto selected = std::find_if(
@@ -136,6 +139,10 @@ void MainWindow::createWorkspace()
                 applySelectedEffectStack(std::move(effects));
             });
     timeline_ = new TimelineNavigator(this);
+    // These run before TimelineNavigator's action handlers, including a seek
+    // that stays at the same frame and therefore emits no frame-change signal.
+    for (auto* action : {play_pause_action_, previous_frame_action_, next_frame_action_})
+        connect(action, &QAction::triggered, this, [this] { cancelPanBehind(); });
     timeline_->setShortcutActions(
         play_pause_action_, previous_frame_action_, next_frame_action_, loop_action_,
         zoom_in_action_, zoom_out_action_);

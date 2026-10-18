@@ -154,6 +154,7 @@ bool MainWindow::recordCompositionEdit(CompositionEditState before)
 }
 void MainWindow::finishPendingTransformEdit()
 {
+    cancelPanBehind();
     if (active_transform_edit_.has_value()) {
         active_transform_edit_.reset();
         if (document_) {
@@ -186,12 +187,13 @@ void MainWindow::updateHistoryActions()
 {
     const bool has_document = document_.has_value();
     if (undo_action_ != nullptr)
-        undo_action_->setEnabled(has_document && composition_history_.canUndo());
+        undo_action_->setEnabled(has_document && (pan_behind_ || composition_history_.canUndo()));
     if (redo_action_ != nullptr)
-        redo_action_->setEnabled(has_document && composition_history_.canRedo());
+        redo_action_->setEnabled(has_document && !pan_behind_ && composition_history_.canRedo());
 }
 void MainWindow::undoComposition()
 {
+    if (pan_behind_) { cancelPanBehind(); return; }
     finishPendingTransformEdit();
     if (!document_) return;
     auto state = composition_history_.undo(captureEditState());
@@ -203,6 +205,7 @@ void MainWindow::undoComposition()
 }
 void MainWindow::redoComposition()
 {
+    if (pan_behind_) return;
     finishPendingTransformEdit();
     if (!document_) return;
     auto state = composition_history_.redo(captureEditState());
@@ -545,6 +548,15 @@ void MainWindow::changeSelectedLayerParent(model::LayerId parent)
 
 void MainWindow::syncTransformInspector()
 {
+    if (pan_behind_) {
+        if (document_ && timeline_ && selected_layer_id_ == pan_behind_->layer_id &&
+            timeline_->currentFrame() == pan_behind_->frame && document_->canvasSize() == pan_behind_->canvas) {
+            inspector_->previewAnchorReposition(pan_behind_->preview);
+            return;
+        }
+        cancelPanBehind();
+    }
+    if (viewer_) viewer_->setPanBehindEnabled(panBehindAvailable());
     const model::CompositionLayer* selected = nullptr;
     if (document_ && selected_layer_id_ != 0) {
         const auto& layers = document_->layers();

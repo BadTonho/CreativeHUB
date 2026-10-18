@@ -1,6 +1,7 @@
 #include "ui/main_window/main_window.h"
 #include "ui/translation_helpers.h"
 #include "ui/dialogs/general_settings_dialog.h"
+#include "ui/viewer/composition_viewer.h"
 
 #include <creative_suite/translations/language_preference.h>
 #include <creative_suite/translations/translation_catalog.h>
@@ -146,6 +147,14 @@ int main(int argc, char* argv[])
                    motion::ui::MotionUiTranslation::tr("Pixels from the fitted layer center, before editable scale and rotation.") != QStringLiteral("Pixels from the fitted layer center, before editable scale and rotation."),
                "Anchor units, explanation and reposition action use the bundled pt-BR catalog.")) return 1;
 
+    {
+        motion::ui::CompositionViewer viewer;
+        if (!check(viewer.toolTip() == QStringLiteral("Arraste o pivô para reposicioná-lo sem mover a camada. Pressione Escape para cancelar."),
+                   "Pan Behind gesture instructions use pt-BR.") ||
+            !check(motion::ui::MotionUiTranslation::tr("The pivot could not be repositioned. Check the Motion Studio log for details.") ==
+                   QStringLiteral("Não foi possível reposicionar o pivô. Consulte o log do Motion Studio para obter detalhes."),
+                   "Pan Behind technical failure text uses pt-BR.")) return 1;
+    }
     const auto english = runtime.installForApplication(
         application, QStringLiteral("motion-editor"),
         QStringLiteral(":/translations/motion-editor/pt_BR.qm"),
@@ -159,6 +168,11 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    {
+        motion::ui::CompositionViewer viewer;
+        if (!check(viewer.toolTip() == QStringLiteral("Drag the pivot to reposition it without moving the layer. Press Escape to cancel."),
+                   "Pan Behind instructions use English without a catalog.")) return 1;
+    }
     preferences.clear();
     preferences.sync();
 

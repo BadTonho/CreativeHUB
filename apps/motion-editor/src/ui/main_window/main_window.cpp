@@ -359,6 +359,8 @@ MainWindow::MainWindow(QWidget* parent,
 }
 MainWindow::~MainWindow()
 {
+    cancelPanBehind();
+    if (viewer_) viewer_->setPanBehindHandlers({}, {}, {}, {});
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
     if (performance_metrics_timer_ != nullptr) performance_metrics_timer_->stop();
     if (audio_keyframe_worker_) audio_keyframe_worker_->cancelAndWait();

@@ -2024,5 +2024,13 @@ Este é um ambiente inicial de trabalho para a suíte criativa de código aberto
         <source>Scale replaces both axis curves with the same animation, regardless of the link.</source>
         <translation>Escala substitui as curvas dos dois eixos pela mesma animação, independentemente do vínculo.</translation>
     </message>
+    <message>
+        <source>Drag the pivot to reposition it without moving the layer. Press Escape to cancel.</source>
+        <translation>Arraste o pivô para reposicioná-lo sem mover a camada. Pressione Escape para cancelar.</translation>
+    </message>
+    <message>
+        <source>The pivot could not be repositioned. Check the Motion Studio log for details.</source>
+        <translation>Não foi possível reposicionar o pivô. Consulte o log do Motion Studio para obter detalhes.</translation>
+    </message>
 </context>
 </TS>
