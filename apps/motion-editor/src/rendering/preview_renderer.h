@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
 class QOffscreenSurface;
@@ -44,6 +45,12 @@ struct PreviewLayerSnapshot {
     std::optional<model::ScaleChannel> scale_y;
 };
 
+struct PreviewSceneSnapshot {
+    std::vector<PreviewLayerSnapshot> layers;
+    std::shared_ptr<const std::vector<model::Mask>> masks;
+    std::shared_ptr<const model::LayerTransformHierarchy> hierarchy;
+};
+
 struct PreviewRequest {
     model::CanvasSize canvas_size{};
     model::FrameRate frame_rate{};
@@ -54,14 +61,25 @@ struct PreviewRequest {
     model::LayerId mask_view_layer=0;
     int mask_view_target=-2;
     std::shared_ptr<const model::LayerTransformHierarchy> hierarchy;
+    // Legacy builders remain adapters. freezeScene moves their heavy data once;
+    // subsequent copies share immutable curves, media references and relations.
+    std::shared_ptr<const PreviewSceneSnapshot> scene;
+    std::optional<model::LayerPositionOverride> position_override;
+    std::uint64_t gesture_session = 0;
+    [[nodiscard]] bool validSceneStorage() const noexcept {
+        return !scene || (layers.empty() && !masks && !hierarchy);
+    }
+    void freezeScene() {
+        if (!validSceneStorage()) throw std::invalid_argument("Concurrent preview scene representations.");
+        if (!scene) scene = std::make_shared<const PreviewSceneSnapshot>(
+            PreviewSceneSnapshot{std::move(layers),std::move(masks),std::move(hierarchy)});
+    }
+    [[nodiscard]] const auto& sceneLayers() const noexcept { return scene ? scene->layers : layers; }
+    [[nodiscard]] const auto& sceneMasks() const noexcept { return scene ? scene->masks : masks; }
+    [[nodiscard]] const auto& sceneHierarchy() const noexcept { return scene ? scene->hierarchy : hierarchy; }
 };
 
 class CompositionFrameRenderer;
-
-enum class PreviewRequestMode : std::uint8_t {
-    Interactive,
-    Playback,
-};
 
 inline constexpr std::int64_t maximum_sequential_playback_decode_gap_frames = 8;
 
@@ -86,7 +104,7 @@ inline constexpr std::int64_t maximum_sequential_playback_decode_gap_frames = 8;
 
 // Serializes decoding on a worker thread and keeps decoder sessions local to
 // that thread. Interactive requests cancel stale decodes; playback requests
-// replace pending work without interrupting the in-flight playback decode.
+// replace pending work without interrupting in-flight playback/gesture work.
 class PreviewRenderer final : public QThread {
 public:
     using ResultHandler = std::function<void(
@@ -119,6 +137,7 @@ public:
         std::uint64_t request_generation,
         PreviewRequestMode mode,
         std::uint64_t cancellation_generation) const noexcept;
+    [[nodiscard]] bool canPresentFrame(const PreviewFrame& frame) const noexcept;
     void stopAndWait();
     // GUI thread: invalidate outstanding deliveries; the next request is
     // recomposed on the worker through RGBA (or CPU after context failure).
@@ -162,6 +181,7 @@ private:
     QOpenGLContext* texture_share_context_ = nullptr;
     std::atomic<std::uint64_t> generation_{0};
     std::atomic<std::uint64_t> cancellation_generation_{0};
+    std::atomic<std::uint64_t> gesture_session_{0};
     std::unique_ptr<CompositionFrameRenderer> frame_renderer_;
     diagnostics::PerformanceMetrics* metrics_ = nullptr;
 };

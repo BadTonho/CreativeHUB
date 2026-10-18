@@ -36,6 +36,17 @@ checks it again before drawing. Continuous playback may present a completed
 frame while later playback requests coalesce. An interactive request or
 composition reset invalidates earlier playback and seek work.
 
+[Viewer Position drag](../features/POSITION_DRAG.md) also carries a gesture
+session ID through PreviewRequest/PreviewFrame. Its immutable scene is shared
+across lightweight Position overrides. One running gesture job completes while
+new movements replace the last pending request; session/cancellation identity
+and monotonic presentation reject obsolete results through the paint boundary.
+Cancel/commit invalidates drafts without resetting source caches. Recovery
+recomposes the latest active candidate. Existing texture lease budgets and
+backpressure remain unchanged; no additional rollback lease or GUI readback is
+introduced. Native GPU acceptance for this interaction is pending; the known
+later presentation failure is retained in the linked feature evidence.
+
 One mailbox result and one scheduled GUI drain bound pending deliveries.
 Replacing its result releases the older lease and records discarded work. A
 single compositor session persists across composition resets; therefore no

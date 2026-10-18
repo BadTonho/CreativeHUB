@@ -3,7 +3,8 @@
 Status: implemented development workflow, current native `.motion` v12. Manual visual,
 platform, and performance acceptance remain pending. The timeline
 [Parent & Link pick-whip](PARENT_PICK_WHIP.md) is implemented; other Viewer
-transform handles remain deferred. Independent
+rotation/scale handles remain deferred. The [Position handle](POSITION_DRAG.md)
+moves the selected subtree through full parent/binding geometry. Independent
 [Scale X/Y](SCALE_AXES.md) retains complete affine inheritance. Animated pixel Anchor Point is
 implemented separately; see [Anchor Point](ANCHOR_POINT.md).
 The [Pan Behind](PAN_BEHIND.md) pivot gesture uses the full inherited affine

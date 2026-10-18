@@ -15,6 +15,9 @@ The timeline [parent pick-whip](../features/PARENT_PICK_WHIP.md) likewise saves
 only confirmed parent IDs and binding compensation through existing fields;
 its candidate cache, fixed frame and capture state are never serialized. Hub
 backup and `.cscomp` v3 compatibility rules are unchanged.
+Likewise, [Position drag](../features/POSITION_DRAG.md) persists only confirmed
+Position bases/keys. Scene snapshots, overrides and gesture session IDs are
+transient. No native, recovery, interchange or Hub format change is introduced.
 
 ## File identity and versioning
 

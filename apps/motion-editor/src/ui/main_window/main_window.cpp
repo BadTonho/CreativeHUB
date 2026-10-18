@@ -360,6 +360,8 @@ MainWindow::MainWindow(QWidget* parent,
 }
 MainWindow::~MainWindow()
 {
+    cancelPositionDrag();
+    if (viewer_) viewer_->setPositionDragHandlers({});
     cancelParentPickWhip();
     if (timeline_) timeline_->setParentPickWhipHandlers({});
     cancelPanBehind();

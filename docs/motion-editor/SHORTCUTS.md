@@ -26,6 +26,11 @@ The timeline [Parent & Link pick-whip](features/PARENT_PICK_WHIP.md) uses the
 same local **Escape** and cancel-only **Undo** behavior, with Redo unavailable
 during capture. Start from the row-header icon; no global shortcut is added.
 
+During [Viewer Position drag](features/POSITION_DRAG.md), **Escape** or **Undo**
+cancels only the provisional move and retains the previous history/Redo branch.
+Redo is unavailable until release/cancel. Start from the four-way handle beside
+the pivot; there is no new global shortcut or tool mode.
+
 ## Customize shortcuts
 
 Open **Settings > Keyboard Shortcuts** to edit an action's key sequence. Changes are applied after confirmation; cancel closes without applying them. The dialog can reset assignments to defaults, and duplicate nonempty shortcuts are rejected. Shortcut assignments are saved in the application's settings.

@@ -17,6 +17,14 @@
 namespace motion::model {
 
 using LayerId = std::uint64_t;
+inline constexpr std::size_t maximum_document_keyframes = 2'000'000;
+
+// Evaluated local Position only; never serialized as gesture state.
+struct LayerPositionOverride {
+    LayerId layer_id = 0;
+    double x = 0, y = 0;
+    friend bool operator==(const LayerPositionOverride&, const LayerPositionOverride&) = default;
+};
 
 struct CanvasSize {
     int width;
@@ -347,6 +355,9 @@ public:
         LayerId id,
         std::optional<LinkedImageDocument> linked_image);
     [[nodiscard]] bool setLayerVisible(LayerId id, bool visible) noexcept;
+    // Atomic static/animated Position edit at a composition frame, including
+    // insertion between keys. All other authored properties are retained.
+    [[nodiscard]] bool setLayerPositionAtFrame(LayerId, double x, double y, std::int64_t composition_frame);
     [[nodiscard]] bool setLayerTransform(
         LayerId id,
         const creative_suite::animation::Transform2D& transform) noexcept;

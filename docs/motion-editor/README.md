@@ -13,6 +13,7 @@ This directory groups approved scope and open work with the native format, featu
 | Independent animated scales and proportional linking | [Scale X/Y](features/SCALE_AXES.md) |
 | Animated pixel pivots and compensated repositioning | [Anchor Point](features/ANCHOR_POINT.md) |
 | Dragging pivots without moving content | [Pan Behind](features/PAN_BEHIND.md) |
+| Moving layers directly in the Viewer | [Position drag](features/POSITION_DRAG.md) |
 | Keyboard shortcuts | [Shortcuts](SHORTCUTS.md) |
 | Native document schema and migrations | [Document format](architecture/FORMAT.md) |
 | Shared-library ownership and reuse boundaries | [Reuse plan](architecture/REUSE_PLAN.md) |

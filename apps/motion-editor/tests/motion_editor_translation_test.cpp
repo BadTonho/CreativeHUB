@@ -156,7 +156,10 @@ int main(int argc, char* argv[])
 
     {
         motion::ui::CompositionViewer viewer;
-        if (!check(viewer.toolTip() == QStringLiteral("Arraste o pivô para reposicioná-lo sem mover a camada. Pressione Escape para cancelar."),
+        if (!check(viewer.toolTip().startsWith(QStringLiteral("Arraste o pivô para reposicioná-lo sem mover a camada. Pressione Escape para cancelar.")) &&
+                   viewer.toolTip().contains(QStringLiteral("Arraste a alça de quatro direções para mover a camada. Pressione Escape para cancelar.")) &&
+                   motion::ui::MotionUiTranslation::tr("The layer could not be moved. Check the Motion Studio log for details.") ==
+                       QStringLiteral("Não foi possível mover a camada. Consulte o log do Motion Studio para obter detalhes."),
                    "Pan Behind gesture instructions use pt-BR.") ||
             !check(motion::ui::MotionUiTranslation::tr("The pivot could not be repositioned. Check the Motion Studio log for details.") ==
                    QStringLiteral("Não foi possível reposicionar o pivô. Consulte o log do Motion Studio para obter detalhes."),
@@ -177,7 +180,10 @@ int main(int argc, char* argv[])
 
     {
         motion::ui::CompositionViewer viewer;
-        if (!check(viewer.toolTip() == QStringLiteral("Drag the pivot to reposition it without moving the layer. Press Escape to cancel."),
+        if (!check(viewer.toolTip().startsWith(QStringLiteral("Drag the pivot to reposition it without moving the layer. Press Escape to cancel.")) &&
+                   viewer.toolTip().contains(QStringLiteral("Drag the four-way handle to move the layer. Press Escape to cancel.")) &&
+                   motion::ui::MotionUiTranslation::tr("The layer could not be moved. Check the Motion Studio log for details.") ==
+                       QStringLiteral("The layer could not be moved. Check the Motion Studio log for details."),
                    "Pan Behind instructions use English without a catalog.")) return 1;
     }
     if (!check(motion::ui::MotionUiTranslation::tr("Parent: %1").arg("Null [#2]") == QStringLiteral("Parent: Null [#2]") &&

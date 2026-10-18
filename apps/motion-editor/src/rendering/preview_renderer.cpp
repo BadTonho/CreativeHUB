@@ -7,6 +7,7 @@
 
 #include <utility>
 #include <chrono>
+#include <stdexcept>
 
 namespace motion::ui {
 
@@ -23,7 +24,7 @@ PreviewRenderer::PreviewRenderer(
     , frame_handler_(frame_handler ? std::move(frame_handler) :
           FrameResultHandler([handler = std::move(result_handler)](PreviewFrame frame) {
               if (handler) handler(frame.generation,
-                  frame.playback ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive,
+                  frame.mode(),
                   frame.cancellation_generation, std::move(frame.rgba));
           }))
     , render_function_(std::move(render_function))
@@ -45,16 +46,21 @@ std::uint64_t PreviewRenderer::submit(PreviewRequest request, PreviewRequestMode
 {
     std::lock_guard lock(mutex_);
     if (stopping_) return generation_.load(std::memory_order_relaxed);
-    if (mode == PreviewRequestMode::Interactive ||
+    if (mode == PreviewRequestMode::Gesture && !request.gesture_session)
+        throw std::invalid_argument("Gesture preview requires a session ID.");
+    const auto session = mode == PreviewRequestMode::Gesture ? request.gesture_session : 0;
+    if (mode == PreviewRequestMode::Interactive || session != gesture_session_.load(std::memory_order_relaxed) ||
         (in_flight_mode_.has_value() &&
          *in_flight_mode_ == PreviewRequestMode::Interactive)) {
         cancellation_generation_.fetch_add(1, std::memory_order_relaxed);
     }
+    gesture_session_.store(session,std::memory_order_relaxed);
     const auto current_generation = generation_.fetch_add(1, std::memory_order_relaxed) + 1;
     if (pending_.has_value() && metrics_ != nullptr) {
         metrics_->recordCoalescedRequest(pending_->generation);
     }
     if (metrics_ != nullptr) metrics_->recordRequest(current_generation);
+    if (mode == PreviewRequestMode::Gesture) request.freezeScene();
     pending_ = PendingRequest{
         current_generation,
         cancellation_generation_.load(std::memory_order_relaxed),
@@ -93,7 +99,13 @@ bool PreviewRenderer::canPresentResult(
         cancellation_generation_.load(std::memory_order_relaxed)) {
         return false;
     }
-    return mode == PreviewRequestMode::Playback || request_generation == generation();
+    return mode != PreviewRequestMode::Interactive || request_generation == generation();
+}
+
+bool PreviewRenderer::canPresentFrame(const PreviewFrame& frame) const noexcept
+{
+    return (!frame.gesture_session || frame.gesture_session == gesture_session_.load(std::memory_order_relaxed)) &&
+        canPresentResult(frame.generation,frame.mode(),frame.cancellation_generation);
 }
 
 void PreviewRenderer::stopAndWait()
@@ -169,6 +181,7 @@ void PreviewRenderer::run()
         output.generation = request->generation;
         output.cancellation_generation = request->cancellation_generation;
         output.playback = request->mode == PreviewRequestMode::Playback;
+        output.gesture_session = request->request.gesture_session;
         bool texture_busy = false;
         const auto render_started = std::chrono::steady_clock::now();
         try {
@@ -189,12 +202,14 @@ void PreviewRenderer::run()
             creative_suite::diagnostics::Logger::instance().log(
                 creative_suite::diagnostics::Level::Error,
                 "motion_preview", "render_frame", error.what(),
-                {{"frame", std::to_string(request->request.layers.empty()
-                    ? 0 : request->request.layers.front().local_frame)}});
+                {{"frame", std::to_string(request->request.sceneLayers().empty()
+                    ? 0 : request->request.sceneLayers().front().local_frame)}});
+            output.render_failed = true;
         } catch (...) {
             creative_suite::diagnostics::Logger::instance().log(
                 creative_suite::diagnostics::Level::Error,
                 "motion_preview", "render_frame", "Unknown preview rendering failure");
+            output.render_failed = true;
         }
         const auto render_elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::steady_clock::now() - render_started).count();
@@ -218,7 +233,7 @@ void PreviewRenderer::run()
                 frame_renderer_->texturePoolOccupancy(), true,
                 request->mode == PreviewRequestMode::Playback);
             std::unique_lock lock(mutex_);
-            if (request->mode == PreviewRequestMode::Interactive && !stopping_ &&
+            if (request->mode != PreviewRequestMode::Playback && !stopping_ &&
                 !pending_ && canPresentResult(request->generation, request->mode,
                                              request->cancellation_generation)) {
                 // Wait before retrying and let new seeks supersede this request.
@@ -262,7 +277,7 @@ void PreviewRenderer::recoverPresentation(bool use_cpu) {
 void PreviewRenderer::publish(PreviewFrame frame) {
     std::lock_guard publication_lock(mutex_);
     if (stopping_ || !canPresentResult(frame.generation,
-        frame.playback ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive,
+        frame.mode(),
         frame.cancellation_generation)) {
         if (metrics_) metrics_->recordStaleResult(frame.generation);
         return;

@@ -58,10 +58,10 @@ void MainWindow::flushPreviewPerformanceMetrics()
         "motion_performance", "preview_sample",
         "Motion Studio preview performance interval.", context);
 }
-void MainWindow::requestPreview(bool playback_tick)
+PreviewRequest MainWindow::buildPreviewRequest()
 {
-    if (!document_ || !preview_renderer_ || !media_pool_ || !timeline_) return;
     PreviewRequest request;
+    if (!document_ || !media_pool_ || !timeline_) return request;
     request.canvas_size = document_->canvasSize();
     request.frame_rate = document_->frameRate();
     const auto frame = timeline_->currentFrame();
@@ -73,7 +73,7 @@ void MainWindow::requestPreview(bool playback_tick)
     } catch (const std::exception& error) {
         creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
             "motion_preview", "prepare_hierarchy", error.what());
-        return;
+        return request;
     }
     request.hierarchy = hierarchy_snapshot_;
     if(!mask_snapshot_ || *mask_snapshot_!=document_->masks())mask_snapshot_=std::make_shared<const std::vector<model::Mask>>(document_->masks());
@@ -110,6 +110,22 @@ void MainWindow::requestPreview(bool playback_tick)
         }
         request.layers.push_back(std::move(snapshot));
     }
+    request.freezeScene();
+    return request;
+}
+void MainWindow::requestPreview(bool playback_tick)
+{
+    if (!document_ || !preview_renderer_ || !media_pool_ || !timeline_) return;
+    if (position_drag_) {
+        auto request = *position_drag_->snapshot;
+        if (request.sceneLayers().empty()) return; // Null-only scenes need no pixels.
+        request.gesture_session = position_drag_->session;
+        request.position_override = model::LayerPositionOverride{position_drag_->id,position_drag_->preview[0],position_drag_->preview[1]};
+        position_drag_->submitted = true;
+        (void)preview_renderer_->submit(std::move(request),PreviewRequestMode::Gesture);
+        return;
+    }
+    auto request = buildPreviewRequest();
     (void)preview_renderer_->submit(
         std::move(request),
         playback_tick ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive);

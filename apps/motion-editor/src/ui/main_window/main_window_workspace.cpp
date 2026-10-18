@@ -58,6 +58,9 @@ void MainWindow::createWorkspace()
     media_pool_->setContentChangedHandler([this] { updateDocumentState(); });
     viewer_ = new CompositionViewer(this);
     viewer_->setObjectName(QStringLiteral("motion-composition-viewer"));
+    viewer_->setPositionDragHandlers({[this] { return beginPositionDrag(); },
+        [this](QPointF delta) { return previewPositionDrag(delta); },
+        [this] { commitPositionDrag(); },[this] { cancelPositionDrag(); }});
     viewer_->setPanBehindHandlers([this] { return beginPanBehind(); },
         [this](const QPointF& delta) { return previewPanBehind(delta); },
         [this] { commitPanBehind(); }, [this] { cancelPanBehind(); });
@@ -440,19 +443,21 @@ void MainWindow::createWorkspace()
         });
     }
     viewer_->setFrameValidator([this](const PreviewFrame& frame) {
-        return preview_renderer_ && preview_renderer_->canPresentResult(frame.generation,
-            frame.playback ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive,
-            frame.cancellation_generation);
+        return preview_renderer_ && preview_renderer_->canPresentFrame(frame);
     });
     preview_renderer_ = std::make_unique<PreviewRenderer>(this,
         PreviewRenderer::ResultHandler{}, PreviewRenderer::RenderFunction{}, nullptr,
         gpu_composition_enabled, gpu_composition_surface_.get(),
         [this](PreviewFrame frame) {
-            const auto mode = frame.playback ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive;
-            const bool may_present = preview_renderer_ && preview_renderer_->canPresentResult(
-                frame.generation, mode, frame.cancellation_generation) &&
+            const bool may_present = preview_renderer_ && preview_renderer_->canPresentFrame(frame) &&
                 (!frame.playback || (timeline_ && timeline_->isPlaying()));
             if (may_present && viewer_) {
+                if (frame.render_failed && position_drag_ && frame.gesture_session==position_drag_->session) {
+                    const auto id=position_drag_->id;const auto current=position_drag_->frame;
+                    cancelPositionDrag();
+                    logPositionDragFailure("position_drag_render",id,current,std::runtime_error("Gesture frame rendering failed."));
+                    return;
+                }
                 if (frame.valid()) viewer_->setPreviewFrame(std::move(frame));
                 else diagnostics::PerformanceMetrics::instance().discardRequest(frame.generation);
             } else diagnostics::PerformanceMetrics::instance().recordStaleResult(frame.generation);

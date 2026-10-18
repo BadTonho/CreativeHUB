@@ -48,6 +48,7 @@ class MediaPoolWidget;
 class MotionWorkspace;
 class PropertyCurveEditor;
 class PreviewRenderer;
+struct PreviewRequest;
 class TimelineNavigator;
 class AudioKeyframeGenerationWorker;
 class MotionVideoExportWorker;
@@ -156,6 +157,11 @@ private:
     bool previewPanBehind(const QPointF& canvas_delta);
     void commitPanBehind();
     void cancelPanBehind();
+    bool beginPositionDrag();
+    bool previewPositionDrag(const QPointF&);
+    void cancelPositionDrag();
+    void commitPositionDrag();
+    void logPositionDragFailure(const char*,model::LayerId,std::int64_t,const std::exception&);
     void commitAnchorReposition(model::LayerId id, model::AnchorPoint anchor, std::int64_t frame);
     void logPanBehindFailure(const char* operation, model::LayerId id, std::int64_t frame,
         const std::exception& error);
@@ -199,6 +205,7 @@ private:
                          std::int64_t start_frame,
                          model::LayerId before_layer_id);
     void requestPreview(bool playback_tick = false);
+    PreviewRequest buildPreviewRequest();
     void closeEvent(QCloseEvent* event) override;
 
     std::optional<model::CompositionDocument> document_;
@@ -291,6 +298,19 @@ private:
         model::AnchorRepositionValues preview;
     };
     std::optional<PanBehindGesture> pan_behind_;
+    struct PositionDragGesture {
+        model::LayerId id;
+        std::int64_t frame;
+        model::CanvasSize canvas;
+        std::array<double,2> initial,preview;
+        model::AffineTransform inverse_linear;
+        QPointF initial_pivot;
+        std::shared_ptr<const PreviewRequest> snapshot;
+        std::uint64_t session;
+        bool submitted=false;
+    };
+    std::optional<PositionDragGesture> position_drag_;
+    std::uint64_t position_session_=0;
     struct ParentPickWhipGesture { model::LayerId child; std::int64_t frame; };
     std::optional<ParentPickWhipGesture> parent_pick_whip_;
     double active_scale_ratio_=1;

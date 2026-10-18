@@ -2,6 +2,7 @@
 
 #include "model/composition_document.h"
 #include "rendering/preview_frame.h"
+#include "position_drag_handle.h"
 
 #include <creative_suite/media/video_frame.h>
 
@@ -56,6 +57,10 @@ public:
     void setPanBehindEnabled(bool enabled);
     void cancelPanBehind();
     [[nodiscard]] bool panBehindActive() const noexcept { return pivot_pressed_; }
+    void setPositionDragHandlers(PositionDragHandlers);
+    void setPositionDragEnabled(bool);
+    void cancelPositionDrag();
+    [[nodiscard]] bool positionDragActive() const noexcept;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -78,6 +83,7 @@ private:
     void paintOverlay(QPainter& painter);
     void recordPaint(bool texture);
     GpuCompositionSurface* gpu_surface_ = nullptr;
+    PositionDragHandle* position_handle_ = nullptr;
     PreviewFrame preview_frame_;
     std::function<void(bool)> recovery_handler_;
     std::function<bool(const PreviewFrame&)> frame_validator_;

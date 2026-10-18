@@ -6,6 +6,8 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL OpenGLWidgets Widgets LinguistTools)
 
 add_library(creative-suite-motion-editor-core STATIC
+    src/model/layer_position.cpp
+    src/model/layer_position.h
     src/audio/audio_envelope_analyzer.cpp
     src/audio/audio_envelope_analyzer.h
     src/diagnostics/performance_metrics.cpp
@@ -45,6 +47,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/workers/audio_keyframe_generation.h
     src/ui/viewer/composition_viewer.cpp
     src/ui/viewer/composition_viewer.h
+    src/ui/viewer/position_drag_handle.cpp
+    src/ui/viewer/position_drag_handle.h
     src/application/history/composition_history.cpp
     src/application/history/composition_history.h
     src/ui/main_window/main_window_interchange.cpp
@@ -58,6 +62,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/main_window/main_window_anchor.cpp
     src/ui/main_window/main_window_pan_behind.cpp
     src/ui/main_window/main_window_parenting.cpp
+    src/ui/main_window/main_window_position.cpp
     src/ui/main_window/main_window_scale.cpp
     src/ui/main_window/main_window_preview.cpp
     src/ui/main_window/main_window_support.cpp

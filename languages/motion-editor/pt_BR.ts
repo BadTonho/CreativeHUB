@@ -2050,5 +2050,13 @@ Pai e vínculo: %2</translation>
         <source>Drag to choose a parent. Release outside a layer to cancel.</source>
         <translation>Arraste para escolher um pai. Solte fora de uma camada para cancelar.</translation>
     </message>
+    <message>
+        <source>Drag the four-way handle to move the layer. Press Escape to cancel.</source>
+        <translation>Arraste a alça de quatro direções para mover a camada. Pressione Escape para cancelar.</translation>
+    </message>
+    <message>
+        <source>The layer could not be moved. Check the Motion Studio log for details.</source>
+        <translation>Não foi possível mover a camada. Consulte o log do Motion Studio para obter detalhes.</translation>
+    </message>
 </context>
 </TS>

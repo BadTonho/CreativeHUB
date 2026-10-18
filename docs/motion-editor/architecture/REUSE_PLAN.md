@@ -113,6 +113,17 @@ same parent-change/history command as the Inspector. Movement does not edit
 documents or request workers; autosave sees only committed state. No compositor,
 Hub, schema or shared-animation interface changes are needed.
 
+[Viewer Position drag](../features/POSITION_DRAG.md) adds a Motion-owned pure
+parent/binding-space displacement calculation and an atomic static/animated
+document edit. The hierarchy accepts a lightweight Position override before
+local evaluation. MainWindow owns gesture identity/frame/values and one shared
+immutable `PreviewSceneSnapshot`; the Viewer owns handle drawing and capture.
+Gesture requests keep one running job and one latest pending job, with session
+and cancellation validation through worker, mailbox, controller and paint.
+Normal value-based request builders remain adapters, including export. Source
+caches, stage masks and CPU/OpenGL/fallback composition remain in their existing
+owners; there are no new shared-library or compositor contracts.
+
 ### Layer effects
 
 Motion Studio owns the effect types, model validation, ordered per-layer

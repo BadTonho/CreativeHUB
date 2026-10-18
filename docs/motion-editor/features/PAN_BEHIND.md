@@ -72,7 +72,9 @@ or shared animation type changes are needed.
 Only confirmed Anchor/Position bases and keys use the existing v12 fields.
 Recovery remains wrapper v1; Hub backup and `.cscomp` compatibility rules are
 unchanged. There is no saved gesture state or new tool/shortcut setting. Viewer
-zoom/pan, snapping, axis restriction and other transform handles remain deferred.
+zoom/pan, snapping, axis restriction and rotation/scale handles remain deferred.
+The separate [Position handle](POSITION_DRAG.md) moves content with live worker
+preview and release-only commit, leaving the pivot gesture unchanged.
 The timeline [parent pick-whip](PARENT_PICK_WHIP.md) is a separate interaction
 using the same committed hierarchy without a new format.
 

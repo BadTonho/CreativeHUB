@@ -19,9 +19,9 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
     c::OpenGlCompositionTimings timings;
     const auto canceled=[&]{return cancel && cancel();};
     const auto coverage=[&](model::MaskId id,int width,int height) {
-        if(!request.masks)throw std::runtime_error("Missing mask definitions.");
-        const auto it=std::find_if(request.masks->begin(),request.masks->end(),[id](const auto& m){return m.id==id;});
-        if(it==request.masks->end())throw std::runtime_error("Unknown mask reference for layer "+std::to_string(layer.id));
+        if(!request.sceneMasks())throw std::runtime_error("Missing mask definitions.");
+        const auto it=std::find_if(request.sceneMasks()->begin(),request.sceneMasks()->end(),[id](const auto& m){return m.id==id;});
+        if(it==request.sceneMasks()->end())throw std::runtime_error("Unknown mask reference for layer "+std::to_string(layer.id));
         auto frame=cache.coverage(it->kind,c::evaluateShapeMask(it->parameters,it->keyframes,request.composition_frame),width,height,cancel);
         if(!frame && !canceled())throw std::runtime_error("Mask coverage exceeds its bounded frame budget.");
         return frame;

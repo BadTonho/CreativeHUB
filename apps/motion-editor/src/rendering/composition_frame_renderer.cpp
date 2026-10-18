@@ -182,8 +182,10 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     if (texture_busy) *texture_busy = false;
     if (async_ticket) async_ticket->reset();
     if (async_failure) *async_failure = false;
+    if (!request.validSceneStorage() || (request.position_override && !request.sceneHierarchy()))
+        throw std::invalid_argument("Position preview requires an exclusive scene and a hierarchy snapshot.");
 
-    if (request.layers.empty()) {
+    if (request.sceneLayers().empty()) {
         content_frames_.clear();
         if (!request.black_canvas_when_empty) return {};
     }
@@ -194,14 +196,14 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         return {};
     }
 
-    if(request.mask_view_layer && request.masks) {
-        const auto layer=std::find_if(request.layers.begin(),request.layers.end(),[&](const auto& l){return l.id==request.mask_view_layer;});
-        if(layer!=request.layers.end()) {
+    if(request.mask_view_layer && request.sceneMasks()) {
+        const auto layer=std::find_if(request.sceneLayers().begin(),request.sceneLayers().end(),[&](const auto& l){return l.id==request.mask_view_layer;});
+        if(layer!=request.sceneLayers().end()) {
             const auto target=request.mask_view_target;
             const auto id=target==-2?layer->source_mask:target==-1?layer->transform_mask:
                 target>=0 && std::size_t(target)<layer->effects.size()?std::visit([](const auto& e){return e.mask;},layer->effects[target]):0;
-            const auto mask=std::find_if(request.masks->begin(),request.masks->end(),[id](const auto& m){return m.id==id;});
-            if(mask!=request.masks->end())try {
+            const auto mask=std::find_if(request.sceneMasks()->begin(),request.sceneMasks()->end(),[id](const auto& m){return m.id==id;});
+            if(mask!=request.sceneMasks()->end())try {
                 int width=request.canvas_size.width,height=request.canvas_size.height;
                 if(target!=-1 && (!layer->presentation || layer->presentation->profile==creative_suite::composition_exchange::Profile::MotionLayer)) {
                     if(const auto* text=std::get_if<model::TextLayerContent>(&layer->content)){width=text->box_width;height=text->box_height;}
@@ -252,34 +254,34 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         gpu_composition_disabled_after_failure_=true;
         return render(request,should_cancel,fail_on_media_error,mode,async_ticket,async_failure,texture,texture_busy);
     };
-    composition_layers.reserve(request.layers.size());
-    owned_frames.reserve(request.layers.size());
-    composition_layer_ids.reserve(request.layers.size());
+    composition_layers.reserve(request.sceneLayers().size());
+    owned_frames.reserve(request.sceneLayers().size());
+    composition_layer_ids.reserve(request.sceneLayers().size());
     std::unordered_map<model::LayerId, model::ResolvedLayerTransform> resolved;
     try {
-        if (request.hierarchy) resolved = request.hierarchy->evaluate(request.composition_frame);
+        if (request.sceneHierarchy()) resolved = request.sceneHierarchy()->evaluate(request.composition_frame,request.position_override);
     } catch (const std::exception& error) {
         creative_suite::diagnostics::Logger::instance().log(
             creative_suite::diagnostics::Level::Error, "motion_preview", "evaluate_hierarchy", error.what());
-        if (fail_on_media_error) throw;
+        if (fail_on_media_error || mode==PreviewRequestMode::Gesture) throw;
         return {};
     }
-    for (const auto& layer : request.layers) {
+    for (const auto& layer : request.sceneLayers()) {
         if ((should_cancel && should_cancel())) return {};
         if (layer.kind == model::LayerKind::Null) continue;
         const auto resolved_entry = resolved.find(layer.id);
-        if (request.hierarchy && resolved_entry == resolved.end()) {
+        if (request.sceneHierarchy() && resolved_entry == resolved.end()) {
             creative_suite::diagnostics::Logger::instance().log(
                 creative_suite::diagnostics::Level::Error, "motion_preview", "evaluate_hierarchy",
                 "The render layer is absent from its hierarchy snapshot.", {{"layer_id", std::to_string(layer.id)}});
-            if (fail_on_media_error) throw std::runtime_error("Missing layer hierarchy snapshot node.");
+            if (fail_on_media_error || mode==PreviewRequestMode::Gesture) throw std::runtime_error("Missing layer hierarchy snapshot node.");
             return {};
         }
-        auto effective_transform = request.hierarchy ? static_cast<const creative_suite::animation::Transform2D&>(resolved_entry->second) :
+        auto effective_transform = request.sceneHierarchy() ? static_cast<const creative_suite::animation::Transform2D&>(resolved_entry->second) :
             creative_suite::animation::evaluateTransform(layer.transform, layer.keyframes, layer.local_frame);
         std::optional<model::AffineTransform> effective_world;
-        if(request.hierarchy && resolved_entry->second.affine)effective_world=resolved_entry->second.world;
-        if (!request.hierarchy) {
+        if(request.sceneHierarchy() && resolved_entry->second.affine)effective_world=resolved_entry->second.world;
+        if (!request.sceneHierarchy()) {
             const model::AnchorPoint anchor{
                 creative_suite::animation::evaluateScalar(layer.anchor_point.x_pixels,layer.anchor_keyframes[0],layer.local_frame),
                 creative_suite::animation::evaluateScalar(layer.anchor_point.y_pixels,layer.anchor_keyframes[1],layer.local_frame)};
