@@ -9,6 +9,7 @@ This directory groups approved scope and open work with the native format, featu
 | MVP scope and current readiness | [Scope and readiness](SCOPE_AND_READINESS.md) |
 | Planned work and feature-to-verification index | [Roadmap](ROADMAP.md) |
 | Layer parenting and Null controls | [Layer hierarchy](features/HIERARCHY.md) |
+| Choosing parents by dragging in the timeline | [Parent & Link pick-whip](features/PARENT_PICK_WHIP.md) |
 | Independent animated scales and proportional linking | [Scale X/Y](features/SCALE_AXES.md) |
 | Animated pixel pivots and compensated repositioning | [Anchor Point](features/ANCHOR_POINT.md) |
 | Dragging pivots without moving content | [Pan Behind](features/PAN_BEHIND.md) |

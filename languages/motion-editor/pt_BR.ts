@@ -2032,5 +2032,23 @@ Este é um ambiente inicial de trabalho para a suíte criativa de código aberto
         <source>The pivot could not be repositioned. Check the Motion Studio log for details.</source>
         <translation>Não foi possível reposicionar o pivô. Consulte o log do Motion Studio para obter detalhes.</translation>
     </message>
+    <message>
+        <source>Parent: %1</source>
+        <translation>Pai: %1</translation>
+    </message>
+    <message>
+        <source>Invalid parent: %1</source>
+        <translation>Pai inválido: %1</translation>
+    </message>
+    <message>
+        <source>Layer: %1
+Parent &amp; Link: %2</source>
+        <translation>Camada: %1
+Pai e vínculo: %2</translation>
+    </message>
+    <message>
+        <source>Drag to choose a parent. Release outside a layer to cancel.</source>
+        <translation>Arraste para escolher um pai. Solte fora de uma camada para cancelar.</translation>
+    </message>
 </context>
 </TS>

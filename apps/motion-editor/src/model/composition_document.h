@@ -302,6 +302,9 @@ public:
     // Detaches direct children without changing their pose at composition_frame.
     [[nodiscard]] bool removeLayer(LayerId id, std::int64_t composition_frame = 0);
     [[nodiscard]] bool canSetLayerParent(LayerId child, LayerId parent) const noexcept;
+    // Existing nonzero IDs in document order, excluding child and descendants.
+    // Iterative O(layers), independent of visibility, media and layer intervals.
+    [[nodiscard]] std::vector<LayerId> eligibleLayerParents(LayerId child) const;
     // Keeps the current global pose and all local keyframes. Zero clears the parent.
     [[nodiscard]] bool setLayerParent(LayerId child, LayerId parent, std::int64_t composition_frame);
     [[nodiscard]] bool setLayerAnchorPoint(LayerId, AnchorPoint);

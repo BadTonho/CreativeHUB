@@ -104,6 +104,15 @@ operation. Inspector preview signals are blocked and only release mutates the
 document/history; autosave reads committed values. Overlay-only moves reuse the
 displayed RGBA frame/GPU texture without worker requests or shared API changes.
 
+The timeline [Parent & Link pick-whip](../features/PARENT_PICK_WHIP.md) keeps
+capture/overlay/scroll in an internal timeline helper and source/frame state in
+MainWindow. Motion's iterative O(layers) eligible-parent query is shared with
+the Inspector; candidates are cached once per gesture. Rows carry parent IDs,
+while hit-tested indices are never persisted. Release revalidates and calls the
+same parent-change/history command as the Inspector. Movement does not edit
+documents or request workers; autosave sees only committed state. No compositor,
+Hub, schema or shared-animation interface changes are needed.
+
 ### Layer effects
 
 Motion Studio owns the effect types, model validation, ordered per-layer

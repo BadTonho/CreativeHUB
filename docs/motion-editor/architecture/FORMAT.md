@@ -11,6 +11,10 @@ from the Video Editor `.csp` project and Image Editor `.cimg` document.
 [Pan Behind](../features/PAN_BEHIND.md) persists only confirmed Anchor/Position
 values through existing fields. Its live Viewer/Inspector draft is not document
 data; native v12 and recovery wrapper v1 remain unchanged.
+The timeline [parent pick-whip](../features/PARENT_PICK_WHIP.md) likewise saves
+only confirmed parent IDs and binding compensation through existing fields;
+its candidate cache, fixed frame and capture state are never serialized. Hub
+backup and `.cscomp` v3 compatibility rules are unchanged.
 
 ## File identity and versioning
 

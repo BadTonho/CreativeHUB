@@ -1,7 +1,9 @@
 # Layer Hierarchy and Null Controls
 
 Status: implemented development workflow, current native `.motion` v12. Manual visual,
-platform, and performance acceptance remain pending. Pick-whip and Viewer handles remain deferred. Independent
+platform, and performance acceptance remain pending. The timeline
+[Parent & Link pick-whip](PARENT_PICK_WHIP.md) is implemented; other Viewer
+transform handles remain deferred. Independent
 [Scale X/Y](SCALE_AXES.md) retains complete affine inheritance. Animated pixel Anchor Point is
 implemented separately; see [Anchor Point](ANCHOR_POINT.md).
 The [Pan Behind](PAN_BEHIND.md) pivot gesture uses the full inherited affine
@@ -22,6 +24,9 @@ For any selected layer, use **Transform > Parent & Link** in the Inspector.
 so duplicate names are distinct. The selected layer and all its descendants are
 excluded. Any layer, including a Null, can parent another layer. Hierarchy and
 back-to-front compositing order are independent; reordering changes only drawing.
+The timeline pick-whip offers the same parent edit by dragging its row-header
+icon onto another main layer row. Both controls share the document's iterative
+eligible-parent query and the controller's parent-change transaction.
 
 Linking, reparenting, or unlinking preserves complete global geometry at the
 current composition frame. Local fields and authored curves remain

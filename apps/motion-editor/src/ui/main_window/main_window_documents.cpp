@@ -582,6 +582,7 @@ bool MainWindow::documentIsDirty() const
 }
 void MainWindow::updateDocumentState()
 {
+    if (parent_pick_whip_ && (export_worker_ || audio_keyframe_worker_)) cancelParentPickWhip();
     if (viewer_) viewer_->setPanBehindEnabled(panBehindAvailable());
     const bool has_document = document_.has_value();
     const bool dirty = documentIsDirty();

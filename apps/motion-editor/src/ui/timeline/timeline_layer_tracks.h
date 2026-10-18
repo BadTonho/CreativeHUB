@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/composition_document.h"
+#include "parent_pick_whip.h"
 
 #include <QString>
 #include <QWidget>
@@ -13,6 +14,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+class QScrollArea;
 
 namespace motion::ui {
 
@@ -28,6 +31,7 @@ struct TimelineLayerRow {
     std::vector<model::LayerEffect> effects;
     model::AnchorKeyframes anchor_keyframes;
     std::optional<model::ScaleChannel> scale_y;
+    model::LayerId parent_id = 0;
 };
 
 class TimelineLayerTracks final : public QWidget {
@@ -48,6 +52,10 @@ public:
                       std::int64_t start_frame,
                       std::int64_t frames_per_view);
     void setSelectedLayerId(model::LayerId id);
+    void setParentPickWhipHandlers(ParentPickWhipHandlers handlers);
+    void setParentPickWhipScrollArea(QScrollArea* area);
+    void cancelParentPickWhip();
+    [[nodiscard]] bool parentPickWhipActive() const noexcept;
 
     void setMediaDropHandler(
         std::function<void(const std::filesystem::path&, std::int64_t, model::LayerId)> handler);

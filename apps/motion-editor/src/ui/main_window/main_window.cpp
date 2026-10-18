@@ -6,6 +6,7 @@
 #include "export/motion_video_export.h"
 #include "rendering/preview_renderer.h"
 #include "ui/viewer/composition_viewer.h"
+#include "ui/timeline/timeline_navigator.h"
 
 #include <creative_suite/diagnostics/logger.h>
 
@@ -359,6 +360,8 @@ MainWindow::MainWindow(QWidget* parent,
 }
 MainWindow::~MainWindow()
 {
+    cancelParentPickWhip();
+    if (timeline_) timeline_->setParentPickWhipHandlers({});
     cancelPanBehind();
     if (viewer_) viewer_->setPanBehindHandlers({}, {}, {}, {});
     if (autosave_timer_ != nullptr) autosave_timer_->stop();

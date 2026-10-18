@@ -9,6 +9,7 @@
 #include <limits>
 #include <stdexcept>
 #include <unordered_set>
+#include <unordered_map>
 #include <utility>
 
 namespace motion::model {
@@ -690,6 +691,25 @@ AddMediaLayerResult CompositionDocument::addMediaLayer(
     }
     if (added_id != nullptr) *added_id = id;
     return AddMediaLayerResult::Added;
+}
+
+std::vector<LayerId> CompositionDocument::eligibleLayerParents(LayerId child) const
+{
+    if (!findLayer(child)) return {};
+    std::unordered_map<LayerId, std::vector<LayerId>> children;
+    children.reserve(layers_.size());
+    for (const auto& layer : layers_) children[layer.parent_id].push_back(layer.id);
+    std::unordered_set<LayerId> excluded{child};
+    std::vector<LayerId> pending{child};
+    for (std::size_t i = 0; i < pending.size(); ++i) {
+        const auto found = children.find(pending[i]);
+        if (found == children.end()) continue;
+        for (const auto id : found->second) if (excluded.insert(id).second) pending.push_back(id);
+    }
+    std::vector<LayerId> result;
+    result.reserve(layers_.size() - excluded.size());
+    for (const auto& layer : layers_) if (!excluded.contains(layer.id)) result.push_back(layer.id);
+    return result;
 }
 
 bool CompositionDocument::canSetLayerParent(LayerId child, LayerId parent) const noexcept

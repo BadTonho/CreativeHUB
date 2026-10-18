@@ -2,6 +2,7 @@
 
 #include "model/composition_document.h"
 #include "timeline_types.h"
+#include "parent_pick_whip.h"
 
 #include <QElapsedTimer>
 #include <QPoint>
@@ -40,6 +41,9 @@ public:
     void setCurrentFrame(std::int64_t frame);
     void setLayers(const std::vector<model::CompositionLayer>& layers);
     void setSelectedLayerId(model::LayerId id);
+    void setParentPickWhipHandlers(ParentPickWhipHandlers handlers);
+    void cancelParentPickWhip();
+    [[nodiscard]] bool parentPickWhipActive() const noexcept;
     void setLayerExpanded(model::LayerId id, bool expanded);
     void setTransformGroupExpanded(model::LayerId id, bool expanded);
     void setEffectsGroupExpanded(model::LayerId id, bool expanded);

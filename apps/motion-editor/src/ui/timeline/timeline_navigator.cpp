@@ -109,6 +109,7 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     layer_scroll_area_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     layer_tracks_ = new TimelineLayerTracks(layer_scroll_area_);
     layer_scroll_area_->setWidget(layer_tracks_);
+    layer_tracks_->setParentPickWhipScrollArea(layer_scroll_area_);
     layout->addWidget(layer_scroll_area_, 1);
 
     horizontal_scroll_bar_ = new QScrollBar(Qt::Horizontal, this);
@@ -351,7 +352,7 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
             layer->duration_frames,
             layer->maximum_timeline_duration_frames,
             layer->keyframes,
-            layer->effects, layer->anchor_keyframes, layer->scale_y});
+            layer->effects, layer->anchor_keyframes, layer->scale_y, layer->parent_id});
         if (layer->kind != model::LayerKind::Null && layer->timeline_start_frame >= 0 && layer->duration_frames > 0) {
             const auto end_frame = layer->duration_frames >
                     maximum_frame - layer->timeline_start_frame
@@ -377,6 +378,13 @@ void TimelineNavigator::setSelectedLayerId(model::LayerId id)
 {
     layer_tracks_->setSelectedLayerId(id);
 }
+
+void TimelineNavigator::setParentPickWhipHandlers(ParentPickWhipHandlers handlers)
+{ layer_tracks_->setParentPickWhipHandlers(std::move(handlers)); }
+void TimelineNavigator::cancelParentPickWhip()
+{ layer_tracks_->cancelParentPickWhip(); }
+bool TimelineNavigator::parentPickWhipActive() const noexcept
+{ return layer_tracks_->parentPickWhipActive(); }
 
 void TimelineNavigator::setLayerExpanded(model::LayerId id, bool expanded)
 {

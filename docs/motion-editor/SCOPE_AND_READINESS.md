@@ -76,11 +76,15 @@ renderer, programming language, native file extension, codec, or implementation
 architecture.
 
 [Layer parenting and Null controls](features/HIERARCHY.md) are an implemented
-expansion: the Inspector selects a parent, local curves remain intact, and
+expansion: the Inspector and timeline [pick-whip](features/PARENT_PICK_WHIP.md)
+select a parent, local curves remain intact, and
 link/unlink/reparent/delete retain the pose at the current composition frame.
 Nulls control transforms without producing pixels. Native v12, recovery and Hub
 backups preserve the graph; independent `.cscomp` export refuses unsupported
 hierarchies. Manual UI/platform and performance acceptance remain pending.
+Pick-whip capture is presentation-only until release, with eligible row targets,
+wheel/edge scrolling and context cancellation. Confirmation reuses the same
+pose-preserving command; no native/recovery/shared format changes are involved.
 
 [Animated Anchor Point](features/ANCHOR_POINT.md) is implemented for every layer,
 including Nulls: local pixel X/Y fields, Transform tracks, Graph Editor curves,

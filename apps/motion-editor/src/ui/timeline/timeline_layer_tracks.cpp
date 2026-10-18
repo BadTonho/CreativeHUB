@@ -25,6 +25,7 @@
 #include <limits>
 #include <optional>
 #include <unordered_set>
+#include <unordered_map>
 #include <utility>
 
 namespace motion::ui {
@@ -159,11 +160,20 @@ public:
         setFocusPolicy(Qt::StrongFocus);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         setMinimumHeight(kTimelineRowHeight);
+        pick_whip = new ParentPickWhip(this,
+            [this](QPointF point) { return parentHit(point); },
+            [this](QPointF point) { return parentTooltip(point); });
     }
+
+    ~LayerRowsCanvas() override { delete pick_whip; }
+    ParentPickWhip* pick_whip = nullptr;
 
     void setRows(std::vector<TimelineLayerRow> rows)
     {
+        pick_whip->cancel();
         rows_ = std::move(rows);
+        parent_names_.clear();
+        for (const auto& row : rows_) parent_names_.emplace(row.id,row.name);
         std::unordered_set<model::LayerId> existing;
         existing.reserve(rows_.size());
         for (const auto& row : rows_) existing.insert(row.id);
@@ -222,6 +232,8 @@ public:
                       std::int64_t start_frame,
                       std::int64_t frames_per_view)
     {
+        if (current_frame != current_frame_ || start_frame != view_start_frame_ || frames_per_view != frames_per_view_)
+            pick_whip->cancel();
         visible_end_frame_ = std::max<std::int64_t>(0, end_frame);
         current_frame_ = std::clamp(current_frame, std::int64_t{0}, visible_end_frame_);
         view_start_frame_ = std::clamp(start_frame, std::int64_t{0}, visible_end_frame_);
@@ -231,6 +243,7 @@ public:
 
     void setSelectedLayerId(model::LayerId id)
     {
+        if (selected_layer_id_ != id) pick_whip->cancel();
         selected_layer_id_ = id;
         update();
     }
@@ -394,6 +407,8 @@ protected:
                 painter.setBrush(QColor(185, 190, 198));
                 painter.drawPolygon(disclosure);
 
+                painter.save();
+                painter.setClipRect(QRect(kTimelineHeaderWidth,top,std::max(0,width()-kTimelineHeaderWidth),kTimelineRowHeight));
                 const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
                     ? kMaximumFrame : row.start_frame + row.duration_frames;
                 if (end_frame >= view_start_frame_ && row.start_frame <= mapping.viewEndFrame()) {
@@ -438,6 +453,8 @@ protected:
                             std::max(2, preview_right - preview_left), kTimelineRowHeight - 6), 3, 3);
                     }
                 }
+                painter.restore();
+                paintParentControl(painter,row,row_rect);
             } else if (group_row) {
                 const bool expanded = transform_group
                     ? expanded_transform_groups_.contains(row.id)
@@ -569,6 +586,7 @@ protected:
             painter.drawRoundedRect(QRect(drag_preview_x_, top + 5, 74,
                 kTimelineRowHeight - 10), 3, 3);
         }
+        pick_whip->paint(painter);
     }
 
     void mousePressEvent(QMouseEvent* event) override
@@ -955,6 +973,7 @@ private:
 
     void rebuildVisualRows()
     {
+        pick_whip->cancel();
         visual_rows_.clear();
         visual_rows_.reserve(rows_.size() * 8);
         for (std::size_t index = 0; index < rows_.size(); ++index) {
@@ -1058,6 +1077,46 @@ private:
         return snapped;
     }
 
+    [[nodiscard]] QString parentLabel(model::LayerId id) const
+    {
+        if (!id) return MotionUiTranslation::tr("No parent");
+        const auto found = parent_names_.find(id);
+        return MotionUiTranslation::tr("%1 [#%2]").arg(found == parent_names_.end() ? QString() : found->second,QString::number(id));
+    }
+
+    [[nodiscard]] std::optional<ParentPickWhip::Hit> parentHit(QPointF point) const
+    {
+        const auto visual_index = rowAtY(static_cast<int>(std::floor(point.y())));
+        if (visual_index < 0) return {};
+        const auto& visual = visual_rows_[static_cast<std::size_t>(visual_index)];
+        if (visual.kind != VisualTimelineRow::Kind::Layer) return {};
+        const auto& row = rows_[visual.layer_index];
+        return ParentPickWhip::Hit{row.id,row.name,QRectF(0,visual_index*kTimelineRowHeight,width(),kTimelineRowHeight)};
+    }
+
+    [[nodiscard]] QString parentTooltip(QPointF point) const
+    {
+        const auto hit = parentHit(point);
+        if (!hit || point.x() < 48 || point.x() >= kTimelineHeaderWidth) return {};
+        const auto* row = findRow(hit->id);
+        const auto name = MotionUiTranslation::tr("%1 [#%2]").arg(row->name,QString::number(row->id));
+        return MotionUiTranslation::tr("Layer: %1\nParent & Link: %2").arg(name,parentLabel(row->parent_id)) + QLatin1Char('\n') +
+            MotionUiTranslation::tr("Drag to choose a parent. Release outside a layer to cancel.");
+    }
+
+    void paintParentControl(QPainter& painter,const TimelineLayerRow& row,QRectF bounds) const
+    {
+        const auto icon = ParentPickWhip::iconRect(bounds);
+        painter.setPen(QPen(QColor(190,199,210),1.5));painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(icon.center()-QPointF(2,0),4,4);
+        painter.drawLine(icon.center()+QPointF(2,0),icon.center()+QPointF(7,-5));
+        painter.drawLine(icon.center()+QPointF(7,-5),icon.center()+QPointF(3,-5));
+        const QRectF label(74,bounds.top(),kTimelineHeaderWidth-78,kTimelineRowHeight);
+        const auto text = painter.fontMetrics().elidedText(parentLabel(row.parent_id),Qt::ElideRight,static_cast<int>(label.width()));
+        painter.drawText(label,Qt::AlignVCenter,text);
+    }
+
+    std::unordered_map<model::LayerId,QString> parent_names_;
     std::vector<TimelineLayerRow> rows_;
     std::vector<VisualTimelineRow> visual_rows_;
     std::unordered_set<model::LayerId> expanded_layers_;
@@ -1125,6 +1184,14 @@ void TimelineLayerTracks::setViewState(std::int64_t end, std::int64_t current,
 { impl_->canvas->setViewState(end, current, start, span); }
 void TimelineLayerTracks::setSelectedLayerId(model::LayerId id)
 { impl_->canvas->setSelectedLayerId(id); }
+void TimelineLayerTracks::setParentPickWhipHandlers(ParentPickWhipHandlers handlers)
+{ impl_->canvas->pick_whip->setHandlers(std::move(handlers)); }
+void TimelineLayerTracks::setParentPickWhipScrollArea(QScrollArea* area)
+{ impl_->canvas->pick_whip->setScrollArea(area); }
+void TimelineLayerTracks::cancelParentPickWhip()
+{ impl_->canvas->pick_whip->cancel(); }
+bool TimelineLayerTracks::parentPickWhipActive() const noexcept
+{ return impl_->canvas->pick_whip->active(); }
 
 void TimelineLayerTracks::setMediaDropHandler(
     std::function<void(const std::filesystem::path&, std::int64_t, model::LayerId)> handler)

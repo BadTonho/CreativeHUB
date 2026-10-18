@@ -141,6 +141,13 @@ int main(int argc, char* argv[])
                "Missing catalog entries must fall back to English source text.")) {
         return 1;
     }
+    if (!check(motion::ui::MotionUiTranslation::tr("Parent: %1").arg("Null [#2]") == QStringLiteral("Pai: Null [#2]") &&
+                   motion::ui::MotionUiTranslation::tr("Invalid parent: %1").arg("Null [#2]") == QStringLiteral("Pai inválido: Null [#2]") &&
+                   motion::ui::MotionUiTranslation::tr("Layer: %1\nParent & Link: %2").arg("Text [#1]", "Null [#2]") ==
+                       QStringLiteral("Camada: Text [#1]\nPai e vínculo: Null [#2]") &&
+                   motion::ui::MotionUiTranslation::tr("Drag to choose a parent. Release outside a layer to cancel.") ==
+                       QStringLiteral("Arraste para escolher um pai. Solte fora de uma camada para cancelar."),
+               "Pick-whip candidates, identities and instructions use pt-BR.")) return 1;
     if (!check(motion::ui::MotionUiTranslation::tr("Anchor X (px)") == QStringLiteral("Âncora X (px)") &&
                    motion::ui::MotionUiTranslation::tr("Anchor Y (px)") == QStringLiteral("Âncora Y (px)") &&
                    motion::ui::MotionUiTranslation::tr("Reposition Anchor Without Moving...") == QStringLiteral("Reposicionar pivô sem mover...") &&
@@ -173,6 +180,13 @@ int main(int argc, char* argv[])
         if (!check(viewer.toolTip() == QStringLiteral("Drag the pivot to reposition it without moving the layer. Press Escape to cancel."),
                    "Pan Behind instructions use English without a catalog.")) return 1;
     }
+    if (!check(motion::ui::MotionUiTranslation::tr("Parent: %1").arg("Null [#2]") == QStringLiteral("Parent: Null [#2]") &&
+                   motion::ui::MotionUiTranslation::tr("Invalid parent: %1").arg("Null [#2]") == QStringLiteral("Invalid parent: Null [#2]") &&
+                   motion::ui::MotionUiTranslation::tr("Layer: %1\nParent & Link: %2").arg("Text [#1]", "Null [#2]") ==
+                       QStringLiteral("Layer: Text [#1]\nParent & Link: Null [#2]") &&
+                   motion::ui::MotionUiTranslation::tr("Drag to choose a parent. Release outside a layer to cancel.") ==
+                       QStringLiteral("Drag to choose a parent. Release outside a layer to cancel."),
+               "Pick-whip labels and instructions retain the English source text.")) return 1;
     preferences.clear();
     preferences.sync();
 

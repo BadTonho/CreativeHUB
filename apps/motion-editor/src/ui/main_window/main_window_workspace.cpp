@@ -139,10 +139,14 @@ void MainWindow::createWorkspace()
                 applySelectedEffectStack(std::move(effects));
             });
     timeline_ = new TimelineNavigator(this);
+    timeline_->setParentPickWhipHandlers({
+        [this](model::LayerId child) { return beginParentPickWhip(child); },
+        [this](model::LayerId child,model::LayerId parent) { commitParentPickWhip(child,parent); },
+        [this] { cancelParentPickWhip(); }});
     // These run before TimelineNavigator's action handlers, including a seek
     // that stays at the same frame and therefore emits no frame-change signal.
     for (auto* action : {play_pause_action_, previous_frame_action_, next_frame_action_})
-        connect(action, &QAction::triggered, this, [this] { cancelPanBehind(); });
+        connect(action, &QAction::triggered, this, [this] { finishPendingTransformEdit(); });
     timeline_->setShortcutActions(
         play_pause_action_, previous_frame_action_, next_frame_action_, loop_action_,
         zoom_in_action_, zoom_out_action_);

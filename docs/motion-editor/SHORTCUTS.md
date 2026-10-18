@@ -22,6 +22,10 @@ gesture locally. **Undo** also cancels the draft without undoing an earlier
 edit; Redo is unavailable until the gesture ends. No global Pan Behind shortcut
 is registered. Start it by dragging the selected layer's existing Viewer marker.
 
+The timeline [Parent & Link pick-whip](features/PARENT_PICK_WHIP.md) uses the
+same local **Escape** and cancel-only **Undo** behavior, with Redo unavailable
+during capture. Start from the row-header icon; no global shortcut is added.
+
 ## Customize shortcuts
 
 Open **Settings > Keyboard Shortcuts** to edit an action's key sequence. Changes are applied after confirmation; cancel closes without applying them. The dialog can reset assignments to defaults, and duplicate nonempty shortcuts are rejected. Shortcut assignments are saved in the application's settings.

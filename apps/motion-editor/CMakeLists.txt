@@ -57,6 +57,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/main_window/main_window_editing.cpp
     src/ui/main_window/main_window_anchor.cpp
     src/ui/main_window/main_window_pan_behind.cpp
+    src/ui/main_window/main_window_parenting.cpp
     src/ui/main_window/main_window_scale.cpp
     src/ui/main_window/main_window_preview.cpp
     src/ui/main_window/main_window_support.cpp
@@ -86,6 +87,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/timeline/timeline_controls.h
     src/ui/timeline/timeline_layer_tracks.cpp
     src/ui/timeline/timeline_layer_tracks.h
+    src/ui/timeline/parent_pick_whip.cpp
+    src/ui/timeline/parent_pick_whip.h
     src/ui/timeline/timeline_navigator.cpp
     src/ui/timeline/timeline_navigator.h
     src/ui/timeline/timeline_navigator_math.h

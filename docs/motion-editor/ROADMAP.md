@@ -160,6 +160,7 @@ readiness checks remain in this roadmap and
 | Independent Scale X/Y and affine inheritance | `layer_scale_test.cpp` (`creative-suite-motion-editor-scale`): proportional/independent editing, curves/history/UI, known matrices, parenting/Anchor, v12/recovery/migration/interchange and independent preview/export references; shared composition/OpenGL/Vulkan, Motion GPU/audio and Hub backup suites protect the boundaries. | [Scale guide and pending checks](features/SCALE_AXES.md); visual/native GPU/platform acceptance and benchmarks pending. |
 | Animated pixel Anchor Point | `layer_anchor_test.cpp` (`creative-suite-motion-editor-anchor`): geometry, compensation/history, parenting, Inspector/timeline/Graph Editor/dialog/marker, v11/recovery/v1–v10 migration, preview/export parity and interchange refusal; GPU and Hub backup tests cover their affected boundaries. | [Feature guide and pending manual checklist](features/ANCHOR_POINT.md); native visual/platform/GPU acceptance and benchmarks remain pending. |
 | Viewer Pan Behind pivot dragging | `pan_behind_test.cpp` (`creative-suite-motion-editor-pan-behind` and `...-pan-behind-hidpi`): hit/threshold/logical mapping, grab offset, live Inspector/document isolation, cancellation/history, Nulls, affine/offline ancestors, keys, pixels/cache reuse, v12 save/autosave/recovery; translation and GPU texture regressions cover presentation boundaries. | [Pan Behind guide and pending checks](features/PAN_BEHIND.md); manual visual/platform/native GPU acceptance and benchmarks pending. |
+| Timeline Parent & Link pick-whip | `parent_pick_whip_test.cpp` (`creative-suite-motion-editor-parent-pick-whip` and `...-parent-pick-whip-hidpi`): shared eligibility, icon/threshold/feedback/final coordinates, expanded rows, wheel/deterministic autoscroll, cancellation/Redo, one history entry, affine geometry/pixels, Inspector parity, v12/autosave/recovery and technical logs; UI, Pan Behind and translation suites protect adjacent behavior. | [Pick-whip guide and pending checklist](features/PARENT_PICK_WHIP.md); visual/platform acceptance and benchmarks pending. Known OpenGL presentation failure remains separately recorded. |
 | Layer parenting and Null controls | `layer_transform_hierarchy_test.cpp` (`creative-suite-motion-editor-hierarchy`): graph validation, pixel-space evaluation, current-pose preservation, Undo/Redo, native parenting/recovery/migration, Inspector, CPU preview/export, and `.cscomp` rejection; `gpu_composition_test.cpp` covers the inherited-transform GPU/CPU boundary; `hub-backup-format-test` reopens parented documents with the current v12 reader. | [Manual hierarchy checklist](features/HIERARCHY.md#pending-manual-checks); native platforms and benchmarks remain pending. |
 | Composition model, validation, layer data, and timing | `composition_document_test.cpp` (`creative-suite-motion-editor-document`) | Pending manual composition and supported-layer checks remain part of MVP acceptance. |
 | Undo/Redo and edit history | `composition_history_test.cpp` (`creative-suite-motion-editor-history`) | Pending manual validation: confirm interactive edit sequences during the broader Windows UI checklist. |
@@ -473,13 +474,13 @@ Pool with bins, basic 2D Transform keyframes with Linear and bounded cubic
 Bezier easing in the Graph Editor, ordered Gaussian Blur and Color
 Adjustment effects with layer-local parameter keyframes and Cubic Bezier easing, stage-level animated Rectangle/Ellipse masks, RMS audio-to-keyframe
 baking, layer parenting, Null controls, animated Anchor Point, Pan Behind pivot
-dragging and independent Scale X/Y, `.motion` v12 persistence, `.cscomp` v3 interchange, and opaque video
+dragging, timeline parent pick-whip and independent Scale X/Y, `.motion` v12 persistence, `.cscomp` v3 interchange, and opaque video
 export). They are candidates, not approved release commitments. Keep
 implementation modular, local-first, and gated by measured rendering and memory
 costs.
 
 - **Hierarchy, structure, and layer compositing:**
-  - Layer parenting through the Inspector is implemented; a timeline pick-whip remains a candidate.
+  - Layer parenting through the Inspector and timeline [pick-whip](features/PARENT_PICK_WHIP.md) is implemented.
   - Null / control layers are implemented; see [Layer hierarchy](features/HIERARCHY.md).
   - Pre-composing (nested compositions treated as reusable single layers).
   - Adjustment layers that apply their effects and masks to all underlying
@@ -573,7 +574,7 @@ architectural complexity:
    interchange deferred):** keyframe support for Gaussian Blur radius and Color
    Adjustment properties across the document model, timeline, Graph Editor,
    preview, and export.
-2. **Layer hierarchy and transform ergonomics:** Inspector parenting and Null layers are implemented in native v10. Animated Anchor Point and compensated Inspector repositioning are implemented in native v11. Independent Scale X/Y with affine inheritance is implemented in native v12. Pan Behind adds pivot dragging with transient Inspector values and release-only commit without a format change. Next candidates are a timeline pick-whip and interactive Viewer position/scale/rotation handles. Manual acceptance remains pending.
+2. **Layer hierarchy and transform ergonomics:** Inspector parenting and Null layers are implemented in native v10. Animated Anchor Point and compensated Inspector repositioning are implemented in native v11. Independent Scale X/Y with affine inheritance is implemented in native v12. Pan Behind adds pivot dragging with transient Inspector values and release-only commit without a format change. The timeline pick-whip adds direct parent selection, candidate feedback and wheel/edge scrolling using the same parent command. Interactive Viewer position/scale/rotation handles remain candidates. Manual acceptance remains pending.
 3. **Blending modes and Track Mattes:** per-layer blend modes and Alpha/Luma
    track mattes in the CPU and OpenGL compositors.
 4. **Pen tool (cubic Bezier paths) and Trim Paths:** freeform vector masks and

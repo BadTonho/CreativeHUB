@@ -7,6 +7,7 @@
 #include "ui/timeline/timeline_navigator.h"
 #include "ui/timeline/timeline_navigator_math.h"
 #include "ui/timeline/timeline_ruler.h"
+#include "ui/timeline/timeline_view_mapping.h"
 #include "model/motion_project_data.h"
 #include "persistence/motion_document_store.h"
 #include "persistence/motion_recovery_store.h"
@@ -2455,7 +2456,7 @@ int main(int argc, char* argv[])
             "a stale video seek cannot replace the final linked-image seek result");
     const auto frame_before_layer_operations = timeline->currentFrame();
     const auto video_layer_id = window.compositionDocument()->layers().back().id;
-    sendMouseDrag(layer_rows, QPoint(60, 15), QPoint(60, 49));
+    sendMouseDrag(layer_rows, QPoint(120, 15), QPoint(120, 49));
     require(window.compositionDocument()->layers().front().id == video_layer_id,
             "dragging a layer header reorders front-to-back timeline rows");
     sendMouseClick(layer_rows, QPoint(15, 15));
@@ -2522,8 +2523,10 @@ int main(int argc, char* argv[])
     timeline->setCurrentFrame(animation_start);
     const auto axis_left = timeline->frameToViewportX(timeline->viewStartFrame());
     const auto collapsed_rows = animated_rows->grab().toImage();
-    require(!hasBrightPixel(collapsed_rows, QRect(50, 0, axis_left - 50, 34), 100),
-            "the collapsed layer header keeps its name out of the left column");
+    require(axis_left == motion::ui::kTimelineHeaderWidth + motion::ui::kRulerHorizontalPadding &&
+                hasBrightPixel(collapsed_rows, QRect(50, 0, 20, 34), 100) &&
+                hasBrightPixel(collapsed_rows, QRect(74, 0, axis_left - 78, 34), 100),
+            "the collapsed layer header shows the pick-whip and parent without moving the clips");
     require(!hasBrightPixel(collapsed_rows,
                             QRect(66, 34, axis_left - 66, 34), 100),
             "a new layer starts with its Transform group collapsed");
@@ -2549,9 +2552,11 @@ int main(int argc, char* argv[])
                             QRect(66, 34, axis_left - 66, 34), 100),
             "collapsing Transform keeps the group row while hiding its property tracks");
     sendMouseClick(animated_rows, QPoint(39, 15));
-    require(!hasBrightPixel(animated_rows->grab().toImage(),
-                            QRect(50, 0, axis_left - 50, 34), 100),
-            "collapsing a layer hides its Transform group and property rows");
+    const auto collapsed_again = animated_rows->grab().toImage();
+    require(!hasBrightPixel(collapsed_again, QRect(66, 34, axis_left - 66, 34), 100) &&
+                collapsed_again.copy(48, 0, axis_left - 48, 34) ==
+                    collapsed_rows.copy(48, 0, axis_left - 48, 34),
+            "collapsing a layer hides its tracks and retains its parent controls");
 
     const auto base_position_x = document->layers().front().transform.position_x;
     position_x_key_button->click();

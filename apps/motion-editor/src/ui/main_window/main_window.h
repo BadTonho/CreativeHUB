@@ -139,6 +139,10 @@ private:
                                 bool published_output);
     void syncTransformInspector();
     void changeSelectedLayerParent(model::LayerId parent);
+    void changeLayerParent(model::LayerId child, model::LayerId parent, std::int64_t frame);
+    std::optional<std::vector<model::LayerId>> beginParentPickWhip(model::LayerId child);
+    void commitParentPickWhip(model::LayerId child, model::LayerId parent);
+    void cancelParentPickWhip();
     void removeCompositionLayer(model::LayerId id);
     void editSelectedLayerAnchor(std::size_t axis);
     void editSelectedScaleAxis(std::size_t axis);
@@ -287,6 +291,8 @@ private:
         model::AnchorRepositionValues preview;
     };
     std::optional<PanBehindGesture> pan_behind_;
+    struct ParentPickWhipGesture { model::LayerId child; std::int64_t frame; };
+    std::optional<ParentPickWhipGesture> parent_pick_whip_;
     double active_scale_ratio_=1;
     std::shared_ptr<const std::vector<model::Mask>> mask_snapshot_;
     std::shared_ptr<const model::LayerTransformHierarchy> hierarchy_snapshot_;

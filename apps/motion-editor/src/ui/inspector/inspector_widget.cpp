@@ -595,21 +595,14 @@ void InspectorWidget::syncParenting(const model::CompositionDocument* document, 
     controls_.parent_layer->addItem(MotionUiTranslation::tr("No parent"), QVariant::fromValue<qulonglong>(0));
     controls_.parent_layer->setEnabled(document != nullptr && selected != 0);
     if (!document || !selected) return;
-    std::unordered_map<model::LayerId, std::vector<model::LayerId>> children;
-    for (const auto& layer : document->layers()) children[layer.parent_id].push_back(layer.id);
-    std::unordered_set<model::LayerId> excluded{selected};
-    std::vector<model::LayerId> pending{selected};
-    for (std::size_t i = 0; i < pending.size(); ++i) {
-        const auto found = children.find(pending[i]);
-        if (found == children.end()) continue;
-        for (const auto child : found->second) if (excluded.insert(child).second) pending.push_back(child);
-    }
+    const auto candidates = document->eligibleLayerParents(selected);
+    const std::unordered_set<model::LayerId> eligible(candidates.begin(), candidates.end());
     model::LayerId parent = 0;
     for (const auto& layer : document->layers()) {
         if (layer.id == selected) parent = layer.parent_id;
-        if (excluded.contains(layer.id)) continue;
+        if (!eligible.contains(layer.id)) continue;
         controls_.parent_layer->addItem(MotionUiTranslation::tr("%1 [#%2]")
-            .arg(fromUtf8(layer.name)).arg(static_cast<qulonglong>(layer.id)),
+            .arg(fromUtf8(layer.name), QString::number(static_cast<qulonglong>(layer.id))),
             QVariant::fromValue<qulonglong>(layer.id));
     }
     controls_.parent_layer->setCurrentIndex(controls_.parent_layer->findData(QVariant::fromValue<qulonglong>(parent)));
