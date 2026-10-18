@@ -104,6 +104,7 @@ public:
     // Presentation only; signals are blocked and normal syncLayer restores editability.
     void previewAnchorReposition(const model::AnchorRepositionValues& values);
     void previewLayerPosition(double x,double y);
+    void previewLayerRotation(double degrees);
     [[nodiscard]] int effectCount() const noexcept;
     [[nodiscard]] double transformFieldValue(std::size_t property_index) const noexcept;
     [[nodiscard]] double anchorFieldValue(std::size_t axis) const noexcept;

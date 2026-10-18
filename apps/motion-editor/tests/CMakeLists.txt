@@ -32,6 +32,15 @@ creative_suite_deploy_media_runtime(creative-suite-motion-editor-pan-behind-test
 set_tests_properties(creative-suite-motion-editor-pan-behind PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1" TIMEOUT 90)
 set_tests_properties(creative-suite-motion-editor-pan-behind-hidpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=2" TIMEOUT 90)
 
+add_executable(creative-suite-motion-editor-rotation-drag-tests rotation_drag_test.cpp)
+target_link_libraries(creative-suite-motion-editor-rotation-drag-tests PRIVATE creative-suite-motion-editor-core Qt6::Widgets)
+target_compile_features(creative-suite-motion-editor-rotation-drag-tests PRIVATE cxx_std_20)
+add_creative_suite_test(NAME creative-suite-motion-editor-rotation-drag COMMAND creative-suite-motion-editor-rotation-drag-tests)
+add_creative_suite_test(NAME creative-suite-motion-editor-rotation-drag-hidpi COMMAND creative-suite-motion-editor-rotation-drag-tests)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-rotation-drag-tests)
+set_tests_properties(creative-suite-motion-editor-rotation-drag PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1" TIMEOUT 90)
+set_tests_properties(creative-suite-motion-editor-rotation-drag-hidpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=2" TIMEOUT 90)
+
 add_executable(creative-suite-motion-editor-position-drag-tests position_drag_test.cpp)
 target_link_libraries(creative-suite-motion-editor-position-drag-tests PRIVATE creative-suite-motion-editor-core Qt6::Widgets)
 target_compile_features(creative-suite-motion-editor-position-drag-tests PRIVATE cxx_std_20)
@@ -255,6 +264,7 @@ set_tests_properties(creative-suite-motion-editor-gpu-texture PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 
 if(MSVC)
+    target_compile_options(creative-suite-motion-editor-rotation-drag-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-position-drag-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-parent-pick-whip-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-pan-behind-tests PRIVATE /W4 /permissive-)
@@ -273,6 +283,7 @@ if(MSVC)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-audio-keyframes-tests PRIVATE /W4 /permissive-)
 else()
+    target_compile_options(creative-suite-motion-editor-rotation-drag-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-position-drag-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-parent-pick-whip-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-pan-behind-tests PRIVATE -Wall -Wextra -Wpedantic)
@@ -301,6 +312,7 @@ if(WIN32)
     find_program(QT_MOTION_TEST_DEPLOY_TOOL windeployqt HINTS "${QT_MOTION_TEST_BIN_DIR}" REQUIRED)
 
     foreach(TEST_TARGET IN ITEMS
+            creative-suite-motion-editor-rotation-drag-tests
             creative-suite-motion-editor-position-drag-tests
             creative-suite-motion-editor-parent-pick-whip-tests
             creative-suite-motion-editor-pan-behind-tests

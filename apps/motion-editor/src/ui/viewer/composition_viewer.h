@@ -3,6 +3,7 @@
 #include "model/composition_document.h"
 #include "rendering/preview_frame.h"
 #include "position_drag_handle.h"
+#include "rotation_drag_handle.h"
 
 #include <creative_suite/media/video_frame.h>
 
@@ -61,6 +62,11 @@ public:
     void setPositionDragEnabled(bool);
     void cancelPositionDrag();
     [[nodiscard]] bool positionDragActive() const noexcept;
+    void setRotationDragHandlers(RotationDragHandlers);
+    void setRotationDragEnabled(bool);
+    void setRotationDirection(std::optional<QPointF>);
+    void cancelRotationDrag();
+    [[nodiscard]] bool rotationDragActive() const noexcept;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -84,6 +90,7 @@ private:
     void recordPaint(bool texture);
     GpuCompositionSurface* gpu_surface_ = nullptr;
     PositionDragHandle* position_handle_ = nullptr;
+    RotationDragHandle* rotation_handle_ = nullptr;
     PreviewFrame preview_frame_;
     std::function<void(bool)> recovery_handler_;
     std::function<bool(const PreviewFrame&)> frame_validator_;

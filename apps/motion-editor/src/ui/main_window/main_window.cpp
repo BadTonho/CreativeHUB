@@ -360,6 +360,8 @@ MainWindow::MainWindow(QWidget* parent,
 }
 MainWindow::~MainWindow()
 {
+    cancelRotationDrag();
+    if (viewer_) viewer_->setRotationDragHandlers({});
     cancelPositionDrag();
     if (viewer_) viewer_->setPositionDragHandlers({});
     cancelParentPickWhip();

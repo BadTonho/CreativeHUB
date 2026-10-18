@@ -26,6 +26,13 @@ struct LayerPositionOverride {
     friend bool operator==(const LayerPositionOverride&, const LayerPositionOverride&) = default;
 };
 
+// Evaluated local Rotation only; never serialized as gesture state.
+struct LayerRotationOverride {
+    LayerId layer_id = 0;
+    double degrees = 0;
+    friend bool operator==(const LayerRotationOverride&, const LayerRotationOverride&) = default;
+};
+
 struct CanvasSize {
     int width;
     int height;
@@ -358,6 +365,8 @@ public:
     // Atomic static/animated Position edit at a composition frame, including
     // insertion between keys. All other authored properties are retained.
     [[nodiscard]] bool setLayerPositionAtFrame(LayerId, double x, double y, std::int64_t composition_frame);
+    // Atomic Rotation base/key edit with the same frame/key-budget policy.
+    [[nodiscard]] bool setLayerRotationAtFrame(LayerId, double degrees, std::int64_t composition_frame);
     [[nodiscard]] bool setLayerTransform(
         LayerId id,
         const creative_suite::animation::Transform2D& transform) noexcept;
@@ -439,6 +448,7 @@ public:
         creative_suite::animation::InterpolationMode, const creative_suite::animation::CubicBezierEasing&);
 
 private:
+    [[nodiscard]] bool canInsertKeyframes(std::size_t count) const noexcept;
     [[nodiscard]] CompositionLayer* findLayer(LayerId id) noexcept;
     [[nodiscard]] const CompositionLayer* findLayer(LayerId id) const noexcept;
 

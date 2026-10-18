@@ -45,33 +45,38 @@ bool CompositionDocument::setLayerPositionAtFrame(LayerId id, double x, double y
     };
     set(candidate.keyframes.position_x,candidate.transform.position_x,initial.position_x,x);
     set(candidate.keyframes.position_y,candidate.transform.position_y,initial.position_y,y);
-    if (inserted) {
-        std::size_t count = inserted;
-        bool exceeds_budget = false;
-        const auto add = [&count,&exceeds_budget](const auto& keys) {
-            if (keys.size() > maximum_document_keyframes-count) {
-                exceeds_budget = true;
-                count = maximum_document_keyframes;
-            } else count += keys.size();
-        };
-        for (const auto& mask : masks_) for (const auto& keys : mask.keyframes) add(keys);
-        for (const auto& item : layers_) {
-            add(item.keyframes.position_x);add(item.keyframes.position_y);add(item.keyframes.scale);
-            add(item.keyframes.rotation);add(item.keyframes.opacity);
-            for (const auto& keys : item.anchor_keyframes) add(keys);
-            if (item.scale_y) add(item.scale_y->keyframes);
-            for (const auto& effect : item.effects) std::visit([&](const auto& e) {
-                using E = std::decay_t<decltype(e)>;
-                if constexpr (std::is_same_v<E,GaussianBlurEffect>) add(e.radius_keyframes);
-                else {add(e.brightness_keyframes);add(e.contrast_keyframes);add(e.saturation_keyframes);}
-            },effect);
-        }
-        if (exceeds_budget) return false; // Expected editing limit, not a technical failure.
-    }
+    if (!canInsertKeyframes(inserted)) return false;
     if (!a::validTransform(candidate.transform) || !a::validTransformKeyframes(candidate.keyframes)) return false;
     (void)localLayerGeometry(candidate,canvas_size_,local);
     (void)LayerTransformHierarchy(canvas_size_,layers_).evaluate(frame,LayerPositionOverride{id,x,y});
     *layer = std::move(candidate);
     return true;
+}
+
+bool CompositionDocument::canInsertKeyframes(std::size_t inserted) const noexcept
+{
+    if (inserted == 0) return true;
+    if (inserted > maximum_document_keyframes) return false;
+    std::size_t count = inserted;
+    bool exceeds_budget = false;
+    const auto add = [&count,&exceeds_budget](const auto& keys) {
+        if (keys.size() > maximum_document_keyframes-count) {
+            exceeds_budget = true;
+            count = maximum_document_keyframes;
+        } else count += keys.size();
+    };
+    for (const auto& mask : masks_) for (const auto& keys : mask.keyframes) add(keys);
+    for (const auto& item : layers_) {
+        add(item.keyframes.position_x);add(item.keyframes.position_y);add(item.keyframes.scale);
+        add(item.keyframes.rotation);add(item.keyframes.opacity);
+        for (const auto& keys : item.anchor_keyframes) add(keys);
+        if (item.scale_y) add(item.scale_y->keyframes);
+        for (const auto& effect : item.effects) std::visit([&](const auto& e) {
+            using E = std::decay_t<decltype(e)>;
+            if constexpr (std::is_same_v<E,GaussianBlurEffect>) add(e.radius_keyframes);
+            else {add(e.brightness_keyframes);add(e.contrast_keyframes);add(e.saturation_keyframes);}
+        },effect);
+    }
+    return !exceeds_budget; // Expected editing limit, not a technical failure.
 }
 } // namespace motion::model

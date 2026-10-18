@@ -34,7 +34,7 @@ bool MainWindow::beginPositionDrag()
         const auto pivot=model::resolvedAnchorPosition(resolved.at(id),model::evaluateLayerAnchor(layer,local),document_->canvasSize());
         const std::array values{initial.position_x,initial.position_y};
         position_drag_=PositionDragGesture{id,frame,document_->canvasSize(),values,values,inverse,
-            QPointF(pivot[0],pivot[1]),std::make_shared<const PreviewRequest>(std::move(request)),++position_session_};
+            QPointF(pivot[0],pivot[1]),std::make_shared<const PreviewRequest>(std::move(request)),++viewer_gesture_session_};
         inspector_->previewLayerPosition(values[0],values[1]);updateHistoryActions();return true;
     }catch(const std::exception& error){logPositionDragFailure("position_drag_begin",id,frame,error);return false;}
 }

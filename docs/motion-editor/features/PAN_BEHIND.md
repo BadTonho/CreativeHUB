@@ -135,3 +135,6 @@ checks are performed later; no manual acceptance is claimed by this change.
    scale factors on Windows, macOS and Linux. Record fallback separately; confirm
    no overlay flicker or unexpected source work. Benchmark small/medium/heavy
    hierarchies separately before making responsiveness or memory guarantees.
+
+The [Rotation handle](ROTATION_DRAG.md) is a separate live-rendered gesture; the
+pivot continues to start Pan Behind. Only one Viewer gesture can be active.

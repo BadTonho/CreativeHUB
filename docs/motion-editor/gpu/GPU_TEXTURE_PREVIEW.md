@@ -143,3 +143,12 @@ rendering and restart repeatedly. Confirm recovery logs and responsive CPU
 preview after a failed GPU context. Check existing export and linked renders.
 Native macOS/Linux drivers and these broader interactive checks remain pending
 until their results are recorded.
+
+## Viewer Rotation gesture
+
+[Rotation drag](../features/ROTATION_DRAG.md) uses the existing shared-scene
+gesture queue and RGBA/texture delivery. Position and Rotation use distinct
+monotonic session identities and paint validation; presentation recovery
+resubmits the active override. No gesture-specific readback or texture lease is
+added. Portable fallback coverage and native GPU acceptance remain separate;
+the known Windows OpenGL presentation failure remains open.

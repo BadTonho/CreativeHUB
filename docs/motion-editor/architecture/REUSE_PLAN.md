@@ -23,7 +23,7 @@ shared.
 Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
 autosave preferences, and the recovery-management dialog. The store reuses the
 native document serializer and its atomic `QSaveFile` validation while writing
-the native `.motion` document at version 11 (recovery wrapper version 1). A recovery payload stores the complete
+the native `.motion` document at version 12 (recovery wrapper version 1). A recovery payload stores the complete
 composition and Media Pool plus the original document path and session ID; it
 does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
 
@@ -123,6 +123,15 @@ and cancellation validation through worker, mailbox, controller and paint.
 Normal value-based request builders remain adapters, including export. Source
 caches, stage masks and CPU/OpenGL/fallback composition remain in their existing
 owners; there are no new shared-library or compositor contracts.
+
+[Viewer Rotation drag](../features/ROTATION_DRAG.md) reuses that same immutable
+scene/queue and shared unique gesture-session allocator. Its Motion-owned pure
+angular state maps pointer vectors through inverse parent/binding linear geometry
+and unwraps full turns. A lightweight Rotation override is applied before local
+composition; an atomic frame edit updates the base or inserts/edits the existing
+Rotation curve. Viewer capture and Inspector drafts never alter documents,
+autosave or shared animation/compositor interfaces. Source caches and mask stages
+retain their owners. Recovery and paint validation cover both gesture kinds.
 
 ### Layer effects
 

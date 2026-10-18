@@ -23,6 +23,7 @@ bool keyAt(const a::ScalarKeyframes& keys,std::int64_t frame)
 void MainWindow::editSelectedLayerAnchor(std::size_t axis)
 {
     if(!document_ || !timeline_ || axis>=2 || !selected_layer_id_)return;
+    const auto value=inspector_->anchorFieldValue(axis);
     const auto identity=std::pair{selected_layer_id_,axis+5};
     const bool coalescing=active_transform_edit_==identity;
     if(!coalescing)finishPendingTransformEdit();
@@ -30,7 +31,6 @@ void MainWindow::editSelectedLayerAnchor(std::size_t axis)
         auto found=std::find_if(document_->layers().begin(),document_->layers().end(),[this](const auto& l){return l.id==selected_layer_id_;});
         if(found==document_->layers().end())return;
         const auto local=timeline_->currentFrame()-found->timeline_start_frame;
-        const auto value=inspector_->anchorFieldValue(axis);
         const auto& keys=found->anchor_keyframes[axis];
         std::optional<CompositionEditState> before;
         if(!coalescing)before=captureEditState();

@@ -103,8 +103,17 @@ handle and live asynchronous content/Inspector preview, with release-only atomic
 commit. Static axes update bases and animated axes can insert keys between keys.
 Immutable scene snapshots and bounded gesture scheduling preserve document and
 autosave isolation while retaining affine inheritance and existing caches.
-Rotation/scale handles remain candidates; manual/native GPU/platform acceptance
+Scale handles remain candidates; manual/native GPU/platform acceptance
 and benchmarks remain pending.
+
+[Viewer Rotation drag](features/ROTATION_DRAG.md) provides a separate curved-arrow
+handle, full positive/negative turns, parent/binding-space angle mapping and live
+content/Inspector preview. A single release edits static Rotation or inserts/edits
+an animated key, including between keys. The pivot remains fixed; descendants
+follow complete affine geometry. Document/history/autosave stay isolated until
+commit. It reuses Position's scene/queue with unique session IDs. Native v12,
+recovery v1 and interchange rules are unchanged. Manual/platform/native GPU
+acceptance and benchmarks remain pending.
 
 [Independent animated Scale X/Y](features/SCALE_AXES.md) is implemented with
 percentage fields, per-layer proportional linking, independent curves and a
@@ -411,14 +420,14 @@ unchanged.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The current implementation writes version 11 JSON documents and reads
-  versions 1 through 11, identified by
+- The current implementation writes version 12 JSON documents and reads
+  versions 1 through 12, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
   in [FORMAT.md](architecture/FORMAT.md).
 - Older text, shape, keyframe, effect, and linked-image records migrate as
   specified in [FORMAT.md](architecture/FORMAT.md); saving an older document writes version
-  11.
+  12.
   An unsupported future schema version is
   rejected without replacing the current composition or overwriting or
   normalizing the original file.

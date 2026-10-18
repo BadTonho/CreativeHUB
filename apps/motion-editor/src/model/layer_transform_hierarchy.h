@@ -36,7 +36,8 @@ public:
     LayerTransformHierarchy(CanvasSize canvas, const std::vector<CompositionLayer>& layers);
     [[nodiscard]] bool matches(CanvasSize canvas, const std::vector<CompositionLayer>& layers) const noexcept;
     [[nodiscard]] std::unordered_map<LayerId, ResolvedLayerTransform>
-        evaluate(std::int64_t composition_frame, std::optional<LayerPositionOverride> position = {}) const;
+        evaluate(std::int64_t composition_frame, std::optional<LayerPositionOverride> position = {},
+            std::optional<LayerRotationOverride> rotation = {}) const;
 
 private:
     struct Node {

@@ -10,6 +10,7 @@ namespace motion::ui {
 namespace a=creative_suite::animation;
 void MainWindow::editSelectedScaleAxis(std::size_t axis) {
     if(!document_||!timeline_||!inspector_||axis>=2||!selected_layer_id_)return;
+    const auto value=inspector_->scaleFieldValue(axis);
     const auto identity=std::pair{selected_layer_id_,axis+7};
     const bool coalescing=active_transform_edit_==identity;
     if(!coalescing)finishPendingTransformEdit();
@@ -19,7 +20,6 @@ void MainWindow::editSelectedScaleAxis(std::size_t axis) {
         const auto frame=timeline_->currentFrame();
         const auto values=model::evaluateLayerScale(*found,std::max<std::int64_t>(0,frame-found->timeline_start_frame));
         if(!coalescing)active_scale_ratio_=values[1]/values[0];
-        const auto value=inspector_->scaleFieldValue(axis);
         const auto other=axis==0?value*active_scale_ratio_:value/active_scale_ratio_;
         if(found->scale_linked && (!std::isfinite(other)||other<.000001||other>1'000'000.)) {syncTransformInspector();return;}
         std::optional<CompositionEditState> before;if(!coalescing)before=captureEditState();

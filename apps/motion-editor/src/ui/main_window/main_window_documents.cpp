@@ -582,6 +582,8 @@ bool MainWindow::documentIsDirty() const
 }
 void MainWindow::updateDocumentState()
 {
+    if (rotation_drag_ && !panBehindAvailable()) cancelRotationDrag();
+    if (viewer_) viewer_->setRotationDragEnabled(panBehindAvailable());
     if (position_drag_ && !panBehindAvailable()) cancelPositionDrag();
     if (viewer_) viewer_->setPositionDragEnabled(panBehindAvailable());
     if (parent_pick_whip_ && (export_worker_ || audio_keyframe_worker_)) cancelParentPickWhip();

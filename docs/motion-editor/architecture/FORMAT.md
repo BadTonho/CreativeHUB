@@ -19,6 +19,10 @@ Likewise, [Position drag](../features/POSITION_DRAG.md) persists only confirmed
 Position bases/keys. Scene snapshots, overrides and gesture session IDs are
 transient. No native, recovery, interchange or Hub format change is introduced.
 
+[Rotation drag](../features/ROTATION_DRAG.md) also persists only confirmed existing
+Rotation bases/keys, including full turns. Its pointer angles, override and
+preview session are transient; native v12/recovery v1 remain unchanged.
+
 ## File identity and versioning
 
 Motion Studio documents are UTF-8 JSON objects with these root fields:

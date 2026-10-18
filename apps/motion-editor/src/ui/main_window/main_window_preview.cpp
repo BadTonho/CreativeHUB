@@ -116,6 +116,15 @@ PreviewRequest MainWindow::buildPreviewRequest()
 void MainWindow::requestPreview(bool playback_tick)
 {
     if (!document_ || !preview_renderer_ || !media_pool_ || !timeline_) return;
+    if (rotation_drag_) {
+        auto request = *rotation_drag_->snapshot;
+        if(request.sceneLayers().empty())return;
+        request.gesture_session = rotation_drag_->session;
+        request.rotation_override = model::LayerRotationOverride{rotation_drag_->id,rotation_drag_->preview};
+        rotation_drag_->submitted = true;
+        (void)preview_renderer_->submit(std::move(request),PreviewRequestMode::Gesture);
+        return;
+    }
     if (position_drag_) {
         auto request = *position_drag_->snapshot;
         if (request.sceneLayers().empty()) return; // Null-only scenes need no pixels.

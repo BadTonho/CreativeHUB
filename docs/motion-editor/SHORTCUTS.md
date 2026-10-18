@@ -31,6 +31,11 @@ cancels only the provisional move and retains the previous history/Redo branch.
 Redo is unavailable until release/cancel. Start from the four-way handle beside
 the pivot; there is no new global shortcut or tool mode.
 
+During [Viewer Rotation drag](features/ROTATION_DRAG.md), **Escape** or **Undo**
+cancels only the draft and preserves history/Redo. Redo is unavailable during
+capture. Start from the curved-arrow handle; full turns are preserved and no
+global shortcut or tool mode is added.
+
 ## Customize shortcuts
 
 Open **Settings > Keyboard Shortcuts** to edit an action's key sequence. Changes are applied after confirmation; cancel closes without applying them. The dialog can reset assignments to defaults, and duplicate nonempty shortcuts are rejected. Shortcut assignments are saved in the application's settings.

@@ -37,8 +37,11 @@ Escape or Undo cancels only the gesture and preserves the preceding history and
 Redo branch; Redo is unavailable during capture. Frame, selection, document,
 layer structure, layout and Viewer size changes, capture loss, hiding and window
 deactivation cancel. Other edits, save and close cancel before continuing.
-Playback stays paused unless explicitly restarted. Rotation/scale handles,
+Playback stays paused unless explicitly restarted. Scale handles,
 axis constraints, snapping, selection by content and Viewer zoom/pan are deferred.
+
+[Rotation drag](ROTATION_DRAG.md) reuses the immutable scene and gesture queue.
+Both gesture kinds share unique session IDs and cannot be active together.
 
 ## Geometry and document boundary
 

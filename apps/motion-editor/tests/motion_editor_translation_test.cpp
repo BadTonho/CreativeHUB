@@ -158,6 +158,9 @@ int main(int argc, char* argv[])
         motion::ui::CompositionViewer viewer;
         if (!check(viewer.toolTip().startsWith(QStringLiteral("Arraste o pivô para reposicioná-lo sem mover a camada. Pressione Escape para cancelar.")) &&
                    viewer.toolTip().contains(QStringLiteral("Arraste a alça de quatro direções para mover a camada. Pressione Escape para cancelar.")) &&
+                   viewer.toolTip().contains(QStringLiteral("Arraste a alça com seta curva para girar a camada. Voltas completas são preservadas. Pressione Escape para cancelar.")) &&
+                   motion::ui::MotionUiTranslation::tr("The layer could not be rotated. Check the Motion Studio log for details.") ==
+                       QStringLiteral("Não foi possível girar a camada. Consulte o log do Motion Studio para obter detalhes.") &&
                    motion::ui::MotionUiTranslation::tr("The layer could not be moved. Check the Motion Studio log for details.") ==
                        QStringLiteral("Não foi possível mover a camada. Consulte o log do Motion Studio para obter detalhes."),
                    "Pan Behind gesture instructions use pt-BR.") ||
@@ -182,6 +185,9 @@ int main(int argc, char* argv[])
         motion::ui::CompositionViewer viewer;
         if (!check(viewer.toolTip().startsWith(QStringLiteral("Drag the pivot to reposition it without moving the layer. Press Escape to cancel.")) &&
                    viewer.toolTip().contains(QStringLiteral("Drag the four-way handle to move the layer. Press Escape to cancel.")) &&
+                   viewer.toolTip().contains(QStringLiteral("Drag the curved-arrow handle to rotate the layer. Full turns are preserved. Press Escape to cancel.")) &&
+                   motion::ui::MotionUiTranslation::tr("The layer could not be rotated. Check the Motion Studio log for details.") ==
+                       QStringLiteral("The layer could not be rotated. Check the Motion Studio log for details.") &&
                    motion::ui::MotionUiTranslation::tr("The layer could not be moved. Check the Motion Studio log for details.") ==
                        QStringLiteral("The layer could not be moved. Check the Motion Studio log for details."),
                    "Pan Behind instructions use English without a catalog.")) return 1;

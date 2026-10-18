@@ -144,11 +144,14 @@ bool LayerTransformHierarchy::matches(CanvasSize canvas, const std::vector<Compo
 }
 
 std::unordered_map<LayerId, ResolvedLayerTransform>
-LayerTransformHierarchy::evaluate(std::int64_t frame, std::optional<LayerPositionOverride> position) const
+LayerTransformHierarchy::evaluate(std::int64_t frame, std::optional<LayerPositionOverride> position,
+    std::optional<LayerRotationOverride> rotation) const
 {
     if(frame<0)throw std::invalid_argument("Negative hierarchy composition frame.");
     if (position && (!indices_.contains(position->layer_id) || !std::isfinite(position->x) || !std::isfinite(position->y)))
         throw std::invalid_argument("Invalid hierarchy Position override.");
+    if (rotation && (!indices_.contains(rotation->layer_id) || !std::isfinite(rotation->degrees)))
+        throw std::invalid_argument("Invalid hierarchy Rotation override.");
     std::vector<ParentTransformOffset> legacy(nodes_.size());
     std::vector<AffineTransform> global(nodes_.size());
     std::vector<bool> uses_affine(nodes_.size());
@@ -163,6 +166,7 @@ LayerTransformHierarchy::evaluate(std::int64_t frame, std::optional<LayerPositio
             value.position_x = position->x;
             value.position_y = position->y;
         }
+        if (rotation && rotation->layer_id == n.id) value.rotation_degrees = rotation->degrees;
         const auto sy=n.scale_y?creative_suite::animation::evaluateScalar(n.scale_y->value,n.scale_y->keyframes,local_frame):value.scale;
         const AnchorPoint anchor{creative_suite::animation::evaluateScalar(n.anchor.x_pixels,n.anchor_keys[0],local_frame),
             creative_suite::animation::evaluateScalar(n.anchor.y_pixels,n.anchor_keys[1],local_frame)};

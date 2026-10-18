@@ -1,4 +1,5 @@
 #pragma once
+#include "model/layer_rotation.h"
 
 #include "model/composition_document.h"
 #include "model/layer_transform_hierarchy.h"
@@ -162,6 +163,11 @@ private:
     void cancelPositionDrag();
     void commitPositionDrag();
     void logPositionDragFailure(const char*,model::LayerId,std::int64_t,const std::exception&);
+    bool beginRotationDrag(QPointF press, double logical_to_canvas);
+    bool previewRotationDrag(QPointF pointer);
+    void cancelRotationDrag();
+    void commitRotationDrag();
+    void logRotationDragFailure(const char*,model::LayerId,std::int64_t,const std::exception&);
     void commitAnchorReposition(model::LayerId id, model::AnchorPoint anchor, std::int64_t frame);
     void logPanBehindFailure(const char* operation, model::LayerId id, std::int64_t frame,
         const std::exception& error);
@@ -310,7 +316,19 @@ private:
         bool submitted=false;
     };
     std::optional<PositionDragGesture> position_drag_;
-    std::uint64_t position_session_=0;
+    std::uint64_t viewer_gesture_session_=0;
+    struct RotationDragGesture {
+        model::LayerId id;
+        std::int64_t frame;
+        model::CanvasSize canvas;
+        double initial, preview;
+        model::AffineTransform outer;
+        model::RotationDragCalculation calculation;
+        std::shared_ptr<const PreviewRequest> snapshot;
+        std::uint64_t session;
+        bool submitted=false;
+    };
+    std::optional<RotationDragGesture> rotation_drag_;
     struct ParentPickWhipGesture { model::LayerId child; std::int64_t frame; };
     std::optional<ParentPickWhipGesture> parent_pick_whip_;
     double active_scale_ratio_=1;

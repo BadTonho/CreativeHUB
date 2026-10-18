@@ -617,6 +617,14 @@ double InspectorWidget::anchorFieldValue(std::size_t axis) const noexcept
     return axis<2?controls_.anchor_fields[axis]->value():0;
 }
 
+void InspectorWidget::previewLayerRotation(double degrees)
+{
+    const QSignalBlocker blocker(controls_.transform_fields[3]);
+    controls_.transform_fields[3]->setValue(degrees);
+    controls_.transform_fields[3]->setReadOnly(true);
+    controls_.transform_key_buttons[3]->setEnabled(false);
+}
+
 void InspectorWidget::previewLayerPosition(double x,double y)
 {
     const std::array values{x,y};

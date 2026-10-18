@@ -4,6 +4,14 @@
 <context>
     <name>MotionUiTranslation</name>
     <message>
+        <source>Drag the curved-arrow handle to rotate the layer. Full turns are preserved. Press Escape to cancel.</source>
+        <translation>Arraste a alça com seta curva para girar a camada. Voltas completas são preservadas. Pressione Escape para cancelar.</translation>
+    </message>
+    <message>
+        <source>The layer could not be rotated. Check the Motion Studio log for details.</source>
+        <translation>Não foi possível girar a camada. Consulte o log do Motion Studio para obter detalhes.</translation>
+    </message>
+    <message>
         <location filename="../../apps/motion-editor/src/ui/dialogs/audio_keyframe_dialog.cpp" line="35"/>
         <source>Position X (canvas ratio)</source>
         <translation>Posição X (proporção da tela)</translation>
