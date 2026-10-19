@@ -3,6 +3,7 @@
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/composition/affine_transform.h>
 #include <creative_suite/composition/blend_mode.h>
+#include <creative_suite/composition/track_matte.h>
 #include <creative_suite/effects/effects.h>
 #include <creative_suite/media/video_frame.h>
 
@@ -23,6 +24,12 @@ namespace creative_suite::composition {
     const std::function<bool()>& cancel = {});
 [[nodiscard]] bool maskedBlend(const media::RgbaFrame& original, media::RgbaFrame& processed,
     const media::RgbaFrame& coverage, const std::function<bool()>& cancel = {});
+
+// Same-size straight RGBA8. A null matte denotes transparent pixels. Only alpha
+// is changed. Invalid geometry/mode returns false before writing; cancellation
+// may leave partial output, which the caller must discard.
+[[nodiscard]] bool applyTrackMatte(media::RgbaFrame&, const media::RgbaFrame*,
+    TrackMatteMode, const std::function<bool()>& cancel = {});
 
 class OpenGlTextureFrame;
 

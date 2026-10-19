@@ -1,6 +1,7 @@
 # Layer Blend Modes
 
-Status: implemented development feature in native `.motion` v13. Recovery stays
+Status: introduced in native `.motion` v13; current documents use v14 for
+[Track Mattes](TRACK_MATTES.md). Recovery stays
 at wrapper v1 and `.cscomp` at v3. Application versions are unchanged. Manual
 visual/platform/native GPU acceptance and benchmarks remain pending.
 
@@ -70,7 +71,7 @@ values or non-Normal Nulls. Invalid Open leaves the current document intact.
 Save, history, autosave and recovery preserve the confirmed mode.
 
 Hub accepts native v13, preserves mode and other metadata through vault/relocated
-restores, and rejects v14. `.cscomp` remains v3: any non-Normal layer prevents
+restores, and rejects v15. `.cscomp` remains v3: any non-Normal layer prevents
 export with its name and ID, including hidden/inactive layers. Imports use Normal.
 Video/Image gain no mode UI, native fields or format changes. Their existing
 Normal rendering and image operations remain covered at the shared boundary.

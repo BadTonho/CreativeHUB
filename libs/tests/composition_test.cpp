@@ -115,8 +115,30 @@ void blendModes() {
 
 } // namespace
 
+void trackMattes() {
+    using namespace creative_suite;
+    const media::RgbaFrame matte{6,1,24,{255,0,0,0, 0,0,0,255, 255,255,255,255, 255,0,0,128, 0,255,0,64, 0,0,255,200}};
+    media::RgbaFrame target{6,1,28,std::vector<std::uint8_t>(28,123)};
+    for(int x=0;x<6;++x)target.rgba_pixels[x*4+3]=200;
+    const int expected[4][6]{{0,200,200,100,50,157},{200,0,0,100,150,43},{0,0,200,21,36,11},{200,200,0,179,164,189}};
+    for(int m=0;m<4;++m) {
+        auto out=target;require(composition::applyTrackMatte(out,&matte,static_cast<composition::TrackMatteMode>(m)),"valid CPU track matte");
+        for(int x=0;x<6;++x) {require(out.rgba_pixels[x*4+3]==expected[m][x],"independent matte alpha reference");for(int c=0;c<3;++c)require(out.rgba_pixels[x*4+c]==123,"track matte preserves straight RGB");}
+        require(out.rgba_pixels[27]==123,"track matte preserves row padding");
+        out=target;require(composition::applyTrackMatte(out,nullptr,static_cast<composition::TrackMatteMode>(m)),"empty matte input");
+        require(out.rgba_pixels[3]==(m%2?200:0),"inversion includes transparent backdrop");
+    }
+    auto tie=frame(1,1,{20,115,0,255});auto rounded=frame(1,1,{1,2,3,255});
+    require(composition::applyTrackMatte(rounded,&tie,composition::TrackMatteMode::Luma)&&rounded.rgba_pixels[3]==87,"Luma half-byte tie rounds up exactly");
+    rounded.rgba_pixels[3]=255;require(composition::applyTrackMatte(rounded,&tie,composition::TrackMatteMode::LumaInverted)&&rounded.rgba_pixels[3]==169,"Inverted luma half-byte tie rounds up exactly");
+    auto out=target;auto invalid=matte;invalid.width=5;
+    require(!composition::applyTrackMatte(out,&invalid,composition::TrackMatteMode::Alpha)&&out.rgba_pixels==target.rgba_pixels,"invalid matte geometry cannot alter output");
+    require(!composition::applyTrackMatte(out,&matte,static_cast<composition::TrackMatteMode>(255))&&out.rgba_pixels==target.rgba_pixels,"invalid matte mode cannot alter output");
+    require(!composition::applyTrackMatte(out,&matte,composition::TrackMatteMode::Alpha,[]{return true;}),"matte cancellation");
+}
+
 int main() {
-    try { blendModes(); } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
+    try { blendModes(); trackMattes(); } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
     using namespace creative_suite;
 
     try {

@@ -4,6 +4,7 @@
 #include "layer_content_renderer.h"
 #include "layer_effect_processor.h"
 #include "masked_layer_renderer.h"
+#include <unordered_map>
 #include "../diagnostics/performance_metrics.h"
 
 #include <creative_suite/composition/frame_compositor.h>
@@ -247,8 +248,41 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     creative_suite::composition::ShapeMaskRasterCache mask_cache;
     bool mask_gpu_in_use=false;
     creative_suite::composition::OpenGlCompositionTimings mask_timings;
+    const auto* matte_graph=request.mask_view_layer?nullptr:request.sceneMattes().get();
+    std::unordered_map<model::LayerId,MaskedLayerFrame> matte_outputs;
+    std::unordered_map<model::LayerId,std::size_t> matte_consumers;
+    std::unordered_map<model::LayerId,const PreviewLayerSnapshot*> scene_by_id;
+    std::vector<const PreviewLayerSnapshot*> processing_layers;
+    if(matte_graph) {
+        for(const auto& layer:request.sceneLayers()) {
+            if(!scene_by_id.emplace(layer.id,&layer).second)throw std::invalid_argument("Duplicate render layer.");
+            if(layer.track_matte)++matte_consumers[layer.track_matte->source_id];
+        }
+        for(auto id:matte_graph->order())if(const auto found=scene_by_id.find(id);found!=scene_by_id.end()) {
+            if(found->second->track_matte!=matte_graph->binding(id))throw std::invalid_argument("Stale track matte relation.");
+            processing_layers.push_back(found->second);
+        }
+        if(processing_layers.size()!=request.sceneLayers().size())throw std::invalid_argument("Unknown track matte scene layer.");
+    } else if(!request.mask_view_layer)for(const auto& layer:request.sceneLayers())
+        if(layer.track_matte)throw std::invalid_argument("Missing track matte graph.");
+    const auto matte_relations=[&](model::LayerId affected=0) {
+        std::string result;
+        if(matte_graph)for(const auto& node:request.sceneLayers())if(node.track_matte &&
+            (!affected || affected==node.id || affected==node.track_matte->source_id)) {
+            if(!result.empty())result+=",";
+            result+=std::to_string(node.id)+"->"+std::to_string(node.track_matte->source_id)+":"+
+                std::string(creative_suite::composition::trackMatteModeIdentifier(node.track_matte->mode));
+        }
+        return result;
+    };
+    const auto release_matte_source=[&](model::LayerId source) {
+        if(--matte_consumers.at(source)!=0)return;
+        const auto found=matte_outputs.find(source);if(found==matte_outputs.end())return;
+        if(!scene_by_id.at(source)->composite)portable_raster_bytes-=std::uint64_t(request.canvas_size.width)*request.canvas_size.height*4;
+        matte_outputs.erase(found);
+    };
     const auto cpu_mask_recovery=[&]() {
-        composition_layers.clear();owned_frames.clear();pending_gpu_effects.clear();mask_cache={};
+        composition_layers.clear();owned_frames.clear();pending_gpu_effects.clear();mask_cache={};matte_outputs.clear();
         const auto previous=gpu_composition_disabled_after_failure_;
         struct Restore {bool& field;bool value;~Restore(){field=value;}} restore{gpu_composition_disabled_after_failure_,previous};
         gpu_composition_disabled_after_failure_=true;
@@ -266,7 +300,10 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         if (fail_on_media_error || mode==PreviewRequestMode::Gesture) throw;
         return {};
     }
-    for (const auto& layer : request.sceneLayers()) {
+    for(std::size_t layer_index=0;layer_index<request.sceneLayers().size();++layer_index) {
+        const auto& layer=matte_graph?*processing_layers[layer_index]:request.sceneLayers()[layer_index];
+        struct OnExit {decltype(release_matte_source)& callback;model::LayerId source;~OnExit(){if(source)callback(source);}}
+            release_dependency{release_matte_source,matte_graph&&layer.track_matte?layer.track_matte->source_id:0};
         if ((should_cancel && should_cancel())) return {};
         if(!creative_suite::composition::validBlendMode(layer.blend_mode)) {
             creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
@@ -472,15 +509,51 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 throw creative_suite::composition_exchange::Error("Interchange source preparation exceeds the 256 MiB frame budget.");
             frame = std::make_shared<const creative_suite::media::RgbaFrame>(creative_suite::composition_exchange::fit(*frame,request.canvas_size.width,request.canvas_size.height, layer.kind == model::LayerKind::Text, should_cancel));
         }
-        if(hasLayerMasks(layer)) {
+        const auto consumers=matte_consumers.find(layer.id);
+        const bool needs_matte_pixels=matte_graph && (layer.track_matte ||
+            (consumers!=matte_consumers.end() && consumers->second>0));
+        if(hasLayerMasks(layer) || needs_matte_pixels) {
             if(try_gpu_effects && !gpu_compositor_)gpu_compositor_=std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(
                 gpu_surface_,creative_suite::composition::OpenGlPrecisionPolicy::Automatic,texture_share_context_,texture_budget_);
             MaskedLayerFrame processed;
-            try {processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel,&effective_transform,effective_world?&*effective_world:nullptr);}
+            try {
+                const auto bytes=std::uint64_t(request.canvas_size.width)*request.canvas_size.height*4;
+                if(matte_graph && portable_raster_bytes+bytes*(layer.track_matte?2:1)>256ULL*1024*1024)
+                    throw std::runtime_error("Track matte intermediates exceed the 256 MiB preparation budget.");
+                processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel,&effective_transform,effective_world?&*effective_world:nullptr);
+                if(matte_graph && layer.track_matte && (processed.rgba || processed.texture)) {
+                    const auto source=matte_outputs.find(layer.track_matte->source_id);
+                    if(try_gpu_effects) {
+                        creative_suite::composition::OpenGlImageOperation op;
+                        op.kind=creative_suite::composition::OpenGlImageOperationKind::ApplyTrackMatte;
+                        op.background={processed.rgba.get(),processed.texture};op.track_matte_mode=layer.track_matte->mode;
+                        if(source!=matte_outputs.end())op.mask={source->second.rgba.get(),source->second.texture};
+                        creative_suite::composition::OpenGlCompositionTimings measured;
+                        auto result=gpu_compositor_->processImage(op,should_cancel,&measured);
+                        addMaskTimings(processed.timings,measured);
+                        if(result.status==creative_suite::composition::OpenGlCompositionStatus::Cancelled)return {};
+                        if(result.status!=creative_suite::composition::OpenGlCompositionStatus::Complete || !result.frame)
+                            throw std::runtime_error(result.operation+": "+(result.cause.empty()?"Track matte image pool is occupied.":result.cause));
+                        processed.rgba.reset();processed.texture=std::move(result.frame);
+                    } else {
+                        auto result=std::make_shared<creative_suite::media::RgbaFrame>(*processed.rgba);
+                        if(!creative_suite::composition::applyTrackMatte(*result,source==matte_outputs.end()?nullptr:source->second.rgba.get(),layer.track_matte->mode,should_cancel)) {
+                            if(should_cancel && should_cancel())return {};
+                            throw std::runtime_error("The CPU track matte operation rejected its inputs.");
+                        }
+                        processed.rgba=std::move(result);
+                    }
+                }
+            }
             catch(const std::exception& e) {
                 if(should_cancel && should_cancel())return {};
                 creative_suite::diagnostics::Logger::instance().log(try_gpu_effects?creative_suite::diagnostics::Level::Warning:creative_suite::diagnostics::Level::Error,
-                    "motion_masks",try_gpu_effects?"gpu_cpu_recovery":"render_layer",e.what(),{{"layer_id",std::to_string(layer.id)}});
+                    layer.track_matte?"motion_track_matte":"motion_masks",try_gpu_effects?"gpu_cpu_recovery":"render_layer",e.what(),
+                    {{"layer_id",std::to_string(layer.id)},
+                     {"source_id",layer.track_matte?std::to_string(layer.track_matte->source_id):std::to_string(layer.id)},
+                     {"track_mattes",matte_relations(layer.id)},
+                     {"mode",layer.track_matte?std::string(creative_suite::composition::trackMatteModeIdentifier(layer.track_matte->mode)):"none"},
+                     {"frame",std::to_string(request.composition_frame)},{"backend",try_gpu_effects?"opengl":"cpu"}});
                 if(try_gpu_effects)return cpu_mask_recovery();
                 if(fail_on_media_error)throw;
                 return {};
@@ -493,6 +566,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             }
             portable_raster_bytes+=std::uint64_t(request.canvas_size.width)*request.canvas_size.height*4;
             if(portable_raster_bytes>256ULL*1024*1024)throw std::runtime_error("Masked layer outputs exceed the 256 MiB preparation budget.");
+            if(matte_graph && matte_consumers[layer.id]>0)matte_outputs.emplace(layer.id,processed);
+            if(!layer.composite)continue;
             if(processed.rgba){owned_frames.push_back(processed.rgba);composition_layers.push_back({processed.rgba.get(),{}});}
             else {
                 auto geometry=std::make_shared<const creative_suite::media::RgbaFrame>(creative_suite::media::RgbaFrame{request.canvas_size.width,request.canvas_size.height,request.canvas_size.width*4,{}});
@@ -637,6 +712,19 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         }
     }
 
+    if(matte_graph) {
+        // Pixel dependencies execute source-first; stack order remains document order.
+        std::unordered_map<model::LayerId,std::size_t> previous;
+        for(std::size_t i=0;i<composition_layer_ids.size();++i)previous.emplace(composition_layer_ids[i],i);
+        std::vector<std::size_t> remap(composition_layers.size());
+        std::vector<CompositionLayer> ordered;std::vector<model::LayerId> ids;
+        ordered.reserve(composition_layers.size());ids.reserve(composition_layers.size());
+        for(const auto& layer:request.sceneLayers())if(const auto found=previous.find(layer.id);found!=previous.end()) {
+            remap[found->second]=ordered.size();ordered.push_back(std::move(composition_layers[found->second]));ids.push_back(layer.id);
+        }
+        composition_layers=std::move(ordered);composition_layer_ids=std::move(ids);
+        for(auto& pending:pending_gpu_effects)pending.composition_index=remap[pending.composition_index];
+    }
     for (auto cached = content_frames_.begin(); cached != content_frames_.end();) {
         if (!active_content_ids.contains(cached->first)) {
             cached = content_frames_.erase(cached);
@@ -679,6 +767,12 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                             texturePoolBytes(), texturePoolOccupancy());
                     }
                     if (direct.status == OpenGlCompositionStatus::Busy) {
+                        if(matte_graph) {
+                            creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Warning,
+                                "motion_track_matte","gpu_pool_recovery","Track matte leases prevent final texture allocation; using CPU.",
+                                {{"frame",std::to_string(request.composition_frame)},{"backend","opengl"},{"track_mattes",matte_relations()}});
+                            return cpu_mask_recovery();
+                        }
                         if (texture_busy) *texture_busy = true;
                         return {};
                     }
@@ -853,6 +947,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
              {"canvas_height", std::to_string(request.canvas_size.height)},
              {"layer_id", failing_layer_id},
              {"blend_modes",blend_context.empty()?"normal":blend_context},
+             {"track_mattes",matte_relations()},{"frame",std::to_string(request.composition_frame)},
              {"layer_index", std::to_string(gpu_result.layer_index)},
              {"status", gpu_result.status == OpenGlCompositionStatus::Unsupported
                     ? "unsupported" : "failed"}});

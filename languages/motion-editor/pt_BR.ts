@@ -4,6 +4,46 @@
 <context>
     <name>MotionUiTranslation</name>
     <message>
+        <source>Track Matte</source>
+        <translation>Matte de camada</translation>
+    </message>
+    <message>
+        <source>Matte Mode</source>
+        <translation>Modo do matte</translation>
+    </message>
+    <message>
+        <source>No matte</source>
+        <translation>Sem matte</translation>
+    </message>
+    <message>
+        <source>Alpha Matte</source>
+        <translation>Matte alfa</translation>
+    </message>
+    <message>
+        <source>Alpha Inverted</source>
+        <translation>Alfa invertido</translation>
+    </message>
+    <message>
+        <source>Luma Matte</source>
+        <translation>Matte de luma</translation>
+    </message>
+    <message>
+        <source>Luma Inverted</source>
+        <translation>Luma invertida</translation>
+    </message>
+    <message>
+        <source>A new matte source is hidden. Its visibility can be enabled without disabling the matte.</source>
+        <translation>Uma nova fonte de matte é ocultada. Sua visibilidade pode ser ativada sem desativar o matte.</translation>
+    </message>
+    <message>
+        <source>Use the source alpha or luma after its effects and masks. Inverted modes reveal areas outside the source.</source>
+        <translation>Use o alfa ou a luma da fonte após seus efeitos e máscaras. Os modos invertidos revelam áreas fora da fonte.</translation>
+    </message>
+    <message>
+        <source>The track matte could not be changed. Check the Motion Studio log for details.</source>
+        <translation>Não foi possível alterar o matte de camada. Consulte o log do Motion Studio para obter detalhes.</translation>
+    </message>
+    <message>
         <source>Blend Mode</source>
         <translation>Modo de mesclagem</translation>
     </message>

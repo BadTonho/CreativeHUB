@@ -6,6 +6,8 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL OpenGLWidgets Widgets LinguistTools)
 
 add_library(creative-suite-motion-editor-core STATIC
+    src/model/track_matte_graph.cpp
+    src/model/track_matte_graph.h
     src/model/layer_scale_drag.cpp
     src/model/layer_scale_drag.h
     src/model/layer_rotation.cpp
@@ -31,6 +33,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/persistence/motion_recovery_store.h
     src/persistence/motion_document_store.cpp
     src/persistence/motion_document_store.h
+    src/rendering/preview_scene_builder.cpp
+    src/rendering/preview_scene_builder.h
     src/rendering/preview_renderer.cpp
     src/rendering/preview_renderer.h
     src/rendering/composition_frame_renderer.cpp

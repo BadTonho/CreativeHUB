@@ -415,8 +415,19 @@ void testMotionDocuments(const QString& root) {
     CS_TEST_CHECK(Store::load(fsPath(blend_backup.vault))==project);
     CS_TEST_CHECK(Store::load(fsPath(blend_backup.restored))==project);
     CS_TEST_CHECK(std::filesystem::exists(Store::load(fsPath(blend_backup.restored)).layers.front().source_path));
-    auto future=QJsonDocument::fromJson(readBytes(blend_path)).object();future.insert("version",14);
-    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v14.motion");writeBytes(future_path,QJsonDocument(future).toJson());
+    motion::model::LayerId matte_id=0;
+    CS_TEST_CHECK(hierarchy.addContentLayer(LayerKind::Shape,"Matte",0,&matte_id));
+    CS_TEST_CHECK(hierarchy.setLayerTrackMatte(id,TrackMatteBinding{matte_id,creative_suite::composition::TrackMatteMode::LumaInverted}));
+    project.layers=hierarchy.layers();
+    const auto matte_path=QDir(QFileInfo(assets).absolutePath()).filePath("matte.motion");
+    Store::save(fsPath(matte_path),project);
+    const auto matte_backup=backup(QDir(root).filePath("motion-matte-v14"),matte_path);
+    CS_TEST_CHECK(Store::load(fsPath(matte_backup.vault))==project);
+    const auto restored_matte=Store::load(fsPath(matte_backup.restored));
+    CS_TEST_CHECK(restored_matte==project && !restored_matte.layers.back().visible);
+    CS_TEST_CHECK(std::filesystem::exists(restored_matte.layers.front().source_path));
+    auto future=QJsonDocument::fromJson(readBytes(blend_path)).object();future.insert("version",Store::current_format_version+1);
+    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v15.motion");writeBytes(future_path,QJsonDocument(future).toJson());
     creative_suite::hub::BackupManager manager(QDir(root).filePath("future-vault"));QString rejected_path,error;
     CS_TEST_CHECK(!manager.createBackup(future_path,&rejected_path,&error)&&!error.isEmpty());
 

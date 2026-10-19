@@ -142,6 +142,8 @@ uniform sampler2D background_image;
 uniform sampler2D foreground_image;
 uniform sampler2D mask_image;
 uniform bool mask_bottom_left;
+uniform bool has_track_matte;
+uniform int track_matte_mode;
 uniform bool background_bottom_left;
 uniform bool foreground_bottom_left;
 uniform int operation;
@@ -166,6 +168,17 @@ vec4 background(ivec2 pixel) {
 vec4 foreground(ivec2 pixel) {
     if (foreground_bottom_left) pixel.y = textureSize(foreground_image, 0).y - 1 - pixel.y;
     return texelFetch(foreground_image, pixel, 0);
+}
+// Eight-bit long division keeps the exact weighted product below INT_MAX.
+// GLSL 1.50 needs neither int64 nor FP64 for RGBA8 half-up rounding.
+int matteAlpha(int alpha,int numerator) {
+    int quotient=0,remainder=0;
+    for(int bit=7;bit>=0;--bit) {
+        remainder=2*remainder+((alpha>>bit)&1)*numerator;
+        quotient=2*quotient+remainder/650250000;
+        remainder=remainder%650250000;
+    }
+    return quotient+(remainder>=325125000?1:0);
 }
 void main() {
     ivec2 pixel = ivec2(int(gl_FragCoord.x), canvas_height - 1 - int(gl_FragCoord.y));
@@ -193,6 +206,20 @@ void main() {
             float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
             color.rgb = floor(clamp(vec3(luma) + (rgb - vec3(luma)) * p.z, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
         }
+        return;
+    }
+    if (operation == 7) {
+        ivec4 matte=ivec4(0);
+        if(has_track_matte) {
+            ivec2 mp=pixel;
+            if(mask_bottom_left)mp.y=textureSize(mask_image,0).y-1-mp.y;
+            matte=ivec4(floor(texelFetch(mask_image,mp,0)*255.0+0.5));
+        }
+        int weighted=2550000;
+        if(track_matte_mode>=2)weighted=matte.r*2126+matte.g*7152+matte.b*722;
+        int numerator=matte.a*weighted;
+        if(track_matte_mode==1 || track_matte_mode==3)numerator=650250000-numerator;
+        color.a=float(matteAlpha(int(floor(color.a*255.0+0.5)),numerator))/255.0;
         return;
     }
     if (operation == 4 || operation == 5) {
@@ -396,6 +423,7 @@ struct OpenGlFrameCompositor::Impl {
     std::uint64_t raster_reserved = 0, raster_clock = 0;
     GLuint image_textures[3]{};
     std::uint64_t image_texture_bytes[3]{};
+    std::uint64_t matte_upload_reserved[3]{};
     std::unique_ptr<detail::WindowsVideoInterop> video_interop;
     std::unique_ptr<QOpenGLFramebufferObject> output;
     std::unique_ptr<QOpenGLFramebufferObject> effect_scratch;
@@ -600,6 +628,12 @@ struct OpenGlFrameCompositor::Impl {
     void releaseRaster(std::uint64_t bytes) {
         std::lock_guard lock(budget->impl_->mutex);
         budget->impl_->bytes -= bytes; raster_reserved -= bytes;
+    }
+    void discardMatteUploads() {
+        for(unsigned i=0;i<3;++i)if(matte_upload_reserved[i]) {
+            gl->glDeleteTextures(1,&image_textures[i]);gl->glGenTextures(1,&image_textures[i]);
+            image_texture_bytes[i]=0;releaseRaster(matte_upload_reserved[i]);matte_upload_reserved[i]=0;
+        }
     }
     void discardBlendBackdrop() {
         if(!blend_backdrop && !blend_reserved)return;
@@ -848,6 +882,12 @@ void main() {
                 const auto bytes=static_cast<std::uint64_t>(input.width())*input.height()*4;
                 if (slot==2 && bytes>budget->impl_->byte_limit)
                     return result(OpenGlCompositionStatus::Unsupported,"check-mask-budget","Coverage exceeds the bounded mask upload budget.");
+                if(operation.kind==OpenGlImageOperationKind::ApplyTrackMatte) {
+                    if(bytes>matte_upload_reserved[slot] && !reserveRaster(bytes-matte_upload_reserved[slot]))
+                        return result(OpenGlCompositionStatus::Unsupported,"track-matte-upload-budget","Track matte inputs exceed the shared texture budget.");
+                    if(bytes<matte_upload_reserved[slot])releaseRaster(matte_upload_reserved[slot]-bytes);
+                    matte_upload_reserved[slot]=bytes;
+                } else if(matte_upload_reserved[slot]){releaseRaster(matte_upload_reserved[slot]);matte_upload_reserved[slot]=0;}
                 const auto started = Clock::now();
                 gl->glBindTexture(GL_TEXTURE_2D, image_textures[slot]);
                 gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, input.width(), input.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -924,6 +964,11 @@ void main() {
             bound=bind(operation.mask,2);
             if (bound.status!=OpenGlCompositionStatus::Complete) return bound;
         }
+        if(operation.kind==OpenGlImageOperationKind::ApplyTrackMatte && (operation.mask.rgba || operation.mask.texture || operation.mask.native)) {
+            if(operation.mask.width()!=width || operation.mask.height()!=height)
+                return result(OpenGlCompositionStatus::Unsupported,"track-matte-geometry","Track matte dimensions must match the receiver.");
+            bound=bind(operation.mask,2);if(bound.status!=OpenGlCompositionStatus::Complete)return bound;
+        }
         const auto started = Clock::now();
         gl->glViewport(0, 0, width, height);
         gl->glDisable(GL_BLEND); gl->glDisable(GL_DEPTH_TEST); gl->glDisable(GL_STENCIL_TEST);
@@ -934,6 +979,8 @@ void main() {
         image_program->setUniformValue("foreground_image", 1);
         image_program->setUniformValue("mask_image", 2);
         image_program->setUniformValue("mask_bottom_left", bool(operation.mask.texture));
+        image_program->setUniformValue("has_track_matte",bool(operation.mask.rgba || operation.mask.texture || operation.mask.native));
+        image_program->setUniformValue("track_matte_mode",static_cast<int>(operation.track_matte_mode));
         image_program->setUniformValue("background_bottom_left", bool(operation.background.texture));
         image_program->setUniformValue("foreground_bottom_left", bool(operation.foreground.texture));
         image_program->setUniformValue("operation", static_cast<int>(operation.kind));
@@ -1042,7 +1089,8 @@ void main() {
     }
     OpenGlResourceUsage resources() const noexcept {
         std::uint64_t bytes = static_cast<std::uint64_t>(source_width) * source_height * 4;
-        bytes += image_texture_bytes[0] + image_texture_bytes[1] + image_texture_bytes[2];
+        bytes += image_texture_bytes[0] + image_texture_bytes[1] + image_texture_bytes[2]
+            - matte_upload_reserved[0] - matte_upload_reserved[1] - matte_upload_reserved[2];
         if (video_interop) bytes += video_interop->reservedBytes();
         if (output && output->isValid()) bytes += static_cast<std::uint64_t>(output->width()) * output->height() * 4;
         for (const auto& target : targets) if (target.output && target.output->isValid()) bytes += target.bytes;
@@ -1132,6 +1180,8 @@ OpenGlCompositionResult OpenGlFrameCompositor::copyToNative(const OpenGlTextureF
 
 OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
     const OpenGlImageOperation& operation, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    if(operation.kind==OpenGlImageOperationKind::ApplyTrackMatte && !validTrackMatteMode(operation.track_matte_mode))
+        return {OpenGlCompositionStatus::Unsupported,{},"track-matte-mode","Invalid track matte mode."};
     if(operation.kind==OpenGlImageOperationKind::GaussianBlur) {
         if(!std::isfinite(operation.blur_radius_pixels)||operation.blur_radius_pixels<0||operation.blur_radius_pixels>100)
             return {OpenGlCompositionStatus::Unsupported,{},"image-blur-radius","Blur radius must be between 0 and 100."};
@@ -1425,6 +1475,7 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, 
             static_cast<std::uint64_t>(width) * height * 4 > p.budget->impl_->byte_limit)
             return {OpenGlCompositionStatus::Unsupported, {}, "check-pool-limits",
                 "Canvas exceeds the shared texture pool budget or device limits."};
+        if(!p.image_operation || p.image_operation->kind!=OpenGlImageOperationKind::ApplyTrackMatte)p.discardMatteUploads();
         if(std::none_of(layers.begin(),layers.end(),[](const auto& l){return l.blend_mode!=BlendMode::Normal;}))p.discardBlendBackdrop();
         auto collected = p.collect();
         if (collected.status != OpenGlCompositionStatus::Complete) return converted(std::move(collected));
@@ -1549,10 +1600,10 @@ void OpenGlFrameCompositor::retireTextureFrames() noexcept { impl_->retiring = t
 
 OpenGlCompositionResult OpenGlFrameCompositor::collectReleasedTextureFrames() {
     auto& p = *impl_;
-    if (p.targets.empty() && !(p.retiring && p.blend_reserved)) return result(OpenGlCompositionStatus::Complete);
+    if (p.targets.empty() && !(p.retiring && (p.blend_reserved || p.matte_upload_reserved[0] || p.matte_upload_reserved[1] || p.matte_upload_reserved[2]))) return result(OpenGlCompositionStatus::Complete);
     auto active = p.activate();
     if (active.status != OpenGlCompositionStatus::Complete) return active;
-    if(p.retiring)p.discardBlendBackdrop();
+    if(p.retiring){p.discardBlendBackdrop();p.discardMatteUploads();}
     auto collected = p.collect();
     if (p.retiring) {
         // A displayed lease must not retain unused slots and starve the next
@@ -1629,6 +1680,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         if (!bounded(width, height, p.texture_limit))
             return result(OpenGlCompositionStatus::Unsupported, "check-limits",
                 "Canvas exceeds the device texture limit or 256 MiB texture budget.");
+        if(!p.image_operation || p.image_operation->kind!=OpenGlImageOperationKind::ApplyTrackMatte)p.discardMatteUploads();
         if(!blending)p.discardBlendBackdrop();
         if (p.raster_request) return p.renderRaster(*p.raster_request, cancel, measured);
         if (p.image_operation) return p.renderImage(*p.image_operation, cancel, measured);

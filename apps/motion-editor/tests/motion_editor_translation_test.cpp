@@ -162,6 +162,14 @@ int main(int argc, char* argv[])
             modes->itemText(3)==QStringLiteral("Sobrepor") && modes->itemText(4)==QStringLiteral("Adicionar") && modes->itemText(5)==QStringLiteral("Diferença") &&
             modes->toolTip().contains(QStringLiteral("transparentes")) && motion::ui::MotionUiTranslation::tr("Blend Mode")==QStringLiteral("Modo de mesclagem") &&
             motion::ui::MotionUiTranslation::tr("The blend mode could not be changed. Check the Motion Studio log for details.").startsWith(QStringLiteral("Não foi possível")),"Blend mode labels, instructions and failures use pt-BR."))return 1;
+        const auto* matte=blend_inspector.findChild<QComboBox*>(QStringLiteral("motion-track-matte-mode"));
+        const auto* matte_source=blend_inspector.findChild<QComboBox*>(QStringLiteral("motion-track-matte-source"));
+        if(!check(matte && matte_source && matte->itemText(0)==QStringLiteral("Matte alfa") && matte->itemText(1)==QStringLiteral("Alfa invertido") &&
+            matte->itemText(2)==QStringLiteral("Matte de luma") && matte->itemText(3)==QStringLiteral("Luma invertida") &&
+            matte_source->toolTip().contains(QStringLiteral("ocultada")) && matte->toolTip().contains(QStringLiteral("fora da fonte")) &&
+            motion::ui::MotionUiTranslation::tr("No matte")==QStringLiteral("Sem matte") &&
+            motion::ui::MotionUiTranslation::tr("Track Matte")==QStringLiteral("Matte de camada") &&
+            motion::ui::MotionUiTranslation::tr("The track matte could not be changed. Check the Motion Studio log for details.").startsWith(QStringLiteral("Não foi possível")),"Track matte labels, instructions and errors use pt-BR."))return 1;
         motion::ui::CompositionViewer viewer;
         if (!check(viewer.toolTip().contains(QStringLiteral("Arraste X, Y ou XY para ajustar a escala da camada. O vínculo do Inspector controla as proporções. O arraste para nos limites positivos; Escape cancela.")) &&
                    motion::ui::MotionUiTranslation::tr("The layer could not be scaled. Check the Motion Studio log for details.") == QStringLiteral("Não foi possível ajustar a escala da camada. Consulte o log do Motion Studio para obter detalhes.") &&
@@ -196,6 +204,9 @@ int main(int argc, char* argv[])
         if(!check(modes && modes->itemText(1)==QStringLiteral("Multiply") && modes->itemText(2)==QStringLiteral("Screen") &&
             modes->itemText(3)==QStringLiteral("Overlay") && modes->itemText(4)==QStringLiteral("Add") && modes->itemText(5)==QStringLiteral("Difference") &&
             motion::ui::MotionUiTranslation::tr("Blend Mode")==QStringLiteral("Blend Mode"),"Blend modes fall back to English."))return 1;
+        const auto* matte=blend_inspector.findChild<QComboBox*>(QStringLiteral("motion-track-matte-mode"));
+        if(!check(matte && matte->itemText(0)==QStringLiteral("Alpha Matte") && matte->itemText(3)==QStringLiteral("Luma Inverted") &&
+            motion::ui::MotionUiTranslation::tr("Track Matte")==QStringLiteral("Track Matte"),"Track mattes fall back to English."))return 1;
         motion::ui::CompositionViewer viewer;
         if (!check(viewer.toolTip().contains(QStringLiteral("Drag X, Y or XY to scale the layer. The Inspector link controls proportions. Positive limits stop the drag; Escape cancels.")) &&
                    motion::ui::MotionUiTranslation::tr("The layer could not be scaled. Check the Motion Studio log for details.") == QStringLiteral("The layer could not be scaled. Check the Motion Studio log for details.") &&

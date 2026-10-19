@@ -403,3 +403,13 @@ Vulkan returns Unsupported so callers can recover. Shared CPU/OpenGL/Vulkan and
 Motion tests cover new semantics; Video/Image rendering/preview/export gates
 protect the existing contracts. Native GPU acceptance and fallback are recorded
 separately. See [pixel/ownership contract](motion-editor/features/BLEND_MODES.md).
+
+## Track Matte processing boundary
+
+Motion native v14 owns matte references, graph orchestration and UI. The shared
+Qt-free TrackMatteMode/CPU operation and additive OpenGL image operation receive
+same-size processed pixels, not application document references. Vulkan refuses
+the new operation. Video/Image continue their current Normal and image contracts
+without matte UI or persisted data. Hub preserves native bindings and media paths;
+`.cscomp` v3 refuses them. Shared, Motion, Hub and affected consumer regressions
+cover the boundary; native/platform acceptance remains separate.

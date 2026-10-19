@@ -1157,6 +1157,8 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
     const CancellationPredicate& cancel,OpenGlCompositionTimings* timings) {
     try {
         cancelled(cancel);
+        if(operation.kind==OpenGlImageOperationKind::ApplyTrackMatte)
+            throw Failure("Track matte image operations are not implemented by Vulkan.",0,Status::Unsupported);
 #ifdef CS_HAS_VULKAN
         if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
         auto batch=beginCommandBatch(cancel);

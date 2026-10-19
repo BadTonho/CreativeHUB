@@ -45,6 +45,8 @@ private:
         QWidget* transform_inspector = nullptr;
         QComboBox* parent_layer = nullptr;
         QComboBox* blend_mode = nullptr;
+        QComboBox* matte_source = nullptr;
+        QComboBox* matte_mode = nullptr;
         QWidget* effects_inspector = nullptr;
         QListWidget* layer_effect_list = nullptr;
         QPushButton* add_layer_effect_button = nullptr;
@@ -102,6 +104,7 @@ public:
                    int selected_effect_row);
     void syncSelectedEffect(const model::CompositionLayer* layer, int row);
     void setBlendModeBusy(bool);
+    void syncTrackMatte(const model::CompositionDocument*,model::LayerId);
     void syncParenting(const model::CompositionDocument* document, model::LayerId selected);
     // Presentation only; signals are blocked and normal syncLayer restores editability.
     void previewAnchorReposition(const model::AnchorRepositionValues& values);
@@ -121,6 +124,7 @@ public:
 
 signals:
     void blendModeChanged(int mode);
+    void trackMatteChanged(qulonglong source,int mode);
     void scaleValueEdited(int axis);
     void scaleKeyframeToggleRequested(int axis);
     void scaleLinkChanged(bool linked);
@@ -154,7 +158,7 @@ private:
     };
     std::optional<model::LayerId> parenting_selected_;
     std::vector<ParentChoice> parenting_choices_;
-    bool blend_mode_busy_=false, blend_layer_available_=false;
+    bool blend_mode_busy_=false, blend_layer_available_=false, matte_has_source_=false;
     Controls controls_;
     MaskInspectorWidget* masks_=nullptr;
     std::int64_t last_composition_frame_ = 0;

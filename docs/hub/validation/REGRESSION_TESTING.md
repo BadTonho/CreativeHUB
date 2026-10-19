@@ -1,10 +1,13 @@
 # Hub Regression Testing
 
+Current backup gates save Motion v14 and reject v15. Version-specific sections
+below retain the records and evidence from earlier deliveries.
+
 Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
-`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion14.
+`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion15.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v13 blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v14 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v14 matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v15 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Motion v13 blend-mode backup coverage
 
@@ -352,3 +355,12 @@ Debug Video Editor, back it up in the Debug Hub, restore it into another folder,
 and reopen it. The same adjustment and lower media must render; no missing-media
 prompt may identify the adjustment. Native UI and macOS/Linux validation remain
 pending until recorded with the build and platform.
+
+## Motion v14 Track Matte backup coverage
+
+The native producer/reader gate `hub-backup-format-test` saves a Luma Inverted
+binding and hidden source alongside independent scale, affine parenting, Anchor,
+effects/masks and media. It reopens vault and relocated restore with full data
+equality and existing media paths. Both backup gates reject future v15.
+Earlier delivery sections retain their version-specific history. Manual UI and
+platform checks remain pending; see [mattes](../../motion-editor/features/TRACK_MATTES.md).

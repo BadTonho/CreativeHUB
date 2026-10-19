@@ -535,6 +535,29 @@ void MainWindow::removeCompositionLayer(model::LayerId id)
     }
 }
 
+void MainWindow::changeSelectedLayerTrackMatte(qulonglong source,int mode) {
+    const auto target=selected_layer_id_;
+    finishPendingTransformEdit();
+    if(!document_ || !target || export_worker_ || audio_keyframe_worker_){syncTransformInspector();return;}
+    try {
+        if(mode<0 || mode>3)throw std::invalid_argument("Invalid track matte selection.");
+        std::optional<model::TrackMatteBinding> binding;
+        if(source)binding=model::TrackMatteBinding{source,static_cast<creative_suite::composition::TrackMatteMode>(mode)};
+        const auto found=std::find_if(document_->layers().begin(),document_->layers().end(),[target](const auto& l){return l.id==target;});
+        if(found==document_->layers().end() || found->kind==model::LayerKind::Null || found->track_matte==binding){syncTransformInspector();return;}
+        auto before=captureEditState();
+        if(document_->setLayerTrackMatte(target,binding)) {
+            (void)recordCompositionEdit(std::move(before));updateDocumentState();requestPreview();
+        }
+    } catch(const std::exception& error) {
+        creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
+            "motion_document","set_layer_track_matte",error.what(),{{"layer_id",std::to_string(target)},
+            {"source_id",std::to_string(source)},{"mode",std::to_string(mode)},{"frame",std::to_string(timeline_?timeline_->currentFrame():0)}});
+        statusBar()->showMessage(MotionUiTranslation::tr("The track matte could not be changed. Check the Motion Studio log for details."),5000);
+    }
+    syncTransformInspector();
+}
+
 void MainWindow::changeSelectedLayerBlendMode(int value)
 {
     // Keep the signal argument: cancelling a Viewer draft resynchronizes fields.
@@ -621,6 +644,7 @@ void MainWindow::syncTransformInspector()
         inspector_->syncLayer(selected, timeline_ != nullptr ? timeline_->currentFrame() : 0,
                               effect_row);
         inspector_->syncParenting(document_ ? &*document_ : nullptr, selected_layer_id_);
+        inspector_->syncTrackMatte(document_ ? &*document_ : nullptr, selected_layer_id_);
         inspector_->masksInspector()->sync(document_?&*document_:nullptr,
             selected && selected->kind != model::LayerKind::Null ? selected_layer_id_ : 0,timeline_?timeline_->currentFrame():0);
     }

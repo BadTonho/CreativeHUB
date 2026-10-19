@@ -4,7 +4,7 @@ Status: implemented development workflow in native `.motion` v12. Application
 versions remain unchanged. Visual acceptance, native platform/GPU qualification
 and representative benchmarks remain pending.
 
-Current documents are written as v13 for [static blend modes](BLEND_MODES.md).
+Current documents are written as v14 for [Track Mattes](TRACK_MATTES.md).
 The feature fields and historical version-specific evidence below remain applicable.
 
 ## Editing

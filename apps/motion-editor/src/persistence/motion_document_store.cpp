@@ -720,6 +720,9 @@ QJsonObject writeLayer(const CompositionLayer& layer,
         const auto& m=*layer.parent_affine;
         object.insert("parent_affine",QJsonObject{{"a",m.a},{"b",m.b},{"c",m.c},{"d",m.d},{"tx",m.tx},{"ty",m.ty}});
     }
+    if(layer.track_matte)object.insert("track_matte",QJsonObject{
+        {"source_id",encodedUInt64(layer.track_matte->source_id)},
+        {"mode",QString::fromStdString(std::string(creative_suite::composition::trackMatteModeIdentifier(layer.track_matte->mode)))}});
     if (layer.parent_id) object.insert("parent_id", encodedUInt64(layer.parent_id));
     if (layer.parent_offset != model::ParentTransformOffset{}) {
         const auto& offset = layer.parent_offset;
@@ -905,6 +908,15 @@ CompositionLayer parseLayer(const QJsonValue& value,
         object.contains("parent_id") || object.contains("parent_offset")))
         fail(MotionDocumentErrorCode::InvalidValue, document_path,
              QStringLiteral("Null layers and parenting require document version 10."));
+    if(object.contains("track_matte")) {
+        if(document_version<14)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Track mattes require document version 14."));
+        const auto matte=requiredObject(object,"track_matte",document_path);
+        for(auto it=matte.begin();it!=matte.end();++it)if(it.key()!="source_id" && it.key()!="mode")
+            fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Unknown track matte field."));
+        const auto mode=creative_suite::composition::parseTrackMatteMode(requiredString(matte,"mode",document_path).toStdString());
+        if(!mode)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Invalid track matte mode."));
+        layer.track_matte=model::TrackMatteBinding{requiredUInt64(matte,"source_id",document_path),*mode};
+    }
     if (object.contains("parent_id")) layer.parent_id = requiredUInt64(object, "parent_id", document_path);
     if (object.contains("parent_offset")) {
         if (!object.value("parent_offset").isObject())

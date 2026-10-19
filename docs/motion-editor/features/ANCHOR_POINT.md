@@ -4,7 +4,7 @@ Status: introduced in native `.motion` v11; current format is v13. Manual visual
 platform/GPU qualification, and representative performance measurements remain
 pending. Application versions are unchanged.
 
-Current documents are written as v13 for [static blend modes](BLEND_MODES.md).
+Current documents are written as v14 for [Track Mattes](TRACK_MATTES.md).
 The feature fields and historical version-specific evidence below remain applicable.
 
 ## Editing

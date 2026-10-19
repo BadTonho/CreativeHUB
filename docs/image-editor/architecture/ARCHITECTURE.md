@@ -637,3 +637,10 @@ rendering remains unchanged; consumer regression gates accompany the shared chan
 Vulkan refuses non-Normal inputs explicitly. See the
 [shared boundary](../../CROSS_APPLICATION_COMPATIBILITY.md#shared-static-blend-mode-composition)
 and [Motion contract](../../motion-editor/features/BLEND_MODES.md).
+
+## Shared Track Matte maintenance
+
+Shared CPU/OpenGL gain an additive alpha/luma image operation for Motion;
+Vulkan refuses it explicitly. This application gains no matte UI or persisted
+fields. Its existing composition/raster, masks, preview/UI and export gates
+protect unchanged operations and defaults. See [contracts and pending acceptance](../../motion-editor/features/TRACK_MATTES.md).

@@ -271,6 +271,48 @@ void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
         "a staging budget smaller than one readback frame was not rejected");
     gpu.discardAsyncReadbacks();
 }
+void trackMatteParity(OpenGlFrameCompositor& gpu) {
+    auto target=fixture(16,12,true),matte=fixture(16,12,true);
+    target.rgba_pixels[3]=255;matte.rgba_pixels[0]=20;matte.rgba_pixels[1]=115;matte.rgba_pixels[2]=0;matte.rgba_pixels[3]=255;
+    for(int mode=0;mode<4;++mode)for(bool empty:{false,true}) {
+        auto expected=target;
+        require(applyTrackMatte(expected,empty?nullptr:&matte,static_cast<TrackMatteMode>(mode)),"CPU matte reference");
+        OpenGlImageOperation op;op.kind=OpenGlImageOperationKind::ApplyTrackMatte;op.background={&target};
+        op.track_matte_mode=static_cast<TrackMatteMode>(mode);if(!empty)op.mask={&matte};
+        OpenGlCompositionTimings timings;auto output=gpu.processImage(op,{},&timings);
+        require(output.status==OpenGlCompositionStatus::Complete&&output.frame&&timings.readback_bytes==0,"Matte image operation must remain on GPU: "+output.operation+": "+output.cause);
+        auto read=gpu.readback(output.frame);require(read.frame&&read.frame->rgba_pixels==expected.rgba_pixels,"Straight RGBA track matte parity");
+        CompositionLayer layer{&target};layer.texture_frame=output.frame;layer.blend_mode=BlendMode::Screen;
+        CompositionLayer reference{&expected};reference.blend_mode=BlendMode::Screen;
+        auto cpu=FrameCompositor::compose(16,12,{{&matte},reference});
+        auto composed=gpu.compose(16,12,{{&matte},layer});
+        require(cpu&&composed.frame,"Matted composition delivery");
+        for(std::size_t x=0;x<cpu->rgba_pixels.size();++x)require(std::abs(int(cpu->rgba_pixels[x])-int(composed.frame->rgba_pixels[x]))<=(x%4==3?0:2),"Matted blend RGBA tolerance");
+        {
+            auto direct=gpu.composeTexture(16,12,{{&matte},layer});
+            require(direct.frame!=nullptr,"Matted texture delivery");
+            auto rgba=gpu.readback(direct.frame);require(rgba.frame&&rgba.frame->rgba_pixels==composed.frame->rgba_pixels,"Matted direct texture matches RGBA");
+            require(gpu.prepareAsyncReadback(16,12,16*12*4*2).status==OpenGlCompositionStatus::Complete,"Matted async staging");
+            auto submitted=gpu.submitAsyncReadback(16,12,{{&matte},layer});require(submitted.ticket.value!=0,"Matted async submission");
+            auto collected=gpu.collectAsyncReadback(submitted.ticket);
+            require(collected.frame&&collected.frame->rgba_pixels==composed.frame->rgba_pixels,"Matted async RGBA matches direct output");
+        }
+        if(!empty) {
+            OpenGlImageOperation resident=op;resident.background={nullptr,output.frame};resident.mask={nullptr,output.frame};
+            auto nested=expected;require(applyTrackMatte(nested,&expected,static_cast<TrackMatteMode>(mode)),"chain reference");
+            auto next=gpu.processImage(resident);require(next.frame!=nullptr,"Resident matte inputs");
+            auto nested_rgba=gpu.readback(next.frame);require(nested_rgba.frame&&nested_rgba.frame->rgba_pixels==nested.rgba_pixels,"Resident matte chain parity");
+            op.mask.rgba=nullptr;op.mask={&matte};matte.width=15;
+            require(gpu.processImage(op).status==OpenGlCompositionStatus::Unsupported,"Mismatched matte dimensions refused");
+            matte.width=0;require(gpu.processImage(op).status==OpenGlCompositionStatus::Unsupported,"A provided zero-width matte is invalid, not an empty source");matte.width=16;
+        }
+        op.track_matte_mode=static_cast<TrackMatteMode>(255);
+        require(gpu.processImage(op).status==OpenGlCompositionStatus::Unsupported,"Invalid matte mode refused");
+        op.track_matte_mode=TrackMatteMode::Alpha;
+        require(gpu.processImage(op,[]{return true;}).status==OpenGlCompositionStatus::Cancelled,"Matte cancellation");
+    }
+}
+
 void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
     auto source = fixture(23, 13, true, 7);
     auto adjusted = source;
@@ -488,6 +530,30 @@ void benchmark(OpenGlFrameCompositor& gpu) {
     }
 }
 
+void trackMatteCapacity(QOffscreenSurface* surface) {
+    const std::uint64_t bytes=16*12*4;
+    auto budget=std::make_shared<OpenGlTexturePoolBudget>(bytes*2);
+    {
+        OpenGlFrameCompositor limited(surface,OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),budget);
+        auto target=fixture(16,12,true),matte=fixture(16,12,true);
+        OpenGlImageOperation op;op.kind=OpenGlImageOperationKind::ApplyTrackMatte;op.background={&target};op.mask={&matte};
+        const auto refused=limited.processImage(op);
+        require(refused.status==OpenGlCompositionStatus::Unsupported&&refused.operation=="track-matte-upload-budget","Matte inputs must share the bounded pool");
+        auto larger=fixture(16,24,true);op={};op.background={&larger};
+        require(limited.processImage(op).frame!=nullptr,"Normal image resize after matte budget refusal must free unused uploads before allocating");
+    }
+    require(budget->bytes()==0&&budget->targets()==0,"Matte upload reservations leaked after worker cleanup");
+    budget=std::make_shared<OpenGlTexturePoolBudget>(bytes*5);
+    {
+        OpenGlFrameCompositor retiring(surface,OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),budget);
+        auto pixels=fixture(16,12,true);OpenGlImageOperation op;op.kind=OpenGlImageOperationKind::ApplyTrackMatte;op.background={&pixels};op.mask={&pixels};
+        const auto output=retiring.processImage(op);require(output.frame&&budget->bytes()==bytes*3,"Matte output and two uploads accounted");
+        retiring.retireTextureFrames();require(retiring.collectReleasedTextureFrames().status==OpenGlCompositionStatus::Complete&&budget->bytes()==bytes,"Retirement frees matte uploads while retaining displayed output");
+        require(retiring.readback(output.frame).frame.has_value(),"Retired matte output remains readable");
+    }
+    require(budget->bytes()==0,"Retired matte reservation leaked");
+}
+
 void textureLeases(QOffscreenSurface* surface) {
     auto retirement_budget=std::make_shared<OpenGlTexturePoolBudget>(16*12*4*3);
     {
@@ -695,6 +761,7 @@ int main(int argc, char** argv) {
                         "native initialization failed: " + initial.operation + ": " + initial.cause);
                     parity(gpu);
                     colorAdjustmentParity(gpu);
+                    trackMatteParity(gpu);
                     {
                         auto source = fixture(93, 57, true);
                         auto brightness = effects::makeDefaultInstance("video.brightness");
@@ -720,6 +787,7 @@ int main(int argc, char** argv) {
                     if (activation == 0) highResolution(gpu);
                     cancellationAndLimits(gpu);
                     directCancellation(gpu);
+                    trackMatteCapacity(surface.get());
                     textureLeases(surface.get());
                     retirementCapacity(surface.get());
                     asynchronousReadbackParity(gpu);
@@ -727,6 +795,7 @@ int main(int argc, char** argv) {
         OpenGlFrameCompositor baseline(surface.get(), OpenGlPrecisionPolicy::CoreOnly, QOpenGLContext::globalShareContext());
                         auto f = fixture(13, 7, true, 3);
                         compare(baseline, 53, 39, {{&f}}, "OpenGL 3.2 without precision extensions");
+                        trackMatteParity(baseline);
                         CompositionLayer blended{&f};blended.blend_mode=BlendMode::Overlay;
                         compare(baseline,53,39,{{&f},blended},"OpenGL 3.2 blend without precision extensions");
                         animation::Transform2D rotated; rotated.rotation_degrees = 90;

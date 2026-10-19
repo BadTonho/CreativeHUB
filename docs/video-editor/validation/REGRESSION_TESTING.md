@@ -2067,3 +2067,10 @@ composition/OpenGL/Vulkan plus Video composition, effect/mask, preview/export an
 interchange regressions. No Video UI, project-format or image-operation semantics
 change. Native GPU success must be distinguished from unsupported/skipped/fallback
 results. See [shared contract](../../CROSS_APPLICATION_COMPATIBILITY.md#shared-static-blend-mode-composition).
+
+## Shared Track Matte maintenance
+
+Shared CPU/OpenGL gain an additive alpha/luma image operation for Motion;
+Vulkan refuses it explicitly. This application gains no matte UI or persisted
+fields. Its existing composition/raster, masks, preview/UI and export gates
+protect unchanged operations and defaults. See [contracts and pending acceptance](../../motion-editor/features/TRACK_MATTES.md).

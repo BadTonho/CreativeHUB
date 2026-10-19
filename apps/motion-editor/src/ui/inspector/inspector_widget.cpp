@@ -283,6 +283,20 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     controls_.blend_mode->setToolTip(MotionUiTranslation::tr("Blend with layers below. Empty areas are transparent during blending; the final background stays black."));
     transform_form->addRow(MotionUiTranslation::tr("Blend Mode"),controls_.blend_mode);
     connect(controls_.blend_mode,&QComboBox::activated,this,[this](int index){emit blendModeChanged(controls_.blend_mode->itemData(index).toInt());});
+    controls_.matte_source=new QComboBox(controls_.transform_inspector);
+    controls_.matte_source->setObjectName(QStringLiteral("motion-track-matte-source"));
+    controls_.matte_mode=new QComboBox(controls_.transform_inspector);
+    controls_.matte_mode->setObjectName(QStringLiteral("motion-track-matte-mode"));
+    const std::array<QString,4> matte_names{MotionUiTranslation::tr("Alpha Matte"),MotionUiTranslation::tr("Alpha Inverted"),
+        MotionUiTranslation::tr("Luma Matte"),MotionUiTranslation::tr("Luma Inverted")};
+    for(std::size_t i=0;i<matte_names.size();++i)controls_.matte_mode->addItem(matte_names[i],static_cast<int>(i));
+    controls_.matte_source->setToolTip(MotionUiTranslation::tr("A new matte source is hidden. Its visibility can be enabled without disabling the matte."));
+    controls_.matte_mode->setToolTip(MotionUiTranslation::tr("Use the source alpha or luma after its effects and masks. Inverted modes reveal areas outside the source."));
+    transform_form->addRow(MotionUiTranslation::tr("Track Matte"),controls_.matte_source);
+    transform_form->addRow(MotionUiTranslation::tr("Matte Mode"),controls_.matte_mode);
+    const auto change_matte=[this](int){emit trackMatteChanged(controls_.matte_source->currentData().toULongLong(),controls_.matte_mode->currentData().toInt());};
+    connect(controls_.matte_source,&QComboBox::activated,this,change_matte);
+    connect(controls_.matte_mode,&QComboBox::activated,this,change_matte);
     for (std::size_t index = 0; index < kTransformObjectNames.size(); ++index) {
         auto* row = new QWidget(controls_.transform_inspector);
         auto* row_layout = new QHBoxLayout(row);
@@ -669,9 +683,33 @@ void InspectorWidget::previewAnchorReposition(const model::AnchorRepositionValue
     controls_.reposition_anchor->setEnabled(false);
 }
 
+void InspectorWidget::syncTrackMatte(const model::CompositionDocument* document,model::LayerId selected) {
+    const QSignalBlocker a(controls_.matte_source),b(controls_.matte_mode);
+    controls_.matte_source->clear();controls_.matte_source->addItem(MotionUiTranslation::tr("No matte"),QVariant::fromValue<qulonglong>(0));
+    std::optional<model::TrackMatteBinding> matte;
+    bool available=false;
+    if(document) {
+        for(const auto& layer:document->layers())if(layer.id==selected){matte=layer.track_matte;available=layer.kind!=model::LayerKind::Null;break;}
+        const auto eligible=document->eligibleTrackMatteSources(selected);
+        const std::unordered_set<model::LayerId> allowed(eligible.begin(),eligible.end());
+        for(const auto& layer:document->layers())if(allowed.contains(layer.id)) {
+            const auto label=MotionUiTranslation::tr("%1 [#%2]").arg(fromUtf8(layer.name),QString::number(qulonglong(layer.id)));
+            controls_.matte_source->addItem(label,QVariant::fromValue<qulonglong>(layer.id));
+            controls_.matte_source->setItemData(controls_.matte_source->count()-1,label,Qt::ToolTipRole);
+        }
+    }
+    matte_has_source_=matte.has_value();
+    controls_.matte_source->setCurrentIndex(controls_.matte_source->findData(QVariant::fromValue<qulonglong>(matte?matte->source_id:0)));
+    controls_.matte_mode->setCurrentIndex(controls_.matte_mode->findData(matte?static_cast<int>(matte->mode):0));
+    controls_.matte_source->setEnabled(available&&!blend_mode_busy_);
+    controls_.matte_mode->setEnabled(available&&matte_has_source_&&!blend_mode_busy_);
+}
+
 void InspectorWidget::setBlendModeBusy(bool busy)
 {
     blend_mode_busy_=busy;controls_.blend_mode->setEnabled(blend_layer_available_&&!busy);
+    controls_.matte_source->setEnabled(blend_layer_available_&&!busy);
+    controls_.matte_mode->setEnabled(blend_layer_available_&&matte_has_source_&&!busy);
 }
 
 void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
@@ -680,7 +718,10 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
 {
     last_composition_frame_ = composition_frame;
     blend_layer_available_=layer && layer->kind!=model::LayerKind::Null;
+    matte_has_source_=layer && layer->track_matte.has_value();
     controls_.blend_mode->setEnabled(blend_layer_available_&&!blend_mode_busy_);
+    controls_.matte_source->setEnabled(blend_layer_available_&&!blend_mode_busy_);
+    controls_.matte_mode->setEnabled(blend_layer_available_&&layer->track_matte.has_value()&&!blend_mode_busy_);
     {const QSignalBlocker block(controls_.blend_mode);
         controls_.blend_mode->setCurrentIndex(controls_.blend_mode->findData(static_cast<int>(layer?layer->blend_mode:creative_suite::composition::BlendMode::Normal)));}
     controls_.transform_inspector->setEnabled(layer != nullptr);

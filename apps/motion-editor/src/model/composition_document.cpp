@@ -1,5 +1,6 @@
 #include "composition_document.h"
 #include "layer_transform_hierarchy.h"
+#include "track_matte_graph.h"
 
 #include <creative_suite/media/media_library.h>
 
@@ -537,6 +538,7 @@ CompositionDocument::CompositionDocument(
     }
     layers_ = std::move(layers);
     (void)LayerTransformHierarchy(canvas_size_, layers_);
+    (void)TrackMatteGraph(layers_);
     std::unordered_set<MaskId> mask_ids;
     if(masks.size()>4096)throw std::invalid_argument("Too many masks.");
     for(const auto& m:masks) {
@@ -782,6 +784,7 @@ bool CompositionDocument::removeLayer(LayerId id, std::int64_t frame)
         }
     }
     for(auto& item:detached){item.child->parent_id=0;item.child->parent_offset=item.legacy;item.child->parent_affine=item.affine;}
+    for(auto& item:layers_)if(item.track_matte && item.track_matte->source_id==id)item.track_matte.reset();
     layers_.erase(layer);
     collectUnreferencedMasks();
     return true;

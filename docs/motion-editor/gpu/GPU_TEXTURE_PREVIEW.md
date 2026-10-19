@@ -170,3 +170,12 @@ RGBA, texture lease or async-readback publication. The backdrop shares the bound
 pool budget and is not leased. Recovery preserves mode and rebuilds the same scene
 on CPU. New modes do not introduce decode/raster invalidation or Viewer readback.
 Normal-only rendering is unchanged. See [Blend modes](../features/BLEND_MODES.md).
+
+## Track Matte frames
+
+Matte sources/targets reuse the immutable scene and existing gesture queue and
+session validation. OpenGL image operations write distinct alpha-preserving
+intermediates; final composition alone flattens over black. Shared outputs and
+uploads remain budgeted; unavoidable lease pressure recovers through CPU with
+the same graph and transform override. No intermediate readback is added.
+See [matte contracts and pending native acceptance](../features/TRACK_MATTES.md).

@@ -35,6 +35,30 @@ bool applyMask(media::RgbaFrame& frame, const media::RgbaFrame& mask, const std:
     }
     return true;
 }
+bool applyTrackMatte(media::RgbaFrame& target,const media::RgbaFrame* matte,
+    TrackMatteMode mode,const std::function<bool()>& cancel) {
+    if(!validTrackMatteMode(mode) || !maskFrameValid(target) || (matte && !maskSameSize(target,*matte)))return false;
+    for(int y=0;y<target.height;++y) {
+        if(cancel && cancel())return false;
+        for(int x=0;x<target.width;++x) {
+            const auto t=std::size_t(y)*target.stride+x*4;
+            // Exact decimal weights and half-up RGBA8 rounding, including ties.
+            constexpr std::uint64_t denominator=650250000; // 255 * 255 * 10000
+            std::uint64_t numerator=0;
+            if(matte) {
+                const auto* m=matte->rgba_pixels.data()+std::size_t(y)*matte->stride+x*4;
+                const auto weighted=mode==TrackMatteMode::Luma || mode==TrackMatteMode::LumaInverted
+                    ? std::uint64_t(m[0])*2126+std::uint64_t(m[1])*7152+std::uint64_t(m[2])*722
+                    : std::uint64_t(255)*10000;
+                numerator=m[3]*weighted;
+            }
+            if(mode==TrackMatteMode::AlphaInverted || mode==TrackMatteMode::LumaInverted)numerator=denominator-numerator;
+            target.rgba_pixels[t+3]=static_cast<std::uint8_t>((target.rgba_pixels[t+3]*numerator+denominator/2)/denominator);
+        }
+    }
+    return true;
+}
+
 bool maskedBlend(const media::RgbaFrame& original, media::RgbaFrame& processed,
     const media::RgbaFrame& mask, const std::function<bool()>& cancel) {
     if (!maskSameSize(original,processed) || !maskSameSize(processed,mask)) return false;

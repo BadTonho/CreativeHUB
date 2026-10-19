@@ -43,7 +43,7 @@ private:
 
 class MotionDocumentStore final {
 public:
-    static constexpr int current_format_version = 13;
+    static constexpr int current_format_version = 14;
     static constexpr std::size_t maximum_keyframe_count = model::maximum_document_keyframes;
     static constexpr const char* format_identifier = "creative-suite.motion-studio";
 

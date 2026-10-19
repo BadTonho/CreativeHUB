@@ -1,3 +1,4 @@
+#include "rendering/preview_scene_builder.h"
 #include "main_window.h"
 
 #include "settings/autosave_preferences.h"
@@ -79,38 +80,10 @@ PreviewRequest MainWindow::buildPreviewRequest()
     if(!mask_snapshot_ || *mask_snapshot_!=document_->masks())mask_snapshot_=std::make_shared<const std::vector<model::Mask>>(document_->masks());
     request.masks=mask_snapshot_;
     request.mask_view_layer=mask_view_layer_;request.mask_view_target=mask_view_target_;
-    for (const auto& layer : document_->layers()) {
-        if (layer.kind == model::LayerKind::Null) continue;
-        if (mask_view_layer_!=layer.id && (!layer.visible || layer.duration_frames <= 0 || frame < layer.timeline_start_frame ||
-            frame - layer.timeline_start_frame >= layer.duration_frames)) {
-            continue;
-        }
-        PreviewLayerSnapshot snapshot;
-        snapshot.id = layer.id;
-        snapshot.kind = layer.kind;
-        snapshot.source_path = layer.source_path;
-        snapshot.local_frame = frame - layer.timeline_start_frame;
-        snapshot.source_frame_count = layer.source_frame_count;
-        snapshot.source_start_frame = layer.source_start_frame;
-        snapshot.presentation = layer.presentation;
-        snapshot.source_mask=layer.source_mask;snapshot.transform_mask=layer.transform_mask;
-        snapshot.source_frame_rate = layer.source_frame_rate;
-        snapshot.transform = layer.transform;
-        snapshot.anchor_point = layer.anchor_point;
-        snapshot.anchor_keyframes = layer.anchor_keyframes;
-        snapshot.scale_y = layer.scale_y;
-        snapshot.blend_mode = layer.blend_mode;
-        snapshot.keyframes = layer.keyframes;
-        snapshot.content = layer.content;
-        snapshot.effects = layer.effects;
-        if (layer.kind == model::LayerKind::Image) {
-            const auto linked = linked_image_frames_.find(layer.id);
-            snapshot.still_frame = linked == linked_image_frames_.end()
-                ? media_pool_->sharedFirstFrameForPath(layer.source_path)
-                : linked->second;
-        }
-        request.layers.push_back(std::move(snapshot));
-    }
+    preparePreviewLayers(request,document_->layers(),[&](const model::CompositionLayer& layer) {
+        const auto linked=linked_image_frames_.find(layer.id);
+        return linked==linked_image_frames_.end()?media_pool_->sharedFirstFrameForPath(layer.source_path):linked->second;
+    });
     request.freezeScene();
     return request;
 }

@@ -5,12 +5,12 @@ mask reference. Editable interchange now accepts `.cscomp` v3 ordered Color/Blur
 stages; no Motion schema change is required. See [contract](../../COMPOSITION_INTERCHANGE.md).
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 13 schema may change before a stable release. This format is separate
+version 14 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 [Pan Behind](../features/PAN_BEHIND.md) persists only confirmed Anchor/Position
 values through existing fields. Its live Viewer/Inspector draft is not document
-data; native v13 and recovery wrapper v1 remain unchanged.
+data; native v14 and recovery wrapper v1 remain unchanged.
 The timeline [parent pick-whip](../features/PARENT_PICK_WHIP.md) likewise saves
 only confirmed parent IDs and binding compensation through existing fields;
 its candidate cache, fixed frame and capture state are never serialized. Hub
@@ -21,12 +21,12 @@ transient. No native, recovery, interchange or Hub format change is introduced.
 
 [Rotation drag](../features/ROTATION_DRAG.md) also persists only confirmed existing
 Rotation bases/keys, including full turns. Its pointer angles, override and
-preview session are transient; native v13/recovery v1 remain unchanged.
+preview session are transient; native v14/recovery v1 remain unchanged.
 
 [Scale drag](../features/SCALE_DRAG.md) persists only confirmed existing X/Y bases
 and curves. Independent edits may materialize the optional Y channel; its copied
 keys count toward the same total-key limit. Controls, clamps, overrides and
-sessions are transient. Native v13/recovery v1 and `.cscomp` v3 are unchanged.
+sessions are transient. Native v14/recovery v1 and `.cscomp` v3 are unchanged.
 
 ## File identity and versioning
 
@@ -35,22 +35,22 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `13`. |
+| `version` | integer | Current schema version is `14`. |
 | `revision` | decimal string | Monotonic saved revision used to reject stale linked writes. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1 through 13. Version 1 text and shape layers
+Motion Studio reads versions 1 through 14. Version 1 text and shape layers
 had no typed content, so they open with the current default text or rectangle content
 for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
-older document writes it as version 13. Versions 1 through 5 load without linked
+older document writes it as version 14. Versions 1 through 5 load without linked
 Image Editor metadata. Motion Studio rejects malformed data, an
 unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
 
-Hub snapshots preserve versions 1–13 and rebase relative media and linked-image
+Hub snapshots preserve versions 1–14 and rebase relative media and linked-image
 references to their original absolute locations. Relative-directory escape
 restrictions are retained. Native save behavior is unchanged and media are not
 bundled. See [Hub backups](../../hub/BACKUPS.md) and the producer/consumer
@@ -82,6 +82,7 @@ Each `layers` entry stores:
 - optional Motion-owned pixel `anchor_point` values and scalar curves (v11);
 - optional `scale_y`, `scale_linked`, and `parent_affine` records (v12).
 - optional `blend_mode` string (v13), omitted for Normal.
+- optional `track_matte` object (v14), omitted when unbound; see below.
 
 Version 6 adds an optional `linked_image` object to Image layers. It contains
 `document_path`, `published_output_path`, and `source_snapshot_path`, each a
@@ -303,7 +304,7 @@ empty. Position, uniform scale, rotation, and their curves remain editable.
 Parenting does not change layer order or local curves. Parent opacity,
 visibility, activity, effects, and masks are not inherited. Pixel-space
 resolution, pose-preserving edits, and pending manual checks are defined in
-[Layer hierarchy](../features/HIERARCHY.md). Hub supports these records through v13 snapshots.
+[Layer hierarchy](../features/HIERARCHY.md). Hub supports these records through v14 snapshots.
 `.cscomp` v3 cannot represent Nulls, parents, or nonidentity compensation, so
 export rejects them with layer-specific issues rather than flattening them.
 
@@ -342,8 +343,8 @@ Pixels are relative to the local center, after initial canvas fit but before
 editable scale/rotation. Local geometry includes `T(-Anchor)` and feeds the
 existing hierarchy/Transform stage. See [Anchor Point](../features/ANCHOR_POINT.md)
 for editing and compensation semantics. Save, autosave and recovery retain these
-fields; the recovery wrapper stays at version 1. Hub accepts native v13, rebases
-existing media fields without changing Anchor or parenting, and rejects v13.
+fields; the recovery wrapper stays at version 1. Hub accepts native v14, rebases
+existing media fields without changing Anchor or parenting, and rejects v15.
 `.cscomp` remains v3 and refuses nonzero base Anchor or nonempty Anchor curves.
 
 ## Version 12 independent scale and affine bindings
@@ -368,7 +369,7 @@ binding. Detached layers may retain either compensation representation.
 All three fields are rejected in declared versions before v12. Versions 1–11
 load without Y/affine overrides and with linking enabled, without resampling
 curves or converting offsets. Save, autosave and recovery preserve the new
-records; recovery wrapper remains v1. Hub accepts 1–13 and rejects 14. See
+records; recovery wrapper remains v1. Hub accepts 1–14 and rejects 15. See
 [Scale axes](../features/SCALE_AXES.md) for editing, matrices and pending checks.
 `.cscomp` v3 accepts scale only when X/Y bases and curves are identical; it
 rejects affine compensation and the existing incompatible features explicitly.
@@ -379,7 +380,21 @@ Optional `blend_mode` is one of `normal`, `multiply`, `screen`, `overlay`, `add`
 `difference`. Missing means Normal; writers omit Normal. Any occurrence before
 v13 is invalid, even `normal`. Unknown strings, non-string values and non-Normal
 Nulls are invalid. Versions 1–12 retain Normal without adding animation data.
-The recovery wrapper remains v1 with the same native payload; Hub accepts v13
-and rejects v14. `.cscomp` v3 refuses non-Normal layers by name/ID. See
+The recovery wrapper remains v1 with the same native payload; Hub accepts v14
+and rejects v15. `.cscomp` v3 refuses non-Normal layers by name/ID. See
 [Blend modes](../features/BLEND_MODES.md) for the transparent accumulation and
 opaque output contract. No application version changes are implied.
+
+## Track Mattes (v14)
+
+Optional layer `track_matte` contains required `source_id` (existing unsigned
+identifier encoding) and `mode` (`alpha`, `alpha_inverted`, `luma`,
+`luma_inverted`). No binding is the default for versions 1-13. The field is
+rejected in older declared versions, including null/empty records. Unknown
+fields, invalid types/modes, zero/missing/Null/self sources, Null targets and
+cycles are invalid. Validate the entire graph before publishing a loaded document.
+Records do not depend on stack order and may form shared-source chains.
+The source eye state is ordinary `visible` data; only a new editor binding hides
+it atomically. Loading never rewrites eye states. Recovery stays at wrapper v1;
+Hub preserves v14 and refuses v15. `.cscomp` v3 refuses bindings by layer name/ID.
+See [Track Mattes](../features/TRACK_MATTES.md) for timing, pixels and coverage.

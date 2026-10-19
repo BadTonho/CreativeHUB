@@ -23,7 +23,7 @@ shared.
 Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
 autosave preferences, and the recovery-management dialog. The store reuses the
 native document serializer and its atomic `QSaveFile` validation while writing
-the native `.motion` document at version 13 (recovery wrapper version 1). A recovery payload stores the complete
+the native `.motion` document at version 14 (recovery wrapper version 1). A recovery payload stores the complete
 composition and Media Pool plus the original document path and session ID; it
 does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
 
@@ -437,3 +437,13 @@ backdrop shares the existing texture budget and never aliases the draw target.
 Vulkan explicitly refuses non-Normal modes. Existing image operations, effects,
 mask coordinates and Video/Image formats/UI retain their contracts. See
 [Blend modes](../features/BLEND_MODES.md) for formulas, lifetime and coverage.
+
+## Track Matte ownership
+
+Motion owns source IDs, static Inspector/history editing, native v14 and the
+iterative immutable dependency graph. Shared scene building supplies hidden
+sources to the same preview/playback/export renderer and gesture snapshots.
+Shared CPU/OpenGL provide a Qt-free mode/coverage contract and additive image
+operation; Vulkan explicitly refuses it. Final CompositionLayer APIs and opaque
+output remain unchanged. No-matte paths and Video/Image UI/formats are retained.
+Lifetime, budget, pixels and test gates are defined in [Track Mattes](../features/TRACK_MATTES.md).

@@ -1,5 +1,6 @@
 #pragma once
 #include <creative_suite/composition/blend_mode.h>
+#include <creative_suite/composition/track_matte.h>
 #include <creative_suite/composition/affine_transform.h>
 
 #include <creative_suite/animation/animation.h>
@@ -243,6 +244,12 @@ struct LinkedImageDocument {
     CanvasSize canvas_size,
     ShapeKind shape = ShapeKind::Rectangle);
 
+struct TrackMatteBinding {
+    LayerId source_id=0;
+    creative_suite::composition::TrackMatteMode mode=creative_suite::composition::TrackMatteMode::Alpha;
+    friend bool operator==(const TrackMatteBinding&,const TrackMatteBinding&)=default;
+};
+
 struct CompositionLayer {
     LayerId id;
     LayerKind kind;
@@ -272,6 +279,7 @@ struct CompositionLayer {
     bool scale_linked=true;
     std::optional<creative_suite::composition::AffineTransform2D> parent_affine;
     creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
+    std::optional<TrackMatteBinding> track_matte;
 
     friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
@@ -331,6 +339,9 @@ public:
     // Keeps the current global pose and all local keyframes. Zero clears the parent.
     [[nodiscard]] bool setLayerParent(LayerId child, LayerId parent, std::int64_t composition_frame);
     [[nodiscard]] bool setLayerAnchorPoint(LayerId, AnchorPoint);
+    // New sources are hidden in this transaction; mode-only edits retain visibility.
+    [[nodiscard]] bool setLayerTrackMatte(LayerId,std::optional<TrackMatteBinding>);
+    [[nodiscard]] std::vector<LayerId> eligibleTrackMatteSources(LayerId) const;
     [[nodiscard]] bool setLayerBlendMode(LayerId, creative_suite::composition::BlendMode) noexcept;
     [[nodiscard]] bool setLayerScaleLinked(LayerId,bool);
     [[nodiscard]] bool setLayerScaleAxisBase(LayerId,ScaleAxis,double);

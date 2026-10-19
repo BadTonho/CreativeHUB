@@ -126,7 +126,7 @@ struct OpenGlImageInput {
     [[nodiscard]] int width() const noexcept;
     [[nodiscard]] int height() const noexcept;
 };
-enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge, ApplyMask, MaskedBlend, GaussianBlur };
+enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge, ApplyMask, MaskedBlend, GaussianBlur, ApplyTrackMatte };
 struct OpenGlImageOperation {
     OpenGlImageOperationKind kind = OpenGlImageOperationKind::Copy;
     OpenGlImageInput background;
@@ -140,6 +140,9 @@ struct OpenGlImageOperation {
     double blur_radius_pixels = 0;
     // Only Transform accepts this source-pixel to output-pixel override.
     std::optional<AffineTransform2D> source_to_canvas;
+    // ApplyTrackMatte uses background as target and mask as straight RGBA source.
+    // An empty mask means transparent; dimensions otherwise match the target.
+    TrackMatteMode track_matte_mode = TrackMatteMode::Alpha;
 };
 
 // Optional raster contract: top-down ARGB32 premultiplied content and ARGB32

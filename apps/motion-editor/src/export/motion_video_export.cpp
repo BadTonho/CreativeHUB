@@ -1,3 +1,4 @@
+#include "rendering/preview_scene_builder.h"
 #include "motion_video_export.h"
 
 #include "rendering/composition_frame_renderer.h"
@@ -438,6 +439,7 @@ void MotionVideoExporter::exportVideo(
             static_cast<std::uint64_t>(snapshot.canvas_size.height) * 4;
         const auto mask_snapshot=std::make_shared<const std::vector<model::Mask>>(snapshot.masks);
         const auto hierarchy = std::make_shared<const model::LayerTransformHierarchy>(snapshot.canvas_size, snapshot.layers);
+        const auto matte_graph=std::make_shared<const model::TrackMatteGraph>(snapshot.layers);
         const auto make_request = [&](std::int64_t output_frame) {
             const auto composition_frame = std::min(
                 duration_frames - 1,
@@ -448,36 +450,10 @@ void MotionVideoExporter::exportVideo(
             request.black_canvas_when_empty = true;
             request.masks=mask_snapshot;request.composition_frame=composition_frame;
             request.hierarchy = hierarchy;
-            for (const auto& layer : snapshot.layers) {
-                if (layer.kind == model::LayerKind::Null) continue;
-                if (!layer.visible || composition_frame < layer.timeline_start_frame ||
-                    composition_frame - layer.timeline_start_frame >= layer.duration_frames) {
-                    continue;
-                }
-                PreviewLayerSnapshot active;
-                active.id = layer.id;
-                active.kind = layer.kind;
-                active.source_path = layer.source_path;
-                active.local_frame = composition_frame - layer.timeline_start_frame;
-                active.source_frame_count = layer.source_frame_count;
-                active.source_start_frame = layer.source_start_frame;
-        active.presentation = layer.presentation;
-                active.source_mask=layer.source_mask;active.transform_mask=layer.transform_mask;
-                active.source_frame_rate = layer.source_frame_rate;
-                active.transform = layer.transform;
-                active.anchor_point = layer.anchor_point;
-                active.anchor_keyframes = layer.anchor_keyframes;
-                active.scale_y = layer.scale_y;
-                active.blend_mode = layer.blend_mode;
-                active.keyframes = layer.keyframes;
-                active.content = layer.content;
-                active.effects = layer.effects;
-                if (layer.kind == model::LayerKind::Image) {
-                    const auto still = snapshot.still_frames.find(layer.id);
-                    if (still != snapshot.still_frames.end()) active.still_frame = still->second;
-                }
-                request.layers.push_back(std::move(active));
-            }
+            preparePreviewLayers(request,snapshot.layers,[&](const model::CompositionLayer& layer) {
+                const auto still=snapshot.still_frames.find(layer.id);
+                return still==snapshot.still_frames.end()?creative_suite::media::RgbaFramePtr{}:still->second;
+            },matte_graph);
             return request;
         };
         const auto record_render = [&](std::chrono::steady_clock::time_point started) {

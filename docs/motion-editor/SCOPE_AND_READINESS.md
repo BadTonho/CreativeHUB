@@ -54,7 +54,7 @@ Motion-owned viewer, with a bounded mailbox and RGBA/CPU recovery; see
 [GPU_TEXTURE_PREVIEW.md](gpu/GPU_TEXTURE_PREVIEW.md). Offline export
 uses the same opt-in path and reads back RGBA for the existing CPU encoder.
 Manual Save, Save As, and Open use a versioned `.motion` document that includes
-the Media Pool. The writer emits schema v13 and reads versions 1–13; migrations
+the Media Pool. The writer emits schema v14 and reads versions 1–14; migrations
 and compatibility behavior are specified in [FORMAT.md](architecture/FORMAT.md). The
 separate recovery wrapper remains at version 1 and contains a nested native
 document. Undo/Redo and configurable autosave and recovery cover the
@@ -137,8 +137,15 @@ benchmarks remain pending.
 Overlay, Add and Difference in the Inspector. New modes blend against transparent
 accumulation before opaque black presentation/export; Normal-only projects keep
 their previous exact path. Native v13/recovery/Hub preserve the mode; `.cscomp`
-v3 refuses non-Normal layers. Track Mattes, mode animation, alpha export,
+v3 refuses non-Normal layers. Mode animation, alpha export,
 manual/platform/native GPU acceptance and benchmarks remain pending.
+
+[Track Mattes](features/TRACK_MATTES.md) add fixed Alpha/Luma and inverted
+source bindings with automatic source hiding, shared sources and iterative
+cycle-checked chains. Existing geometry/effects/masks apply before alpha coverage
+and final blending. Native v14/recovery/Hub preserve the relations; `.cscomp` v3
+refuses bindings. Native presentation/platform/visual acceptance and benchmarks
+remain pending.
 
 ## Intended Users and Workflows
 
@@ -342,7 +349,7 @@ The blur duration is wall-clock time, including pool scheduling and pass barrier
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
-The native `.motion` writer emits schema v13 and reads versions 1–13, including
+The native `.motion` writer emits schema v14 and reads versions 1–14, including
 layer-local keyframes and Cubic Bezier easing on Gaussian Blur and Color
 Adjustment parameters. Migration
 details are maintained in [FORMAT.md](architecture/FORMAT.md); the recovery wrapper remains
@@ -436,14 +443,14 @@ unchanged.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The current implementation writes version 13 JSON documents and reads
-  versions 1 through 13, identified by
+- The current implementation writes version 14 JSON documents and reads
+  versions 1 through 14, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
   in [FORMAT.md](architecture/FORMAT.md).
 - Older text, shape, keyframe, effect, and linked-image records migrate as
   specified in [FORMAT.md](architecture/FORMAT.md); saving an older document writes version
-  13.
+  14.
   An unsupported future schema version is
   rejected without replacing the current composition or overwriting or
   normalizing the original file.

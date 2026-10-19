@@ -453,3 +453,10 @@ Normal and raster/group/image-operation semantics remain unchanged. Shared
 composition/OpenGL/Vulkan and Image core/raster/mask/UI/export/GPU-raster gates
 protect this boundary. Native visual/platform/GPU acceptance remains separate
 from portable fallback coverage. See [shared contract](../CROSS_APPLICATION_COMPATIBILITY.md#shared-static-blend-mode-composition).
+
+## Shared Track Matte maintenance
+
+Shared CPU/OpenGL gain an additive alpha/luma image operation for Motion;
+Vulkan refuses it explicitly. This application gains no matte UI or persisted
+fields. Its existing composition/raster, masks, preview/UI and export gates
+protect unchanged operations and defaults. See [contracts and pending acceptance](../motion-editor/features/TRACK_MATTES.md).

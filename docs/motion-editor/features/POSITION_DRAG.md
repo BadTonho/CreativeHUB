@@ -4,7 +4,7 @@ Status: implemented development interaction. Native `.motion` is v13,
 recovery wrapper v1 and application versions are unchanged. Manual visual,
 platform, native GPU acceptance and benchmarks remain pending.
 
-Current documents are written as v13 for [static blend modes](BLEND_MODES.md).
+Current documents are written as v14 for [Track Mattes](TRACK_MATTES.md).
 The feature fields and historical version-specific evidence below remain applicable.
 
 ## Moving a selected layer

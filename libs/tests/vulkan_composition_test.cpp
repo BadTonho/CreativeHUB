@@ -75,6 +75,11 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
     op.kind=OpenGlImageOperationKind::GaussianBlur;op.blur_radius_pixels=3;
     expected=b;require(effects::applyGaussianBlur(expected,3)==effects::ProcessingResult::Completed,"CPU blur failed.");
     texture=gpu.processImage(op);require(bool(texture.frame),texture.cause);result=gpu.readback(texture.frame);parity(expected,*result.frame,0);
+    for(int mode=0;mode<4;++mode) {
+        OpenGlImageOperation matte;matte.kind=OpenGlImageOperationKind::ApplyTrackMatte;matte.background.rgba=&b;
+        matte.track_matte_mode=static_cast<TrackMatteMode>(mode);
+        require(gpu.processImage(matte).status==OpenGlCompositionStatus::Unsupported,"Vulkan must explicitly reject track matte operations");
+    }
     auto coverage=fixture(b.width,b.height);op={};op.kind=OpenGlImageOperationKind::ApplyMask;op.background.rgba=&b;op.mask.rgba=&coverage;
     expected=b;require(applyMask(expected,coverage),"CPU mask failed.");texture=gpu.processImage(op);require(bool(texture.frame),texture.cause);
     result=gpu.readback(texture.frame);parity(expected,*result.frame,0);

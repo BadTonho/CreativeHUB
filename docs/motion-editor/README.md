@@ -32,3 +32,5 @@ This directory groups approved scope and open work with the native format, featu
 - [Direct texture preview contract](gpu/GPU_TEXTURE_PREVIEW.md)
 - [Windows preview results, 2026-10-10](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
 - [Windows performance results, 2026-10-07](performance/PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md)
+
+[Layer Track Mattes](features/TRACK_MATTES.md) documents static source/mode editing, chained pixel dependencies, native v14 and pending acceptance.

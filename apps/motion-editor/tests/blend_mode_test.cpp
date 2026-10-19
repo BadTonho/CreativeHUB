@@ -89,7 +89,7 @@ void modelAndPersistence(const QString& root) {
     const auto stable=d.layers();check(!d.setLayerBlendMode(1,BlendMode::Overlay)&&!d.setLayerBlendMode(9,BlendMode::Add)&&!d.setLayerBlendMode(1,static_cast<BlendMode>(255))&&d.layers()==stable,"invalid/no-change atomicity");
     LayerId null_id=0;check(d.addContentLayer(LayerKind::Null,"Null",0,&null_id),"Null fixture");check(!d.setLayerBlendMode(null_id,BlendMode::Screen),"Null cannot blend");
     const auto file=root+"/modes.motion";auto p=project(d);Store::save(path(file),p);
-    auto encoded=read(file);check(encoded.value("version").toInt()==13&&encoded.value("layers").toArray()[0].toObject().value("blend_mode")=="overlay","v13 string record");
+    auto encoded=read(file);check(encoded.value("version").toInt()==Store::current_format_version&&encoded.value("layers").toArray()[0].toObject().value("blend_mode")=="overlay","v13 string record");
     check(!encoded.value("layers").toArray()[1].toObject().contains("blend_mode")&&Store::load(path(file))==p,"Normal omitted and full roundtrip");
     auto invalid_project=p;invalid_project.layers[0].blend_mode=static_cast<BlendMode>(255);bool invalid_save=false;
     try{Store::save(path(file),invalid_project);}catch(const motion::persistence::MotionDocumentError&){invalid_save=true;}
@@ -100,7 +100,7 @@ void modelAndPersistence(const QString& root) {
         auto bad=encoded;auto layers=bad.value("layers").toArray();auto record=layers[0].toObject();
         if(code==0)bad.insert("version",12);else if(code==1)record.insert("blend_mode","unknown");else if(code==2)record.insert("blend_mode",1);
         else if(code==3){record=layers[1].toObject();record.insert("blend_mode","multiply");layers.removeLast();}
-        else if(code==4)bad.insert("version",14);
+        else if(code==4)bad.insert("version",Store::current_format_version+1);
         else if(code==5){bad.insert("version",12);record.insert("blend_mode","normal");}
         else if(code==6)record.insert("blend_mode",QJsonValue());
         else record.insert("blend_mode",QJsonArray{"screen"});

@@ -2,6 +2,7 @@
 
 #include "model/composition_document.h"
 #include "model/layer_transform_hierarchy.h"
+#include "model/track_matte_graph.h"
 #include "preview_frame.h"
 #include "../diagnostics/performance_metrics.h"
 
@@ -44,12 +45,15 @@ struct PreviewLayerSnapshot {
     model::AnchorKeyframes anchor_keyframes;
     std::optional<model::ScaleChannel> scale_y;
     creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
+    std::optional<model::TrackMatteBinding> track_matte;
+    bool composite=true; // False for hidden pixel dependencies; not a visibility override.
 };
 
 struct PreviewSceneSnapshot {
     std::vector<PreviewLayerSnapshot> layers;
     std::shared_ptr<const std::vector<model::Mask>> masks;
     std::shared_ptr<const model::LayerTransformHierarchy> hierarchy;
+    std::shared_ptr<const model::TrackMatteGraph> track_mattes;
 };
 
 struct PreviewRequest {
@@ -65,20 +69,22 @@ struct PreviewRequest {
     // Legacy builders remain adapters. freezeScene moves their heavy data once;
     // subsequent copies share immutable curves, media references and relations.
     std::shared_ptr<const PreviewSceneSnapshot> scene;
+    std::shared_ptr<const model::TrackMatteGraph> track_mattes;
     std::optional<model::LayerPositionOverride> position_override;
     std::optional<model::LayerRotationOverride> rotation_override;
     std::optional<model::LayerScaleOverride> scale_override;
     std::uint64_t gesture_session = 0;
     [[nodiscard]] bool validSceneStorage() const noexcept {
-        return !scene || (layers.empty() && !masks && !hierarchy);
+        return !scene || (layers.empty() && !masks && !hierarchy && !track_mattes);
     }
     void freezeScene() {
         if (!validSceneStorage()) throw std::invalid_argument("Concurrent preview scene representations.");
         if (!scene) scene = std::make_shared<const PreviewSceneSnapshot>(
-            PreviewSceneSnapshot{std::move(layers),std::move(masks),std::move(hierarchy)});
+            PreviewSceneSnapshot{std::move(layers),std::move(masks),std::move(hierarchy),std::move(track_mattes)});
     }
     [[nodiscard]] const auto& sceneLayers() const noexcept { return scene ? scene->layers : layers; }
     [[nodiscard]] const auto& sceneMasks() const noexcept { return scene ? scene->masks : masks; }
+    [[nodiscard]] const auto& sceneMattes() const noexcept { return scene ? scene->track_mattes : track_mattes; }
     [[nodiscard]] const auto& sceneHierarchy() const noexcept { return scene ? scene->hierarchy : hierarchy; }
 };
 
