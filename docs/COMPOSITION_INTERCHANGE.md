@@ -286,3 +286,7 @@ matte consumers by layer name/ID, including hidden/inactive layers. Imports have
 no matte binding; other current refusal rules remain. Motion's new matte test
 and Hub's native producer/consumer backup gate cover persistence and refusal.
 Manual native restore/reopen and rendered comparisons remain pending.
+
+## Motion Bezier path boundary
+
+Motion native v15 owns freeform shape/mask geometry and complete-path animation. `.cscomp` remains v3: export refuses every Bezier shape or associated mask, including hidden/inactive layers, with layer names/IDs and mask IDs. Primitive mask records remain unchanged through explicit adapters; imports contain no Bezier paths.

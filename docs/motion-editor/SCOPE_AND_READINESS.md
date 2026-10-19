@@ -54,7 +54,7 @@ Motion-owned viewer, with a bounded mailbox and RGBA/CPU recovery; see
 [GPU_TEXTURE_PREVIEW.md](gpu/GPU_TEXTURE_PREVIEW.md). Offline export
 uses the same opt-in path and reads back RGBA for the existing CPU encoder.
 Manual Save, Save As, and Open use a versioned `.motion` document that includes
-the Media Pool. The writer emits schema v14 and reads versions 1–14; migrations
+the Media Pool. The writer emits schema v15 and reads versions 1–15; migrations
 and compatibility behavior are specified in [FORMAT.md](architecture/FORMAT.md). The
 separate recovery wrapper remains at version 1 and contains a nested native
 document. Undo/Redo and configurable autosave and recovery cover the
@@ -147,6 +147,12 @@ and final blending. Native v14/recovery/Hub preserve the relations; `.cscomp` v3
 refuses bindings. Native presentation/platform/visual acceptance and benchmarks
 remain pending.
 
+[Pen and animated Bezier paths](features/BEZIER_PATHS.md) add explicit shape/mask
+authoring, point/tangent editing, complete-path animation and raster origins
+that preserve affine layer geometry beyond original bounds. Native v15 and Hub
+retain paths; `.cscomp` v3 refuses them. Manual/platform/native presentation and
+performance acceptance remain pending.
+
 ## Intended Users and Workflows
 
 Motion Studio serves both motion-graphics creators making standalone animated
@@ -201,7 +207,7 @@ property. The source audio is not persisted, and the tool does not add audio
 playback, mixing, or audio export. MVP and release acceptance gates remain
 open. Rectangle/Ellipse masks with geometry animation are now an additional
 implemented expansion, separate from release acceptance. 3D, nested
-compositions, node-based workflows, particles, vector-path masks/tracking and
+compositions, node-based workflows, particles, advanced mask combinations/tracking and
 advanced effect graphs remain later research.
 
 ### MVP acceptance
@@ -349,7 +355,7 @@ The blur duration is wall-clock time, including pool scheduling and pass barrier
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
-The native `.motion` writer emits schema v14 and reads versions 1–14, including
+The native `.motion` writer emits schema v15 and reads versions 1–15, including
 layer-local keyframes and Cubic Bezier easing on Gaussian Blur and Color
 Adjustment parameters. Migration
 details are maintained in [FORMAT.md](architecture/FORMAT.md); the recovery wrapper remains
@@ -443,14 +449,14 @@ unchanged.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The current implementation writes version 14 JSON documents and reads
-  versions 1 through 14, identified by
+- The current implementation writes version 15 JSON documents and reads
+  versions 1 through 15, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
   in [FORMAT.md](architecture/FORMAT.md).
 - Older text, shape, keyframe, effect, and linked-image records migrate as
   specified in [FORMAT.md](architecture/FORMAT.md); saving an older document writes version
-  14.
+  15.
   An unsupported future schema version is
   rejected without replacing the current composition or overwriting or
   normalizing the original file.

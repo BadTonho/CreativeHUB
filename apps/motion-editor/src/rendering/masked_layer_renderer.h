@@ -1,5 +1,6 @@
 #pragma once
 #include "preview_renderer.h"
+#include "path_rasterizer.h"
 #include <creative_suite/composition/shape_mask.h>
 #include <creative_suite/composition/opengl_frame_compositor.h>
 namespace motion::ui {
@@ -27,9 +28,9 @@ inline void addMaskTimings(creative_suite::composition::OpenGlCompositionTimings
 [[nodiscard]] bool hasLayerMasks(const PreviewLayerSnapshot&) noexcept;
 [[nodiscard]] MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot&,
     creative_suite::media::RgbaFramePtr source, const PreviewRequest&,
-    creative_suite::composition::ShapeMaskRasterCache&,
+    MotionMaskRasterCache&,
     creative_suite::composition::OpenGlFrameCompositor*,
     const std::function<bool()>& cancel,
     const creative_suite::animation::Transform2D* resolved_transform = nullptr,
-    const creative_suite::composition::AffineTransform2D* resolved_world = nullptr);
+    const creative_suite::composition::AffineTransform2D* resolved_world = nullptr, const PathRaster* path_raster = nullptr);
 }

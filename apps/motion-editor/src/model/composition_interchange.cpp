@@ -19,8 +19,15 @@ x::Document exportComposition(const MotionProjectData &project) {
     d.name = project.composition.name;
     d.duration = std::max<std::int64_t>(1, project.composition.duration);
     std::vector<x::Issue> issues;
-    d.masks=project.masks;
+    for(const auto& mask:project.masks)if(!mask.path)d.masks.push_back(static_cast<const x::Mask&>(mask));
     for (const auto &layer : project.layers) {
+        bool path_mask=false;
+        for(const auto& mask:project.masks)if(mask.path&&(layer.source_mask==mask.id||layer.transform_mask==mask.id||std::any_of(layer.effects.begin(),layer.effects.end(),[&](const auto& e){return std::visit([&](const auto& v){return v.mask==mask.id;},e);}))) {
+            issues.push_back({layer.id,"Layer '"+layer.name+"' uses Bezier mask #"+std::to_string(mask.id)+" not supported by composition interchange."});path_mask=true;
+        }
+        if(path_mask)continue;
+        if(const auto* shape=std::get_if<ShapeLayerContent>(&layer.content);shape&&shape->path){issues.push_back({layer.id,"Layer '"+layer.name+"' uses a Bezier path not supported by composition interchange."});continue;}
+
         if(layer.track_matte) {
             issues.push_back({layer.id,"Layer '"+layer.name+"' uses a track matte not supported by composition interchange."});continue;
         }
@@ -121,7 +128,7 @@ MotionProjectData importComposition(const x::Document &d) {
     MotionProjectData project;
     project.composition = {
         {d.width, d.height}, {d.fps_numerator, d.fps_denominator}, d.name, d.duration};
-    project.masks=d.masks;
+    for(const auto& mask:d.masks)project.masks.emplace_back(mask);
     std::set<std::filesystem::path> media;
     for (const auto &l : d.layers) {
         CompositionLayer layer{};

@@ -185,6 +185,16 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     if (async_failure) *async_failure = false;
     if (!request.validSceneStorage() || ((request.position_override || request.rotation_override || request.scale_override) && !request.sceneHierarchy()))
         throw std::invalid_argument("Transform preview requires an exclusive scene and a hierarchy snapshot.");
+    if(request.path_override){
+        const auto& value=*request.path_override;bool found=false;
+        if(value.target.mask){if(request.sceneMasks())for(const auto& mask:*request.sceneMasks())if(mask.id==value.target.id&&mask.path){found=true;break;}}
+        else for(const auto& layer:request.sceneLayers())if(layer.id==value.target.id){const auto* shape=std::get_if<model::ShapeLayerContent>(&layer.content);found=shape&&shape->path;break;}
+        if(!found||!value.geometry||!model::validPathGeometry(*value.geometry,value.target.mask)){
+            creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,"motion_path","validate_path_override","Invalid path preview target or geometry",{{"path_id",std::to_string(value.target.id)},{"mask",value.target.mask?"true":"false"},{"frame",std::to_string(request.composition_frame)}});
+            throw std::invalid_argument("Path preview requires an existing path and valid evaluated geometry.");
+        }
+    }
+
 
     if (request.sceneLayers().empty()) {
         content_frames_.clear();
@@ -212,8 +222,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                     else if(layer->still_frame){width=layer->still_frame->width;height=layer->still_frame->height;}
                     else {const auto metadata=creative_suite::media::VideoProbe{}.probe(layer->source_path);width=metadata.width;height=metadata.height;}
                 }
-                creative_suite::composition::ShapeMaskRasterCache cache;
-                auto frame=cache.coverage(mask->kind,creative_suite::composition::evaluateShapeMask(mask->parameters,mask->keyframes,request.composition_frame),width,height,should_cancel);
+                MotionMaskRasterCache cache;
+                auto frame=cache.coverage(*mask,request.composition_frame,width,height,should_cancel,{},request.path_override&&request.path_override->target==model::PathTarget{mask->id,true}?request.path_override->geometry.get():nullptr);
                 if(!frame){if(should_cancel&&should_cancel())return {};throw std::runtime_error("Mask VIEW exceeds the coverage budget.");}
                 auto result=creative_suite::composition::FrameCompositor::compose(request.canvas_size.width,request.canvas_size.height,{{frame.get(),{}}});
                 return result?std::make_shared<const creative_suite::media::RgbaFrame>(std::move(*result)):nullptr;
@@ -245,7 +255,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         !gpu_composition_disabled_after_failure_;
     std::set<model::LayerId> active_content_ids;
     std::uint64_t portable_raster_bytes = 0;
-    creative_suite::composition::ShapeMaskRasterCache mask_cache;
+    MotionMaskRasterCache mask_cache;
     bool mask_gpu_in_use=false;
     creative_suite::composition::OpenGlCompositionTimings mask_timings;
     const auto* matte_graph=request.mask_view_layer?nullptr:request.sceneMattes().get();
@@ -339,6 +349,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             }
         }
         creative_suite::media::RgbaFramePtr frame;
+        std::optional<PathRaster> path_raster;
         if (layer.kind == model::LayerKind::Image) {
             frame = layer.still_frame;
             if (frame == nullptr) {
@@ -467,17 +478,26 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                    layer.kind == model::LayerKind::Shape) {
             active_content_ids.insert(layer.id);
             auto cached = content_frames_.find(layer.id);
-            if (cached == content_frames_.end() || cached->second.content != layer.content || cached->second.presentation != layer.presentation || cached->second.canvas != request.canvas_size) {
+            const auto* shape=std::get_if<model::ShapeLayerContent>(&layer.content);
+            std::optional<model::PathGeometry> path_geometry;double path_margin=0;
+            if(shape&&shape->path){
+                path_geometry=request.path_override&&request.path_override->target==model::PathTarget{layer.id,false}?*request.path_override->geometry:model::evaluatePath(*shape->path,layer.local_frame);
+                for(const auto& effect:layer.effects)if(const auto* blur=std::get_if<model::GaussianBlurEffect>(&effect);blur&&blur->enabled)path_margin+=std::ceil(3*model::evaluateGaussianBlurEffect(*blur,layer.local_frame).radius_pixels);
+            }
+            if (cached == content_frames_.end() || cached->second.content != layer.content || cached->second.presentation != layer.presentation || cached->second.canvas != request.canvas_size || cached->second.path_geometry!=path_geometry || cached->second.path_margin!=path_margin) {
                 StageTimer raster_timer(
                     record_preview_metrics_,
                     diagnostics::PreviewTimingStage::TextShapeRasterization);
-                auto rasterized = rasterizeLayerContent(layer.content);
+                std::optional<creative_suite::media::RgbaFrame> rasterized;
+                std::optional<PathRaster> new_path_raster;
+                if(path_geometry)new_path_raster=rasterizePath(*shape,*path_geometry,path_margin,should_cancel);
+                else rasterized=rasterizeLayerContent(layer.content);
                 if (layer.presentation && layer.presentation->profile == creative_suite::composition_exchange::Profile::FusionCanvas && layer.kind == model::LayerKind::Text) {
                     const auto& t = std::get<model::TextLayerContent>(layer.content);
                     rasterized = creative_suite::composition_exchange::textFrame({t.text,t.font_family,t.font_size_pixels,int(t.alignment),t.color}, *layer.presentation, request.canvas_size.width, request.canvas_size.height);
                 }
-                if (!rasterized.has_value()) {
-                    if (fail_on_media_error) {
+                if (!rasterized.has_value() && !new_path_raster) {
+                    if (fail_on_media_error || (path_geometry && mode==PreviewRequestMode::Gesture)) {
                         throw std::runtime_error("Text or shape content could not be rasterized for layer " +
                                                  std::to_string(layer.id));
                     }
@@ -489,21 +509,20 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                     content_frames_.erase(layer.id);
                     continue;
                 }
-                cached = content_frames_.insert_or_assign(
-                    layer.id,
-                    CachedContentFrame{
-                        layer.content, layer.presentation, request.canvas_size,
-                        std::make_shared<const creative_suite::media::RgbaFrame>(
-                            *rasterized)}).first;
+                auto raster_frame=new_path_raster?new_path_raster->frame:std::make_shared<const creative_suite::media::RgbaFrame>(std::move(*rasterized));
+                if(cached!=content_frames_.end()&&cached->second.content==layer.content&&cached->second.presentation==layer.presentation&&cached->second.canvas==request.canvas_size){
+                    cached->second.frame=std::move(raster_frame);cached->second.path_raster=std::move(new_path_raster);cached->second.path_geometry=std::move(path_geometry);cached->second.path_margin=path_margin;
+                }else cached=content_frames_.insert_or_assign(layer.id,CachedContentFrame{layer.content,layer.presentation,request.canvas_size,std::move(raster_frame),std::move(new_path_raster),std::move(path_geometry),path_margin}).first;
             }
-            frame = cached->second.frame;
+            frame = cached->second.frame;path_raster=cached->second.path_raster;
+            if(path_raster){if(request.sceneHierarchy())effective_world=resolved_entry->second.world;else {model::CompositionLayer local{layer.id,model::LayerKind::Shape,""};local.transform=layer.transform;local.keyframes=layer.keyframes;local.anchor_point=layer.anchor_point;local.anchor_keyframes=layer.anchor_keyframes;local.scale_y=layer.scale_y;effective_world=model::localLayerGeometry(local,request.canvas_size,layer.local_frame);}}
         } else {
             continue;
         }
 
         if (frame == nullptr) continue;
         const bool fusion_presentation = layer.presentation && layer.presentation->profile == creative_suite::composition_exchange::Profile::FusionCanvas;
-        if (fusion_presentation) {
+        if (fusion_presentation && !path_raster) {
             portable_raster_bytes += std::uint64_t(request.canvas_size.width)*request.canvas_size.height*4;
             if (portable_raster_bytes > 256ULL*1024*1024)
                 throw creative_suite::composition_exchange::Error("Interchange source preparation exceeds the 256 MiB frame budget.");
@@ -512,7 +531,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         const auto consumers=matte_consumers.find(layer.id);
         const bool needs_matte_pixels=matte_graph && (layer.track_matte ||
             (consumers!=matte_consumers.end() && consumers->second>0));
-        if(hasLayerMasks(layer) || needs_matte_pixels) {
+        if(hasLayerMasks(layer) || needs_matte_pixels || path_raster) {
             if(try_gpu_effects && !gpu_compositor_)gpu_compositor_=std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(
                 gpu_surface_,creative_suite::composition::OpenGlPrecisionPolicy::Automatic,texture_share_context_,texture_budget_);
             MaskedLayerFrame processed;
@@ -520,7 +539,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 const auto bytes=std::uint64_t(request.canvas_size.width)*request.canvas_size.height*4;
                 if(matte_graph && portable_raster_bytes+bytes*(layer.track_matte?2:1)>256ULL*1024*1024)
                     throw std::runtime_error("Track matte intermediates exceed the 256 MiB preparation budget.");
-                processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel,&effective_transform,effective_world?&*effective_world:nullptr);
+                processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel,&effective_transform,effective_world?&*effective_world:nullptr,path_raster?&*path_raster:nullptr);
                 if(matte_graph && layer.track_matte && (processed.rgba || processed.texture)) {
                     const auto source=matte_outputs.find(layer.track_matte->source_id);
                     if(try_gpu_effects) {

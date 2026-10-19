@@ -1,3 +1,4 @@
+#include "ui/viewer/pen_tool.h"
 #include "ui/translation_helpers.h"
 #include "ui/inspector/mask_inspector_widget.h"
 #include "main_window.h"
@@ -55,7 +56,7 @@ void MainWindow::createWorkspace()
     media_pool_->setMinimumWidth(220);
     media_pool_->setImportRequestedHandler([this] { openMedia(); });
     media_pool_->setSelectionChangedHandler([this] { updateMediaDetails(); });
-    media_pool_->setContentChangedHandler([this] { updateDocumentState(); });
+    media_pool_->setContentChangedHandler([this] { finishPendingTransformEdit(); updateDocumentState(); });
     viewer_ = new CompositionViewer(this);
     viewer_->setObjectName(QStringLiteral("motion-composition-viewer"));
     viewer_->setScaleDragHandlers({[this](model::ScaleDragControl control,QPointF lever) { return beginScaleDrag(control,lever); },
@@ -82,6 +83,7 @@ void MainWindow::createWorkspace()
         }
     });
     inspector_ = new InspectorWidget(this);
+    inspector_->masksInspector()->setContextChangedHandler([this]{finishPendingTransformEdit();if(pen_tool_)pen_tool_->sync();});
     connect(inspector_,&InspectorWidget::scaleValueEdited,this,[this](int axis){editSelectedScaleAxis(static_cast<std::size_t>(axis));});
     connect(inspector_,&InspectorWidget::scaleKeyframeToggleRequested,this,[this](int axis){toggleSelectedScaleAxisKeyframe(static_cast<std::size_t>(axis));});
     connect(inspector_,&InspectorWidget::scaleLinkChanged,this,&MainWindow::setSelectedScaleLinked);
@@ -99,7 +101,7 @@ void MainWindow::createWorkspace()
                 syncTransformInspector();refreshCurveEditor();requestPreview();
             } catch(const std::exception& e){reportDocumentError("edit_mask",document_path_.value_or(std::filesystem::path{}),e);}
         },
-        [this](model::LayerId layer,int target,bool enabled){mask_view_layer_=enabled?layer:0;mask_view_target_=target;requestPreview();},
+        [this](model::LayerId layer,int target,bool enabled){finishPendingTransformEdit();mask_view_layer_=enabled?layer:0;mask_view_target_=target;requestPreview();},
         [this](model::MaskId mask,std::size_t property,std::int64_t frame){
             curve_selection_=CurveSelection{selected_layer_id_,creative_suite::animation::TransformProperty::PositionX,frame,mask,property};refreshCurveEditor();
         });
@@ -394,8 +396,12 @@ void MainWindow::createWorkspace()
             this, [this](int index) { applyCurvePreset(index); });
     curve_panel_layout->addWidget(curve_editor_, 1);
 
+    pen_tool_=new PenTool(*this);
+    timeline_->setPathKeyframeHandlers([this](model::LayerId layer,model::PathTarget target,std::int64_t frame){selectLayer(layer);pen_tool_->selectCurve(target,frame);},
+        [this](model::LayerId layer,model::PathTarget target,std::int64_t from,std::int64_t to){finishPendingTransformEdit();if(!document_)return false;try{auto before=captureEditState();if(!document_->movePathKeyframe(target,from,to))return false;(void)recordCompositionEdit(std::move(before));selectLayer(layer);pen_tool_->selectCurve(target,to);updateDocumentState();refreshTimeline();syncTransformInspector();requestPreview();return true;}catch(const std::exception& e){reportDocumentError("move_path_keyframe",document_path_.value_or(std::filesystem::path{}),e);return false;}});
+    auto* viewer_container=new QWidget(this);auto* viewer_layout=new QVBoxLayout(viewer_container);viewer_layout->setContentsMargins(0,0,0,0);viewer_layout->addWidget(pen_tool_->controls());viewer_layout->addWidget(viewer_,1);
     workspace_ = new MotionWorkspace(
-        this, viewer_, media_pool_, inspector_, timeline_, curve_editor_panel_, timeline_);
+        this, viewer_container, media_pool_, inspector_, timeline_, curve_editor_panel_, timeline_);
     media_pool_dock_ = workspace_->mediaPoolDock();
     inspector_dock_ = workspace_->inspectorDock();
     timeline_dock_ = workspace_->timelineDock();
@@ -460,6 +466,7 @@ void MainWindow::createWorkspace()
             const bool may_present = preview_renderer_ && preview_renderer_->canPresentFrame(frame) &&
                 (!frame.playback || (timeline_ && timeline_->isPlaying()));
             if (may_present && viewer_) {
+                if(frame.render_failed&&pen_tool_&&pen_tool_->active()&&frame.gesture_session){pen_tool_->renderFailed();return;}
                 if(frame.render_failed&&scale_drag_&&frame.gesture_session==scale_drag_->session) {
                     const auto id=scale_drag_->id;const auto current=scale_drag_->frame;cancelScaleDrag();
                     logScaleDragFailure("scale_drag_render",id,current,std::runtime_error("Gesture frame rendering failed."));return;
@@ -522,7 +529,7 @@ void MainWindow::updateMediaDetails()
 void MainWindow::refreshTimeline()
 {
     if (timeline_ == nullptr || !document_) return;
-    timeline_->setLayers(document_->layers());
+    timeline_->setLayers(document_->layers(),document_->masks());
     timeline_->setSelectedLayerId(selected_layer_id_);
     refreshCurveEditor();
 }

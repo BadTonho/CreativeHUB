@@ -1,3 +1,12 @@
+add_executable(creative-suite-motion-editor-bezier-tests bezier_path_test.cpp)
+target_link_libraries(creative-suite-motion-editor-bezier-tests PRIVATE creative-suite-motion-editor-core Qt6::Widgets)
+target_compile_features(creative-suite-motion-editor-bezier-tests PRIVATE cxx_std_20)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-bezier-tests)
+add_creative_suite_test(NAME creative-suite-motion-editor-bezier COMMAND creative-suite-motion-editor-bezier-tests)
+add_creative_suite_test(NAME creative-suite-motion-editor-bezier-hidpi COMMAND creative-suite-motion-editor-bezier-tests)
+set_tests_properties(creative-suite-motion-editor-bezier PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1" TIMEOUT 120)
+set_tests_properties(creative-suite-motion-editor-bezier-hidpi PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=2" TIMEOUT 120)
+
 add_executable(creative-suite-motion-editor-track-matte-tests track_matte_test.cpp)
 target_link_libraries(creative-suite-motion-editor-track-matte-tests PRIVATE creative-suite-motion-editor-core Qt6::Widgets)
 target_compile_features(creative-suite-motion-editor-track-matte-tests PRIVATE cxx_std_20)
@@ -341,6 +350,7 @@ if(WIN32)
     find_program(QT_MOTION_TEST_DEPLOY_TOOL windeployqt HINTS "${QT_MOTION_TEST_BIN_DIR}" REQUIRED)
 
     foreach(TEST_TARGET IN ITEMS
+            creative-suite-motion-editor-bezier-tests
             creative-suite-motion-editor-track-matte-tests
             creative-suite-motion-editor-blend-tests
             creative-suite-motion-editor-scale-drag-tests

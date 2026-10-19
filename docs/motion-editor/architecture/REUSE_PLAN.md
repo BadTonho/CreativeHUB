@@ -23,7 +23,7 @@ shared.
 Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
 autosave preferences, and the recovery-management dialog. The store reuses the
 native document serializer and its atomic `QSaveFile` validation while writing
-the native `.motion` document at version 14 (recovery wrapper version 1). A recovery payload stores the complete
+the native `.motion` document at version 15 (recovery wrapper version 1). A recovery payload stores the complete
 composition and Media Pool plus the original document path and session ID; it
 does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
 
@@ -447,3 +447,13 @@ Shared CPU/OpenGL provide a Qt-free mode/coverage contract and additive image
 operation; Vulkan explicitly refuses it. Final CompositionLayer APIs and opaque
 output remain unchanged. No-matte paths and Video/Image UI/formats are retained.
 Lifetime, budget, pixels and test gates are defined in [Track Mattes](../features/TRACK_MATTES.md).
+
+## Motion-owned Bezier authoring
+
+[Pen paths](../features/BEZIER_PATHS.md) keep geometry/animation, native mask
+records, history and UI in Motion. Explicit adapters retain primitive `.cscomp`
+masks. QPainterPath rasterization carries a local origin and stable logical
+receiver size through the existing effects/masks/affine pipeline. The shared
+coverage generator accepts an optional raster window; default callers retain
+legacy pixels. Geometry overrides reuse immutable scenes and the bounded gesture
+queue; changed paths rerasterize without copying animation curves per movement.

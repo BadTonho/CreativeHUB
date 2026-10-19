@@ -66,8 +66,9 @@ layers/effects, seek/play, move a layer without shifting mask keys, edit Bezier
 easing, toggle View Mask, remove each association, undo/redo, save/recover, and
 transfer back. Compare rotated, transparent media with source and transform
 masks on native drivers. Windows automated coverage does not establish native
-macOS/Linux acceptance. Pen/polygon masks, combinations, tracking, Merge/Output
-masks, animated Soft Edge/Invert, and direct Viewer editing remain outside v1.
+macOS/Linux acceptance. Pen/polygon masks and direct path editing were outside that initial delivery;
+Bezier authoring is now documented below. Combinations, tracking, Merge/Output
+masks and animated Soft Edge/Invert remain planned.
 
 
 Layer hierarchy resolves inherited geometry and the animated [Anchor Point](ANCHOR_POINT.md) before this existing Transform
@@ -82,3 +83,5 @@ its prior space and Transform coverage remains in composition pixels; masks do
 not inherit a parent's masks or link state. `creative-suite-motion-editor-scale`
 compares animated affine effects and all mask stages with independent reference
 sampling and encoded export frames. Native visual/GPU acceptance remains pending.
+
+Bezier masks and direct path editing are now implemented in native v15; see [Pen paths](BEZIER_PATHS.md). Existing primitive-mask stages/coordinates retain their exact default path. Path masks have complete-geometry keys in composition time and preserve sharing by ID. Combinations and tracking remain planned.

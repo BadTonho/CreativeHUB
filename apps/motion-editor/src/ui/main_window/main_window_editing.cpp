@@ -1,3 +1,5 @@
+#include "ui/viewer/pen_tool.h"
+#include <QScopeGuard>
 #include "ui/translation_helpers.h"
 #include "ui/inspector/mask_inspector_widget.h"
 #include "main_window.h"
@@ -154,6 +156,7 @@ bool MainWindow::recordCompositionEdit(CompositionEditState before)
 }
 void MainWindow::finishPendingTransformEdit()
 {
+    if(pen_tool_&&pen_tool_->active())pen_tool_->cancel();
     cancelScaleDrag();
     cancelRotationDrag();
     cancelPositionDrag();
@@ -191,12 +194,13 @@ void MainWindow::updateHistoryActions()
 {
     const bool has_document = document_.has_value();
     if (undo_action_ != nullptr)
-        undo_action_->setEnabled(has_document && (scale_drag_ || rotation_drag_ || position_drag_ || pan_behind_ || parent_pick_whip_ || composition_history_.canUndo()));
+        undo_action_->setEnabled(has_document && ((pen_tool_&&pen_tool_->active()) || scale_drag_ || rotation_drag_ || position_drag_ || pan_behind_ || parent_pick_whip_ || composition_history_.canUndo()));
     if (redo_action_ != nullptr)
-        redo_action_->setEnabled(has_document && !scale_drag_ && !rotation_drag_ && !position_drag_ && !pan_behind_ && !parent_pick_whip_ && composition_history_.canRedo());
+        redo_action_->setEnabled(has_document && !(pen_tool_&&pen_tool_->active()) && !scale_drag_ && !rotation_drag_ && !position_drag_ && !pan_behind_ && !parent_pick_whip_ && composition_history_.canRedo());
 }
 void MainWindow::undoComposition()
 {
+    if(pen_tool_&&pen_tool_->active()){pen_tool_->cancel();return;}
     if (scale_drag_) { cancelScaleDrag(); return; }
     if (rotation_drag_) { cancelRotationDrag(); return; }
     if (position_drag_) { cancelPositionDrag(); return; }
@@ -213,6 +217,7 @@ void MainWindow::undoComposition()
 }
 void MainWindow::redoComposition()
 {
+    if(pen_tool_&&pen_tool_->active())return;
     if (scale_drag_ || rotation_drag_ || position_drag_ || pan_behind_ || parent_pick_whip_) return;
     finishPendingTransformEdit();
     if (!document_) return;
@@ -307,6 +312,14 @@ void MainWindow::refreshCurveEditor()
         curve_editor_->setCurve(0, TransformProperty::PositionX, {}, std::nullopt);
         if (curve_preset_combo_ != nullptr) curve_preset_combo_->setEnabled(false);
         if (curve_custom_label_ != nullptr) curve_custom_label_->hide();
+        return;
+    }
+    if(curve_selection_->path_target){
+        const auto* path=document_->pathFor(*curve_selection_->path_target);if(!path){resetCurveEditor();return;}
+        creative_suite::animation::ScalarKeyframes keys;std::optional<std::int64_t> segment;
+        if(path->keys.size()>=2){const auto at=std::upper_bound(path->keys.begin(),path->keys.end(),curve_selection_->segment_start_frame,[](auto f,const auto& k){return f<k.frame;});const auto index=at==path->keys.begin()?0:std::min(std::size_t(at-path->keys.begin()-1),path->keys.size()-2);const auto& l=path->keys[index];const auto& r=path->keys[index+1];keys={{l.frame,0,l.interpolation,l.easing},{r.frame,100}};segment=l.frame;curve_selection_->segment_start_frame=l.frame;}
+        curve_editor_->setScalarCurve(curve_selection_->path_target->id,MotionUiTranslation::tr("Path Progress (%)"),keys,segment);
+        if(curve_preset_combo_){QSignalBlocker b(curve_preset_combo_);curve_preset_combo_->setEnabled(segment.has_value());if(segment)curve_preset_combo_->setCurrentIndex(curvePresetIndex(keys.front()));}
         return;
     }
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
@@ -582,6 +595,7 @@ void MainWindow::changeSelectedLayerBlendMode(int value)
 
 void MainWindow::syncTransformInspector()
 {
+    const auto path_sync=qScopeGuard([this]{if(pen_tool_)pen_tool_->sync();});
     if (scale_drag_) {
         if (panBehindAvailable() && timeline_->currentFrame() == scale_drag_->frame && selected_layer_id_ == scale_drag_->id) {
             inspector_->previewLayerScale(scale_drag_->preview[0],scale_drag_->preview[1]);return;

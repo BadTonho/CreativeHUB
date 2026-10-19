@@ -750,6 +750,9 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
         const QSignalBlocker a(controls_.shape_width_field);
         const QSignalBlocker b(controls_.shape_height_field);
         const QSignalBlocker c(controls_.shape_stroke_width_field);
+        controls_.shape_width_field->setEnabled(!shape->path);controls_.shape_height_field->setEnabled(!shape->path);
+        const auto path_help=shape->path?MotionUiTranslation::tr("Path size is controlled by its points; masks keep the creation reference size."):QString{};
+        controls_.shape_width_field->setToolTip(path_help);controls_.shape_height_field->setToolTip(path_help);
         controls_.shape_width_field->setValue(shape->width);
         controls_.shape_height_field->setValue(shape->height);
         controls_.shape_stroke_width_field->setValue(shape->stroke_width_pixels);

@@ -168,7 +168,7 @@ void MainWindow::createNewComposition()
     resetCurveEditor();
     import_media_action_->setEnabled(true);
     timeline_->setCompositionTiming(settings->frame_rate);
-    timeline_->setLayers(document_->layers());
+    timeline_->setLayers(document_->layers(),document_->masks());
     timeline_->setSelectedLayerId(0);
     viewer_->setComposition(document_->canvasSize(), std::nullopt);
     inspector_->setMedia(nullptr);
@@ -797,7 +797,7 @@ void MainWindow::finishOpen(std::uint64_t generation,
         media_pool_->replaceLibrary(std::move(staged_library));
         initializeLinkedImageFrames();
         timeline_->setCompositionTiming(document_->frameRate());
-        timeline_->setLayers(document_->layers());
+        timeline_->setLayers(document_->layers(),document_->masks());
         timeline_->setSelectedLayerId(0);
         viewer_->setComposition(document_->canvasSize(), std::nullopt);
         inspector_->setMedia(nullptr);

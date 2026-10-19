@@ -105,11 +105,14 @@ QPointF pixels(const QWidget& viewer, CanvasSize size, QPointF displacement) {
     return {displacement.x()*size.width/rect.width(),displacement.y()*size.height/rect.height()};
 }
 void discardClose(MainWindow& window) {
-    QTimer::singleShot(0, [] {
+    // Queued preview/layout work can run before close opens its modal dialog.
+    QTimer discard;
+    QObject::connect(&discard,&QTimer::timeout,[] {
         if (auto* dialog = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
             dialog->button(QMessageBox::Discard)->click();
     });
-    window.close(); QApplication::processEvents();
+    discard.start(1);
+    window.close(); discard.stop(); QApplication::processEvents();
 }
 void newComposition(MainWindow& window) {
     QTimer::singleShot(0, [] {
@@ -370,7 +373,11 @@ int main(int argc,char** argv) {
     QSettings::setDefaultFormat(QSettings::IniFormat);QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,root.path());
     try {
         check(creative_suite::diagnostics::Logger::instance().initialize(path(root.path()+"/logs")),"logger");
-        calculationAndPixels(root.path());viewerGestures();inspectorHistoryAndRecovery(root.path());animatedAffineUi(root.path());numericFailureLog(root.path());
+        std::cerr<<"Pan Behind: geometry/rendering\n";calculationAndPixels(root.path());
+        std::cerr<<"Pan Behind: Viewer gestures\n";viewerGestures();
+        std::cerr<<"Pan Behind: Inspector/history/recovery\n";inspectorHistoryAndRecovery(root.path());
+        std::cerr<<"Pan Behind: animated affine editing\n";animatedAffineUi(root.path());
+        std::cerr<<"Pan Behind: numeric failure diagnostics\n";numericFailureLog(root.path());
         std::cout<<"Pan Behind tests passed (DPR "<<app.devicePixelRatio()<<").\n";return 0;
     } catch(const std::exception& error) { std::cerr<<"FAIL: "<<error.what()<<'\n';return 1; }
 }

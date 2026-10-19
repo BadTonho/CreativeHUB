@@ -179,3 +179,5 @@ intermediates; final composition alone flattens over black. Shared outputs and
 uploads remain budgeted; unavoidable lease pressure recovers through CPU with
 the same graph and transform override. No intermediate readback is added.
 See [matte contracts and pending native acceptance](../features/TRACK_MATTES.md).
+
+[Pen path editing](../features/BEZIER_PATHS.md) reuses the common gesture session counter, immutable scene and bounded queue with a shared geometry override. Path edits rerasterize the affected content/coverage on the worker and reuse existing CPU/GPU effects, masks and composition. Commit/cancel invalidate late RGBA/texture delivery; fallback retains the current path candidate.

@@ -124,6 +124,7 @@ bool MainWindow::applySelectedCurveInterpolation(std::int64_t frame,a::Interpola
 {
     if(!document_ || !curve_selection_)return false;
     const auto& s=*curve_selection_;
+    if(s.path_target)return document_->setPathKeyframeInterpolation(*s.path_target,frame,mode,easing);
     if(s.scale_axis) {
         try{return document_->setLayerScaleAxisKeyframeInterpolation(s.layer_id,*s.scale_axis,frame,mode,easing);}
         catch(const std::exception& error){reportDocumentError("edit_scale_interpolation",document_path_.value_or(std::filesystem::path{}),error);return false;}

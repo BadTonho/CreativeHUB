@@ -115,12 +115,12 @@ bool validTextContent(const TextLayerContent& content) noexcept
 
 bool validShapeContent(const ShapeLayerContent& content) noexcept
 {
-    return (content.shape == ShapeKind::Rectangle || content.shape == ShapeKind::Ellipse) &&
+    return ((content.shape == ShapeKind::Rectangle || content.shape == ShapeKind::Ellipse) ? !content.path : (content.shape == ShapeKind::BezierPath && content.path && content.path.valid() && validPathRasterGeometry(content.path->base,content.stroke_width_pixels) && std::all_of(content.path->keys.begin(),content.path->keys.end(),[&](const auto& key){return validPathRasterGeometry(key.geometry,content.stroke_width_pixels);}))) &&
         content.width >= 1 && content.width <= kMaximumContentDimension &&
         content.height >= 1 && content.height <= kMaximumContentDimension &&
         content.stroke_width_pixels >= 0 &&
         content.stroke_width_pixels <= kMaximumStrokeWidthPixels &&
-        content.stroke_width_pixels <= std::min(content.width, content.height);
+        (content.shape==ShapeKind::BezierPath || content.stroke_width_pixels <= std::min(content.width, content.height));
 }
 
 bool validContentForKind(LayerKind kind, const LayerContent& content) noexcept
@@ -493,6 +493,7 @@ ShapeLayerContent defaultShapeLayerContent(CanvasSize canvas_size, ShapeKind sha
                                1, kMaximumContentDimension);
     content.height = std::clamp(canvas_size.height / 4,
                                 1, kMaximumContentDimension);
+    if(shape==ShapeKind::BezierPath){const auto x=content.width*.5,y=content.height*.5;content.path=PathAnimation{PathGeometry{{{{-x,-y},{},{}},{{x,-y},{},{}},{{x,y},{},{}},{{-x,y},{},{}}},true},{}};}
     return content;
 }
 
@@ -542,11 +543,12 @@ CompositionDocument::CompositionDocument(
     std::unordered_set<MaskId> mask_ids;
     if(masks.size()>4096)throw std::invalid_argument("Too many masks.");
     for(const auto& m:masks) {
-        if(!creative_suite::composition_exchange::validMask(m)||!mask_ids.insert(m.id).second)
+        if(!validMotionMask(m)||!mask_ids.insert(m.id).second)
             throw std::invalid_argument("Invalid mask definition or duplicate ID.");
         next_mask_id_=std::max(next_mask_id_,m.id+1);
     }
     masks_=std::move(masks);
+    if(!canInsertKeyframes(0))throw std::invalid_argument("Too many document keyframes");
     std::unordered_set<MaskId> used_masks;
     for(const auto& layer:layers_) {
         const auto check=[&](MaskId id){if(id && !mask_ids.contains(id))throw std::invalid_argument("Unknown mask reference.");if(id)used_masks.insert(id);};
@@ -1297,12 +1299,12 @@ MaskId CompositionDocument::createMask(LayerId id,int target,creative_suite::com
 }
 bool CompositionDocument::setMaskParameters(MaskId id,const creative_suite::composition::ShapeMaskParameters& p) {
     const auto* old=findMask(id);if(!old || old->parameters==p || !creative_suite::composition::validShapeMask(p,old->keyframes))return false;
-    for(auto& m:masks_)if(m.id==id){m.parameters=p;return true;}return false;
+    for(auto& m:masks_)if(m.id==id){auto candidate=m;candidate.parameters=p;if(!validMotionMask(candidate))return false;m.parameters=p;return true;}return false;
 }
 bool CompositionDocument::replaceMaskKeyframes(MaskId id,std::size_t property,creative_suite::animation::ScalarKeyframes keys) {
     const auto* old=findMask(id);if(!old||property>=5)return false;
     auto m=*old;m.keyframes[property]=std::move(keys);
-    if(!creative_suite::composition_exchange::validMask(m)||m.keyframes==old->keyframes)return false;
+    if(!validMotionMask(m)||m.keyframes==old->keyframes)return false;
     for(auto& existing:masks_)if(existing.id==id){existing=std::move(m);return true;}return false;
 }
 bool CompositionDocument::setMaskKeyframe(MaskId id,std::size_t property,std::int64_t frame,double value) {

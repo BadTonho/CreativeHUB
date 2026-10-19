@@ -6,6 +6,9 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL OpenGLWidgets Widgets LinguistTools)
 
 add_library(creative-suite-motion-editor-core STATIC
+    src/model/bezier_path.cpp
+    src/model/bezier_path.h
+    src/model/path_editing.cpp
     src/model/track_matte_graph.cpp
     src/model/track_matte_graph.h
     src/model/layer_scale_drag.cpp
@@ -31,6 +34,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/model/motion_project_data.h
     src/persistence/motion_recovery_store.cpp
     src/persistence/motion_recovery_store.h
+    src/persistence/path_serialization.cpp
+    src/persistence/path_serialization.h
     src/persistence/motion_document_store.cpp
     src/persistence/motion_document_store.h
     src/rendering/preview_scene_builder.cpp
@@ -39,6 +44,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/rendering/preview_renderer.h
     src/rendering/composition_frame_renderer.cpp
     src/rendering/composition_frame_renderer.h
+    src/rendering/path_rasterizer.cpp
+    src/rendering/path_rasterizer.h
     src/rendering/layer_content_renderer.cpp
     src/rendering/layer_content_renderer.h
     src/rendering/layer_effect_processor.cpp
@@ -53,6 +60,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/settings/gpu_composition_preferences.h
     src/ui/workers/audio_keyframe_generation.cpp
     src/ui/workers/audio_keyframe_generation.h
+    src/ui/viewer/pen_tool.cpp
+    src/ui/viewer/pen_tool.h
     src/ui/viewer/composition_viewer.cpp
     src/ui/viewer/composition_viewer.h
     src/ui/viewer/scale_drag_handle.cpp

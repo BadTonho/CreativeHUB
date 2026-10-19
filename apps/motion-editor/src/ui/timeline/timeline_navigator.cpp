@@ -1,5 +1,7 @@
 #include "ui/translation_helpers.h"
 #include "timeline_navigator.h"
+#include <unordered_map>
+#include <unordered_set>
 #include "timeline_navigator_math.h"
 #include "timeline_controls.h"
 #include "timeline_layer_tracks.h"
@@ -336,8 +338,10 @@ std::int64_t TimelineNavigator::frameAtViewportX(int x) const noexcept
         view_start_frame_, frames_per_view_}.frameAtX(x);
 }
 
-void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& layers)
+void TimelineNavigator::setPathKeyframeHandlers(std::function<void(model::LayerId,model::PathTarget,std::int64_t)> selected,std::function<bool(model::LayerId,model::PathTarget,std::int64_t,std::int64_t)> moved){layer_tracks_->setPathKeyframeHandlers(std::move(selected),std::move(moved));}
+void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& layers,const std::vector<model::Mask>& masks)
 {
+    std::unordered_map<model::MaskId,const model::Mask*> mask_by_id;for(const auto& mask:masks)mask_by_id.emplace(mask.id,&mask);
     std::vector<TimelineLayerRow> rows;
     rows.reserve(layers.size());
     playback_end_frame_exclusive_ = 0;
@@ -353,6 +357,14 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
             layer->maximum_timeline_duration_frames,
             layer->keyframes,
             layer->effects, layer->anchor_keyframes, layer->scale_y, layer->parent_id});
+        const auto addPath=[&](model::PathTarget target,const model::PathAnimationStorage& path,QString name){
+            TimelinePathTrack track{target,std::move(name),path,target.mask?0:layer->timeline_start_frame,target.mask?(std::int64_t(1)<<50):layer->duration_frames};
+            rows.back().paths.push_back(std::move(track));
+        };
+        if(const auto* shape=std::get_if<model::ShapeLayerContent>(&layer->content);shape&&shape->path)addPath({layer->id,false},shape->path,MotionUiTranslation::tr("Path"));
+        std::unordered_set<model::MaskId> seen_masks;
+        const auto addMaskPath=[&](model::MaskId id){const auto found=mask_by_id.find(id);if(found!=mask_by_id.end()&&found->second->path&&seen_masks.insert(id).second)addPath({id,true},found->second->path,MotionUiTranslation::tr("Mask Path #%1").arg(id));};
+        addMaskPath(layer->source_mask);addMaskPath(layer->transform_mask);for(const auto& effect:layer->effects)std::visit([&](const auto& value){addMaskPath(value.mask);},effect);
         if (layer->kind != model::LayerKind::Null && layer->timeline_start_frame >= 0 && layer->duration_frames > 0) {
             const auto end_frame = layer->duration_frames >
                     maximum_frame - layer->timeline_start_frame

@@ -42,7 +42,7 @@ MaskInspectorWidget::MaskInspectorWidget(QWidget* parent):QWidget(parent) {
     properties_=new QComboBox(this);for(int i=0;i<5;++i)properties_->addItem(names[i]);layout->addWidget(properties_);
     key_list_=new QListWidget(this);key_list_->setObjectName("motion-mask-keyframes");key_list_->setMaximumHeight(160);layout->addWidget(key_list_);layout->addStretch();
     connect(apply,&QPushButton::clicked,this,[this]{this->apply();});
-    connect(targets_,&QComboBox::currentIndexChanged,this,[this]{if(syncing_)return;clearView();target_=targets_->currentData().toInt();refresh();});
+    connect(targets_,&QComboBox::currentIndexChanged,this,[this]{if(syncing_)return;clearView();target_=targets_->currentData().toInt();refresh();if(context_changed_)context_changed_();});
     connect(masks_,&QComboBox::currentIndexChanged,this,[this]{if(syncing_||!edit_)return;clearView();const auto id=masks_->currentData().toULongLong();edit_([=,this](auto& doc){return doc.associateMask(layer_,target_,id);});});
     connect(properties_,&QComboBox::currentIndexChanged,this,[this]{if(!syncing_)refresh();});
     connect(key_list_,&QListWidget::itemClicked,this,[this](auto* item){if(curve_ && selectedMask())curve_(selectedMask(),properties_->currentIndex(),item->data(Qt::UserRole).toLongLong());});
@@ -51,6 +51,7 @@ MaskInspectorWidget::MaskInspectorWidget(QWidget* parent):QWidget(parent) {
 }
 void MaskInspectorWidget::setHandlers(EditHandler edit,ViewHandler view,CurveHandler curve){edit_=std::move(edit);view_=std::move(view);curve_=std::move(curve);}
 model::MaskId MaskInspectorWidget::selectedMask() const{return document_?document_->maskForTarget(layer_,target_):0;}
+void MaskInspectorWidget::selectDestinationForMask(model::MaskId id){if(!document_)return;for(int i=0;i<targets_->count();++i)if(document_->maskForTarget(layer_,targets_->itemData(i).toInt())==id){targets_->setCurrentIndex(i);return;}}
 void MaskInspectorWidget::clearView(){if(view_button_->isChecked()){QSignalBlocker block(view_button_);view_button_->setChecked(false);if(view_)view_(layer_,target_,false);}}
 void MaskInspectorWidget::sync(const model::CompositionDocument* document,model::LayerId layer,std::int64_t frame){
     if(document_!=document || layer_!=layer){clearView();target_=-2;}
@@ -66,11 +67,11 @@ void MaskInspectorWidget::refresh(){
     if(targets_->findData(target_)<0)target_=-2;
     targets_->setCurrentIndex(targets_->findData(target_));
     masks_->addItem(MotionUiTranslation::tr("None"),QVariant::fromValue<qulonglong>(0));
-    if(document_)for(const auto& m:document_->masks())masks_->addItem(QString("%1 #%2").arg(m.kind==c::ShapeMaskKind::Rectangle?MotionUiTranslation::tr("Rectangle Mask"):MotionUiTranslation::tr("Ellipse Mask")).arg(m.id),QVariant::fromValue<qulonglong>(m.id));
+    if(document_)for(const auto& m:document_->masks())masks_->addItem(QString("%1 #%2").arg(m.path?MotionUiTranslation::tr("Bezier Mask"):(m.kind==c::ShapeMaskKind::Rectangle?MotionUiTranslation::tr("Rectangle Mask"):MotionUiTranslation::tr("Ellipse Mask"))).arg(m.id),QVariant::fromValue<qulonglong>(m.id));
     const auto id=selectedMask();masks_->setCurrentIndex(masks_->findData(QVariant::fromValue<qulonglong>(id)));
     const auto* mask=document_?document_->findMask(id):nullptr;
     const auto values=mask?c::evaluateShapeMask(mask->parameters,mask->keyframes,frame_):c::ShapeMaskParameters{};
-    for(std::size_t i=0;i<6;++i){fields_[i]->setEnabled(mask);fields_[i]->setValue(i==5?values.soft_edge*100:c::shapeMaskValue(values,i)*(i==4?1:100));shown_values_[i]=fields_[i]->value();if(i<5){keys_[i]->setEnabled(mask);keys_[i]->setChecked(mask && std::any_of(mask->keyframes[i].begin(),mask->keyframes[i].end(),[this](const auto& k){return k.frame==frame_;}));}}
+    for(std::size_t i=0;i<6;++i){fields_[i]->setEnabled(mask && (i==5 || !mask->path));fields_[i]->setValue(i==5?values.soft_edge*100:c::shapeMaskValue(values,i)*(i==4?1:100));shown_values_[i]=fields_[i]->value();if(i<5){keys_[i]->setEnabled(mask && !mask->path);keys_[i]->setChecked(mask && std::any_of(mask->keyframes[i].begin(),mask->keyframes[i].end(),[this](const auto& k){return k.frame==frame_;}));}}
     invert_->setEnabled(mask);invert_->setChecked(values.invert);view_button_->setEnabled(mask);
     uses_->setText(mask?MotionUiTranslation::tr("Used by %1 destination(s).\nKeys use composition frames.").arg(document_->maskUseCount(id)):MotionUiTranslation::tr("Choose or create a mask."));
     if(mask)for(const auto& k:mask->keyframes[properties_->currentIndex()]){auto* item=new QListWidgetItem(QString(MotionUiTranslation::tr("Frame %1: %2")).arg(k.frame).arg(k.value),key_list_);item->setData(Qt::UserRole,QVariant::fromValue<qlonglong>(k.frame));}

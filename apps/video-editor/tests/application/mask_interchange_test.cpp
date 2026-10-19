@@ -129,7 +129,7 @@ int main(int argc,char** argv) try {
     const auto rescaled=timeline::TimelineModel::rescaleSnapshotFrameRate(session.timeline().snapshot(),{60,1});check(rescaled.has_value(),"mask FPS conversion");
     const auto& resized_mask=*std::find_if(rescaled->tracks.front().clips.front().node_graph->nodes.begin(),rescaled->tracks.front().clips.front().node_graph->nodes.end(),[](const auto& n){return fusion::nodes::isMaskNode(n.type);});
     check(resized_mask.mask_keyframes[0].back().frame>=38,"mask key times rescale");
-    motion::ui::PreviewRequest view;view.canvas_size={160,90};view.frame_rate={30,1};view.masks=std::make_shared<const std::vector<x::Mask>>(shared.masks);view.mask_view_layer=1;view.mask_view_target=-2;
+    motion::ui::PreviewRequest view;view.canvas_size={160,90};view.frame_rate={30,1};view.masks=std::make_shared<const std::vector<motion::model::Mask>>(shared.masks.begin(),shared.masks.end());view.mask_view_layer=1;view.mask_view_target=-2;
     motion::ui::PreviewLayerSnapshot inactive;inactive.id=1;inactive.kind=motion::model::LayerKind::Shape;inactive.content=motion::model::ShapeLayerContent{motion::model::ShapeKind::Rectangle,160,90};inactive.source_mask=8;view.layers={inactive};
     motion::ui::CompositionFrameRenderer view_renderer(false);
     auto viewed=view_renderer.render(view,{},true);check(viewed && viewed->rgba_pixels[0]==0 && viewed->rgba_pixels[(45*160+80)*4]==255,"VIEW renders coverage without source sampling");

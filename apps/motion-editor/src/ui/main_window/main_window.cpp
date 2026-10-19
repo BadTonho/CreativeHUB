@@ -1,3 +1,4 @@
+#include "ui/viewer/pen_tool.h"
 #include "ui/translation_helpers.h"
 #include "main_window.h"
 #include "main_window_support.h"
@@ -360,6 +361,7 @@ MainWindow::MainWindow(QWidget* parent,
 }
 MainWindow::~MainWindow()
 {
+    delete std::exchange(pen_tool_,nullptr);
     cancelScaleDrag();
     if (viewer_) viewer_->setScaleDragHandlers({});
     cancelRotationDrag();

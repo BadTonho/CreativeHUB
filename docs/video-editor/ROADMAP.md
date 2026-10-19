@@ -252,3 +252,5 @@ Editor preview, Fusion and RGBA export. Startup selection is application-local;
 GPU composition and codecs retain separate controls. See
 [Vulkan implementation and acceptance](gpu/VULKAN_RENDERER.md).
 Native Linux/macOS and broader manual acceptance remain pending.
+
+Shared logical mask-raster maintenance for Motion Bezier paths: existing `creative-suite-composition`, `creative-suite-mask-interchange`, `creative-suite-main-editor-fusion-mask`, preview and render/export suites protect Video default coordinates and pixels. No Video feature/format is added; native acceptance remains separate.

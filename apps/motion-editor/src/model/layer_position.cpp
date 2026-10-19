@@ -55,7 +55,7 @@ bool CompositionDocument::setLayerPositionAtFrame(LayerId id, double x, double y
 
 bool CompositionDocument::canInsertKeyframes(std::size_t inserted) const noexcept
 {
-    if (inserted == 0) return true;
+
     if (inserted > maximum_document_keyframes) return false;
     std::size_t count = inserted;
     bool exceeds_budget = false;
@@ -65,8 +65,14 @@ bool CompositionDocument::canInsertKeyframes(std::size_t inserted) const noexcep
             count = maximum_document_keyframes;
         } else count += keys.size();
     };
-    for (const auto& mask : masks_) for (const auto& keys : mask.keyframes) add(keys);
+    const auto addPath=[&](const PathAnimation& path){
+        const auto cost=pathKeyframeCost(path);
+        if(cost>maximum_document_keyframes-count){exceeds_budget=true;count=maximum_document_keyframes;}else count+=cost;
+    };
+    for (const auto& mask : masks_) {for (const auto& keys : mask.keyframes) add(keys);if(mask.path)addPath(*mask.path);}
+
     for (const auto& item : layers_) {
+        if(const auto* shape=std::get_if<ShapeLayerContent>(&item.content);shape&&shape->path)addPath(*shape->path);
         add(item.keyframes.position_x);add(item.keyframes.position_y);add(item.keyframes.scale);
         add(item.keyframes.rotation);add(item.keyframes.opacity);
         for (const auto& keys : item.anchor_keyframes) add(keys);

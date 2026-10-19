@@ -1,4 +1,5 @@
 #pragma once
+#include "bezier_path.h"
 #include <creative_suite/composition/blend_mode.h>
 #include <creative_suite/composition/track_matte.h>
 #include <creative_suite/composition/affine_transform.h>
@@ -148,6 +149,7 @@ struct TextLayerContent {
 enum class ShapeKind : std::uint8_t {
     Rectangle,
     Ellipse,
+    BezierPath,
 };
 
 struct ShapeLayerContent {
@@ -157,13 +159,21 @@ struct ShapeLayerContent {
     ColorRgba fill_color{255, 183, 54, 255};
     ColorRgba stroke_color{255, 255, 255, 255};
     int stroke_width_pixels = 0;
+    PathAnimationStorage path;
 
     friend bool operator==(const ShapeLayerContent&, const ShapeLayerContent&) = default;
 };
 
 using LayerContent = std::variant<std::monostate, TextLayerContent, ShapeLayerContent>;
 
-using Mask = creative_suite::composition_exchange::Mask;
+struct Mask : creative_suite::composition_exchange::Mask {
+    PathAnimationStorage path;
+    Mask()=default;
+    Mask(const creative_suite::composition_exchange::Mask& value):creative_suite::composition_exchange::Mask(value){}
+    Mask(std::uint64_t identifier,creative_suite::composition::ShapeMaskKind type):creative_suite::composition_exchange::Mask{identifier,type}{}
+    friend bool operator==(const Mask&,const Mask&)=default;
+};
+[[nodiscard]] bool validMotionMask(const Mask&) noexcept;
 using MaskId = creative_suite::composition_exchange::MaskId;
 
 enum class EffectParameterProperty : std::uint8_t {
@@ -470,6 +480,16 @@ public:
     [[nodiscard]] bool setMaskKeyframeInterpolation(MaskId, std::size_t property, std::int64_t composition_frame,
         creative_suite::animation::InterpolationMode, const creative_suite::animation::CubicBezierEasing&);
 
+    [[nodiscard]] const PathAnimation* pathFor(PathTarget) const noexcept;
+    [[nodiscard]] bool replacePathAnimation(PathTarget,PathAnimation);
+    [[nodiscard]] bool setPathAtFrame(PathTarget,const PathGeometry&,std::int64_t composition_frame);
+    [[nodiscard]] bool setPathKeyframe(PathTarget,std::int64_t composition_frame);
+    [[nodiscard]] bool removePathKeyframe(PathTarget,std::int64_t frame);
+    [[nodiscard]] bool movePathKeyframe(PathTarget,std::int64_t from,std::int64_t to);
+    [[nodiscard]] bool setPathKeyframeInterpolation(PathTarget,std::int64_t frame,creative_suite::animation::InterpolationMode,const creative_suite::animation::CubicBezierEasing&);
+    [[nodiscard]] bool clearPathAnimationAtFrame(PathTarget,std::int64_t composition_frame);
+    [[nodiscard]] bool createPathLayer(const PathGeometry&,std::int64_t composition_frame,LayerId* added=nullptr,std::string name="Path");
+    [[nodiscard]] MaskId createPathMask(LayerId,int target,const PathGeometry&);
 private:
     [[nodiscard]] bool canInsertKeyframes(std::size_t count) const noexcept;
     [[nodiscard]] CompositionLayer* findLayer(LayerId id) noexcept;

@@ -1,3 +1,4 @@
+#include "ui/viewer/pen_tool.h"
 #include "main_window.h"
 #include "ui/inspector/inspector_widget.h"
 #include "ui/timeline/timeline_navigator.h"
@@ -25,7 +26,7 @@ bool withinEditingLimits(const model::AnchorRepositionValues& value)
 
 bool MainWindow::panBehindAvailable() const
 {
-    if (!document_ || !timeline_ || !selected_layer_id_ || export_worker_ || audio_keyframe_worker_) return false;
+    if ((pen_tool_&&pen_tool_->mode()) || !document_ || !timeline_ || !selected_layer_id_ || export_worker_ || audio_keyframe_worker_) return false;
     const auto frame = timeline_->currentFrame();
     return std::any_of(document_->layers().begin(), document_->layers().end(), [this, frame](const auto& layer) {
         return layer.id == selected_layer_id_ && layer.visible && frame >= layer.timeline_start_frame &&

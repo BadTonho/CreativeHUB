@@ -1,4 +1,5 @@
 #include <creative_suite/composition/frame_compositor.h>
+#include <creative_suite/composition/shape_mask.h>
 
 #include <algorithm>
 #include <cmath>
@@ -137,8 +138,23 @@ void trackMattes() {
     require(!composition::applyTrackMatte(out,&matte,composition::TrackMatteMode::Alpha,[]{return true;}),"matte cancellation");
 }
 
+void logicalMaskRasterContract(){
+    using namespace creative_suite::composition;
+    for(auto kind:{ShapeMaskKind::Rectangle,ShapeMaskKind::Ellipse})for(bool invert:{false,true}){
+        ShapeMaskParameters parameters;parameters.rotation=27;parameters.soft_edge=.12;parameters.invert=invert;
+        ShapeMaskRasterCache full_cache,window_cache;
+        const auto full=full_cache.coverage(kind,parameters,80,50);
+        const auto window=window_cache.coverage(kind,parameters,30,20,{}, {80,50,18,11});
+        require(full&&window,"logical mask raster window");
+        for(int y=0;y<20;++y)for(int x=0;x<30;++x)for(int channel=0;channel<4;++channel)
+            require(window->rgba_pixels[std::size_t(y)*window->stride+x*4+channel]==full->rgba_pixels[std::size_t(y+11)*full->stride+(x+18)*4+channel],"logical mask crop preserves legacy pixels");
+        require(window_cache.coverage(kind,parameters,30,20,{}, {80,50,18,11})==window,"raster window is part of cache identity");
+        require(!window_cache.coverage(kind,parameters,30,20,{}, {-1,50,0,0}),"negative receiver size rejected");
+        require(!window_cache.coverage(kind,parameters,30,20,{}, {80,50,std::numeric_limits<double>::quiet_NaN(),0}),"nonfinite raster origin rejected");
+    }
+}
 int main() {
-    try { blendModes(); trackMattes(); } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
+    try { blendModes(); trackMattes(); logicalMaskRasterContract(); } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
     using namespace creative_suite;
 
     try {

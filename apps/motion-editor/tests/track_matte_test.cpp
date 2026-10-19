@@ -91,7 +91,9 @@ void modelAndPersistence(const QString& root) {
     check(!d.setLayerTrackMatte(null,TrackMatteBinding{1,TrackMatteMode::Alpha})&&!d.setLayerTrackMatte(1,TrackMatteBinding{null,TrackMatteMode::Alpha}),"Null cannot consume or supply matte");
     check(d.moveLayer(1,2)&&d.layers()[0].track_matte->source_id==1,"reorder retains ID binding");
     const auto file=root+"/matte.motion";const auto saved=project(d);Store::save(path(file),saved);const auto encoded=read(file);
-    check(encoded.value("version").toInt()==14&&Store::load(path(file))==saved,"v14 roundtrip");
+    check(encoded.value("version").toInt()==Store::current_format_version&&Store::load(path(file))==saved,"current native matte roundtrip");
+    auto v14=encoded;v14.insert("version",14);write(root+"/v14.motion",v14);
+    check(Store::load(path(root+"/v14.motion"))==saved,"v14 matte migration");
     Store::saveRecovery(path(root+"/recovery"),path(file),"matte",saved);
     check(read(root+"/recovery").value("version").toInt()==1&&Store::loadRecovery(path(root+"/recovery")).document==saved,"recovery wrapper remains v1");
     for(int code=0;code<11;++code) {
@@ -104,7 +106,7 @@ void modelAndPersistence(const QString& root) {
         else if(code==5)matte.insert("source_id",QString::number(null));
         else if(code==6){auto source=layers[2].toObject();source.insert("track_matte",QJsonObject{{"source_id",layer.value("id")},{"mode","alpha"}});layers[2]=source;}
         else if(code==7)matte.insert("unexpected",true);
-        else if(code==8)bad.insert("version",15);
+        else if(code==8)bad.insert("version",Store::current_format_version+1);
         else if(code==9)matte.remove("mode");
         layer.insert("track_matte",code==10?QJsonValue(QJsonArray{}):QJsonValue(matte));layers[0]=layer;bad.insert("layers",layers);
         write(root+"/bad.motion",bad);bool rejected=false;

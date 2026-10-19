@@ -2025,9 +2025,10 @@ int main(int argc, char* argv[])
     auto* redo_action = action(window, "motion-redo-action");
     require(!undo_action->isEnabled() && !redo_action->isEnabled(),
             "a new composition begins with empty Undo and Redo history");
-    require(window.centralWidget()->objectName() == QStringLiteral("motion-composition-viewer") &&
+    require(window.centralWidget()->findChild<QWidget*>(QStringLiteral("motion-composition-viewer")) &&
+                window.centralWidget()->findChild<QWidget*>(QStringLiteral("motion-pen-controls")) &&
                 window.isMaximized(),
-            "the composition workspace replaces the empty state and preserves maximization");
+            "the composition workspace contains the Viewer and local tools and preserves maximization");
     auto* media_pool_dock = findWidget<QDockWidget>(&window, "motion-media-pool-dock");
     auto* inspector_dock = findWidget<QDockWidget>(&window, "motion-inspector-dock");
     auto* timeline_dock = findWidget<QDockWidget>(&window, "motion-timeline-dock");

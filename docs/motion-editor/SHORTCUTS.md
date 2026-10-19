@@ -44,3 +44,7 @@ the gesture rather than cancelling it. No modifiers or global shortcut are added
 ## Customize shortcuts
 
 Open **Settings > Keyboard Shortcuts** to edit an action's key sequence. Changes are applied after confirmation; cancel closes without applying them. The dialog can reset assignments to defaults, and duplicate nonempty shortcuts are rejected. Shortcut assignments are saved in the application's settings.
+
+## Pen tool local keys
+
+In [Pen mode](features/BEZIER_PATHS.md), Enter finishes an open shape or closes a mask; Escape cancels the draft. Backspace removes the last point during creation. Delete removes a selected static point when topology permits. Undo cancels only an active draft and Redo is unavailable during it. There is no new global shortcut.

@@ -5,12 +5,12 @@ mask reference. Editable interchange now accepts `.cscomp` v3 ordered Color/Blur
 stages; no Motion schema change is required. See [contract](../../COMPOSITION_INTERCHANGE.md).
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 14 schema may change before a stable release. This format is separate
+version 15 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 [Pan Behind](../features/PAN_BEHIND.md) persists only confirmed Anchor/Position
 values through existing fields. Its live Viewer/Inspector draft is not document
-data; native v14 and recovery wrapper v1 remain unchanged.
+data; native v15 and recovery wrapper v1 remain unchanged.
 The timeline [parent pick-whip](../features/PARENT_PICK_WHIP.md) likewise saves
 only confirmed parent IDs and binding compensation through existing fields;
 its candidate cache, fixed frame and capture state are never serialized. Hub
@@ -21,12 +21,12 @@ transient. No native, recovery, interchange or Hub format change is introduced.
 
 [Rotation drag](../features/ROTATION_DRAG.md) also persists only confirmed existing
 Rotation bases/keys, including full turns. Its pointer angles, override and
-preview session are transient; native v14/recovery v1 remain unchanged.
+preview session are transient; native v15/recovery v1 remain unchanged.
 
 [Scale drag](../features/SCALE_DRAG.md) persists only confirmed existing X/Y bases
 and curves. Independent edits may materialize the optional Y channel; its copied
 keys count toward the same total-key limit. Controls, clamps, overrides and
-sessions are transient. Native v14/recovery v1 and `.cscomp` v3 are unchanged.
+sessions are transient. Native v15/recovery v1 and `.cscomp` v3 are unchanged.
 
 ## File identity and versioning
 
@@ -35,22 +35,22 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `14`. |
+| `version` | integer | Current schema version is `15`. |
 | `revision` | decimal string | Monotonic saved revision used to reject stale linked writes. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1 through 14. Version 1 text and shape layers
+Motion Studio reads versions 1 through 15. Version 1 text and shape layers
 had no typed content, so they open with the current default text or rectangle content
 for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
-older document writes it as version 14. Versions 1 through 5 load without linked
+older document writes it as version 15. Versions 1 through 5 load without linked
 Image Editor metadata. Motion Studio rejects malformed data, an
 unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
 
-Hub snapshots preserve versions 1–14 and rebase relative media and linked-image
+Hub snapshots preserve versions 1–15 and rebase relative media and linked-image
 references to their original absolute locations. Relative-directory escape
 restrictions are retained. Native save behavior is unchanged and media are not
 bundled. See [Hub backups](../../hub/BACKUPS.md) and the producer/consumer
@@ -117,7 +117,7 @@ Version 2 adds typed content to native Text and Shape layers. A Text layer has
 a `text_content` object with UTF-8 `text` and `font_family`, numeric
 `font_size_pixels` (integer before v7), RGBA byte-array `color`, `alignment` (`left`, `center`, or
 `right`), and integer `box_width` and `box_height`. A Shape layer has a
-`shape_content` object with `primitive` (`rectangle` or `ellipse`), integer
+`shape_content` object with `primitive` (`rectangle`, `ellipse`, or v15 `bezier_path`), integer
 `width` and `height`, RGBA byte-array `fill_color` and `stroke_color`, and
 integer `stroke_width_pixels`. Text boxes and shape dimensions are measured in
 canvas pixels before layer transforms. A zero stroke width disables the shape
@@ -304,7 +304,7 @@ empty. Position, uniform scale, rotation, and their curves remain editable.
 Parenting does not change layer order or local curves. Parent opacity,
 visibility, activity, effects, and masks are not inherited. Pixel-space
 resolution, pose-preserving edits, and pending manual checks are defined in
-[Layer hierarchy](../features/HIERARCHY.md). Hub supports these records through v14 snapshots.
+[Layer hierarchy](../features/HIERARCHY.md). Hub supports these records through v15 snapshots.
 `.cscomp` v3 cannot represent Nulls, parents, or nonidentity compensation, so
 export rejects them with layer-specific issues rather than flattening them.
 
@@ -343,8 +343,8 @@ Pixels are relative to the local center, after initial canvas fit but before
 editable scale/rotation. Local geometry includes `T(-Anchor)` and feeds the
 existing hierarchy/Transform stage. See [Anchor Point](../features/ANCHOR_POINT.md)
 for editing and compensation semantics. Save, autosave and recovery retain these
-fields; the recovery wrapper stays at version 1. Hub accepts native v14, rebases
-existing media fields without changing Anchor or parenting, and rejects v15.
+fields; the recovery wrapper stays at version 1. Hub accepts native v15, rebases
+existing media fields without changing Anchor or parenting, and rejects v16.
 `.cscomp` remains v3 and refuses nonzero base Anchor or nonempty Anchor curves.
 
 ## Version 12 independent scale and affine bindings
@@ -369,7 +369,7 @@ binding. Detached layers may retain either compensation representation.
 All three fields are rejected in declared versions before v12. Versions 1–11
 load without Y/affine overrides and with linking enabled, without resampling
 curves or converting offsets. Save, autosave and recovery preserve the new
-records; recovery wrapper remains v1. Hub accepts 1–14 and rejects 15. See
+records; recovery wrapper remains v1. Hub accepts 1–15 and rejects 16. See
 [Scale axes](../features/SCALE_AXES.md) for editing, matrices and pending checks.
 `.cscomp` v3 accepts scale only when X/Y bases and curves are identical; it
 rejects affine compensation and the existing incompatible features explicitly.
@@ -380,8 +380,8 @@ Optional `blend_mode` is one of `normal`, `multiply`, `screen`, `overlay`, `add`
 `difference`. Missing means Normal; writers omit Normal. Any occurrence before
 v13 is invalid, even `normal`. Unknown strings, non-string values and non-Normal
 Nulls are invalid. Versions 1–12 retain Normal without adding animation data.
-The recovery wrapper remains v1 with the same native payload; Hub accepts v14
-and rejects v15. `.cscomp` v3 refuses non-Normal layers by name/ID. See
+The recovery wrapper remains v1 with the same native payload; Hub accepts v15
+and rejects v16. `.cscomp` v3 refuses non-Normal layers by name/ID. See
 [Blend modes](../features/BLEND_MODES.md) for the transparent accumulation and
 opaque output contract. No application version changes are implied.
 
@@ -396,5 +396,12 @@ cycles are invalid. Validate the entire graph before publishing a loaded documen
 Records do not depend on stack order and may form shared-source chains.
 The source eye state is ordinary `visible` data; only a new editor binding hides
 it atomically. Loading never rewrites eye states. Recovery stays at wrapper v1;
-Hub preserves v14 and refuses v15. `.cscomp` v3 refuses bindings by layer name/ID.
+Hub preserves v15 and refuses v16. `.cscomp` v3 refuses bindings by layer name/ID.
 See [Track Mattes](../features/TRACK_MATTES.md) for timing, pixels and coverage.
+
+## Pen paths (v15)
+
+Native v15 adds optional Bezier shape and mask geometry and complete path
+keyframes. See [Pen paths](../features/BEZIER_PATHS.md#persistence-and-compatibility)
+for records, topology, coordinate spaces and validation. Versions 1–14 contain
+no paths. The recovery wrapper remains v1; Hub accepts v15 and rejects v16.

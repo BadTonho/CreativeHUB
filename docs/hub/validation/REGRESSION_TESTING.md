@@ -1,13 +1,13 @@
 # Hub Regression Testing
 
-Current backup gates save Motion v14 and reject v15. Version-specific sections
+Current backup gates save Motion v15 and reject v16. Version-specific sections
 below retain the records and evidence from earlier deliveries.
 
 Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
-`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion15.
+`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion16.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v14 matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v15 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v15 Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v16 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Motion v13 blend-mode backup coverage
 
@@ -364,3 +364,16 @@ effects/masks and media. It reopens vault and relocated restore with full data
 equality and existing media paths. Both backup gates reject future v15.
 Earlier delivery sections retain their version-specific history. Manual UI and
 platform checks remain pending; see [mattes](../../motion-editor/features/TRACK_MATTES.md).
+
+## Motion v15 Bezier backup coverage
+
+`hub-backup-format-test` saves animated shapes and shared Bezier masks alongside
+previous Motion features, reopens vault/restored documents, checks full equality
+and existing media paths. Current future-version rejection is v16; the v14
+section above describes its historical delivery. Manual checks remain pending.
+
+Windows Release evidence (2026-10-19): both Hub backup gates passed in the
+53/53 affected-suite regression run for Motion Pen paths. The explicit Release
+targets for all four applications built successfully; native Hub UI/platform
+acceptance remains pending. See [Pen verification](../../motion-editor/features/BEZIER_PATHS.md#windows-release-evidence--2026-10-19)
+for the full boundary and separate GPU evidence.

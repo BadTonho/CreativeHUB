@@ -42,6 +42,11 @@ public:
     // Also used by deterministic failure-injection regression.
     void recoverTexturePresentation(bool use_cpu);
 
+    [[nodiscard]] QRectF compositionRect() const {return canvasRect();}
+    void setPathOverlayPainter(std::function<void(QPainter&,QRectF)> painter);
+    void updatePathOverlay();
+    void setPathGestureActive(bool value){path_gesture_active_=value;}
+    [[nodiscard]] bool pathGestureActive() const {return path_gesture_active_;}
     void setComposition(
         model::CanvasSize canvas_size,
         std::optional<QPointF> selected_layer_anchor);
@@ -95,6 +100,8 @@ private:
     void paintBackground(QPainter& painter);
     void paintOverlay(QPainter& painter);
     void recordPaint(bool texture);
+    bool path_gesture_active_=false;
+    std::function<void(QPainter&,QRectF)> path_overlay_;
     GpuCompositionSurface* gpu_surface_ = nullptr;
     PositionDragHandle* position_handle_ = nullptr;
     RotationDragHandle* rotation_handle_ = nullptr;

@@ -3,6 +3,112 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>MotionUiTranslation</name>
+    <message><source>Point</source><translation>Ponto</translation></message>
+    <message>
+        <source>Path size is controlled by its points; masks keep the creation reference size.</source>
+        <translation>O tamanho do caminho é definido pelos pontos; as máscaras mantêm o tamanho de referência da criação.</translation>
+    </message>
+    <message>
+        <source>Pen</source>
+        <translation>Caneta</translation>
+    </message>
+    <message>
+        <source>New Shape</source>
+        <translation>Nova forma</translation>
+    </message>
+    <message>
+        <source>New Path</source>
+        <translation>Novo caminho</translation>
+    </message>
+    <message>
+        <source>Edit Selected Path</source>
+        <translation>Editar caminho selecionado</translation>
+    </message>
+    <message>
+        <source>Finish</source>
+        <translation>Concluir</translation>
+    </message>
+    <message>
+        <source>Close Path</source>
+        <translation>Fechar caminho</translation>
+    </message>
+    <message>
+        <source>Open Path</source>
+        <translation>Abrir caminho</translation>
+    </message>
+    <message>
+        <source>Point X</source>
+        <translation>Ponto X</translation>
+    </message>
+    <message>
+        <source>Point Y</source>
+        <translation>Ponto Y</translation>
+    </message>
+    <message>
+        <source>Incoming X</source>
+        <translation>Entrada X</translation>
+    </message>
+    <message>
+        <source>Incoming Y</source>
+        <translation>Entrada Y</translation>
+    </message>
+    <message>
+        <source>Outgoing X</source>
+        <translation>Saída X</translation>
+    </message>
+    <message>
+        <source>Outgoing Y</source>
+        <translation>Saída Y</translation>
+    </message>
+    <message>
+        <source>Corner</source>
+        <translation>Canto</translation>
+    </message>
+    <message>
+        <source>Smooth</source>
+        <translation>Suavizar</translation>
+    </message>
+    <message>
+        <source>Insert Point</source>
+        <translation>Inserir ponto</translation>
+    </message>
+    <message>
+        <source>Remove Point</source>
+        <translation>Remover ponto</translation>
+    </message>
+    <message>
+        <source>Toggle Path Keyframe</source>
+        <translation>Adicionar/remover keyframe do caminho</translation>
+    </message>
+    <message>
+        <source>Remove Animation Keeping Current Frame</source>
+        <translation>Remover animação mantendo o quadro atual</translation>
+    </message>
+    <message>
+        <source>Path</source>
+        <translation>Caminho</translation>
+    </message>
+    <message>
+        <source>Bezier Mask</source>
+        <translation>Máscara Bézier</translation>
+    </message>
+    <message>
+        <source>Path Progress (%)</source>
+        <translation>Progresso do caminho (%)</translation>
+    </message>
+    <message>
+        <source>Mask Path #%1</source>
+        <translation>Caminho da máscara #%1</translation>
+    </message>
+    <message>
+        <source>The path could not be edited. Check the Motion Studio log for details.</source>
+        <translation>Não foi possível editar o caminho. Consulte o log do Motion Studio para obter detalhes.</translation>
+    </message>
+    <message>
+        <source>Click for corners; drag for curves. Enter finishes, Escape cancels. Animated paths keep their point count.</source>
+        <translation>Clique para criar cantos; arraste para criar curvas. Enter conclui e Escape cancela. Caminhos animados mantêm a quantidade de pontos.</translation>
+    </message>
+
     <message>
         <source>Track Matte</source>
         <translation>Matte de camada</translation>

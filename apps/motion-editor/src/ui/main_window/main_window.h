@@ -45,6 +45,7 @@ namespace creative_suite::media { struct MediaImportBatchResult; }
 namespace motion::ui {
 
 class CompositionViewer;
+class PenTool;
 class InspectorWidget;
 class MediaPoolWidget;
 class MotionWorkspace;
@@ -58,6 +59,7 @@ struct AudioKeyframeGenerationResult;
 struct MotionExportResult;
 
 class MainWindow final : public QMainWindow {
+    friend class PenTool;
 public:
     explicit MainWindow(QWidget* parent = nullptr,
                         std::filesystem::path recovery_root = {},
@@ -256,6 +258,7 @@ private:
     QDockWidget* timeline_dock_ = nullptr;
     QDockWidget* graph_editor_dock_ = nullptr;
     MediaPoolWidget* media_pool_ = nullptr;
+    PenTool* pen_tool_ = nullptr;
     CompositionViewer* viewer_ = nullptr;
     InspectorWidget* inspector_ = nullptr;
     MotionWorkspace* workspace_ = nullptr;
@@ -300,6 +303,7 @@ private:
             model::EffectParameterProperty::GaussianBlurRadius;
         std::optional<model::AnchorProperty> anchor_property;
         std::optional<model::ScaleAxis> scale_axis;
+        std::optional<model::PathTarget> path_target;
     };
     std::optional<CurveSelection> curve_selection_;
     struct PanBehindGesture {

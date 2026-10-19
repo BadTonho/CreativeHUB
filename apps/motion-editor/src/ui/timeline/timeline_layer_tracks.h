@@ -14,11 +14,19 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <span>
 
 class QScrollArea;
 
 namespace motion::ui {
 
+struct TimelinePathTrack {
+    model::PathTarget target;
+    QString name;
+    model::PathAnimationStorage animation;
+    [[nodiscard]] std::span<const model::PathKeyframe> keys() const noexcept {return animation?std::span<const model::PathKeyframe>{animation->keys}:std::span<const model::PathKeyframe>{};}
+    std::int64_t start=0,duration=0;
+};
 struct TimelineLayerRow {
     model::LayerId id = 0;
     model::LayerKind kind = model::LayerKind::Image;
@@ -32,6 +40,7 @@ struct TimelineLayerRow {
     model::AnchorKeyframes anchor_keyframes;
     std::optional<model::ScaleChannel> scale_y;
     model::LayerId parent_id = 0;
+    std::vector<TimelinePathTrack> paths;
 };
 
 class TimelineLayerTracks final : public QWidget {
@@ -57,6 +66,8 @@ public:
     void cancelParentPickWhip();
     [[nodiscard]] bool parentPickWhipActive() const noexcept;
 
+    void setPathKeyframeHandlers(std::function<void(model::LayerId,model::PathTarget,std::int64_t)> selected,
+        std::function<bool(model::LayerId,model::PathTarget,std::int64_t,std::int64_t)> moved);
     void setMediaDropHandler(
         std::function<void(const std::filesystem::path&, std::int64_t, model::LayerId)> handler);
     void setLayerSelectedHandler(std::function<void(model::LayerId)> handler);

@@ -1,4 +1,5 @@
 #include "motion_document_store.h"
+#include "path_serialization.h"
 
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/media/media_library.h>
@@ -295,6 +296,7 @@ QString shapeKindName(ShapeKind shape)
     switch (shape) {
     case ShapeKind::Rectangle: return QStringLiteral("rectangle");
     case ShapeKind::Ellipse: return QStringLiteral("ellipse");
+    case ShapeKind::BezierPath: return QStringLiteral("bezier_path");
     }
     return {};
 }
@@ -303,6 +305,7 @@ ShapeKind parseShapeKind(const QString& value, const std::filesystem::path& path
 {
     if (value == QLatin1String("rectangle")) return ShapeKind::Rectangle;
     if (value == QLatin1String("ellipse")) return ShapeKind::Ellipse;
+    if (value == QLatin1String("bezier_path")) return ShapeKind::BezierPath;
     fail(MotionDocumentErrorCode::InvalidValue, path,
          QStringLiteral("The shape layer has an unsupported primitive."));
 }
@@ -784,6 +787,7 @@ QJsonObject writeLayer(const CompositionLayer& layer,
         content.insert(QStringLiteral("fill_color"), writeColor(shape.fill_color));
         content.insert(QStringLiteral("stroke_color"), writeColor(shape.stroke_color));
         content.insert(QStringLiteral("stroke_width_pixels"), shape.stroke_width_pixels);
+        if(shape.path)content.insert("path",writePathAnimation(*shape.path));
         object.insert(QStringLiteral("shape_content"), content);
     }
     object.insert(QStringLiteral("effects"), writeEffects(layer.effects));
@@ -862,6 +866,10 @@ CompositionLayer parseLayer(const QJsonValue& value,
     }
     layer.id = requiredUInt64(object, "id", document_path);
     layer.kind = parseLayerKind(requiredString(object, "kind", document_path), document_path);
+    const auto path_content=object.value("shape_content").toObject();
+    if(path_content.contains("path")||path_content.value("primitive")=="bezier_path") {
+        if(document_version<15||layer.kind!=LayerKind::Shape)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Bezier content requires a Shape layer and format version 15."));
+    }
     if(object.contains("blend_mode")) {
         if(document_version<13)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Blend modes require document version 13."));
         const auto name=requiredString(object,"blend_mode",document_path).toStdString();
@@ -1017,6 +1025,10 @@ CompositionLayer parseLayer(const QJsonValue& value,
         shape.fill_color = parseColor(content.value(QStringLiteral("fill_color")), document_path);
         shape.stroke_color = parseColor(content.value(QStringLiteral("stroke_color")), document_path);
         shape.stroke_width_pixels = requiredInt(content, "stroke_width_pixels", document_path);
+        if(content.contains("path") || shape.shape==ShapeKind::BezierPath) {
+            if(document_version<15)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Bezier paths require version 15."));
+            try {shape.path=readPathAnimation(content.value("path"));}catch(const std::exception& e){fail(MotionDocumentErrorCode::InvalidValue,document_path,QString::fromUtf8(e.what()));}
+        }
         layer.content = shape;
     }
     if (document_version >= 4) {
@@ -1111,7 +1123,20 @@ MotionProjectData parseDocument(const QJsonObject& root,
 
     if(root.contains("masks")) {
         if(version<8 || !root.value("masks").isArray())fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Masks require version 8."));
-        try {result.masks=creative_suite::composition_exchange::parseMasksJson(root.value("masks").toArray());}
+        try {
+            auto array=root.value("masks").toArray();
+            if(array.size()>4096)throw std::invalid_argument("Too many masks");
+            for(auto value:array){
+                if(!value.isObject())throw std::invalid_argument("Invalid mask object");
+                auto object=value.toObject();const bool path=object.contains("path")||object.value("kind")=="bezier_path";
+                if(path && version<15)throw std::invalid_argument("Bezier masks require version 15");
+                if(path && object.value("kind")!="bezier_path")throw std::invalid_argument("Concurrent primitive and path mask");
+                if(path)object.insert("kind","rectangle");
+                auto parsed=creative_suite::composition_exchange::parseMasksJson(QJsonArray{object});
+                model::Mask mask(parsed.front());if(path)mask.path=readPathAnimation(value.toObject().value("path"),true);
+                result.masks.push_back(std::move(mask));
+            }
+        }
         catch(const std::exception& e){fail(MotionDocumentErrorCode::InvalidValue,document_path,QString::fromUtf8(e.what()));}
     }
     const auto layers = requiredArray(root, "layers", document_path);
@@ -1175,7 +1200,12 @@ QJsonObject encodeDocument(const MotionProjectData& document,
         layers.append(writeLayer(layer, document_path));
     }
     root.insert(QStringLiteral("layers"), layers);
-    if(!document.masks.empty())root.insert("masks",creative_suite::composition_exchange::masksJson(document.masks));
+    if(!document.masks.empty()) {
+        QJsonArray masks;for(const auto& mask:document.masks){
+            auto object=creative_suite::composition_exchange::masksJson({static_cast<const creative_suite::composition_exchange::Mask&>(mask)}).first().toObject();
+            if(mask.path){object.insert("kind","bezier_path");object.insert("path",writePathAnimation(*mask.path));}masks.append(object);
+        }root.insert("masks",masks);
+    }
     return root;
 }
 

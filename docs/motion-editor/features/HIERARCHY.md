@@ -13,7 +13,7 @@ implemented separately; see [Anchor Point](ANCHOR_POINT.md).
 The [Pan Behind](PAN_BEHIND.md) pivot gesture uses the full inherited affine
 matrix and preserves layer/descendant geometry while retaining parent bindings.
 
-Current documents are written as v14 for [Track Mattes](TRACK_MATTES.md).
+Current documents are written as v15 for [Pen paths](BEZIER_PATHS.md).
 The feature fields and historical version-specific evidence below remain applicable.
 
 ## Editing
@@ -140,3 +140,9 @@ Record the build, OS and graphics backend when performing these checks later:
 
 These checks and representative performance measurements are pending; automated
 coverage alone does not establish native platform or release acceptance.
+
+[Pen paths](BEZIER_PATHS.md) keep the resolved local/world transform independent
+of raster bounds. A path raster origin is applied only to source pixels;
+changing points or raster size does not rewrite parenting, Anchor or the
+geometry of descendants. Shared source/effect masks retain a logical receiver
+reference while Transform masks remain in composition space.

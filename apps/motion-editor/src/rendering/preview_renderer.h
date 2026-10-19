@@ -70,6 +70,7 @@ struct PreviewRequest {
     // subsequent copies share immutable curves, media references and relations.
     std::shared_ptr<const PreviewSceneSnapshot> scene;
     std::shared_ptr<const model::TrackMatteGraph> track_mattes;
+    std::optional<model::PathOverride> path_override;
     std::optional<model::LayerPositionOverride> position_override;
     std::optional<model::LayerRotationOverride> rotation_override;
     std::optional<model::LayerScaleOverride> scale_override;

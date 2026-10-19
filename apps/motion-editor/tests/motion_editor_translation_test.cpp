@@ -85,6 +85,10 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    if(!check(motion::ui::MotionUiTranslation::tr("Pen")==QStringLiteral("Caneta")&&
+              motion::ui::MotionUiTranslation::tr("Edit Selected Path")==QStringLiteral("Editar caminho selecionado")&&
+              motion::ui::MotionUiTranslation::tr("Path Progress (%)")==QStringLiteral("Progresso do caminho (%)")&&
+              motion::ui::MotionUiTranslation::tr("Mask Path #%1").arg(42)==QStringLiteral("Caminho da máscara #42"),"Pen/path instructions use Portuguese"))return 1;
     {
         motion::ui::MainWindow window(nullptr, filesystemPath(recovery_storage.path()),
                                       "translation-test");
@@ -226,6 +230,7 @@ int main(int argc, char* argv[])
                    motion::ui::MotionUiTranslation::tr("Drag to choose a parent. Release outside a layer to cancel.") ==
                        QStringLiteral("Drag to choose a parent. Release outside a layer to cancel."),
                "Pick-whip labels and instructions retain the English source text.")) return 1;
+    if(!check(motion::ui::MotionUiTranslation::tr("Pen")==QStringLiteral("Pen")&&motion::ui::MotionUiTranslation::tr("Remove Animation Keeping Current Frame")==QStringLiteral("Remove Animation Keeping Current Frame"),"Pen/path English fallback"))return 1;
     preferences.clear();
     preferences.sync();
 

@@ -143,12 +143,14 @@ struct VisualTimelineRow {
         Property,
         EffectsGroup,
         EffectProperty,
+        PathProperty,
     };
     std::size_t layer_index = 0;
     Kind kind = Kind::Layer;
     std::optional<TrackProperty> property;
     std::size_t effect_index = 0;
     std::optional<model::EffectParameterProperty> effect_property;
+    std::size_t path_index=0;
 };
 class LayerRowsCanvas final : public QWidget {
 public:
@@ -286,6 +288,8 @@ public:
             if (anchor_keyframe_move) (void)anchor_keyframe_move(id,property == TrackProperty::AnchorX ? model::AnchorProperty::X : model::AnchorProperty::Y,from,to);
         } else if (keyframe_move) (void)keyframe_move(id,static_cast<creative_suite::animation::TransformProperty>(property),from,to);
     }
+    std::function<void(model::LayerId,model::PathTarget,std::int64_t)> path_selected;
+    std::function<bool(model::LayerId,model::PathTarget,std::int64_t,std::int64_t)> path_moved;
     std::function<void(model::LayerId, creative_suite::animation::TransformProperty, std::int64_t)> keyframe_selected;
     std::function<bool(model::LayerId, creative_suite::animation::TransformProperty, std::int64_t, std::int64_t)>
         keyframe_move;
@@ -363,7 +367,7 @@ protected:
             const bool group_row = transform_group || effects_group;
             const bool property_track =
                 visual.kind == VisualTimelineRow::Kind::Property ||
-                visual.kind == VisualTimelineRow::Kind::EffectProperty;
+                visual.kind == VisualTimelineRow::Kind::EffectProperty || visual.kind == VisualTimelineRow::Kind::PathProperty;
             const QRect row_rect(0, top, width(), kTimelineRowHeight);
             const bool selected = row.id == selected_layer_id_;
             QColor row_background;
@@ -476,6 +480,9 @@ protected:
                                  transform_group
                                      ? MotionUiTranslation::tr("Transform")
                                      : MotionUiTranslation::tr("Effects"));
+            } else if(visual.kind==VisualTimelineRow::Kind::PathProperty){
+                const auto& path=row.paths[visual.path_index];const int center=top+kTimelineRowHeight/2;painter.setPen(QColor(255,200,80));painter.drawText(QRect(68,top,kTimelineHeaderWidth-74,kTimelineRowHeight),Qt::AlignLeft|Qt::AlignVCenter,path.name);
+                for(const auto& key:path.keys()){auto frame=key.frame;if(interaction_mode_==InteractionMode::MovePathKeyframe&&interaction_layer_id_==row.id&&interaction_path_index_==visual.path_index&&frame==interaction_keyframe_frame_)frame=preview_value_;const auto composition=path.start+frame;if(composition<view_start_frame_||composition>mapping.viewEndFrame())continue;const int x=mapping.xForFrame(composition);QPolygon diamond;diamond<<QPoint(x,center-6)<<QPoint(x+6,center)<<QPoint(x,center+6)<<QPoint(x-6,center);painter.setBrush(QColor(255,200,80));painter.drawPolygon(diamond);}
             } else if (visual.kind == VisualTimelineRow::Kind::Property) {
                 const auto property = *visual.property;
                 painter.setPen(propertyColor(property));
@@ -612,6 +619,11 @@ protected:
         if (layer_selected) layer_selected(row.id);
         interaction_layer_id_ = row.id;
         press_position_ = position;
+        if(visual.kind==VisualTimelineRow::Kind::PathProperty){
+            const auto& path=row.paths[visual.path_index];const int center=row_index*kTimelineRowHeight+kTimelineRowHeight/2;
+            for(const auto& key:path.keys())if(std::abs(position.x()-viewMapping().xForFrame(path.start+key.frame))<=8&&std::abs(position.y()-center)<=9){interaction_mode_=InteractionMode::MovePathKeyframe;interaction_path_index_=visual.path_index;interaction_keyframe_frame_=preview_value_=key.frame;event->accept();return;}
+            if(path_selected&&!path.keys().empty())path_selected(row.id,path.target,std::max<std::int64_t>(0,frameAtX(position.x())-path.start));interaction_mode_=InteractionMode::None;interaction_layer_id_=0;event->accept();return;
+        }
         if (visual.kind == VisualTimelineRow::Kind::Property) {
             const auto property = *visual.property;
             const int lane_center_y = row_index * kTimelineRowHeight + kTimelineRowHeight / 2;
@@ -768,6 +780,8 @@ protected:
                     target_row_ = static_cast<int>(
                         visual_rows_[static_cast<std::size_t>(visual_index)].layer_index);
                 }
+            } else if(interaction_mode_==InteractionMode::MovePathKeyframe){
+                if(const auto* row=findRow(interaction_layer_id_);row&&interaction_path_index_<row->paths.size()){const auto& path=row->paths[interaction_path_index_];preview_value_=std::clamp(frameAtX(x)-path.start,std::int64_t(0),path.duration-1);}
             } else if (interaction_mode_ == InteractionMode::MoveKeyframe ||
                        interaction_mode_ == InteractionMode::MoveEffectKeyframe) {
                 if (const auto* row = findRow(interaction_layer_id_);
@@ -849,6 +863,8 @@ protected:
             layer_move(id, value);
         } else if (mode == InteractionMode::Resize && moved && layer_resize) {
             layer_resize(id, value);
+        } else if(mode==InteractionMode::MovePathKeyframe){
+            if(const auto* row=findRow(id);row&&interaction_path_index_<row->paths.size()){const auto path=row->paths[interaction_path_index_];const auto final=std::clamp(frameAtX(event->position().toPoint().x())-path.start,std::int64_t(0),path.duration-1);if(moved&&final!=old_keyframe){if(path_moved)(void)path_moved(id,path.target,old_keyframe,final);}else if(path_selected)path_selected(id,path.target,old_keyframe);}
         } else if (mode == InteractionMode::MoveKeyframe) {
             if (moved && value != old_keyframe) {
                 moveTrackKey(id, property, old_keyframe, value);
@@ -954,6 +970,7 @@ private:
         Reorder,
         MoveKeyframe,
         MoveEffectKeyframe,
+        MovePathKeyframe,
     };
 
     [[nodiscard]] int rowAtY(int y) const noexcept
@@ -980,6 +997,7 @@ private:
             const auto layer_id = rows_[index].id;
             visual_rows_.push_back({index, VisualTimelineRow::Kind::Layer, std::nullopt});
             if (!expanded_layers_.contains(layer_id)) continue;
+            for(std::size_t i=0;i<rows_[index].paths.size();++i){VisualTimelineRow path{index,VisualTimelineRow::Kind::PathProperty};path.path_index=i;visual_rows_.push_back(path);}
             visual_rows_.push_back(
                 {index, VisualTimelineRow::Kind::TransformGroup, std::nullopt});
             if (expanded_transform_groups_.contains(layer_id)) {
@@ -1129,6 +1147,7 @@ private:
     model::LayerId selected_layer_id_ = 0;
     InteractionMode interaction_mode_ = InteractionMode::None;
     model::LayerId interaction_layer_id_ = 0;
+    std::size_t interaction_path_index_=0;
     TrackProperty interaction_property_ = TrackProperty::PositionX;
     std::size_t interaction_effect_index_ = 0;
     EffectParameterProperty interaction_effect_property_ =
@@ -1253,6 +1272,7 @@ void TimelineLayerTracks::setAnchorCurveSegmentSelectedHandler(std::function<voi
 
 void TimelineLayerTracks::setScaleAxisKeyframeSelectedHandler(std::function<void(model::LayerId, model::ScaleAxis, std::int64_t)> handler)
 { impl_->canvas->scale_axis_keyframe_selected = std::move(handler); }
+void TimelineLayerTracks::setPathKeyframeHandlers(std::function<void(model::LayerId,model::PathTarget,std::int64_t)> selected,std::function<bool(model::LayerId,model::PathTarget,std::int64_t,std::int64_t)> moved){impl_->canvas->path_selected=std::move(selected);impl_->canvas->path_moved=std::move(moved);}
 void TimelineLayerTracks::setScaleAxisKeyframeMoveHandler(std::function<bool(model::LayerId, model::ScaleAxis, std::int64_t, std::int64_t)> handler)
 { impl_->canvas->scale_axis_keyframe_move = std::move(handler); }
 void TimelineLayerTracks::setScaleAxisCurveSegmentSelectedHandler(std::function<void(model::LayerId, model::ScaleAxis, std::int64_t)> handler)

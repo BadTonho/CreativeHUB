@@ -426,8 +426,24 @@ void testMotionDocuments(const QString& root) {
     const auto restored_matte=Store::load(fsPath(matte_backup.restored));
     CS_TEST_CHECK(restored_matte==project && !restored_matte.layers.back().visible);
     CS_TEST_CHECK(std::filesystem::exists(restored_matte.layers.front().source_path));
+    PathGeometry geometry{{{{-70,-20},{},{20,-10}},{{80,-20},{-20,10},{}},{{0,45},{},{}}},true};
+    LayerId path_id=0;
+    CS_TEST_CHECK(hierarchy.createPathLayer(geometry,5,&path_id));
+    CS_TEST_CHECK(hierarchy.setPathKeyframe({path_id,false},5));
+    auto moved=geometry;moved.nodes[0].point.x-=30;
+    CS_TEST_CHECK(hierarchy.setPathAtFrame({path_id,false},moved,25));
+    PathGeometry coverage{{{{.1,.1},{},{}},{{.9,.1},{},{}},{{.5,.9},{},{}}},true};
+    const auto path_mask=hierarchy.createPathMask(path_id,-2,coverage);
+    CS_TEST_CHECK(path_mask && hierarchy.setPathKeyframe({path_mask,true},12));
+    project.layers=hierarchy.layers();project.masks=hierarchy.masks();
+    const auto bezier_path=QDir(QFileInfo(assets).absolutePath()).filePath("bezier.motion");
+    Store::save(fsPath(bezier_path),project);
+    const auto bezier_backup=backup(QDir(root).filePath("motion-bezier-v15"),bezier_path);
+    CS_TEST_CHECK(Store::load(fsPath(bezier_backup.vault))==project);
+    CS_TEST_CHECK(Store::load(fsPath(bezier_backup.restored))==project);
+    CS_TEST_CHECK(std::filesystem::exists(Store::load(fsPath(bezier_backup.restored)).layers.front().source_path));
     auto future=QJsonDocument::fromJson(readBytes(blend_path)).object();future.insert("version",Store::current_format_version+1);
-    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v15.motion");writeBytes(future_path,QJsonDocument(future).toJson());
+    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v16.motion");writeBytes(future_path,QJsonDocument(future).toJson());
     creative_suite::hub::BackupManager manager(QDir(root).filePath("future-vault"));QString rejected_path,error;
     CS_TEST_CHECK(!manager.createBackup(future_path,&rejected_path,&error)&&!error.isEmpty());
 

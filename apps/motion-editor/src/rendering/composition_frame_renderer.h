@@ -1,6 +1,7 @@
 #pragma once
 
 #include "preview_renderer.h"
+#include "path_rasterizer.h"
 
 #include <creative_suite/media/video_playback.h>
 #include <creative_suite/composition/opengl_frame_compositor.h>
@@ -103,6 +104,9 @@ private:
         std::optional<creative_suite::composition_exchange::Presentation> presentation;
         model::CanvasSize canvas{};
         creative_suite::media::RgbaFramePtr frame;
+        std::optional<PathRaster> path_raster;
+        std::optional<model::PathGeometry> path_geometry;
+        double path_margin=0;
     };
     std::map<model::LayerId, CachedContentFrame> content_frames_;
     bool record_preview_metrics_ = true;

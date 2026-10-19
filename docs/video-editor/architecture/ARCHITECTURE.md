@@ -116,3 +116,5 @@ GPU use. The decoder remains separate from the 256 MiB known session budget.
 No application input selection, dependency, format or version changes. See the
 [contract](../gpu/VULKAN_DECODE_PROTOTYPE.md) and
 [4K evidence](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md).
+
+Shared primitive-mask coverage accepts an optional logical receiver/raster origin for Motion Bezier rasters. Video keeps default arguments and existing pixels, UI and document format; composition/exchange/mask consumer regressions protect this maintenance boundary.

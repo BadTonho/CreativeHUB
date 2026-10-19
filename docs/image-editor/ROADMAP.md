@@ -460,3 +460,5 @@ Shared CPU/OpenGL gain an additive alpha/luma image operation for Motion;
 Vulkan refuses it explicitly. This application gains no matte UI or persisted
 fields. Its existing composition/raster, masks, preview/UI and export gates
 protect unchanged operations and defaults. See [contracts and pending acceptance](../motion-editor/features/TRACK_MATTES.md).
+
+Shared logical mask-raster maintenance for Motion Bezier paths: existing composition, `creative-suite-image-editor-raster`, `creative-suite-image-editor-masks`, UI and export suites protect unchanged defaults. No Image path control or format field is added; native acceptance remains separate.

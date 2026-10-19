@@ -42,22 +42,31 @@ inline ShapeMaskParameters evaluateShapeMask(const ShapeMaskParameters& base, co
     for(std::size_t i=0;i<5;++i)setShapeMaskValue(p,i,animation::evaluateScalar(shapeMaskValue(base,i),keys[i],frame));
     return p;
 }
+// Optional raster window in the receiver's stable logical pixel space.
+// Zero logical dimensions preserve the legacy output-sized coordinate system.
+struct MaskRasterSpace {
+    int logical_width=0, logical_height=0;
+    double origin_x=0, origin_y=0;
+    friend bool operator==(const MaskRasterSpace&,const MaskRasterSpace&)=default;
+};
 // Evaluation-owned cache: at most four geometries / 64 MiB, never frame history.
 // Immutable RGBA coverage uses the red channel; VIEW shows RGB with opaque alpha.
 class ShapeMaskRasterCache {
-    struct Entry { ShapeMaskKind type; ShapeMaskParameters parameters; media::VideoFramePtr frame; };
+    struct Entry { ShapeMaskKind type; ShapeMaskParameters parameters; media::VideoFramePtr frame; MaskRasterSpace space; };
     std::vector<Entry> entries_;
     std::size_t bytes_ = 0;
 public:
     static constexpr std::size_t maximum_bytes = 64ULL * 1024 * 1024;
     [[nodiscard]] media::VideoFramePtr coverage(ShapeMaskKind type, const ShapeMaskParameters& p,
-        int width, int height, const std::function<bool()>& cancel = {}) {
+        int width, int height, const std::function<bool()>& cancel = {}, MaskRasterSpace space = {}) {
         if (cancel && cancel()) return {};
-        if(!validShapeMask(p))return {};
+        if(!validShapeMask(p)||space.logical_width<0||space.logical_height<0||!std::isfinite(space.origin_x)||!std::isfinite(space.origin_y))return {};
+        const auto logical_width=space.logical_width?space.logical_width:width;
+        const auto logical_height=space.logical_height?space.logical_height:height;
         if ((type != ShapeMaskKind::Rectangle && type != ShapeMaskKind::Ellipse) || width <= 0 || height <= 0 || width > 16384 || height > 16384)
             return {};
         for (const auto& e : entries_)
-            if (e.type == type && e.parameters == p && e.frame->width == width && e.frame->height == height)
+            if (e.type == type && e.parameters == p && e.frame->width == width && e.frame->height == height && e.space==space)
                 return e.frame;
         const auto bytes = static_cast<std::size_t>(width) * height * 4;
         if (bytes > maximum_bytes) return {};
@@ -65,14 +74,14 @@ public:
             std::vector<std::uint8_t>(bytes)});
         const auto angle = p.rotation * std::numbers::pi / 180.0;
         const auto c = std::cos(angle), s = std::sin(angle);
-        const auto rx = p.width * width / 2, ry = p.height * height / 2;
-        const auto soft = p.soft_edge * std::min(width,height);
+        const auto rx = p.width * logical_width / 2, ry = p.height * logical_height / 2;
+        const auto soft = p.soft_edge * std::min(logical_width,logical_height);
         for (int y=0; y<height; ++y) {
             if (cancel && cancel()) return {};
             for (int x=0; x<width; ++x) {
                 double coverage = 0;
                 if (rx > 0 && ry > 0) for (double oy : {0.25,0.75}) for (double ox : {0.25,0.75}) {
-                    const auto dx=x+ox-p.center_x*width, dy=y+oy-p.center_y*height;
+                    const auto dx=x+ox+space.origin_x-p.center_x*logical_width, dy=y+oy+space.origin_y-p.center_y*logical_height;
                     const auto px=c*dx+s*dy, py=-s*dx+c*dy;
                     double distance;
                     if (type == ShapeMaskKind::Ellipse)
@@ -95,7 +104,7 @@ public:
         while (!entries_.empty() && (entries_.size()>=4 || bytes_+bytes>maximum_bytes)) {
             bytes_-=entries_.front().frame->rgba_pixels.size(); entries_.erase(entries_.begin());
         }
-        bytes_+=bytes; entries_.push_back({type,p,frame});
+        bytes_+=bytes; entries_.push_back({type,p,frame,space});
         return frame;
     }
 };

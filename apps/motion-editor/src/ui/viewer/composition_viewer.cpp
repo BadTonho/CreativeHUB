@@ -99,7 +99,7 @@ protected:
         if (!available()) return;
         auto frame = owner_->preview_frame_;
         if (frame.valid() && owner_->frame_validator_ && !owner_->frame_validator_(frame) &&
-            !((owner_->scaleDragActive() || owner_->positionDragActive() || owner_->rotationDragActive()) && !frame.gesture_session)) {
+            !((owner_->pathGestureActive() || owner_->scaleDragActive() || owner_->positionDragActive() || owner_->rotationDragActive()) && !frame.gesture_session)) {
             if (owner_->rendered_frame_paint_pending_)
                 diagnostics::PerformanceMetrics::instance().recordStaleResult(frame.generation);
             owner_->clearPreviewFrame();
@@ -535,6 +535,8 @@ void CompositionViewer::paintBackground(QPainter& painter) {
     painter.setBrush(kCanvasColor);
     painter.drawRect(canvas);
 }
+void CompositionViewer::setPathOverlayPainter(std::function<void(QPainter&,QRectF)> painter){path_overlay_=std::move(painter);updatePathOverlay();}
+void CompositionViewer::updatePathOverlay(){update();if(gpu_surface_)gpu_surface_->update();}
 void CompositionViewer::paintOverlay(QPainter& painter) {
     const auto canvas_rect = canvasRect();
     if (canvas_rect.isEmpty()) return;
@@ -546,6 +548,7 @@ void CompositionViewer::paintOverlay(QPainter& painter) {
     painter.drawText(QRectF(16.0, 12.0, width() - 32.0, 20.0),
         Qt::AlignLeft | Qt::AlignVCenter,
         MotionUiTranslation::tr("%1 x %2 px").arg(canvas_size_.width).arg(canvas_size_.height));
+    if(path_overlay_){path_overlay_(painter,canvas_rect);return;}
     if (scale_handle_) scale_handle_->paint(painter);
     if (rotation_handle_) rotation_handle_->paint(painter);
     if (position_handle_) position_handle_->paint(painter);
@@ -571,7 +574,7 @@ void CompositionViewer::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     paintBackground(painter);
     if (preview_frame_.valid() && frame_validator_ && !frame_validator_(preview_frame_) &&
-        !((scaleDragActive() || positionDragActive() || rotationDragActive()) && !preview_frame_.gesture_session)) {
+        !((pathGestureActive() || scaleDragActive() || positionDragActive() || rotationDragActive()) && !preview_frame_.gesture_session)) {
         if (rendered_frame_paint_pending_)
             diagnostics::PerformanceMetrics::instance().recordStaleResult(preview_frame_.generation);
         clearPreviewFrame();

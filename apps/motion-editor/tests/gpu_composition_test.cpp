@@ -1,5 +1,6 @@
 #include "rendering/composition_frame_renderer.h"
 #include "rendering/preview_renderer.h"
+#include "rendering/preview_scene_builder.h"
 #include "diagnostics/performance_metrics.h"
 #include "settings/gpu_composition_preferences.h"
 
@@ -342,6 +343,25 @@ int main(int argc, char* argv[])
         const auto masked_metrics=metrics.takeSnapshotAndReset();
         require(masked_metrics&&(!gpu_backend_available || (masked_metrics->gpu_composition_frames==1&&masked_metrics->gpu_composition_fallbacks==0)),
             "native affine masked preview cannot silently pass through CPU fallback");
+        motion::model::CompositionDocument paths(160,90,{30,1});motion::model::LayerId path_id=0;
+        motion::model::PathGeometry geometry{{{{-50,-25},{},{20,-10}},{{50,-25},{-20,-10},{}},{{40,25},{},{-15,8}},{{-40,25},{15,8},{}}},true};
+        require(paths.createPathLayer(geometry,0,&path_id),"GPU path fixture");
+        require(paths.setLayerAnchorPoint(path_id,{10,-5})&&paths.setLayerScaleAtFrame(path_id,1.1,.75,0)&&paths.setLayerRotationAtFrame(path_id,21,0),"GPU path affine geometry");
+        require(paths.setLayerEffects(path_id,{motion::model::ColorAdjustmentEffect{true,5,110,90},motion::model::GaussianBlurEffect{true,1.25}}),"GPU path effects");
+        motion::model::PathGeometry coverage{{{{.1,.1},{},{.1,-.05}},{{.9,.1},{-.1,-.05},{}},{{.8,.9},{},{}},{{.2,.9},{},{}}},true};
+        const auto path_mask=paths.createPathMask(path_id,-2,coverage);
+        require(path_mask&&paths.associateMask(path_id,-1,path_mask)&&paths.associateMask(path_id,0,path_mask),"GPU path shared masks");
+        auto parameters=paths.findMask(path_mask)->parameters;parameters.soft_edge=.04;require(paths.setMaskParameters(path_mask,parameters),"GPU Bezier feather");
+        motion::ui::PreviewRequest path_request;path_request.canvas_size=paths.canvasSize();path_request.frame_rate=paths.frameRate();path_request.hierarchy=std::make_shared<const motion::model::LayerTransformHierarchy>(paths.canvasSize(),paths.layers());path_request.masks=std::make_shared<const std::vector<motion::model::Mask>>(paths.masks());motion::ui::preparePreviewLayers(path_request,paths.layers(),{});path_request.freezeScene();
+        auto candidate=geometry;candidate.nodes[0].point.x-=15.5;path_request.path_override=motion::model::PathOverride{{path_id,false},std::make_shared<const motion::model::PathGeometry>(candidate)};
+        QObject path_receiver;creative_suite::media::RgbaFramePtr path_frame;std::uint64_t path_generation=0;
+        motion::ui::PreviewRenderer path_renderer(&path_receiver,[&](std::uint64_t generation,motion::ui::PreviewRequestMode,std::uint64_t,creative_suite::media::RgbaFramePtr frame){path_generation=generation;path_frame=std::move(frame);},{},&metrics,true,surface.get());
+        metrics.reset();path_request.gesture_session=500;const auto wanted_path=path_renderer.submit(path_request,motion::ui::PreviewRequestMode::Gesture);require(waitFor([&]{return path_generation==wanted_path;})&&path_frame,"GPU Bezier override frame completes");
+        motion::ui::CompositionFrameRenderer path_cpu(false);const auto path_reference=path_cpu.render(path_request);require(path_reference&&path_reference->rgba_pixels.size()==path_frame->rgba_pixels.size(),"Bezier CPU frame");
+        for(std::size_t i=0;i<path_frame->rgba_pixels.size();++i)require(std::abs(int(path_frame->rgba_pixels[i])-int(path_reference->rgba_pixels[i]))<=(i%4==3?0:2),"Bezier GPU/CPU keeps existing mask tolerance");
+        path_renderer.stopAndWait();const auto path_metrics=metrics.takeSnapshotAndReset();require(path_metrics&&(!gpu_backend_available||(path_metrics->gpu_composition_frames==1&&path_metrics->gpu_composition_fallbacks==0)),"native Bezier composition cannot be approved by fallback");
+        std::cout<<"Bezier GPU composition: native="<<path_metrics->gpu_composition_frames<<" fallback="<<path_metrics->gpu_composition_fallbacks<<'\n';
+
 
     }
 

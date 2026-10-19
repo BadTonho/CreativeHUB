@@ -644,3 +644,5 @@ Shared CPU/OpenGL gain an additive alpha/luma image operation for Motion;
 Vulkan refuses it explicitly. This application gains no matte UI or persisted
 fields. Its existing composition/raster, masks, preview/UI and export gates
 protect unchanged operations and defaults. See [contracts and pending acceptance](../../motion-editor/features/TRACK_MATTES.md).
+
+Shared primitive-mask coverage accepts an optional logical receiver/raster origin for Motion Bezier rasters. Image keeps its existing calls, UI and document format; raster/mask/composition regression gates protect the additive boundary.

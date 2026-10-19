@@ -413,3 +413,5 @@ the new operation. Video/Image continue their current Normal and image contracts
 without matte UI or persisted data. Hub preserves native bindings and media paths;
 `.cscomp` v3 refuses them. Shared, Motion, Hub and affected consumer regressions
 cover the boundary; native/platform acceptance remains separate.
+
+Motion native v15 adds Bezier shapes/masks and complete-path keys. Hub preserves them in vault/restored backups and rejects v16. Editable `.cscomp` v3 transfer refuses these features explicitly. Video/Image retain their current UI and persisted formats; their shared mask-coverage calls keep the default coordinate path.

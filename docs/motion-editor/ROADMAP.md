@@ -427,12 +427,11 @@ and the later mask-authoring initiative remain open below.
 - [ ] Profile representative compositions and validate export throughput,
   memory use, and codec behavior on Windows.
 - [ ] Address measured bottlenecks before expanding the MVP scope.
-- [ ] (Provisional later initiative, after the performance gate) Build editable
-  cubic Bezier vector paths and 2D alpha masks. Start with Pen-created paths
-  and one invertible mask per image, video, text, or shape layer; then add
-  animated path keyframes, Undo/Redo, `.motion` version migration, and preview
-  and export parity. Reuse the shape-mask stage operations and softness already
-  implemented; defer mask combinations and tracking to later work.
+- [x] Implement editable Pen-created cubic Bezier shapes and invertible stage
+  masks with complete-path keyframes, history, native v15 migration and shared
+  preview/export preparation. Reuse existing mask operations and softness units.
+  Development is authorized while performance, native presentation, visual and
+  platform acceptance remain pending; mask combinations and tracking stay planned.
 
 **Exit criteria:** the agreed MVP workflows pass regression coverage and
 manual visual checks, including save/reopen, recovery, and heavy-composition
@@ -509,7 +508,7 @@ costs.
     time-driven formulas, and cross-property bindings).
 - **Vectors, shape layers, and advanced masks:**
   - Editable cubic Bezier vector paths (*Pen tool*) for freeform shapes and 2D
-    alpha masks.
+    alpha masks are implemented in native v15; acceptance remains pending.
   - Keyframe animation of shape and mask content properties: path vertices and
     tangents, rectangle/ellipse dimensions, corner roundness, stroke width, fill
     and stroke RGBA, gradients (linear/radial), dashed strokes, and animated
@@ -579,10 +578,8 @@ architectural complexity:
    Adjustment properties across the document model, timeline, Graph Editor,
    preview, and export.
 2. **Layer hierarchy and transform ergonomics:** Inspector parenting and Null layers are implemented in native v10. Animated Anchor Point and compensated Inspector repositioning are implemented in native v11. Independent Scale X/Y with affine inheritance is implemented in native v12. Pan Behind adds pivot dragging with transient Inspector values and release-only commit without a format change. The timeline pick-whip adds direct parent selection, candidate feedback and wheel/edge scrolling using the same parent command. The Viewer Position handle adds live asynchronous movement preview and atomic Position commit. The Viewer Rotation handle adds local affine-aware rotation with full turns, live preview and release-only commit. Viewer Scale X/Y/XY handles add linked/free live scaling with positive clamping and atomic release-only edits. Manual acceptance remains pending.
-3. **Blending modes and Track Mattes:** six static per-layer modes are implemented in native v13 with transparent accumulation, opaque output and CPU/OpenGL composition; Vulkan requests fallback. Alpha/Luma and inverted track mattes with shared sources/chains are implemented in native v14. Pen paths and Trim Paths remain the next candidate.
-4. **Pen tool (cubic Bezier paths) and Trim Paths:** freeform vector masks and
-   shapes with animated path vertices and procedural stroke trimming (aligned
-   with Milestone 3).
+3. **Blending modes and Track Mattes:** six static per-layer modes are implemented in native v13 with transparent accumulation, opaque output and CPU/OpenGL composition; Vulkan requests fallback. Alpha/Luma and inverted track mattes with shared sources/chains are implemented in native v14. Pen-created animated shape/mask paths are implemented in native v15; Trim Paths remains the next candidate.
+4. **Pen tool (implemented in native v15) and Trim Paths:** freeform shapes and masks support animated vertices/tangents, local Viewer editing and complete-path easing. Trim Paths remains planned; manual/platform/performance acceptance is pending.
 5. **Drop Shadow, Glow, and Alpha-channel export:** core motion-graphics shading
    effects paired with transparent-background export for overlay workflows.
 
@@ -600,3 +597,13 @@ Native shared-compositor regression can require actual hardware by running
 `creative-suite-motion-editor-gpu-composition-tests --require-gpu` with the native
 Qt platform plugin. It rejects an absent context or CPU recovery instead of
 qualifying that run. The default portable test retains its CPU recovery coverage.
+
+## Pen path regression boundary
+
+| Feature | Automated coverage | Remaining acceptance |
+| --- | --- | --- |
+| Pen creation/editing, animated shapes and shared masks, origin-aware rendering, v15/recovery | `bezier_path_test.cpp`: `creative-suite-motion-editor-bezier` and `...-bezier-hidpi`; existing Motion preview/export/history/gesture suites; `hub-backup-format-test`; shared composition/exchange consumers | [Manual checklist](features/BEZIER_PATHS.md#verification-and-pending-checks), native presentation/platform checks and benchmarks pending. |
+
+Development of Pen paths is authorized independently of the remaining MVP
+performance/visual acceptance gates. Their pending status is not changed by
+automated implementation coverage.

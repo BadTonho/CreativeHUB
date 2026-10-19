@@ -1,3 +1,4 @@
+#include "ui/viewer/pen_tool.h"
 #include "rendering/preview_scene_builder.h"
 #include "main_window.h"
 
@@ -90,6 +91,7 @@ PreviewRequest MainWindow::buildPreviewRequest()
 void MainWindow::requestPreview(bool playback_tick)
 {
     if (!document_ || !preview_renderer_ || !media_pool_ || !timeline_) return;
+    if(pen_tool_){auto request=pen_tool_->previewRequest();if(request){(void)preview_renderer_->submit(std::move(*request),PreviewRequestMode::Gesture);return;}}
     if (scale_drag_) {
         auto request=*scale_drag_->snapshot;
         if(request.sceneLayers().empty())return;

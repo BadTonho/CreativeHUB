@@ -105,7 +105,7 @@ creative_suite::media::RgbaFramePtr motionFrame(const motion::model::MotionProje
     request.canvas_size = d.composition.canvas_size;
     request.frame_rate = d.composition.frame_rate;
     request.black_canvas_when_empty = true;
-    request.masks=std::make_shared<const std::vector<x::Mask>>(d.masks);request.composition_frame=frame;
+    request.masks=std::make_shared<const std::vector<motion::model::Mask>>(d.masks);request.composition_frame=frame;
     for (const auto &l : d.layers) {
         if (!l.visible || frame < l.timeline_start_frame ||
             frame - l.timeline_start_frame >= l.duration_frames)
