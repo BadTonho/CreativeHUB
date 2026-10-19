@@ -628,3 +628,12 @@ See [GPU_ACCELERATION_PLAN.md](../gpu/GPU_ACCELERATION_PLAN.md) for the public r
 contract, two-level final-channel tolerance, exact mask coverage and activation
 gate, and [the Windows results](../performance/INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md)
 for measurements and platform acceptance limits.
+
+## Shared Motion blend-mode maintenance
+
+The shared compositor adds an optional static blend mode with Normal as default.
+This application does not expose or persist it. Existing layer/group/image-operation
+rendering remains unchanged; consumer regression gates accompany the shared change.
+Vulkan refuses non-Normal inputs explicitly. See the
+[shared boundary](../../CROSS_APPLICATION_COMPATIBILITY.md#shared-static-blend-mode-composition)
+and [Motion contract](../../motion-editor/features/BLEND_MODES.md).

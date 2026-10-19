@@ -1,8 +1,11 @@
 # Pan Behind in the Viewer
 
-Status: implemented development interaction. Native `.motion` remains v12 and
+Status: implemented development interaction. Native `.motion` is v13 and
 application versions are unchanged. Manual visual/platform acceptance, native
 GPU qualification and representative benchmarks remain pending.
+
+Current documents are written as v13 for [static blend modes](BLEND_MODES.md).
+The feature fields and historical version-specific evidence below remain applicable.
 
 ## Using the pivot
 

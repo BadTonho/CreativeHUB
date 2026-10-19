@@ -582,6 +582,7 @@ bool MainWindow::documentIsDirty() const
 }
 void MainWindow::updateDocumentState()
 {
+    if(inspector_)inspector_->setBlendModeBusy(export_worker_ || audio_keyframe_worker_);
     if(scale_drag_&&!panBehindAvailable())cancelScaleDrag();
     if(viewer_)viewer_->setScaleDragEnabled(panBehindAvailable());
     if (rotation_drag_ && !panBehindAvailable()) cancelRotationDrag();

@@ -384,7 +384,7 @@ void testMotionDocuments(const QString& root) {
     project.layers=hierarchy.layers();
     const auto anchor_path=QDir(QFileInfo(assets).absolutePath()).filePath("anchor.motion");
     Store::save(fsPath(anchor_path),project);
-    CS_TEST_CHECK(QJsonDocument::fromJson(readBytes(anchor_path)).object().value("version").toInt()==12);
+    CS_TEST_CHECK(QJsonDocument::fromJson(readBytes(anchor_path)).object().value("version").toInt()==Store::current_format_version);
     const auto anchor_backup=backup(QDir(root).filePath("motion-anchor-v11"),anchor_path);
     CS_TEST_CHECK(Store::load(fsPath(anchor_backup.vault))==project);
     const auto restored_anchor=Store::load(fsPath(anchor_backup.restored));
@@ -407,6 +407,19 @@ void testMotionDocuments(const QString& root) {
     const auto restored_scale=Store::load(fsPath(scale_backup.restored));
     CS_TEST_CHECK(restored_scale==project);
     CS_TEST_CHECK(std::filesystem::exists(restored_scale.layers.front().source_path));
+    CS_TEST_CHECK(hierarchy.setLayerBlendMode(id,creative_suite::composition::BlendMode::Overlay));
+    project.layers=hierarchy.layers();
+    const auto blend_path=QDir(QFileInfo(assets).absolutePath()).filePath("blend.motion");
+    Store::save(fsPath(blend_path),project);
+    const auto blend_backup=backup(QDir(root).filePath("motion-blend-v13"),blend_path);
+    CS_TEST_CHECK(Store::load(fsPath(blend_backup.vault))==project);
+    CS_TEST_CHECK(Store::load(fsPath(blend_backup.restored))==project);
+    CS_TEST_CHECK(std::filesystem::exists(Store::load(fsPath(blend_backup.restored)).layers.front().source_path));
+    auto future=QJsonDocument::fromJson(readBytes(blend_path)).object();future.insert("version",14);
+    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v14.motion");writeBytes(future_path,QJsonDocument(future).toJson());
+    creative_suite::hub::BackupManager manager(QDir(root).filePath("future-vault"));QString rejected_path,error;
+    CS_TEST_CHECK(!manager.createBackup(future_path,&rejected_path,&error)&&!error.isEmpty());
+
 
 }
 #endif

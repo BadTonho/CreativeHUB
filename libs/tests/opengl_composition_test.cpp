@@ -73,6 +73,24 @@ void compare(OpenGlFrameCompositor& gpu, int width, int height,
 }
 void parity(OpenGlFrameCompositor& gpu) {
     {
+        auto b=fixture(17,13,true),f=fixture(9,7,true);CompositionLayer front{&f};front.transform.opacity=.375;
+        for(unsigned m=1;m<6;++m) {
+            front.blend_mode=static_cast<BlendMode>(m);
+            compare(gpu,53,39,{{&b},front},"blend alpha/opacity and empty backdrop");
+            compare(gpu,53,39,{front},"blend over entirely empty canvas");
+            front.source_to_canvas=AffineTransform2D{2,.25,.5,1.5,3,4};
+            compare(gpu,53,39,{{&b},front,{&f}},"affine blend followed by Normal");front.source_to_canvas.reset();
+        }
+        const auto before=gpu.resourceUsage().texture_bytes;
+        compare(gpu,53,39,{{&b},front},"reuse warmed backdrop");
+        require(gpu.resourceUsage().texture_bytes==before,"Backdrop allocation grew after warmup");
+        auto invalid=front;invalid.blend_mode=static_cast<BlendMode>(255);
+        require(gpu.compose(53,39,{invalid}).status==OpenGlCompositionStatus::Unsupported,"Invalid blend mode is explicit");
+        require(gpu.compose(53,39,{front},[]{return true;}).status==OpenGlCompositionStatus::Cancelled,"Blend cancellation");
+        compare(gpu,53,39,{{&b}},"Normal reuse after blended frames");
+    }
+
+    {
         auto affine_source=fixture(13,7,true,4);
         CompositionLayer affine_layer{&affine_source};
         affine_layer.source_to_canvas=AffineTransform2D{1.75,.35,.7,.625,8.125,4.25};
@@ -185,8 +203,9 @@ void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
     second_transform.position_y = .58;
     second_transform.opacity = .72;
     const std::vector<CompositionLayer> first_layers{{&first_source}};
-    const std::vector<CompositionLayer> second_layers{{&first_source},
+    std::vector<CompositionLayer> second_layers{{&first_source},
         {&second_source, second_transform}};
+    second_layers.back().blend_mode=BlendMode::Screen;
     const auto first_reference = gpu.compose(73, 51, first_layers);
     const auto second_reference = gpu.compose(73, 51, second_layers);
     require(first_reference.frame && second_reference.frame,
@@ -470,6 +489,36 @@ void benchmark(OpenGlFrameCompositor& gpu) {
 }
 
 void textureLeases(QOffscreenSurface* surface) {
+    auto retirement_budget=std::make_shared<OpenGlTexturePoolBudget>(16*12*4*3);
+    {
+        OpenGlFrameCompositor old(surface,OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),retirement_budget);
+        auto source=fixture(16,12,true);CompositionLayer layer{&source};layer.blend_mode=BlendMode::Screen;
+        const auto lease=old.composeTexture(16,12,{layer});require(lease.frame&&retirement_budget->bytes()==16*12*4*2,"Blend output/backdrop accounted");
+        old.retireTextureFrames();require(old.collectReleasedTextureFrames().status==OpenGlCompositionStatus::Complete&&retirement_budget->bytes()==16*12*4,"Retirement must free the unleased backdrop");
+        require(old.readback(lease.frame).frame.has_value(),"Retired blended lease remains readable");
+    }
+    require(retirement_budget->bytes()==0,"Retired backdrop reservation leaked");
+    {
+        auto two_frames=std::make_shared<OpenGlTexturePoolBudget>(16*12*4*2);
+        OpenGlFrameCompositor stream(surface,OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),two_frames);
+        auto source=fixture(16,12,true);CompositionLayer layer{&source};layer.blend_mode=BlendMode::Screen;
+        auto displayed=stream.composeTexture(16,12,{layer});require(displayed.frame!=nullptr,"Single blended output fits the two-frame budget");
+        const auto next=stream.composeTexture(16,12,{layer});
+        require(next.status==OpenGlCompositionStatus::Unsupported&&next.operation=="blend-output-budget","Backdrop pressure must recover, not stall forever on a displayed lease");
+        displayed.frame.reset();layer.blend_mode=BlendMode::Normal;
+        require(stream.composeTexture(16,12,{layer}).frame!=nullptr,"Normal recovery after backdrop pressure");
+    }
+    auto constrained=std::make_shared<OpenGlTexturePoolBudget>(16*12*4);
+    {
+        OpenGlFrameCompositor limited(surface,OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),constrained);
+        auto pixels=fixture(16,12,true);CompositionLayer layer{&pixels};layer.blend_mode=BlendMode::Overlay;
+        const auto rejected=limited.composeTexture(16,12,{layer});
+        require(rejected.status==OpenGlCompositionStatus::Unsupported&&rejected.operation=="blend-backdrop-budget"&&!rejected.frame,"Backdrop must share the output reservation budget");
+        layer.blend_mode=BlendMode::Normal;const auto recovered=limited.composeTexture(16,12,{layer});
+        require(recovered.frame&&limited.readback(recovered.frame).frame,"Budget refusal must preserve Normal recovery");
+    }
+    require(constrained->bytes()==0&&constrained->targets()==0,"Backdrop/output reservations must retire");
+
     auto budget = std::make_shared<OpenGlTexturePoolBudget>();
     auto backend = std::make_unique<OpenGlFrameCompositor>(surface,
         OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext(), budget);
@@ -538,6 +587,7 @@ void textureLeases(QOffscreenSurface* surface) {
 void directCancellation(OpenGlFrameCompositor& gpu) {
     auto source = fixture(16, 12, true, 3);
     std::vector<CompositionLayer> layers{{&source}, {&source}};
+    layers.back().blend_mode=BlendMode::Overlay;
     int checkpoints = 0;
     auto probe = gpu.composeTexture(32, 24, layers, [&] { ++checkpoints; return false; });
     require(probe.frame && gpu.readback(probe.frame).frame, "Direct cancellation fixture unavailable.");
@@ -677,6 +727,8 @@ int main(int argc, char** argv) {
         OpenGlFrameCompositor baseline(surface.get(), OpenGlPrecisionPolicy::CoreOnly, QOpenGLContext::globalShareContext());
                         auto f = fixture(13, 7, true, 3);
                         compare(baseline, 53, 39, {{&f}}, "OpenGL 3.2 without precision extensions");
+                        CompositionLayer blended{&f};blended.blend_mode=BlendMode::Overlay;
+                        compare(baseline,53,39,{{&f},blended},"OpenGL 3.2 blend without precision extensions");
                         animation::Transform2D rotated; rotated.rotation_degrees = 90;
                         const auto limited = baseline.compose(53, 39, {{&f, rotated}});
                         require(limited.status == OpenGlCompositionStatus::Unsupported &&

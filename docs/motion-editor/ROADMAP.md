@@ -156,7 +156,8 @@ readiness checks remain in this roadmap and
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
 | Per-app language selection loads the downloaded/bundled pt-BR catalog before the editor window and falls back to English | `motion_editor_translation_test.cpp` (`creative-suite-motion-editor-translation-catalog`) checks the General Settings selector, saved preference resolution, bundled loading, regional Portuguese selection, visible menu text, placeholders, missing-text fallback, and unsupported-locale fallback; shared `creative-suite-translations` checks preference isolation and manifest integrity | Startup-before-window code path and automated preference/catalog checks are present. Native Windows/macOS/Linux locale and clipping checks remain pending in [translation acceptance](../TRANSLATIONS_AND_LANGUAGE_PACKS.md#regression-and-acceptance). |
-| Hub snapshot references and restoration across versions 1–12 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Motion persistence producer and consumer | Automated coverage present for Media Pool, layer sources, linked-image sidecars, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
+| Hub snapshot references and restoration across versions 1–13 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Motion persistence producer and consumer | Automated coverage present for Media Pool, layer sources, linked-image sidecars, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
+| Static layer blend modes | `blend_mode_test.cpp` (`creative-suite-motion-editor-blend`): model/UI/history, independent preview/export values, cache/mask/affine behavior, v13/migration/recovery/invalid Open and interchange. Shared CPU/OpenGL/Vulkan and Hub backup tests cover the contracts; Video/Image consumer gates protect Normal behavior. | [Blend guide and pending checks](features/BLEND_MODES.md); visual/native GPU/platform acceptance and benchmarks pending. |
 | Independent Scale X/Y and affine inheritance | `layer_scale_test.cpp` (`creative-suite-motion-editor-scale`): proportional/independent editing, curves/history/UI, known matrices, parenting/Anchor, v12/recovery/migration/interchange and independent preview/export references; shared composition/OpenGL/Vulkan, Motion GPU/audio and Hub backup suites protect the boundaries. | [Scale guide and pending checks](features/SCALE_AXES.md); visual/native GPU/platform acceptance and benchmarks pending. |
 | Animated pixel Anchor Point | `layer_anchor_test.cpp` (`creative-suite-motion-editor-anchor`): geometry, compensation/history, parenting, Inspector/timeline/Graph Editor/dialog/marker, v11/recovery/v1–v10 migration, preview/export parity and interchange refusal; GPU and Hub backup tests cover their affected boundaries. | [Feature guide and pending manual checklist](features/ANCHOR_POINT.md); native visual/platform/GPU acceptance and benchmarks remain pending. |
 | Viewer Pan Behind pivot dragging | `pan_behind_test.cpp` (`creative-suite-motion-editor-pan-behind` and `...-pan-behind-hidpi`): hit/threshold/logical mapping, grab offset, live Inspector/document isolation, cancellation/history, Nulls, affine/offline ancestors, keys, pixels/cache reuse, v12 save/autosave/recovery; translation and GPU texture regressions cover presentation boundaries. | [Pan Behind guide and pending checks](features/PAN_BEHIND.md); manual visual/platform/native GPU acceptance and benchmarks pending. |
@@ -489,16 +490,15 @@ costs.
   - Adjustment layers that apply their effects and masks to all underlying
     layers in the stack.
   - Dedicated solid layers with composition-sized creation presets.
-  - Layer blending modes (*Multiply*, *Screen*, *Overlay*, *Add*, *Soft Light*,
-    *Difference*, etc.) beyond standard normal/alpha-over blending.
+  - [Normal, Multiply, Screen, Overlay, Add and Difference](features/BLEND_MODES.md) are implemented. Additional modes such as Soft Light remain candidates.
   - Track mattes (*Alpha Matte*, *Alpha Inverted*, *Luma Matte*, *Luma Inverted*)
     using arbitrary layers as transparency or luminance mattes.
 - **Transforms, viewer gizmos, and animation curves:**
   - Broader pivot/transform tools beyond the implemented [Pan Behind](features/PAN_BEHIND.md)
     marker drag, [Position handle](features/POSITION_DRAG.md) and compensated Inspector [Anchor Point](features/ANCHOR_POINT.md) action.
-  - Zero scale, mirroring and Scale Viewer handles; positive independent
-    [Scale X/Y](features/SCALE_AXES.md) is implemented in native v12.
-  - Additional Viewer handles for scale, rotation and mask/shape control points;
+  - Zero scale and mirroring remain candidates; Viewer Scale handles and positive independent
+    [Scale X/Y](features/SCALE_AXES.md) are implemented in native v12.
+  - Additional Viewer handles for mask/shape control points;
     the [Position movement handle](features/POSITION_DRAG.md) is implemented.
   - Additional keyframe interpolation modes: *Toggle Hold*, *Roving* keyframes,
     spatial Bezier motion paths editable directly in the Viewer, and Graph
@@ -578,8 +578,7 @@ architectural complexity:
    Adjustment properties across the document model, timeline, Graph Editor,
    preview, and export.
 2. **Layer hierarchy and transform ergonomics:** Inspector parenting and Null layers are implemented in native v10. Animated Anchor Point and compensated Inspector repositioning are implemented in native v11. Independent Scale X/Y with affine inheritance is implemented in native v12. Pan Behind adds pivot dragging with transient Inspector values and release-only commit without a format change. The timeline pick-whip adds direct parent selection, candidate feedback and wheel/edge scrolling using the same parent command. The Viewer Position handle adds live asynchronous movement preview and atomic Position commit. The Viewer Rotation handle adds local affine-aware rotation with full turns, live preview and release-only commit. Viewer Scale X/Y/XY handles add linked/free live scaling with positive clamping and atomic release-only edits. Manual acceptance remains pending.
-3. **Blending modes and Track Mattes:** per-layer blend modes and Alpha/Luma
-   track mattes in the CPU and OpenGL compositors.
+3. **Blending modes and Track Mattes:** six static per-layer modes are implemented in native v13 with transparent accumulation, opaque output and CPU/OpenGL composition; Vulkan requests fallback. Alpha/Luma track mattes remain the next candidate.
 4. **Pen tool (cubic Bezier paths) and Trim Paths:** freeform vector masks and
    shapes with animated path vertices and procedural stroke trimming (aligned
    with Milestone 3).

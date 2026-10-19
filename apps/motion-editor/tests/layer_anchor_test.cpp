@@ -134,7 +134,7 @@ void persistence(const QString& root)
     layer.anchor_keyframes[0]={{0,-2.5,InterpolationMode::CubicBezier,{.42,0,1,1}},{20,30}};
     CompositionDocument doc(64,32,{30,1},{layer,control});auto p=project(doc);
     const auto file=root+"/anchor.motion";Store::save(path(file),p);
-    check(Store::load(path(file))==p && read(file).value("version").toInt()==12,"current-format Anchor full round trip");
+    check(Store::load(path(file))==p && read(file).value("version").toInt()==Store::current_format_version,"current-format Anchor full round trip");
     Store::saveRecovery(path(root+"/recovery"),path(file),"anchor",p);
     check(Store::loadRecovery(path(root+"/recovery")).document==p,"recovery wrapper preserves anchor");
     auto encoded=read(file);auto layers=encoded.value("layers").toArray();auto first=layers[0].toObject();

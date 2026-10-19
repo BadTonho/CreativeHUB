@@ -1,4 +1,5 @@
 #pragma once
+#include <creative_suite/composition/blend_mode.h>
 #include <creative_suite/composition/affine_transform.h>
 
 #include <creative_suite/animation/animation.h>
@@ -270,6 +271,7 @@ struct CompositionLayer {
     std::optional<ScaleChannel> scale_y;
     bool scale_linked=true;
     std::optional<creative_suite::composition::AffineTransform2D> parent_affine;
+    creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
 
     friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
@@ -329,6 +331,7 @@ public:
     // Keeps the current global pose and all local keyframes. Zero clears the parent.
     [[nodiscard]] bool setLayerParent(LayerId child, LayerId parent, std::int64_t composition_frame);
     [[nodiscard]] bool setLayerAnchorPoint(LayerId, AnchorPoint);
+    [[nodiscard]] bool setLayerBlendMode(LayerId, creative_suite::composition::BlendMode) noexcept;
     [[nodiscard]] bool setLayerScaleLinked(LayerId,bool);
     [[nodiscard]] bool setLayerScaleAxisBase(LayerId,ScaleAxis,double);
     [[nodiscard]] bool replaceLayerScaleAxisKeyframes(LayerId,ScaleAxis,creative_suite::animation::ScalarKeyframes);

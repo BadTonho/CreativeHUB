@@ -1,8 +1,11 @@
 # Animated Anchor Point
 
-Status: introduced in native `.motion` v11; current format is v12. Manual visual acceptance, native
+Status: introduced in native `.motion` v11; current format is v13. Manual visual acceptance, native
 platform/GPU qualification, and representative performance measurements remain
 pending. Application versions are unchanged.
+
+Current documents are written as v13 for [static blend modes](BLEND_MODES.md).
+The feature fields and historical version-specific evidence below remain applicable.
 
 ## Editing
 

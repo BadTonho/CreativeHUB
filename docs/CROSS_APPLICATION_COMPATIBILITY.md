@@ -387,3 +387,19 @@ media references. `hub-backup-format-test` produces with the Video Editor writer
 and restores through its reader, alongside versions 1–25. Application version
 metadata remains unchanged. Native restore/reopen visual acceptance is separate
 from this automated producer/consumer contract; see [Hub regression testing](hub/validation/REGRESSION_TESTING.md).
+
+## Shared static blend-mode composition
+
+The shared CPU/OpenGL layer contract has a Qt-free `BlendMode` defaulting to
+Normal. Existing callers and image operations retain their defaults. Motion alone
+exposes the six modes; it owns native v13, history and scene snapshots. Other
+applications do not adopt Motion's schema or workflow. `.cscomp` remains v3 and
+refuses non-Normal layers; Hub preserves v13 backups and rejects v14.
+
+Non-Normal scenes accumulate transparent premultiplied RGBA8 internally and flatten
+over black before public output. Normal-only scenes keep their exact old path.
+OpenGL uses one worker-owned, budgeted backdrop without draw/sampler aliasing;
+Vulkan returns Unsupported so callers can recover. Shared CPU/OpenGL/Vulkan and
+Motion tests cover new semantics; Video/Image rendering/preview/export gates
+protect the existing contracts. Native GPU acceptance and fallback are recorded
+separately. See [pixel/ownership contract](motion-editor/features/BLEND_MODES.md).

@@ -275,6 +275,14 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     connect(controls_.parent_layer, &QComboBox::activated, this, [this](int index) {
         emit parentLayerChanged(controls_.parent_layer->itemData(index).toULongLong());
     });
+    controls_.blend_mode=new QComboBox(controls_.transform_inspector);
+    controls_.blend_mode->setObjectName(QStringLiteral("motion-blend-mode"));
+    const std::array blend_names{MotionUiTranslation::tr("Normal"),MotionUiTranslation::tr("Multiply"),
+        MotionUiTranslation::tr("Screen"),MotionUiTranslation::tr("Overlay"),MotionUiTranslation::tr("Add"),MotionUiTranslation::tr("Difference")};
+    for(std::size_t i=0;i<blend_names.size();++i)controls_.blend_mode->addItem(blend_names[i],static_cast<int>(i));
+    controls_.blend_mode->setToolTip(MotionUiTranslation::tr("Blend with layers below. Empty areas are transparent during blending; the final background stays black."));
+    transform_form->addRow(MotionUiTranslation::tr("Blend Mode"),controls_.blend_mode);
+    connect(controls_.blend_mode,&QComboBox::activated,this,[this](int index){emit blendModeChanged(controls_.blend_mode->itemData(index).toInt());});
     for (std::size_t index = 0; index < kTransformObjectNames.size(); ++index) {
         auto* row = new QWidget(controls_.transform_inspector);
         auto* row_layout = new QHBoxLayout(row);
@@ -661,11 +669,20 @@ void InspectorWidget::previewAnchorReposition(const model::AnchorRepositionValue
     controls_.reposition_anchor->setEnabled(false);
 }
 
+void InspectorWidget::setBlendModeBusy(bool busy)
+{
+    blend_mode_busy_=busy;controls_.blend_mode->setEnabled(blend_layer_available_&&!busy);
+}
+
 void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
                                 std::int64_t composition_frame,
                                 int selected_effect_row)
 {
     last_composition_frame_ = composition_frame;
+    blend_layer_available_=layer && layer->kind!=model::LayerKind::Null;
+    controls_.blend_mode->setEnabled(blend_layer_available_&&!blend_mode_busy_);
+    {const QSignalBlocker block(controls_.blend_mode);
+        controls_.blend_mode->setCurrentIndex(controls_.blend_mode->findData(static_cast<int>(layer?layer->blend_mode:creative_suite::composition::BlendMode::Normal)));}
     controls_.transform_inspector->setEnabled(layer != nullptr);
     const auto* text = layer ? std::get_if<model::TextLayerContent>(&layer->content) : nullptr;
     const auto* shape = layer ? std::get_if<model::ShapeLayerContent>(&layer->content) : nullptr;

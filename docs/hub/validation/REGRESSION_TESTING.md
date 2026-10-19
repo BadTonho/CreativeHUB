@@ -2,9 +2,18 @@
 
 Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
-`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion12.
+`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion14.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v12 Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v13 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v13 blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v14 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+
+## Motion v13 blend-mode backup coverage
+
+`hub-backup-format-test` saves a real native v13 document with Overlay, independent
+scale, affine binding, Anchor/Null hierarchy, masks/effects and linked media;
+the actual Motion reader reopens vault and relocated restore. Both backup gates
+reject v14. Manual Hub UI/platform acceptance remains pending: back up, restore
+to another directory and reopen in Motion to compare mode, geometry and media.
+See [Blend modes](../../motion-editor/features/BLEND_MODES.md).
 
 ## Motion hierarchy backup verification
 

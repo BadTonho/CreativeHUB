@@ -1221,6 +1221,8 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
     const std::vector<CompositionLayer>& layers,const CancellationPredicate& cancel,OpenGlCompositionTimings* timings) {
     try {
         cancelled(cancel);
+        if(std::any_of(layers.begin(),layers.end(),[](const auto& layer){return !validBlendMode(layer.blend_mode)||layer.blend_mode!=BlendMode::Normal;}))
+            throw Failure("Non-Normal blend modes are not implemented by Vulkan.",0,Status::Unsupported);
 #ifdef CS_HAS_VULKAN
         if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
         checkCapacity(width,height);

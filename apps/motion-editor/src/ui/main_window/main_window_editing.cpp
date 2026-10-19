@@ -535,6 +535,28 @@ void MainWindow::removeCompositionLayer(model::LayerId id)
     }
 }
 
+void MainWindow::changeSelectedLayerBlendMode(int value)
+{
+    // Keep the signal argument: cancelling a Viewer draft resynchronizes fields.
+    finishPendingTransformEdit();
+    if(!document_ || !selected_layer_id_ || export_worker_ || audio_keyframe_worker_) {syncTransformInspector();return;}
+    try {
+        if(value<0 || value>static_cast<int>(creative_suite::composition::BlendMode::Difference))
+            throw std::invalid_argument("Invalid blend-mode selection.");
+        const auto selected=std::find_if(document_->layers().begin(),document_->layers().end(),[this](const auto& l){return l.id==selected_layer_id_;});
+        if(selected==document_->layers().end() || selected->kind==model::LayerKind::Null || static_cast<int>(selected->blend_mode)==value) {syncTransformInspector();return;}
+        auto before=captureEditState();
+        if(document_->setLayerBlendMode(selected_layer_id_,static_cast<creative_suite::composition::BlendMode>(value))) {
+            (void)recordCompositionEdit(std::move(before));updateDocumentState();requestPreview();
+        }
+    }catch(const std::exception& error) {
+        creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
+            "motion_document","set_layer_blend_mode",error.what(),{{"layer_id",std::to_string(selected_layer_id_)},{"blend_mode",std::to_string(value)}});
+        statusBar()->showMessage(MotionUiTranslation::tr("The blend mode could not be changed. Check the Motion Studio log for details."),5000);
+    }
+    syncTransformInspector();
+}
+
 void MainWindow::syncTransformInspector()
 {
     if (scale_drag_) {

@@ -1,3 +1,10 @@
+add_executable(creative-suite-motion-editor-blend-tests blend_mode_test.cpp)
+target_link_libraries(creative-suite-motion-editor-blend-tests PRIVATE creative-suite-motion-editor-core Qt6::Widgets)
+target_compile_features(creative-suite-motion-editor-blend-tests PRIVATE cxx_std_20)
+add_creative_suite_test(NAME creative-suite-motion-editor-blend COMMAND creative-suite-motion-editor-blend-tests)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-blend-tests)
+set_tests_properties(creative-suite-motion-editor-blend PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
+
 add_executable(creative-suite-motion-editor-document-tests
     composition_document_test.cpp
 )
@@ -273,6 +280,7 @@ set_tests_properties(creative-suite-motion-editor-gpu-texture PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 
 if(MSVC)
+    target_compile_options(creative-suite-motion-editor-blend-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-scale-drag-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-rotation-drag-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-position-drag-tests PRIVATE /W4 /permissive-)
@@ -293,6 +301,7 @@ if(MSVC)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-audio-keyframes-tests PRIVATE /W4 /permissive-)
 else()
+    target_compile_options(creative-suite-motion-editor-blend-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-scale-drag-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-rotation-drag-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-position-drag-tests PRIVATE -Wall -Wextra -Wpedantic)
@@ -323,6 +332,7 @@ if(WIN32)
     find_program(QT_MOTION_TEST_DEPLOY_TOOL windeployqt HINTS "${QT_MOTION_TEST_BIN_DIR}" REQUIRED)
 
     foreach(TEST_TARGET IN ITEMS
+            creative-suite-motion-editor-blend-tests
             creative-suite-motion-editor-scale-drag-tests
             creative-suite-motion-editor-rotation-drag-tests
             creative-suite-motion-editor-position-drag-tests

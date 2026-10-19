@@ -23,7 +23,7 @@ shared.
 Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
 autosave preferences, and the recovery-management dialog. The store reuses the
 native document serializer and its atomic `QSaveFile` validation while writing
-the native `.motion` document at version 12 (recovery wrapper version 1). A recovery payload stores the complete
+the native `.motion` document at version 13 (recovery wrapper version 1). A recovery payload stores the complete
 composition and Media Pool plus the original document path and session ID; it
 does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
 
@@ -426,3 +426,14 @@ Vulkan explicitly refuses the override and uses existing recovery. Source fit an
 Anchor occur once; scale edits add no image pass or decode/raster invalidation.
 This is an additive shared compositor contract; Video/Image keep legacy defaults.
 See [Scale axes](../features/SCALE_AXES.md) and [format v12](FORMAT.md).
+
+## Static blend-mode ownership
+
+Motion owns Inspector/history/native v13 and immutable scene propagation.
+The Qt-free shared `BlendMode` is a trailing layer field defaulting to Normal.
+CPU/OpenGL own final pixel blending with transparent premultiplied accumulation
+and opaque black output; Normal-only paths remain exact. OpenGL's reusable
+backdrop shares the existing texture budget and never aliases the draw target.
+Vulkan explicitly refuses non-Normal modes. Existing image operations, effects,
+mask coordinates and Video/Image formats/UI retain their contracts. See
+[Blend modes](../features/BLEND_MODES.md) for formulas, lifetime and coverage.

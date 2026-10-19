@@ -700,6 +700,8 @@ QJsonObject writeLayer(const CompositionLayer& layer,
     QJsonObject object;
     object.insert(QStringLiteral("id"), encodedUInt64(layer.id));
     object.insert(QStringLiteral("kind"), layerKindName(layer.kind));
+    if(layer.blend_mode!=creative_suite::composition::BlendMode::Normal)
+        object.insert("blend_mode",QString::fromLatin1(creative_suite::composition::blendModeIdentifier(layer.blend_mode).data()));
     if (layer.anchor_point != model::AnchorPoint{} || !layer.anchor_keyframes[0].empty() || !layer.anchor_keyframes[1].empty()) {
         QJsonObject anchor{{"x_pixels",layer.anchor_point.x_pixels},{"y_pixels",layer.anchor_point.y_pixels}};
         QJsonObject keys;
@@ -857,6 +859,14 @@ CompositionLayer parseLayer(const QJsonValue& value,
     }
     layer.id = requiredUInt64(object, "id", document_path);
     layer.kind = parseLayerKind(requiredString(object, "kind", document_path), document_path);
+    if(object.contains("blend_mode")) {
+        if(document_version<13)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Blend modes require document version 13."));
+        const auto name=requiredString(object,"blend_mode",document_path).toStdString();
+        const auto mode=creative_suite::composition::parseBlendMode(name);
+        if(!mode || (layer.kind==model::LayerKind::Null && *mode!=creative_suite::composition::BlendMode::Normal))
+            fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Invalid layer blend mode."));
+        layer.blend_mode=*mode;
+    }
     if(document_version<12 && (object.contains("scale_y") || object.contains("scale_linked") || object.contains("parent_affine")))
         fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Axis scale and affine bindings require document version 12."));
     if(object.contains("scale_y")) {

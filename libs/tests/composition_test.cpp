@@ -1,5 +1,6 @@
 #include <creative_suite/composition/frame_compositor.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -42,9 +43,80 @@ bool pixelEquals(
         image.rgba_pixels[offset + 3] == alpha;
 }
 
+
+void blendModes() {
+    using namespace creative_suite;
+    using composition::BlendMode;
+    auto background=frame(1,1,{64,64,64,255}),source=frame(1,1,{192,192,192,255});
+    const std::uint8_t expected[]{192,48,208,96,255,128};
+    for(unsigned i=0;i<6;++i) {
+        const auto mode=static_cast<BlendMode>(i);
+        require(composition::parseBlendMode(composition::blendModeIdentifier(mode))==mode,"Blend identifier roundtrip");
+        composition::CompositionLayer layer{&source};layer.blend_mode=mode;
+        const auto result=composition::FrameCompositor::compose(1,1,{{&background},layer});
+        require(result && pixelEquals(*result,0,0,expected[i],expected[i],expected[i],255),"Independent blend color table");
+        source.rgba_pixels={200,100,50,128};
+        const auto empty=composition::FrameCompositor::compose(1,1,{layer});
+        require(empty && pixelEquals(*empty,0,0,100,50,25,255),"Empty backdrop is transparent, not black for blending");
+        source.rgba_pixels={192,192,192,255};
+    }
+    for(int backdrop:{127,128}) {
+        auto b=frame(1,1,{static_cast<std::uint8_t>(backdrop),0,0,255}),f=frame(1,1,{64,0,0,255});
+        composition::CompositionLayer overlay{&f};overlay.blend_mode=BlendMode::Overlay;
+        const auto edge=composition::FrameCompositor::compose(1,1,{{&b},overlay});
+        require(edge&&edge->rgba_pixels[0]==(backdrop==127?64:65),"Overlay threshold neighbors");
+    }
+    {
+        auto b=frame(1,1,{64,64,64,128}),a=frame(1,1,{192,192,192,128}),f=frame(1,1,{64,64,64,255});
+        composition::CompositionLayer add{&a},multiply{&f};add.blend_mode=BlendMode::Add;multiply.blend_mode=BlendMode::Multiply;
+        const auto layered=composition::FrameCompositor::compose(1,1,{{&b},add,multiply});
+        require(layered&&pixelEquals(*layered,0,0,48,48,48,255),"Add preserves source-over coverage for subsequent layers");
+    }
+    composition::CompositionLayer invalid{&source};invalid.blend_mode=static_cast<BlendMode>(255);
+    require(!composition::FrameCompositor::compose(1,1,{invalid}) && !composition::validBlendMode(invalid.blend_mode),"Invalid mode rejected");
+    require(!composition::parseBlendMode("Multiply")&&!composition::parseBlendMode(""),"Identifiers are strict");
+    // Independent per-layer premultiplied RGBA8 reference, including coverage
+    // quantization and the straight-color backdrop used by blend functions.
+    for(unsigned mode=1;mode<6;++mode)for(int alpha:{0,1,64,128,254,255})for(double opacity:{0.,.375,1.}) {
+        background.rgba_pixels={43,129,217,73};source.rgba_pixels={232,81,155,static_cast<std::uint8_t>(alpha)};
+        composition::CompositionLayer top{&source};top.blend_mode=static_cast<BlendMode>(mode);top.transform.opacity=opacity;
+        const auto output=composition::FrameCompositor::compose(1,1,{{&background},top});require(output.has_value(),"Blend fixture");
+        const auto ab=73./255.,as=alpha/255.*opacity;
+        for(int c=0;c<3;++c) {
+            const auto pb=std::lround(background.rgba_pixels[c]*ab)/255.;
+            const auto cb=std::clamp(pb/ab,0.,1.),cs=source.rgba_pixels[c]/255.;double b=0;
+            switch(mode){case 1:b=cb*cs;break;case 2:b=cb+cs-cb*cs;break;case 3:b=cb<=.5?2*cb*cs:2*(cb+cs-cb*cs)-1;break;case 4:b=std::min(1.,cb+cs);break;case 5:b=std::max(cb,cs)-std::min(cb,cs);break;}
+            const auto expected_byte=std::lround(std::clamp(pb*(1-as)+as*((1-ab)*cs+ab*b),0.,1.)*255);
+            require(output->rgba_pixels[c]==expected_byte,"Alpha/opacity independent numeric reference");
+        }
+        require(output->rgba_pixels[3]==255,"Flattened output remains opaque");
+        // Affine geometry shares sampling, coverage and blend semantics.
+        top.source_to_canvas=composition::AffineTransform2D{};
+        const auto affine=composition::FrameCompositor::compose(1,1,{{&background},top});
+        require(affine && affine->rgba_pixels==output->rgba_pixels,"Affine blend parity");
+    }
+    source.rgba_pixels={255,0,0,255};background.rgba_pixels={0,255,0,255};
+    composition::CompositionLayer top{&source};top.blend_mode=BlendMode::Difference;top.source_to_canvas=composition::AffineTransform2D{1,0,0,1,1,0};
+    auto wide=frame(2,1,{0,255,0,255,0,255,0,255});
+    const auto partial=composition::FrameCompositor::compose(2,1,{{&wide},top});
+    require(partial && pixelEquals(*partial,0,0,0,255,0,255)&&pixelEquals(*partial,1,0,255,255,0,255),"Partial overlap preserves unrelated pixels");
+    auto coverage=composition::FrameCompositor::buildAlphaCoverage(source);top.source_to_canvas.reset();top.alpha_coverage=coverage;
+    require(!composition::FrameCompositor::canUseAlphaCoverageFastPath(top),"Normal-only fast path cannot bypass a blend mode");
+    auto huge=top;huge.alpha_coverage.reset();huge.transform.scale=1e308;
+    require(composition::FrameCompositor::compose(2,1,{huge}).has_value(),"Large axis-aligned blending remains bounded");
+    huge.transform.rotation_degrees=45;
+    const auto huge_rotated=composition::FrameCompositor::compose(2,1,{huge});
+    require(huge_rotated&&pixelEquals(*huge_rotated,0,0,255,0,0,255),"Huge rotated blend bounds do not overflow integers");
+    top.blend_mode=BlendMode::Normal;
+    const auto normal=composition::FrameCompositor::compose(1,1,{{&background},top});
+    const auto legacy=composition::FrameCompositor::compose(1,1,{{&background},{&source}});
+    require(normal&&legacy&&normal->rgba_pixels==legacy->rgba_pixels,"Normal path remains byte-identical");
+}
+
 } // namespace
 
 int main() {
+    try { blendModes(); } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
     using namespace creative_suite;
 
     try {

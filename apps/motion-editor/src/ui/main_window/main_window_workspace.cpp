@@ -109,6 +109,7 @@ void MainWindow::createWorkspace()
             this, &MainWindow::finishPendingContentEdit);
     connect(inspector_, &InspectorWidget::layerColorSelectionRequested,
             this, &MainWindow::chooseSelectedLayerColor);
+    connect(inspector_, &InspectorWidget::blendModeChanged,this,&MainWindow::changeSelectedLayerBlendMode);
     connect(inspector_, &InspectorWidget::transformValueEdited, this,
             [this](int index) { editSelectedLayerTransform(static_cast<std::size_t>(index)); });
     connect(inspector_, &InspectorWidget::transformEditFinished,

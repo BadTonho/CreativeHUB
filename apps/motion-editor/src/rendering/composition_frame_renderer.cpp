@@ -268,6 +268,11 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     }
     for (const auto& layer : request.sceneLayers()) {
         if ((should_cancel && should_cancel())) return {};
+        if(!creative_suite::composition::validBlendMode(layer.blend_mode)) {
+            creative_suite::diagnostics::Logger::instance().log(creative_suite::diagnostics::Level::Error,
+                "motion_preview","validate_blend_mode","Invalid scene blend mode.",{{"layer_id",std::to_string(layer.id)},{"blend_mode",std::to_string(static_cast<unsigned>(layer.blend_mode))}});
+            throw std::invalid_argument("Invalid scene blend mode.");
+        }
         if (layer.kind == model::LayerKind::Null) continue;
         const auto resolved_entry = resolved.find(layer.id);
         if (request.sceneHierarchy() && resolved_entry == resolved.end()) {
@@ -494,6 +499,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 owned_frames.push_back(geometry);CompositionLayer entry{geometry.get(),{}};entry.texture_frame=processed.texture;
                 composition_layers.push_back(std::move(entry));mask_gpu_in_use=true;
             }
+            composition_layers.back().blend_mode=layer.blend_mode;
             composition_layer_ids.push_back(layer.id);continue;
         }
         const bool effects_valid = model::validLayerEffects(layer.effects);
@@ -607,6 +613,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         const auto composition_index = composition_layers.size();
         composition_layers.push_back(CompositionLayer{frame.get(), transform, {}, {},
             std::move(gpu_adjustments), std::move(gpu_effects)});
+        composition_layers.back().blend_mode=layer.blend_mode;
         if(effective_world) {
             const bool intrinsic=layer.kind==model::LayerKind::Text || layer.kind==model::LayerKind::Shape;
             const auto fit=intrinsic || fusion_presentation?1.:std::min(double(request.canvas_size.width)/frame->width,double(request.canvas_size.height)/frame->height);
@@ -827,6 +834,11 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             ? std::to_string(composition_layer_ids[static_cast<std::size_t>(gpu_result.layer_index)])
             : std::string("unknown");
         if(!mask_gpu_in_use || gpu_failed)gpu_composition_disabled_after_failure_ = true;
+        std::string blend_context;
+        for(std::size_t i=0;i<composition_layers.size();++i)if(composition_layers[i].blend_mode!=creative_suite::composition::BlendMode::Normal) {
+            if(!blend_context.empty())blend_context+=",";
+            blend_context+=std::to_string(composition_layer_ids[i])+":"+std::string(creative_suite::composition::blendModeIdentifier(composition_layers[i].blend_mode));
+        }
         const char* const gpu_subsystem = record_preview_metrics_
             ? "motion_preview" : "motion_export";
         creative_suite::diagnostics::Logger::instance().log(
@@ -840,6 +852,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
              {"canvas_width", std::to_string(request.canvas_size.width)},
              {"canvas_height", std::to_string(request.canvas_size.height)},
              {"layer_id", failing_layer_id},
+             {"blend_modes",blend_context.empty()?"normal":blend_context},
              {"layer_index", std::to_string(gpu_result.layer_index)},
              {"status", gpu_result.status == OpenGlCompositionStatus::Unsupported
                     ? "unsupported" : "failed"}});

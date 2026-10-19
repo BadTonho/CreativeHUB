@@ -2059,3 +2059,11 @@ Video defaults retain uniform geometry. Shared CPU/OpenGL/Vulkan composition tes
 
 The selected consumer and shared gates passed in the 2026-10-17 Release run;
 see [Scale boundary evidence](../../motion-editor/features/SCALE_AXES.md#automated-windows-evidence--2026-10-17).
+
+## Shared static blend-mode maintenance
+
+Motion's additive shared layer mode defaults to Normal for Video. Run shared
+composition/OpenGL/Vulkan plus Video composition, effect/mask, preview/export and
+interchange regressions. No Video UI, project-format or image-operation semantics
+change. Native GPU success must be distinguished from unsupported/skipped/fallback
+results. See [shared contract](../../CROSS_APPLICATION_COMPATIBILITY.md#shared-static-blend-mode-composition).

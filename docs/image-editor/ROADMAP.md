@@ -445,3 +445,11 @@ used by the shared window source; this keeps its scoped Release build complete.
 
 The selected consumer and shared gates passed in the 2026-10-17 Release run;
 see [Scale boundary evidence](../motion-editor/features/SCALE_AXES.md#automated-windows-evidence--2026-10-17).
+
+## Shared static blend-mode maintenance
+
+Motion's six shared composition modes do not add Image Editor UI or persistence.
+Normal and raster/group/image-operation semantics remain unchanged. Shared
+composition/OpenGL/Vulkan and Image core/raster/mask/UI/export/GPU-raster gates
+protect this boundary. Native visual/platform/GPU acceptance remains separate
+from portable fallback coverage. See [shared contract](../CROSS_APPLICATION_COMPATIBILITY.md#shared-static-blend-mode-composition).

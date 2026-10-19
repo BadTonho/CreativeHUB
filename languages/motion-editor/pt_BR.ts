@@ -4,6 +4,42 @@
 <context>
     <name>MotionUiTranslation</name>
     <message>
+        <source>Blend Mode</source>
+        <translation>Modo de mesclagem</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normal</translation>
+    </message>
+    <message>
+        <source>Multiply</source>
+        <translation>Multiplicar</translation>
+    </message>
+    <message>
+        <source>Screen</source>
+        <translation>Divisão</translation>
+    </message>
+    <message>
+        <source>Overlay</source>
+        <translation>Sobrepor</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Adicionar</translation>
+    </message>
+    <message>
+        <source>Difference</source>
+        <translation>Diferença</translation>
+    </message>
+    <message>
+        <source>Blend with layers below. Empty areas are transparent during blending; the final background stays black.</source>
+        <translation>Mescle com as camadas abaixo. Áreas vazias são transparentes durante a mesclagem; o fundo final permanece preto.</translation>
+    </message>
+    <message>
+        <source>The blend mode could not be changed. Check the Motion Studio log for details.</source>
+        <translation>Não foi possível alterar o modo de mesclagem. Consulte o log do Motion Studio para obter detalhes.</translation>
+    </message>
+    <message>
         <source>Drag X, Y or XY to scale the layer. The Inspector link controls proportions. Positive limits stop the drag; Escape cancels.</source>
         <translation>Arraste X, Y ou XY para ajustar a escala da camada. O vínculo do Inspector controla as proporções. O arraste para nos limites positivos; Escape cancela.</translation>
     </message>

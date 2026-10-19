@@ -1,8 +1,11 @@
 # Scale X/Y Drag in the Viewer
 
-Status: implemented development interaction. Native `.motion` stays v12,
+Status: implemented development interaction. Native `.motion` is v13,
 recovery wrapper v1, `.cscomp` v3 and application versions remain unchanged.
 Manual visual/platform/native GPU acceptance and benchmarks remain pending.
+
+Current documents are written as v13 for [static blend modes](BLEND_MODES.md).
+The feature fields and historical version-specific evidence below remain applicable.
 
 ## Interaction
 

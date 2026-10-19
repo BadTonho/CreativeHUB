@@ -21,6 +21,9 @@ x::Document exportComposition(const MotionProjectData &project) {
     std::vector<x::Issue> issues;
     d.masks=project.masks;
     for (const auto &layer : project.layers) {
+        if(layer.blend_mode!=creative_suite::composition::BlendMode::Normal) {
+            issues.push_back({layer.id,"Layer '"+layer.name+"' uses a blend mode not supported by composition interchange."});continue;
+        }
         if(layer.scale_y && (layer.scale_y->value!=layer.transform.scale || layer.scale_y->keyframes!=layer.keyframes.scale)) {
             issues.push_back({layer.id,"Independent scale axes cannot be represented by composition interchange without rewriting curves."});continue;
         }

@@ -70,6 +70,8 @@ void main() {
 )GLSL";
 constexpr char fragment_shader[] = R"GLSL(
 uniform sampler2D source_image;
+uniform sampler2D backdrop_image;
+uniform int blend_mode;
 uniform bool source_bottom_left;
 uniform float canvas_height;
 uniform int color_adjustment_count;
@@ -121,6 +123,18 @@ void main() {
     for (int i = 0; i < color_adjustment_count; ++i)
         source.rgb = adjustColor(source.rgb, color_adjustments[i]);
     color = vec4(source.rgb, source.a * opacity);
+    if(blend_mode!=0) {
+        vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
+        vec3 cb=b.a>0.0 ? clamp(b.rgb/b.a,0.0,1.0) : vec3(0);
+        vec3 mixed=source.rgb;
+        if(blend_mode==1)mixed=cb*source.rgb;
+        else if(blend_mode==2)mixed=1.0-(1.0-cb)*(1.0-source.rgb);
+        else if(blend_mode==3)mixed=mix(1.0-2.0*(1.0-cb)*(1.0-source.rgb),2.0*cb*source.rgb,lessThanEqual(cb,vec3(0.5)));
+        else if(blend_mode==4)mixed=min(vec3(1),cb+source.rgb);
+        else if(blend_mode==5)mixed=abs(cb-source.rgb);
+        float a=color.a;
+        color=vec4((1.0-a)*b.rgb+a*(1.0-b.a)*source.rgb+a*b.a*mixed,a+b.a*(1.0-a));
+    }
 }
 )GLSL";
 constexpr char image_fragment_shader[] = R"GLSL(
@@ -385,6 +399,8 @@ struct OpenGlFrameCompositor::Impl {
     std::unique_ptr<detail::WindowsVideoInterop> video_interop;
     std::unique_ptr<QOpenGLFramebufferObject> output;
     std::unique_ptr<QOpenGLFramebufferObject> effect_scratch;
+    std::unique_ptr<QOpenGLFramebufferObject> blend_backdrop;
+    std::uint64_t blend_reserved = 0;
     GLuint texture = 0;
     GLuint effect_source_fbo = 0;
     GLuint vao = 0;
@@ -453,6 +469,7 @@ struct OpenGlFrameCompositor::Impl {
             }
             output.reset();
             effect_scratch.reset();
+            blend_backdrop.reset();
             program.reset();
             effect_program.reset();
             image_program.reset();
@@ -583,6 +600,10 @@ struct OpenGlFrameCompositor::Impl {
     void releaseRaster(std::uint64_t bytes) {
         std::lock_guard lock(budget->impl_->mutex);
         budget->impl_->bytes -= bytes; raster_reserved -= bytes;
+    }
+    void discardBlendBackdrop() {
+        if(!blend_backdrop && !blend_reserved)return;
+        blend_backdrop.reset();releaseRaster(blend_reserved);blend_reserved=0;
     }
     OpenGlCompositionResult renderRaster(const OpenGlRasterRequest& request,
         const OpenGlFrameCompositor::CancellationPredicate& cancel, OpenGlCompositionTimings& measured) {
@@ -1404,6 +1425,7 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, 
             static_cast<std::uint64_t>(width) * height * 4 > p.budget->impl_->byte_limit)
             return {OpenGlCompositionStatus::Unsupported, {}, "check-pool-limits",
                 "Canvas exceeds the shared texture pool budget or device limits."};
+        if(std::none_of(layers.begin(),layers.end(),[](const auto& l){return l.blend_mode!=BlendMode::Normal;}))p.discardBlendBackdrop();
         auto collected = p.collect();
         if (collected.status != OpenGlCompositionStatus::Complete) return converted(std::move(collected));
         std::size_t index = p.targets.size();
@@ -1420,9 +1442,16 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, 
         p.targets.reserve(p.budget->impl_->target_limit);
         {
             std::lock_guard lock(p.budget->impl_->mutex);
-            if ((adding && p.budget->impl_->targets >= p.budget->impl_->target_limit) ||
-                p.budget->impl_->bytes - old_bytes + bytes > p.budget->impl_->byte_limit)
+            if (adding && p.budget->impl_->targets >= p.budget->impl_->target_limit)
                 return {OpenGlCompositionStatus::Busy};
+            if(p.budget->impl_->bytes - old_bytes + bytes > p.budget->impl_->byte_limit) {
+                // A displayed lease cannot return until its replacement arrives.
+                // Recover instead of retrying Busy forever when the backdrop
+                // leaves no room for that replacement output.
+                if(p.blend_reserved)return {OpenGlCompositionStatus::Unsupported,{},"blend-output-budget",
+                    "Leased composition outputs and blend backdrop exceed the shared texture budget."};
+                return {OpenGlCompositionStatus::Busy};
+            }
             if (adding) { p.targets.emplace_back(); ++p.budget->impl_->targets; }
             p.budget->impl_->bytes = p.budget->impl_->bytes - old_bytes + bytes;
         }
@@ -1520,9 +1549,10 @@ void OpenGlFrameCompositor::retireTextureFrames() noexcept { impl_->retiring = t
 
 OpenGlCompositionResult OpenGlFrameCompositor::collectReleasedTextureFrames() {
     auto& p = *impl_;
-    if (p.targets.empty()) return result(OpenGlCompositionStatus::Complete);
+    if (p.targets.empty() && !(p.retiring && p.blend_reserved)) return result(OpenGlCompositionStatus::Complete);
     auto active = p.activate();
     if (active.status != OpenGlCompositionStatus::Complete) return active;
+    if(p.retiring)p.discardBlendBackdrop();
     auto collected = p.collect();
     if (p.retiring) {
         // A displayed lease must not retain unused slots and starve the next
@@ -1555,6 +1585,9 @@ OpenGlResourceUsage OpenGlFrameCompositor::resourceUsage() const noexcept { retu
 OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
     const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
     OpenGlCompositionTimings* timings, bool read_output) {
+    for(std::size_t i=0;i<layers.size();++i)if(!validBlendMode(layers[i].blend_mode))
+        return result(OpenGlCompositionStatus::Unsupported,"check-blend-mode","Invalid layer blend mode.",0,static_cast<int>(i));
+    const bool blending=std::any_of(layers.begin(),layers.end(),[](const auto& l){return l.blend_mode!=BlendMode::Normal;});
     if (std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
             return layer.texture_frame && layer.texture_frame->backend() != GraphicsBackend::OpenGl;
         })) return result(OpenGlCompositionStatus::Unsupported, "check-image-backend", "An OpenGL compositor cannot consume a Vulkan image.");
@@ -1596,6 +1629,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         if (!bounded(width, height, p.texture_limit))
             return result(OpenGlCompositionStatus::Unsupported, "check-limits",
                 "Canvas exceeds the device texture limit or 256 MiB texture budget.");
+        if(!blending)p.discardBlendBackdrop();
         if (p.raster_request) return p.renderRaster(*p.raster_request, cancel, measured);
         if (p.image_operation) return p.renderImage(*p.image_operation, cancel, measured);
         for (std::size_t layer_index = 0; layer_index < layers.size(); ++layer_index) {
@@ -1692,6 +1726,20 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                 "allocate-framebuffer", "Cannot allocate the output RGBA8 framebuffer.");
             p.rememberResourcePeak();
         }
+        if(blending && (!p.blend_backdrop || p.blend_backdrop->width()!=width || p.blend_backdrop->height()!=height)) {
+            p.blend_backdrop.reset();
+            p.releaseRaster(p.blend_reserved);p.blend_reserved=0;
+            const auto bytes=static_cast<std::uint64_t>(width)*height*4;
+            if(!p.reserveRaster(bytes))return result(OpenGlCompositionStatus::Unsupported,"blend-backdrop-budget","Blend backdrop exceeds the shared texture budget.");
+            p.blend_reserved=bytes;
+            QOpenGLFramebufferObjectFormat format;format.setInternalTextureFormat(GL_RGBA8);
+            p.blend_backdrop=std::make_unique<QOpenGLFramebufferObject>(width,height,format);
+            if(!p.blend_backdrop->isValid()) {
+                p.blend_backdrop.reset();p.releaseRaster(p.blend_reserved);p.blend_reserved=0;
+                return result(OpenGlCompositionStatus::Failed,"blend-backdrop-target","Cannot allocate the blend backdrop.");
+            }
+            p.rememberResourcePeak();
+        }
         auto* output = read_output ? p.output.get() : p.selected_output;
         const auto setup_started = Clock::now();
         if (!output || !output->bind() || !p.program->bind())
@@ -1708,7 +1756,8 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         gl->glEnable(GL_BLEND);
         gl->glBlendEquation(GL_FUNC_ADD);
         gl->glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        gl->glClearColor(0, 0, 0, 1);
+        gl->glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+        gl->glClearColor(0, 0, 0, blending?0:1);
         gl->glClear(GL_COLOR_BUFFER_BIT);
         gl->glBindVertexArray(p.vao);
         gl->glActiveTexture(GL_TEXTURE0);
@@ -1717,6 +1766,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 1, p.lookup_buffers[1]);
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 2, p.lookup_buffers[2]);
         p.program->setUniformValue("source_image", 0);
+        p.program->setUniformValue("backdrop_image",1);
         p.program->setUniformValue("canvas_height", static_cast<float>(height));
         measured.draw_submission_nanoseconds += elapsed(setup_started);
         for (const auto& layer : layers) {
@@ -2006,6 +2056,15 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             p.program->setUniformValue("opacity", static_cast<float>(t.opacity));
             gl->glActiveTexture(GL_TEXTURE0);
             gl->glBindTexture(GL_TEXTURE_2D, layer_texture);
+            p.program->setUniformValue("blend_mode",static_cast<int>(layer.blend_mode));
+            if(layer.blend_mode!=BlendMode::Normal) {
+                // Snapshot the completed backdrop on GPU. Never sample a draw attachment.
+                gl->glActiveTexture(GL_TEXTURE1);
+                gl->glBindTexture(GL_TEXTURE_2D,p.blend_backdrop->texture());
+                gl->glReadBuffer(GL_COLOR_ATTACHMENT0);
+                gl->glCopyTexSubImage2D(GL_TEXTURE_2D,0,0,0,0,0,width,height);
+                gl->glActiveTexture(GL_TEXTURE0);gl->glDisable(GL_BLEND);
+            } else gl->glEnable(GL_BLEND);
             gl->glDrawArrays(GL_TRIANGLES, 0, 3);
             if (native_use.adapter) {
                 auto released = native_use.adapter->end(); native_use.adapter = nullptr;
@@ -2026,6 +2085,14 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     "OpenGL reported an upload or drawing error.", code);
         }
         if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
+        if(blending) {
+            // Accumulated RGB is already premultiplied over black; publish opaque RGBA.
+            gl->glColorMask(GL_FALSE,GL_FALSE,GL_FALSE,GL_TRUE);
+            gl->glClearColor(0,0,0,1);gl->glClear(GL_COLOR_BUFFER_BIT);
+            gl->glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+            if(const auto code=gl->glGetError();code!=GL_NO_ERROR)
+                return result(OpenGlCompositionStatus::Failed,"flatten-blend-output","Cannot finalize the opaque composition.",code);
+        }
         if (!read_output) return result(OpenGlCompositionStatus::Complete);
         const auto read_started = Clock::now();
         media::RgbaFrame frame{width, height, width * 4, {}};

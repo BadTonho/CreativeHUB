@@ -782,3 +782,12 @@ GPU use. The decoder remains separate from the 256 MiB known session budget.
 No application input selection, dependency, format or version changes. See the
 [contract](../gpu/VULKAN_DECODE_PROTOTYPE.md) and
 [4K evidence](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md).
+
+## Shared Motion blend-mode maintenance
+
+The shared compositor adds an optional static blend mode with Normal as default.
+This application does not expose or persist it. Existing layer/group/image-operation
+rendering remains unchanged; consumer regression gates accompany the shared change.
+Vulkan refuses non-Normal inputs explicitly. See the
+[shared boundary](../../CROSS_APPLICATION_COMPATIBILITY.md#shared-static-blend-mode-composition)
+and [Motion contract](../../motion-editor/features/BLEND_MODES.md).

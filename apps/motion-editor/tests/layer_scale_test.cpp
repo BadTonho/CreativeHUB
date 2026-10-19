@@ -131,7 +131,7 @@ void persistence(const QString& root)
     auto parent=control(2);parent.transform.position_x=0;parent.transform.position_y=0;parent.scale_y=ScaleChannel{.5,{}};
     auto l=shape(1);l.transform.rotation_degrees=33;l.scale_y=ScaleChannel{.75,{{0,.75,InterpolationMode::CubicBezier,{.42,0,1,1}},{20,1.5}}};l.scale_linked=false;
     CompositionDocument d(64,32,{30,1},{l,parent});check(d.setLayerParent(1,2,7),"persist affine binding fixture");auto p=project(d);
-    const auto name=root+"/scale.motion";Store::save(path(name),p);check(read(name).value("version").toInt()==12,"v12 writer");check(Store::load(path(name))==p,"scale and binding round trip");
+    const auto name=root+"/scale.motion";Store::save(path(name),p);check(read(name).value("version").toInt()==Store::current_format_version,"current-format writer");check(Store::load(path(name))==p,"scale and binding round trip");
     Store::saveRecovery(path(root+"/recovery"),path(name),"scale",p);check(Store::loadRecovery(path(root+"/recovery")).document==p,"recovery wrapper preserves scale");
     auto bad=read(name);bad.insert("version",11);write(root+"/bad.motion",bad);rejects([&]{(void)Store::load(path(root+"/bad.motion"));});
     for(const auto field:{"scale_y","parent_affine"}) {
@@ -144,7 +144,7 @@ void persistence(const QString& root)
         if(code<=2){auto channel=record.value("scale_y").toObject();if(code<2)channel.insert("value",code==0?0:-.5);else channel.insert("keyframes",QJsonArray{QJsonObject{{"frame","0"},{"value",0}}});record.insert("scale_y",channel);}
         else if(code==3)record.insert("scale_linked",1);
         else if(code==4){auto matrix=record.value("parent_affine").toObject();matrix.insert("a",0);matrix.insert("b",0);record.insert("parent_affine",matrix);}
-        else bad.insert("version",13);
+        else bad.insert("version",Store::current_format_version+1);
         cases[0]=record;bad.insert("layers",cases);write(root+"/bad.motion",bad);rejects([&]{(void)Store::load(path(root+"/bad.motion"));});
     }
     auto legacy=project(CompositionDocument(64,32,{30,1},{shape(1)}));Store::save(path(root+"/legacy.motion"),legacy);const auto neutral=read(root+"/legacy.motion");

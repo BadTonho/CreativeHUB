@@ -1,6 +1,6 @@
 # Layer Hierarchy and Null Controls
 
-Status: implemented development workflow, current native `.motion` v12. Manual visual,
+Status: implemented development workflow, current native `.motion` v13. Manual visual,
 platform, and performance acceptance remain pending. The timeline
 [Parent & Link pick-whip](PARENT_PICK_WHIP.md) and
 [Viewer scale handles](SCALE_DRAG.md) are implemented. Scale handles support
@@ -12,6 +12,9 @@ moves the selected subtree through full parent/binding geometry. Independent
 implemented separately; see [Anchor Point](ANCHOR_POINT.md).
 The [Pan Behind](PAN_BEHIND.md) pivot gesture uses the full inherited affine
 matrix and preserves layer/descendant geometry while retaining parent bindings.
+
+Current documents are written as v13 for [static blend modes](BLEND_MODES.md).
+The feature fields and historical version-specific evidence below remain applicable.
 
 ## Editing
 

@@ -99,6 +99,7 @@ PreviewRequest MainWindow::buildPreviewRequest()
         snapshot.anchor_point = layer.anchor_point;
         snapshot.anchor_keyframes = layer.anchor_keyframes;
         snapshot.scale_y = layer.scale_y;
+        snapshot.blend_mode = layer.blend_mode;
         snapshot.keyframes = layer.keyframes;
         snapshot.content = layer.content;
         snapshot.effects = layer.effects;

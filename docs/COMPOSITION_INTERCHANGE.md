@@ -126,8 +126,8 @@ Gaussian Blur node; versions through 30 reject that node. Older supported
 projects retain their existing rendering defaults; readers predating these
 versions reject the newer files. Motion v7 introduced composition
 name/duration and fractional font-size metadata. Autosave and recovery use the
-same native serializers. Hub backups accept CSP 1–31 and Motion 1–12, retain
-presentation, Scale Y/link/affine binding, Anchor bases/curves, hierarchy, compensation and effect-curve records, and rebase existing media/Input paths. CSP 32 and Motion 13
+same native serializers. Hub backups accept CSP 1–31 and Motion 1–13, retain
+presentation, Scale Y/link/affine binding, Anchor bases/curves, hierarchy, compensation and effect-curve records, and rebase existing media/Input paths. CSP 32 and Motion 14
 are rejected. Application versions and the existing linked-handoff v1 protocol
 are unchanged.
 
@@ -267,3 +267,13 @@ The native File-menu, driver/font, small/medium/heavy interaction and macOS/Linu
 checks in [Gaussian Blur](video-editor/features/GAUSSIAN_BLUR.md) remain pending.
 Application versions and dependencies are unchanged. No installer, commit or
 remote submission was generated for this delivery.
+
+## Motion static blend-mode compatibility
+
+Motion v13 persists static layer modes; `.cscomp` remains v3. Export refuses all
+non-Normal layers with name/ID, including hidden/inactive layers, without flattening
+or silently replacing a mode. Normal imports/exports retain existing rules.
+Hub preserves the v13 field while rebasing existing media paths and rejects v14.
+Motion blend and Hub backup producer/consumer tests cover these boundaries. Video
+and Image gain no mode UI or native schema changes. See
+[Blend modes](motion-editor/features/BLEND_MODES.md).

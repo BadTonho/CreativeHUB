@@ -43,6 +43,7 @@ struct PreviewLayerSnapshot {
     model::AnchorPoint anchor_point;
     model::AnchorKeyframes anchor_keyframes;
     std::optional<model::ScaleChannel> scale_y;
+    creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
 };
 
 struct PreviewSceneSnapshot {

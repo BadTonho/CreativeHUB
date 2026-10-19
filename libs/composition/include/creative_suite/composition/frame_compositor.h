@@ -2,6 +2,7 @@
 
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/composition/affine_transform.h>
+#include <creative_suite/composition/blend_mode.h>
 #include <creative_suite/effects/effects.h>
 #include <creative_suite/media/video_frame.h>
 
@@ -127,6 +128,7 @@ struct CompositionLayer {
     std::shared_ptr<const media::NativeVideoFrame> native_frame;
     // Overrides transform geometry and aspect fit; transform.opacity still applies.
     std::optional<AffineTransform2D> source_to_canvas;
+    BlendMode blend_mode = BlendMode::Normal;
 };
 
 // Transparent nearest-neighbor Transform-stage raster, without an extra fit.
@@ -175,7 +177,10 @@ public:
 
     // Source frames are aspect-fit to the canvas, then scaled and rotated about
     // their centers. Sampling is nearest-neighbor. Layers blend source-over,
-    // back-to-front in vector order, over an opaque black RGBA8 background.
+    // back-to-front in vector order. Non-Normal modes blend over transparent
+    // premultiplied accumulation before flattening over black. Normal-only
+    // scenes retain the legacy path. Returned RGBA8 is always opaque. Invalid
+    // blend-mode values return nullopt, never silently substitute Normal.
     // Non-positive or unrepresentable canvas dimensions return nullopt.
     // Layers with a null frame, non-positive source dimensions, invalid
     // transforms, or unusable RGBA storage contribute no pixels. Allocation

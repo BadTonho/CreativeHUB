@@ -157,6 +157,7 @@ bool validLayer(const CompositionLayer& layer) noexcept
         !validTransform(layer.transform) ||
         !validTransformKeyframes(layer.keyframes) ||
         !validContentForKind(layer.kind, layer.content) ||
+        !creative_suite::composition::validBlendMode(layer.blend_mode) ||
         !validLayerEffects(layer.effects) || !validParentOffset(layer.parent_offset) ||
         !validAnchorPoint(layer.anchor_point) ||
         (layer.scale_y && !validScaleChannel(*layer.scale_y)) ||
@@ -166,7 +167,8 @@ bool validLayer(const CompositionLayer& layer) noexcept
         return false;
     }
     if (layer.kind == LayerKind::Null &&
-        (!layer.source_path.empty() || layer.linked_image || layer.presentation ||
+        (layer.blend_mode != creative_suite::composition::BlendMode::Normal ||
+         !layer.source_path.empty() || layer.linked_image || layer.presentation ||
          layer.source_frame_count || layer.source_start_frame || layer.source_duration_frames ||
          layer.maximum_timeline_duration_frames || layer.source_frame_rate != 0 ||
          !layer.effects.empty() || layer.source_mask || layer.transform_mask ||
@@ -920,6 +922,14 @@ bool CompositionDocument::setLayerVisible(LayerId id, bool visible) noexcept
     }
     layer->visible = visible;
     return true;
+}
+
+bool CompositionDocument::setLayerBlendMode(LayerId id, creative_suite::composition::BlendMode mode) noexcept
+{
+    auto* layer=findLayer(id);
+    if(!layer || !creative_suite::composition::validBlendMode(mode) || layer->blend_mode==mode ||
+        (layer->kind==LayerKind::Null && mode!=creative_suite::composition::BlendMode::Normal))return false;
+    layer->blend_mode=mode;return true;
 }
 
 bool CompositionDocument::setLayerTransform(

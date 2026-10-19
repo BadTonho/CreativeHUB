@@ -161,3 +161,12 @@ current two-axis override; ending the gesture invalidates transient deliveries.
 No new readback, raster or GPU image contract is introduced. Native GPU
 acceptance and the known OpenGL presentation failure remain separate from
 portable fallback coverage.
+
+## Layer blend-mode output
+
+Native v13 static modes travel in the immutable scene. Shared OpenGL snapshots
+the backdrop solely on GPU for non-Normal draws and finalizes opaque alpha before
+RGBA, texture lease or async-readback publication. The backdrop shares the bounded
+pool budget and is not leased. Recovery preserves mode and rebuilds the same scene
+on CPU. New modes do not introduce decode/raster invalidation or Viewer readback.
+Normal-only rendering is unchanged. See [Blend modes](../features/BLEND_MODES.md).

@@ -141,6 +141,7 @@ private:
                                 const std::filesystem::path& path,
                                 bool published_output);
     void syncTransformInspector();
+    void changeSelectedLayerBlendMode(int mode);
     void changeSelectedLayerParent(model::LayerId parent);
     void changeLayerParent(model::LayerId child, model::LayerId parent, std::int64_t frame);
     std::optional<std::vector<model::LayerId>> beginParentPickWhip(model::LayerId child);
