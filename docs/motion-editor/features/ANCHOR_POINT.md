@@ -1,10 +1,10 @@
 # Animated Anchor Point
 
-Status: introduced in native `.motion` v11; current format is v13. Manual visual acceptance, native
+Status: introduced in native `.motion` v11. Manual visual acceptance, native
 platform/GPU qualification, and representative performance measurements remain
 pending. Application versions are unchanged.
 
-Current documents are written as v16 for [Trim Paths](TRIM_PATHS.md).
+Current documents are written as v17 for [Drop Shadow](DROP_SHADOW.md).
 The feature fields and historical version-specific evidence below remain applicable.
 
 ## Editing

@@ -2,6 +2,7 @@
 
 #include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/composition/graphics_backend.h>
+#include <creative_suite/effects/drop_shadow.h>
 
 #include <functional>
 #include <memory>
@@ -126,7 +127,7 @@ struct OpenGlImageInput {
     [[nodiscard]] int width() const noexcept;
     [[nodiscard]] int height() const noexcept;
 };
-enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge, ApplyMask, MaskedBlend, GaussianBlur, ApplyTrackMatte };
+enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge, ApplyMask, MaskedBlend, GaussianBlur, ApplyTrackMatte, DropShadow };
 struct OpenGlImageOperation {
     OpenGlImageOperationKind kind = OpenGlImageOperationKind::Copy;
     OpenGlImageInput background;
@@ -143,6 +144,7 @@ struct OpenGlImageOperation {
     // ApplyTrackMatte uses background as target and mask as straight RGBA source.
     // An empty mask means transparent; dimensions otherwise match the target.
     TrackMatteMode track_matte_mode = TrackMatteMode::Alpha;
+    effects::DropShadowParameters drop_shadow;
 };
 
 // Optional raster contract: top-down ARGB32 premultiplied content and ARGB32

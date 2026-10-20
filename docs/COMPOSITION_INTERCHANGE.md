@@ -294,3 +294,7 @@ Motion native v15 owns freeform shape/mask geometry and complete-path animation.
 Motion native v16 adds Bezier-only Trim Paths bases and scalar curves. The
 existing `.cscomp` v3 Bezier refusal remains in force and additionally names
 Trim Paths when configured; no interchange schema or Video/Image UI changes.
+
+## Drop Shadow contract maintenance
+
+Motion native v17 adds ordered Drop Shadow effects. `.cscomp` remains v3 and refuses every instance, including disabled or hidden/inactive usage, by layer name/ID and effect position. No shadow is flattened or added to Video/Image interchange.

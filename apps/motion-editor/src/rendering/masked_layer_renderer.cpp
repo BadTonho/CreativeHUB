@@ -15,7 +15,7 @@ bool hasLayerMasks(const PreviewLayerSnapshot& layer) noexcept {
 }
 MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFramePtr source,
     const PreviewRequest& request,MotionMaskRasterCache& cache,c::OpenGlFrameCompositor* gpu,
-    const std::function<bool()>& cancel, const a::Transform2D* resolved_transform,const c::AffineTransform2D* resolved_world,const PathRaster* path_raster) {
+    const std::function<bool()>& cancel, const a::Transform2D* resolved_transform,const c::AffineTransform2D* resolved_world,const PathRaster* path_raster,std::uint64_t preparation_budget_bytes,bool record_metrics) {
     c::OpenGlCompositionTimings timings;
     const auto canceled=[&]{return cancel && cancel();};
     const auto coverage=[&](model::MaskId id,int width,int height,bool source_space=true) {
@@ -56,6 +56,7 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
     const auto evaluated_effects=model::validLayerEffects(layer.effects)
         ? model::evaluateLayerEffects(layer.effects,layer.local_frame)
         : layer.effects;
+    if(hasActiveDropShadow(layer))return renderExpandedLayer(layer,source,request,cache,gpu,cancel,resolved_world,path_raster,preparation_budget_bytes,record_metrics);
     if(gpu) {
         c::OpenGlImageInput current{source.get()};
         const auto process=[&](c::OpenGlImageOperation operation) {
@@ -76,11 +77,13 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
         for(const auto& effect:evaluated_effects) {
             if(canceled())return {};
             if(!std::visit([](const auto& e){return e.enabled;},effect))continue;
+            if(const auto* shadow=std::get_if<model::DropShadowEffect>(&effect);shadow&&shadow->parameters.opacity_percent==0)continue;
             auto original=current;
             c::OpenGlImageOperation op;op.background=current;
             std::visit([&](const auto& e){using E=std::decay_t<decltype(e)>;
                 if constexpr(std::is_same_v<E,model::ColorAdjustmentEffect>) {op.kind=c::OpenGlImageOperationKind::Color;op.colors={{e.brightness,e.contrast_percent,e.saturation_percent}};}
-                else {op.kind=c::OpenGlImageOperationKind::GaussianBlur;op.blur_radius_pixels=e.radius_pixels;}
+                else if constexpr(std::is_same_v<E,model::GaussianBlurEffect>) {op.kind=c::OpenGlImageOperationKind::GaussianBlur;op.blur_radius_pixels=e.radius_pixels;}
+                else {op.kind=c::OpenGlImageOperationKind::Copy;}
             },effect);
             auto processed=process(std::move(op));current={nullptr,std::move(processed)};
             if(canceled())return {};
@@ -110,6 +113,7 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
     for(const auto& effect:evaluated_effects) {
         if(canceled())return {};
         if(!std::visit([](const auto& e){return e.enabled;},effect))continue;
+        if(const auto* shadow=std::get_if<model::DropShadowEffect>(&effect);shadow&&shadow->parameters.opacity_percent==0)continue;
         const auto id=std::visit([](const auto& e){return e.mask;},effect);
         auto original=id?std::make_shared<m::RgbaFrame>(*frame):nullptr;
         if(!applyLayerEffects(*frame,{effect},cancel))return {};

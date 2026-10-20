@@ -26,11 +26,16 @@ inline void addMaskTimings(creative_suite::composition::OpenGlCompositionTimings
 }
 // Worker-only orchestration of existing image/effect operations. No decoder ownership.
 [[nodiscard]] bool hasLayerMasks(const PreviewLayerSnapshot&) noexcept;
+[[nodiscard]] bool hasActiveDropShadow(const PreviewLayerSnapshot&);
+[[nodiscard]] MaskedLayerFrame renderExpandedLayer(const PreviewLayerSnapshot&,
+    creative_suite::media::RgbaFramePtr, const PreviewRequest&,MotionMaskRasterCache&,
+    creative_suite::composition::OpenGlFrameCompositor*,const std::function<bool()>&,
+    const creative_suite::composition::AffineTransform2D*,const PathRaster*,std::uint64_t preparation_budget_bytes,bool record_metrics=true);
 [[nodiscard]] MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot&,
     creative_suite::media::RgbaFramePtr source, const PreviewRequest&,
     MotionMaskRasterCache&,
     creative_suite::composition::OpenGlFrameCompositor*,
     const std::function<bool()>& cancel,
     const creative_suite::animation::Transform2D* resolved_transform = nullptr,
-    const creative_suite::composition::AffineTransform2D* resolved_world = nullptr, const PathRaster* path_raster = nullptr);
+    const creative_suite::composition::AffineTransform2D* resolved_world = nullptr, const PathRaster* path_raster = nullptr, std::uint64_t preparation_budget_bytes = 256ULL*1024*1024,bool record_metrics=true);
 }

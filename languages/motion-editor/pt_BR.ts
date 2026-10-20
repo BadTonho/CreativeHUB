@@ -3,6 +3,15 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>MotionUiTranslation</name>
+    <message><source>The preview could not be rendered. Check the Motion Studio log for details.</source><translation>Não foi possível renderizar a prévia. Consulte o log do Motion Studio para obter detalhes.</translation></message>
+    <message><source>Drop Shadow</source><translation>Sombra projetada</translation></message>
+    <message><source>Shadow Color</source><translation>Cor da sombra</translation></message>
+    <message><source>Shadow Opacity (%)</source><translation>Opacidade da sombra (%)</translation></message>
+    <message><source>Shadow Angle (degrees)</source><translation>Ângulo da sombra (graus)</translation></message>
+    <message><source>Shadow Distance (px)</source><translation>Distância da sombra (px)</translation></message>
+    <message><source>Shadow Softness (px)</source><translation>Suavização da sombra (px)</translation></message>
+    <message><source>Source pixels before fitting. The shadow follows layer transforms; 0 degrees points right and 90 degrees down. Color is not animated.</source><translation>Pixels da fonte antes do ajuste. A sombra acompanha as transformações da camada; 0 graus apontam para a direita e 90 graus para baixo. A cor não é animável.</translation></message>
+
     <message><source>Trim Paths</source><translation>Aparar contorno</translation></message>
     <message><source>Enable Trim Paths</source><translation>Ativar aparagem do contorno</translation></message>
     <message><source>Toggle Keyframe</source><translation>Adicionar ou remover keyframe</translation></message>

@@ -23,7 +23,7 @@ shared.
 Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
 autosave preferences, and the recovery-management dialog. The store reuses the
 native document serializer and its atomic `QSaveFile` validation while writing
-the native `.motion` document at version 16 (recovery wrapper version 1). A recovery payload stores the complete
+the native `.motion` document at version 17 (recovery wrapper version 1). A recovery payload stores the complete
 composition and Media Pool plus the original document path and session ID; it
 does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
 
@@ -466,3 +466,12 @@ bounded length index while geometry matches, including Pen overrides. Trim
 ranges affect rasterized stroke only; full geometry still defines origins and
 mask references. Shared animation/compositor interfaces and Video/Image formats
 are unchanged. Native v16 and Hub backup are the affected persistence boundary.
+
+## Drop Shadow and expanded image stages
+
+[Drop Shadow](../features/DROP_SHADOW.md) keeps editing, animation, local origin,
+mask references and original media fit owned by Motion. Shared effects owns the
+Qt-free CPU primitive and bounds calculation; shared composition owns the GPU
+image operation. OpenGL reuses Gaussian Blur without intermediate readback;
+Vulkan explicitly refuses the new operation. Video/Image receive contract
+maintenance only. Native Motion v17 and Hub v17 are the persistence boundary.

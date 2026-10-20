@@ -1,13 +1,13 @@
 # Hub Regression Testing
 
-Current backup gates save Motion v16 and reject v17. Version-specific sections
+Current backup gates save Motion v17 and reject v18. Version-specific sections
 below retain the records and evidence from earlier deliveries.
 
 Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
-`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion17.
+`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion18.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v16 Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v17 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v17 Drop Shadow, Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v18 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Motion v13 blend-mode backup coverage
 
@@ -395,3 +395,19 @@ The Windows Release execution on 2026-10-19 passed both backup gates within the
 40/40 affected-test gate. Motion and Hub were built at their canonical Release
 paths; see the [Trim Paths execution record](../../motion-editor/features/TRIM_PATHS.md#windows-release-execution-2026-10-19)
 for output times, separate GPU evidence and pending manual acceptance.
+
+## Motion v17 Drop Shadow backup coverage
+
+[Producer/reader coverage](../../../apps/hub/tests/test_backup_formats.cpp) saves
+RGB shadows, full-turn angles, all four curves and shared effect masks alongside
+Trim Paths, hierarchy and real media. It reopens vault/restored payloads and
+compares complete Motion data plus relocated paths.
+[Manager coverage](../../../apps/hub/tests/test_backup_manager.cpp) rejects v18;
+[CTest registration](../../../apps/hub/tests/CMakeLists.txt) retains both gates.
+Older sections are historical delivery records. Native UI/platform checks remain
+pending; see [Drop Shadow](../../motion-editor/features/DROP_SHADOW.md).
+
+On 2026-10-20, both backup gates passed within the **59/59** affected Windows
+Release gate. The four applications were built at their canonical Release paths;
+see the [Drop Shadow execution record](../../motion-editor/features/DROP_SHADOW.md#windows-release-execution-2026-10-20)
+for output times, separate native GPU/fallback evidence and pending acceptance.

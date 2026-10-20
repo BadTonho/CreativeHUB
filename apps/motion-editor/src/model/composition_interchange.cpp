@@ -21,6 +21,9 @@ x::Document exportComposition(const MotionProjectData &project) {
     std::vector<x::Issue> issues;
     for(const auto& mask:project.masks)if(!mask.path)d.masks.push_back(static_cast<const x::Mask&>(mask));
     for (const auto &layer : project.layers) {
+        bool shadow_found=false;
+        for(std::size_t i=0;i<layer.effects.size();++i)if(std::holds_alternative<DropShadowEffect>(layer.effects[i])){issues.push_back({layer.id,"Layer '"+layer.name+"' (#"+std::to_string(layer.id)+") effect #"+std::to_string(i+1)+" uses Drop Shadow, unsupported by composition interchange."});shadow_found=true;}
+        if(shadow_found)continue;
         bool path_mask=false;
         for(const auto& mask:project.masks)if(mask.path&&(layer.source_mask==mask.id||layer.transform_mask==mask.id||std::any_of(layer.effects.begin(),layer.effects.end(),[&](const auto& e){return std::visit([&](const auto& v){return v.mask==mask.id;},e);}))) {
             issues.push_back({layer.id,"Layer '"+layer.name+"' uses Bezier mask #"+std::to_string(mask.id)+" not supported by composition interchange."});path_mask=true;

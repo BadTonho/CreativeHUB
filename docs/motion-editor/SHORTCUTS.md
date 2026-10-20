@@ -52,3 +52,7 @@ In [Pen mode](features/BEZIER_PATHS.md), Enter finishes an open shape or closes 
 Trim Paths adds no shortcut. Its three scalar channels use the existing
 Inspector key buttons, timeline key dragging and Graph Editor easing controls;
 Viewer/Pen gestures are cancelled before a Trim edit is committed.
+
+## Drop Shadow contract maintenance
+
+Drop Shadow adds no shortcut. Its four numeric channels use the existing Inspector key buttons, timeline and Graph Editor; the RGB picker remains static. Editing cancels transient gestures before applying the chosen value.

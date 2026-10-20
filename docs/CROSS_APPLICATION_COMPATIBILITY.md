@@ -420,3 +420,7 @@ Motion native v16/Hub backup preserves animated Trim Paths without changing
 media rebasing or shared renderer contracts. Hub rejects v17. `.cscomp` v3
 continues to refuse these Bezier shapes with layer identifiers and a Trim Paths
 annotation. Producer/reader backup and exchange regressions protect this boundary.
+
+## Drop Shadow contract maintenance
+
+Motion native v17/Hub backup preserves Drop Shadow colors, four bases/curves and effect masks while rebasing existing media paths; Hub rejects v18. `.cscomp` v3 explicitly refuses it. Video/Image maintain the shared CPU/GPU operation contracts without shadow UI or persisted records.

@@ -453,8 +453,19 @@ void testMotionDocuments(const QString& root) {
     CS_TEST_CHECK(Store::load(fsPath(trim_backup.vault))==project);
     CS_TEST_CHECK(Store::load(fsPath(trim_backup.restored))==project);
     CS_TEST_CHECK(std::filesystem::exists(Store::load(fsPath(trim_backup.restored)).layers.front().source_path));
+    auto shadow_layer=std::find_if(hierarchy.layers().begin(),hierarchy.layers().end(),[&](const auto& l){return l.id==path_id;});
+    auto shadow_effects=shadow_layer->effects;DropShadowEffect shadow;shadow.parameters.color={10,40,130};shadow.parameters.angle_degrees=-1080.125;shadow.parameters.distance_pixels=19.5;shadow.parameters.softness_pixels=3.25;
+    if(!hierarchy.masks().empty())shadow.mask=hierarchy.masks().front().id;
+    const auto shadow_index=shadow_effects.size();shadow_effects.emplace_back(shadow);
+    CS_TEST_CHECK(hierarchy.setLayerEffects(path_id,shadow_effects));
+    for(auto property:shadow_properties){CS_TEST_CHECK(hierarchy.setEffectKeyframe(path_id,shadow_index,property,0,shadowBaseValue(shadow,property)));CS_TEST_CHECK(hierarchy.setEffectKeyframe(path_id,shadow_index,property,20,shadowBaseValue(shadow,property)));}
+    project.layers=hierarchy.layers();project.masks=hierarchy.masks();Store::save(fsPath(bezier_path),project);
+    const auto shadow_backup=backup(QDir(root).filePath("motion-shadow-v17"),bezier_path);
+    CS_TEST_CHECK(Store::load(fsPath(shadow_backup.vault))==project);
+    CS_TEST_CHECK(Store::load(fsPath(shadow_backup.restored))==project);
+    CS_TEST_CHECK(std::filesystem::exists(Store::load(fsPath(shadow_backup.restored)).layers.front().source_path));
     auto future=QJsonDocument::fromJson(readBytes(blend_path)).object();future.insert("version",Store::current_format_version+1);
-    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v17.motion");writeBytes(future_path,QJsonDocument(future).toJson());
+    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v18.motion");writeBytes(future_path,QJsonDocument(future).toJson());
     creative_suite::hub::BackupManager manager(QDir(root).filePath("future-vault"));QString rejected_path,error;
     CS_TEST_CHECK(!manager.createBackup(future_path,&rejected_path,&error)&&!error.isEmpty());
 

@@ -200,7 +200,7 @@ void modelAndPersistence(const QString &root) {
           "Null cannot trim");
     const auto filename = root + "/trim.motion";
     Store::save(file(filename), project(doc));
-    check(Store::load(file(filename)) == project(doc), "v16 roundtrip");
+    check(Store::load(file(filename)) == project(doc), "current native Trim roundtrip");
     Store::saveRecovery(file(root + "/recovery"), file(filename), "trim", project(doc));
     check(Store::loadRecovery(file(root + "/recovery")).document == project(doc), "recovery retains trim");
     bool refused = false;
@@ -214,6 +214,14 @@ void modelAndPersistence(const QString &root) {
     check(input.open(QIODevice::ReadOnly), "read native JSON");
     const auto encoded = QJsonDocument::fromJson(input.readAll()).object();
     input.close();
+    auto previous_version = encoded;
+    previous_version.insert("version", 16);
+    QFile previous_file(root + "/declared-v16.motion");
+    check(previous_file.open(QIODevice::WriteOnly), "write declared v16 fixture");
+    previous_file.write(QJsonDocument(previous_version).toJson());
+    previous_file.close();
+    check(Store::load(file(previous_file.fileName())) == project(doc),
+          "declared v16 Trim data migrates without loss");
     for (int code = 0; code < 9; ++code) {
         auto bad = encoded;
         auto layers = bad.value("layers").toArray();
@@ -237,7 +245,7 @@ void modelAndPersistence(const QString &root) {
         else if (code == 7)
             layer.insert("kind", "null");
         else
-            bad.insert("version", 17);
+            bad.insert("version", 18);
         content.insert("trim_paths", trim);
         layer.insert("shape_content", content);
         layers[0] = layer;
@@ -567,8 +575,8 @@ int main(int argc, char **argv) {
         std::cout << "Trim Paths tests passed\n";
         return 0;
     } catch (const motion::persistence::MotionDocumentError &e) {
-        std::cerr << e.what() << " path=" << e.path().string()
-                  << " error=" << e.systemError().value_or(0) << '\n';
+        std::cerr << e.what() << " path=" << e.path().string() << " error=" << e.systemError().value_or(0)
+                  << '\n';
         return 1;
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

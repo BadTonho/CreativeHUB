@@ -365,6 +365,11 @@ QJsonArray writeEffects(const std::vector<model::LayerEffect>& effects)
                                      writeKeyframes(value.radius_keyframes));
                     object.insert(QStringLiteral("keyframes"), keyframes);
                 }
+            } else if constexpr(std::is_same_v<Effect,model::DropShadowEffect>) {
+                object.insert("type","drop_shadow");QJsonArray rgb;for(auto c:value.parameters.color)rgb.append(int(c));object.insert("color_rgb",rgb);
+                const std::array<const char*,4> names{"opacity_percent","angle_degrees","distance_pixels","softness_pixels"};QJsonObject keys;
+                for(std::size_t i=0;i<4;++i){object.insert(names[i],model::shadowBaseValue(value,model::shadow_properties[i]));if(!value.keyframes[i].empty())keys.insert(names[i],writeKeyframes(value.keyframes[i]));}
+                if(!keys.empty())object.insert("keyframes",keys);
             } else {
                 object.insert(QStringLiteral("type"), QStringLiteral("color_adjustment"));
                 object.insert(QStringLiteral("brightness"), value.brightness);
@@ -417,7 +422,21 @@ std::vector<model::LayerEffect> parseEffects(const QJsonArray& array,
         const auto mask=object.contains("mask")?requiredInt64(object,"mask",path):0;
         if(mask<0)fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Invalid mask reference."));
         const auto enabled = requiredBool(object, "enabled", path);
-        if (type == QLatin1String("gaussian_blur")) {
+        if(type==QLatin1String("drop_shadow")) {
+            if(document_version<17)fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Drop Shadow requires document version 17."));
+            model::DropShadowEffect shadow;shadow.enabled=enabled;shadow.mask=mask;
+            const auto rgb=requiredArray(object,"color_rgb",path);
+            if(rgb.size()!=3)fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Drop Shadow requires three RGB bytes."));
+            for(int i=0;i<3;++i){if(!rgb[i].isDouble()||rgb[i].toDouble()<0||rgb[i].toDouble()>255||std::floor(rgb[i].toDouble())!=rgb[i].toDouble())fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Invalid Drop Shadow RGB component."));shadow.parameters.color[i]=std::uint8_t(rgb[i].toInt());}
+            const std::array<const char*,4> names{"opacity_percent","angle_degrees","distance_pixels","softness_pixels"};
+            for(std::size_t i=0;i<4;++i)model::setShadowBaseValue(shadow,model::shadow_properties[i],requiredNumber(object,names[i],path));
+            if(object.contains("keyframes")) {
+                const auto curves=requiredObject(object,"keyframes",path);
+                for(auto it=curves.begin();it!=curves.end();++it)if(std::find(names.begin(),names.end(),it.key().toStdString())==names.end())fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Unknown Drop Shadow curve."));
+                for(std::size_t i=0;i<4;++i)if(curves.contains(names[i]))shadow.keyframes[i]=parseKeyframes(requiredArray(curves,names[i],path),path,keyframe_count,document_version);
+            }
+            effects.emplace_back(std::move(shadow));
+        } else if (type == QLatin1String("gaussian_blur")) {
             model::GaussianBlurEffect blur;
             blur.enabled = enabled;
             blur.mask=mask;
@@ -568,6 +587,8 @@ void validateDocument(const MotionProjectData& document,
                 using Effect = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<Effect, model::GaussianBlurEffect>) {
                     keyframe_count += value.radius_keyframes.size();
+                } else if constexpr(std::is_same_v<Effect,model::DropShadowEffect>) {
+                    for(const auto& keys:value.keyframes)keyframe_count+=keys.size();
                 } else {
                     keyframe_count += value.brightness_keyframes.size() +
                         value.contrast_keyframes.size() +

@@ -32,6 +32,7 @@ target_compile_features(creative-suite-animation PUBLIC cxx_std_20)
 add_library(creative-suite-effects STATIC
     effects/src/effects.cpp
     effects/src/gaussian_blur.cpp
+    effects/src/drop_shadow.cpp
     effects/include/creative_suite/effects/gaussian_blur.h
     effects/include/creative_suite/effects/effects.h
 )

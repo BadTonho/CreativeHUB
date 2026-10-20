@@ -63,7 +63,7 @@ void MaskInspectorWidget::refresh(){
     if(document_)for(const auto& l:document_->layers())if(l.id==layer_){layer=&l;break;}
     setEnabled(layer!=nullptr);targets_->clear();masks_->clear();key_list_->clear();
     targets_->addItem(MotionUiTranslation::tr("Content"),-2);targets_->addItem(MotionUiTranslation::tr("Transformation"),-1);
-    if(layer)for(std::size_t i=0;i<layer->effects.size();++i)targets_->addItem(QString(MotionUiTranslation::tr("Effect %1: %2")).arg(i+1).arg(std::holds_alternative<model::GaussianBlurEffect>(layer->effects[i])?MotionUiTranslation::tr("Gaussian Blur"):MotionUiTranslation::tr("Color Adjustment")),int(i));
+    if(layer)for(std::size_t i=0;i<layer->effects.size();++i)targets_->addItem(QString(MotionUiTranslation::tr("Effect %1: %2")).arg(i+1).arg(std::holds_alternative<model::GaussianBlurEffect>(layer->effects[i])?MotionUiTranslation::tr("Gaussian Blur"):std::holds_alternative<model::DropShadowEffect>(layer->effects[i])?MotionUiTranslation::tr("Drop Shadow"):MotionUiTranslation::tr("Color Adjustment")),int(i));
     if(targets_->findData(target_)<0)target_=-2;
     targets_->setCurrentIndex(targets_->findData(target_));
     masks_->addItem(MotionUiTranslation::tr("None"),QVariant::fromValue<qulonglong>(0));

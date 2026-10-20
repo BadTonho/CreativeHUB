@@ -2074,3 +2074,7 @@ Shared CPU/OpenGL gain an additive alpha/luma image operation for Motion;
 Vulkan refuses it explicitly. This application gains no matte UI or persisted
 fields. Its existing composition/raster, masks, preview/UI and export gates
 protect unchanged operations and defaults. See [contracts and pending acceptance](../../motion-editor/features/TRACK_MATTES.md).
+
+## Drop Shadow contract maintenance
+
+Motion Drop Shadow extends shared CPU effects/GPU image operations only. Video adds no selector or persisted field. Shared composition/OpenGL/Vulkan, blur/mask/composition interchange, Fusion mask/composition, preview/OpenGL preview and render/export regressions protect existing behavior. Native UI/platform acceptance remains separate.

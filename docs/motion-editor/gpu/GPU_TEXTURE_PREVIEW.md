@@ -187,3 +187,7 @@ bounded cubic cuts before the existing path raster pipeline. Scene snapshots
 share its immutable curves. Pen geometry overrides invalidate the length index
 when geometry changes; presentation sessions/fallback retain the same scene,
 frame and candidate. No new GPU image operation or readback is introduced.
+
+## Drop Shadow contract maintenance
+
+[Drop Shadow](../features/DROP_SHADOW.md) adds worker-owned expanded origins and stable media fitting to prepared layers. Its shared image operation uses existing GPU blur and distinct targets, with no intermediate readback. Sessions, overrides and late-delivery rejection are unchanged; resource failure recovers through the same candidate scene. Native composition parity and Viewer presentation acceptance remain separate.

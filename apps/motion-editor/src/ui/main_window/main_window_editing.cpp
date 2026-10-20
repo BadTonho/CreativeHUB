@@ -378,6 +378,10 @@ void MainWindow::refreshCurveEditor()
     } else if (effect_curve) {
         QString prop_label;
         switch (curve_selection_->effect_property) {
+        case model::EffectParameterProperty::ShadowOpacityPercent:prop_label=MotionUiTranslation::tr("Shadow Opacity (%)");break;
+        case model::EffectParameterProperty::ShadowAngleDegrees:prop_label=MotionUiTranslation::tr("Shadow Angle (degrees)");break;
+        case model::EffectParameterProperty::ShadowDistancePixels:prop_label=MotionUiTranslation::tr("Shadow Distance (px)");break;
+        case model::EffectParameterProperty::ShadowSoftnessPixels:prop_label=MotionUiTranslation::tr("Shadow Softness (px)");break;
         case model::EffectParameterProperty::GaussianBlurRadius:
             prop_label = MotionUiTranslation::tr("Radius (sigma)");
             break;
@@ -747,15 +751,17 @@ void MainWindow::selectEffectRow(int row)
 }
 void MainWindow::addLayerEffect(int kind)
 {
+    if(export_worker_||audio_keyframe_worker_)return;
     finishPendingTransformEdit();
-    if (!document_ || selected_layer_id_ == 0 || (kind != 0 && kind != 1)) return;
+    if (!document_ || selected_layer_id_ == 0 || (kind < 0 || kind > 2)) return;
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
         [this](const auto& layer) { return layer.id == selected_layer_id_; });
     if (found == document_->layers().end()) return;
     auto before = captureEditState();
     auto effects = found->effects;
     if (kind == 0) effects.emplace_back(model::GaussianBlurEffect{});
-    else effects.emplace_back(model::ColorAdjustmentEffect{});
+    else if(kind==1)effects.emplace_back(model::ColorAdjustmentEffect{});
+    else effects.emplace_back(model::DropShadowEffect{});
     const auto new_index = effects.size() - 1;
     if (!document_->setLayerEffects(selected_layer_id_, effects)) return;
     selected_effect_ = std::pair{selected_layer_id_, new_index};
@@ -770,6 +776,7 @@ void MainWindow::applySelectedEffectStack(
     std::vector<model::LayerEffect> effects,
     bool coalesce_parameters)
 {
+    if(export_worker_||audio_keyframe_worker_)return;
     if (!document_ || selected_layer_id_ == 0 || !selected_effect_.has_value() ||
         selected_effect_->first != selected_layer_id_) return;
     const auto effect_identity = *selected_effect_;
@@ -805,6 +812,7 @@ void MainWindow::applySelectedEffectStack(
 }
 void MainWindow::editSelectedEffectParameters()
 {
+    if(export_worker_||audio_keyframe_worker_)return;
     if (!document_ || !selected_effect_.has_value() ||
         selected_effect_->first != selected_layer_id_) return;
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
@@ -842,10 +850,11 @@ void MainWindow::editSelectedEffectParameters()
 }
 void MainWindow::toggleSelectedEffectKeyframe(int property_index)
 {
+    if(export_worker_||audio_keyframe_worker_)return;
     finishPendingTransformEdit();
     if (!document_ || !selected_effect_.has_value() ||
         selected_effect_->first != selected_layer_id_ || timeline_ == nullptr ||
-        property_index < 0 || property_index > 3) {
+        property_index < 0 || property_index > 7) {
         return;
     }
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
@@ -888,6 +897,7 @@ void MainWindow::toggleSelectedEffectKeyframe(int property_index)
 }
 void MainWindow::reorderEffectsFromList(std::size_t source_index, int insertion_row)
 {
+    if(export_worker_||audio_keyframe_worker_)return;
     finishPendingTransformEdit();
     if (!document_ || selected_layer_id_ == 0 || inspector_ == nullptr) return;
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
@@ -931,6 +941,7 @@ void MainWindow::reorderEffectsFromList(std::size_t source_index, int insertion_
 }
 void MainWindow::moveSelectedEffect(int direction)
 {
+    if(export_worker_||audio_keyframe_worker_)return;
     finishPendingTransformEdit();
     if (!document_ || !selected_effect_.has_value() || direction == 0) return;
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
@@ -961,6 +972,7 @@ void MainWindow::moveSelectedEffect(int direction)
 }
 void MainWindow::removeSelectedEffect()
 {
+    if(export_worker_||audio_keyframe_worker_)return;
     finishPendingTransformEdit();
     if (!document_ || !selected_effect_.has_value()) return;
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),

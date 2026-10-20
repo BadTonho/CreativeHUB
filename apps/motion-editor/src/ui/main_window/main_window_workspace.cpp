@@ -132,6 +132,8 @@ void MainWindow::createWorkspace()
             this, &MainWindow::removeSelectedEffect);
     connect(inspector_, &InspectorWidget::effectRowSelected,
             this, &MainWindow::selectEffectRow);
+    connect(inspector_,&InspectorWidget::shadowValueEdited,this,&MainWindow::editSelectedShadowValue);
+    connect(inspector_,&InspectorWidget::shadowColorRequested,this,&MainWindow::chooseShadowColor);
     connect(inspector_, &InspectorWidget::effectParametersEdited,
             this, &MainWindow::editSelectedEffectParameters);
     connect(inspector_, &InspectorWidget::effectParametersEditFinished,
@@ -292,7 +294,7 @@ void MainWindow::createWorkspace()
                std::int64_t from_local_frame,
                std::int64_t to_local_frame) {
             finishPendingTransformEdit();
-            if (!document_) return false;
+            if (!document_ || export_worker_ || audio_keyframe_worker_) return false;
             auto before = captureEditState();
             if (!document_ || !document_->moveEffectKeyframe(
                     id, effect_index, property, from_local_frame, to_local_frame)) {
@@ -492,6 +494,7 @@ void MainWindow::createWorkspace()
                     logPositionDragFailure("position_drag_render",id,current,std::runtime_error("Gesture frame rendering failed."));
                     return;
                 }
+                if(frame.render_failed)statusBar()->showMessage(MotionUiTranslation::tr("The preview could not be rendered. Check the Motion Studio log for details."),5000);
                 if (frame.valid()) viewer_->setPreviewFrame(std::move(frame));
                 else diagnostics::PerformanceMetrics::instance().discardRequest(frame.generation);
             } else diagnostics::PerformanceMetrics::instance().recordStaleResult(frame.generation);

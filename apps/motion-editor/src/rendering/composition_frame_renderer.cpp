@@ -542,7 +542,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         const auto consumers=matte_consumers.find(layer.id);
         const bool needs_matte_pixels=matte_graph && (layer.track_matte ||
             (consumers!=matte_consumers.end() && consumers->second>0));
-        if(hasLayerMasks(layer) || needs_matte_pixels || path_raster) {
+        if(hasLayerMasks(layer) || needs_matte_pixels || path_raster || hasActiveDropShadow(layer)) {
             if(try_gpu_effects && !gpu_compositor_)gpu_compositor_=std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(
                 gpu_surface_,creative_suite::composition::OpenGlPrecisionPolicy::Automatic,texture_share_context_,texture_budget_);
             MaskedLayerFrame processed;
@@ -550,7 +550,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 const auto bytes=std::uint64_t(request.canvas_size.width)*request.canvas_size.height*4;
                 if(matte_graph && portable_raster_bytes+bytes*(layer.track_matte?2:1)>256ULL*1024*1024)
                     throw std::runtime_error("Track matte intermediates exceed the 256 MiB preparation budget.");
-                processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel,&effective_transform,effective_world?&*effective_world:nullptr,path_raster?&*path_raster:nullptr);
+                processed=renderMaskedLayer(layer,frame,request,mask_cache,try_gpu_effects?gpu_compositor_.get():nullptr,should_cancel,&effective_transform,effective_world?&*effective_world:nullptr,path_raster?&*path_raster:nullptr,256ULL*1024*1024-portable_raster_bytes,record_preview_metrics_);
                 if(matte_graph && layer.track_matte && (processed.rgba || processed.texture)) {
                     const auto source=matte_outputs.find(layer.track_matte->source_id);
                     if(try_gpu_effects) {
@@ -578,14 +578,15 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             catch(const std::exception& e) {
                 if(should_cancel && should_cancel())return {};
                 creative_suite::diagnostics::Logger::instance().log(try_gpu_effects?creative_suite::diagnostics::Level::Warning:creative_suite::diagnostics::Level::Error,
-                    layer.track_matte?"motion_track_matte":"motion_masks",try_gpu_effects?"gpu_cpu_recovery":"render_layer",e.what(),
+                    layer.track_matte?"motion_track_matte":hasActiveDropShadow(layer)?"motion_shadow":"motion_masks",try_gpu_effects?"gpu_cpu_recovery":"render_layer",e.what(),
                     {{"layer_id",std::to_string(layer.id)},
                      {"source_id",layer.track_matte?std::to_string(layer.track_matte->source_id):std::to_string(layer.id)},
                      {"track_mattes",matte_relations(layer.id)},
                      {"mode",layer.track_matte?std::string(creative_suite::composition::trackMatteModeIdentifier(layer.track_matte->mode)):"none"},
                      {"frame",std::to_string(request.composition_frame)},{"backend",try_gpu_effects?"opengl":"cpu"}});
+                if(record_preview_metrics_&&try_gpu_effects&&hasActiveDropShadow(layer))diagnostics::PerformanceMetrics::instance().recordGpuDropShadow(0,1,true,0);
                 if(try_gpu_effects)return cpu_mask_recovery();
-                if(fail_on_media_error)throw;
+                if(fail_on_media_error||hasActiveDropShadow(layer))throw;
                 return {};
             }
             if(!processed.rgba && !processed.texture)return {};
@@ -619,8 +620,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             std::all_of(evaluated_effects.begin(), evaluated_effects.end(), [](const auto& effect) {
                 return std::visit([](const auto& value) {
                     using Effect = std::decay_t<decltype(value)>;
-                    return !value.enabled ||
-                        std::is_same_v<Effect, model::ColorAdjustmentEffect>;
+                    if constexpr(std::is_same_v<Effect,model::DropShadowEffect>)return !value.enabled||value.parameters.opacity_percent==0;
+                    else return !value.enabled || std::is_same_v<Effect, model::ColorAdjustmentEffect>;
                 }, effect);
             });
         const bool gpu_ordered_stack = try_gpu_effects && has_enabled_effects &&
@@ -648,7 +649,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                         gpu_effects.emplace_back(
                             creative_suite::composition::GpuGaussianBlurParameters{
                                 value.radius_pixels});
-                    } else {
+                    } else if constexpr(std::is_same_v<Effect,model::ColorAdjustmentEffect>) {
                         gpu_effects.emplace_back(
                             creative_suite::effects::ColorAdjustmentParameters{
                                 value.brightness, value.contrast_percent,

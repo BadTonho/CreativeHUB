@@ -579,10 +579,11 @@ architectural complexity:
    Adjustment properties across the document model, timeline, Graph Editor,
    preview, and export.
 2. **Layer hierarchy and transform ergonomics:** Inspector parenting and Null layers are implemented in native v10. Animated Anchor Point and compensated Inspector repositioning are implemented in native v11. Independent Scale X/Y with affine inheritance is implemented in native v12. Pan Behind adds pivot dragging with transient Inspector values and release-only commit without a format change. The timeline pick-whip adds direct parent selection, candidate feedback and wheel/edge scrolling using the same parent command. The Viewer Position handle adds live asynchronous movement preview and atomic Position commit. The Viewer Rotation handle adds local affine-aware rotation with full turns, live preview and release-only commit. Viewer Scale X/Y/XY handles add linked/free live scaling with positive clamping and atomic release-only edits. Manual acceptance remains pending.
-3. **Blending modes and Track Mattes:** six static per-layer modes are implemented in native v13 with transparent accumulation, opaque output and CPU/OpenGL composition; Vulkan requests fallback. Alpha/Luma and inverted track mattes with shared sources/chains are implemented in native v14. Pen-created animated shape/mask paths are implemented in native v15; Animated Trim Paths is implemented in native v16; Drop Shadow, Glow and alpha export remain the next candidates.
+3. **Blending modes and Track Mattes:** six static per-layer modes are implemented in native v13 with transparent accumulation, opaque output and CPU/OpenGL composition; Vulkan requests fallback. Alpha/Luma and inverted track mattes with shared sources/chains are implemented in native v14. Pen-created animated shape/mask paths are implemented in native v15; Animated Trim Paths is implemented in native v16; Animated Drop Shadow is implemented in native v17; Glow and alpha export remain the next candidates.
 4. **Pen tool (implemented in native v15) and Trim Paths:** freeform shapes and masks support animated vertices/tangents, local Viewer editing and complete-path easing. Trim Paths is implemented in native v16 with Start/End/Offset scalar animation; manual/platform/performance acceptance is pending.
-5. **Drop Shadow, Glow, and Alpha-channel export:** core motion-graphics shading
-   effects paired with transparent-background export for overlay workflows.
+5. **Drop Shadow (implemented in native v17), Glow and Alpha-channel export:**
+   ordered local RGB shadows have four scalar animation channels. Glow and
+   transparent-background export remain planned. Manual acceptance is pending.
 
 ## Status legend
 
@@ -614,3 +615,9 @@ automated implementation coverage.
 | Feature | Automated coverage | Remaining acceptance |
 | --- | --- | --- |
 | Bezier stroke trimming, open/closed seams, length/cubic cuts, three scalar channels, history, v16/recovery | [Trim tests](../../apps/motion-editor/tests/trim_paths_test.cpp), [CTest registration](../../apps/motion-editor/tests/CMakeLists.txt): `creative-suite-motion-editor-trim-paths` and `...-trim-paths-hidpi`; existing path/transform/preview/export/UI suites; Motion GPU composition; `hub-backup-format-test` | [Manual checklist](features/TRIM_PATHS.md#verification-and-pending-acceptance); native presentation/platform checks and benchmarks pending. |
+
+## Drop Shadow regression boundary
+
+| Feature | Automated coverage | Remaining acceptance |
+| --- | --- | --- |
+| Ordered shadows, expanded origins/fitting, masks/mattes, animation/history, v17/recovery and GPU image contract | [Drop Shadow tests](../../apps/motion-editor/tests/drop_shadow_test.cpp), [CTest registration](../../apps/motion-editor/tests/CMakeLists.txt): `creative-suite-motion-editor-drop-shadow` and `...-drop-shadow-hidpi`; `hub-backup-format-test`; existing shared/consumer regressions | [Manual checklist](features/DROP_SHADOW.md#verification-and-pending-acceptance); visual/platform/native Viewer presentation and benchmarks pending. |

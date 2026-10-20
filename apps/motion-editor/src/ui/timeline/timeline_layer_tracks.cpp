@@ -115,6 +115,10 @@ QString effectPropertyName(std::size_t effect_index, EffectParameterProperty pro
     using P = EffectParameterProperty;
     QString prop_label;
     switch (property) {
+    case P::ShadowOpacityPercent:prop_label=MotionUiTranslation::tr("Shadow Opacity (%)");break;
+    case P::ShadowAngleDegrees:prop_label=MotionUiTranslation::tr("Shadow Angle (degrees)");break;
+    case P::ShadowDistancePixels:prop_label=MotionUiTranslation::tr("Shadow Distance (px)");break;
+    case P::ShadowSoftnessPixels:prop_label=MotionUiTranslation::tr("Shadow Softness (px)");break;
     case P::GaussianBlurRadius:
         prop_label = MotionUiTranslation::tr("Radius (sigma)");
         break;
@@ -1040,6 +1044,8 @@ private:
                                 std::nullopt,
                                 effect_index,
                                 model::EffectParameterProperty::GaussianBlurRadius});
+                        } else if(std::holds_alternative<model::DropShadowEffect>(effect)) {
+                            for(auto property:model::shadow_properties)visual_rows_.push_back({index,VisualTimelineRow::Kind::EffectProperty,std::nullopt,effect_index,property});
                         } else if (std::holds_alternative<model::ColorAdjustmentEffect>(effect)) {
                             visual_rows_.push_back({
                                 index,

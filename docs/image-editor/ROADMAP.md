@@ -462,3 +462,7 @@ fields. Its existing composition/raster, masks, preview/UI and export gates
 protect unchanged operations and defaults. See [contracts and pending acceptance](../motion-editor/features/TRACK_MATTES.md).
 
 Shared logical mask-raster maintenance for Motion Bezier paths: existing composition, `creative-suite-image-editor-raster`, `creative-suite-image-editor-masks`, UI and export suites protect unchanged defaults. No Image path control or format field is added; native acceptance remains separate.
+
+## Drop Shadow contract maintenance
+
+Motion Drop Shadow extends shared CPU effects/GPU image operations only; Image adds no selector or persisted field. Existing core/raster/mask/blur, UI/export, interactive and GPU-raster regressions protect consumers. See [shared Motion contract](../motion-editor/features/DROP_SHADOW.md); native/platform acceptance remains pending.

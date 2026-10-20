@@ -25,6 +25,7 @@ enum class PreviewTimingStage : std::size_t {
     GpuCompositionReadback,
     GpuColorAdjustment,
     GpuGaussianBlur,
+    GpuDropShadow,
     GpuProducerFenceSubmission,
     GpuViewerWaitSubmission,
     GpuViewerDrawSubmission,
@@ -37,6 +38,7 @@ enum class PreviewTimingStage : std::size_t {
 enum class PreviewEffectKind : std::size_t {
     GaussianBlur,
     ColorAdjustment,
+    DropShadow,
     Count
 };
 
@@ -86,6 +88,7 @@ struct PreviewMetricsSnapshot {
     std::uint64_t gpu_gaussian_blur_effects = 0;
     std::uint64_t gpu_gaussian_blur_fallbacks = 0;
     std::uint64_t gpu_gaussian_blur_failures = 0;
+    std::uint64_t gpu_drop_shadow_effects = 0, gpu_drop_shadow_fallbacks = 0, gpu_drop_shadow_failures = 0;
     std::array<TimingSummary,
                static_cast<std::size_t>(PreviewTimingStage::Count)> timings{};
     std::array<TimingSummary,
@@ -144,6 +147,7 @@ public:
                                std::uint64_t fallback_effects,
                                bool failed,
                                std::uint64_t submission_nanoseconds) noexcept;
+    void recordGpuDropShadow(std::uint64_t applied_effects,std::uint64_t fallback_effects,bool failed,std::uint64_t submission_nanoseconds) noexcept;
     void recordTiming(PreviewTimingStage stage,
                       std::uint64_t duration_nanoseconds) noexcept;
     void recordEffectTiming(PreviewEffectKind effect,
@@ -194,6 +198,7 @@ private:
     std::uint64_t gpu_gaussian_blur_effects_ = 0;
     std::uint64_t gpu_gaussian_blur_fallbacks_ = 0;
     std::uint64_t gpu_gaussian_blur_failures_ = 0;
+    std::uint64_t gpu_drop_shadow_effects_ = 0, gpu_drop_shadow_fallbacks_ = 0, gpu_drop_shadow_failures_ = 0;
     std::array<TimingBucket,
                static_cast<std::size_t>(PreviewTimingStage::Count)> timings_{};
     std::array<TimingBucket,

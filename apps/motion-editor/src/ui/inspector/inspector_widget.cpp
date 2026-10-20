@@ -381,6 +381,9 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     blur_action->setObjectName(QStringLiteral("motion-add-gaussian-blur"));
     auto* color_action = add_menu->addAction(MotionUiTranslation::tr("Color Adjustment"));
     color_action->setObjectName(QStringLiteral("motion-add-color-adjustment"));
+    auto* shadow_action=add_menu->addAction(MotionUiTranslation::tr("Drop Shadow"));
+    shadow_action->setObjectName("motion-add-drop-shadow");
+    connect(shadow_action,&QAction::triggered,this,[this]{emit effectAddRequested(2);});
     controls_.add_layer_effect_button->setMenu(add_menu);
     toolbar->addWidget(controls_.add_layer_effect_button);
     controls_.effect_up_button = new QPushButton(MotionUiTranslation::tr("Up"), controls_.effects_inspector);
@@ -497,6 +500,22 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
         make_effect_row(
             color_page, controls_.effect_saturation_field, controls_.effect_saturation_key_button));
     controls_.effect_parameter_pages->addWidget(color_page);
+    auto* shadow_page=new QWidget(controls_.effect_parameter_pages);auto* shadow_form=new QFormLayout(shadow_page);
+    controls_.shadow_color=new QPushButton(MotionUiTranslation::tr("Shadow Color"),shadow_page);controls_.shadow_color->setObjectName("motion-shadow-color");
+    connect(controls_.shadow_color,&QPushButton::clicked,this,&InspectorWidget::shadowColorRequested);shadow_form->addRow(MotionUiTranslation::tr("Color"),controls_.shadow_color);
+    const std::array shadow_names{MotionUiTranslation::tr("Shadow Opacity (%)"),MotionUiTranslation::tr("Shadow Angle (degrees)"),MotionUiTranslation::tr("Shadow Distance (px)"),MotionUiTranslation::tr("Shadow Softness (px)")};
+    for(std::size_t i=0;i<4;++i){auto* field=controls_.shadow_fields[i]=new QDoubleSpinBox(shadow_page);
+        field->setObjectName(QString("motion-shadow-value-%1").arg(i));field->setDecimals(6);field->setKeyboardTracking(false);
+        field->setRange(i==1?-1e9:0,i==1?1e9:i==2?16384:100);field->setSuffix(i==0?QStringLiteral(" %"):i==1?QString::fromUtf8(" °"):QStringLiteral(" px"));
+        auto* key=controls_.shadow_keys[i]=make_effect_key_button(shadow_page,QString("motion-shadow-key-%1").arg(i),model::shadow_properties[i]);
+        shadow_form->addRow(shadow_names[i],make_effect_row(shadow_page,field,key));
+        connect(field,&QDoubleSpinBox::valueChanged,this,[this,i](double){emit shadowValueEdited(int(i));});
+        connect(field,&QDoubleSpinBox::editingFinished,this,&InspectorWidget::effectParametersEditFinished);
+        field->installEventFilter(this);
+    }
+    auto* shadow_help=new QLabel(MotionUiTranslation::tr("Source pixels before fitting. The shadow follows layer transforms; 0 degrees points right and 90 degrees down. Color is not animated."),shadow_page);
+    shadow_help->setWordWrap(true);shadow_form->addRow(shadow_help);
+    controls_.effect_parameter_pages->addWidget(shadow_page);
     effects_layout->addWidget(controls_.effect_parameter_pages);
     controls_.effects_tab_index = addTab(controls_.effects_inspector, MotionUiTranslation::tr("Effects"));
     setTabEnabled(controls_.effects_tab_index, false);
@@ -586,6 +605,7 @@ double InspectorWidget::transformFieldValue(std::size_t property_index) const no
 }
 double InspectorWidget::effectFieldValue(model::EffectParameterProperty property) const noexcept
 {
+    for(std::size_t i=0;i<4;++i)if(property==model::shadow_properties[i])return controls_.shadow_fields[i]->value();
     switch (property) {
     case model::EffectParameterProperty::GaussianBlurRadius:
         return controls_.blur_radius_field->value();
@@ -707,7 +727,7 @@ void InspectorWidget::syncTrackMatte(const model::CompositionDocument* document,
 
 void InspectorWidget::setBlendModeBusy(bool busy)
 {
-    blend_mode_busy_=busy;controls_.blend_mode->setEnabled(blend_layer_available_&&!busy);
+    blend_mode_busy_=busy;controls_.effects_inspector->setEnabled(blend_layer_available_&&!busy);controls_.blend_mode->setEnabled(blend_layer_available_&&!busy);
     controls_.matte_source->setEnabled(blend_layer_available_&&!busy);
     controls_.matte_mode->setEnabled(blend_layer_available_&&matte_has_source_&&!busy);
 }
@@ -763,7 +783,7 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
     }
 
     const bool has_layer = layer != nullptr && layer->kind != model::LayerKind::Null;
-    controls_.effects_inspector->setEnabled(has_layer);
+    controls_.effects_inspector->setEnabled(has_layer&&!blend_mode_busy_);
     setTabEnabled(controls_.effects_tab_index, has_layer);
     const QSignalBlocker list_blocker(controls_.layer_effect_list);
     controls_.layer_effect_list->clear();
@@ -772,7 +792,7 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
             const auto& effect = layer->effects[i];
             const bool enabled = std::visit([](const auto& value) { return value.enabled; }, effect);
             const QString name = std::holds_alternative<model::GaussianBlurEffect>(effect)
-                ? MotionUiTranslation::tr("Gaussian Blur") : MotionUiTranslation::tr("Color Adjustment");
+                ? MotionUiTranslation::tr("Gaussian Blur") : std::holds_alternative<model::DropShadowEffect>(effect)?MotionUiTranslation::tr("Drop Shadow"):MotionUiTranslation::tr("Color Adjustment");
             auto* item = new QListWidgetItem(name, controls_.layer_effect_list);
             item->setData(Qt::UserRole, static_cast<qulonglong>(i));
             item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsDragEnabled);
@@ -885,7 +905,11 @@ void InspectorWidget::syncSelectedEffect(const model::CompositionLayer* layer, i
             ? MotionUiTranslation::tr("Remove the keyframe at the current frame")
             : MotionUiTranslation::tr("Add a keyframe at the current frame"));
     };
-    if (std::holds_alternative<model::GaussianBlurEffect>(effect)) {
+    if(const auto* shadow=std::get_if<model::DropShadowEffect>(&effect)) {
+        controls_.effect_parameter_pages->setCurrentIndex(3);
+        setColorButton(controls_.shadow_color,{shadow->parameters.color[0],shadow->parameters.color[1],shadow->parameters.color[2],255});
+        for(std::size_t i=0;i<4;++i)sync_parameter(controls_.shadow_fields[i],controls_.shadow_keys[i],model::shadow_properties[i]);
+    } else if (std::holds_alternative<model::GaussianBlurEffect>(effect)) {
         controls_.effect_parameter_pages->setCurrentIndex(1);
         sync_parameter(controls_.blur_radius_field,
                        controls_.blur_radius_key_button,
@@ -953,6 +977,7 @@ bool InspectorWidget::eventFilter(QObject* watched, QEvent* event)
             watched == controls_.text_box_height_field || watched == controls_.shape_width_field ||
             watched == controls_.shape_height_field || watched == controls_.shape_stroke_width_field)
             emit layerContentEditFinished();
+        if(std::find(controls_.shadow_fields.begin(),controls_.shadow_fields.end(),watched)!=controls_.shadow_fields.end())emit effectParametersEditFinished();
         if (watched == controls_.blur_radius_field || watched == controls_.effect_brightness_field ||
             watched == controls_.effect_contrast_field || watched == controls_.effect_saturation_field)
             emit effectParametersEditFinished();

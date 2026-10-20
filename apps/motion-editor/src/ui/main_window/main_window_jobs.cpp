@@ -185,12 +185,14 @@ void MainWindow::generateKeyframesFromAudio()
         other_keyframes = count > maximum_keyframes - other_keyframes
             ? maximum_keyframes : other_keyframes + count;
     };
-    for(const auto& mask:document_->masks())for(const auto& keys:mask.keyframes)add_other_keyframes(keys.size());
+    for(const auto& mask:document_->masks()){for(const auto& keys:mask.keyframes)add_other_keyframes(keys.size());if(mask.path)add_other_keyframes(model::pathKeyframeCost(*mask.path));}
     for (const auto& layer : document_->layers()) {
+        if(const auto* shape=std::get_if<model::ShapeLayerContent>(&layer.content)){if(shape->path)add_other_keyframes(model::pathKeyframeCost(*shape->path));add_other_keyframes(model::trimKeyframeCost(shape->trim_paths.get()));}
         add_other_keyframes(layer.anchor_keyframes[0].size());add_other_keyframes(layer.anchor_keyframes[1].size());
         for(const auto& effect:layer.effects)std::visit([&](const auto& e){
             using E=std::decay_t<decltype(e)>;
             if constexpr(std::is_same_v<E,model::GaussianBlurEffect>)add_other_keyframes(e.radius_keyframes.size());
+            else if constexpr(std::is_same_v<E,model::DropShadowEffect>){for(const auto& keys:e.keyframes)add_other_keyframes(keys.size());}
             else {add_other_keyframes(e.brightness_keyframes.size());add_other_keyframes(e.contrast_keyframes.size());add_other_keyframes(e.saturation_keyframes.size());}
         },effect);
         if(layer.scale_y && (layer.id!=selected->id || settings.property!=TransformProperty::Scale))

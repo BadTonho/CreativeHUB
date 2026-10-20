@@ -122,7 +122,7 @@ void MainWindow::selectAnchorCurveSegment(model::LayerId id,model::AnchorPropert
 
 bool MainWindow::applySelectedCurveInterpolation(std::int64_t frame,a::InterpolationMode mode,const a::CubicBezierEasing& easing)
 {
-    if(!document_ || !curve_selection_)return false;
+    if(!document_ || !curve_selection_ || export_worker_ || audio_keyframe_worker_)return false;
     const auto& s=*curve_selection_;
     if(s.trim_property)return document_->setLayerTrimKeyframeInterpolation(s.layer_id,*s.trim_property,frame,mode,easing);
     if(s.path_target)return document_->setPathKeyframeInterpolation(*s.path_target,frame,mode,easing);

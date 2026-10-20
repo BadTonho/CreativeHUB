@@ -90,3 +90,7 @@ Trim Paths is a Bezier-shape stroke operator, not a mask operator. Existing
 source/effect masks retain full-path logical reference dimensions while its
 stroke changes. Transformation masks remain in composition coordinates; matte
 consumers see the trimmed layer's normal prepared pixels. See [Trim Paths](TRIM_PATHS.md).
+
+## Drop Shadow contract maintenance
+
+Drop Shadow expands source-space images while preserving original logical mask references. Its effect mask blends aligned input/output, including the shadow; Transform masks remain in composition coordinates. View Mask is independent. See [Drop Shadow](DROP_SHADOW.md).

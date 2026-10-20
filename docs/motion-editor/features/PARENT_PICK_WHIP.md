@@ -1,10 +1,10 @@
 # Timeline Parent & Link Pick-whip
 
-Status: implemented development interaction. Native `.motion` is v13,
+Status: implemented development interaction. The original delivery used native `.motion` v13,
 recovery remains wrapper v1, and application versions are unchanged. Manual
 visual/platform acceptance and representative benchmarks remain pending.
 
-Current documents are written as v16 for [Trim Paths](TRIM_PATHS.md).
+Current documents are written as v17 for [Drop Shadow](DROP_SHADOW.md).
 The feature fields and historical version-specific evidence below remain applicable.
 
 ## Choosing a parent

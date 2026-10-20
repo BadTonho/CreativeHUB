@@ -158,6 +158,10 @@ uniform GEOMETRY_VEC2 scale_opacity;
 uniform GEOMETRY_VEC2 merge_scale;
 uniform ivec2 merge_origin;
 uniform ivec2 merge_size;
+uniform ivec2 shadow_origin;
+uniform GEOMETRY_VEC2 shadow_delta;
+uniform ivec3 shadow_rgb;
+uniform GEOMETRY_VEC2 shadow_strength;
 uniform int color_count;
 layout(std140) uniform ColorAdjustments { vec4 color_adjustments[256]; };
 out vec4 color;
@@ -168,6 +172,11 @@ vec4 background(ivec2 pixel) {
 vec4 foreground(ivec2 pixel) {
     if (foreground_bottom_left) pixel.y = textureSize(foreground_image, 0).y - 1 - pixel.y;
     return texelFetch(foreground_image, pixel, 0);
+}
+int shadowAlphaByte(ivec2 p) {
+    ivec2 size=textureSize(foreground_image,0);
+    if(any(lessThan(p,ivec2(0)))||any(greaterThanEqual(p,size)))return 0;
+    return int(floor(foreground(p).a*255.0+0.5));
 }
 // Eight-bit long division keeps the exact weighted product below INT_MAX.
 // GLSL 1.50 needs neither int64 nor FP64 for RGBA8 half-up rounding.
@@ -196,6 +205,24 @@ void main() {
         if (any(lessThan(pixel, ivec2(0))) || any(greaterThanEqual(pixel, size))) { color = vec4(0); return; }
         color = background(pixel);
         color.a = float(floor(GEOMETRY_VEC2(floor(color.a * 255.0 + 0.5), 0).x * scale_opacity.y + 0.5)) / 255.0;
+        return;
+    }
+    if(operation==8) {
+        ivec2 source_pixel=pixel-shadow_origin;
+        ivec4 original=any(lessThan(source_pixel,ivec2(0)))||any(greaterThanEqual(source_pixel,size))?ivec4(0):ivec4(floor(background(source_pixel)*255.0+0.5));
+        PRECISE GEOMETRY_VEC2 point=GEOMETRY_VEC2(pixel)-shadow_delta;
+        ivec2 p=ivec2(floor(point));
+        PRECISE GEOMETRY_VEC2 f=point-GEOMETRY_VEC2(p);
+        PRECISE GEOMETRY_VEC2 top=GEOMETRY_VEC2(shadowAlphaByte(p),shadowAlphaByte(p+ivec2(1,0)))/255.0;
+        PRECISE GEOMETRY_VEC2 bottom=GEOMETRY_VEC2(shadowAlphaByte(p+ivec2(0,1)),shadowAlphaByte(p+ivec2(1,1)))/255.0;
+        PRECISE GEOMETRY_VEC2 rows=GEOMETRY_VEC2((1.0-f.x)*top.x+f.x*top.y,(1.0-f.x)*bottom.x+f.x*bottom.y);
+        PRECISE GEOMETRY_VEC2 alpha=GEOMETRY_VEC2(((1.0-f.y)*rows.x+f.y*rows.y)*shadow_strength.x/100.0,GEOMETRY_VEC2(original.a).x/255.0);
+        PRECISE GEOMETRY_VEC2 ao=GEOMETRY_VEC2(alpha.y+alpha.x*(1.0-alpha.y));
+        color.a=float(floor(ao.x*255.0+0.5)/255.0);
+        for(int channel=0;channel<3;++channel) {
+            PRECISE GEOMETRY_VEC2 numerator=GEOMETRY_VEC2(original[channel])*alpha.y+GEOMETRY_VEC2(shadow_rgb[channel])*alpha.x*(1.0-alpha.y);
+            color[channel]=ao.x>0.0?float(floor(numerator.x/ao.x+0.5)/255.0):0.0;
+        }
         return;
     }
     color = background(pixel);
@@ -952,7 +979,7 @@ void main() {
             measured.draw_submission_nanoseconds+=elapsed(started);
             rememberResourcePeak();return result(OpenGlCompositionStatus::Complete);
         }
-        if (operation.kind == OpenGlImageOperationKind::Merge || operation.kind == OpenGlImageOperationKind::MaskedBlend) {
+        if (operation.kind == OpenGlImageOperationKind::Merge || operation.kind == OpenGlImageOperationKind::MaskedBlend || operation.kind==OpenGlImageOperationKind::DropShadow) {
             bound = bind(operation.foreground, 1);
             if (bound.status != OpenGlCompositionStatus::Complete) return bound;
         }
@@ -991,6 +1018,14 @@ void main() {
                 const GLdouble values[]{x, y}; uniform2dv(image_program->uniformLocation(name), 1, values);
             } else image_program->setUniformValue(name, QVector2D(float(x), float(y)));
         };
+        if(operation.kind==OpenGlImageOperationKind::DropShadow) {
+            const auto bounds=effects::dropShadowBounds(operation.background.width(),operation.background.height(),operation.drop_shadow);
+            geometry("shadow_delta",bounds.dx,bounds.dy);
+            gl->glUniform2i(image_program->uniformLocation("shadow_origin"),bounds.left,bounds.top);
+            const auto& c=operation.drop_shadow.color;
+            geometry("shadow_strength",operation.drop_shadow.opacity_percent,0);
+            gl->glUniform3i(image_program->uniformLocation("shadow_rgb"),c[0],c[1],c[2]);
+        }
         image_program->setUniformValue("use_affine",operation.source_to_canvas.has_value());
         if(operation.source_to_canvas) {
             const auto inverse=requireInverseAffine(*operation.source_to_canvas);
@@ -1180,6 +1215,33 @@ OpenGlCompositionResult OpenGlFrameCompositor::copyToNative(const OpenGlTextureF
 
 OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
     const OpenGlImageOperation& operation, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    if(operation.kind==OpenGlImageOperationKind::DropShadow) {
+        if(!effects::validDropShadow(operation.drop_shadow))return {OpenGlCompositionStatus::Unsupported,{},"drop-shadow-parameters","Invalid Drop Shadow parameters."};
+        if(!operation.foreground.texture) {
+            effects::DropShadowBounds bounds;
+            try{bounds=effects::dropShadowBounds(operation.background.width(),operation.background.height(),operation.drop_shadow);}
+            catch(const std::exception& e){return {OpenGlCompositionStatus::Unsupported,{},"drop-shadow-bounds",e.what()};}
+            if(operation.drop_shadow.opacity_percent==0){OpenGlImageOperation copy;copy.background=operation.background;return processImage(copy,cancel,timings);}
+            OpenGlCompositionTimings total;
+            const auto pass=[&](OpenGlImageOperation op){OpenGlCompositionTimings t;auto r=processImage(op,cancel,&t);
+                total.uploaded_bytes+=t.uploaded_bytes;total.uploaded_layers+=t.uploaded_layers;total.upload_nanoseconds+=t.upload_nanoseconds;
+                total.draw_submission_nanoseconds+=t.draw_submission_nanoseconds;total.producer_fence_submission_nanoseconds+=t.producer_fence_submission_nanoseconds;
+                if(timings)*timings=total;return r;};
+            OpenGlImageOperation pad;pad.kind=OpenGlImageOperationKind::Transform;pad.background=operation.background;
+            pad.output_width=bounds.width;pad.output_height=bounds.height;pad.source_to_canvas=AffineTransform2D{1,0,0,1,double(bounds.left),double(bounds.top)};
+            auto padded=pass(pad);if(padded.status!=OpenGlCompositionStatus::Complete)return padded;
+            OpenGlImageOperation blur;blur.kind=OpenGlImageOperationKind::GaussianBlur;blur.background={nullptr,padded.frame};blur.blur_radius_pixels=operation.drop_shadow.softness_pixels;
+            auto blurred=pass(blur);if(blurred.status!=OpenGlCompositionStatus::Complete)return blurred;
+            padded.frame.reset();blur.background={};
+            OpenGlImageOperation merge;merge.kind=OpenGlImageOperationKind::DropShadow;merge.background=operation.background;merge.foreground={nullptr,blurred.frame};merge.drop_shadow=operation.drop_shadow;
+            merge.output_width=bounds.width;merge.output_height=bounds.height;
+            return pass(merge);
+        }
+        effects::DropShadowBounds expected;
+        try{expected=effects::dropShadowBounds(operation.background.width(),operation.background.height(),operation.drop_shadow);}
+        catch(const std::exception& e){return {OpenGlCompositionStatus::Unsupported,{},"drop-shadow-bounds",e.what()};}
+        if(operation.output_width!=expected.width||operation.output_height!=expected.height||operation.foreground.width()!=operation.output_width||operation.foreground.height()!=operation.output_height)return {OpenGlCompositionStatus::Unsupported,{},"drop-shadow-geometry","Prepared alpha dimensions must match the input."};
+    }
     if(operation.kind==OpenGlImageOperationKind::ApplyTrackMatte && !validTrackMatteMode(operation.track_matte_mode))
         return {OpenGlCompositionStatus::Unsupported,{},"track-matte-mode","Invalid track matte mode."};
     if(operation.kind==OpenGlImageOperationKind::GaussianBlur) {
@@ -1201,7 +1263,7 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
     }
     if (operation.output_width < 0 || operation.output_height < 0 ||
         ((operation.output_width == 0) != (operation.output_height == 0)) ||
-        (operation.output_width > 0 && operation.kind != OpenGlImageOperationKind::Transform))
+        (operation.output_width > 0 && operation.kind != OpenGlImageOperationKind::Transform && operation.kind != OpenGlImageOperationKind::DropShadow))
         return {OpenGlCompositionStatus::Unsupported, {}, "image-output-geometry", "Explicit output dimensions require a Transform and a complete positive canvas."};
     auto& p = *impl_;
     struct Guard { Impl& p; ~Guard() { p.image_operation = nullptr; } } guard{p};

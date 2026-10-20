@@ -162,6 +162,7 @@ int main(int argc, char* argv[])
                "Anchor units, explanation and reposition action use the bundled pt-BR catalog.")) return 1;
 
     {
+        if(!check(motion::ui::MotionUiTranslation::tr("Drop Shadow")==QStringLiteral("Sombra projetada")&&motion::ui::MotionUiTranslation::tr("Shadow Distance (px)")==QStringLiteral("Distância da sombra (px)"),"Drop Shadow uses pt-BR"))return 1;
         motion::ui::TrimPathsInspector trim;
         if(!check(motion::ui::MotionUiTranslation::tr("Trim Paths")==QStringLiteral("Aparar contorno")&&
             trim.findChild<QCheckBox*>("motion-trim-enabled")->text()==QStringLiteral("Ativar aparagem do contorno")&&
@@ -239,6 +240,7 @@ int main(int argc, char* argv[])
     if(!check(motion::ui::MotionUiTranslation::tr("Pen")==QStringLiteral("Pen")&&motion::ui::MotionUiTranslation::tr("Remove Animation Keeping Current Frame")==QStringLiteral("Remove Animation Keeping Current Frame"),"Pen/path English fallback"))return 1;
     preferences.clear();
     if(!check(motion::ui::MotionUiTranslation::tr("Trim Paths")==QStringLiteral("Trim Paths"),"Trim Paths English fallback"))return 1;
+    if(!check(motion::ui::MotionUiTranslation::tr("Drop Shadow")==QStringLiteral("Drop Shadow"),"Drop Shadow English fallback"))return 1;
     preferences.sync();
 
     return 0;

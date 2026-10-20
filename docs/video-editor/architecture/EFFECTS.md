@@ -182,3 +182,7 @@ pixel parity, cancellation, and timing. Video Editor boundary coverage lives
 in the project, Timeline command, Preview, offline export, Effects dock,
 Functions, and Timeline widget tests. The manual acceptance checklist is in
 [`../REGRESSION_TESTING.md`](../validation/REGRESSION_TESTING.md#manual-ui-validation).
+
+## Drop Shadow contract maintenance
+
+The shared processing library also exposes the Qt-free Drop Shadow primitive for Motion. It is not registered as a Video effect. Its GPU image contract expands origins in the Motion caller, reuses Gaussian Blur on OpenGL and explicitly refuses Vulkan. Existing Video effects and CSP serialization remain unchanged; see [Motion contract](../../motion-editor/features/DROP_SHADOW.md).
