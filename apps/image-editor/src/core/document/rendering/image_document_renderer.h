@@ -32,6 +32,10 @@ public:
         const QStringList& excluded_object_ids = {},
         const std::atomic_bool* cancellation_requested = nullptr,
         ImageLayerRasterCache* layer_raster_cache = nullptr);
+    // Process a base and its clipping chain before base/group opacity or group transforms.
+    [[nodiscard]] static QImage layerChain(const ImageDocumentData& document,
+        const QImage& source, const QHash<QString, QImage>& resources, const QString& base_id,
+        const std::atomic_bool* cancel = nullptr);
     [[nodiscard]] static QImage selectedLayer(
         const ImageDocumentData& document,
         const QImage& source_image,
@@ -58,12 +62,14 @@ public:
         const QImage& source_image,
         const QHash<QString, QImage>& raster_images,
         const ImageLayerData& layer,
-        const QSize& maximum_size);
+        const QSize& maximum_size,
+        const std::atomic_bool* cancellation_requested = nullptr);
     [[nodiscard]] static QImage groupThumbnail(
         const ImageDocumentData& document,
         const QHash<QString, QImage>& raster_images,
         const ImageGroupData& group,
-        const QSize& maximum_size);
+        const QSize& maximum_size,
+        const std::atomic_bool* cancellation_requested = nullptr);
     [[nodiscard]] static QHash<QString, QImage> maskThumbnails(
         const ImageDocumentData& document,
         const QImage& source_image,

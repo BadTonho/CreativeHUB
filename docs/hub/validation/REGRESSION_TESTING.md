@@ -420,3 +420,16 @@ vault/restored documents. `hub-backup-manager-test` rejects future Image v18.
 Manual follow-up: back up an outlined image, restore to another directory, open
 in Image Editor, and confirm outline settings and source links. Native acceptance
 remains pending.
+
+## Image Editor v18 clipping backup coverage
+
+`hub-backup-format-test` exercises actual Image producer/reader round trips for
+schemas 1-18 and a v18 masked/outlined chain in a group, including vault and
+restored payload equality and media-path rebasing. `hub-backup-manager-test`
+rejects future Image v19. Manual Hub backup/restore UI acceptance is pending;
+see the [Image checklist](../../image-editor/validation/MANUAL_VALIDATION.md#clipping-masks).
+
+Windows Release evidence (2026-10-20): both Hub backup gates passed in the final
+24-test Image/Hub/Video selection. Motion linked references in the shared format
+fixture are materialized so canonical-path checks exercise existing paths.
+Native backup/restore UI and macOS/Linux acceptance remain pending.

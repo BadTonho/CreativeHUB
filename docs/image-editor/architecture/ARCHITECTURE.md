@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 17; host links live in the Video Editor's
+  The `.cimg` schema is version 18; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -661,5 +661,23 @@ export error paths; cancellation publishes no partial output.
 
 Raw editable targets exclude outlines. Layer/group thumbnail invalidation
 includes the outline, and composite Eyedropper sampling includes its pixels.
-Hub backup rebasing accepts v17 and retains outline properties; linked PNG
+Hub backup rebasing accepts v18 and retains outline/clipping properties; linked PNG
 publication retains the existing protocol. See [the contract](../features/LAYER_OUTLINE.md).
+
+## Clipping composition
+
+The app-owned `image_layer_clipping.h` resolves sibling chains for stack edits,
+session commands, persistence validation and both render paths. The CPU renderer
+composes masked base pixels and styled children with SourceAtop, then base
+outline; base opacity and group composition follow. Interactive preparation
+retains each finished chain as one budgeted raster and passes no mask to the
+GPU. Keys include ordered member properties/resources and base geometry.
+Selected export remains isolated; editable tool targets exclude clipping.
+Thumbnail rendering accepts the worker cancellation token; clipped thumbnail
+dependencies include the base/parent document state, and failures are logged
+through the existing worker boundary.
+See [complete contract](../features/CLIPPING_MASKS.md).
+
+Native recovery window tests may inject an error-log directory independently of
+recovery and performance output. Production windows retain the existing local
+log default; test failures are verified inside their isolated temporary root.

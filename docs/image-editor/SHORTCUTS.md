@@ -110,3 +110,12 @@ other unselected operations remain fixed in canvas coordinates. Existing
 Rotate/Flip/Crop layer commands continue to affect both layer content and mask.
 Imported images may extend beyond the canvas. Drop one or more local supported
 image files onto the canvas to import a batch centered at the drop point.
+
+## Clipping masks
+
+Create/Release Clipping Mask defaults to Ctrl+Alt+G on Windows/Linux and
+Command+Option+G on macOS (Qt platform mapping). Configure it in Keyboard
+Shortcuts. A saved conflicting assignment is preserved and the introduced
+command starts unassigned. The command requires one editable layer and an
+eligible lower sibling base; Background, groups and multiple selections are
+disabled. Mask thumbnail selection still targets its owning layer.

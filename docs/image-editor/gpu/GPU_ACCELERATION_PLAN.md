@@ -96,7 +96,7 @@ and retain its existing license obligations. No new external package is added.
 
 The feature index is in [ROADMAP.md](../ROADMAP.md), with repeatable native steps in
 [MANUAL_VALIDATION.md](../validation/MANUAL_VALIDATION.md). The original GPU delivery did not change document/history/recovery
-versions. The current `.cimg` v17 outline is processed on CPU before GPU
+versions. The outline introduced in `.cimg` v17 is processed on CPU before GPU
 composition, with its mask already applied; recovery wrapper v1 remains current. CPU export
 and publication remain the result reference, with existing producer/consumer
 coverage. GPU brush kernels, GPU export, PNG publication acceleration, new effects,
@@ -202,3 +202,12 @@ global sharing, a three-target/64 MiB reservation budget including retired targe
 producer/consumer fences and asynchronous RGBA recovery. This application remains
 on its current CPU renderer; adoption requires its own rendering, alpha, lifecycle,
 export and regression contracts. See [native evidence and remaining platform gates](../../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).
+
+## Editable clipping masks
+
+Clipping chains use the existing worker-owned CPU processing boundary. One
+processed chain raster reaches CPU/OpenGL composition, without a second mask
+application; base opacity is applied once. The same CPU implementation serves
+reference/export/publication. Cache reuse, member changes, cancellation and
+native channel parity are covered by clipping/interactive tests. No shared GPU
+protocol or shader change is required. See [contract](../features/CLIPPING_MASKS.md).

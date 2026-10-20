@@ -1,3 +1,9 @@
+add_executable(creative-suite-image-editor-clipping-tests image_editor_clipping_test.cpp)
+target_link_libraries(creative-suite-image-editor-clipping-tests PRIVATE creative-suite-image-editor-core Qt6::Test)
+target_compile_features(creative-suite-image-editor-clipping-tests PRIVATE cxx_std_20)
+add_creative_suite_test(NAME creative-suite-image-editor-clipping COMMAND creative-suite-image-editor-clipping-tests -o -,txt)
+set_tests_properties(creative-suite-image-editor-clipping PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 add_executable(creative-suite-image-editor-outline-tests image_editor_outline_test.cpp)
 target_link_libraries(creative-suite-image-editor-outline-tests PRIVATE creative-suite-image-editor-core Qt6::Test)
 target_compile_features(creative-suite-image-editor-outline-tests PRIVATE cxx_std_20)
@@ -122,6 +128,7 @@ add_executable(creative-suite-image-editor-ui-tests
     image_editor_raster_ui_test.cpp
     image_editor_deletion_ui_test.cpp
     image_editor_outline_ui_test.cpp
+    image_editor_clipping_ui_test.cpp
     ../src/ui/windows/image_editor_window.cpp
     ../src/ui/windows/image_editor_window.h
     ../src/ui/diagnostics/performance_metrics_panel.cpp
@@ -412,6 +419,7 @@ if(WIN32)
     find_program(QT_TEST_DEPLOY_TOOL windeployqt HINTS "${QT_TEST_BIN_DIR}" REQUIRED)
 
     foreach(TEST_TARGET IN ITEMS
+            creative-suite-image-editor-clipping-tests
             creative-suite-image-editor-outline-tests
             creative-suite-image-editor-core-tests
             creative-suite-image-editor-bucket-fill-tests
@@ -464,3 +472,6 @@ endif()
 
 add_creative_suite_test(NAME creative-suite-image-editor-outline-ui COMMAND creative-suite-image-editor-ui-tests --outline-only)
 set_tests_properties(creative-suite-image-editor-outline-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_creative_suite_test(NAME creative-suite-image-editor-clipping-ui COMMAND creative-suite-image-editor-ui-tests --clipping-only)
+set_tests_properties(creative-suite-image-editor-clipping-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

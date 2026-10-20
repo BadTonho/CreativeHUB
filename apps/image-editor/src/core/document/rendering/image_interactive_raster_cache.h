@@ -49,6 +49,7 @@ private:
         qint64 content_revision = 0, mask_revision = 0;
         std::optional<ImageLayerOutlineData> outline;
         std::optional<ImageLayerMaskData> layer_mask;
+        std::optional<ImageDocumentData> clipping_signature;
     };
     InteractiveRaster raster(const QString& identity, const QSize& size,
         const QVector<ImageOperation>& operations, const QHash<QString, QImage>& resources,

@@ -1,3 +1,4 @@
+#include "../../core/document/image_layer_clipping.h"
 #include "layer_panel.h"
 #include "../translation_helpers.h"
 
@@ -56,6 +57,7 @@ constexpr int kMaskEnabledRole = Qt::UserRole + 9;
 constexpr int kSourceProblemRole = Qt::UserRole + 10;
 constexpr int kRasterObjectRole = Qt::UserRole + 11;
 constexpr int kHasMaskRole = Qt::UserRole + 12;
+constexpr int kClippedRole = Qt::UserRole + 13;
 constexpr int kLayerRowHeight = 46;
 
 QRect maskThumbnailRect(const QRect& row) {
@@ -156,7 +158,7 @@ public:
         painter->setPen(source_problem ? QColor(230, 170, 80) : option.palette.color(selected ? QPalette::HighlightedText
                                                        : QPalette::Text));
         const QString text = QFontMetrics(option.font).elidedText(
-            index.data(Qt::DisplayRole).toString() + (source_problem
+            (index.data(kClippedRole).toBool() ? QString(QChar(0x21b3)) + " " : QString{}) + index.data(Qt::DisplayRole).toString() + (source_problem
                 ? QCoreApplication::translate("ImageEditorUI", " [Image unavailable]")
                 : QString{}), Qt::ElideRight,
             std::max(0, text_rect.width()));
@@ -347,6 +349,14 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     enable_mask_action->setCheckable(true);
     QAction* remove_mask_action = layer_context_menu_->addAction(QCoreApplication::translate("ImageEditorUI", "Remove Layer Mask"));
     remove_mask_action->setObjectName(QStringLiteral("removeLayerMaskAction"));
+
+    clipping_action_ = layer_context_menu_->addAction(QCoreApplication::translate("ImageEditorUI", "Create Clipping Mask"));
+    clipping_action_->setObjectName(QStringLiteral("toggleLayerClippingAction"));
+    connect(clipping_action_, &QAction::triggered, this, [this] {
+        if (!clipping_action_->isEnabled()) return;
+        const auto* layer = findLayer(document_, selectedItemId());
+        if (layer) { finishOutlineEdit(); emit layerClippingChanged(layer->id, !layer->clip_to_base); }
+    });
 
     auto* outline_form = new QFormLayout;
     outline_enabled_ = new QCheckBox(QCoreApplication::translate("ImageEditorUI", "Outline"), this);
@@ -659,6 +669,7 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
     const QSignalBlocker blocker(layer_tree_);
     document_ = document;
     const auto set_mask_data = [&](QTreeWidgetItem* item, const ImageLayerData& layer) {
+        item->setData(0, kClippedRole, layer.clip_to_base);
         item->setData(0, kHasMaskRole, layer.mask.has_value());
         item->setData(0, kMaskThumbnailRole, mask_thumbnails.value(layer.id));
         item->setData(0, kMaskSelectedRole, layer.id == selected_mask_id);
@@ -678,6 +689,12 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
             item->setData(0, Qt::AccessibleDescriptionRole,
                 ui::translateMessage(source_problems.value(op.raster.id)));
             item->setForeground(0, QColor(230, 170, 80));
+        }
+        if (layer.clip_to_base) {
+            const auto* base = findLayer(document_, clippingBases(document_).value(layer.id));
+            const auto hint = QCoreApplication::translate("ImageEditorUI", "Clipped to: %1").arg(base ? base->name : QString{});
+            item->setToolTip(0, hint + "\n" + item->toolTip(0));
+            item->setData(0, Qt::AccessibleDescriptionRole, hint);
         }
     };
     layer_tree_->clear();
@@ -930,6 +947,10 @@ void LayerPanel::updateControls() {
     const bool has_layer = !is_group && layer != document_.layers.cend();
     const bool editable = has_group || (has_layer && !layer->background);
     const bool outline_editable = has_layer && !layer->background && layer_tree_->selectedItems().size() == 1;
+    clipping_action_->setEnabled(outline_editable && (layer->clip_to_base || clippingBases(document_).contains(id)));
+    clipping_action_->setText(has_layer && layer->clip_to_base
+        ? QCoreApplication::translate("ImageEditorUI", "Release Clipping Mask")
+        : QCoreApplication::translate("ImageEditorUI", "Create Clipping Mask"));
     const auto outline = has_layer ? layer->outline.value_or(ImageLayerOutlineData{}) : ImageLayerOutlineData{};
     const QSignalBlocker enabled_block(outline_enabled_), thickness_block(outline_thickness_), position_block(outline_position_);
     outline_enabled_->setChecked(has_layer && layer->outline && outline.enabled);

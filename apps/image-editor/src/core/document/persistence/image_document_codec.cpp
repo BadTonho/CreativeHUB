@@ -1,3 +1,4 @@
+#include "image_layer_clipping.h"
 #include "persistence/image_document_codec.h"
 
 #include <QDir>
@@ -810,7 +811,7 @@ bool validateLayers(const ImageDocumentData& document,
         if (layer.background) {
             ++background_count;
             if (index != 0 || layer.name != QStringLiteral("Background") ||
-                layer.opacity != 100 || !layer.operations.isEmpty() || layer.mask.has_value() || layer.outline.has_value()) {
+                layer.opacity != 100 || !layer.operations.isEmpty() || layer.mask.has_value() || layer.outline.has_value() || layer.clip_to_base) {
                 assignError(error, QStringLiteral("The Background layer is invalid."));
                 return false;
             }
@@ -836,6 +837,10 @@ bool validateLayers(const ImageDocumentData& document,
                 return false;
             }
             object_ids.insert(id);
+        }
+        if (layer.clip_to_base && !clippingBases(document).contains(layer.id)) {
+            assignError(error, QStringLiteral("A clipping layer has no sibling base."));
+            return false;
         }
         if (layer.outline && !validLayerOutline(*layer.outline)) {
             assignError(error, QStringLiteral("A layer outline has invalid properties."));
@@ -1061,6 +1066,7 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
             mask.insert("operations", encodeOperations(layer.mask->operations));
             encoded.insert("mask", mask);
         }
+        if (layer.clip_to_base) encoded.insert("clip_to_base", true);
         if (layer.outline) {
             const auto& o = *layer.outline;
             encoded.insert("outline", QJsonObject{{"enabled", o.enabled}, {"thickness", o.thickness},
@@ -1226,6 +1232,13 @@ bool decodeDocumentJson(const QJsonObject& root,
                                   &layer_size, true, &layer->operations, error, document_path)) {
                 return false;
             }
+            if (encoded.contains("clip_to_base")) {
+                if (version < 18 || layer->background || !encoded.value("clip_to_base").isBool()) {
+                    assignError(error, QStringLiteral("A layer clipping flag is invalid."));
+                    return false;
+                }
+                layer->clip_to_base = encoded.value("clip_to_base").toBool();
+            }
             if (encoded.contains("outline")) {
                 const auto value = encoded.value("outline");
                 const auto object = value.toObject();
@@ -1271,7 +1284,7 @@ bool decodeDocumentJson(const QJsonObject& root,
             const auto encoded = encoded_value.toObject();
             const QString kind = encoded.value("kind").toString();
             if (version >= kLayerGroupsDocumentVersion && kind == QStringLiteral("group")) {
-                if (encoded.contains("mask") || encoded.contains("outline")) {
+                if (encoded.contains("mask") || encoded.contains("outline") || encoded.contains("clip_to_base")) {
                     assignError(error, QStringLiteral("Group masks and outlines are not supported."));
                     return false;
                 }

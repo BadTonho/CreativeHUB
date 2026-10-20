@@ -1,6 +1,7 @@
 #include "editing/image_layer_stack_editor.h"
 
 #include "image_document_utils.h"
+#include "image_layer_clipping.h"
 
 #include <QUuid>
 #include <QSet>
@@ -57,6 +58,7 @@ QString uniqueStackName(const ImageDocumentData& document,
 ImageLayerStackEditResult makeResult(ImageDocumentData document,
                                      QString selected_layer_id,
                                      QString selected_group_id) {
+    releaseOrphanClipping(document);
     return {std::move(document), std::move(selected_layer_id),
             std::move(selected_group_id)};
 }
@@ -164,6 +166,9 @@ std::optional<ImageLayerStackEditResult> ImageLayerStackEditor::deleteItems(
     const bool removed_layer = layer_ids.contains(selected_layer_id);
     const bool removed_group = group_ids.contains(selected_group_id);
     ImageDocumentData updated = document;
+    const auto bases = clippingBases(document);
+    for (auto& layer : updated.layers)
+        if (layer.clip_to_base && layer_ids.contains(bases.value(layer.id))) layer.clip_to_base = false;
     updated.root_stack.erase(std::remove_if(updated.root_stack.begin(), updated.root_stack.end(),
         [&group_ids, &layer_ids](const ImageStackItemData& item) {
             return item.group ? group_ids.contains(item.id) : layer_ids.contains(item.id);

@@ -39,6 +39,7 @@ add_library(creative-suite-image-editor-core STATIC
     src/core/document/import_export/image_raster_import.h
     src/core/document/image_document_store.cpp
     src/core/document/image_document_store.h
+    src/core/document/image_layer_clipping.h
     src/core/document/image_document_session.cpp
     src/core/document/image_document_session.h
     src/core/diagnostics/image_editor_logger.cpp

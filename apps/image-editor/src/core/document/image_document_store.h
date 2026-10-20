@@ -198,6 +198,7 @@ struct ImageLayerData {
     QVector<ImageOperation> operations;
     std::optional<ImageLayerMaskData> mask;
     std::optional<ImageLayerOutlineData> outline;
+    bool clip_to_base = false;
 
     bool operator==(const ImageLayerData&) const = default;
 };
@@ -250,7 +251,7 @@ struct RecoveryDocumentData {
 
 class ImageDocumentStore final {
 public:
-    static constexpr int kCurrentDocumentVersion = 17;
+    static constexpr int kCurrentDocumentVersion = 18;
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr qsizetype kMaximumStrokeClipPathElements = 100'000;

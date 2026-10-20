@@ -92,7 +92,7 @@ private slots:
         QVERIFY(recovered.document==s.data());
         QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
         const auto root=QJsonDocument::fromJson(file.readAll()).object(); file.close();
-        QCOMPARE(root.value("version").toInt(),17);
+        QCOMPARE(root.value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         for(int version:{16,17}) for(int bad:{0,1,2,3,4}) {
             auto malformed=root; malformed.insert("version",version); auto layers=malformed.value("layers").toArray();
             auto layer=layers.last().toObject(); auto outline=layer.value("outline").toObject();

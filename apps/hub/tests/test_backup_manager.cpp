@@ -251,7 +251,7 @@ void testRejectedBackups(const QString& root) {
         {"corrupt.cimg", "not JSON"},
         {"future.csp", R"({"format":"creative-suite.main-editor","version":32})"},
         {"future.motion", R"({"format":"creative-suite.motion-studio","version":18})"},
-        {"future.csie", R"({"format":"creative-suite-image-document","version":18})"},
+        {"future.csie", R"({"format":"creative-suite-image-document","version":19})"},
         {"fractional.cimg", R"({"format":"creative-suite-image-document","version":1.5})"},
         {"bad-path.cimg", R"({"format":"creative-suite-image-document","version":16,"base":{"kind":"source_image","path":42}})"},
         {"bad-media.csve", R"({"format":"creative-suite.main-editor","version":24,"media":{}})"},

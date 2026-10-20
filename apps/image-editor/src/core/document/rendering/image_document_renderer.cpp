@@ -1,3 +1,4 @@
+#include "image_layer_clipping.h"
 #include "rendering/image_document_renderer.h"
 #include "rendering/image_layer_outline.h"
 #include "rendering/image_bucket_fill.h"
@@ -390,6 +391,50 @@ QImage renderRasterLayer(const QHash<QString, QImage>& resources,
     return pixels;
 }
 
+QImage renderBackground(const ImageDocumentData& document, const QImage& source,
+                        const QSize& size, const std::atomic_bool* cancel) {
+    const auto pixels = applyOperations(source, document.operations, false, cancel);
+    if (pixels.isNull() || exportWasCancelled(cancel)) return {};
+    if (document.canvas_base_offset.isNull() && pixels.size() == size) return pixels.convertToFormat(QImage::Format_ARGB32);
+    QImage base(size, QImage::Format_ARGB32);
+    if (base.isNull()) return {};
+    base.fill(document.base_kind == ImageBaseKind::Canvas ? document.canvas_background : QColor(0,0,0,0));
+    QPainter painter(&base);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.drawImage(document.canvas_base_offset, pixels);
+    return base;
+}
+
+QImage renderChain(const QHash<QString, QImage>& resources, const ImageDocumentData& document,
+                   const QImage& source, const ImageLayerData& base, const QSize& size,
+                   const std::atomic_bool* cancel, const QStringList& excluded,
+                   ImageLayerRasterCache* cache = nullptr) {
+    const auto ids = clippingChain(document, base.id);
+    auto raw = base;
+    if (ids.size() > 1) raw.outline.reset();
+    QImage pixels = base.background ? renderBackground(document, source, size, cancel)
+        : renderRasterLayer(resources, raw, size, cancel, excluded, cache);
+    if (pixels.isNull() || ids.size() == 1) return pixels;
+    pixels = pixels.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    // SourceAtop preserves base alpha, including partial coverage and holes.
+    QPainter painter(&pixels);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceAtop);
+    for (qsizetype i = 1; i < ids.size(); ++i) {
+        const auto* child = findLayer(document, ids[i]);
+        if (!child || !child->visible || child->opacity == 0) continue;
+        const auto content = renderRasterLayer(resources, *child, size, cancel, excluded, cache);
+        if (content.isNull()) return {};
+        painter.setOpacity(child->opacity / 100.0);
+        for (int y = 0; y < size.height(); ++y) {
+            if (exportWasCancelled(cancel)) return {};
+            painter.drawImage(QPoint(0,y), content, QRect(0,y,size.width(),1));
+        }
+    }
+    painter.end();
+    if (exportWasCancelled(cancel)) return {};
+    return base.outline && base.outline->enabled ? applyLayerOutline(pixels, *base.outline, cancel) : pixels;
+}
+
 QImage renderGroup(const QHash<QString, QImage>& resources,
                    const ImageDocumentData& document,
                    const ImageGroupData& group,
@@ -414,10 +459,9 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
             return {};
         }
         const auto* layer = findLayer(document, layer_id);
-        if (layer == nullptr || !layer->visible || layer->opacity == 0) continue;
-        QImage pixels = renderRasterLayer(resources,
-            *layer, size, cancellation_requested, excluded_object_ids,
-            layer_raster_cache);
+        if (layer == nullptr || layer->clip_to_base || !layer->visible || layer->opacity == 0) continue;
+        QImage pixels = renderChain(resources, document, {}, *layer, size,
+            cancellation_requested, excluded_object_ids, layer_raster_cache);
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
             painter.end();
             return {};
@@ -451,37 +495,22 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
         ImageEditorPerformanceStage::Composite);
     if (source_image.isNull() || exportWasCancelled(cancellation_requested)) return {};
 
-    QImage background = applyOperations(
-        source_image, document.operations, false, cancellation_requested);
-    if (background.isNull() || exportWasCancelled(cancellation_requested)) return {};
-
-    QSize size = document.canvas_size;
-    if (!size.isValid() || size.isEmpty()) size = background.size();
-    QImage base;
-    if (document.canvas_base_offset.isNull() && size == background.size()) {
-        base = background.convertToFormat(QImage::Format_ARGB32);
+    const QSize size = ImageDocumentRenderer::documentSize(document, source_image.size());
+    const auto* background = document.layers.isEmpty() ? nullptr : &document.layers.front();
+    const bool clipping_background = background && clippingChain(document, background->id).size() > 1;
+    QImage composite;
+    if (background && background->visible && !clipping_background) {
+        // Preserve straight-RGBA Background values on the legacy fast path.
+        composite = renderBackground(document, source_image, size, cancellation_requested);
     } else {
-        base = QImage(size, QImage::Format_ARGB32);
-        if (base.isNull()) return {};
-        base.fill(document.base_kind == ImageBaseKind::Canvas
-            ? document.canvas_background : QColor(0, 0, 0, 0));
-        QPainter base_painter(&base);
-        base_painter.setCompositionMode(QPainter::CompositionMode_Source);
-        base_painter.drawImage(document.canvas_base_offset, background);
+        composite = QImage(size, QImage::Format_ARGB32);
+        if (!composite.isNull()) composite.fill(Qt::transparent);
     }
-    const auto* background_layer = document.layers.isEmpty()
-        ? nullptr : &document.layers.front();
-    QImage composite = background_layer != nullptr && background_layer->visible
-        ? base
-        : QImage(size, QImage::Format_ARGB32);
     if (composite.isNull()) return {};
-    if (background_layer == nullptr || !background_layer->visible) {
-        composite.fill(Qt::transparent);
-    }
 
     QPainter painter(&composite);
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    for (qsizetype index = 1; index < document.root_stack.size(); ++index) {
+    for (qsizetype index = clipping_background ? 0 : 1; index < document.root_stack.size(); ++index) {
         if (exportWasCancelled(cancellation_requested)) {
             painter.end();
             return {};
@@ -497,11 +526,10 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
                                  layer_raster_cache);
         } else {
             const auto* layer = findLayer(document, item.id);
-            if (layer == nullptr || !layer->visible || layer->opacity == 0) continue;
+            if (layer == nullptr || layer->clip_to_base || !layer->visible || layer->opacity == 0) continue;
             opacity = layer->opacity / 100.0;
-            pixels = renderRasterLayer(resources,
-                *layer, size, cancellation_requested, excluded_object_ids,
-                layer_raster_cache);
+            pixels = renderChain(resources, document, source_image, *layer, size,
+                cancellation_requested, excluded_object_ids, layer_raster_cache);
         }
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
             painter.end();
@@ -564,6 +592,22 @@ QImage renderSelectedLayer(const QHash<QString, QImage>& resources,
         pixels.fill(Qt::transparent);
         pixels = renderRasterLayer(resources, selected_layer, size,
                                    cancellation_requested, {});
+        if (selected_layer.clip_to_base && !pixels.isNull()) {
+            const auto* base = findLayer(document, clippingBases(document).value(selected_layer.id));
+            if (!base) return {};
+            if (!base->visible || base->opacity == 0) return rendered;
+            auto raw = *base; raw.outline.reset();
+            const auto matte = base->background ? renderBackground(document, source_image, size, cancellation_requested)
+                : renderRasterLayer(resources, raw, size, cancellation_requested, {});
+            if (matte.isNull()) return {};
+            QPainter clip(&pixels);
+            clip.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+            clip.setOpacity(base->opacity / 100.0);
+            for (int y=0; y<size.height(); ++y) {
+                if (exportWasCancelled(cancellation_requested)) return {};
+                clip.drawImage(QPoint(0,y), matte, QRect(0,y,size.width(),1));
+            }
+        }
         if (parent_group != nullptr) {
             pixels = applyOperations(std::move(pixels), parent_group->operations,
                                      true, cancellation_requested);
@@ -824,17 +868,29 @@ QImage ImageDocumentRenderer::editableLayerTarget(
                            mask_target ? QHash<QString, QImage>{} : raster_images);
 }
 
+QImage ImageDocumentRenderer::layerChain(const ImageDocumentData& document,
+    const QImage& source, const QHash<QString, QImage>& resources, const QString& base_id,
+    const std::atomic_bool* cancel) {
+    const auto* base = findLayer(document, base_id);
+    if (!base || base->clip_to_base || exportWasCancelled(cancel)) return {};
+    return renderChain(resources, document, source, *base, documentSize(document, source.size()), cancel, {});
+}
+
 QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,
     const QImage& source_image, const QHash<QString, QImage>& raster_images,
-    const ImageLayerData& layer, const QSize& maximum_size) {
+    const ImageLayerData& layer, const QSize& maximum_size, const std::atomic_bool* cancellation_requested) {
     ImageEditorPerformanceScope thumbnail_scope(
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::LayerThumbnail);
-    if (maximum_size.width() <= 0 || maximum_size.height() <= 0) return {};
+    if (exportWasCancelled(cancellation_requested) || maximum_size.width() <= 0 || maximum_size.height() <= 0) return {};
     const QSize canvas_size = documentSize(document, source_image.size());
     QImage thumbnail;
+    if (layer.clip_to_base) {
+        const auto pixels = renderSelectedLayer(raster_images, source_image, document, layer.id, cancellation_requested);
+        return pixels.isNull() ? QImage{} : pixels.scaled(maximum_size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
     if (layer.outline && layer.outline->enabled && !layer.background) {
-        const auto pixels = renderRasterLayer(raster_images, layer, canvas_size, nullptr, {});
+        const auto pixels = renderRasterLayer(raster_images, layer, canvas_size, cancellation_requested, {});
         return pixels.isNull() ? QImage{} : pixels.scaled(maximum_size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     }
     if (layer.background) {
@@ -866,14 +922,14 @@ QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,
 
 QImage ImageDocumentRenderer::groupThumbnail(const ImageDocumentData& document,
     const QHash<QString, QImage>& raster_images, const ImageGroupData& group,
-    const QSize& maximum_size) {
+    const QSize& maximum_size, const std::atomic_bool* cancellation_requested) {
     ImageEditorPerformanceScope thumbnail_scope(
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::GroupThumbnail);
-    if (maximum_size.width() <= 0 || maximum_size.height() <= 0) return {};
+    if (exportWasCancelled(cancellation_requested) || maximum_size.width() <= 0 || maximum_size.height() <= 0) return {};
     const QImage rendered = renderGroup(raster_images, document, group,
-        documentSize(document, document.source_size), nullptr, {});
-    return rendered.isNull() ? QImage{}
+        documentSize(document, document.source_size), cancellation_requested, {});
+    return rendered.isNull() || exportWasCancelled(cancellation_requested) ? QImage{}
         : rendered.scaled(maximum_size, Qt::KeepAspectRatio,
                           Qt::SmoothTransformation);
 }

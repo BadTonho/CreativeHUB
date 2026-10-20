@@ -44,9 +44,11 @@ struct ImageRenderController::WorkerState {
         for (const auto& layer : snapshot.document.layers) {
             if (cancellation->load()) return;
             const auto* before = findLayer(thumbnail_snapshot.document,layer.id);
-            const bool unchanged = !reset && before && before->operations==layer.operations && before->mask==layer.mask && before->outline==layer.outline;
+            const bool unchanged = !reset && before && before->operations==layer.operations && before->mask==layer.mask &&
+                before->outline==layer.outline && before->clip_to_base==layer.clip_to_base &&
+                (!layer.clip_to_base || thumbnail_snapshot.document==snapshot.document);
             next.insert(layer.id, unchanged && thumbnails.contains(layer.id) ? thumbnails.value(layer.id) :
-                ImageDocumentRenderer::layerThumbnail(snapshot.document,snapshot.source_image,snapshot.raster_images,layer,size));
+                ImageDocumentRenderer::layerThumbnail(snapshot.document,snapshot.source_image,snapshot.raster_images,layer,size,cancellation));
             if (layer.mask) {
                 if (unchanged && mask_thumbnails.contains(layer.id)) masks.insert(layer.id,mask_thumbnails.value(layer.id));
                 else {
@@ -64,8 +66,11 @@ struct ImageRenderController::WorkerState {
                 if (!old || !current || *old != *current) { unchanged=false; break; }
             }
             next.insert(group.id, unchanged && thumbnails.contains(group.id) ? thumbnails.value(group.id) :
-                ImageDocumentRenderer::groupThumbnail(snapshot.document,snapshot.raster_images,group,size));
+                ImageDocumentRenderer::groupThumbnail(snapshot.document,snapshot.raster_images,group,size,cancellation));
         }
+        if (cancellation->load()) return;
+        for (const auto& thumbnail : next)
+            if (thumbnail.isNull()) throw std::runtime_error("Layer/group thumbnail rendering failed.");
         thumbnail_snapshot=snapshot; thumbnail_document_id=id; thumbnails=std::move(next); mask_thumbnails=std::move(masks);
         frame.thumbnails=thumbnails; frame.mask_thumbnails=mask_thumbnails;
         std::uint64_t thumbnail_bytes=0;

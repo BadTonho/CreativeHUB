@@ -2810,5 +2810,25 @@ Executável: %2</translation>
         <source>Group masks and outlines are not supported.</source>
         <translation>Máscaras e contornos de grupo não são compatíveis.</translation>
     </message>
+    <message>
+        <source>Create Clipping Mask</source>
+        <translation>Criar máscara de corte</translation>
+    </message>
+    <message>
+        <source>Release Clipping Mask</source>
+        <translation>Liberar máscara de corte</translation>
+    </message>
+    <message>
+        <source>Clipped to: %1</source>
+        <translation>Recortada por: %1</translation>
+    </message>
+    <message>
+        <source>A clipping layer has no sibling base.</source>
+        <translation>Uma camada recortada não possui base no mesmo grupo.</translation>
+    </message>
+    <message>
+        <source>A layer clipping flag is invalid.</source>
+        <translation>O indicador de recorte de uma camada é inválido.</translation>
+    </message>
 </context>
 </TS>

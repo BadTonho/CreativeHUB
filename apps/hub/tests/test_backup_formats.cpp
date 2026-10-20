@@ -55,7 +55,7 @@ Snapshot backup(const QString& root, const QString& source) {
     QString path;
     QString error;
     const bool copied = manager.createBackup(source, &path, &error);
-    if (!copied) std::cerr << error.toStdString() << '\n';
+    if (!copied) std::cerr << source.toStdString() << ": " << error.toStdString() << '\n';
     CS_TEST_CHECK(copied);
     CS_TEST_CHECK(error.isEmpty());
     CS_TEST_CHECK(readBytes(source) == original);
@@ -144,6 +144,15 @@ void testImageDocuments(const QString& root) {
             children[0]=childObject; groupObject.insert("children",children); layers[layers.size()-1]=groupObject;
             fixture.insert("layers",layers);
         }
+        if (version >= 18) {
+            auto layers = fixture.value("layers").toArray(); auto groupObject = layers.last().toObject();
+            auto children = groupObject.value("children").toArray(); auto child = children.first().toObject();
+            child.insert("id", QUuid::createUuid().toString(QUuid::WithoutBraces));
+            child.insert("clip_to_base", true); child.insert("operations", QJsonArray{});
+            child.insert("mask", QJsonObject{{"enabled",true},{"operations",QJsonArray{}}});
+            children.append(child); groupObject.insert("children",children); layers[layers.size()-1]=groupObject;
+            fixture.insert("layers",layers);
+        }
         // Use the producer's assets in every case, including legacy documents.
         const auto path = QDir(QFileInfo(assets).absolutePath()).filePath(QStringLiteral("image-v%1.cimg").arg(version));
         writeBytes(path, QJsonDocument(fixture).toJson());
@@ -163,7 +172,7 @@ void testImageDocuments(const QString& root) {
         CS_TEST_CHECK(after.source_size == before.source_size);
         if (version >= 4) CS_TEST_CHECK(after == before);
         CS_TEST_CHECK(!QImage(after.source_path).isNull());
-        if (version >= 11) CS_TEST_CHECK(!QImage(after.layers.back().operations.front().raster.source_path).isNull());
+        if (version >= 11) CS_TEST_CHECK(!QImage(after.layers.at(1).operations.front().raster.source_path).isNull());
     }
     CS_TEST_CHECK(readBytes(source) == readBytes(imported));
 }
@@ -325,6 +334,12 @@ void testMotionDocuments(const QString& root) {
     LayerId id = 0;
     const auto added = composition.addMediaLayer(media, 0, &id);
     CS_TEST_CHECK(added == AddMediaLayerResult::Added);
+    // Materialize linked references: Windows weakly_canonical may report an
+    // error for a missing leaf, which would turn this valid-path fixture into
+    // an unrelated path-validation case.
+    writeBytes(QDir(assets).filePath("linked.cimg"), "{}");
+    writeBytes(QDir(assets).filePath("published.png"), readBytes(source));
+    writeBytes(QDir(assets).filePath("source snapshot.png"), readBytes(source));
     const bool linked = composition.setLayerLinkedImage(id, LinkedImageDocument{
         fsPath(QDir(assets).filePath("linked.cimg")), fsPath(QDir(assets).filePath("published.png")),
         fsPath(QDir(assets).filePath("source snapshot.png"))});

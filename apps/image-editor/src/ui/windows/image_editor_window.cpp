@@ -1,3 +1,4 @@
+#include "image_layer_clipping.h"
 #include "image_editor_window.h"
 
 #include "../tools/magic_wand/magic_wand_tool.h"
@@ -218,8 +219,10 @@ std::uint64_t operationCount(const ImageDocumentData& document) {
 
 ImageEditorWindow::ImageEditorWindow(QWidget* parent,
                                      QString recovery_data_directory,
-                                     QString performance_log_directory)
+                                     QString performance_log_directory,
+                                     QString error_log_directory)
     : QMainWindow(parent),
+      logger_(std::move(error_log_directory)),
       performance_log_(std::move(performance_log_directory)),
       recovery_store_(std::move(recovery_data_directory)) {
     background_task_pool_.setMaxThreadCount(2);
@@ -467,6 +470,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
                     updateView(true);
                 }
             });
+    connect(layer_panel_, &LayerPanel::layerClippingChanged, this,
+        [this](const QString& id, bool enabled) {
+            if (activeSession().setLayerClipping(id, enabled)) updateView(true);
+        });
     connect(layer_panel_, &LayerPanel::outlineEditStarted, this,
         [this] { if (hasActiveDocumentTab()) activeSession().beginLayerOutlineEdit(); });
     connect(layer_panel_, &LayerPanel::outlineEditFinished, this, [this] {
@@ -743,8 +750,9 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
                     if (object_ids.contains(imageObjectId(object.operation)) &&
                         (object.operation.kind == OperationKind::RasterImage ||
                          std::any_of(activeSession().data().layers.cbegin(), activeSession().data().layers.cend(),
-                            [&object](const ImageLayerData& layer) {
-                                return layer.id == object.layer_id && layer.outline && layer.outline->enabled;
+                            [this, &object](const ImageLayerData& layer) {
+                                return layer.id == object.layer_id && ((layer.outline && layer.outline->enabled) ||
+                                    participatesInClipping(activeSession().data(), layer.id));
                             }))) {
                         requestCanvasRender();
                         return;
@@ -1287,8 +1295,9 @@ void ImageEditorWindow::updateObjectPlacements() {
         [this](const ImageObjectPlacement& object) {
             if (!selectedObjectIds().contains(imageObjectId(object.operation))) return false;
             return std::any_of(activeSession().data().layers.cbegin(), activeSession().data().layers.cend(),
-                [&object](const ImageLayerData& layer) {
-                    return layer.id == object.layer_id && layer.outline && layer.outline->enabled;
+                [this, &object](const ImageLayerData& layer) {
+                    return layer.id == object.layer_id && ((layer.outline && layer.outline->enabled) ||
+                                    participatesInClipping(activeSession().data(), layer.id));
                 });
         });
     activeCanvas()->setObjectPlacements(placements, selectedObjectIds(), composed_preview);
@@ -2146,6 +2155,10 @@ void ImageEditorWindow::createActions() {
                          : executable_path));
     });
 
+    auto* clipping = layer_panel_->clippingAction();
+    addAction(clipping);
+    // Qt maps Control to Command and Alt to Option on macOS.
+    registerShortcutAction(clipping, QKeySequence(QStringLiteral("Ctrl+Alt+G")));
     loadShortcutPreferences();
 }
 
@@ -2163,21 +2176,23 @@ void ImageEditorWindow::loadShortcutPreferences() {
     // A newly introduced default must not displace an older saved assignment.
     QSettings settings;
     settings.beginGroup(QStringLiteral("ImageEditor/KeyboardShortcuts"));
-    const QString deletion_key = delete_selection_action_->objectName();
-    if (!settings.contains(deletion_key)) {
-        for (const auto& entry : shortcut_manager_.entries()) {
-            if (entry.id == deletion_key || !settings.contains(entry.id)) continue;
-            if (QKeySequence::fromString(settings.value(entry.id).toString(), QKeySequence::PortableText)
-                == delete_selection_action_->shortcut()) {
-                settings.setValue(deletion_key, QString{});
-                break;
+    for (auto* introduced : {delete_selection_action_, layer_panel_->clippingAction()}) {
+        const QString introduced_key = introduced->objectName();
+        if (!settings.contains(introduced_key)) {
+            for (const auto& entry : shortcut_manager_.entries()) {
+                if (entry.id == introduced_key || !settings.contains(entry.id)) continue;
+                if (QKeySequence::fromString(settings.value(entry.id).toString(), QKeySequence::PortableText)
+                    == introduced->shortcut()) {
+                    settings.setValue(introduced_key, QString{});
+                    break;
+                }
             }
         }
-    }
-    if (settings.contains(deletion_key)) {
-        const QString saved = settings.value(deletion_key).toString();
-        delete_selection_action_->setShortcut(saved == QStringLiteral("<disabled>")
-            ? QKeySequence{} : QKeySequence(saved, QKeySequence::PortableText));
+        if (settings.contains(introduced_key)) {
+            const QString saved = settings.value(introduced_key).toString();
+            introduced->setShortcut(saved == QStringLiteral("<disabled>")
+                ? QKeySequence{} : QKeySequence(saved, QKeySequence::PortableText));
+        }
     }
     settings.endGroup();
     settings.sync();

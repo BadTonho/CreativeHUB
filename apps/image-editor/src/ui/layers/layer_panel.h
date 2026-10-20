@@ -6,6 +6,7 @@
 #include <QImage>
 #include <QWidget>
 
+class QAction;
 class QCheckBox;
 class QComboBox;
 class QSpinBox;
@@ -46,9 +47,11 @@ public:
     [[nodiscard]] QVector<ImageStackItemData> selectedStackItems() const;
     void requestDeleteSelection();
     void finishOutlineEdit();
+    [[nodiscard]] QAction* clippingAction() const { return clipping_action_; }
 
 signals:
     void quickExportRequested();
+    void layerClippingChanged(const QString& id, bool enabled);
     void layerSelected(const QString& layer_id);
     void groupSelected(const QString& group_id);
     void layerMaskSelected(const QString& layer_id);
@@ -87,6 +90,7 @@ private:
     QPushButton* quick_export_button_ = nullptr;
     QTreeWidget* layer_tree_ = nullptr;
     QMenu* layer_context_menu_ = nullptr;
+    QAction* clipping_action_ = nullptr;
     QLabel* edit_hint_ = nullptr;
     QSlider* opacity_slider_ = nullptr;
     QToolButton* add_button_ = nullptr;

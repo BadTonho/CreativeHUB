@@ -1,3 +1,4 @@
+#include "image_document_utils.h"
 #include "image_document_session.h"
 #include "rendering/image_document_renderer.h"
 #include "rendering/image_interactive_raster_cache.h"
@@ -110,6 +111,30 @@ private slots:
             ImageDocumentRenderer::composite(snapshot.document,snapshot.source_image,snapshot.raster_images).convertToFormat(QImage::Format_ARGB32_Premultiplied));
         QCOMPARE(cache.retainedBytes(),bytes); QCOMPARE(session.data(),original.document);
         QCOMPARE(ImageInteractiveRasterCache::composite(cache.prepare(original,"document")),before);
+    }
+    void clippingWorkerThumbnails() {
+        ImageDocumentSession session; QVERIFY(session.createCanvas({96,72},Qt::transparent));
+        const auto base=session.selectedLayerId(); QVERIFY(session.applyPaintStroke({{20,25},{70,25}},Qt::red,18));
+        const auto child=session.addLayer(); QVERIFY(session.applyPaintStroke({{5,25},{85,25}},Qt::blue,40));
+        QVERIFY(session.setLayerClipping(child,true));
+        ImageRenderController controller; controller.setAutomatic(false);
+        InteractiveFrame frame; int count=0;
+        connect(&controller,&ImageRenderController::frameReady,this,[&](const InteractiveFrame& value){frame=value;++count;});
+        const auto verify=[&] {
+            const auto snapshot=session.exportSnapshot(); const int expected=count+1;
+            controller.request(snapshot,"clipping-thumbnails"); QTRY_COMPARE_WITH_TIMEOUT(count,expected,10000);
+            QCOMPARE(frame.image,baseline(session));
+            const auto* layer=findLayer(snapshot.document,child); QVERIFY(layer);
+            QCOMPARE(frame.thumbnails.value(child),ImageDocumentRenderer::layerThumbnail(snapshot.document,
+                snapshot.source_image,snapshot.raster_images,*layer,{48,36}));
+        };
+        verify(); verify();
+        QVERIFY(session.selectLayer(base)); QVERIFY(session.addLayerMask(base));
+        QVERIFY(session.applyLayerMaskEraseStroke({{40,25}},20)); verify();
+        QVERIFY(session.setLayerVisible(base,false)); verify();
+        QVERIFY(session.setLayerVisible(base,true)); QVERIFY(session.setLayerOpacity(base,40)); verify();
+        QVERIFY(session.setLayerClipping(child,false)); verify();
+        QVERIFY(session.undo()); verify();
     }
     void latestRequestAndCancellation() {
         ImageDocumentSession session; QVERIFY(session.createCanvas({128,128},Qt::white));
@@ -280,6 +305,8 @@ private slots:
         QVERIFY(session.setLayerOutline(layer,ImageLayerOutlineData{})); verify();
         ImageLayerOutlineData inside; inside.position=ImageOutlinePosition::Inside; inside.color=QColor(50,200,90,160);
         QVERIFY(session.setLayerOutline(second,inside)); verify();
+        QVERIFY(session.setLayerClipping(second,true)); verify();
+        QVERIFY(session.setLayerOpacity(layer,45)); verify();
         const auto group=session.groupLayers({layer,second}); QVERIFY(!group.isEmpty());
         QVERIFY(session.setGroupOpacity(group,65)); verify();
         session.rotateRight(); verify(); session.flipHorizontal(); verify();

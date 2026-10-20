@@ -970,3 +970,26 @@ in one group. Native Windows visual and macOS/Linux acceptance are pending.
    outlines and source paths. Confirm all original image files are unchanged.
 
 Automated sources and recorded results are in [the outline contract](../features/LAYER_OUTLINE.md).
+
+## Clipping masks
+
+Status: pending owner visual acceptance on Windows; macOS/Linux pending.
+
+1. Create text/shape/transparent-image bases, including a hole and partial alpha.
+   Put a larger image above each and use Layers > Create Clipping Mask or the
+   configurable shortcut. Verify the row marker/base tooltip and editable content.
+2. Add several clipped siblings. Check base/child masks and visibility, both
+   opacities, Inside/Outside outlines, canvas edges, and a transformed group.
+   Textures stay inside the original matte and base outlines retain their color.
+3. Move/resize text, shape and image objects in the chain; verify live composed
+   previews and Escape cancellation. Confirm selection/paint/fill targets stay raw.
+4. Reorder/group/ungroup, delete the base, and Undo/Redo. Verify stack-following
+   association, group boundaries and released survivors after deleting a base.
+5. Select Background/group/multiple rows and a mask thumbnail; verify command
+   restrictions and mask-owner targeting. Switch tabs and verify independent state.
+6. Save/reopen/recover v18, backup/restore through Hub, and compare full/Quick
+   Export and CPU/Automatic preview. Quick Export isolates the selected layer.
+7. Save a linked image, refresh all Video Editor uses and reopen its project.
+   Verify the published PNG includes clipping and the source image is unchanged.
+8. Repeat at 1080p with five layers/one group; record drag responsiveness,
+   memory, application build/configuration, OS/GPU, results and any logged errors.

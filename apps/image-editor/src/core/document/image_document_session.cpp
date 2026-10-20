@@ -1,4 +1,5 @@
 #include "image_document_session.h"
+#include "image_layer_clipping.h"
 #include "rendering/image_bucket_fill.h"
 #include "rendering/image_blur_stroke.h"
 #include "rendering/image_linear_gradient.h"
@@ -761,6 +762,10 @@ QVector<ImageObjectPlacement> ImageDocumentSession::visibleObjects() const {
     for (qsizetype layer_index = data_.layers.size(); layer_index > 1; --layer_index) {
         const auto& layer = data_.layers.at(layer_index - 1);
         if (!effectiveLayerVisible(layer)) continue;
+        if (layer.clip_to_base) {
+            const auto* base = findLayer(data_, clippingBases(data_).value(layer.id));
+            if (!base || !base->visible || base->opacity == 0) continue;
+        }
         const auto* parent_group = layer.parent_group_id.isEmpty()
             ? nullptr : findGroup(data_, layer.parent_group_id);
         const int effective_opacity = parent_group == nullptr
@@ -892,12 +897,14 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
             cached->source_size == canvas_size &&
             cached->maximum_size == maximum_size &&
             cached->source_cache_key == source_cache_key &&
-            cached->background == layer.background && cached->mask == layer.mask;
+            cached->background == layer.background && cached->mask == layer.mask &&
+            (layer.clip_to_base ? cached->clipping_document == data_ : !cached->clipping_document);
         cache_scope.setStage(cache_matches
             ? ImageEditorPerformanceStage::ThumbnailCacheHit
             : ImageEditorPerformanceStage::ThumbnailCacheMiss);
         if (!cache_matches) {
             LayerThumbnailCacheEntry entry;
+            if (layer.clip_to_base) entry.clipping_document = data_;
             entry.operations = operations;
             entry.source_size = canvas_size;
             entry.maximum_size = maximum_size;
@@ -1697,6 +1704,19 @@ bool ImageDocumentSession::setLayerOpacity(const QString& layer_id, int opacity)
         data_.layers.at(index).opacity == opacity) return false;
     if (!opacity_edit_active_) pushEdit();
     data_.layers[index].opacity = opacity;
+    invalidateGroupThumbnailCache();
+    return true;
+}
+
+bool ImageDocumentSession::setLayerClipping(const QString& layer_id, bool enabled) {
+    const auto index = layerIndex(layer_id);
+    if (index <= 0 || data_.layers.at(index).clip_to_base == enabled ||
+        (enabled && !clippingBases(data_).contains(layer_id))) return false;
+    endLayerOutlineEdit();
+    endLayerOpacityEdit();
+    pushEdit();
+    data_.layers[index].clip_to_base = enabled;
+    layer_thumbnail_cache_.clear();
     invalidateGroupThumbnailCache();
     return true;
 }

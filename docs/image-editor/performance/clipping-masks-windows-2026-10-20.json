@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-20",
+  "platform": "Windows 11 x64",
+  "configuration": "Release",
+  "qt_version": "6.7.2",
+  "workload": {
+    "width": 1920,
+    "height": 1080,
+    "editable_layers": 5,
+    "groups": 1,
+    "background_layers": 1,
+    "clipped_children": 4,
+    "content": "Five painted layers sharing one clipping base"
+  },
+  "milliseconds": {
+    "cold_prepare_and_cpu_composite": 30,
+    "unchanged_prepare_and_cpu_composite": 7,
+    "base_opacity_update_prepare_and_cpu_composite": 24
+  },
+  "retained_raster_cache_bytes": 16588800,
+  "sampled_peak_working_set_bytes_whole_clipping_test_process": 83939328,
+  "unchanged_frame_additional_rasterized_pixels": 0,
+  "test_results": {
+    "scoped_ctest_passed": 24,
+    "scoped_ctest_failed": 0,
+    "native_clipping_qttest_passed": 7,
+    "native_gpu_qttest_passed": 12
+  },
+  "limits": [
+    "Single native run; not a whole-application latency or memory measurement.",
+    "Native visual acceptance and macOS/Linux validation remain pending."
+  ]
+}

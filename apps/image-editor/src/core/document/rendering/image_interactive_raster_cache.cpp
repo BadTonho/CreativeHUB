@@ -1,3 +1,4 @@
+#include "image_layer_clipping.h"
 #include "image_interactive_raster_cache.h"
 #include "image_layer_outline.h"
 #include "image_document_renderer.h"
@@ -104,6 +105,7 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
     InteractiveComposition result; result.size = size;
     QSet<QString> live;
     for (const auto& layer : doc.layers) {
+        if (!layer.clip_to_base && clippingChain(doc, layer.id).size() > 1) live.insert(layer.id + "/clipping");
         live.insert(layer.id + "/content"); live.insert(layer.id + "/mask");
         if (layer.outline && layer.outline->enabled) live.insert(layer.id + "/outline");
     }
@@ -118,7 +120,9 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
         background_snapshot_.document.operations != doc.operations ||
         background_snapshot_.document.canvas_base_offset != doc.canvas_base_offset ||
         background_snapshot_.document.canvas_background != doc.canvas_background;
-    if (!doc.layers.isEmpty() && doc.layers.front().visible) {
+    const bool clipped_background = !doc.layers.isEmpty() && clippingChain(doc, doc.layers.front().id).size() > 1;
+    if (clipped_background && !background_.isNull()) { bytes_ -= background_.sizeInBytes(); background_ = {}; }
+    if (!doc.layers.isEmpty() && doc.layers.front().visible && !clipped_background) {
         if (background_changed) {
             if (!background_.isNull()) bytes_ -= background_.sizeInBytes();
             background_ = ImageDocumentRenderer::selectedLayer(doc, snapshot.source_image, snapshot.raster_images, doc.layers.front().id, cancel)
@@ -214,7 +218,60 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
         }
         value.opacity = layer.opacity; return value;
     };
-    for (qsizetype i = 1; i < doc.root_stack.size(); ++i) {
+    const auto chain_input = [&](const ImageLayerData& base) {
+        const auto ids = clippingChain(doc, base.id);
+        if (ids.size() == 1) return layer_input(base);
+        const QString key = base.id + "/clipping";
+        ImageDocumentData signature = doc;
+        signature.layers.clear(); signature.groups.clear(); signature.root_stack.clear();
+        if (!base.background) signature.operations.clear();
+        QHash<QString,qint64> resources;
+        if (base.background) resources.insert(QStringLiteral("background"), snapshot.source_image.cacheKey());
+        for (const auto& id : ids) {
+            const auto* layer = findLayer(doc, id);
+            signature.layers.append(*layer);
+            for (const auto& op : layer->operations) if (op.kind == OperationKind::RasterImage)
+                resources.insert(op.raster.id, snapshot.raster_images.value(op.raster.id,
+                    snapshot.raster_images.value(op.raster.source_path)).cacheKey());
+        }
+        InteractiveLayer input; input.opacity = base.opacity;
+        input.content.identity = document_id + "/" + key;
+        const auto hit = entries_.find(key);
+        if (hit != entries_.end() && hit->pixels.size() == size &&
+            hit->clipping_signature == signature && hit->resources == resources) {
+            hit->used = ++clock_; input.content.pixels = hit->pixels;
+            input.content.revision = hit->revision; return input;
+        }
+        input.content.pixels = ImageDocumentRenderer::layerChain(doc, snapshot.source_image,
+            snapshot.raster_images, base.id, cancel);
+        if (input.content.pixels.isNull() || cancelled(cancel)) { input.content.pixels = {}; return input; }
+        reconstructed_pixels_ += std::uint64_t(size.width()) * size.height() * ids.size();
+        const auto previous = revisions_.constFind(key);
+        input.content.revision = previous != revisions_.cend() && previous->clipping_signature == signature &&
+            previous->resources == resources ? previous->revision : ++next_revision_;
+        if (!transient) {
+            Entry entry; entry.clipping_signature = std::move(signature); entry.resources = resources;
+            entry.revision = input.content.revision;
+            revisions_.insert(key, entry);
+            // Retain one finished chain rather than duplicate member rasters.
+            for (const auto& id : ids) for (const auto& suffix : {"/content", "/mask", "/outline", "/clipping"}) {
+                const auto old = entries_.find(id + suffix);
+                if (old != entries_.end()) { bytes_ -= old->pixels.sizeInBytes(); entries_.erase(old); }
+            }
+            const auto requested = std::uint64_t(input.content.pixels.sizeInBytes());
+            while (requested <= byte_limit_ && bytes_ + requested > byte_limit_ && !entries_.isEmpty()) {
+                auto victim = std::min_element(entries_.begin(), entries_.end(),
+                    [](const Entry& a, const Entry& b) { return a.used < b.used; });
+                bytes_ -= victim->pixels.sizeInBytes(); entries_.erase(victim);
+            }
+            if (requested <= byte_limit_ && bytes_ + requested <= byte_limit_) {
+                entry.pixels = input.content.pixels; entry.used = ++clock_;
+                entries_.insert(key, std::move(entry)); bytes_ += requested;
+            }
+        }
+        return input;
+    };
+    for (qsizetype i = 0; i < doc.root_stack.size(); ++i) {
         const auto& item = doc.root_stack[i]; InteractiveNode node;
         if (item.group) {
             const auto* group = findGroup(doc, item.id);
@@ -222,16 +279,17 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
             node.group = true; node.opacity = group->opacity; node.transforms = group->operations;
             for (const auto& id : group->layer_ids) {
                 const auto* layer = findLayer(doc, id);
-                if (layer && layer->visible && layer->opacity > 0) {
-                    auto input = layer_input(*layer);
+                if (layer && !layer->clip_to_base && layer->visible && layer->opacity > 0) {
+                    auto input = chain_input(*layer);
                     if (input.content.pixels.isNull()) return {};
                     node.layers.append(std::move(input));
                 }
             }
         } else {
             const auto* layer = findLayer(doc, item.id);
-            if (!layer || !layer->visible || layer->opacity == 0) continue;
-            auto input = layer_input(*layer);
+            if (!layer || layer->clip_to_base || !layer->visible || layer->opacity == 0 ||
+                (layer->background && !clipped_background)) continue;
+            auto input = chain_input(*layer);
             if (input.content.pixels.isNull()) return {};
             node.layers.append(std::move(input));
         }

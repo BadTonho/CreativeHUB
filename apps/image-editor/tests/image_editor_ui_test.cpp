@@ -94,6 +94,7 @@
 #endif
 
 bool testLayerOutlineUi(const QString& root);
+bool testLayerClippingUi(const QString& root);
 
 namespace {
 
@@ -3834,41 +3835,43 @@ bool testBrushSizeControls(const QString& directory) {
 
 bool testInteractiveRenderingWindow(const QString& directory, const QString& screenshot) {
     std::cerr << "Running testInteractiveRenderingWindow.\n";
+    const auto fail=[](int line) { std::cerr<<"Native rendering check failed at line "<<line<<'\n'; return false; };
     QImage source(512,320,QImage::Format_ARGB32_Premultiplied); source.fill(Qt::transparent);
     { QPainter painter(&source); painter.setRenderHint(QPainter::Antialiasing); painter.setPen(Qt::NoPen);
       painter.setBrush(QColor(220,70,130,170)); painter.drawEllipse(QRectF(60,30,260,240)); }
-    const auto path=QDir(directory).filePath("interactive-window.png"); if(!source.save(path)) return false;
-    image_editor::ImageEditorWindow window(nullptr,directory); window.resize(1100,750); window.show();
+    const auto path=QDir(directory).filePath("interactive-window.png"); if(!source.save(path)) return fail(__LINE__);
+    const auto log_directory=QDir(directory).filePath("native-rendering-logs");
+    image_editor::ImageEditorWindow window(nullptr,directory,{},log_directory); window.resize(1100,750); window.show();
     auto* renderer=window.findChild<image_editor::ImageRenderController*>();
     auto* cpu=window.findChild<QAction*>("cpuRenderingAction"); auto* automatic=window.findChild<QAction*>("automaticRenderingAction");
-    if(!renderer || !cpu || !automatic || !automatic->isChecked()) return false;
+    if(!renderer || !cpu || !automatic || !automatic->isChecked()) return fail(__LINE__);
     int cpu_count=0,gpu_count=0; bool recovery_logged=false;
     const QString injected="Native canvas recovery regression: context lost.";
     QObject::connect(renderer,&image_editor::ImageRenderController::frameReady,&window,[&](const image_editor::InteractiveFrame& frame) {
         if(frame.texture) ++gpu_count; else ++cpu_count;
         if(!frame.texture) {
-            QFile log(QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)).filePath("logs/image-editor.log"));
+            QFile log(QDir(log_directory).filePath("image-editor.log"));
             if(log.open(QIODevice::ReadOnly)) recovery_logged=log.readAll().contains(injected.toUtf8());
         }
     });
-    if(!window.openImagePath(path)) return false; processImageEditorEvents(); QTest::qWait(50);
-    auto* canvas=window.findChild<image_editor::ImageCanvas*>(); if(!canvas || gpu_count!=1) return false;
-    const auto gpu_pixels=canvas->grab().toImage(); if(gpu_pixels.isNull()) return false;
+    if(!window.openImagePath(path)) return fail(__LINE__); processImageEditorEvents(); QTest::qWait(50);
+    auto* canvas=window.findChild<image_editor::ImageCanvas*>(); if(!canvas || gpu_count!=1) return fail(__LINE__);
+    const auto gpu_pixels=canvas->grab().toImage(); if(gpu_pixels.isNull()) return fail(__LINE__);
     auto* tree=window.findChild<QTreeWidget*>();
-    if(!tree || !tree->topLevelItemCount()) return false;
+    if(!tree || !tree->topLevelItemCount()) return fail(__LINE__);
     auto* stable_item=tree->topLevelItem(0);
-    if(!screenshot.isEmpty() && !window.grab().save(screenshot)) return false;
-    cpu->trigger(); processImageEditorEvents(); if(cpu_count!=1 || !cpu->isChecked()) return false;
-    if(tree->topLevelItem(0)!=stable_item) return false;
+    if(!screenshot.isEmpty() && !window.grab().save(screenshot)) return fail(__LINE__);
+    cpu->trigger(); processImageEditorEvents(); if(cpu_count!=1 || !cpu->isChecked()) return fail(__LINE__);
+    if(tree->topLevelItem(0)!=stable_item) return fail(__LINE__);
     const auto cpu_pixels=canvas->grab().toImage();
-    if(gpu_pixels.size()!=cpu_pixels.size()) return false;
+    if(gpu_pixels.size()!=cpu_pixels.size()) return fail(__LINE__);
     // Interpolated display edges can differ; compare the document center coverage.
     const auto point=canvas->rect().center(); const auto a=gpu_pixels.pixelColor(point),b=cpu_pixels.pixelColor(point);
-    if(std::abs(a.red()-b.red())>2 || std::abs(a.green()-b.green())>2 || std::abs(a.blue()-b.blue())>2) return false;
-    automatic->trigger(); processImageEditorEvents(); if(gpu_count!=2) return false;
+    if(std::abs(a.red()-b.red())>2 || std::abs(a.green()-b.green())>2 || std::abs(a.blue()-b.blue())>2) return fail(__LINE__);
+    automatic->trigger(); processImageEditorEvents(); if(gpu_count!=2) return fail(__LINE__);
     renderer->injectGpuFailureForTesting(injected); automatic->trigger(); processImageEditorEvents();
-    if(cpu_count!=2 || !recovery_logged) return false;
-    automatic->trigger(); processImageEditorEvents(); if(cpu_count!=3 || gpu_count!=2) return false;
+    if(cpu_count!=2 || !recovery_logged) { std::cerr<<"CPU frames="<<cpu_count<<", GPU frames="<<gpu_count<<", recovery logged="<<recovery_logged<<'\n'; return fail(__LINE__); }
+    automatic->trigger(); processImageEditorEvents(); if(cpu_count!=3 || gpu_count!=2) return fail(__LINE__);
     return true;
 }
 
@@ -3938,6 +3941,10 @@ int main(int argc, char* argv[]) {
             std::cerr << "The Image Editor system language preference could not be restored.\n";
             return 1;
         }
+    }
+    if (application.arguments().contains(QStringLiteral("--clipping-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testLayerClippingUi(temporary.path()) ? 0 : 1;
     }
     if (application.arguments().contains(QStringLiteral("--outline-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
@@ -4123,6 +4130,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     if (!testLayerOutlineUi(temporary.path())) return 1;
+    if (!testLayerClippingUi(temporary.path())) return 1;
     if (!testEyedropperTool()) return 1;
     if (!testBucketFillTool()) return 1;
     if (!testMagicWandTool()) return 1;

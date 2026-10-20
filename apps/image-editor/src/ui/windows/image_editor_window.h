@@ -50,7 +50,8 @@ class ImageEditorWindow final : public QMainWindow {
 public:
     explicit ImageEditorWindow(QWidget* parent = nullptr,
                                 QString recovery_data_directory = {},
-                                QString performance_log_directory = {});
+                                QString performance_log_directory = {},
+                                QString error_log_directory = {});
     ~ImageEditorWindow() override;
     [[nodiscard]] bool importImagePaths(const QStringList& paths,
         std::optional<QPointF> center = {}, const QString& relink_id = {});
