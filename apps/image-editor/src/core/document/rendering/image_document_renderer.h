@@ -8,6 +8,7 @@
 #include <QStringList>
 
 #include <atomic>
+#include <functional>
 
 namespace image_editor {
 
@@ -33,9 +34,12 @@ public:
         const std::atomic_bool* cancellation_requested = nullptr,
         ImageLayerRasterCache* layer_raster_cache = nullptr);
     // Process a base and its clipping chain before base/group opacity or group transforms.
+    // Optional borrowed input supplies masked/styled member pixels on the same worker;
+    // it must honor cancellation and return null on failure. No callback is retained.
     [[nodiscard]] static QImage layerChain(const ImageDocumentData& document,
         const QImage& source, const QHash<QString, QImage>& resources, const QString& base_id,
-        const std::atomic_bool* cancel = nullptr);
+        const std::atomic_bool* cancel = nullptr,
+        const std::function<QImage(const ImageLayerData&)>& input = {});
     [[nodiscard]] static QImage selectedLayer(
         const ImageDocumentData& document,
         const QImage& source_image,

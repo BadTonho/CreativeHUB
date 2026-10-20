@@ -119,3 +119,5 @@ Shortcuts. A saved conflicting assignment is preserved and the introduced
 command starts unassigned. The command requires one editable layer and an
 eligible lower sibling base; Background, groups and multiple selections are
 disabled. Mask thumbnail selection still targets its owning layer.
+
+Blend Mode uses the Layers selector and introduces no keyboard shortcut.

@@ -78,6 +78,7 @@ public:
         const QPainterPath& path);
     void translateAreaSelection(const QPoint& delta);
     void cancelAreaSelectionGesture();
+    void cancelTransientGestures();
     [[nodiscard]] bool hasAreaSelection() const noexcept;
     [[nodiscard]] bool areaSelectionGestureActive() const noexcept;
     [[nodiscard]] bool areaSelectionMode() const noexcept { return area_selection_mode_; }

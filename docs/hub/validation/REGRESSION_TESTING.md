@@ -416,7 +416,7 @@ for output times, separate native GPU/fallback evidence and pending acceptance.
 
 `hub-backup-format-test` covers Image schemas 1-17 and preserves an outlined
 group child with its source/imported paths. The actual reader compares complete
-vault/restored documents. `hub-backup-manager-test` rejects future Image v18.
+vault/restored documents. `hub-backup-manager-test` rejects future Image v20.
 Manual follow-up: back up an outlined image, restore to another directory, open
 in Image Editor, and confirm outline settings and source links. Native acceptance
 remains pending.
@@ -426,10 +426,20 @@ remains pending.
 `hub-backup-format-test` exercises actual Image producer/reader round trips for
 schemas 1-18 and a v18 masked/outlined chain in a group, including vault and
 restored payload equality and media-path rebasing. `hub-backup-manager-test`
-rejects future Image v19. Manual Hub backup/restore UI acceptance is pending;
+rejects future Image v20. Manual Hub backup/restore UI acceptance is pending;
 see the [Image checklist](../../image-editor/validation/MANUAL_VALIDATION.md#clipping-masks).
 
 Windows Release evidence (2026-10-20): both Hub backup gates passed in the final
 24-test Image/Hub/Video selection. Motion linked references in the shared format
 fixture are materialized so canonical-path checks exercise existing paths.
 Native backup/restore UI and macOS/Linux acceptance remain pending.
+
+## Image Editor v19 blend backup coverage
+
+`hub-backup-format-test` round trips actual Image schemas 1-19 including group,
+base and clipped-child modes, metadata equality and relocated media. The manager
+gate rejects future Image v20. Native Hub UI/macOS/Linux acceptance is pending.
+
+Windows Release evidence (2026-10-20): both v19 backup gates passed in the
+38-gate blend-mode selection; canonical Hub Debug was rebuilt successfully.
+See [Image execution evidence](../../image-editor/features/BLEND_MODES.md#windows-execution-evidence--2026-10-20).

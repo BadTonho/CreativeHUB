@@ -199,9 +199,9 @@ post-group-cache report remain unchanged for historical comparison.
 Video Editor remains the first consumer. Its experimental backend now supports
 [direct texture delivery](../../video-editor/gpu/GPU_TEXTURE_DELIVERY.md), public Qt
 global sharing, a three-target/64 MiB reservation budget including retired targets,
-producer/consumer fences and asynchronous RGBA recovery. This application remains
-on its current CPU renderer; adoption requires its own rendering, alpha, lifecycle,
-export and regression contracts. See [native evidence and remaining platform gates](../../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).
+producer/consumer fences and asynchronous RGBA recovery. Image was CPU-only at
+that delivery; its current transparent raster adoption is described above, with
+application-owned alpha, lifecycle, export and regression contracts. See [native evidence and remaining platform gates](../../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).
 
 ## Editable clipping masks
 
@@ -211,3 +211,13 @@ application; base opacity is applied once. The same CPU implementation serves
 reference/export/publication. Cache reuse, member changes, cancellation and
 native channel parity are covered by clipping/interactive tests. No shared GPU
 protocol or shader change is required. See [contract](../features/CLIPPING_MASKS.md).
+
+## Layer/group blend modes
+
+The raster shader now composes six static modes while retaining transparent
+premultiplied Image output. Normal paths keep prior behavior. A reusable RGBA8
+backdrop is copied on GPU only for non-Normal draws, counted against the shared
+budget and released for Normal-only work/retirement. Insufficient capacity uses
+logged CPU recovery; it must not loop indefinitely on Busy. No GPU readback is
+needed for blending itself. Source rasters/textures survive outer mode edits;
+clipped child changes recompose their CPU chain. See [contract and evidence](../features/BLEND_MODES.md).

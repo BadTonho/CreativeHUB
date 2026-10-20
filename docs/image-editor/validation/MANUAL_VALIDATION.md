@@ -987,9 +987,33 @@ Status: pending owner visual acceptance on Windows; macOS/Linux pending.
    association, group boundaries and released survivors after deleting a base.
 5. Select Background/group/multiple rows and a mask thumbnail; verify command
    restrictions and mask-owner targeting. Switch tabs and verify independent state.
-6. Save/reopen/recover v18, backup/restore through Hub, and compare full/Quick
+6. Save/reopen/recover current v19 and open an older v18 fixture, back up/restore
+   through Hub, and compare full/Quick
    Export and CPU/Automatic preview. Quick Export isolates the selected layer.
 7. Save a linked image, refresh all Video Editor uses and reopen its project.
    Verify the published PNG includes clipping and the source image is unchanged.
 8. Repeat at 1080p with five layers/one group; record drag responsiveness,
    memory, application build/configuration, OS/GPU, results and any logged errors.
+
+## Blend modes
+
+Status: pending owner visual acceptance on Windows; macOS/Linux pending.
+
+1. Select opaque/partially transparent text, shapes and images; switch all six
+   modes against opaque and transparent backgrounds. Verify Multiply remains
+   visible on empty areas and Add saturates color without adding alpha.
+2. Combine layer masks, inside/outside outlines, opacity and several clipped
+   siblings. Verify child modes act within the base, its outline retains its
+   color internally, and base mode acts on the whole chain against the document.
+3. Test isolated groups, group modes/opacity/transforms, reordering and ungrouping.
+   Check mode retention and absence of inherited group modes after ungrouping.
+4. Verify Background/multiple-selection restrictions and hidden-item editing.
+   Select mask thumbnails, change tabs, Undo/Redo and change modes during drawing,
+   gradient, text and object-transform gestures. Confirm no stale drafts survive.
+5. Compare CPU/Automatic preview, composite Eyedropper, individual/group thumbnails,
+   full export, isolated Quick Export, save/reopen and recovery. Raw painting and
+   selection targets must remain unchanged by the property.
+6. Back up/restore v19 through Hub; publish a linked PNG and refresh repeated Video
+   uses. Verify original source bytes stay unchanged and all output matches.
+7. Repeat a 1080p five-layer/group workload; record build path/date, OS/GPU,
+   responsiveness, memory, GPU recovery and any technical errors in local logs.

@@ -621,3 +621,13 @@ automated implementation coverage.
 | Feature | Automated coverage | Remaining acceptance |
 | --- | --- | --- |
 | Ordered shadows, expanded origins/fitting, masks/mattes, animation/history, v17/recovery and GPU image contract | [Drop Shadow tests](../../apps/motion-editor/tests/drop_shadow_test.cpp), [CTest registration](../../apps/motion-editor/tests/CMakeLists.txt): `creative-suite-motion-editor-drop-shadow` and `...-drop-shadow-hidpi`; `hub-backup-format-test`; existing shared/consumer regressions | [Manual checklist](features/DROP_SHADOW.md#verification-and-pending-acceptance); visual/platform/native Viewer presentation and benchmarks pending. |
+
+
+## Image transparent blend composition maintenance
+
+Image v19 reuses shared channel math and extends transparent OpenGL raster
+records with default-Normal blend fields. Motion's own formats, opaque output,
+preview and export remain unchanged. Shared composition/OpenGL/Vulkan and Motion
+blend, preview, GPU composition and export gates protect this additive boundary.
+See [Image contract and execution evidence](../image-editor/features/BLEND_MODES.md).
+Native visual and other-platform acceptance remain pending.

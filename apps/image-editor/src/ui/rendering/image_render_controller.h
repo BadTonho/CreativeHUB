@@ -35,11 +35,14 @@ public:
     void disableGpu(const QString& cause);
     // Deterministic allocation/context failure seam for recovery regression tests.
     void injectGpuFailureForTesting(const QString& cause);
+    // Deterministic capacity seam; replacement occurs on the worker thread.
+    void setGpuByteLimitForTesting(std::uint64_t bytes);
     [[nodiscard]] bool busy() const noexcept { return running_; }
     [[nodiscard]] bool hasPendingRequest() const noexcept { return pending_.has_value(); }
     [[nodiscard]] std::uint64_t sequence() const noexcept { return sequence_; }
 signals:
     void frameReady(const image_editor::InteractiveFrame& frame);
+    void cpuRecoveryUsed(const QString& operation, const QString& cause);
     void renderFailed(const QString& operation, const QString& cause);
 private:
     struct WorkerState;
@@ -60,7 +63,7 @@ private:
     std::optional<Request> pending_;
     std::shared_ptr<std::atomic_bool> running_cancellation_;
     std::uint64_t sequence_ = 0, document_revision_ = 0, gesture_ = 0;
-    QString requested_document_id_;
+    QString requested_document_id_, last_recovery_key_;
     bool running_ = false, automatic_ = true;
 };
 } // namespace image_editor

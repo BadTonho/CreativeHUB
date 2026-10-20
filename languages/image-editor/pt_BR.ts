@@ -2830,5 +2830,33 @@ Executável: %2</translation>
         <source>A layer clipping flag is invalid.</source>
         <translation>O indicador de recorte de uma camada é inválido.</translation>
     </message>
+    <message>
+        <source>Blend Mode</source>
+        <translation>Modo de mesclagem</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normal</translation>
+    </message>
+    <message>
+        <source>Multiply</source>
+        <translation>Multiplicar</translation>
+    </message>
+    <message>
+        <source>Screen</source>
+        <translation>Tela</translation>
+    </message>
+    <message>
+        <source>Overlay</source>
+        <translation>Sobrepor</translation>
+    </message>
+    <message>
+        <source>Difference</source>
+        <translation>Diferença</translation>
+    </message>
+    <message>
+        <source>A layer or group blend mode is invalid.</source>
+        <translation>O modo de mesclagem da camada ou do grupo é inválido.</translation>
+    </message>
 </context>
 </TS>

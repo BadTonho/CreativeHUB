@@ -81,6 +81,19 @@ void ImageCanvas::releaseGpuFrames() {
     committed_texture_.reset(); transient_texture_.reset();
     if (gpu_presenter_) { gpu_presenter_->setFrame({}); gpu_presenter_->hide(); }
 }
+void ImageCanvas::cancelTransientGestures() {
+    if (linear_gradient_tool_.gestureActive()) {
+        linear_gradient_tool_.cancelGesture(); emit linearGradientPreviewCleared();
+    }
+    resetBlurTool(true); resetBrushTools(true);
+    static_cast<void>(shape_tool_.cancelGesture());
+    static_cast<void>(crop_tool_.cancelGesture());
+    static_cast<void>(area_selection_tool_.cancelGesture());
+    static_cast<void>(text_tool_.cancelFrame());
+    clearObjectInteraction(); resizing_brush_=false;
+    transient_image_={}; transient_texture_.reset(); update();
+}
+
 void ImageCanvas::setDocumentGeometry(const QSize& size, bool resetView) {
     // A confirmed document update cancels gestures even when its dimensions
     // stay unchanged (for example, deleting an object during a drag).

@@ -143,6 +143,7 @@ public:
     [[nodiscard]] bool moveLayer(const QString& layer_id, int direction);
     [[nodiscard]] bool setLayerVisible(const QString& layer_id, bool visible);
     [[nodiscard]] bool setLayerOpacity(const QString& layer_id, int opacity);
+    [[nodiscard]] bool setStackBlendMode(const QString& id, bool group, creative_suite::composition::BlendMode mode);
     [[nodiscard]] bool setLayerClipping(const QString& layer_id, bool enabled);
     [[nodiscard]] bool setLayerOutline(const QString& layer_id,
         std::optional<ImageLayerOutlineData> outline);

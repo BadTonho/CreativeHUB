@@ -15,9 +15,13 @@ public:
                   const QString& path = {},
                   int error_code = 0) const noexcept;
 
+    // Expected resource-capacity recovery is informational, not an error.
+    void logRecovery(const QString& operation, const QString& cause) const noexcept;
     [[nodiscard]] QString logPath() const;
 
 private:
+    void writeEntry(const QString& severity, const QString& operation,
+                    const QString& cause, const QString& path, int error_code) const noexcept;
     void rotateIfNeeded() const noexcept;
 
     QString log_directory_;

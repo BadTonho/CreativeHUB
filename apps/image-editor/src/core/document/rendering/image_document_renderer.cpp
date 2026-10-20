@@ -1,3 +1,4 @@
+#include "image_layer_blending.h"
 #include "image_layer_clipping.h"
 #include "rendering/image_document_renderer.h"
 #include "rendering/image_layer_outline.h"
@@ -408,29 +409,23 @@ QImage renderBackground(const ImageDocumentData& document, const QImage& source,
 QImage renderChain(const QHash<QString, QImage>& resources, const ImageDocumentData& document,
                    const QImage& source, const ImageLayerData& base, const QSize& size,
                    const std::atomic_bool* cancel, const QStringList& excluded,
-                   ImageLayerRasterCache* cache = nullptr) {
+                   ImageLayerRasterCache* cache = nullptr,
+                   const std::function<QImage(const ImageLayerData&)>& input = {}) {
     const auto ids = clippingChain(document, base.id);
     auto raw = base;
     if (ids.size() > 1) raw.outline.reset();
-    QImage pixels = base.background ? renderBackground(document, source, size, cancel)
-        : renderRasterLayer(resources, raw, size, cancel, excluded, cache);
+    QImage pixels = input ? input(raw) : (base.background ? renderBackground(document, source, size, cancel)
+        : renderRasterLayer(resources, raw, size, cancel, excluded, cache));
     if (pixels.isNull() || ids.size() == 1) return pixels;
     pixels = pixels.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     // SourceAtop preserves base alpha, including partial coverage and holes.
-    QPainter painter(&pixels);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceAtop);
     for (qsizetype i = 1; i < ids.size(); ++i) {
         const auto* child = findLayer(document, ids[i]);
         if (!child || !child->visible || child->opacity == 0) continue;
-        const auto content = renderRasterLayer(resources, *child, size, cancel, excluded, cache);
+        const auto content = input ? input(*child) : renderRasterLayer(resources, *child, size, cancel, excluded, cache);
         if (content.isNull()) return {};
-        painter.setOpacity(child->opacity / 100.0);
-        for (int y = 0; y < size.height(); ++y) {
-            if (exportWasCancelled(cancel)) return {};
-            painter.drawImage(QPoint(0,y), content, QRect(0,y,size.width(),1));
-        }
+        if (!blendLayerPixels(&pixels,content,child->blend_mode,child->opacity,cancel,true)) return {};
     }
-    painter.end();
     if (exportWasCancelled(cancel)) return {};
     return base.outline && base.outline->enabled ? applyLayerOutline(pixels, *base.outline, cancel) : pixels;
 }
@@ -451,11 +446,8 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
     if (!group.visible || group.opacity == 0 || exportWasCancelled(cancellation_requested)) {
         return composite;
     }
-    QPainter painter(&composite);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     for (const QString& layer_id : group.layer_ids) {
         if (exportWasCancelled(cancellation_requested)) {
-            painter.end();
             return {};
         }
         const auto* layer = findLayer(document, layer_id);
@@ -463,13 +455,10 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
         QImage pixels = renderChain(resources, document, {}, *layer, size,
             cancellation_requested, excluded_object_ids, layer_raster_cache);
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
-            painter.end();
             return {};
         }
-        painter.setOpacity(layer->opacity / 100.0);
-        painter.drawImage(0, 0, pixels);
+        if (!blendLayerPixels(&composite,pixels,layer->blend_mode,layer->opacity,cancellation_requested)) return {};
     }
-    painter.end();
     QImage transformed = applyOperations(
         std::move(composite), group.operations, true, cancellation_requested, resources);
     if (transformed.isNull() || exportWasCancelled(cancellation_requested)) return {};
@@ -508,37 +497,33 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
     }
     if (composite.isNull()) return {};
 
-    QPainter painter(&composite);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     for (qsizetype index = clipping_background ? 0 : 1; index < document.root_stack.size(); ++index) {
         if (exportWasCancelled(cancellation_requested)) {
-            painter.end();
             return {};
         }
         const auto& item = document.root_stack.at(index);
-        qreal opacity = 1.0;
+        int opacity = 100;
+        auto mode = creative_suite::composition::BlendMode::Normal;
         QImage pixels;
         if (item.group) {
             const auto* group = findGroup(document, item.id);
             if (group == nullptr || !group->visible || group->opacity == 0) continue;
+            mode = group->blend_mode;
             pixels = renderGroup(resources, document, *group, size,
                                  cancellation_requested, excluded_object_ids,
                                  layer_raster_cache);
         } else {
             const auto* layer = findLayer(document, item.id);
             if (layer == nullptr || layer->clip_to_base || !layer->visible || layer->opacity == 0) continue;
-            opacity = layer->opacity / 100.0;
+            opacity = layer->opacity; mode = layer->blend_mode;
             pixels = renderChain(resources, document, source_image, *layer, size,
                 cancellation_requested, excluded_object_ids, layer_raster_cache);
         }
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
-            painter.end();
             return {};
         }
-        painter.setOpacity(opacity);
-        painter.drawImage(0, 0, pixels);
+        if (!blendLayerPixels(&composite,pixels,mode,opacity,cancellation_requested)) return {};
     }
-    painter.end();
     return exportWasCancelled(cancellation_requested) ? QImage{} : composite;
 }
 
@@ -870,10 +855,10 @@ QImage ImageDocumentRenderer::editableLayerTarget(
 
 QImage ImageDocumentRenderer::layerChain(const ImageDocumentData& document,
     const QImage& source, const QHash<QString, QImage>& resources, const QString& base_id,
-    const std::atomic_bool* cancel) {
+    const std::atomic_bool* cancel, const std::function<QImage(const ImageLayerData&)>& input) {
     const auto* base = findLayer(document, base_id);
     if (!base || base->clip_to_base || exportWasCancelled(cancel)) return {};
-    return renderChain(resources, document, source, *base, documentSize(document, source.size()), cancel, {});
+    return renderChain(resources, document, source, *base, documentSize(document, source.size()), cancel, {}, nullptr, input);
 }
 
 QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,

@@ -28,3 +28,7 @@ This directory groups the current scope, implementation contracts, feature deliv
 - [Performance baseline](performance/performance-baseline-windows-2026-10-06.json) and [updated baseline](performance/performance-baseline-windows-2026-10-06-v2.json)
 
 - [Editable clipping masks](features/CLIPPING_MASKS.md): stack, alpha, history, v18 and verification.
+
+- [Layer and group blend modes](features/BLEND_MODES.md): transparent composition, v19 and regression coverage.
+
+- [Blend-mode Windows profile](performance/blend-modes-windows-2026-10-20.json): 1080p CPU/GPU, caches, uploads, capacity recovery and canonical builds.

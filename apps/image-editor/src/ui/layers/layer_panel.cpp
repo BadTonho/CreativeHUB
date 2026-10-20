@@ -470,6 +470,23 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     actions->addWidget(move_down_button_);
     layout->addLayout(actions);
 
+    auto* blend_row = new QHBoxLayout;
+    blend_row->addWidget(new QLabel(QCoreApplication::translate("ImageEditorUI","Blend Mode"),this));
+    blend_mode_=new QComboBox(this); blend_mode_->setObjectName(QStringLiteral("layerBlendMode"));
+    blend_mode_->setAccessibleName(QCoreApplication::translate("ImageEditorUI","Blend Mode"));
+    const char* blend_names[]{QT_TRANSLATE_NOOP("ImageEditorUI","Normal"),QT_TRANSLATE_NOOP("ImageEditorUI","Multiply"),
+        QT_TRANSLATE_NOOP("ImageEditorUI","Screen"),QT_TRANSLATE_NOOP("ImageEditorUI","Overlay"),
+        QT_TRANSLATE_NOOP("ImageEditorUI","Add"),QT_TRANSLATE_NOOP("ImageEditorUI","Difference")};
+    for(int i=0;i<6;++i) blend_mode_->addItem(QCoreApplication::translate("ImageEditorUI",blend_names[i]),i);
+    blend_row->addWidget(blend_mode_,1); layout->addLayout(blend_row);
+    connect(blend_mode_,&QComboBox::currentIndexChanged,this,[this] {
+        if (!refreshing_ && blend_mode_->isEnabled()) {
+            const auto id=selectedItemId(); const bool group=selectedItemIsGroup();
+            const int mode=blend_mode_->currentData().toInt();
+            finishOutlineEdit(); emit stackBlendModeChanged(id,group,mode);
+        }
+    });
+
     auto* opacity_row = new QHBoxLayout;
     auto* opacity_label = new QLabel(QCoreApplication::translate("ImageEditorUI", "Opacity"), this);
     opacity_label->setObjectName(QStringLiteral("imageLayerOpacityLabel"));
@@ -946,6 +963,12 @@ void LayerPanel::updateControls() {
     const bool has_group = is_group && group != document_.groups.cend();
     const bool has_layer = !is_group && layer != document_.layers.cend();
     const bool editable = has_group || (has_layer && !layer->background);
+    {
+        const QSignalBlocker block(blend_mode_);
+        const auto mode=has_group ? group->blend_mode : has_layer ? layer->blend_mode : creative_suite::composition::BlendMode::Normal;
+        blend_mode_->setCurrentIndex(blend_mode_->findData(static_cast<int>(mode)));
+        blend_mode_->setEnabled(editable && layer_tree_->selectedItems().size()==1);
+    }
     const bool outline_editable = has_layer && !layer->background && layer_tree_->selectedItems().size() == 1;
     clipping_action_->setEnabled(outline_editable && (layer->clip_to_base || clippingBases(document_).contains(id)));
     clipping_action_->setText(has_layer && layer->clip_to_base

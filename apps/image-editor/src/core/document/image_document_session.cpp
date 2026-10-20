@@ -1708,6 +1708,21 @@ bool ImageDocumentSession::setLayerOpacity(const QString& layer_id, int opacity)
     return true;
 }
 
+bool ImageDocumentSession::setStackBlendMode(const QString& id, bool group, creative_suite::composition::BlendMode mode) {
+    using namespace creative_suite::composition;
+    if (!validBlendMode(mode)) return false;
+    const auto* layer = group ? nullptr : findLayer(data_, id);
+    const auto* parent = group ? findGroup(data_, id) : nullptr;
+    if ((!group && (!layer || layer->background || layer->blend_mode == mode)) ||
+        (group && (!parent || parent->blend_mode == mode))) return false;
+    pushEdit();
+    if (group) findGroup(data_, id)->blend_mode = mode;
+    else findLayer(data_, id)->blend_mode = mode;
+    layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
+    return true;
+}
+
 bool ImageDocumentSession::setLayerClipping(const QString& layer_id, bool enabled) {
     const auto index = layerIndex(layer_id);
     if (index <= 0 || data_.layers.at(index).clip_to_base == enabled ||

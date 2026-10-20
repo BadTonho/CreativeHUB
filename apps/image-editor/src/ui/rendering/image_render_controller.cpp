@@ -15,6 +15,7 @@ struct ImageRenderController::WorkerState {
     std::unique_ptr<OpenGlFrameCompositor> gpu;
     bool disabled = false;
     QString injected_failure;
+    std::uint64_t gpu_byte_limit = 256ULL*1024*1024;
     QString thumbnail_document_id;
     ImageExportSnapshot thumbnail_snapshot;
     QHash<QString,QImage> thumbnails, mask_thumbnails;
@@ -85,12 +86,12 @@ struct ImageRenderController::WorkerState {
 OpenGlRasterRequest makeGpuRasterRequest(const InteractiveComposition& composition) {
     OpenGlRasterRequest request; request.size = composition.size;
     for (const auto& source : composition.nodes) {
-        OpenGlRasterNode node; node.group = source.group; node.opacity = source.opacity;
+        OpenGlRasterNode node; node.group = source.group; node.opacity = source.opacity; node.blend_mode = source.blend_mode;
         for (const auto& layer : source.layers) {
             const auto input = [](const InteractiveRaster& value) {
                 return OpenGlRasterInput{value.identity.toStdString(), value.pixels, value.previous_key, value.dirty, value.revision};
             };
-            node.layers.push_back({input(layer.content), input(layer.mask), layer.opacity});
+            node.layers.push_back({input(layer.content), input(layer.mask), layer.opacity, layer.blend_mode});
         }
         for (const auto& op : source.transforms) {
             OpenGlRasterTransform transform;
@@ -138,6 +139,11 @@ void ImageRenderController::setAutomatic(bool enabled) { automatic_ = enabled; c
 void ImageRenderController::injectGpuFailureForTesting(const QString& cause) {
     QMetaObject::invokeMethod(worker_, [state = state_, cause] { state->injected_failure = cause; }, Qt::QueuedConnection);
 }
+void ImageRenderController::setGpuByteLimitForTesting(std::uint64_t bytes) {
+    QMetaObject::invokeMethod(worker_, [state = state_, bytes] {
+        state->gpu.reset(); state->gpu_byte_limit=bytes;
+    }, Qt::QueuedConnection);
+}
 void ImageRenderController::disableGpu(const QString& cause) {
     emit renderFailed(QStringLiteral("gpu_presentation"), cause);
     QMetaObject::invokeMethod(worker_, [state = state_] { state->disabled = true; }, Qt::QueuedConnection);
@@ -166,7 +172,7 @@ void ImageRenderController::start(Request request) {
     QOpenGLContext* sharing = QOpenGLContext::globalShareContext();
     QMetaObject::invokeMethod(worker_, [receiver, state = state_, latest = latest_, surface, sharing, request = std::move(request)]() mutable {
         InteractiveFrame frame; frame.document_id = request.document_id; frame.sequence = request.sequence; frame.document_revision = request.document_revision; frame.gesture = request.gesture; frame.transient = request.transient;
-        QString failure, operation;
+        QString failure, operation, recovery, recovery_operation;
         const auto cancelled = [&] { return latest->load() != request.sequence; };
         try {
             if (!cancelled()) {
@@ -180,9 +186,16 @@ void ImageRenderController::start(Request request) {
                 }
                 if (!cancelled() && request.automatic && surface && !state->disabled) {
                     if (!state->gpu) state->gpu = std::make_unique<OpenGlFrameCompositor>(surface,
-                        OpenGlPrecisionPolicy::Automatic, sharing, std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,3));
+                        OpenGlPrecisionPolicy::Automatic, sharing, std::make_shared<OpenGlTexturePoolBudget>(state->gpu_byte_limit,3));
                     const auto composed = state->gpu->composeRasterTexture(makeGpuRasterRequest(composition), cancelled, &frame.timings);
-                    if (composed.status == OpenGlCompositionStatus::Complete) frame.texture = composed.frame;
+                    if (composed.status == OpenGlCompositionStatus::Complete) {
+                        frame.texture = composed.frame;
+                    }
+                    if (composed.status == OpenGlCompositionStatus::Unsupported) {
+                        recovery_operation=QString::fromStdString(composed.operation);
+                        recovery=QStringLiteral("CPU recovery: %1 (document %2, GPU byte limit %3)")
+                            .arg(QString::fromStdString(composed.cause),request.document_id).arg(state->gpu_byte_limit);
+                    }
                     if (composed.status == OpenGlCompositionStatus::Failed) {
                         state->disabled = true;
                         failure = QStringLiteral("%1 (OpenGL code %2, document %3, request %4)")
@@ -212,9 +225,15 @@ void ImageRenderController::start(Request request) {
             } catch (...) { failure += QStringLiteral(" CPU recovery also failed."); }
         }
         frame.latency_nanoseconds = request.submitted.nsecsElapsed();
-        if (receiver) QMetaObject::invokeMethod(receiver, [receiver, frame = std::move(frame), failure, operation]() mutable {
+        if (receiver) QMetaObject::invokeMethod(receiver, [receiver, frame = std::move(frame), failure, operation, recovery, recovery_operation]() mutable {
             if (!receiver) return;
             receiver->running_ = false; receiver->running_cancellation_.reset();
+            if (receiver->latest_->load()==frame.sequence) {
+                const QString key=recovery_operation+recovery;
+                if (!recovery.isEmpty() && !frame.image.isNull() && receiver->last_recovery_key_!=key) {
+                    receiver->last_recovery_key_=key; emit receiver->cpuRecoveryUsed(recovery_operation,recovery);
+                } else if (frame.texture) receiver->last_recovery_key_.clear();
+            }
             if (!failure.isEmpty()) emit receiver->renderFailed(operation, failure);
             if (receiver->latest_->load() == frame.sequence && (!frame.image.isNull() || frame.texture)) emit receiver->frameReady(frame);
             if (receiver->pending_) {

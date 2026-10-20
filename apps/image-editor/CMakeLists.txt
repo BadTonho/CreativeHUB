@@ -16,6 +16,7 @@ add_library(creative-suite-image-editor-core STATIC
     src/core/document/rendering/image_blur_stroke.h
     src/core/document/rendering/image_layer_outline.cpp
     src/core/document/rendering/image_layer_outline.h
+    src/core/document/rendering/image_layer_blending.h
     src/core/document/rendering/image_linear_gradient.cpp
     src/core/document/rendering/image_linear_gradient.h
     src/core/document/editing/image_document_history.cpp
@@ -59,6 +60,7 @@ target_include_directories(creative-suite-image-editor-core PUBLIC
 )
 
 target_link_libraries(creative-suite-image-editor-core PUBLIC
+    creative-suite::composition
     Qt6::Core
     Qt6::Gui
 )

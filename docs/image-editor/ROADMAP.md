@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, editable layer outlines, clipping masks, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,10 +41,10 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Implement layer blend modes**: Normal, Multiply, Screen, Overlay, Add and
-Difference, as listed in section 4.2. Editable outlines and clipping masks are
-implemented; see [outlines](features/LAYER_OUTLINE.md) and
-[clipping masks](features/CLIPPING_MASKS.md). Manual acceptance remains pending.
+**Implement non-destructive adjustment and fill layers**, beginning with the
+application-owned contract in section 4.3. Outlines, clipping masks and six layer/
+group blend modes are implemented; see [blend modes](features/BLEND_MODES.md).
+Manual and platform acceptance remains pending.
 
 The maintainer requested this feature expansion plan on **2026-10-20**, based
 on the Photoshop feature comparison in the local owner-planning reference
@@ -266,11 +266,12 @@ Native visual and macOS/Linux acceptance remains pending.
 - [x] Clip sibling layers to a shared base alpha with Layers commands, a customizable
   shortcut, stack-following chains, group barriers and atomic release on base deletion.
   See [clipping contract](features/CLIPPING_MASKS.md).
-- [ ] Expose Normal, Multiply, Screen, Overlay, Add, and Difference using the
-  existing shared compositor where compatible. Add further darken/lighten,
+- [x] Expose Normal, Multiply, Screen, Overlay, Add, and Difference on layers
+  and isolated groups; see [contract](features/BLEND_MODES.md).
+- [ ] Add further darken/lighten,
   contrast, comparison, and hue/saturation/color/luminosity modes incrementally.
-- [ ] Preserve preview/export equivalence, history, persistence, recovery, and
-  linked output for these layer-composition properties.
+- [x] Preserve preview/export equivalence, history, persistence, recovery, and
+  linked output for clipping and the six implemented blend modes.
 
 #### 4.3. Non-destructive adjustments and fill layers
 
@@ -500,7 +501,7 @@ results.
 | --- | --- | --- |
 | Editable layer outline, masked alpha, Inside/Outside, history, v17 persistence/recovery, preview/cache/export and PNG publication | `image_editor_outline_test.cpp` (`creative-suite-image-editor-outline`), `image_editor_outline_ui_test.cpp` (`creative-suite-image-editor-outline-ui` and full UI), interactive/GPU raster suites, Hub backup format/manager tests and Video consumer gates | Windows Release automated evidence and 1080p measurements are in [the feature contract](features/LAYER_OUTLINE.md). Native visual/manual and macOS/Linux acceptance remain pending. |
 | Startup loads the per-app selected downloaded/bundled Qt catalog before the editor window; Settings > Language persists System language, English, or pt-BR for next launch | `creative-suite-image-editor-translation-catalog`, `creative-suite-image-editor-ui` (`tests/image_editor_ui_test.cpp`), and shared `creative-suite-translations` cover startup catalog loading, language control persistence, regional locale resolution, manifest validation, update integrity, and fallback. App integration is in `apps/image-editor/src/app/main.cpp`. | Automated checks are present. Native Windows/macOS/Linux startup, locale, and visual checks remain pending in [translation acceptance](../TRANSLATIONS_AND_LANGUAGE_PACKS.md#regression-and-acceptance). |
-| Hub snapshot references and restoration across versions 1–18 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Image Editor persistence producer and consumer | Automated coverage present for original and grouped raster paths, unchanged source bytes, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
+| Hub snapshot references and restoration across versions 1–19 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Image Editor persistence producer and consumer | Automated coverage present for original and grouped raster paths, unchanged source bytes, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
 | Source preservation in all image export scopes | `image_editor_core_test.cpp` (`testExportPreservesSourceImages`; `creative-suite-image-editor-core`) and `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | Automated coverage verifies PNG/JPEG base-image preservation, imported sources, Composite/SelectedLayer/SelectedGroup scopes, relative and normalized paths, Windows case aliases, rejection before rendering, unchanged source bytes/document state, worker failure propagation, and successful export to a separate destination. Filesystem alias cases run when link creation is available. The core test failed against the previous exporter before the fix. The Release application and affected targets built; core, raster, export UI, and application UI tests passed 4/4 on Windows on 2026-10-10. An unrestricted core run also passed hard-link cases; symbolic-link creation lacked the required Windows privilege and remains pending, along with native manual and macOS/Linux validation. The checklist is in `MANUAL_VALIDATION.md`. |
 | Contextual object/layer/group deletion | `image_editor_raster_test.cpp` (`creative-suite-image-editor-raster`), `image_editor_deletion_ui_test.cpp` (within `creative-suite-image-editor-ui`), existing layer/group core tests | Automated coverage present for button/menu/Delete focus routing, multiple selection, masks, Background, text/rename/numeric fields, gesture cancellation, Undo/Redo, thumbnails, save/reopen, missing sources, exports, and linked PNG output. Native/platform checks are documented in `MANUAL_VALIDATION.md`; no manual result recorded. |
 | Document editing, canvas, layers, groups, shapes, object selection, transforms, undo/redo | `image_editor_ui_test.cpp` (`testShapeToolState`, `testObjectSelectionToolState`, `testGeneralCanvasSelection`; `creative-suite-image-editor-ui`), `image_editor_raster_ui_test.cpp` (`testRasterImagesUi`; same CTest target), and `image_editor_core_test.cpp` (`creative-suite-image-editor-core`) | Automated coverage includes shape preview/geometry, Shift constraints, cancellation, invalid dimensions, topmost hit testing, marquee and Shift selection, mixed-object movement, resize/rotation, confirmation, and history. Windows Release focused Image Editor tests passed 5/5 and full CTest passed 70/70 on 2026-10-05. The existing interaction checklist is in `MANUAL_VALIDATION.md`; visual validation of the Shape Tool extraction remains with the owner. Cross-platform visual checks remain pending. |
@@ -565,8 +566,7 @@ validation.
 - **P2 — editable text visual validation:** automated editing, rendering,
   formatting, transform, history, persistence, export, recovery, and publication
   checks are implemented; the manual canvas and visual review is pending.
-- **Planned, not implemented:** remaining section 4.2 onward, beginning with blend
-  modes, is excluded from current coverage until implementation begins.
+- **Planned, not implemented:** additional section 4.2 modes and section 4.3 onward are excluded from current coverage until implementation begins.
   Add actual regression mappings as each feature is delivered.
 
 ## Status legend
@@ -591,8 +591,10 @@ see [Scale boundary evidence](../motion-editor/features/SCALE_AXES.md#automated-
 
 ## Shared static blend-mode maintenance
 
-Motion's six shared composition modes do not add Image Editor UI or persistence.
-Normal and raster/group/image-operation semantics remain unchanged. Shared
+Motion originally introduced the six shared composition modes. Image now uses
+them for its own layer/group UI and v19 persistence, as specified in
+[Blend modes](features/BLEND_MODES.md). Existing Normal and image-operation
+semantics remain unchanged. Shared
 composition/OpenGL/Vulkan and Image core/raster/mask/UI/export/GPU-raster gates
 protect this boundary. Native visual/platform/GPU acceptance remains separate
 from portable fallback coverage. See [shared contract](../CROSS_APPLICATION_COMPATIBILITY.md#shared-static-blend-mode-composition).
@@ -617,3 +619,11 @@ Motion Drop Shadow extends shared CPU effects/GPU image operations only; Image a
 | Clipping alpha/styles/opacity, stack/history, v18/recovery, cache/export | `image_editor_clipping_test.cpp` (`creative-suite-image-editor-clipping`) | Automated coverage present; execution evidence in [feature contract](features/CLIPPING_MASKS.md). |
 | Layers command, restrictions, tabs, shortcut migration and linked PNG | `image_editor_clipping_ui_test.cpp` (`creative-suite-image-editor-clipping-ui`, full UI) | [Manual visual checklist](validation/MANUAL_VALIDATION.md#clipping-masks) pending. |
 | CPU/OpenGL parity and Hub restoration | `image_editor_interactive_test.cpp` (`creative-suite-image-editor-gpu-raster`), `hub-backup-format-test`, `hub-backup-manager-test` | Native macOS/Linux acceptance pending. |
+
+## Blend mode regression coverage
+
+| Behavior | Automated coverage | Acceptance |
+| --- | --- | --- |
+| Six layer/group modes, alpha, clipping, history/v19/recovery/export/cache | `image_editor_blend_test.cpp` (`creative-suite-image-editor-blend`), shared `composition_test.cpp` | Coverage present; evidence in [feature contract](features/BLEND_MODES.md). |
+| Selector restrictions, mask ownership, tabs, history, linked PNG | `image_editor_blend_ui_test.cpp` (`creative-suite-image-editor-blend-ui`, full UI), Video consumer tests | [Visual checklist](validation/MANUAL_VALIDATION.md#blend-modes) pending. |
+| CPU/OpenGL parity, uploads, budget/cancellation and Hub restoration | Interactive/native GPU, shared composition/OpenGL and Hub backup format/manager tests; Motion/Video consumer gates | Native macOS/Linux and manual acceptance pending. |

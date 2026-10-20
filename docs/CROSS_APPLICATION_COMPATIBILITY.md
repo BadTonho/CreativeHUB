@@ -430,8 +430,21 @@ Motion native v17/Hub backup preserves Drop Shadow colors, four bases/curves and
 Image Editor adds an optional native layer outline without changing linked PNG
 publication or Video Editor host-link schemas. The published raster includes
 masked outlines. Hub accepts Image v17, rebases existing source/import paths,
-and preserves style data through backup/restoration; future Image v18 is
-rejected. Current Image reads v1-16 with no outline; older Image binaries reject
+and preserves style data through backup/restoration. The current Hub accepts
+Image v1-19 and rejects v20. Image reads v1-16 with no outline; older Image binaries reject
 v17. Producer UI publication, Video Editor refresh regressions and Hub actual
 reader round trips protect this boundary. Native cross-application acceptance
 remains pending. See [outline contract](image-editor/features/LAYER_OUTLINE.md).
+
+## Shared transparent raster blend composition
+
+Image v19 introduces layer/group modes; Motion and Video native formats and
+published PNG handoff remain unchanged. Qt-free channel/alpha helpers in
+`composition/blend_mode.h` serve transparent source-over and SourceAtop without
+opaque finalization. Video's existing CPU accumulator reuses them; Normal and
+opaque output behavior is preserved. OpenGL raster layer/node records add
+trailing default-Normal fields, validated before rendering. A separately
+budgeted GPU backdrop serves transparent raster blending; general Video/Motion
+composition retains its established finalization. Shared composition/OpenGL,
+Image, Video and Motion consumer gates protect the additive boundary. See
+[Image contract](image-editor/features/BLEND_MODES.md).

@@ -1,0 +1,122 @@
+{
+  "date": "2026-10-20",
+  "platform": "Windows 11 x64",
+  "configuration": "Release",
+  "qt_version": "6.7.2",
+  "hardware": {
+    "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+    "gpu": "NVIDIA GeForce GTX 1660 SUPER",
+    "driver": "617.42",
+    "vram_mib": 6144,
+    "source": "Local processor registry and nvidia-smi"
+  },
+  "workload": {
+    "width": 1920,
+    "height": 1080,
+    "editable_layers": 5,
+    "background_layers": 1,
+    "groups": 1,
+    "clipped_children": 0,
+    "content": "Five partially transparent painted layers, each using a different non-Normal mode, inside one isolated group"
+  },
+  "cpu": {
+    "prepare_and_composite_ms": {
+      "cold": 108,
+      "warm": 94,
+      "mode_change": 96,
+      "base_content_update": 100
+    },
+    "retained_raster_cache_bytes": 49766400,
+    "sampled_peak_working_set_bytes_profile_process": 105115648
+  },
+  "gpu": {
+    "texture_budget_bytes": 268435456,
+    "phases": {
+      "cold": {
+        "prepare_ms": 13,
+        "prepare_compose_readback_ms": 282,
+        "uploaded_bytes": 49766400,
+        "gpu_texture_bytes": 74649600,
+        "cpu_cache_bytes": 49766400
+      },
+      "warm": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 4,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "mode_change": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 3,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "base_content": {
+        "prepare_ms": 1,
+        "prepare_compose_readback_ms": 5,
+        "uploaded_bytes": 4624,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      }
+    },
+    "sampled_peak_working_set_bytes_profile_process": 259784704,
+    "mode_change_additional_rasterized_pixels": 0,
+    "warm_additional_rasterized_pixels": 0
+  },
+  "constrained_capacity": {
+    "texture_budget_bytes": 67108864,
+    "status": "Unsupported",
+    "operation": "raster-budget",
+    "cause": "Source textures exceed the raster budget.",
+    "refusal_ms": 221,
+    "cpu_recovery_ms": 109,
+    "retained_gpu_bytes_on_refusal": 66355200,
+    "cpu_reference_pixels_match": true,
+    "note": "Separate forced-capacity case; the production worker uses 256 MiB."
+  },
+  "test_results": {
+    "scoped_ctest_passed": 38,
+    "scoped_ctest_failed": 0,
+    "image_ctest_passed": 21,
+    "shared_composition_ctest_passed": 3,
+    "video_ctest_passed": 8,
+    "motion_ctest_passed": 4,
+    "hub_ctest_passed": 2,
+    "native_gpu_qttest_passed": 16,
+    "maximum_allowed_gpu_channel_difference": 2,
+    "followup_interactive_and_gpu_ctest_passed": 2
+  },
+  "canonical_executables": [
+    {
+      "path": "build/apps/image-editor/Release/creative-suite-image-editor.exe",
+      "modified_local": "2026-10-20T19:09:03-03:00"
+    },
+    {
+      "path": "build/apps/image-editor/Debug/creative-suite-image-editor.exe",
+      "modified_local": "2026-10-20T19:14:03-03:00"
+    },
+    {
+      "path": "build/apps/hub/Debug/creative-suite-hub.exe",
+      "modified_local": "2026-10-20T19:14:10-03:00"
+    },
+    {
+      "path": "build/apps/video-editor/Release/creative-suite-video-editor.exe",
+      "modified_local": "2026-10-20T19:01:09-03:00"
+    },
+    {
+      "path": "build/apps/motion-editor/Release/creative-suite-motion-editor.exe",
+      "modified_local": "2026-10-20T19:01:17-03:00"
+    }
+  ],
+  "limits": [
+    "Single native profile after scoped builds/tests; no general latency or memory guarantee.",
+    "Cold recreates CPU/GPU application caches and context/program resources; driver shader caches were not cleared.",
+    "GPU totals include synchronous readback for measurement; production preview delivers texture leases directly.",
+    "Sampled process peaks include Qt/driver/session state; GPU profile also includes the separate constrained-capacity context and CPU recovery. These are not whole-application or VRAM peak measurements.",
+    "Changing the base appends a 30 px painted point, enabling bounded raster/upload updates.",
+    "CPU and GPU raster reconstruction/upload assertions are deterministic; timing and process peaks are observations.",
+    "Native visual acceptance, macOS/Linux builds and native driver/runtime validation remain pending."
+  ]
+}

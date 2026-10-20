@@ -122,7 +122,7 @@ private slots:
         QVERIFY(ImageDocumentStore::saveRecovery(recoveryPath,recovery));
         QVERIFY(ImageDocumentStore::loadRecovery(recoveryPath,&recovered)); QCOMPARE(recovered.document,s.data());
         QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); const auto root=QJsonDocument::fromJson(file.readAll()).object(); file.close();
-        QCOMPARE(root.value("version").toInt(),18);
+        QCOMPARE(root.value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         for(int bad=0;bad<3;++bad) {
             auto invalid=root; auto layers=invalid.value("layers").toArray(); auto layer=layers.at(2).toObject();
             if(bad==0) layer.insert("clip_to_base",1);

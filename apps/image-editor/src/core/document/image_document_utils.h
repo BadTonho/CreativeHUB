@@ -43,6 +43,12 @@ namespace image_editor {
     return found == document.groups.end() ? nullptr : &*found;
 }
 
+[[nodiscard]] inline bool documentHasBlendModes(const ImageDocumentData& document) {
+    using creative_suite::composition::BlendMode;
+    return std::any_of(document.layers.cbegin(),document.layers.cend(),[](const auto& l){return l.blend_mode!=BlendMode::Normal;}) ||
+        std::any_of(document.groups.cbegin(),document.groups.cend(),[](const auto& g){return g.blend_mode!=BlendMode::Normal;});
+}
+
 [[nodiscard]] inline QString operationObjectId(const ImageOperation& operation) {
     switch (operation.kind) {
     case OperationKind::PaintStroke: return operation.paint_stroke.id;

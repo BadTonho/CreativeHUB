@@ -3111,6 +3111,12 @@ void testRecoveryAndLogging(const QString& root) {
                 entry.value("error_code").toInt() == 17,
             QStringLiteral("The structured error log entry is incomplete."));
 
+    log_file.close();logger.logRecovery(QStringLiteral("raster-blend-budget"),QStringLiteral("CPU capacity recovery"));
+    require(log_file.open(QIODevice::ReadOnly),QStringLiteral("Recovery log is missing."));
+    static_cast<void>(log_file.readLine());const auto recovered_entry=QJsonDocument::fromJson(log_file.readLine()).object();
+    require(recovered_entry.value("severity").toString()=="info" && recovered_entry.value("operation").toString()=="raster-blend-budget" &&
+                !recovered_entry.value("timestamp").toString().isEmpty(),QStringLiteral("Capacity recovery was not logged as information."));
+
     require(recovery.remove(snapshots.front()) && recovery.snapshots().isEmpty(),
             QStringLiteral("Recovery snapshot could not be removed."));
 }

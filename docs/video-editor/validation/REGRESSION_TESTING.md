@@ -2078,3 +2078,14 @@ protect unchanged operations and defaults. See [contracts and pending acceptance
 ## Drop Shadow contract maintenance
 
 Motion Drop Shadow extends shared CPU effects/GPU image operations only. Video adds no selector or persisted field. Shared composition/OpenGL/Vulkan, blur/mask/composition interchange, Fusion mask/composition, preview/OpenGL preview and render/export regressions protect existing behavior. Native UI/platform acceptance remains separate.
+
+
+## Image transparent blend composition maintenance
+
+Image v19 reuses shared CPU blend math and adds default-Normal OpenGL raster
+layer/group fields. Video keeps opaque output, native schemas and PNG refresh
+contracts. Shared composition/OpenGL/Vulkan, main-window/application-media,
+workspace-page-switch, transform/text compositor, GPU timeline and render/GPU
+export gates protect this boundary. Image producer blend UI tests compare its
+published PNG with the reference rendering. See [contract and execution evidence](../../image-editor/features/BLEND_MODES.md).
+Native cross-application visual acceptance remains pending.

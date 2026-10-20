@@ -43,6 +43,18 @@ void assignError(QString* error, const QString& message) {
     if (error != nullptr) *error = message;
 }
 
+bool decodeBlendMode(const QJsonObject& encoded, int version,
+    creative_suite::composition::BlendMode* mode, QString* error, bool background = false) {
+    if (!encoded.contains("blend_mode")) return true;
+    const auto value=encoded.value("blend_mode");
+    const auto name=value.toString().toStdString();
+    const auto parsed=creative_suite::composition::parseBlendMode(name);
+    if (version < 19 || background || !value.isString() || !parsed) {
+        assignError(error,QStringLiteral("A layer or group blend mode is invalid.")); return false;
+    }
+    *mode=*parsed; return true;
+}
+
 bool isInteger(const QJsonValue& value, int* result) {
     if (!value.isDouble()) return false;
     const double number = value.toDouble();
@@ -811,7 +823,7 @@ bool validateLayers(const ImageDocumentData& document,
         if (layer.background) {
             ++background_count;
             if (index != 0 || layer.name != QStringLiteral("Background") ||
-                layer.opacity != 100 || !layer.operations.isEmpty() || layer.mask.has_value() || layer.outline.has_value() || layer.clip_to_base) {
+                layer.opacity != 100 || !layer.operations.isEmpty() || layer.mask.has_value() || layer.outline.has_value() || layer.clip_to_base || layer.blend_mode != creative_suite::composition::BlendMode::Normal) {
                 assignError(error, QStringLiteral("The Background layer is invalid."));
                 return false;
             }
@@ -837,6 +849,9 @@ bool validateLayers(const ImageDocumentData& document,
                 return false;
             }
             object_ids.insert(id);
+        }
+        if (!creative_suite::composition::validBlendMode(layer.blend_mode)) {
+            assignError(error,QStringLiteral("A layer or group blend mode is invalid.")); return false;
         }
         if (layer.clip_to_base && !clippingBases(document).contains(layer.id)) {
             assignError(error, QStringLiteral("A clipping layer has no sibling base."));
@@ -877,6 +892,9 @@ bool validateLayers(const ImageDocumentData& document,
         }
     }
     for (const auto& group : document.groups) {
+        if (!creative_suite::composition::validBlendMode(group.blend_mode)) {
+            assignError(error,QStringLiteral("A layer or group blend mode is invalid.")); return false;
+        }
         const QString normalized_id = group.id.toLower();
         if (!isValidLayerId(group.id) || ids.contains(normalized_id)) {
             assignError(error, QStringLiteral("The document contains an invalid or duplicate group ID."));
@@ -1066,6 +1084,8 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
             mask.insert("operations", encodeOperations(layer.mask->operations));
             encoded.insert("mask", mask);
         }
+        if (layer.blend_mode != creative_suite::composition::BlendMode::Normal)
+            encoded.insert("blend_mode",QString::fromUtf8(creative_suite::composition::blendModeIdentifier(layer.blend_mode).data()));
         if (layer.clip_to_base) encoded.insert("clip_to_base", true);
         if (layer.outline) {
             const auto& o = *layer.outline;
@@ -1092,6 +1112,8 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
         encoded_group.insert("kind", "group");
         encoded_group.insert("visible", group->visible);
         encoded_group.insert("opacity", group->opacity);
+        if (group->blend_mode != creative_suite::composition::BlendMode::Normal)
+            encoded_group.insert("blend_mode",QString::fromUtf8(creative_suite::composition::blendModeIdentifier(group->blend_mode).data()));
         encoded_group.insert("operations", encodeOperations(group->operations));
         QJsonArray children;
         for (const auto& child_id : group->layer_ids) {
@@ -1119,6 +1141,15 @@ bool decodeDocumentJson(const QJsonObject& root,
         (version < kLegacyDocumentVersion || version > kDocumentVersion)) {
         assignError(error, QStringLiteral("This Image Editor document version is not supported."));
         return false;
+    }
+
+    if (version < 19) {
+        for (const auto& value : root.value("layers").toArray()) {
+            const auto layer=value.toObject();
+            bool has_mode=layer.contains("blend_mode");
+            for (const auto& child : layer.value("children").toArray()) has_mode |= child.toObject().contains("blend_mode");
+            if (has_mode) { assignError(error,QStringLiteral("A layer or group blend mode is invalid.")); return false; }
+        }
     }
 
     const auto source = version == kLegacyDocumentVersion
@@ -1223,6 +1254,7 @@ bool decodeDocumentJson(const QJsonObject& root,
             layer->background = kind == QStringLiteral("background");
             layer->visible = encoded.value("visible").toBool();
             layer->opacity = opacity;
+            if (!decodeBlendMode(encoded,version,&layer->blend_mode,error,layer->background)) return false;
             if (kind != QStringLiteral("background") && kind != QStringLiteral("raster")) {
                 assignError(error, QStringLiteral("The document contains an unsupported layer type."));
                 return false;
@@ -1300,6 +1332,7 @@ bool decodeDocumentJson(const QJsonObject& root,
                 group.name = encoded.value("name").toString();
                 group.visible = encoded.value("visible").toBool();
                 group.opacity = opacity;
+                if (!decodeBlendMode(encoded,version,&group.blend_mode,error)) return false;
                 QSize group_size = layer_canvas_size;
                 if (!decodeOperations(encoded.value("operations"), version,
                                       &group_size, true, &group.operations, error)) {

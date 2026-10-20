@@ -229,6 +229,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
     render_controller_ = new ImageRenderController(this);
     connect(render_controller_, &ImageRenderController::renderFailed, this,
         [this](const QString& operation, const QString& cause) { logger_.logError(operation, cause); });
+    connect(render_controller_, &ImageRenderController::cpuRecoveryUsed, this,
+        [this](const QString& operation, const QString& cause) { logger_.logRecovery(operation,cause); });
     connect(render_controller_, &ImageRenderController::frameReady, this,
         [this](const InteractiveFrame& frame) {
             if (!hasActiveDocumentTab() || document_tabs_.at(active_document_tab_)->rendering_identity != frame.document_id) return;
@@ -470,6 +472,13 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
                     updateView(true);
                 }
             });
+    connect(layer_panel_, &LayerPanel::stackBlendModeChanged, this,
+        [this](const QString& id, bool group, int mode) {
+            if (!hasActiveDocumentTab()) return;
+            if (auto* canvas=activeCanvas()) { canvas->commitTextEditing(); canvas->cancelTransientGestures(); }
+            clearInteractivePreview(activeCanvas());
+            if (activeSession().setStackBlendMode(id,group,static_cast<creative_suite::composition::BlendMode>(mode))) updateView(true);
+        });
     connect(layer_panel_, &LayerPanel::layerClippingChanged, this,
         [this](const QString& id, bool enabled) {
             if (activeSession().setLayerClipping(id, enabled)) updateView(true);
@@ -752,7 +761,8 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
                          std::any_of(activeSession().data().layers.cbegin(), activeSession().data().layers.cend(),
                             [this, &object](const ImageLayerData& layer) {
                                 return layer.id == object.layer_id && ((layer.outline && layer.outline->enabled) ||
-                                    participatesInClipping(activeSession().data(), layer.id));
+                                    participatesInClipping(activeSession().data(), layer.id) ||
+                                    documentHasBlendModes(activeSession().data()));
                             }))) {
                         requestCanvasRender();
                         return;
@@ -1297,7 +1307,8 @@ void ImageEditorWindow::updateObjectPlacements() {
             return std::any_of(activeSession().data().layers.cbegin(), activeSession().data().layers.cend(),
                 [this, &object](const ImageLayerData& layer) {
                     return layer.id == object.layer_id && ((layer.outline && layer.outline->enabled) ||
-                                    participatesInClipping(activeSession().data(), layer.id));
+                                    participatesInClipping(activeSession().data(), layer.id) ||
+                                    documentHasBlendModes(activeSession().data()));
                 });
         });
     activeCanvas()->setObjectPlacements(placements, selectedObjectIds(), composed_preview);

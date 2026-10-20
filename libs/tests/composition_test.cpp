@@ -154,7 +154,18 @@ void logicalMaskRasterContract(){
     }
 }
 int main() {
-    try { blendModes(); trackMattes(); logicalMaskRasterContract(); } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
+    try {
+        {
+            using namespace creative_suite::composition;
+            const double over[]{.49,.355,.505,.4,.55,.43},atop[]{.22,.085,.235,.13,.28,.16};
+            for(unsigned i=0;i<6;++i) {
+                const auto mode=static_cast<BlendMode>(i);
+                require(std::abs(composeBlendChannel(mode,.1,.4,.75,.6)-over[i])<1e-12,"Shared transparent source-over math changed.");
+                require(std::abs(composeBlendChannel(mode,.1,.4,.75,.6,true)-atop[i])<1e-12,"Shared source-atop math changed.");
+            }
+            require(std::abs(composeBlendAlpha(.3,.7)-.79)<1e-12 && composeBlendAlpha(.3,.7,true)==.3,"Blend alpha was flattened or added.");
+        }
+ blendModes(); trackMattes(); logicalMaskRasterContract(); } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
     using namespace creative_suite;
 
     try {

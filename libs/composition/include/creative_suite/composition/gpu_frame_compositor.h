@@ -170,12 +170,14 @@ struct OpenGlRasterLayer {
     OpenGlRasterInput content;
     OpenGlRasterInput mask;
     int opacity = 100;
+    BlendMode blend_mode = BlendMode::Normal;
 };
 struct OpenGlRasterNode {
     std::vector<OpenGlRasterLayer> layers;
     std::vector<OpenGlRasterTransform> transforms;
     int opacity = 100;
     bool group = false;
+    BlendMode blend_mode = BlendMode::Normal;
 };
 struct OpenGlRasterRequest {
     QSize size;

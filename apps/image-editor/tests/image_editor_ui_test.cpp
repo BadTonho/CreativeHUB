@@ -95,6 +95,7 @@
 
 bool testLayerOutlineUi(const QString& root);
 bool testLayerClippingUi(const QString& root);
+bool testLayerBlendUi(const QString& root);
 
 namespace {
 
@@ -3942,6 +3943,10 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     }
+    if (application.arguments().contains(QStringLiteral("--blend-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testLayerBlendUi(temporary.path()) ? 0 : 1;
+    }
     if (application.arguments().contains(QStringLiteral("--clipping-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testLayerClippingUi(temporary.path()) ? 0 : 1;
@@ -4131,6 +4136,7 @@ int main(int argc, char* argv[]) {
     }
     if (!testLayerOutlineUi(temporary.path())) return 1;
     if (!testLayerClippingUi(temporary.path())) return 1;
+    if (!testLayerBlendUi(temporary.path())) return 1;
     if (!testEyedropperTool()) return 1;
     if (!testBucketFillTool()) return 1;
     if (!testMagicWandTool()) return 1;

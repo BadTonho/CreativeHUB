@@ -42,4 +42,16 @@ enum class BlendMode : std::uint8_t { Normal, Multiply, Screen, Overlay, Add, Di
     }
     return 0;
 }
+// Premultiplied backdrop channel, straight source channel and effective alphas.
+// SourceAtop preserves the backdrop alpha; source-over retains transparency.
+// No quantization, color conversion or opaque finalization occurs here.
+[[nodiscard]] inline double composeBlendChannel(BlendMode mode, double pb, double ab,
+    double cs, double as, bool source_atop = false) noexcept {
+    if (mode == BlendMode::Normal && !source_atop) return as*cs+(1-as)*pb;
+    const double cb = ab > 0 ? std::clamp(pb/ab, 0., 1.) : 0.;
+    return (1-as)*pb + (source_atop ? 0. : as*(1-ab)*cs) + as*ab*blendChannel(mode,cb,cs);
+}
+[[nodiscard]] inline double composeBlendAlpha(double ab, double as, bool source_atop = false) noexcept {
+    return source_atop ? ab : as+ab*(1-as);
+}
 } // namespace creative_suite::composition

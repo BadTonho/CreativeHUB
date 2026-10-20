@@ -51,7 +51,7 @@ producer/consumer regression coverage when supported schemas gain path fields.
 
 | Format identifier | Supported versions | References rewritten |
 | --- | --- | --- |
-| `creative-suite-image-document` | 1–18 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
+| `creative-suite-image-document` | 1–19 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
 | `creative-suite.main-editor` | 1–31 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
 | `creative-suite.motion-studio` | 1–17 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
 
@@ -212,17 +212,25 @@ platform acceptance remain pending.
 
 ## Image Editor v17 outlines
 
-Backup/restore accepts Image documents through v18 and preserves optional layer
+Backup/restore accepts Image documents through v19 and preserves optional layer
 outline parameters, including disabled styles, while rebasing existing source
 and imported-image paths. `hub-backup-format-test` reopens vault and relocated
 restores with the actual Image reader, including an outlined grouped image.
-`hub-backup-manager-test` rejects future Image v19. Native Hub UI/platform
+`hub-backup-manager-test` rejects future Image v20. Native Hub UI/platform
 acceptance remains pending.
 
 ## Image Editor v18 clipping masks
 
-Accept Image schemas 1-18 and preserve `clip_to_base`, masks and outlines while
+Clipping was introduced in Image v18. The current reader accepts v1-19 and
+preserves `clip_to_base`, masks and outlines while
 rebasing source/import paths in root layers and group children. The actual
-Image reader verifies vault and restored v18 chains. Future Image v19 is
+Image reader verifies vault and restored v18 chains. Future Image v20 is
 rejected. The recovery envelope and published PNG protocol are unchanged.
 Native Hub UI/platform acceptance remains pending.
+
+## Image Editor v19 blend modes
+
+Accept Image schemas 1-19 and preserve layer/group `blend_mode` strings with
+clipping, masks and outlines while rebasing existing paths. Actual Image reader
+round trips cover group/base/clipped-child modes in vault and relocated files.
+Reject future Image v20. Native backup UI/platform acceptance remains pending.

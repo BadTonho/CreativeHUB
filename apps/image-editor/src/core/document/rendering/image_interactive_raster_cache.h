@@ -14,12 +14,14 @@ struct InteractiveRaster {
 struct InteractiveLayer {
     InteractiveRaster content, mask;
     int opacity = 100;
+    creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
 };
 struct InteractiveNode {
     QVector<InteractiveLayer> layers;
     QVector<ImageOperation> transforms;
     int opacity = 100;
     bool group = false;
+    creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
 };
 struct InteractiveComposition {
     QSize size;

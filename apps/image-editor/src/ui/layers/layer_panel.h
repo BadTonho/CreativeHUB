@@ -51,6 +51,7 @@ public:
 
 signals:
     void quickExportRequested();
+    void stackBlendModeChanged(const QString& id, bool group, int mode);
     void layerClippingChanged(const QString& id, bool enabled);
     void layerSelected(const QString& layer_id);
     void groupSelected(const QString& group_id);
@@ -93,6 +94,7 @@ private:
     QAction* clipping_action_ = nullptr;
     QLabel* edit_hint_ = nullptr;
     QSlider* opacity_slider_ = nullptr;
+    QComboBox* blend_mode_ = nullptr;
     QToolButton* add_button_ = nullptr;
     QToolButton* group_selected_button_ = nullptr;
     QToolButton* delete_button_ = nullptr;

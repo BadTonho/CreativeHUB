@@ -153,6 +153,13 @@ void testImageDocuments(const QString& root) {
             children.append(child); groupObject.insert("children",children); layers[layers.size()-1]=groupObject;
             fixture.insert("layers",layers);
         }
+        if (version >= 19) {
+            auto layers=fixture.value("layers").toArray(); auto group=layers.last().toObject();
+            group.insert("blend_mode","screen"); auto children=group.value("children").toArray();
+            auto base=children[0].toObject(); base.insert("blend_mode","multiply"); children[0]=base;
+            auto child=children[1].toObject(); child.insert("blend_mode","difference"); children[1]=child;
+            group.insert("children",children); layers[layers.size()-1]=group; fixture.insert("layers",layers);
+        }
         // Use the producer's assets in every case, including legacy documents.
         const auto path = QDir(QFileInfo(assets).absolutePath()).filePath(QStringLiteral("image-v%1.cimg").arg(version));
         writeBytes(path, QJsonDocument(fixture).toJson());

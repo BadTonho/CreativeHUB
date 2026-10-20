@@ -1,4 +1,5 @@
 #pragma once
+#include <creative_suite/composition/blend_mode.h>
 
 #include <QColor>
 #include <QPointF>
@@ -199,6 +200,7 @@ struct ImageLayerData {
     std::optional<ImageLayerMaskData> mask;
     std::optional<ImageLayerOutlineData> outline;
     bool clip_to_base = false;
+    creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
 
     bool operator==(const ImageLayerData&) const = default;
 };
@@ -211,6 +213,7 @@ struct ImageGroupData {
     QVector<ImageOperation> operations;
     // Child layer IDs are ordered bottom-to-top. Groups cannot contain groups.
     QStringList layer_ids;
+    creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
 
     bool operator==(const ImageGroupData&) const = default;
 };
@@ -251,7 +254,7 @@ struct RecoveryDocumentData {
 
 class ImageDocumentStore final {
 public:
-    static constexpr int kCurrentDocumentVersion = 18;
+    static constexpr int kCurrentDocumentVersion = 19;
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr qsizetype kMaximumStrokeClipPathElements = 100'000;

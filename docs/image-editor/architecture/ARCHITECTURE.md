@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 18; host links live in the Video Editor's
+  The `.cimg` schema is version 19; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -631,9 +631,11 @@ for measurements and platform acceptance limits.
 
 ## Shared Motion blend-mode maintenance
 
-The shared compositor adds an optional static blend mode with Normal as default.
-This application does not expose or persist it. Existing layer/group/image-operation
-rendering remains unchanged; consumer regression gates accompany the shared change.
+The shared compositor originally added optional static blend modes for Motion.
+Image now exposes these same identifiers through layer/group properties and v19
+persistence; see the blend composition section below. Existing Normal and
+image-operation rendering remain unchanged; consumer regression gates protect
+the shared boundary.
 Vulkan refuses non-Normal inputs explicitly. See the
 [shared boundary](../../CROSS_APPLICATION_COMPATIBILITY.md#shared-static-blend-mode-composition)
 and [Motion contract](../../motion-editor/features/BLEND_MODES.md).
@@ -661,7 +663,7 @@ export error paths; cancellation publishes no partial output.
 
 Raw editable targets exclude outlines. Layer/group thumbnail invalidation
 includes the outline, and composite Eyedropper sampling includes its pixels.
-Hub backup rebasing accepts v18 and retains outline/clipping properties; linked PNG
+Hub backup rebasing accepts v19 and retains outline/clipping properties; linked PNG
 publication retains the existing protocol. See [the contract](../features/LAYER_OUTLINE.md).
 
 ## Clipping composition
@@ -681,3 +683,20 @@ See [complete contract](../features/CLIPPING_MASKS.md).
 Native recovery window tests may inject an error-log directory independently of
 recovery and performance output. Production windows retain the existing local
 log default; test failures are verified inside their isolated temporary root.
+
+## Blend mode boundaries
+
+Image layer/group records reuse the Qt-free shared `composition::BlendMode`.
+The shared channel/alpha functions serve Video CPU and Image's cancellable
+premultiplied raster adapter. Reference rendering/export and CPU preview use the
+same adapter, retaining the exact Qt path for Normal. Clipping chain assembly
+accepts a borrowed worker member-pixel callback for cache reuse; it never retains
+the callback. Base outer modes do not invalidate chain rasters.
+OpenGL raster records/shader add modes without changing video finalization or
+Image alpha. A separately budgeted GPU backdrop avoids sampling a draw target.
+See [feature contract](../features/BLEND_MODES.md).
+
+Capacity-driven GPU refusal records informational CPU recovery in the bounded
+local log before publishing the recovered frame. Repeated identical recovery
+is deduplicated until GPU success or a changed cause/document; stale/cancelled
+frames do not emit recovery. Technical failures retain error severity.

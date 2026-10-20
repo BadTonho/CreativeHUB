@@ -45,13 +45,22 @@ void ImageEditorLogger::logError(const QString& operation,
                                  const QString& cause,
                                  const QString& path,
                                  int error_code) const noexcept {
+    writeEntry(QStringLiteral("error"),operation,cause,path,error_code);
+}
+
+void ImageEditorLogger::logRecovery(const QString& operation, const QString& cause) const noexcept {
+    writeEntry(QStringLiteral("info"),operation,cause,{},0);
+}
+
+void ImageEditorLogger::writeEntry(const QString& severity, const QString& operation,
+    const QString& cause, const QString& path, int error_code) const noexcept {
     try {
         QDir().mkpath(log_directory_);
         rotateIfNeeded();
 
         QJsonObject entry;
         entry.insert("timestamp", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
-        entry.insert("severity", "error");
+        entry.insert("severity", severity);
         entry.insert("subsystem", "image_editor");
         entry.insert("operation", operation);
         entry.insert("cause", cause);

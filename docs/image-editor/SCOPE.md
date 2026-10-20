@@ -1,6 +1,6 @@
 # Image Editor Scope
 
-Status: **editable text, raster masks, linked image layers, canvas resizing, layer outlines, and clipping masks are implemented;
+Status: **editable text, raster masks, linked image layers, canvas resizing, layer outlines, clipping masks and six blend modes are implemented;
 manual visual validation and release acceptance remain pending**. The Image Editor is a standalone raster
 editor in `apps/image-editor/`. Its current behavior and the approved next
 release direction are recorded separately below. See the
@@ -29,9 +29,9 @@ alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 18 format. The application reads
-versions 1 through 17 and writes version 18, migrating older documents on save;
-version 1 recovery envelopes accept a version 18 document payload. Source images
+Documents use the provisional `.cimg` version 19 format. The application reads
+versions 1 through 18 and writes version 19, migrating older documents on save;
+version 1 recovery envelopes accept a version 19 document payload. Source images
 remain unchanged, and original source dimensions are retained for relinking.
 Area Selection is a separate tool from object Selection. Its Rectangle and
 Ellipse gestures can replace, add to, or subtract from the temporary per-tab
@@ -119,9 +119,9 @@ performance guarantee is approved yet.
 ## Compatibility and Release Order
 
 The current implementation preserves the ability to open existing `.cimg`
-versions 1 through 17 and writes the current version 18 format on save. Automated
+versions 1 through 18 and writes the current version 19 format on save. Automated
 regression tests cover migration, canvas-size persistence, clipped paint/erase,
-bucket-fill, linear-gradient, and blur operations, and version 18 recovery payload. This implementation does not mark manual text checks or
+bucket-fill, linear-gradient, and blur operations, and version 19 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
 
 Per project policy, complete and accept the standalone minimum before accepting
@@ -174,7 +174,7 @@ editable stack items in one Undo/Redo edit; groups include their children.
 Background is protected, including mixed selections. Text, rename, and numeric
 fields keep normal character deletion. Deleting a missing image reference is
 allowed and can unblock exports. Original files are preserved. The document
-format is v18 and the contextual shortcut is customizable.
+format is v19 and the contextual shortcut is customizable.
 
 ## Approved Blur Tool
 
@@ -197,7 +197,7 @@ transparent holes. It is clipped to canvas bounds and does not change raw
 paint/fill/selection targets or source files. Object transforms keep the
 configured thickness in document pixels. Text remains editable.
 
-Live editing, history, v18 save/reopen, recovery, thumbnails, composite sampling,
+Live editing, history, v19 save/reopen, recovery, thumbnails, composite sampling,
 full/Quick Export, and linked PNG publication include the outline. The
 [feature contract](features/LAYER_OUTLINE.md) records rendering and coverage.
 Manual/native and macOS/Linux visual acceptance remains pending.
@@ -206,7 +206,7 @@ Manual/native and macOS/Linux visual acceptance remains pending.
 
 The [roadmap implementation sequence](ROADMAP.md#4-feature-expansion--implementation-sequence),
 updated at the maintainer's request on 2026-10-20, records implemented layer outlines and clipping masks,
-then plans blend modes, adjustments, styles, selections/vectors, brushes,
+then plans additional blend modes, adjustments, styles, selections/vectors, brushes,
 deformation, layout/color, automation, and assisted editing. The remaining
 items are planned extensions and are not automatically added to the first
 editing release. Existing shape strokes, linked images, basic object selection, and
@@ -235,5 +235,11 @@ for current results and outstanding checks.
 Sibling layers can clip to their shared base alpha without baking editable
 content. Layers commands, customizable shortcuts, stack/history, masked alpha,
 outline preservation, thumbnails, CPU/GPU preview and export are implemented.
-See [contract and verification](features/CLIPPING_MASKS.md). Blend modes remain
-planned; visual and release acceptance remain pending.
+See [contract and verification](features/CLIPPING_MASKS.md). Six blend modes are implemented; visual and release acceptance remain pending.
+
+## Layer and group blend modes
+
+Normal, Multiply, Screen, Overlay, Add and Difference are editable per layer and
+isolated group. Clipped children blend within their chain; base outlines remain
+protected internally. Undo/Redo, CPU/OpenGL preview, v19 persistence/recovery,
+exports and PNG publication retain editable content. See [contract](features/BLEND_MODES.md).

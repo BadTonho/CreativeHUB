@@ -148,13 +148,11 @@ void blendPremultiplied(std::uint8_t* destination,const Color& source,BlendMode 
     const double channels[]{source.red,source.green,source.blue};
     for(int c=0;c<3;++c) {
         const auto pb=destination[c]/255.;
-        const auto cb=ab>0?std::clamp(pb/ab,0.,1.):0.;
         const auto cs=std::clamp(channels[c],0.,1.);
-        const auto value=mode==BlendMode::Normal ? as*cs+(1-as)*pb :
-            (1-as)*pb+as*(1-ab)*cs+as*ab*blendChannel(mode,cb,cs);
+        const auto value=composeBlendChannel(mode,pb,ab,cs,as);
         destination[c]=static_cast<std::uint8_t>(std::lround(std::clamp(value,0.,1.)*255));
     }
-    destination[3]=static_cast<std::uint8_t>(std::lround((as+ab*(1-as))*255));
+    destination[3]=static_cast<std::uint8_t>(std::lround(composeBlendAlpha(ab,as)*255));
 }
 
 void blendOverOpaqueDestination(

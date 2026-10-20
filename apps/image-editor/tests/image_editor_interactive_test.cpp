@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
+#include <QPainter>
 #include <QSignalSpy>
 #include <QSurfaceFormat>
 #include <QTest>
@@ -259,6 +260,117 @@ private slots:
         }
         presenter.setFrame({});
     }
+    void gpuRasterBlendBudgetsAndUploads() {
+        if(QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
+        auto surface=OpenGlFrameCompositor::createSurface(); QVERIFY(surface);
+        const QSize size(32,24); const std::uint64_t plane=32*24*4;
+        auto budget=std::make_shared<OpenGlTexturePoolBudget>(plane*16,3);
+        OpenGlFrameCompositor gpu(surface.get(),OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),budget);
+        ImageDocumentSession session; QVERIFY(session.createCanvas(size,QColor(80,140,190,128)));
+        const auto id=session.selectedLayerId(); QVERIFY(session.applyPaintStroke({{3,10},{28,10}},QColor(190,80,50,170),12));
+        ImageInteractiveRasterCache cache;
+        auto comp=cache.prepare(session.exportSnapshot(),"blend-budget");
+        auto first=gpu.composeRasterTexture(makeGpuRasterRequest(comp)); QVERIFY(first.frame); first.frame.reset();
+        const auto work=cache.reconstructedPixels();
+        for(int mode=1;mode<6;++mode) {
+            QVERIFY(session.setStackBlendMode(id,false,static_cast<BlendMode>(mode)));
+            comp=cache.prepare(session.exportSnapshot(),"blend-budget"); QCOMPARE(cache.reconstructedPixels(),work);
+            OpenGlCompositionTimings timing;auto result=gpu.composeRasterTexture(makeGpuRasterRequest(comp),{},&timing);
+            QVERIFY2(result.status==OpenGlCompositionStatus::Complete,result.cause.c_str()); QCOMPARE(timing.uploaded_bytes,std::uint64_t(0));
+            auto read=gpu.readback(result.frame);QVERIFY(read.frame);
+            QImage actual(read.frame->rgba_pixels.data(),read.frame->width,read.frame->height,read.frame->stride,QImage::Format_RGBA8888_Premultiplied);
+            const auto expected=baseline(session);const auto pixels=actual.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+            for(int y=0;y<size.height();++y)for(int x=0;x<size.width();++x){auto a=pixels.pixel(x,y),b=expected.pixel(x,y);QVERIFY(std::abs(qRed(a)-qRed(b))<=2 && std::abs(qGreen(a)-qGreen(b))<=2 && std::abs(qBlue(a)-qBlue(b))<=2 && std::abs(qAlpha(a)-qAlpha(b))<=2);}
+        }
+        auto invalid=makeGpuRasterRequest(comp); invalid.nodes.back().layers.back().blend_mode=static_cast<BlendMode>(255);
+        QCOMPARE(gpu.composeRasterTexture(invalid).status,OpenGlCompositionStatus::Unsupported);
+        std::atomic_bool cancel{true};QCOMPARE(gpu.composeRasterTexture(makeGpuRasterRequest(comp),[&]{return cancel.load();}).status,OpenGlCompositionStatus::Cancelled);
+        auto small=std::make_shared<OpenGlTexturePoolBudget>(plane*3,3);
+        OpenGlFrameCompositor limited(surface.get(),OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),small);
+        QCOMPARE(limited.composeRasterTexture(makeGpuRasterRequest(comp)).status,OpenGlCompositionStatus::Unsupported);
+        QVERIFY(session.setStackBlendMode(id,false,BlendMode::Normal));comp=cache.prepare(session.exportSnapshot(),"blend-budget");
+        const auto recovered=limited.composeRasterTexture(makeGpuRasterRequest(comp));QVERIFY(recovered.status==OpenGlCompositionStatus::Complete);
+    }
+    void capacityRecoveryIsReported() {
+        if(QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
+        ImageDocumentSession session;QVERIFY(session.createCanvas({64,48},Qt::transparent));
+        const auto id=session.selectedLayerId();QVERIFY(session.applyPaintStroke({{10,20},{50,20}},Qt::red,20));
+        QVERIFY(session.setStackBlendMode(id,false,BlendMode::Multiply));
+        ImageRenderController controller;controller.setAutomatic(true);controller.setGpuByteLimitForTesting(64*48*4*3);
+        QSignalSpy recoveries(&controller,&ImageRenderController::cpuRecoveryUsed),failures(&controller,&ImageRenderController::renderFailed);
+        int count=0;InteractiveFrame frame;connect(&controller,&ImageRenderController::frameReady,this,[&](const auto& value){frame=value;++count;});
+        controller.request(session.exportSnapshot(),"capacity");QTRY_COMPARE(count,1);
+        QCOMPARE(recoveries.count(),1);QCOMPARE(failures.count(),0);QCOMPARE(frame.image,baseline(session));QVERIFY(!frame.texture);
+        QVERIFY(recoveries.first()[1].toString().contains("GPU byte limit"));
+        controller.request(session.exportSnapshot(),"capacity");QTRY_COMPARE(count,2);QCOMPARE(recoveries.count(),1);
+        controller.request(session.exportSnapshot(),"cancelled-capacity");controller.cancel();
+        controller.request(session.exportSnapshot(),"capacity");QTRY_COMPARE(count,3);QCOMPARE(recoveries.count(),1);
+        QVERIFY(session.setStackBlendMode(id,false,BlendMode::Normal));controller.request(session.exportSnapshot(),"capacity");QTRY_COMPARE(count,4);QVERIFY(frame.texture);
+        frame.texture.reset();QVERIFY(session.setStackBlendMode(id,false,BlendMode::Multiply));
+        controller.request(session.exportSnapshot(),"capacity");QTRY_COMPARE(count,5);QCOMPARE(recoveries.count(),2);
+    }
+    void gpuBlendReference1080p() {
+        if(QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
+        auto surface=OpenGlFrameCompositor::createSurface();QVERIFY(surface);
+        auto budget=std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,3);
+        OpenGlFrameCompositor gpu(surface.get(),OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),budget);
+        ImageDocumentSession session;QVERIFY(session.createCanvas({1920,1080},Qt::transparent));QStringList ids;
+        for(int i=0;i<5;++i){if(i)QVERIFY(!session.addLayer().isEmpty());ids.append(session.selectedLayerId());QVERIFY(session.applyPaintStroke({{200.,300.+i*30},{1600.,300.+i*30}},QColor(30*i,80,180,190),220));QVERIFY(session.setStackBlendMode(ids.back(),false,static_cast<BlendMode>(1+i)));}
+        const auto group=session.groupLayers(ids);QVERIFY(!group.isEmpty());ImageInteractiveRasterCache cache;
+        OpenGlTextureFramePtr lease;QElapsedTimer timer;
+        const auto measure=[&](const char* label,bool no_upload) {
+            timer.restart();const auto comp=cache.prepare(session.exportSnapshot(),"blend-1080p");const auto prepare_ms=timer.elapsed();
+            OpenGlCompositionTimings timing;auto next=gpu.composeRasterTexture(makeGpuRasterRequest(comp),{},&timing);
+            QVERIFY2(next.status==OpenGlCompositionStatus::Complete,next.cause.c_str());
+            lease=next.frame;QVERIFY(gpu.readback(lease).frame);
+            if(no_upload)QCOMPARE(timing.uploaded_bytes,std::uint64_t(0));
+            qInfo()<<"blend_gpu_1080p"<<label<<"prepare_ms"<<prepare_ms<<"prepare_compose_readback_ms"<<timer.elapsed()<<"uploaded_bytes"<<timing.uploaded_bytes<<"gpu_bytes"<<gpu.resourceUsage().texture_bytes<<"cpu_cache_bytes"<<cache.retainedBytes();
+        };
+        measure("cold",false);const auto work=cache.reconstructedPixels();measure("warm",true);QCOMPARE(cache.reconstructedPixels(),work);
+        QVERIFY(session.setStackBlendMode(ids.front(),false,BlendMode::Difference));measure("mode_change",true);QCOMPARE(cache.reconstructedPixels(),work);
+        QVERIFY(session.selectLayer(ids.front()));QVERIFY(session.applyPaintStroke({{800,450}},Qt::yellow,30));measure("base_content",false);QVERIFY(cache.reconstructedPixels()>work);
+        auto constrained=std::make_shared<OpenGlTexturePoolBudget>(64ULL*1024*1024,3);
+        OpenGlFrameCompositor limited(surface.get(),OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),constrained);
+        const auto composition=cache.prepare(session.exportSnapshot(),"blend-1080p");timer.restart();
+        const auto refused=limited.composeRasterTexture(makeGpuRasterRequest(composition));
+        QCOMPARE(refused.status,OpenGlCompositionStatus::Unsupported);QVERIFY(!refused.frame);
+        const auto refusal_ms=timer.elapsed();timer.restart();const auto recovered=ImageInteractiveRasterCache::composite(composition);
+        QVERIFY(!recovered.isNull());
+        qInfo()<<"blend_gpu_1080p constrained_capacity"<<"refusal_ms"<<refusal_ms<<"cpu_recovery_ms"<<timer.elapsed()<<"operation"<<refused.operation.c_str()<<"cause"<<refused.cause.c_str()<<"gpu_bytes"<<limited.resourceUsage().texture_bytes;
+        QCOMPARE(recovered,baseline(session));
+    }
+    void gpuEditableBlendObjects() {
+        if(QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
+        auto surface=OpenGlFrameCompositor::createSurface();QVERIFY(surface);
+        OpenGlFrameCompositor gpu(surface.get(),OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),
+            std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,3));
+        QTemporaryDir dir;ImageDocumentSession s;QVERIFY(s.createCanvas({160,100},QColor(100,140,180,180)));
+        ImageShapeData shape;shape.start={4,4};shape.end={140,85};shape.fill_color=QColor(220,90,50,180);
+        QVERIFY(!s.addShape(shape).isEmpty());const auto shapeLayer=s.selectedLayerId();
+        ImageTextData text;text.content="Blend";text.position={10,10};text.box_width=140;text.font_pixel_size=28;
+        QVERIFY(!s.addText(text).isEmpty());const auto textLayer=s.selectedLayerId();
+        QImage image(160,100,QImage::Format_ARGB32_Premultiplied);image.fill(QColor(40,190,240,140));
+        {QPainter p(&image);p.setCompositionMode(QPainter::CompositionMode_Source);p.fillRect(QRect(35,15,20,20),Qt::transparent);}
+        const auto path=dir.filePath("source.png");QVERIFY(image.save(path));QVERIFY(s.importRasterImages({{path,image}}));const auto rasterLayer=s.selectedLayerId();
+        QVERIFY(s.setLayerClipping(rasterLayer,true));QVERIFY(s.addLayerMask(textLayer));QVERIFY(s.selectLayer(textLayer));
+        QVERIFY(s.applyLayerMaskStroke({{60,25}},QColor(128,128,128),35));
+        ImageLayerOutlineData outline;outline.position=ImageOutlinePosition::Inside;outline.color=Qt::green;
+        QVERIFY(s.setLayerOutline(textLayer,outline));outline.position=ImageOutlinePosition::Outside;QVERIFY(s.setLayerOutline(shapeLayer,outline));
+        ImageInteractiveRasterCache cache;
+        const auto verify=[&] {
+            const auto composition=cache.prepare(s.exportSnapshot(),"gpu-objects");
+            auto rendered=gpu.composeRasterTexture(makeGpuRasterRequest(composition));QVERIFY2(rendered.status==OpenGlCompositionStatus::Complete,rendered.cause.c_str());
+            const auto read=gpu.readback(rendered.frame);QVERIFY(read.frame);
+            const auto actual=QImage(read.frame->rgba_pixels.data(),read.frame->width,read.frame->height,read.frame->stride,QImage::Format_RGBA8888_Premultiplied).convertToFormat(QImage::Format_ARGB32_Premultiplied);
+            const auto expected=baseline(s);QCOMPARE(actual.size(),expected.size());
+            for(int y=0;y<actual.height();++y)for(int x=0;x<actual.width();++x){const auto a=actual.pixel(x,y),b=expected.pixel(x,y);
+                QVERIFY(std::abs(qRed(a)-qRed(b))<=2 && std::abs(qGreen(a)-qGreen(b))<=2 && std::abs(qBlue(a)-qBlue(b))<=2 && std::abs(qAlpha(a)-qAlpha(b))<=2);}
+        };
+        verify();for(int mode=1;mode<6;++mode){const auto m=static_cast<BlendMode>(mode);
+            QVERIFY(s.setStackBlendMode(shapeLayer,false,m));QVERIFY(s.setStackBlendMode(textLayer,false,m));QVERIFY(s.setStackBlendMode(rasterLayer,false,m));verify();}
+        const auto group=s.groupLayers({shapeLayer,textLayer,rasterLayer});QVERIFY(!group.isEmpty());
+        QVERIFY(s.setStackBlendMode(group,true,BlendMode::Overlay));QVERIFY(s.setGroupOpacity(group,73));s.rotateRight();verify();
+    }
     void gpuPixelsUploadsAndPresentation() {
         if (QGuiApplication::platformName() == "offscreen") QSKIP("Native GPU validation is registered separately.");
         auto surface=OpenGlFrameCompositor::createSurface(); QVERIFY(surface);
@@ -305,10 +417,13 @@ private slots:
         QVERIFY(session.setLayerOutline(layer,ImageLayerOutlineData{})); verify();
         ImageLayerOutlineData inside; inside.position=ImageOutlinePosition::Inside; inside.color=QColor(50,200,90,160);
         QVERIFY(session.setLayerOutline(second,inside)); verify();
+        for(int mode=1;mode<6;++mode) { QVERIFY(session.setStackBlendMode(second,false,static_cast<BlendMode>(mode))); verify(); }
         QVERIFY(session.setLayerClipping(second,true)); verify();
+        for(int mode=1;mode<6;++mode) { QVERIFY(session.setStackBlendMode(second,false,static_cast<BlendMode>(mode))); verify(); }
         QVERIFY(session.setLayerOpacity(layer,45)); verify();
         const auto group=session.groupLayers({layer,second}); QVERIFY(!group.isEmpty());
         QVERIFY(session.setGroupOpacity(group,65)); verify();
+        for(int mode=1;mode<6;++mode) { QVERIFY(session.setStackBlendMode(group,true,static_cast<BlendMode>(mode))); verify(); }
         session.rotateRight(); verify(); session.flipHorizontal(); verify();
         QVERIFY(session.applyCrop({5,7,70,60})); verify();
         ImageOperation bounded; bounded.kind=OperationKind::FlipHorizontal; bounded.transform_bounds={10,12,55,40};
