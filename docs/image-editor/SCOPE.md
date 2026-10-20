@@ -187,11 +187,20 @@ General retouching and broad effect systems remain outside this feature.
 
 ## Outside This Release
 
-Keep retouching, color adjustment, broad effect systems, advanced
-typography, text outlines, and text effects in the backlog for later evaluation.
-Do not expand the release boundary without validated user workflows and
-performance measurements. The Image Editor remains a separate development
-track; Video Editor stability remains a suite priority.
+The [roadmap implementation sequence](ROADMAP.md#4-feature-expansion--implementation-sequence),
+updated at the maintainer's request on 2026-10-20, plans layer outlines first,
+then clipping/blend modes, adjustments, styles, selections/vectors, brushes,
+deformation, layout/color, automation, and assisted editing. These are planned
+extensions, not implemented capabilities or additions to the first editing
+release. Existing shape strokes, linked images, basic object selection, and
+linear gradients are partial building blocks rather than their advanced
+equivalents.
+
+Implementation can proceed while manual acceptance is pending; the existing
+standalone, linked-image, and first-release acceptance order still applies.
+Assign release scope separately, based on bounded workflows and performance
+evidence. The Image Editor remains a separate development track; Video Editor
+stability remains a suite priority.
 
 ## Validation
 

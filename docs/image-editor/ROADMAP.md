@@ -11,6 +11,7 @@ See the [documentation index](README.md) for organized references by topic.
 | Question | Canonical document |
 | --- | --- |
 | What can the editor do today? | [Current scope](SCOPE.md) |
+| What should be implemented next? | [Next code step](#next-code-step) and [implementation sequence](#4-feature-expansion--implementation-sequence) |
 | How are documents stored and migrated? | [Document format](architecture/FORMAT.md) |
 | How is the editor structured? | [Architecture](architecture/ARCHITECTURE.md) |
 | Which behaviors still need hands-on checks? | [Manual validation](validation/MANUAL_VALIDATION.md) |
@@ -38,6 +39,25 @@ AMD Ryzen 5 3600, 32 GB RAM, NVIDIA GeForce GTX 1660 SUPER with 6 GB VRAM, and
 Windows 11. This profile is for validation, not a new canvas-size limit; exact
 hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
+## Next code step
+
+**Implement an editable layer outline (Stroke) with thickness in pixels, color,
+and Inside/Outside placement**, applicable to text, logos, and cutout images.
+The existing shape stroke only outlines line/rectangle/ellipse geometry; it
+does not provide an outline around arbitrary layer content.
+
+The maintainer requested this feature expansion plan on **2026-10-20**, based
+on the Photoshop feature comparison in the local owner-planning reference
+`ideia/PHOTOSHOP_FEATURES.md`. The self-contained sequence in section 4 records
+the missing and partial capabilities from that comparison. Its order is
+provisional, beginning with the simple outline workflow highlighted in the
+reference. Each unchecked item is **planned, not implemented**.
+
+Implementation can proceed while existing manual acceptance remains pending.
+The acceptance order in Milestones 1-3 still applies to release readiness;
+section 4 defines code work and does not assign features to an application
+version or expand the first editing release automatically.
+
 ## Principles
 
 The shared GPU/dependency regression gate on 2026-10-10 corrected unqualified
@@ -53,18 +73,17 @@ their existing contracts. Its execution result is tracked with the shared
   Editor as a separate executable.
 - Preserve linked source images; store editable document operations in a
   versioned format.
-- Keep each standalone document to one raster image with a Background,
-  editable raster layers and masks, and one-level layer groups. Defer retouching,
-  color adjustment, and effect systems until they are justified by validated
-  workflows. The application window can hold multiple independent raster
-  documents in tabs; this does not change the `.cimg` format or linked-image
-  contract.
+- The current document model has a Background, editable raster layers and
+  masks, and one-level groups. Multiple independent documents use tabs.
+  Section 4 plans extensions to this baseline; introduce new hierarchy,
+  artboard, color, or effect contracts deliberately and preserve older
+  supported documents and linked-image consumers.
 - Basic editable text is implemented for the first editing release: multiline
   content, font family, pixel size, color, alignment, move/width resize,
   horizontal growth to the canvas edge while typing, wrapping, Undo/Redo,
   `.cimg` save/reopen, recovery, and export. Manual visual
-  validation remains pending. Advanced typography, text outlines, and text
-  effects remain deferred.
+  validation remains pending. Layer outlines and richer typography are planned
+  separately in section 4 and are not part of the implemented text baseline.
 - Use Qt image I/O and deploy the plugins required for the documented input
   formats. Track Qt Image Formats and its codec notices for distribution.
 - Keep compatibility with the Video Editor as an independently testable
@@ -213,38 +232,164 @@ acceptance remains with the maintainer; automated coverage is indexed below.
 - [ ] Record native visual validation with masks, layer opacity, and transparent
   canvas pixels in [`MANUAL_VALIDATION.md`](validation/MANUAL_VALIDATION.md).
 
-### 4. Future expansion
+### 4. Feature expansion — implementation sequence
 
-- [ ] Revisit retouching, color adjustments, and larger effect sets only
-  when user workflows and performance measurements justify them.
-- [ ] Use additional systems before generalizing performance requirements or
-  setting numerical hardware requirements.
+Planning baseline: **2026-10-20**. The numbered stages below give a provisional
+code order, not release dates or a promise of full Photoshop parity. Later
+stages need their own bounded implementation contracts before code changes.
+Preserve the lightweight, local-first workflow and reuse shared processing
+where its semantics match; document models and editing workflows remain owned
+by the Image Editor.
 
-#### Candidate feature backlog — unprioritized
+Already implemented and excluded from new-feature tasks: raster layers and
+one-level groups, layer opacity, raster layer masks, rectangular/elliptical and
+freehand selections, Magic Wand, paint/erase, bucket fill, linear
+color-to-transparent gradients, blur, basic editable text and shapes, linked
+raster imports, basic transforms, document tabs, and PNG/JPEG export including
+selected-layer/group Quick Export. Partial equivalents must not be mistaken
+for the complete features below: object selection selects existing editable
+objects rather than detecting subjects in photos; linked images are not full
+Smart Objects; linear gradients are not Gradient Maps; shape strokes are not
+general layer outlines.
 
-These capabilities are candidates for future scope, not approved release
-commitments. Preserve the lightweight, local-first workflow and prioritize only
-after the standalone acceptance gate.
+#### 4.1. Instant layer outline — next implementation
 
-- **Layer compositing:** non-destructive adjustment and fill layers; clipping
-  to underlying layers; common blend modes; reusable layer styles; masks on
-  groups and nested groups; embedded or linked object layers that preserve
-  source data through transforms and support controlled relinking/refresh.
-- **Selections and paths:** assisted subject/object isolation; color-range
-  selection; feather, expand, contract, smooth, and refine selection edges;
-  editable Bezier paths; path-based vector shapes and text.
-- **Retouching:** clone and healing brushes; dodge, burn, sharpen, and smudge;
-  content-aware patch, move, and fill operations with results on separate
-  editable layers; multi-source reconstruction for matching photographs.
-- **Typography and design:** richer font and paragraph controls, outlines,
-  shadows, text-on-path, reusable styles, and multiple artboards for related
-  layouts.
-- **Color and delivery:** color profiles and soft proofing; higher-precision
-  pixel workflows; non-destructive camera-raw development; reusable presets,
-  batch operations, and multi-document export.
-- **Assisted editing:** optional object isolation and content reconstruction
-  tools only after local-processing options, privacy, dependency licensing,
-  and any external-service boundary are reviewed.
+- [ ] Add an editable outline to an editable layer's visible content, including
+  text and imported/cutout raster images, with thickness (px), color, and
+  Inside/Outside placement. Keep source pixels and text editable.
+- [ ] Define how the outline follows content alpha, raster masks, transforms,
+  layer opacity, and group composition; keep it distinct from shape stroke
+  geometry. Keep the initial controls limited to the simple outline workflow.
+- [ ] Integrate live preview, enable/disable and removal, Undo/Redo, `.cimg`
+  save/reopen and recovery, full/Quick Export, and linked PNG publication.
+  Define backward-compatible loading and any required schema migration in
+  the implementation change.
+
+#### 4.2. Clipping masks and blend modes
+
+- [ ] Clip a layer to the visible alpha of its base layer, with a clear Layers
+  command and customizable shortcut. Define chains, group boundaries, ordering,
+  visibility, masks, and base-layer deletion behavior.
+- [ ] Expose Normal, Multiply, Screen, Overlay, Add, and Difference using the
+  existing shared compositor where compatible. Add further darken/lighten,
+  contrast, comparison, and hue/saturation/color/luminosity modes incrementally.
+- [ ] Preserve preview/export equivalence, history, persistence, recovery, and
+  linked output for these layer-composition properties.
+
+#### 4.3. Non-destructive adjustments and fill layers
+
+- [ ] Establish an application-owned adjustment-layer contract for affected
+  lower layers, masks, groups, clipping, and operation order; reuse compatible
+  shared effect processing without importing Video Editor timeline models.
+- [ ] Implement Gradient Map, mapping luminance to editable gradient colors.
+  This is separate from the existing linear painting tool.
+- [ ] Add brightness/contrast, exposure/offset/gamma, hue/saturation, levels,
+  and per-channel/global curves in bounded increments.
+- [ ] Add color balance, Black & White channel controls, LUT loading, selective
+  color, invert, posterize, and threshold.
+- [ ] Add editable solid-color, gradient, and pattern fill layers and reusable
+  adjustment/fill presets.
+
+#### 4.4. Layer styles and organization
+
+- [ ] Extend outline styling with center placement and gradient/pattern fills
+  after the simple outline is implemented.
+- [ ] Add drop/inner shadows, outer/inner glow, bevel/emboss, and
+  color/gradient/pattern overlays with reeditable parameters and reusable styles.
+- [ ] Add Fill separately from Opacity, defining its interaction with each
+  blend mode and style rather than treating it as a second opacity slider.
+- [ ] Add masks on groups, nested groups, configurable layer locks, linked
+  layer transforms, layer filtering, and saved layer compositions.
+- [ ] Extend linked raster resources into embedded/linked object containers
+  with controlled relink/refresh, preserved source data through transforms,
+  and reeditable filter stacks. Current linked imports remain the baseline.
+
+#### 4.5. Selection refinement, paths, and vector design
+
+- [ ] Add polygonal/magnetic lasso, Quick Selection brush, color-range
+  selection including skin-tone targeting, fixed-size/aspect marquee controls,
+  and selection intersection.
+- [ ] Add selection transforms, expand/contract, smooth, feather, contrast,
+  edge shifting, saved selections, and selection/mask/alpha-channel conversion.
+- [ ] Add an edge-refinement workspace with transparent/black/white/onion-skin
+  views, refine-edge brush, adaptive radius, and color decontamination.
+- [ ] Add editable Bezier paths, vector masks, path editing, and a channel
+  panel for component and alpha channels as supported by the color model.
+- [ ] Extend shapes with triangles/polygons, independently rounded rectangle
+  corners, and union/subtract/intersect/exclude operations.
+- [ ] Add richer paragraph/character formatting, variable-font axis and
+  OpenType controls, text on paths, and reusable typography styles.
+
+#### 4.6. Brush engine and retouching
+
+- [ ] Extend paint/erase with hardness, independent opacity/flow, smoothing,
+  pressure/tilt input, custom tips, size/angle dynamics, scattering, texture,
+  dual brushes, color dynamics, and brush presets.
+- [ ] Add Mixer Brush wet/load/mix controls and horizontal/vertical/radial
+  painting symmetry.
+- [ ] Add Clone Stamp and source rotation/flip/scale controls, then Spot
+  Healing, sampled Healing Brush, and Patch workflows.
+- [ ] Add Dodge/Burn with tonal-range targeting, Sponge saturation controls,
+  Sharpen, and Smudge. Extend the existing Blur tool only where needed.
+
+#### 4.7. Advanced transforms and deformation
+
+- [ ] Add a configurable transform pivot, skew, corner distortion, perspective,
+  and editable warp meshes with custom rows/columns.
+- [ ] Add linked-plane Perspective Warp and pin-based deformation. Static
+  deformation belongs to Image Editor; pose recording/keyframes require a
+  separate Motion Studio contract and producer/consumer coverage.
+- [ ] Add Liquify-style forward warp, reconstruct, smooth, twirl, pucker, and
+  bloat tools. Face-aware deformation belongs to the assisted-editing stage.
+
+#### 4.8. Layout, precision, and color-managed photography
+
+- [ ] Add rulers, guides, grids, snapping/alignment, measurement tools,
+  physical units, and configurable document DPI/PPI.
+- [ ] Add multiple artboards per document, with independent sizes and export.
+  Existing document tabs are not artboards.
+- [ ] Add explicit ICC profile assignment/conversion, black-point
+  compensation, and soft proofing; define display and export color contracts.
+- [ ] Extend the 8-bit RGBA editing pipeline to 16-bit and 32-bit floating-point
+  workflows, plus explicit grayscale/bitmap, CMYK, and Lab document modes in
+  separately bounded increments. Define operation/format availability per mode.
+- [ ] Add non-destructive RAW development with exposure, color, and optical
+  controls and preserved original camera data.
+
+#### 4.9. Automation and asset delivery
+
+- [ ] Add recorded actions/macros, batch processing, reusable presets, and
+  batch/multi-document/artboard export.
+- [ ] Add WebP export and SVG export for compatible vector content; importing
+  WebP today does not provide WebP export.
+- [ ] Add controlled layer-based asset generation and a documented
+  scripting/extension API with explicit ownership and error boundaries.
+
+#### 4.10. Assisted editing and content reconstruction
+
+- [ ] Add photo object/subject/sky isolation; do not conflate this with existing
+  editable-object selection or the connected-color Magic Wand.
+- [ ] Evaluate content-aware fill, patch/move, multi-source reconstruction,
+  and content-aware scaling, with separately editable results where applicable.
+- [ ] Evaluate generative fill/expand, image/background generation, variants,
+  upscaling, harmonization, and prompt-guided editing.
+- [ ] Evaluate neural restoration, skin/portrait tools, colorization, artifact
+  removal, and face-aware deformation. Distinguish local and online processing
+  and experimental capabilities. Choose concrete implementations only after
+  reviewing workload, dependencies/licenses, privacy, and service boundaries.
+
+#### Delivery requirements for each implementation
+
+Every item above remains **planned, not implemented** until delivered with its
+regression coverage. Cover model behavior, cancellation/no-ops where relevant,
+history, persistence/migration, recovery, rendering/export, and error logging.
+Update the feature-to-verification index with actual test sources/targets when
+implementation starts; planned features are not existing coverage gaps.
+Changes to shared processing or linked output require affected
+producer/consumer regressions. Retain documented native/manual checks where
+automation cannot cover the interaction. Measure representative workloads
+before complex optimizations or broader hardware/performance claims; use
+additional systems before setting numerical hardware requirements.
 
 ## Regression coverage index
 
@@ -423,8 +568,9 @@ validation.
 - **P2 — editable text visual validation:** automated editing, rendering,
   formatting, transform, history, persistence, export, recovery, and publication
   checks are implemented; the manual canvas and visual review is pending.
-- **Planned, not implemented:** future retouching, color adjustments, and advanced effects
-  are excluded from current coverage until their implementation begins.
+- **Planned, not implemented:** the section 4 feature expansion, beginning with
+  layer outlines, is excluded from current coverage until implementation begins.
+  Add actual regression mappings as each feature is delivered.
 
 ## Status legend
 
