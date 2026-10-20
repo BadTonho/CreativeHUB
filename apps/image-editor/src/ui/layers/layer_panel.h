@@ -6,6 +6,9 @@
 #include <QImage>
 #include <QWidget>
 
+class QCheckBox;
+class QComboBox;
+class QSpinBox;
 class QEvent;
 class QLabel;
 class QMenu;
@@ -42,6 +45,7 @@ public:
     void setQuickExportEnabled(bool enabled);
     [[nodiscard]] QVector<ImageStackItemData> selectedStackItems() const;
     void requestDeleteSelection();
+    void finishOutlineEdit();
 
 signals:
     void quickExportRequested();
@@ -65,6 +69,9 @@ signals:
                                 bool is_group,
                                 const QString& target_group_id,
                                 qsizetype insertion_index);
+    void outlineEditStarted();
+    void outlineEditFinished();
+    void layerOutlineChanged(const QString& id, const image_editor::ImageLayerOutlineData& outline, bool remove);
     void opacityEditStarted();
     void stackOpacityChanged(const QString& item_id, bool is_group, int opacity);
     void opacityEditFinished();
@@ -90,7 +97,15 @@ private:
     QToolButton* move_up_button_ = nullptr;
     QToolButton* move_down_button_ = nullptr;
     ImageDocumentData document_;
+    QCheckBox* outline_enabled_ = nullptr;
+    QSpinBox* outline_thickness_ = nullptr;
+    QComboBox* outline_position_ = nullptr;
+    QPushButton* outline_color_ = nullptr;
+    QPushButton* outline_remove_ = nullptr;
+    bool outline_editing_ = false;
     bool refreshing_ = false;
+    void beginOutlineEdit();
+    void emitOutlineChange();
     bool eye_press_consumed_ = false;
 };
 

@@ -46,6 +46,9 @@ private:
         QImage pixels;
         std::uint64_t used = 0;
         qint64 revision = 0;
+        qint64 content_revision = 0, mask_revision = 0;
+        std::optional<ImageLayerOutlineData> outline;
+        std::optional<ImageLayerMaskData> layer_mask;
     };
     InteractiveRaster raster(const QString& identity, const QSize& size,
         const QVector<ImageOperation>& operations, const QHash<QString, QImage>& resources,

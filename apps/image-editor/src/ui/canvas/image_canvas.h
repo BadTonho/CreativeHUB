@@ -89,7 +89,7 @@ public:
     void commitTextEditing();
     [[nodiscard]] bool textEditing() const noexcept;
     void setObjectPlacements(QVector<ImageObjectPlacement> placements,
-                             QStringList selected_object_ids);
+                             QStringList selected_object_ids, bool composition_preview_required = false);
     void setEraserPreviewEnabled(bool enabled);
     void setTransientImage(QImage image);
     void setMaskEditing(bool enabled);

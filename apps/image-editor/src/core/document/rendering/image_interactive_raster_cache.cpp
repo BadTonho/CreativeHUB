@@ -1,4 +1,5 @@
 #include "image_interactive_raster_cache.h"
+#include "image_layer_outline.h"
 #include "image_document_renderer.h"
 #include "image_document_utils.h"
 #include "image_editor_performance_metrics.h"
@@ -102,7 +103,10 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
     if (snapshot.source_image.isNull() || cancelled(cancel)) return {};
     InteractiveComposition result; result.size = size;
     QSet<QString> live;
-    for (const auto& layer : doc.layers) { live.insert(layer.id + "/content"); live.insert(layer.id + "/mask"); }
+    for (const auto& layer : doc.layers) {
+        live.insert(layer.id + "/content"); live.insert(layer.id + "/mask");
+        if (layer.outline && layer.outline->enabled) live.insert(layer.id + "/outline");
+    }
     for (auto it = entries_.begin(); it != entries_.end();) {
         if (!live.contains(it.key())) { bytes_ -= it->pixels.sizeInBytes(); it = entries_.erase(it); } else ++it;
     }
@@ -135,12 +139,78 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
     }
     const auto layer_input = [&](const ImageLayerData& layer) {
         InteractiveLayer value;
+        QHash<QString,qint64> outline_resources;
+        if (layer.outline && layer.outline->enabled) {
+            for (const auto& op : layer.operations) if (op.kind == OperationKind::RasterImage)
+                outline_resources.insert(op.raster.id, snapshot.raster_images.value(op.raster.id,
+                    snapshot.raster_images.value(op.raster.source_path)).cacheKey());
+            auto cached = entries_.find(layer.id + "/outline");
+            if (!transient && cached != entries_.end() && cached->pixels.size() == size &&
+                cached->operations == layer.operations && cached->resources == outline_resources &&
+                cached->outline == layer.outline && cached->layer_mask == layer.mask) {
+                cached->used = ++clock_;
+                value.content = {document_id + "/" + layer.id + "/outline", cached->pixels, 0, {}, cached->revision};
+                value.opacity = layer.opacity; return value;
+            }
+        }
         value.content = raster(layer.id + "/content", size, layer.operations, snapshot.raster_images, false, transient, cancel);
         value.content.identity = document_id + "/" + value.content.identity;
         if (layer.mask && layer.mask->enabled && !layer.mask->operations.isEmpty()) {
             value.mask = raster(layer.id + "/mask", size, layer.mask->operations, {}, true, transient, cancel);
             value.mask.identity = document_id + "/" + value.mask.identity;
             if (value.mask.pixels.isNull()) value.content.pixels = {};
+        }
+        if (layer.outline && layer.outline->enabled && !value.content.pixels.isNull()) {
+            const QString key = layer.id + "/outline";
+            auto found = entries_.find(key);
+            const qint64 content_revision = value.content.revision, mask_revision = value.mask.revision;
+            InteractiveRaster styled;
+            styled.identity = document_id + "/" + key;
+            if (!transient && found != entries_.end() && found->pixels.size() == size &&
+                found->content_revision == content_revision && found->mask_revision == mask_revision &&
+                found->outline == layer.outline) {
+                found->used = ++clock_; styled.pixels = found->pixels; styled.revision = found->revision;
+            } else {
+                QImage pixels = value.content.pixels;
+                if (!value.mask.pixels.isNull()) {
+                    for (int y=0; y<size.height(); ++y) {
+                        if (cancelled(cancel)) { value.content.pixels = {}; return value; }
+                        auto* row = reinterpret_cast<QRgb*>(pixels.scanLine(y));
+                        const auto* coverage = value.mask.pixels.constScanLine(y);
+                        for (int x=0; x<size.width(); ++x) {
+                            const int a = coverage[x]; const auto p = row[x];
+                            row[x] = qRgba((qRed(p)*a+127)/255, (qGreen(p)*a+127)/255,
+                                (qBlue(p)*a+127)/255, (qAlpha(p)*a+127)/255);
+                        }
+                    }
+                }
+                styled.pixels = applyLayerOutline(pixels, *layer.outline, cancel);
+                styled.revision = ++next_revision_;
+                // Release source planes before admitting the styled result so the
+                // temporary pair does not evict another unchanged outlined layer.
+                if (!transient) for (const auto& suffix : {QStringLiteral("/content"), QStringLiteral("/mask")}) {
+                    const auto original = entries_.find(layer.id + suffix);
+                    if (original != entries_.end()) { bytes_ -= original->pixels.sizeInBytes(); entries_.erase(original); }
+                }
+                if (!transient && !styled.pixels.isNull()) {
+                    if (found != entries_.end()) { bytes_ -= found->pixels.sizeInBytes(); entries_.erase(found); }
+                    const auto requested = std::uint64_t(styled.pixels.sizeInBytes());
+                    while (requested <= byte_limit_ && bytes_ + requested > byte_limit_ && !entries_.isEmpty()) {
+                        auto victim = std::min_element(entries_.begin(), entries_.end(),
+                            [](const Entry& a, const Entry& b) { return a.used < b.used; });
+                        bytes_ -= victim->pixels.sizeInBytes(); entries_.erase(victim);
+                    }
+                    if (requested <= byte_limit_ && bytes_ + requested <= byte_limit_) {
+                        Entry entry; entry.pixels = styled.pixels; entry.revision = styled.revision;
+                        entry.used = ++clock_; entry.outline = layer.outline;
+                        entry.operations = layer.operations; entry.resources = outline_resources; entry.layer_mask = layer.mask;
+                        entry.content_revision = content_revision; entry.mask_revision = mask_revision;
+                        entries_.insert(key, std::move(entry)); bytes_ += requested;
+                    }
+                }
+            }
+            value.content = std::move(styled);
+            value.mask = {};
         }
         value.opacity = layer.opacity; return value;
     };
@@ -152,12 +222,18 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
             node.group = true; node.opacity = group->opacity; node.transforms = group->operations;
             for (const auto& id : group->layer_ids) {
                 const auto* layer = findLayer(doc, id);
-                if (layer && layer->visible && layer->opacity > 0) node.layers.append(layer_input(*layer));
+                if (layer && layer->visible && layer->opacity > 0) {
+                    auto input = layer_input(*layer);
+                    if (input.content.pixels.isNull()) return {};
+                    node.layers.append(std::move(input));
+                }
             }
         } else {
             const auto* layer = findLayer(doc, item.id);
             if (!layer || !layer->visible || layer->opacity == 0) continue;
-            node.layers.append(layer_input(*layer));
+            auto input = layer_input(*layer);
+            if (input.content.pixels.isNull()) return {};
+            node.layers.append(std::move(input));
         }
         if (cancelled(cancel)) return {};
         for (const auto& layer : node.layers) if (layer.content.pixels.isNull()) return {};

@@ -88,6 +88,10 @@ public:
     [[nodiscard]] bool selectingObjects() const noexcept { return selecting_objects_; }
     [[nodiscard]] bool transformingObjects() const noexcept { return transforming_objects_; }
     [[nodiscard]] bool transformContainsRaster() const noexcept;
+    void setCompositionPreviewRequired(bool required) noexcept { composition_preview_required_ = required; }
+    [[nodiscard]] bool transformRequiresComposition() const noexcept {
+        return composition_preview_required_ || transformContainsRaster();
+    }
     [[nodiscard]] bool resizingTextWidth() const noexcept { return resizing_text_width_; }
     [[nodiscard]] const QVector<ImageObjectPlacement>& currentTransformObjects() const noexcept {
         return transform_current_objects_;
@@ -126,6 +130,7 @@ private:
     QVector<ImageObjectPlacement> object_placements_;
     QStringList selected_object_ids_;
 
+    bool composition_preview_required_ = false;
     bool selecting_objects_ = false;
     bool selection_toggle_ = false;
     bool transforming_objects_ = false;

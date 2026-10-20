@@ -424,3 +424,14 @@ annotation. Producer/reader backup and exchange regressions protect this boundar
 ## Drop Shadow contract maintenance
 
 Motion native v17/Hub backup preserves Drop Shadow colors, four bases/curves and effect masks while rebasing existing media paths; Hub rejects v18. `.cscomp` v3 explicitly refuses it. Video/Image maintain the shared CPU/GPU operation contracts without shadow UI or persisted records.
+
+## Image Editor v17 layer outlines
+
+Image Editor adds an optional native layer outline without changing linked PNG
+publication or Video Editor host-link schemas. The published raster includes
+masked outlines. Hub accepts Image v17, rebases existing source/import paths,
+and preserves style data through backup/restoration; future Image v18 is
+rejected. Current Image reads v1-16 with no outline; older Image binaries reject
+v17. Producer UI publication, Video Editor refresh regressions and Hub actual
+reader round trips protect this boundary. Native cross-application acceptance
+remains pending. See [outline contract](image-editor/features/LAYER_OUTLINE.md).

@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 16; host links live in the Video Editor's
+  The `.cimg` schema is version 17; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -646,3 +646,20 @@ fields. Its existing composition/raster, masks, preview/UI and export gates
 protect unchanged operations and defaults. See [contracts and pending acceptance](../../motion-editor/features/TRACK_MATTES.md).
 
 Shared primitive-mask coverage accepts an optional logical receiver/raster origin for Motion Bezier rasters. Image keeps its existing calls, UI and document format; raster/mask/composition regression gates protect the additive boundary.
+
+## Layer outline rendering
+
+The optional v17 outline is owned by the Image Editor layer model and edited
+through session history. `rendering/image_layer_outline.*` performs cancellable,
+CPU grayscale-alpha disk dilation/erosion on masked premultiplied layer pixels.
+The reference renderer, export and worker preview use the same helper. The
+interactive cache retains processed pixels with content/mask revisions and
+outline parameters; the GPU adapter receives the processed content with an
+empty mask to avoid masking the outline twice. Cache entries share the existing
+64 MiB budget. Technical rendering failures use the existing logged worker and
+export error paths; cancellation publishes no partial output.
+
+Raw editable targets exclude outlines. Layer/group thumbnail invalidation
+includes the outline, and composite Eyedropper sampling includes its pixels.
+Hub backup rebasing accepts v17 and retains outline properties; linked PNG
+publication retains the existing protocol. See [the contract](../features/LAYER_OUTLINE.md).

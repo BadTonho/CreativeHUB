@@ -135,6 +135,15 @@ void testImageDocuments(const QString& root) {
         if (version == 1) { fixture.insert("source", fixture.value("base")); fixture.remove("base"); }
         if (version < 4) fixture.remove("layers");
         else if (version < 11) fixture.insert("layers", QJsonArray{encoded.value("layers").toArray().first()});
+        if (version >= 17) {
+            auto layers = fixture.value("layers").toArray();
+            auto groupObject = layers.last().toObject(); auto children = groupObject.value("children").toArray();
+            auto childObject = children.first().toObject();
+            childObject.insert("outline", QJsonObject{{"enabled",true},{"thickness",7},
+                {"color","#c81450f0"},{"position","outside"}});
+            children[0]=childObject; groupObject.insert("children",children); layers[layers.size()-1]=groupObject;
+            fixture.insert("layers",layers);
+        }
         // Use the producer's assets in every case, including legacy documents.
         const auto path = QDir(QFileInfo(assets).absolutePath()).filePath(QStringLiteral("image-v%1.cimg").arg(version));
         writeBytes(path, QJsonDocument(fixture).toJson());

@@ -50,6 +50,7 @@ private slots:
         QVERIFY(session.applyEraseStroke({{15,15},{60,35}}, 7)); verify();
         QVERIFY(session.undo()); verify(); QVERIFY(session.redo()); verify();
         QVERIFY(session.addLayerMask(layer)); verify();
+        QVERIFY(session.setLayerOutline(layer,ImageLayerOutlineData{})); verify();
         QVERIFY(session.applyLayerMaskStroke({{10,10},{80,70}}, QColor(128,128,128), 20)); verify();
         QVERIFY(session.applyLayerMaskEraseStroke({{20,20}}, 7)); verify();
         QVERIFY(session.setLayerOpacity(layer,47)); verify();
@@ -276,6 +277,9 @@ private slots:
         auto update=gpu.composeRasterTexture(makeGpuRasterRequest(composition),{},&warm);
         QVERIFY(update.status==OpenGlCompositionStatus::Complete);
         QVERIFY(warm.uploaded_bytes>0 && warm.uploaded_bytes<96ULL*80*4); update.frame.reset(); verify();
+        QVERIFY(session.setLayerOutline(layer,ImageLayerOutlineData{})); verify();
+        ImageLayerOutlineData inside; inside.position=ImageOutlinePosition::Inside; inside.color=QColor(50,200,90,160);
+        QVERIFY(session.setLayerOutline(second,inside)); verify();
         const auto group=session.groupLayers({layer,second}); QVERIFY(!group.isEmpty());
         QVERIFY(session.setGroupOpacity(group,65)); verify();
         session.rotateRight(); verify(); session.flipHorizontal(); verify();

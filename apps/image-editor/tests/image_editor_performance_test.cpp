@@ -465,7 +465,9 @@ private slots:
         QVERIFY(session.deleteLayer(raster_layer));
         QVERIFY(!session.renderedImage().isNull());
         QCOMPARE(session.data().layers.size(), 2);
-        QCOMPARE(session.cachedRasterLayerBytes(), std::uint64_t{2 * 32 * 24 * 4});
+        // Background is not retained by this cache; the deleted imported layer
+        // must release its bytes, leaving only the initial editable layer.
+        QCOMPARE(session.cachedRasterLayerBytes(), std::uint64_t{32 * 24 * 4});
 
         const QString source_path = directory.filePath(QStringLiteral("source.png"));
         const QString replacement_path = directory.filePath(QStringLiteral("replacement.png"));

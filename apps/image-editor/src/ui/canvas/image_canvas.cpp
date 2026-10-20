@@ -534,7 +534,8 @@ bool ImageCanvas::textEditing() const noexcept {
 }
 
 void ImageCanvas::setObjectPlacements(QVector<ImageObjectPlacement> placements,
-                                      QStringList selected_object_ids) {
+                                      QStringList selected_object_ids, bool composition_preview_required) {
+    object_selection_tool_.setCompositionPreviewRequired(composition_preview_required);
     object_selection_tool_.setObjects(std::move(placements),
                                       std::move(selected_object_ids));
     update();
@@ -902,7 +903,7 @@ void ImageCanvas::paintScene(QPainter& painter, const QRect& dirty, bool gpu) {
     shape_tool_.paintOverlay(painter, {target, zoom_});
     text_tool_.paintFramePreview(painter, textToolContext());
     if (object_selection_tool_.transformingObjects() &&
-        !object_selection_tool_.transformContainsRaster()) {
+        !object_selection_tool_.transformRequiresComposition()) {
         for (const auto& object : object_selection_tool_.currentTransformObjects())
             drawObjectOverlay(painter, object);
     }

@@ -941,3 +941,32 @@ native Windows, macOS and Linux; portable/headless tests do not accept drivers.
 
 The reference Windows measurement/visual record and pending native platforms are
 in [INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md](../performance/INTERACTIVE_RENDERING_RESULTS_WINDOWS_2026-10-12.md).
+
+## Layer outline
+
+Use a 1920x1080 canvas with text, a transparent imported logo and a raster layer
+in one group. Native Windows visual and macOS/Linux acceptance are pending.
+
+1. Select one editable layer. Enable Outline below Layers; confirm defaults of
+   2 px, opaque black, Outside. Change thickness, RGBA color and Inside/Outside;
+   inspect curves, thin text, transparent holes and partially transparent edges.
+2. Edit text and resize/move an imported object. Confirm the outline follows
+   the content while keeping its configured document-pixel thickness. Paint a
+   layer mask and toggle it: the outline must follow the resulting silhouette.
+   Area Selection must not limit the effect. Mask-thumbnail selection must keep
+   the controls attached to its owning layer.
+3. Inspect canvas edges and masked holes; outside pixels stay clipped to the
+   canvas. Change layer/group opacity and group transforms. Compare Automatic
+   and CPU rendering and inspect layer/group thumbnails and Eyedropper samples.
+4. Change thickness continuously and Undo once. Preview a different color and
+   cancel its dialog: no edit remains. Disable/re-enable the effect and confirm
+   its settings survive. Remove it and confirm defaults reset. Background,
+   groups and multiple selections must disable the controls.
+5. Switch layers/tabs while editing; undo in the original document and confirm
+   no changes leak to another document. Save/reopen and recover an autosave;
+   compare full PNG/JPEG and layer/group Quick Export with the visible result.
+6. Save a linked image and confirm every intended Video Editor use refreshes.
+   Back up and relocate the v17 document through Hub, reopen it and inspect
+   outlines and source paths. Confirm all original image files are unchanged.
+
+Automated sources and recorded results are in [the outline contract](../features/LAYER_OUTLINE.md).

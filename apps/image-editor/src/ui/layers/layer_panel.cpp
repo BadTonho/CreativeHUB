@@ -3,6 +3,16 @@
 
 #include "../transparency_checkerboard.h"
 
+#include <QCheckBox>
+#include <QColorDialog>
+#include <QComboBox>
+#include <QFormLayout>
+#include <QSpinBox>
+#include <QCheckBox>
+#include <QColorDialog>
+#include <QComboBox>
+#include <QFormLayout>
+#include <QSpinBox>
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QCursor>
@@ -272,8 +282,8 @@ QTreeWidgetItem* makeLayerItem(const ImageLayerData& layer,
             ? QCoreApplication::translate("ImageEditorUI", "Locked Background. Click the eye button to hide it.")
             : QCoreApplication::translate("ImageEditorUI", "Locked Background. Click the eye button to show it."))
         : (layer.visible
-            ? QCoreApplication::translate("ImageEditorUI", "Visible — click the eye button to hide this layer.")
-            : QCoreApplication::translate("ImageEditorUI", "Hidden — click the eye button to show this layer.")));
+            ? QCoreApplication::translate("ImageEditorUI", "Visible â€” click the eye button to hide this layer.")
+            : QCoreApplication::translate("ImageEditorUI", "Hidden â€” click the eye button to show this layer.")));
     item->setData(0, Qt::AccessibleDescriptionRole, layer.visible
         ? QCoreApplication::translate("ImageEditorUI", "Visible. Eye button hides this layer.")
         : QCoreApplication::translate("ImageEditorUI", "Hidden. Eye button shows this layer."));
@@ -338,6 +348,58 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     QAction* remove_mask_action = layer_context_menu_->addAction(QCoreApplication::translate("ImageEditorUI", "Remove Layer Mask"));
     remove_mask_action->setObjectName(QStringLiteral("removeLayerMaskAction"));
 
+    auto* outline_form = new QFormLayout;
+    outline_enabled_ = new QCheckBox(QCoreApplication::translate("ImageEditorUI", "Outline"), this);
+    outline_enabled_->setObjectName(QStringLiteral("layerOutlineEnabled"));
+    outline_form->addRow(outline_enabled_);
+    outline_thickness_ = new QSpinBox(this);
+    outline_thickness_->setObjectName(QStringLiteral("layerOutlineThickness"));
+    outline_thickness_->setRange(1, 1024); outline_thickness_->setValue(2);
+    outline_thickness_->setSuffix(QStringLiteral(" px"));
+    outline_thickness_->installEventFilter(this);
+    outline_form->addRow(QCoreApplication::translate("ImageEditorUI", "Thickness"), outline_thickness_);
+    outline_position_ = new QComboBox(this);
+    outline_position_->setObjectName(QStringLiteral("layerOutlinePosition"));
+    outline_position_->addItem(QCoreApplication::translate("ImageEditorUI", "Inside"));
+    outline_position_->addItem(QCoreApplication::translate("ImageEditorUI", "Outside"));
+    outline_position_->setCurrentIndex(1);
+    outline_form->addRow(QCoreApplication::translate("ImageEditorUI", "Position"), outline_position_);
+    outline_color_ = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Color"), this);
+    outline_color_->setObjectName(QStringLiteral("layerOutlineColor"));
+    outline_form->addRow(outline_color_);
+    outline_remove_ = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Remove Outline"), this);
+    outline_remove_->setObjectName(QStringLiteral("layerOutlineRemove"));
+    outline_form->addRow(outline_remove_);
+    layout->addLayout(outline_form);
+    connect(outline_enabled_, &QCheckBox::toggled, this, [this] { if (!refreshing_) emitOutlineChange(); });
+    connect(outline_position_, &QComboBox::currentIndexChanged, this, [this] { if (!refreshing_) emitOutlineChange(); });
+    connect(outline_thickness_, &QSpinBox::valueChanged, this, [this] {
+        if (refreshing_) return;
+        beginOutlineEdit(); emitOutlineChange();
+    });
+    connect(outline_thickness_, &QSpinBox::editingFinished, this, &LayerPanel::finishOutlineEdit);
+    connect(outline_remove_, &QPushButton::clicked, this, [this] {
+        finishOutlineEdit(); emit layerOutlineChanged(selectedItemId(), {}, true);
+    });
+    connect(outline_color_, &QPushButton::clicked, this, [this] {
+        finishOutlineEdit();
+        const QString id = selectedItemId();
+        const auto layer = std::find_if(document_.layers.cbegin(), document_.layers.cend(),
+            [&id](const ImageLayerData& value) { return value.id == id; });
+        if (layer == document_.layers.cend() || layer->background) return;
+        const auto before = layer->outline;
+        auto initial = before.value_or(ImageLayerOutlineData{});
+        QColorDialog dialog(initial.color, this);
+        dialog.setOption(QColorDialog::ShowAlphaChannel);
+        dialog.setObjectName(QStringLiteral("layerOutlineColorDialog"));
+        beginOutlineEdit();
+        connect(&dialog, &QColorDialog::currentColorChanged, this, [this, id, initial](const QColor& color) mutable {
+            initial.color = color; emit layerOutlineChanged(id, initial, false);
+        });
+        if (dialog.exec() != QDialog::Accepted) emit layerOutlineChanged(id, initial, !before.has_value());
+        finishOutlineEdit();
+    });
+
     edit_hint_ = new QLabel(this);
     edit_hint_->setObjectName(QStringLiteral("layerEditingHint"));
     edit_hint_->setWordWrap(true);
@@ -388,12 +450,12 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
 
     move_up_button_ = new QToolButton(this);
     move_up_button_->setObjectName(QStringLiteral("moveImageLayerUpButton"));
-    move_up_button_->setText(QCoreApplication::translate("ImageEditorUI", "↑"));
+    move_up_button_->setText(QCoreApplication::translate("ImageEditorUI", "â†‘"));
     move_up_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Move item up"));
     actions->addWidget(move_up_button_);
     move_down_button_ = new QToolButton(this);
     move_down_button_->setObjectName(QStringLiteral("moveImageLayerDownButton"));
-    move_down_button_->setText(QCoreApplication::translate("ImageEditorUI", "↓"));
+    move_down_button_->setText(QCoreApplication::translate("ImageEditorUI", "â†“"));
     move_down_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Move item down"));
     actions->addWidget(move_down_button_);
     layout->addLayout(actions);
@@ -707,7 +769,30 @@ void LayerPanel::requestDeleteSelection() {
     if (!items.isEmpty()) emit deleteStackItemsRequested(items);
 }
 
+void LayerPanel::beginOutlineEdit() {
+    outline_editing_ = true; emit outlineEditStarted();
+}
+
+void LayerPanel::finishOutlineEdit() {
+    if (!outline_editing_) return;
+    outline_editing_ = false; emit outlineEditFinished();
+}
+
+void LayerPanel::emitOutlineChange() {
+    const QString id = selectedItemId();
+    const auto layer = std::find_if(document_.layers.cbegin(), document_.layers.cend(),
+        [&id](const ImageLayerData& value) { return value.id == id; });
+    if (layer == document_.layers.cend() || layer->background || layer_tree_->selectedItems().size() != 1) return;
+    auto outline = layer->outline.value_or(ImageLayerOutlineData{});
+    outline.enabled = outline_enabled_->isChecked();
+    outline.thickness = outline_thickness_->value();
+    outline.position = outline_position_->currentIndex() == 0 ? ImageOutlinePosition::Inside : ImageOutlinePosition::Outside;
+    emit layerOutlineChanged(id, outline, false);
+}
+
 bool LayerPanel::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == outline_thickness_ && event->type() == QEvent::FocusIn) beginOutlineEdit();
+    if (watched == outline_thickness_ && event->type() == QEvent::FocusOut) finishOutlineEdit();
     if (watched == layer_tree_->viewport()) {
         if (event->type() == QEvent::MouseMove) {
             auto* mouse = static_cast<QMouseEvent*>(event);
@@ -844,6 +929,19 @@ void LayerPanel::updateControls() {
     const bool has_group = is_group && group != document_.groups.cend();
     const bool has_layer = !is_group && layer != document_.layers.cend();
     const bool editable = has_group || (has_layer && !layer->background);
+    const bool outline_editable = has_layer && !layer->background && layer_tree_->selectedItems().size() == 1;
+    const auto outline = has_layer ? layer->outline.value_or(ImageLayerOutlineData{}) : ImageLayerOutlineData{};
+    const QSignalBlocker enabled_block(outline_enabled_), thickness_block(outline_thickness_), position_block(outline_position_);
+    outline_enabled_->setChecked(has_layer && layer->outline && outline.enabled);
+    outline_thickness_->setValue(outline.thickness);
+    outline_position_->setCurrentIndex(outline.position == ImageOutlinePosition::Inside ? 0 : 1);
+    outline_color_->setStyleSheet(QStringLiteral("background-color: %1; color: %2").arg(
+        outline.color.name(QColor::HexArgb), outline.color.lightness() < 128 ? QStringLiteral("white") : QStringLiteral("black")));
+    outline_enabled_->setEnabled(outline_editable);
+    outline_thickness_->setEnabled(outline_editable);
+    outline_position_->setEnabled(outline_editable);
+    outline_color_->setEnabled(outline_editable);
+    outline_remove_->setEnabled(outline_editable && layer->outline.has_value());
     edit_hint_->setVisible(has_layer && layer->background);
     add_button_->setEnabled(!document_.root_stack.isEmpty());
     group_selected_button_->setEnabled(canGroupSelectedLayers());

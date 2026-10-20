@@ -95,8 +95,9 @@ and retain its existing license obligations. No new external package is added.
 ## Verification and deferred work
 
 The feature index is in [ROADMAP.md](../ROADMAP.md), with repeatable native steps in
-[MANUAL_VALIDATION.md](../validation/MANUAL_VALIDATION.md). No document, history or recovery
-version changes. `.cimg` v16 and recovery wrapper v1 remain current. CPU export
+[MANUAL_VALIDATION.md](../validation/MANUAL_VALIDATION.md). The original GPU delivery did not change document/history/recovery
+versions. The current `.cimg` v17 outline is processed on CPU before GPU
+composition, with its mask already applied; recovery wrapper v1 remains current. CPU export
 and publication remain the result reference, with existing producer/consumer
 coverage. GPU brush kernels, GPU export, PNG publication acceleration, new effects,
 color-management changes, nested groups and alternate graphics APIs are deferred.

@@ -51,7 +51,7 @@ producer/consumer regression coverage when supported schemas gain path fields.
 
 | Format identifier | Supported versions | References rewritten |
 | --- | --- | --- |
-| `creative-suite-image-document` | 1–16 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
+| `creative-suite-image-document` | 1–17 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
 | `creative-suite.main-editor` | 1–31 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
 | `creative-suite.motion-studio` | 1–17 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
 
@@ -209,3 +209,12 @@ and masks alongside earlier geometry/effects. The actual Motion producer/reader
 reopens vault/restored files after media rebasing, and the gates reject v18.
 See [Drop Shadow](../motion-editor/features/DROP_SHADOW.md); native restore/UI and
 platform acceptance remain pending.
+
+## Image Editor v17 outlines
+
+Backup/restore accepts Image documents through v17 and preserves optional layer
+outline parameters, including disabled styles, while rebasing existing source
+and imported-image paths. `hub-backup-format-test` reopens vault and relocated
+restores with the actual Image reader, including an outlined grouped image.
+`hub-backup-manager-test` rejects future Image v18. Native Hub UI/platform
+acceptance remains pending.

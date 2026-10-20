@@ -483,7 +483,7 @@ void ObjectSelectionTool::updateObjectTransform(
             transform_initial_objects_, 1.0, 1.0,
             transform_initial_bounds_.topLeft(),
             transform_initial_bounds_.topLeft() + delta);
-        if (transformContainsRaster()) {
+        if (transformRequiresComposition()) {
             ObjectSelectionToolEvent event;
             event.type = ObjectSelectionToolEventType::PreviewRequested;
             event.objects = transform_current_objects_;
@@ -552,7 +552,7 @@ void ObjectSelectionTool::updateObjectTransform(
     transform_current_objects_ = transformObjects(
         transform_initial_objects_, scale_x, scale_y,
         transform_initial_bounds_.topLeft(), new_top_left);
-    if (transformContainsRaster()) {
+    if (transformRequiresComposition()) {
         ObjectSelectionToolEvent event;
         event.type = ObjectSelectionToolEventType::PreviewRequested;
         event.objects = transform_current_objects_;

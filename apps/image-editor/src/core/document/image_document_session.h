@@ -143,6 +143,10 @@ public:
     [[nodiscard]] bool moveLayer(const QString& layer_id, int direction);
     [[nodiscard]] bool setLayerVisible(const QString& layer_id, bool visible);
     [[nodiscard]] bool setLayerOpacity(const QString& layer_id, int opacity);
+    [[nodiscard]] bool setLayerOutline(const QString& layer_id,
+        std::optional<ImageLayerOutlineData> outline);
+    void beginLayerOutlineEdit();
+    void endLayerOutlineEdit();
     [[nodiscard]] bool addLayerMask(const QString& layer_id);
     [[nodiscard]] bool removeLayerMask(const QString& layer_id);
     [[nodiscard]] bool setLayerMaskEnabled(const QString& layer_id, bool enabled);
@@ -297,6 +301,8 @@ private:
     mutable ImageLayerRasterCache layer_raster_cache_;
     ImageDocumentData opacity_edit_snapshot_;
     bool opacity_edit_active_ = false;
+    bool outline_edit_active_ = false;
+    ImageDocumentData outline_edit_snapshot_;
 };
 
 } // namespace image_editor

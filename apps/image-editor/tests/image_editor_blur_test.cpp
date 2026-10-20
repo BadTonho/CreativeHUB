@@ -113,8 +113,8 @@ void testSessionPreviewHistoryMaskAndPersistence(const QString& root) {
     require(saved.open(QIODevice::ReadOnly), "Could not inspect the saved blur document.");
     QJsonObject saved_json = QJsonDocument::fromJson(saved.readAll()).object();
     saved.close();
-    require(saved_json.value("version").toInt() == 16,
-            "A saved blur document must use .cimg version 16.");
+    require(saved_json.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            "A saved blur document must use the current .cimg version.");
     const auto encoded_operation = saved_json.value("layers").toArray().at(layer_index)
         .toObject().value("operations").toArray().last().toObject();
     require(encoded_operation.value("kind").toString() == QStringLiteral("blur_stroke") &&

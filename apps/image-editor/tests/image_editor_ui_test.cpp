@@ -93,6 +93,8 @@
 #include <windows.h>
 #endif
 
+bool testLayerOutlineUi(const QString& root);
+
 namespace {
 
 class ShortcutOverrideDeliveryProbe final : public QObject {
@@ -3937,6 +3939,10 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     }
+    if (application.arguments().contains(QStringLiteral("--outline-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testLayerOutlineUi(temporary.path()) ? 0 : 1;
+    }
     if (application.arguments().contains(QStringLiteral("--rendering-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         const QString screenshot=application.arguments().size()>2?application.arguments().at(2):QString();
@@ -4116,6 +4122,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Performance collection settings, panel, or shutdown failed.\n";
         return 1;
     }
+    if (!testLayerOutlineUi(temporary.path())) return 1;
     if (!testEyedropperTool()) return 1;
     if (!testBucketFillTool()) return 1;
     if (!testMagicWandTool()) return 1;

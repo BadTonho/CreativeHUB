@@ -173,6 +173,21 @@ struct ImageLayerMaskData {
     bool operator==(const ImageLayerMaskData&) const = default;
 };
 
+enum class ImageOutlinePosition { Inside, Outside };
+
+struct ImageLayerOutlineData {
+    bool enabled = true;
+    int thickness = 2;
+    QColor color = Qt::black;
+    ImageOutlinePosition position = ImageOutlinePosition::Outside;
+    bool operator==(const ImageLayerOutlineData&) const = default;
+};
+
+[[nodiscard]] inline bool validLayerOutline(const ImageLayerOutlineData& outline) noexcept {
+    return outline.thickness >= 1 && outline.thickness <= 1024 && outline.color.isValid() &&
+        (outline.position == ImageOutlinePosition::Inside || outline.position == ImageOutlinePosition::Outside);
+}
+
 struct ImageLayerData {
     QString id;
     QString name;
@@ -182,6 +197,7 @@ struct ImageLayerData {
     int opacity = 100;
     QVector<ImageOperation> operations;
     std::optional<ImageLayerMaskData> mask;
+    std::optional<ImageLayerOutlineData> outline;
 
     bool operator==(const ImageLayerData&) const = default;
 };
@@ -234,7 +250,7 @@ struct RecoveryDocumentData {
 
 class ImageDocumentStore final {
 public:
-    static constexpr int kCurrentDocumentVersion = 16;
+    static constexpr int kCurrentDocumentVersion = 17;
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr qsizetype kMaximumStrokeClipPathElements = 100'000;

@@ -44,7 +44,7 @@ ImageLayerRasterCache::LookupResult ImageLayerRasterCache::lookup(
     if (entry != entries_.end()) {
         if (entry->canvas_size == canvas_size &&
             sameOperations(entry->operations, layer.operations) &&
-            sameMask(entry->mask, layer.mask) &&
+            sameMask(entry->mask, layer.mask) && entry->outline == layer.outline &&
             entry->raster_resources == resourceSignatures(layer, raster_images)) {
             return {LookupState::Hit, entry->pixels};
         }
@@ -86,6 +86,7 @@ void ImageLayerRasterCache::insert(
     Entry entry;
     entry.operations = layer.operations;
     entry.mask = layer.mask;
+    entry.outline = layer.outline;
     entry.raster_resources = resourceSignatures(layer, raster_images);
     entry.canvas_size = canvas_size;
     entry.pixels = pixels;
@@ -105,9 +106,10 @@ void ImageLayerRasterCache::synchronize(
             });
         if (layer == layers.cend() || entry->canvas_size != canvas_size ||
             !sameOperations(entry->operations, layer->operations) ||
-            !sameMask(entry->mask, layer->mask) ||
+            !sameMask(entry->mask, layer->mask) || entry->outline != layer->outline ||
             entry->raster_resources != resourceSignatures(*layer, raster_images)) {
-            entry = entries_.erase(entry);
+            const auto stale = entry++;
+            removeEntry(stale);
         } else {
             ++entry;
         }

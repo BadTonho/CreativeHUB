@@ -411,3 +411,12 @@ On 2026-10-20, both backup gates passed within the **59/59** affected Windows
 Release gate. The four applications were built at their canonical Release paths;
 see the [Drop Shadow execution record](../../motion-editor/features/DROP_SHADOW.md#windows-release-execution-2026-10-20)
 for output times, separate native GPU/fallback evidence and pending acceptance.
+
+## Image Editor v17 outline backup coverage
+
+`hub-backup-format-test` covers Image schemas 1-17 and preserves an outlined
+group child with its source/imported paths. The actual reader compares complete
+vault/restored documents. `hub-backup-manager-test` rejects future Image v18.
+Manual follow-up: back up an outlined image, restore to another directory, open
+in Image Editor, and confirm outline settings and source links. Native acceptance
+remains pending.

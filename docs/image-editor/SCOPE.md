@@ -1,6 +1,6 @@
 # Image Editor Scope
 
-Status: **editable text, raster masks, linked image layers, and canvas resizing are implemented;
+Status: **editable text, raster masks, linked image layers, canvas resizing, and layer outlines are implemented;
 manual visual validation and release acceptance remain pending**. The Image Editor is a standalone raster
 editor in `apps/image-editor/`. Its current behavior and the approved next
 release direction are recorded separately below. See the
@@ -29,9 +29,9 @@ alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 16 format. The application reads
-versions 1 through 15 and writes version 16, migrating older documents on save;
-version 1 recovery envelopes accept a version 16 document payload. Source images
+Documents use the provisional `.cimg` version 17 format. The application reads
+versions 1 through 16 and writes version 17, migrating older documents on save;
+version 1 recovery envelopes accept a version 17 document payload. Source images
 remain unchanged, and original source dimensions are retained for relinking.
 Area Selection is a separate tool from object Selection. Its Rectangle and
 Ellipse gestures can replace, add to, or subtract from the temporary per-tab
@@ -102,8 +102,8 @@ Basic editable text is implemented with these capabilities:
   Undo/Redo, flattened and Quick Export, save/reopen, and recovery;
 - save only the requested font family name, using the system fallback if the
   font is unavailable. The default is 48 px Sans Serif, opaque black, and
-  left-aligned. Fonts are not embedded; outlines, effects, and backgrounds are
-  outside this scope.
+  left-aligned. Fonts are not embedded. The text operation does not contain effects or
+  backgrounds; the separate layer-outline property can outline editable text.
 
 The approved representative document is 1920x1080 with up to five layers and
 one group. It is a validation workload, not a maximum canvas size, layer count,
@@ -119,9 +119,9 @@ performance guarantee is approved yet.
 ## Compatibility and Release Order
 
 The current implementation preserves the ability to open existing `.cimg`
-versions 1 through 15 and writes the current version 16 format on save. Automated
+versions 1 through 16 and writes the current version 17 format on save. Automated
 regression tests cover migration, canvas-size persistence, clipped paint/erase,
-bucket-fill, linear-gradient, and blur operations, and version 16 recovery payload. This implementation does not mark manual text checks or
+bucket-fill, linear-gradient, and blur operations, and version 17 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
 
 Per project policy, complete and accept the standalone minimum before accepting
@@ -174,7 +174,7 @@ editable stack items in one Undo/Redo edit; groups include their children.
 Background is protected, including mixed selections. Text, rename, and numeric
 fields keep normal character deletion. Deleting a missing image reference is
 allowed and can unblock exports. Original files are preserved. The document
-format remains v16 and the contextual shortcut is customizable.
+format remains v17 and the contextual shortcut is customizable.
 
 ## Approved Blur Tool
 
@@ -185,14 +185,31 @@ Area Selection clips writes. A live preview is temporary; Escape cancels, and
 each changed gesture becomes one ordered, undoable `.cimg` v16 operation.
 General retouching and broad effect systems remain outside this feature.
 
+## Editable layer outlines (2026-10-20)
+
+Editable layers, including group children, offer Outline controls below the
+layer list: enable, thickness (1-1024 px, initially 2), RGBA color (initially
+opaque black), Inside/Outside placement (initially Outside), and removal.
+Background, groups, and multiple selections cannot receive an outline.
+Disabling retains settings; removing resets them. The outline follows the
+layer alpha after its raster mask, before layer/group opacity, and includes
+transparent holes. It is clipped to canvas bounds and does not change raw
+paint/fill/selection targets or source files. Object transforms keep the
+configured thickness in document pixels. Text remains editable.
+
+Live editing, history, v17 save/reopen, recovery, thumbnails, composite sampling,
+full/Quick Export, and linked PNG publication include the outline. The
+[feature contract](features/LAYER_OUTLINE.md) records rendering and coverage.
+Manual/native and macOS/Linux visual acceptance remains pending.
+
 ## Outside This Release
 
 The [roadmap implementation sequence](ROADMAP.md#4-feature-expansion--implementation-sequence),
-updated at the maintainer's request on 2026-10-20, plans layer outlines first,
-then clipping/blend modes, adjustments, styles, selections/vectors, brushes,
-deformation, layout/color, automation, and assisted editing. These are planned
-extensions, not implemented capabilities or additions to the first editing
-release. Existing shape strokes, linked images, basic object selection, and
+updated at the maintainer's request on 2026-10-20, records implemented layer outlines,
+then plans clipping/blend modes, adjustments, styles, selections/vectors, brushes,
+deformation, layout/color, automation, and assisted editing. The remaining
+items are planned extensions and are not automatically added to the first
+editing release. Existing shape strokes, linked images, basic object selection, and
 linear gradients are partial building blocks rather than their advanced
 equivalents.
 

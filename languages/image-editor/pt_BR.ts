@@ -2778,5 +2778,37 @@ Executável: %2</translation>
         <source>Linked mode requires --linked-source, --linked-document, and --publish-output.</source>
         <translation>O modo vinculado exige --linked-source, --linked-document e --publish-output.</translation>
     </message>
+    <message>
+        <source>Outline</source>
+        <translation>Contorno</translation>
+    </message>
+    <message>
+        <source>Thickness</source>
+        <translation>Espessura</translation>
+    </message>
+    <message>
+        <source>Inside</source>
+        <translation>Interna</translation>
+    </message>
+    <message>
+        <source>Outside</source>
+        <translation>Externa</translation>
+    </message>
+    <message>
+        <source>Position</source>
+        <translation>Posição</translation>
+    </message>
+    <message>
+        <source>Remove Outline</source>
+        <translation>Remover contorno</translation>
+    </message>
+    <message>
+        <source>A layer outline has invalid properties.</source>
+        <translation>Um contorno de camada tem propriedades inválidas.</translation>
+    </message>
+    <message>
+        <source>Group masks and outlines are not supported.</source>
+        <translation>Máscaras e contornos de grupo não são compatíveis.</translation>
+    </message>
 </context>
 </TS>

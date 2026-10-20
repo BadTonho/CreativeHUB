@@ -810,7 +810,7 @@ bool validateLayers(const ImageDocumentData& document,
         if (layer.background) {
             ++background_count;
             if (index != 0 || layer.name != QStringLiteral("Background") ||
-                layer.opacity != 100 || !layer.operations.isEmpty() || layer.mask.has_value()) {
+                layer.opacity != 100 || !layer.operations.isEmpty() || layer.mask.has_value() || layer.outline.has_value()) {
                 assignError(error, QStringLiteral("The Background layer is invalid."));
                 return false;
             }
@@ -836,6 +836,10 @@ bool validateLayers(const ImageDocumentData& document,
                 return false;
             }
             object_ids.insert(id);
+        }
+        if (layer.outline && !validLayerOutline(*layer.outline)) {
+            assignError(error, QStringLiteral("A layer outline has invalid properties."));
+            return false;
         }
         if (layer.mask.has_value()) {
             QSize mask_size = canvas_size;
@@ -1057,6 +1061,12 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
             mask.insert("operations", encodeOperations(layer.mask->operations));
             encoded.insert("mask", mask);
         }
+        if (layer.outline) {
+            const auto& o = *layer.outline;
+            encoded.insert("outline", QJsonObject{{"enabled", o.enabled}, {"thickness", o.thickness},
+                {"color", o.color.name(QColor::HexArgb)},
+                {"position", o.position == ImageOutlinePosition::Inside ? "inside" : "outside"}});
+        }
         return encoded;
     };
     QJsonArray layers;
@@ -1216,6 +1226,22 @@ bool decodeDocumentJson(const QJsonObject& root,
                                   &layer_size, true, &layer->operations, error, document_path)) {
                 return false;
             }
+            if (encoded.contains("outline")) {
+                const auto value = encoded.value("outline");
+                const auto object = value.toObject();
+                ImageLayerOutlineData outline;
+                const auto position = object.value("position").toString();
+                outline.color = QColor(object.value("color").toString());
+                outline.enabled = object.value("enabled").toBool();
+                outline.position = position == "inside" ? ImageOutlinePosition::Inside : ImageOutlinePosition::Outside;
+                if (version < 17 || layer->background || !value.isObject() ||
+                    !object.value("enabled").isBool() || !isInteger(object.value("thickness"), &outline.thickness) ||
+                    (position != "inside" && position != "outside") || !validLayerOutline(outline)) {
+                    assignError(error, QStringLiteral("A layer outline has invalid properties."));
+                    return false;
+                }
+                layer->outline = outline;
+            }
             if (encoded.contains("mask")) {
                 if (version < kLayerMaskDocumentVersion || layer->background ||
                     !encoded.value("mask").isObject()) {
@@ -1245,8 +1271,8 @@ bool decodeDocumentJson(const QJsonObject& root,
             const auto encoded = encoded_value.toObject();
             const QString kind = encoded.value("kind").toString();
             if (version >= kLayerGroupsDocumentVersion && kind == QStringLiteral("group")) {
-                if (encoded.contains("mask")) {
-                    assignError(error, QStringLiteral("Group masks are not supported."));
+                if (encoded.contains("mask") || encoded.contains("outline")) {
+                    assignError(error, QStringLiteral("Group masks and outlines are not supported."));
                     return false;
                 }
                 int opacity = -1;

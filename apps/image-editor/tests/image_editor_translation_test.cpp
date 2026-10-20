@@ -77,6 +77,8 @@ int main(int argc, char** argv) {
             QLocale(QStringLiteral("pt_BR")), bundled_only_storage.path());
         CS_TEST_CHECK(result.bundled_loaded);
         CS_TEST_CHECK(!result.downloaded_loaded);
+        CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Outline") == QStringLiteral("Contorno"));
+        CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Remove Outline") == QStringLiteral("Remover contorno"));
         CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Open Image") ==
                       QStringLiteral("Abrir imagem"));
     }

@@ -56,6 +56,7 @@ private:
     struct Entry {
         QVector<ImageOperation> operations;
         std::optional<ImageLayerMaskData> mask;
+        std::optional<ImageLayerOutlineData> outline;
         QVector<RasterResourceSignature> raster_resources;
         QSize canvas_size;
         QImage pixels;

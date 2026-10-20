@@ -1,4 +1,5 @@
 #include "rendering/image_document_renderer.h"
+#include "rendering/image_layer_outline.h"
 #include "rendering/image_bucket_fill.h"
 #include "rendering/image_blur_stroke.h"
 #include "rendering/image_linear_gradient.h"
@@ -379,6 +380,8 @@ QImage renderRasterLayer(const QHash<QString, QImage>& resources,
                                true, cancellation_requested);
         if (!multiplyLayerMask(&pixels, mask, cancellation_requested)) return {};
     }
+    if (layer.outline && layer.outline->enabled && !pixels.isNull())
+        pixels = applyLayerOutline(pixels, *layer.outline, cancellation_requested);
     if (layer_raster_cache != nullptr &&
         cache_state == ImageLayerRasterCache::LookupState::Miss &&
         !pixels.isNull()) {
@@ -830,6 +833,10 @@ QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,
     if (maximum_size.width() <= 0 || maximum_size.height() <= 0) return {};
     const QSize canvas_size = documentSize(document, source_image.size());
     QImage thumbnail;
+    if (layer.outline && layer.outline->enabled && !layer.background) {
+        const auto pixels = renderRasterLayer(raster_images, layer, canvas_size, nullptr, {});
+        return pixels.isNull() ? QImage{} : pixels.scaled(maximum_size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
     if (layer.background) {
         const QImage base = applyOperations(source_image, document.operations, false);
         QImage canvas(canvas_size, QImage::Format_ARGB32);

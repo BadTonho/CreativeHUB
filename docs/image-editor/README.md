@@ -13,6 +13,10 @@ This directory groups the current scope, implementation contracts, feature deliv
 | Native document schema and migrations | [Document format](architecture/FORMAT.md) |
 | Owner-operated visual checks | [Manual validation](validation/MANUAL_VALIDATION.md) |
 
+## Feature contracts
+
+- [Editable layer outline](features/LAYER_OUTLINE.md)
+
 ## GPU and performance
 
 - [GPU acceleration plan](gpu/GPU_ACCELERATION_PLAN.md)

@@ -467,6 +467,16 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
                     updateView(true);
                 }
             });
+    connect(layer_panel_, &LayerPanel::outlineEditStarted, this,
+        [this] { if (hasActiveDocumentTab()) activeSession().beginLayerOutlineEdit(); });
+    connect(layer_panel_, &LayerPanel::outlineEditFinished, this, [this] {
+        if (hasActiveDocumentTab()) { activeSession().endLayerOutlineEdit(); updateView(true); }
+    });
+    connect(layer_panel_, &LayerPanel::layerOutlineChanged, this,
+        [this](const QString& id, const ImageLayerOutlineData& outline, bool remove) {
+            if (hasActiveDocumentTab() && activeSession().setLayerOutline(id,
+                remove ? std::optional<ImageLayerOutlineData>{} : outline)) updateView(true);
+        });
     connect(layer_panel_, &LayerPanel::opacityEditStarted, this,
             [this]() { activeSession().beginLayerOpacityEdit(); });
     connect(layer_panel_, &LayerPanel::stackOpacityChanged, this,
@@ -506,6 +516,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
 }
 
 ImageEditorWindow::~ImageEditorWindow() {
+    if (layer_panel_) {
+        layer_panel_->finishOutlineEdit();
+        QObject::disconnect(layer_panel_, nullptr, this, nullptr);
+    }
     for (auto* tab : document_tabs_) if (tab->canvas) tab->canvas->releaseGpuFrames();
     delete render_controller_; render_controller_ = nullptr;
     background_task_pool_.waitForDone();
@@ -727,7 +741,11 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
                 if (activeCanvas() == nullptr) return;
                 for (const auto& object : activeSession().visibleObjects())
                     if (object_ids.contains(imageObjectId(object.operation)) &&
-                        object.operation.kind == OperationKind::RasterImage) {
+                        (object.operation.kind == OperationKind::RasterImage ||
+                         std::any_of(activeSession().data().layers.cbegin(), activeSession().data().layers.cend(),
+                            [&object](const ImageLayerData& layer) {
+                                return layer.id == object.layer_id && layer.outline && layer.outline->enabled;
+                            }))) {
                         requestCanvasRender();
                         return;
                     }
@@ -777,6 +795,7 @@ int ImageEditorWindow::addDocumentTab(bool activate) {
 }
 
 void ImageEditorWindow::activateDocumentTab(int index) {
+    if (layer_panel_) layer_panel_->finishOutlineEdit();
     if (render_controller_) render_controller_->cancel();
     if (activeCanvas() && index != active_document_tab_) {
         activeCanvas()->releaseGpuFrames();
@@ -814,6 +833,7 @@ void ImageEditorWindow::activateDocumentTab(int index) {
 }
 
 void ImageEditorWindow::closeDocumentTab(int index) {
+    if (layer_panel_) layer_panel_->finishOutlineEdit();
     if (render_controller_) render_controller_->cancel();
     if (importing_ || index < 0 || index >= document_tabs_.size()) return;
     auto* closing = document_tabs_.at(index);
@@ -1263,7 +1283,15 @@ void ImageEditorWindow::updateObjectPlacements() {
             });
         if (!visible) selectedObjectIds().removeAt(index - 1);
     }
-    activeCanvas()->setObjectPlacements(placements, selectedObjectIds());
+    const bool composed_preview = std::any_of(placements.cbegin(), placements.cend(),
+        [this](const ImageObjectPlacement& object) {
+            if (!selectedObjectIds().contains(imageObjectId(object.operation))) return false;
+            return std::any_of(activeSession().data().layers.cbegin(), activeSession().data().layers.cend(),
+                [&object](const ImageLayerData& layer) {
+                    return layer.id == object.layer_id && layer.outline && layer.outline->enabled;
+                });
+        });
+    activeCanvas()->setObjectPlacements(placements, selectedObjectIds(), composed_preview);
 }
 
 void ImageEditorWindow::applyShapeStyleToSelection(bool include_kind) {

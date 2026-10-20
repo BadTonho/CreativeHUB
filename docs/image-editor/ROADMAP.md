@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,17 +41,18 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Implement an editable layer outline (Stroke) with thickness in pixels, color,
-and Inside/Outside placement**, applicable to text, logos, and cutout images.
-The existing shape stroke only outlines line/rectangle/ellipse geometry; it
-does not provide an outline around arbitrary layer content.
+**Implement clipping masks**, restricting a layer to its base layer's visible
+alpha, with a Layers command and customizable shortcut. Define chains, group
+boundaries, ordering and base-layer deletion behavior as listed in section 4.2.
+Blend modes follow in the same stage. Layer outlines from section 4.1 are
+implemented; see [their contract and evidence](features/LAYER_OUTLINE.md).
 
 The maintainer requested this feature expansion plan on **2026-10-20**, based
 on the Photoshop feature comparison in the local owner-planning reference
 `ideia/PHOTOSHOP_FEATURES.md`. The self-contained sequence in section 4 records
 the missing and partial capabilities from that comparison. Its order is
-provisional, beginning with the simple outline workflow highlighted in the
-reference. Each unchecked item is **planned, not implemented**.
+provisional; the simple outline workflow highlighted in the reference has now
+been implemented. Each unchecked item is **planned, not implemented**.
 
 Implementation can proceed while existing manual acceptance remains pending.
 The acceptance order in Milestones 1-3 still applies to release readiness;
@@ -246,24 +247,20 @@ one-level groups, layer opacity, raster layer masks, rectangular/elliptical and
 freehand selections, Magic Wand, paint/erase, bucket fill, linear
 color-to-transparent gradients, blur, basic editable text and shapes, linked
 raster imports, basic transforms, document tabs, and PNG/JPEG export including
-selected-layer/group Quick Export. Partial equivalents must not be mistaken
+selected-layer/group Quick Export, and editable layer outlines. Partial equivalents must not be mistaken
 for the complete features below: object selection selects existing editable
 objects rather than detecting subjects in photos; linked images are not full
 Smart Objects; linear gradients are not Gradient Maps; shape strokes are not
-general layer outlines.
+general layer outlines, which now have their own layer property.
 
-#### 4.1. Instant layer outline — next implementation
+#### 4.1. Instant layer outline — implemented
 
-- [ ] Add an editable outline to an editable layer's visible content, including
-  text and imported/cutout raster images, with thickness (px), color, and
-  Inside/Outside placement. Keep source pixels and text editable.
-- [ ] Define how the outline follows content alpha, raster masks, transforms,
-  layer opacity, and group composition; keep it distinct from shape stroke
-  geometry. Keep the initial controls limited to the simple outline workflow.
-- [ ] Integrate live preview, enable/disable and removal, Undo/Redo, `.cimg`
-  save/reopen and recovery, full/Quick Export, and linked PNG publication.
-  Define backward-compatible loading and any required schema migration in
-  the implementation change.
+Editable layer outlines provide thickness, RGBA color and Inside/Outside
+placement, with enable/disable and removal in Layers. They follow masked alpha,
+preserve editable content, and participate in history, v17 persistence/recovery,
+CPU/GPU preview, thumbnails, export and linked PNG publication. See the
+[implementation contract, regression coverage and Windows evidence](features/LAYER_OUTLINE.md).
+Native visual and macOS/Linux acceptance remains pending.
 
 #### 4.2. Clipping masks and blend modes
 
@@ -502,8 +499,9 @@ results.
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
+| Editable layer outline, masked alpha, Inside/Outside, history, v17 persistence/recovery, preview/cache/export and PNG publication | `image_editor_outline_test.cpp` (`creative-suite-image-editor-outline`), `image_editor_outline_ui_test.cpp` (`creative-suite-image-editor-outline-ui` and full UI), interactive/GPU raster suites, Hub backup format/manager tests and Video consumer gates | Windows Release automated evidence and 1080p measurements are in [the feature contract](features/LAYER_OUTLINE.md). Native visual/manual and macOS/Linux acceptance remain pending. |
 | Startup loads the per-app selected downloaded/bundled Qt catalog before the editor window; Settings > Language persists System language, English, or pt-BR for next launch | `creative-suite-image-editor-translation-catalog`, `creative-suite-image-editor-ui` (`tests/image_editor_ui_test.cpp`), and shared `creative-suite-translations` cover startup catalog loading, language control persistence, regional locale resolution, manifest validation, update integrity, and fallback. App integration is in `apps/image-editor/src/app/main.cpp`. | Automated checks are present. Native Windows/macOS/Linux startup, locale, and visual checks remain pending in [translation acceptance](../TRANSLATIONS_AND_LANGUAGE_PACKS.md#regression-and-acceptance). |
-| Hub snapshot references and restoration across versions 1–16 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Image Editor persistence producer and consumer | Automated coverage present for original and grouped raster paths, unchanged source bytes, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
+| Hub snapshot references and restoration across versions 1–17 | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`), registered in `apps/hub/tests/CMakeLists.txt`; actual Image Editor persistence producer and consumer | Automated coverage present for original and grouped raster paths, unchanged source bytes, and opening vault/relocated snapshots. Native UI and macOS/Linux checks remain pending in [Hub backups](../hub/BACKUPS.md). |
 | Source preservation in all image export scopes | `image_editor_core_test.cpp` (`testExportPreservesSourceImages`; `creative-suite-image-editor-core`) and `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | Automated coverage verifies PNG/JPEG base-image preservation, imported sources, Composite/SelectedLayer/SelectedGroup scopes, relative and normalized paths, Windows case aliases, rejection before rendering, unchanged source bytes/document state, worker failure propagation, and successful export to a separate destination. Filesystem alias cases run when link creation is available. The core test failed against the previous exporter before the fix. The Release application and affected targets built; core, raster, export UI, and application UI tests passed 4/4 on Windows on 2026-10-10. An unrestricted core run also passed hard-link cases; symbolic-link creation lacked the required Windows privilege and remains pending, along with native manual and macOS/Linux validation. The checklist is in `MANUAL_VALIDATION.md`. |
 | Contextual object/layer/group deletion | `image_editor_raster_test.cpp` (`creative-suite-image-editor-raster`), `image_editor_deletion_ui_test.cpp` (within `creative-suite-image-editor-ui`), existing layer/group core tests | Automated coverage present for button/menu/Delete focus routing, multiple selection, masks, Background, text/rename/numeric fields, gesture cancellation, Undo/Redo, thumbnails, save/reopen, missing sources, exports, and linked PNG output. Native/platform checks are documented in `MANUAL_VALIDATION.md`; no manual result recorded. |
 | Document editing, canvas, layers, groups, shapes, object selection, transforms, undo/redo | `image_editor_ui_test.cpp` (`testShapeToolState`, `testObjectSelectionToolState`, `testGeneralCanvasSelection`; `creative-suite-image-editor-ui`), `image_editor_raster_ui_test.cpp` (`testRasterImagesUi`; same CTest target), and `image_editor_core_test.cpp` (`creative-suite-image-editor-core`) | Automated coverage includes shape preview/geometry, Shift constraints, cancellation, invalid dimensions, topmost hit testing, marquee and Shift selection, mixed-object movement, resize/rotation, confirmation, and history. Windows Release focused Image Editor tests passed 5/5 and full CTest passed 70/70 on 2026-10-05. The existing interaction checklist is in `MANUAL_VALIDATION.md`; visual validation of the Shape Tool extraction remains with the owner. Cross-platform visual checks remain pending. |
@@ -515,10 +513,10 @@ results.
 | Canvas Size dimensions, all anchors, translation of source/layers/groups/masks, Undo/Redo, and v12 persistence | `image_editor_core_test.cpp` (`creative-suite-image-editor-core`), `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | Automated coverage is present for all nine anchors, extension/reduction, custom background/transparency, edits and persistence. Manual dialog, save/reopen, export, recovery and linked output checks are documented in `MANUAL_VALIDATION.md`; outcome pending. |
 | Area Selection and standalone Lasso geometry, per-tab UI, clipping, masks, groups, resize, export, and stroke Undo/Redo | `tools/lasso/lasso_tool.*`; `image_editor_ui_test.cpp` (`testAreaSelectionToolState`, `testAreaSelectionToolUi`; `creative-suite-image-editor-area-selection-ui`) and `image_editor_core_test.cpp` (`creative-suite-image-editor-core`) | Automated coverage checks rectangle/ellipse and standalone Lasso gestures, live contour preview, Replace/Add/Subtract results, Escape cancellation, oversized and degenerate contours, bounds clipping, the dedicated toolbar button, Paint clipping, shortcuts, masks, transformed groups, save/reopen, and export. Native brush/eraser and linked PNG checks are documented in `MANUAL_VALIDATION.md`; outcome pending (**P1 validation**). |
 | `.cimg` persistence, validation, and backward compatibility | `image_editor_core_test.cpp` (`testImageDocumentCodec`; `creative-suite-image-editor-core`), `image_editor_bucket_fill_test.cpp` (`creative-suite-image-editor-bucket-fill`), `image_editor_gradient_test.cpp` (`creative-suite-image-editor-gradient`), `image_editor_blur_test.cpp` (`creative-suite-image-editor-blur`), and `image_editor_mask_test.cpp`; migration fixtures for v1–v15, v9 text validation, v10 masks, v12 canvas bounds, v13 stroke clips, v14 bucket fills, v15 gradients, v16 blur, paths, recovery, and write failures | Direct codec coverage checks current-version encode/decode, v3 migration, bucket-fill, gradient, and blur layer/mask serialization, v15 compatibility, and rejection of unsupported versions; existing store tests cover legacy migrations, invalid data, relative raster references, recovery, and atomic write failures. Focused Windows Release verification is recorded after this implementation. Cross-platform validation remains pending. |
-| Bucket Fill algorithm, session edit, mask/selection behavior, tolerance, no-op history, Undo/Redo, persistence and UI interaction | `image_editor_bucket_fill_test.cpp` (`creative-suite-image-editor-bucket-fill`) covers four-way connectivity, per-channel RGBA tolerance, selection clipping, layer/mask rendering, grayscale mask conversion, no-op history, Undo/Redo and current v16 save/reopen; `image_editor_ui_test.cpp` (`testBucketFillTool`; `creative-suite-image-editor-ui`) covers activation, tolerance control, inside/outside clicks | Automated focused coverage is present. The owner-facing manual layer/mask visual checklist is in `MANUAL_VALIDATION.md`; native visual validation and macOS/Linux acceptance remain pending. |
+| Bucket Fill algorithm, session edit, mask/selection behavior, tolerance, no-op history, Undo/Redo, persistence and UI interaction | `image_editor_bucket_fill_test.cpp` (`creative-suite-image-editor-bucket-fill`) covers four-way connectivity, per-channel RGBA tolerance, selection clipping, layer/mask rendering, grayscale mask conversion, no-op history, Undo/Redo and current-version save/reopen; `image_editor_ui_test.cpp` (`testBucketFillTool`; `creative-suite-image-editor-ui`) covers activation, tolerance control, inside/outside clicks | Automated focused coverage is present. The owner-facing manual layer/mask visual checklist is in `MANUAL_VALIDATION.md`; native visual validation and macOS/Linux acceptance remain pending. |
 | Magic Wand region detection, tolerance, active layer/mask pixels, group mapping, temporary selection combination and UI | `src/ui/tools/magic_wand/`; `image_editor_ui_test.cpp` (`testMagicWandTool`; `creative-suite-image-editor-magic-wand-ui`) | Focused coverage checks four-way connectivity, RGBA tolerance, seed and group-path mapping, complexity rejection and preservation, mask pixels without document/history changes, toolbar/tolerance UI, Replace/Add/Subtract, and ignored outside clicks. The focused test passed 1/1 on 2026-10-07 before the responsiveness follow-up; the latest code still needs that focused test rerun. The owner manual check now includes a large transparent canvas and a responsive interface. |
-| Linear Gradient algorithm, composed preview, layer/mask selection, Undo/Redo, persistence and UI interaction | `image_editor_gradient_test.cpp` (`creative-suite-image-editor-gradient`) covers premultiplied endpoints, selection, no-op gestures, preview/commit pixel equality, grayscale masks, history, v16 round-trip, and v14 reading; `image_editor_ui_test.cpp` (`testLinearGradientTool`; `creative-suite-image-editor-gradient-ui`) covers activation, live gesture signals, outside clicks, and zero-length drags | Focused automated coverage is present. The manual layer/mask preview and visual checklist is in `MANUAL_VALIDATION.md`; native visual validation and macOS/Linux acceptance remain pending. |
-| Blur algorithm, layer/mask source isolation, asynchronous latest-state preview, cursor repaint, selection clipping, cancellation, Undo/Redo, v16 persistence and UI interaction | `image_editor_blur_test.cpp` (`creative-suite-image-editor-blur`) covers premultiplied RGBA, radius zero, selection clipping, layer/mask editing, preview/commit equality, grayscale masks, history, v16 round-trip and v15 reading; `image_editor_ui_test.cpp` (`testBlurTool`; `creative-suite-image-editor-blur-ui`) covers activation, controls, live preview, Escape cancellation and ignored outside clicks | Existing algorithm and UI coverage remains applicable; latest responsiveness changes still need the focused tests rerun. The manual checklist now verifies cursor tracking and responsiveness during preview. Native visual acceptance and macOS/Linux checks remain pending. |
+| Linear Gradient algorithm, composed preview, layer/mask selection, Undo/Redo, persistence and UI interaction | `image_editor_gradient_test.cpp` (`creative-suite-image-editor-gradient`) covers premultiplied endpoints, selection, no-op gestures, preview/commit pixel equality, grayscale masks, history, current-version round-trip, and v14 reading; `image_editor_ui_test.cpp` (`testLinearGradientTool`; `creative-suite-image-editor-gradient-ui`) covers activation, live gesture signals, outside clicks, and zero-length drags | Focused automated coverage is present. The manual layer/mask preview and visual checklist is in `MANUAL_VALIDATION.md`; native visual validation and macOS/Linux acceptance remain pending. |
+| Blur algorithm, layer/mask source isolation, asynchronous latest-state preview, cursor repaint, selection clipping, cancellation, Undo/Redo, current-version persistence and UI interaction | `image_editor_blur_test.cpp` (`creative-suite-image-editor-blur`) covers premultiplied RGBA, radius zero, selection clipping, layer/mask editing, preview/commit equality, grayscale masks, history, current-version round-trip and v15 reading; `image_editor_ui_test.cpp` (`testBlurTool`; `creative-suite-image-editor-blur-ui`) covers activation, controls, live preview, Escape cancellation and ignored outside clicks | Existing algorithm and UI coverage remains applicable; the focused blur gate passed in the 2026-10-20 outline regression selection. The manual checklist now verifies cursor tracking and responsiveness during preview. Native visual acceptance and macOS/Linux checks remain pending. |
 | Stateless document rendering, previews, thumbnails, and image export | `image_editor_core_test.cpp` (`testStatelessDocumentRenderer`; `creative-suite-image-editor-core`), `creative-suite-image-editor-raster`, `creative-suite-image-editor-masks`, image-format tests, and `creative-suite-image-editor-export-ui` | Direct core coverage checks composition, selected layer/group output, excluded objects, and cancellation. Existing regression tests cover masks, groups, imported raster resources, thumbnail caching, PNG/JPEG export, and export UI. The affected Release targets compiled; focused tests passed 11/11 and full CTest passed 70/70 on Windows on 2026-10-05. No visual UI change is part of this refactor. |
 | Recovery, relinking, and error logging | `image_editor_core_test.cpp` | The owner reports current recovery workflows working on Windows; the per-scenario record is not maintained. Cross-platform validation remains pending. |
 | Import formats, decoding, and UI job lifecycle | `image_editor_raster_test.cpp` (`creative-suite-image-editor-raster`), `image_editor_raster_ui_test.cpp` (`creative-suite-image-editor-ui`), `image_editor_format_test.cpp` (`creative-suite-image-editor-image-formats`), and `creative-suite-image-editor-deployed-image-formats` | Core tests cover PNG/JPEG/BMP/WebP/TIFF decoding, corrupt/unsupported files, limits, and cancellation. Direct UI-controller checks cover ready and failed results; integration coverage checks file-dialog import, canvas drop, atomic batches, relinking, cancellation without document mutation, and safe return after the worker finishes. The three focused tests passed and full CTest passed (12/12) on Windows Release on 2026-10-05; other-platform packaging remains pending (**P1 validation**). |
@@ -568,8 +566,8 @@ validation.
 - **P2 — editable text visual validation:** automated editing, rendering,
   formatting, transform, history, persistence, export, recovery, and publication
   checks are implemented; the manual canvas and visual review is pending.
-- **Planned, not implemented:** the section 4 feature expansion, beginning with
-  layer outlines, is excluded from current coverage until implementation begins.
+- **Planned, not implemented:** section 4.2 onward, beginning with clipping
+  masks and blend modes, is excluded from current coverage until implementation begins.
   Add actual regression mappings as each feature is delivered.
 
 ## Status legend

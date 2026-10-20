@@ -44,7 +44,7 @@ struct ImageRenderController::WorkerState {
         for (const auto& layer : snapshot.document.layers) {
             if (cancellation->load()) return;
             const auto* before = findLayer(thumbnail_snapshot.document,layer.id);
-            const bool unchanged = !reset && before && before->operations==layer.operations && before->mask==layer.mask;
+            const bool unchanged = !reset && before && before->operations==layer.operations && before->mask==layer.mask && before->outline==layer.outline;
             next.insert(layer.id, unchanged && thumbnails.contains(layer.id) ? thumbnails.value(layer.id) :
                 ImageDocumentRenderer::layerThumbnail(snapshot.document,snapshot.source_image,snapshot.raster_images,layer,size));
             if (layer.mask) {

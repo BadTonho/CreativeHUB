@@ -1,3 +1,9 @@
+add_executable(creative-suite-image-editor-outline-tests image_editor_outline_test.cpp)
+target_link_libraries(creative-suite-image-editor-outline-tests PRIVATE creative-suite-image-editor-core Qt6::Test)
+target_compile_features(creative-suite-image-editor-outline-tests PRIVATE cxx_std_20)
+add_creative_suite_test(NAME creative-suite-image-editor-outline COMMAND creative-suite-image-editor-outline-tests -o -,txt)
+set_tests_properties(creative-suite-image-editor-outline PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 add_executable(creative-suite-image-editor-core-tests
     image_editor_core_test.cpp
 )
@@ -115,6 +121,7 @@ add_executable(creative-suite-image-editor-ui-tests
     image_editor_mask_ui_test.cpp
     image_editor_raster_ui_test.cpp
     image_editor_deletion_ui_test.cpp
+    image_editor_outline_ui_test.cpp
     ../src/ui/windows/image_editor_window.cpp
     ../src/ui/windows/image_editor_window.h
     ../src/ui/diagnostics/performance_metrics_panel.cpp
@@ -405,6 +412,7 @@ if(WIN32)
     find_program(QT_TEST_DEPLOY_TOOL windeployqt HINTS "${QT_TEST_BIN_DIR}" REQUIRED)
 
     foreach(TEST_TARGET IN ITEMS
+            creative-suite-image-editor-outline-tests
             creative-suite-image-editor-core-tests
             creative-suite-image-editor-bucket-fill-tests
             creative-suite-image-editor-gradient-tests
@@ -453,3 +461,6 @@ if(COMMAND creative_suite_deploy_media_runtime)
         creative_suite_deploy_media_runtime(${raster_runtime_target})
     endforeach()
 endif()
+
+add_creative_suite_test(NAME creative-suite-image-editor-outline-ui COMMAND creative-suite-image-editor-ui-tests --outline-only)
+set_tests_properties(creative-suite-image-editor-outline-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

@@ -329,6 +329,7 @@ bool ImageDocumentSession::createCanvas(const QSize& size,
     force_dirty_ = true;
     history_.clear();
     opacity_edit_active_ = false;
+    outline_edit_active_ = false; outline_edit_snapshot_ = {};
     return true;
 }
 
@@ -384,6 +385,7 @@ bool ImageDocumentSession::openImage(const QString& source_path, QString* error)
     force_dirty_ = false;
     history_.clear();
     opacity_edit_active_ = false;
+    outline_edit_active_ = false; outline_edit_snapshot_ = {};
     return true;
 }
 
@@ -439,6 +441,7 @@ bool ImageDocumentSession::openDocument(const QString& document_path, QString* e
     force_dirty_ = false;
     history_.clear();
     opacity_edit_active_ = false;
+    outline_edit_active_ = false; outline_edit_snapshot_ = {};
     return true;
 }
 
@@ -497,6 +500,7 @@ bool ImageDocumentSession::restoreRecovery(const QString& recovery_path, QString
     force_dirty_ = true;
     history_.clear();
     opacity_edit_active_ = false;
+    outline_edit_active_ = false; outline_edit_snapshot_ = {};
     return true;
 }
 
@@ -677,6 +681,7 @@ bool ImageDocumentSession::resizeCanvas(const QSize& size,
 }
 
 bool ImageDocumentSession::saveDocument(QString document_path, QString* error) {
+    endLayerOutlineEdit();
     if (!hasSource()) {
         assignError(error, QStringLiteral("Relink the source image before saving the document."));
         return false;
@@ -1696,6 +1701,34 @@ bool ImageDocumentSession::setLayerOpacity(const QString& layer_id, int opacity)
     return true;
 }
 
+bool ImageDocumentSession::setLayerOutline(const QString& layer_id,
+    std::optional<ImageLayerOutlineData> outline) {
+    const auto index = layerIndex(layer_id);
+    if (index <= 0 || (outline && !validLayerOutline(*outline)) ||
+        data_.layers.at(index).outline == outline) return false;
+    if (!outline_edit_active_) pushEdit();
+    data_.layers[index].outline = std::move(outline);
+    layer_raster_cache_.invalidateLayer(layer_id);
+    layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
+    return true;
+}
+
+void ImageDocumentSession::beginLayerOutlineEdit() {
+    if (outline_edit_active_) return;
+    endLayerOpacityEdit();
+    outline_edit_snapshot_ = data_;
+    outline_edit_active_ = true;
+}
+
+void ImageDocumentSession::endLayerOutlineEdit() {
+    if (!outline_edit_active_) return;
+    outline_edit_active_ = false;
+    if (outline_edit_snapshot_ != data_)
+        recordEditSnapshot(std::move(outline_edit_snapshot_), selected_layer_id_, selected_group_id_);
+    outline_edit_snapshot_ = {};
+}
+
 bool ImageDocumentSession::addLayerMask(const QString& layer_id) {
     const qsizetype index = layerIndex(layer_id);
     if (!hasSource() || index <= 0 || data_.layers.at(index).mask.has_value()) return false;
@@ -1906,6 +1939,7 @@ void ImageDocumentSession::endLayerOpacityEdit() {
 }
 
 bool ImageDocumentSession::selectLayer(const QString& layer_id) {
+    endLayerOutlineEdit();
     if (layerIndex(layer_id) < 0 ||
         (selected_layer_id_ == layer_id && selected_group_id_.isEmpty())) return false;
     selected_layer_id_ = layer_id;
@@ -1914,6 +1948,7 @@ bool ImageDocumentSession::selectLayer(const QString& layer_id) {
 }
 
 bool ImageDocumentSession::selectGroup(const QString& group_id) {
+    endLayerOutlineEdit();
     if (groupIndex(group_id) < 0 ||
         (selected_group_id_ == group_id && selected_layer_id_.isEmpty())) return false;
     selected_layer_id_.clear();
@@ -2004,6 +2039,7 @@ void ImageDocumentSession::restoreHistorySnapshot(
 }
 
 void ImageDocumentSession::pushEdit() {
+    endLayerOutlineEdit();
     endLayerOpacityEdit();
     recordEditSnapshot(data_, selected_layer_id_, selected_group_id_);
     invalidateGroupThumbnailCache();
@@ -2111,6 +2147,7 @@ void ImageDocumentSession::flipVertical() {
 }
 
 bool ImageDocumentSession::undo() {
+    endLayerOutlineEdit();
     endLayerOpacityEdit();
     auto previous = history_.undo(
         {data_, selected_layer_id_, selected_group_id_, raster_images_});
@@ -2120,6 +2157,7 @@ bool ImageDocumentSession::undo() {
 }
 
 bool ImageDocumentSession::redo() {
+    endLayerOutlineEdit();
     endLayerOpacityEdit();
     auto next = history_.redo(
         {data_, selected_layer_id_, selected_group_id_, raster_images_});
