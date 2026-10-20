@@ -88,7 +88,7 @@ Writers omit absent bindings. v1-v13 read without bindings; earlier declared
 versions reject the field. Unknown modes/fields, wrong types, missing/Null/self
 sources and cyclic graphs are rejected before Open replaces a document.
 History, Save, autosave and recovery preserve confirmed bindings and eye states.
-Hub currently accepts v15, preserves records and media rebasing, and rejects v16. `.cscomp`
+Hub currently accepts v16, preserves records and media rebasing, and rejects v17. `.cscomp`
 remains v3 and refuses every matte binding by layer name/ID, including hidden or
 inactive targets; imports have no binding.
 

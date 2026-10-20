@@ -41,6 +41,8 @@ struct TimelineLayerRow {
     std::optional<model::ScaleChannel> scale_y;
     model::LayerId parent_id = 0;
     std::vector<TimelinePathTrack> paths;
+    model::TrimPathStorage trim_paths;
+    bool has_trim_paths=false;
 };
 
 class TimelineLayerTracks final : public QWidget {
@@ -68,6 +70,8 @@ public:
 
     void setPathKeyframeHandlers(std::function<void(model::LayerId,model::PathTarget,std::int64_t)> selected,
         std::function<bool(model::LayerId,model::PathTarget,std::int64_t,std::int64_t)> moved);
+    void setTrimKeyframeHandlers(std::function<void(model::LayerId,model::TrimPathProperty,std::int64_t)> selected,
+        std::function<bool(model::LayerId,model::TrimPathProperty,std::int64_t,std::int64_t)> moved);
     void setMediaDropHandler(
         std::function<void(const std::filesystem::path&, std::int64_t, model::LayerId)> handler);
     void setLayerSelectedHandler(std::function<void(model::LayerId)> handler);

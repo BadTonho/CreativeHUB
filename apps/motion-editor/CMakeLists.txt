@@ -6,6 +6,10 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL OpenGLWidgets Widgets LinguistTools)
 
 add_library(creative-suite-motion-editor-core STATIC
+    src/model/trim_paths.cpp
+    src/model/trim_paths.h
+    src/model/trim_path_geometry.cpp
+    src/model/trim_path_editing.cpp
     src/model/bezier_path.cpp
     src/model/bezier_path.h
     src/model/path_editing.cpp
@@ -61,6 +65,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/workers/audio_keyframe_generation.cpp
     src/ui/workers/audio_keyframe_generation.h
     src/ui/viewer/pen_tool.cpp
+    src/ui/inspector/trim_paths_inspector.cpp
+    src/ui/inspector/trim_paths_inspector.h
     src/ui/viewer/pen_tool.h
     src/ui/viewer/composition_viewer.cpp
     src/ui/viewer/composition_viewer.h
@@ -81,6 +87,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/main_window/main_window_workspace.cpp
     src/ui/main_window/main_window_editing.cpp
     src/ui/main_window/main_window_anchor.cpp
+    src/ui/main_window/main_window_trim_paths.cpp
     src/ui/main_window/main_window_pan_behind.cpp
     src/ui/main_window/main_window_parenting.cpp
     src/ui/main_window/main_window_scale_drag.cpp

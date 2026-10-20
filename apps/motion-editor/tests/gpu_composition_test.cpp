@@ -346,6 +346,7 @@ int main(int argc, char* argv[])
         motion::model::CompositionDocument paths(160,90,{30,1});motion::model::LayerId path_id=0;
         motion::model::PathGeometry geometry{{{{-50,-25},{},{20,-10}},{{50,-25},{-20,-10},{}},{{40,25},{},{-15,8}},{{-40,25},{15,8},{}}},true};
         require(paths.createPathLayer(geometry,0,&path_id),"GPU path fixture");
+        require(paths.setLayerTrimPathsEnabled(path_id,true)&&paths.setLayerTrimValueAtFrame(path_id,motion::model::TrimPathProperty::Start,80,0)&&paths.setLayerTrimValueAtFrame(path_id,motion::model::TrimPathProperty::End,20,0)&&paths.setLayerTrimValueAtFrame(path_id,motion::model::TrimPathProperty::Offset,-810,0),"GPU Trim Paths fixture");
         require(paths.setLayerAnchorPoint(path_id,{10,-5})&&paths.setLayerScaleAtFrame(path_id,1.1,.75,0)&&paths.setLayerRotationAtFrame(path_id,21,0),"GPU path affine geometry");
         require(paths.setLayerEffects(path_id,{motion::model::ColorAdjustmentEffect{true,5,110,90},motion::model::GaussianBlurEffect{true,1.25}}),"GPU path effects");
         motion::model::PathGeometry coverage{{{{.1,.1},{},{.1,-.05}},{{.9,.1},{-.1,-.05},{}},{{.8,.9},{},{}},{{.2,.9},{},{}}},true};
@@ -361,6 +362,7 @@ int main(int argc, char* argv[])
         for(std::size_t i=0;i<path_frame->rgba_pixels.size();++i)require(std::abs(int(path_frame->rgba_pixels[i])-int(path_reference->rgba_pixels[i]))<=(i%4==3?0:2),"Bezier GPU/CPU keeps existing mask tolerance");
         path_renderer.stopAndWait();const auto path_metrics=metrics.takeSnapshotAndReset();require(path_metrics&&(!gpu_backend_available||(path_metrics->gpu_composition_frames==1&&path_metrics->gpu_composition_fallbacks==0)),"native Bezier composition cannot be approved by fallback");
         std::cout<<"Bezier GPU composition: native="<<path_metrics->gpu_composition_frames<<" fallback="<<path_metrics->gpu_composition_fallbacks<<'\n';
+        std::cout<<"Trim Paths GPU composition: native="<<path_metrics->gpu_composition_frames<<" fallback="<<path_metrics->gpu_composition_fallbacks<<'\n';
 
 
     }

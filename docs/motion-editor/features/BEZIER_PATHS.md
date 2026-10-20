@@ -103,9 +103,9 @@ a path.
 
 Versions 1–14 load without paths; new records are rejected below v15. Save,
 autosave and recovery preserve confirmed geometry; the recovery wrapper stays
-v1. Hub backs up/restores v15 and rejects v16 without rewriting geometry while
+v1. Hub backs up/restores v16 and rejects v17 without rewriting geometry while
 rebasing media. `.cscomp` stays v3 and refuses Bezier shapes/masks with layer and
-mask identifiers. Trim Paths, multiple contours, boolean masks, tracking,
+mask identifiers. Multiple contours, boolean masks, tracking,
 snapping, content picking, zoom/pan and animated styles remain future work.
 
 ## Verification and pending checks
@@ -176,3 +176,8 @@ Manual checks pending:
 5. Measure small/medium/heavy path compositions and export throughput. Record
    Windows/macOS/Linux acceptance separately. Preserve the known OpenGL Viewer
    presentation issue from Pan Behind; successful fallback is not native acceptance.
+
+[Animated Trim Paths](TRIM_PATHS.md) is now an additional stroke-only operator
+in native v16. Bezier point topology, fill style and path keys remain independent;
+versions 1–15 load with trimming disabled. The v15 execution record above remains
+historical evidence for the original Pen delivery.

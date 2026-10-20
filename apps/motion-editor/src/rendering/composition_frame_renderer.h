@@ -107,6 +107,8 @@ private:
         std::optional<PathRaster> path_raster;
         std::optional<model::PathGeometry> path_geometry;
         double path_margin=0;
+        model::TrimPathRange trim_range;
+        std::shared_ptr<const model::PathLengthTable> path_length;
     };
     std::map<model::LayerId, CachedContentFrame> content_frames_;
     bool record_preview_metrics_ = true;

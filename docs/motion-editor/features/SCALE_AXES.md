@@ -4,7 +4,7 @@ Status: implemented development workflow in native `.motion` v12. Application
 versions remain unchanged. Visual acceptance, native platform/GPU qualification
 and representative benchmarks remain pending.
 
-Current documents are written as v15 for [Pen paths](BEZIER_PATHS.md).
+Current documents are written as v16 for [Trim Paths](TRIM_PATHS.md).
 The feature fields and historical version-specific evidence below remain applicable.
 
 ## Editing

@@ -339,6 +339,7 @@ std::int64_t TimelineNavigator::frameAtViewportX(int x) const noexcept
 }
 
 void TimelineNavigator::setPathKeyframeHandlers(std::function<void(model::LayerId,model::PathTarget,std::int64_t)> selected,std::function<bool(model::LayerId,model::PathTarget,std::int64_t,std::int64_t)> moved){layer_tracks_->setPathKeyframeHandlers(std::move(selected),std::move(moved));}
+void TimelineNavigator::setTrimKeyframeHandlers(std::function<void(model::LayerId,model::TrimPathProperty,std::int64_t)> selected,std::function<bool(model::LayerId,model::TrimPathProperty,std::int64_t,std::int64_t)> moved){layer_tracks_->setTrimKeyframeHandlers(std::move(selected),std::move(moved));}
 void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& layers,const std::vector<model::Mask>& masks)
 {
     std::unordered_map<model::MaskId,const model::Mask*> mask_by_id;for(const auto& mask:masks)mask_by_id.emplace(mask.id,&mask);
@@ -362,6 +363,7 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
             rows.back().paths.push_back(std::move(track));
         };
         if(const auto* shape=std::get_if<model::ShapeLayerContent>(&layer->content);shape&&shape->path)addPath({layer->id,false},shape->path,MotionUiTranslation::tr("Path"));
+        if(const auto* shape=std::get_if<model::ShapeLayerContent>(&layer->content);shape&&shape->path){rows.back().has_trim_paths=true;rows.back().trim_paths=shape->trim_paths;}
         std::unordered_set<model::MaskId> seen_masks;
         const auto addMaskPath=[&](model::MaskId id){const auto found=mask_by_id.find(id);if(found!=mask_by_id.end()&&found->second->path&&seen_masks.insert(id).second)addPath({id,true},found->second->path,MotionUiTranslation::tr("Mask Path #%1").arg(id));};
         addMaskPath(layer->source_mask);addMaskPath(layer->transform_mask);for(const auto& effect:layer->effects)std::visit([&](const auto& value){addMaskPath(value.mask);},effect);

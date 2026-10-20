@@ -72,6 +72,7 @@ bool CompositionDocument::canInsertKeyframes(std::size_t inserted) const noexcep
     for (const auto& mask : masks_) {for (const auto& keys : mask.keyframes) add(keys);if(mask.path)addPath(*mask.path);}
 
     for (const auto& item : layers_) {
+        if(const auto* shape=std::get_if<ShapeLayerContent>(&item.content))for(const auto& keys:shape->trim_paths.get().keys)add(keys);
         if(const auto* shape=std::get_if<ShapeLayerContent>(&item.content);shape&&shape->path)addPath(*shape->path);
         add(item.keyframes.position_x);add(item.keyframes.position_y);add(item.keyframes.scale);
         add(item.keyframes.rotation);add(item.keyframes.opacity);

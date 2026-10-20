@@ -3,6 +3,17 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>MotionUiTranslation</name>
+    <message><source>Trim Paths</source><translation>Aparar contorno</translation></message>
+    <message><source>Enable Trim Paths</source><translation>Ativar aparagem do contorno</translation></message>
+    <message><source>Toggle Keyframe</source><translation>Adicionar ou remover keyframe</translation></message>
+    <message><source>Start (%)</source><translation>Início (%)</translation></message>
+    <message><source>End (%)</source><translation>Fim (%)</translation></message>
+    <message><source>Offset (degrees)</source><translation>Deslocamento (graus)</translation></message>
+    <message><source>Trim Paths / Start (%)</source><translation>Aparar contorno / Início (%)</translation></message>
+    <message><source>Trim Paths / End (%)</source><translation>Aparar contorno / Fim (%)</translation></message>
+    <message><source>Trim Paths / Offset (degrees)</source><translation>Aparar contorno / Deslocamento (graus)</translation></message>
+    <message><source>Only the stroke is trimmed. Wrapped portions reappear at the start, including on open paths. 360 degrees is one turn.</source><translation>Somente o contorno é aparado. Os trechos que atravessam o fim reaparecem no início, inclusive em caminhos abertos. 360 graus equivalem a uma volta.</translation></message>
+    <message><source>Add a keyframe to edit this interpolated value.</source><translation>Adicione um keyframe para editar este valor interpolado.</translation></message>
     <message><source>Point</source><translation>Ponto</translation></message>
     <message>
         <source>Path size is controlled by its points; masks keep the creation reference size.</source>

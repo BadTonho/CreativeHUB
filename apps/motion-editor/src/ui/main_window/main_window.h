@@ -46,6 +46,7 @@ namespace motion::ui {
 
 class CompositionViewer;
 class PenTool;
+class TrimPathsInspector;
 class InspectorWidget;
 class MediaPoolWidget;
 class MotionWorkspace;
@@ -183,6 +184,8 @@ private:
     void logPanBehindFailure(const char* operation, model::LayerId id, std::int64_t frame,
         const std::exception& error);
     void selectAnchorCurveSegment(model::LayerId, model::AnchorProperty, std::int64_t local_frame);
+    void selectTrimCurveSegment(model::LayerId, model::TrimPathProperty, std::int64_t local_frame);
+    void editTrimPaths(std::function<bool(model::CompositionDocument&)>);
     [[nodiscard]] bool applySelectedCurveInterpolation(std::int64_t,
         creative_suite::animation::InterpolationMode, const creative_suite::animation::CubicBezierEasing&);
     void refreshCurveEditor();
@@ -259,6 +262,7 @@ private:
     QDockWidget* graph_editor_dock_ = nullptr;
     MediaPoolWidget* media_pool_ = nullptr;
     PenTool* pen_tool_ = nullptr;
+    TrimPathsInspector* trim_paths_inspector_ = nullptr;
     CompositionViewer* viewer_ = nullptr;
     InspectorWidget* inspector_ = nullptr;
     MotionWorkspace* workspace_ = nullptr;
@@ -304,6 +308,7 @@ private:
         std::optional<model::AnchorProperty> anchor_property;
         std::optional<model::ScaleAxis> scale_axis;
         std::optional<model::PathTarget> path_target;
+        std::optional<model::TrimPathProperty> trim_property;
     };
     std::optional<CurveSelection> curve_selection_;
     struct PanBehindGesture {

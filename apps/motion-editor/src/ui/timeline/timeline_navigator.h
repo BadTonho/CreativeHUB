@@ -42,6 +42,8 @@ public:
     void setLayers(const std::vector<model::CompositionLayer>& layers,const std::vector<model::Mask>& masks = {});
     void setPathKeyframeHandlers(std::function<void(model::LayerId,model::PathTarget,std::int64_t)> selected,
         std::function<bool(model::LayerId,model::PathTarget,std::int64_t,std::int64_t)> moved);
+    void setTrimKeyframeHandlers(std::function<void(model::LayerId,model::TrimPathProperty,std::int64_t)> selected,
+        std::function<bool(model::LayerId,model::TrimPathProperty,std::int64_t,std::int64_t)> moved);
 
     void setSelectedLayerId(model::LayerId id);
     void setParentPickWhipHandlers(ParentPickWhipHandlers handlers);

@@ -184,8 +184,10 @@ QPainterPath painterPath(const model::PathGeometry &p, double sx, double sy) {
 }
 std::optional<PathRaster> rasterizePath(const model::ShapeLayerContent &content,
                                         const model::PathGeometry &geometry, double margin,
-                                        const std::function<bool()> &cancel) {
+                                        const std::function<bool()> &cancel, model::TrimPathRange trim,
+                                        const model::PathLengthTable* measurement) {
     if (content.width <= 0 || content.height <= 0 || content.stroke_width_pixels < 0 ||
+        !std::isfinite(trim.start) || !std::isfinite(trim.span) || trim.start<0 || trim.start>=1 || trim.span<0 || trim.span>1 ||
         content.stroke_width_pixels > 4096 || !model::validPathGeometry(geometry) ||
         !model::validPathRasterGeometry(geometry, content.stroke_width_pixels, margin) ||
         !std::isfinite(margin) || margin < 0 || (cancel && cancel()))
@@ -219,7 +221,21 @@ std::optional<PathRaster> rasterizePath(const model::ShapeLayerContent &content,
                        ? QPen(color(content.stroke_color), content.stroke_width_pixels, Qt::SolidLine,
                               Qt::RoundCap, Qt::RoundJoin)
                        : QPen(Qt::NoPen));
-    painter.drawPath(path);
+    if(trim.span==1)painter.drawPath(path);
+    else {
+        painter.setPen(Qt::NoPen);painter.drawPath(path);
+        if(trim.span>0 && content.stroke_width_pixels>0) {
+            std::shared_ptr<const model::PathLengthTable> owned;
+            if(!measurement || !model::measuredPathMatches(*measurement,geometry)) {
+                owned=model::measureTrimPath(geometry,cancel);measurement=owned.get();
+            }
+            if(!measurement)return {};
+            const auto pieces=model::extractTrimPath(*measurement,trim,cancel);if(!pieces)return {};
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(color(content.stroke_color),content.stroke_width_pixels,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+            for(const auto& piece:*pieces)painter.drawPath(painterPath(piece));
+        }
+    }
     painter.end();
     if (cancel && cancel())
         return {};

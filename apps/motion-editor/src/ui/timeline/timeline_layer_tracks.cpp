@@ -44,7 +44,9 @@ std::filesystem::path pathFromQString(const QString& value)
     return std::filesystem::path(std::u8string(first, first + utf8.size()));
 }
 
-enum class TrackProperty { PositionX, PositionY, ScaleX, Rotation, Opacity, AnchorX, AnchorY, ScaleY };
+enum class TrackProperty { PositionX, PositionY, ScaleX, Rotation, Opacity, AnchorX, AnchorY, ScaleY, TrimStart, TrimEnd, TrimOffset };
+bool isTrim(TrackProperty p){return p>=TrackProperty::TrimStart&&p<=TrackProperty::TrimOffset;}
+model::TrimPathProperty trimProperty(TrackProperty p){return static_cast<model::TrimPathProperty>(int(p)-int(TrackProperty::TrimStart));}
 
 constexpr std::array<TrackProperty, 8> kTimelineProperties{{
     TrackProperty::PositionX,
@@ -59,6 +61,7 @@ constexpr std::array<TrackProperty, 8> kTimelineProperties{{
 
 const creative_suite::animation::ScalarKeyframes& trackKeys(const TimelineLayerRow& row, TrackProperty property)
 {
+    if(isTrim(property))return row.trim_paths.get().keys[static_cast<std::size_t>(trimProperty(property))];
     if(property==TrackProperty::ScaleX)return row.keyframes.scale;
     if(property==TrackProperty::ScaleY)return row.scale_y?row.scale_y->keyframes:row.keyframes.scale;
     if (property == TrackProperty::AnchorX) return row.anchor_keyframes[0];
@@ -72,6 +75,9 @@ QString propertyName(TrackProperty property)
     using P = TrackProperty;
     switch (property) {
     case P::PositionX: return MotionUiTranslation::tr("Position X");
+    case P::TrimStart: return MotionUiTranslation::tr("Trim Paths / Start (%)");
+    case P::TrimEnd: return MotionUiTranslation::tr("Trim Paths / End (%)");
+    case P::TrimOffset: return MotionUiTranslation::tr("Trim Paths / Offset (degrees)");
     case P::PositionY: return MotionUiTranslation::tr("Position Y");
     case P::ScaleX: return MotionUiTranslation::tr("Scale X (%)");
     case P::ScaleY: return MotionUiTranslation::tr("Scale Y (%)");
@@ -88,6 +94,9 @@ QColor propertyColor(TrackProperty property)
     using P = TrackProperty;
     switch (property) {
     case P::PositionX: return QColor(100, 190, 255);
+    case P::TrimStart: return QColor(100,210,180);
+    case P::TrimEnd: return QColor(255,200,80);
+    case P::TrimOffset: return QColor(210,160,255);
     case P::PositionY: return QColor(130, 225, 180);
     case P::ScaleX: return QColor(210, 160, 255);
     case P::ScaleY: return QColor(180, 140, 230);
@@ -265,6 +274,7 @@ public:
     std::function<bool(model::LayerId, model::AnchorProperty, std::int64_t, std::int64_t)> anchor_keyframe_move;
     std::function<void(model::LayerId, model::AnchorProperty, std::int64_t)> anchor_curve_segment_selected;
     void selectTrackCurve(model::LayerId id, TrackProperty property, std::int64_t frame) {
+        if(isTrim(property)){if(trim_selected)trim_selected(id,trimProperty(property),frame);return;}
         if(property==TrackProperty::ScaleX || property==TrackProperty::ScaleY) {
             if(scale_axis_curve_segment_selected)(void)scale_axis_curve_segment_selected(id,property==TrackProperty::ScaleX?model::ScaleAxis::X:model::ScaleAxis::Y,frame);return;
         }
@@ -273,6 +283,7 @@ public:
         } else if (curve_segment_selected) curve_segment_selected(id,static_cast<creative_suite::animation::TransformProperty>(property),frame);
     }
     void selectTrackKey(model::LayerId id, TrackProperty property, std::int64_t frame) {
+        if(isTrim(property)){if(trim_selected)trim_selected(id,trimProperty(property),frame);return;}
         if(property==TrackProperty::ScaleX || property==TrackProperty::ScaleY) {
             if(scale_axis_keyframe_selected)(void)scale_axis_keyframe_selected(id,property==TrackProperty::ScaleX?model::ScaleAxis::X:model::ScaleAxis::Y,frame);return;
         }
@@ -281,6 +292,7 @@ public:
         } else if (keyframe_selected) keyframe_selected(id,static_cast<creative_suite::animation::TransformProperty>(property),frame);
     }
     void moveTrackKey(model::LayerId id, TrackProperty property, std::int64_t from, std::int64_t to) {
+        if(isTrim(property)){if(trim_moved)(void)trim_moved(id,trimProperty(property),from,to);return;}
         if(property==TrackProperty::ScaleX || property==TrackProperty::ScaleY) {
             if(scale_axis_keyframe_move)(void)scale_axis_keyframe_move(id,property==TrackProperty::ScaleX?model::ScaleAxis::X:model::ScaleAxis::Y,from,to);return;
         }
@@ -289,6 +301,8 @@ public:
         } else if (keyframe_move) (void)keyframe_move(id,static_cast<creative_suite::animation::TransformProperty>(property),from,to);
     }
     std::function<void(model::LayerId,model::PathTarget,std::int64_t)> path_selected;
+    std::function<void(model::LayerId,model::TrimPathProperty,std::int64_t)> trim_selected;
+    std::function<bool(model::LayerId,model::TrimPathProperty,std::int64_t,std::int64_t)> trim_moved;
     std::function<bool(model::LayerId,model::PathTarget,std::int64_t,std::int64_t)> path_moved;
     std::function<void(model::LayerId, creative_suite::animation::TransformProperty, std::int64_t)> keyframe_selected;
     std::function<bool(model::LayerId, creative_suite::animation::TransformProperty, std::int64_t, std::int64_t)>
@@ -866,7 +880,10 @@ protected:
         } else if(mode==InteractionMode::MovePathKeyframe){
             if(const auto* row=findRow(id);row&&interaction_path_index_<row->paths.size()){const auto path=row->paths[interaction_path_index_];const auto final=std::clamp(frameAtX(event->position().toPoint().x())-path.start,std::int64_t(0),path.duration-1);if(moved&&final!=old_keyframe){if(path_moved)(void)path_moved(id,path.target,old_keyframe,final);}else if(path_selected)path_selected(id,path.target,old_keyframe);}
         } else if (mode == InteractionMode::MoveKeyframe) {
-            if (moved && value != old_keyframe) {
+            if(isTrim(property)) {
+                const auto* row=findRow(id);const auto final=row?std::clamp(frameAtX(event->position().toPoint().x())-row->start_frame,std::int64_t(0),row->duration_frames-1):old_keyframe;
+                if(moved&&final!=old_keyframe)moveTrackKey(id,property,old_keyframe,final);else selectTrackKey(id,property,old_keyframe);
+            } else if (moved && value != old_keyframe) {
                 moveTrackKey(id, property, old_keyframe, value);
             } else {
                 selectTrackKey(id, property, old_keyframe);
@@ -998,6 +1015,8 @@ private:
             visual_rows_.push_back({index, VisualTimelineRow::Kind::Layer, std::nullopt});
             if (!expanded_layers_.contains(layer_id)) continue;
             for(std::size_t i=0;i<rows_[index].paths.size();++i){VisualTimelineRow path{index,VisualTimelineRow::Kind::PathProperty};path.path_index=i;visual_rows_.push_back(path);}
+            if(rows_[index].has_trim_paths)for(auto property:{TrackProperty::TrimStart,TrackProperty::TrimEnd,TrackProperty::TrimOffset})
+                visual_rows_.push_back({index,VisualTimelineRow::Kind::Property,property});
             visual_rows_.push_back(
                 {index, VisualTimelineRow::Kind::TransformGroup, std::nullopt});
             if (expanded_transform_groups_.contains(layer_id)) {
@@ -1273,6 +1292,7 @@ void TimelineLayerTracks::setAnchorCurveSegmentSelectedHandler(std::function<voi
 void TimelineLayerTracks::setScaleAxisKeyframeSelectedHandler(std::function<void(model::LayerId, model::ScaleAxis, std::int64_t)> handler)
 { impl_->canvas->scale_axis_keyframe_selected = std::move(handler); }
 void TimelineLayerTracks::setPathKeyframeHandlers(std::function<void(model::LayerId,model::PathTarget,std::int64_t)> selected,std::function<bool(model::LayerId,model::PathTarget,std::int64_t,std::int64_t)> moved){impl_->canvas->path_selected=std::move(selected);impl_->canvas->path_moved=std::move(moved);}
+void TimelineLayerTracks::setTrimKeyframeHandlers(std::function<void(model::LayerId,model::TrimPathProperty,std::int64_t)> selected,std::function<bool(model::LayerId,model::TrimPathProperty,std::int64_t,std::int64_t)> moved){impl_->canvas->trim_selected=std::move(selected);impl_->canvas->trim_moved=std::move(moved);}
 void TimelineLayerTracks::setScaleAxisKeyframeMoveHandler(std::function<bool(model::LayerId, model::ScaleAxis, std::int64_t, std::int64_t)> handler)
 { impl_->canvas->scale_axis_keyframe_move = std::move(handler); }
 void TimelineLayerTracks::setScaleAxisCurveSegmentSelectedHandler(std::function<void(model::LayerId, model::ScaleAxis, std::int64_t)> handler)

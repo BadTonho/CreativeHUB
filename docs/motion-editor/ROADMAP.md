@@ -513,9 +513,10 @@ costs.
     tangents, rectangle/ellipse dimensions, corner roundness, stroke width, fill
     and stroke RGBA, gradients (linear/radial), dashed strokes, and animated
     mask feather (*Soft Edge*) and expansion.
-  - Procedural shape operators: *Trim Paths* (`Start`, `End`, `Offset`),
-    *Repeater*, *Merge Paths*, *Offset Paths*, *Round Corners*, *Wiggle Paths*,
-    and *Pucker & Bloat*.
+  - *Trim Paths* (`Start`, `End`, `Offset`) is implemented for Bezier strokes in
+    native v16; acceptance remains pending. Other procedural operators remain
+    planned: *Repeater*, *Merge Paths*, *Offset Paths*, *Round Corners*,
+    *Wiggle Paths* and *Pucker & Bloat*.
   - Multiple masks per stage with boolean combine modes (*Add*, *Subtract*,
     *Intersect*, *Lighten*, *Darken*, *Difference*).
 - **Text animation:**
@@ -578,8 +579,8 @@ architectural complexity:
    Adjustment properties across the document model, timeline, Graph Editor,
    preview, and export.
 2. **Layer hierarchy and transform ergonomics:** Inspector parenting and Null layers are implemented in native v10. Animated Anchor Point and compensated Inspector repositioning are implemented in native v11. Independent Scale X/Y with affine inheritance is implemented in native v12. Pan Behind adds pivot dragging with transient Inspector values and release-only commit without a format change. The timeline pick-whip adds direct parent selection, candidate feedback and wheel/edge scrolling using the same parent command. The Viewer Position handle adds live asynchronous movement preview and atomic Position commit. The Viewer Rotation handle adds local affine-aware rotation with full turns, live preview and release-only commit. Viewer Scale X/Y/XY handles add linked/free live scaling with positive clamping and atomic release-only edits. Manual acceptance remains pending.
-3. **Blending modes and Track Mattes:** six static per-layer modes are implemented in native v13 with transparent accumulation, opaque output and CPU/OpenGL composition; Vulkan requests fallback. Alpha/Luma and inverted track mattes with shared sources/chains are implemented in native v14. Pen-created animated shape/mask paths are implemented in native v15; Trim Paths remains the next candidate.
-4. **Pen tool (implemented in native v15) and Trim Paths:** freeform shapes and masks support animated vertices/tangents, local Viewer editing and complete-path easing. Trim Paths remains planned; manual/platform/performance acceptance is pending.
+3. **Blending modes and Track Mattes:** six static per-layer modes are implemented in native v13 with transparent accumulation, opaque output and CPU/OpenGL composition; Vulkan requests fallback. Alpha/Luma and inverted track mattes with shared sources/chains are implemented in native v14. Pen-created animated shape/mask paths are implemented in native v15; Animated Trim Paths is implemented in native v16; Drop Shadow, Glow and alpha export remain the next candidates.
+4. **Pen tool (implemented in native v15) and Trim Paths:** freeform shapes and masks support animated vertices/tangents, local Viewer editing and complete-path easing. Trim Paths is implemented in native v16 with Start/End/Offset scalar animation; manual/platform/performance acceptance is pending.
 5. **Drop Shadow, Glow, and Alpha-channel export:** core motion-graphics shading
    effects paired with transparent-background export for overlay workflows.
 
@@ -607,3 +608,9 @@ qualifying that run. The default portable test retains its CPU recovery coverage
 Development of Pen paths is authorized independently of the remaining MVP
 performance/visual acceptance gates. Their pending status is not changed by
 automated implementation coverage.
+
+## Trim Paths regression boundary
+
+| Feature | Automated coverage | Remaining acceptance |
+| --- | --- | --- |
+| Bezier stroke trimming, open/closed seams, length/cubic cuts, three scalar channels, history, v16/recovery | [Trim tests](../../apps/motion-editor/tests/trim_paths_test.cpp), [CTest registration](../../apps/motion-editor/tests/CMakeLists.txt): `creative-suite-motion-editor-trim-paths` and `...-trim-paths-hidpi`; existing path/transform/preview/export/UI suites; Motion GPU composition; `hub-backup-format-test` | [Manual checklist](features/TRIM_PATHS.md#verification-and-pending-acceptance); native presentation/platform checks and benchmarks pending. |

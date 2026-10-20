@@ -13,7 +13,7 @@ implemented separately; see [Anchor Point](ANCHOR_POINT.md).
 The [Pan Behind](PAN_BEHIND.md) pivot gesture uses the full inherited affine
 matrix and preserves layer/descendant geometry while retaining parent bindings.
 
-Current documents are written as v15 for [Pen paths](BEZIER_PATHS.md).
+Current documents are written as v16 for [Trim Paths](TRIM_PATHS.md).
 The feature fields and historical version-specific evidence below remain applicable.
 
 ## Editing

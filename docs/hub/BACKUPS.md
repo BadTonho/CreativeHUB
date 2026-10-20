@@ -1,6 +1,6 @@
 # Hub Project Backups
 
-Bezier paths extend native backup support to Motion v15; CSP v31 remains supported. Matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, and effect parameter keyframes are retained unchanged and existing media/Input paths are rebased. Future CSP v32 and Motion v16 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
+Trim Paths extends native backup support to Motion v16; CSP v31 remains supported. Matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, and effect parameter keyframes are retained unchanged and existing media/Input paths are rebased. Future CSP v32 and Motion v17 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
 
 ## Video Editor v29 Background presets
 
@@ -53,7 +53,7 @@ producer/consumer regression coverage when supported schemas gain path fields.
 | --- | --- | --- |
 | `creative-suite-image-document` | 1–16 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
 | `creative-suite.main-editor` | 1–31 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
-| `creative-suite.motion-studio` | 1–15 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
+| `creative-suite.motion-studio` | 1–16 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
 
 Video v26 adjustment clips have no source path. Their duration, effects and
 transform curves are preserved by backup and restoration. They do not cause
@@ -197,4 +197,9 @@ macOS/Linux execution remain pending.
 Motion v15 backups preserve Bezier shape/mask bases, complete-path keys and
 relative tangents along with earlier features. Existing path rebasing changes
 only media/link paths. `hub-backup-format-test` reopens vault/restored documents
-with the Motion reader and rejects v16; native Hub UI/platform checks remain pending.
+with the Motion reader. The original v15 gate rejected v16; the current gate below accepts it. Native Hub UI/platform checks remain pending.
+
+Motion v16 backups preserve Trim Paths activation, Start/End/Offset bases and
+curves (including complete turns) alongside Bezier geometry, hierarchy and media.
+The producer/reader gate reopens vault/restored documents and rejects v17. Native
+UI/platform checks remain pending; see [Trim Paths](../motion-editor/features/TRIM_PATHS.md).

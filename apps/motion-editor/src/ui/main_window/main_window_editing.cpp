@@ -1,4 +1,5 @@
 #include "ui/viewer/pen_tool.h"
+#include "ui/inspector/trim_paths_inspector.h"
 #include <QScopeGuard>
 #include "ui/translation_helpers.h"
 #include "ui/inspector/mask_inspector_widget.h"
@@ -346,8 +347,11 @@ void MainWindow::refreshCurveEditor()
     }
     const auto* anchor_keys = curve_selection_->anchor_property
         ? &found->anchor_keyframes[static_cast<std::size_t>(*curve_selection_->anchor_property)] : nullptr;
+    const auto* trim_data=curve_selection_->trim_property?document_->layerTrimPaths(found->id):nullptr;
+    if(curve_selection_->trim_property&&!trim_data){resetCurveEditor();return;}
+    const auto* trim_keys=trim_data?&trim_data->get().keys[static_cast<std::size_t>(*curve_selection_->trim_property)]:nullptr;
     const auto* scale_keys=curve_selection_->scale_axis?&model::layerScaleKeys(*found,*curve_selection_->scale_axis):nullptr;
-    const auto& keys = scale_keys?*scale_keys:anchor_keys ? *anchor_keys : mask
+    const auto& keys = trim_keys?*trim_keys:scale_keys?*scale_keys:anchor_keys ? *anchor_keys : mask
         ? mask->keyframes[curve_selection_->mask_property]
         : (effect_curve
             ? *effect_keys
@@ -359,7 +363,10 @@ void MainWindow::refreshCurveEditor()
         curve_selection_->segment_start_frame = keys.front().frame;
     }
     const auto segment=keys.size()>=2?std::optional<std::int64_t>(curve_selection_->segment_start_frame):std::nullopt;
-    if(scale_keys) {
+    if(trim_keys) {
+        const std::array names{MotionUiTranslation::tr("Trim Paths / Start (%)"),MotionUiTranslation::tr("Trim Paths / End (%)"),MotionUiTranslation::tr("Trim Paths / Offset (degrees)")};
+        curve_editor_->setScalarCurve(found->id,names[static_cast<std::size_t>(*curve_selection_->trim_property)],keys,segment);
+    } else if(scale_keys) {
         auto percentages=keys;for(auto& key:percentages)key.value*=100.;
         curve_editor_->setScalarCurve(found->id,*curve_selection_->scale_axis==model::ScaleAxis::X
             ?MotionUiTranslation::tr("Scale X (%)"):MotionUiTranslation::tr("Scale Y (%)"),percentages,segment);
@@ -595,7 +602,7 @@ void MainWindow::changeSelectedLayerBlendMode(int value)
 
 void MainWindow::syncTransformInspector()
 {
-    const auto path_sync=qScopeGuard([this]{if(pen_tool_)pen_tool_->sync();});
+    const auto path_sync=qScopeGuard([this]{if(pen_tool_)pen_tool_->sync();if(trim_paths_inspector_)trim_paths_inspector_->sync(document_?&*document_:nullptr,selected_layer_id_,timeline_?timeline_->currentFrame():0,export_worker_||audio_keyframe_worker_);});
     if (scale_drag_) {
         if (panBehindAvailable() && timeline_->currentFrame() == scale_drag_->frame && selected_layer_id_ == scale_drag_->id) {
             inspector_->previewLayerScale(scale_drag_->preview[0],scale_drag_->preview[1]);return;

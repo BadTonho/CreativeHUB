@@ -1,7 +1,7 @@
 # Layer Blend Modes
 
-Status: introduced in native `.motion` v13; current documents use v15 for
-[Pen paths](BEZIER_PATHS.md). Recovery stays
+Status: introduced in native `.motion` v13; current documents use v16 for
+[Trim Paths](TRIM_PATHS.md). Recovery stays
 at wrapper v1 and `.cscomp` at v3. Application versions are unchanged. Manual
 visual/platform/native GPU acceptance and benchmarks remain pending.
 

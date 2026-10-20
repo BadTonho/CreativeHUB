@@ -13,7 +13,9 @@ struct PathRaster {
 [[nodiscard]] QPainterPath painterPath(const model::PathGeometry &, double sx = 1, double sy = 1);
 [[nodiscard]] std::optional<PathRaster> rasterizePath(const model::ShapeLayerContent &,
                                                       const model::PathGeometry &, double effect_margin = 0,
-                                                      const std::function<bool()> &cancel = {});
+                                                      const std::function<bool()> &cancel = {},
+                                                      model::TrimPathRange trim = {},
+                                                      const model::PathLengthTable* measurement = nullptr);
 // Per-evaluation cache, shared by primitive and Bezier coverage, four entries / 64 MiB.
 class MotionMaskRasterCache {
     struct Entry {

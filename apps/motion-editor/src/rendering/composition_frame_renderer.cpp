@@ -480,23 +480,33 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             auto cached = content_frames_.find(layer.id);
             const auto* shape=std::get_if<model::ShapeLayerContent>(&layer.content);
             std::optional<model::PathGeometry> path_geometry;double path_margin=0;
+            model::TrimPathRange trim_range;
+            std::shared_ptr<const model::PathLengthTable> path_length;
             if(shape&&shape->path){
+                trim_range=model::trimPathRange(model::evaluateTrimPaths(shape->trim_paths,layer.local_frame));
                 path_geometry=request.path_override&&request.path_override->target==model::PathTarget{layer.id,false}?*request.path_override->geometry:model::evaluatePath(*shape->path,layer.local_frame);
                 for(const auto& effect:layer.effects)if(const auto* blur=std::get_if<model::GaussianBlurEffect>(&effect);blur&&blur->enabled)path_margin+=std::ceil(3*model::evaluateGaussianBlurEffect(*blur,layer.local_frame).radius_pixels);
             }
-            if (cached == content_frames_.end() || cached->second.content != layer.content || cached->second.presentation != layer.presentation || cached->second.canvas != request.canvas_size || cached->second.path_geometry!=path_geometry || cached->second.path_margin!=path_margin) {
+            if(path_geometry && cached!=content_frames_.end() && cached->second.path_geometry==path_geometry)path_length=cached->second.path_length;
+            if(path_geometry && trim_range.span>0 && trim_range.span<1 && shape->stroke_width_pixels>0 && !path_length){
+                try{path_length=model::measureTrimPath(*path_geometry,should_cancel);if(!path_length)return {};}
+                catch(const std::exception& e){throw std::runtime_error("Trim Paths layer "+std::to_string(layer.id)+", frame "+std::to_string(request.composition_frame)+": "+e.what());}
+            }
+            if (cached == content_frames_.end() || cached->second.content != layer.content || cached->second.presentation != layer.presentation || cached->second.canvas != request.canvas_size || cached->second.path_geometry!=path_geometry || cached->second.path_margin!=path_margin || cached->second.trim_range!=trim_range) {
                 StageTimer raster_timer(
                     record_preview_metrics_,
                     diagnostics::PreviewTimingStage::TextShapeRasterization);
                 std::optional<creative_suite::media::RgbaFrame> rasterized;
                 std::optional<PathRaster> new_path_raster;
-                if(path_geometry)new_path_raster=rasterizePath(*shape,*path_geometry,path_margin,should_cancel);
+                if(path_geometry){try{new_path_raster=rasterizePath(*shape,*path_geometry,path_margin,should_cancel,trim_range,path_length.get());}
+                    catch(const std::exception& e){throw std::runtime_error("Path raster/Trim Paths layer "+std::to_string(layer.id)+", frame "+std::to_string(request.composition_frame)+": "+e.what());}}
                 else rasterized=rasterizeLayerContent(layer.content);
                 if (layer.presentation && layer.presentation->profile == creative_suite::composition_exchange::Profile::FusionCanvas && layer.kind == model::LayerKind::Text) {
                     const auto& t = std::get<model::TextLayerContent>(layer.content);
                     rasterized = creative_suite::composition_exchange::textFrame({t.text,t.font_family,t.font_size_pixels,int(t.alignment),t.color}, *layer.presentation, request.canvas_size.width, request.canvas_size.height);
                 }
                 if (!rasterized.has_value() && !new_path_raster) {
+                    if(should_cancel && should_cancel())return {};
                     if (fail_on_media_error || (path_geometry && mode==PreviewRequestMode::Gesture)) {
                         throw std::runtime_error("Text or shape content could not be rasterized for layer " +
                                                  std::to_string(layer.id));
@@ -514,6 +524,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                     cached->second.frame=std::move(raster_frame);cached->second.path_raster=std::move(new_path_raster);cached->second.path_geometry=std::move(path_geometry);cached->second.path_margin=path_margin;
                 }else cached=content_frames_.insert_or_assign(layer.id,CachedContentFrame{layer.content,layer.presentation,request.canvas_size,std::move(raster_frame),std::move(new_path_raster),std::move(path_geometry),path_margin}).first;
             }
+            cached->second.trim_range=trim_range;cached->second.path_length=std::move(path_length);
             frame = cached->second.frame;path_raster=cached->second.path_raster;
             if(path_raster){if(request.sceneHierarchy())effective_world=resolved_entry->second.world;else {model::CompositionLayer local{layer.id,model::LayerKind::Shape,""};local.transform=layer.transform;local.keyframes=layer.keyframes;local.anchor_point=layer.anchor_point;local.anchor_keyframes=layer.anchor_keyframes;local.scale_y=layer.scale_y;effective_world=model::localLayerGeometry(local,request.canvas_size,layer.local_frame);}}
         } else {

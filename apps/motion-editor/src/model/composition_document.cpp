@@ -115,6 +115,7 @@ bool validTextContent(const TextLayerContent& content) noexcept
 
 bool validShapeContent(const ShapeLayerContent& content) noexcept
 {
+    if(!content.trim_paths.valid() || (content.shape!=ShapeKind::BezierPath && !content.trim_paths.isDefault()))return false;
     return ((content.shape == ShapeKind::Rectangle || content.shape == ShapeKind::Ellipse) ? !content.path : (content.shape == ShapeKind::BezierPath && content.path && content.path.valid() && validPathRasterGeometry(content.path->base,content.stroke_width_pixels) && std::all_of(content.path->keys.begin(),content.path->keys.end(),[&](const auto& key){return validPathRasterGeometry(key.geometry,content.stroke_width_pixels);}))) &&
         content.width >= 1 && content.width <= kMaximumContentDimension &&
         content.height >= 1 && content.height <= kMaximumContentDimension &&
@@ -982,6 +983,10 @@ bool CompositionDocument::setShapeLayerContent(
         !validShapeContent(content)) {
         return false;
     }
+    const auto* old=std::get_if<ShapeLayerContent>(&layer->content);
+    const auto cost=[](const ShapeLayerContent& s){return (s.path?pathKeyframeCost(*s.path):0)+trimKeyframeCost(s.trim_paths.get());};
+    const auto before=old?cost(*old):0,after=cost(content);
+    if(!canInsertKeyframes(after>before?after-before:0))return false;
     layer->content = content;
     return true;
 }

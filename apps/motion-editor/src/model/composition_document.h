@@ -1,5 +1,6 @@
 #pragma once
 #include "bezier_path.h"
+#include "trim_paths.h"
 #include <creative_suite/composition/blend_mode.h>
 #include <creative_suite/composition/track_matte.h>
 #include <creative_suite/composition/affine_transform.h>
@@ -160,6 +161,8 @@ struct ShapeLayerContent {
     ColorRgba stroke_color{255, 255, 255, 255};
     int stroke_width_pixels = 0;
     PathAnimationStorage path;
+
+    TrimPathStorage trim_paths;
 
     friend bool operator==(const ShapeLayerContent&, const ShapeLayerContent&) = default;
 };
@@ -480,6 +483,16 @@ public:
     [[nodiscard]] bool setMaskKeyframeInterpolation(MaskId, std::size_t property, std::int64_t composition_frame,
         creative_suite::animation::InterpolationMode, const creative_suite::animation::CubicBezierEasing&);
 
+    [[nodiscard]] const TrimPathStorage* layerTrimPaths(LayerId) const noexcept;
+    [[nodiscard]] bool replaceLayerTrimPaths(LayerId, TrimPathAnimation);
+    [[nodiscard]] bool setLayerTrimPathsEnabled(LayerId, bool);
+    [[nodiscard]] bool setLayerTrimValueAtFrame(LayerId, TrimPathProperty, double, std::int64_t composition_frame);
+    [[nodiscard]] bool setLayerTrimKeyframe(LayerId, TrimPathProperty, std::int64_t composition_frame);
+    // Removal, movement and easing use layer-local keyframe times.
+    [[nodiscard]] bool removeLayerTrimKeyframe(LayerId, TrimPathProperty, std::int64_t local_frame);
+    [[nodiscard]] bool moveLayerTrimKeyframe(LayerId, TrimPathProperty, std::int64_t from, std::int64_t to);
+    [[nodiscard]] bool setLayerTrimKeyframeInterpolation(LayerId, TrimPathProperty, std::int64_t local_frame,
+        creative_suite::animation::InterpolationMode, const creative_suite::animation::CubicBezierEasing&);
     [[nodiscard]] const PathAnimation* pathFor(PathTarget) const noexcept;
     [[nodiscard]] bool replacePathAnimation(PathTarget,PathAnimation);
     [[nodiscard]] bool setPathAtFrame(PathTarget,const PathGeometry&,std::int64_t composition_frame);

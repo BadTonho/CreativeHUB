@@ -271,13 +271,22 @@ void application(const QString& root) {
     auto* rows=widget<QWidget>(w,"motion-timeline-layer-rows");auto* area=widget<QScrollArea>(w,"motion-timeline-layer-scroll");const auto select=pointFor(w,1,120);showPoint(area,select);press(*rows,select);release(*rows,select);QApplication::processEvents();
     auto* viewer=widget<CompositionViewer>(w,"motion-composition-viewer");auto* x=widget<QDoubleSpinBox>(w,"motion-transform-position-x");auto* y=widget<QDoubleSpinBox>(w,"motion-transform-position-y");
     auto* undo=widget<QAction>(w,"motion-undo-action");auto* redo=widget<QAction>(w,"motion-redo-action");
-    waitFor([&]{return viewer->renderedFrame()!=nullptr;});const auto before=w.compositionDocument()->layers();const auto c=canvasRect(*viewer,{400,200});
+    // Wait for this selection/frame, rather than any frame left by Open or the
+    // earlier structural edit. Drain posted layout work before freezing the
+    // gesture: layout changes intentionally cancel a captured Viewer gesture.
+    CompositionFrameRenderer initial_renderer(false);
+    const auto initial_frame=initial_renderer.render(request(*w.compositionDocument(),10));
+    waitFor([&]{return initial_frame&&viewer->renderedFrame()&&viewer->renderedFrame()->rgba_pixels==initial_frame->rgba_pixels;});
+    QCoreApplication::sendPostedEvents(nullptr,QEvent::LayoutRequest);
+    QApplication::processEvents();
+    const auto before=w.compositionDocument()->layers();const auto c=canvasRect(*viewer,{400,200});
     const auto initial_x=x->value(),initial_y=y->value();const auto begin=[&]{const auto h=handle(*viewer,{400,200})+QPointF(6,-2);press(*viewer,h);check(viewer->positionDragActive(),"Position handle captures");return h;};
     widget<QAction>(w,"motion-play-pause-action")->trigger();auto h=begin();check(!timeline->isPlaying()&&timeline->currentFrame()==10,"press pauses/fixes frame");
     const auto frame_before_drag=viewer->renderedFrame();
     move(*viewer,h+QPointF(21.25,-13.75));check(x->isReadOnly()&&y->isReadOnly()&&w.compositionDocument()->layers()==before,"Inspector preview/document isolation");
     check(!redo->isEnabled()&&(!near(x->value(),initial_x)||!near(y->value(),initial_y)),"live local Position and blocked redo");
     waitFor([&]{return viewer->renderedFrame()&&viewer->renderedFrame()!=frame_before_drag;});
+    check(viewer->positionDragActive(),"Position gesture stays active until explicit completion/cancellation");
     const auto evaluated=evaluateTransform(source.transform,source.keyframes,10);
     auto outer=creative_suite::composition::composeAffine(resolve(*w.compositionDocument(),10).at(9).world,*source.parent_affine);outer.tx=outer.ty=0;
     const auto exact=positionFromCanvasDelta(evaluated.position_x,evaluated.position_y,{400,200},creative_suite::composition::requireInverseAffine(outer),21.25*400/c.width(),-13.75*200/c.height());

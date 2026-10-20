@@ -414,4 +414,9 @@ without matte UI or persisted data. Hub preserves native bindings and media path
 `.cscomp` v3 refuses them. Shared, Motion, Hub and affected consumer regressions
 cover the boundary; native/platform acceptance remains separate.
 
-Motion native v15 adds Bezier shapes/masks and complete-path keys. Hub preserves them in vault/restored backups and rejects v16. Editable `.cscomp` v3 transfer refuses these features explicitly. Video/Image retain their current UI and persisted formats; their shared mask-coverage calls keep the default coordinate path.
+Motion native v15 adds Bezier shapes/masks and complete-path keys. Its original Hub delivery preserved them in vault/restored backups and rejected future v16; the current boundary follows below. Editable `.cscomp` v3 transfer refuses these features explicitly. Video/Image retain their current UI and persisted formats; their shared mask-coverage calls keep the default coordinate path.
+
+Motion native v16/Hub backup preserves animated Trim Paths without changing
+media rebasing or shared renderer contracts. Hub rejects v17. `.cscomp` v3
+continues to refuse these Bezier shapes with layer identifiers and a Trim Paths
+annotation. Producer/reader backup and exchange regressions protect this boundary.

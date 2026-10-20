@@ -85,3 +85,8 @@ compares animated affine effects and all mask stages with independent reference
 sampling and encoded export frames. Native visual/GPU acceptance remains pending.
 
 Bezier masks and direct path editing are now implemented in native v15; see [Pen paths](BEZIER_PATHS.md). Existing primitive-mask stages/coordinates retain their exact default path. Path masks have complete-geometry keys in composition time and preserve sharing by ID. Combinations and tracking remain planned.
+
+Trim Paths is a Bezier-shape stroke operator, not a mask operator. Existing
+source/effect masks retain full-path logical reference dimensions while its
+stroke changes. Transformation masks remain in composition coordinates; matte
+consumers see the trimmed layer's normal prepared pixels. See [Trim Paths](TRIM_PATHS.md).

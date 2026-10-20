@@ -442,8 +442,19 @@ void testMotionDocuments(const QString& root) {
     CS_TEST_CHECK(Store::load(fsPath(bezier_backup.vault))==project);
     CS_TEST_CHECK(Store::load(fsPath(bezier_backup.restored))==project);
     CS_TEST_CHECK(std::filesystem::exists(Store::load(fsPath(bezier_backup.restored)).layers.front().source_path));
+    CS_TEST_CHECK(hierarchy.setLayerTrimPathsEnabled(path_id,true));
+    CS_TEST_CHECK(hierarchy.setLayerTrimValueAtFrame(path_id,TrimPathProperty::Start,80,5));
+    CS_TEST_CHECK(hierarchy.setLayerTrimValueAtFrame(path_id,TrimPathProperty::End,20,5));
+    CS_TEST_CHECK(hierarchy.setLayerTrimKeyframe(path_id,TrimPathProperty::Offset,5));
+    CS_TEST_CHECK(hierarchy.setLayerTrimKeyframe(path_id,TrimPathProperty::Offset,25));
+    CS_TEST_CHECK(hierarchy.setLayerTrimValueAtFrame(path_id,TrimPathProperty::Offset,810.125,25));
+    project.layers=hierarchy.layers();Store::save(fsPath(bezier_path),project);
+    const auto trim_backup=backup(QDir(root).filePath("motion-trim-v16"),bezier_path);
+    CS_TEST_CHECK(Store::load(fsPath(trim_backup.vault))==project);
+    CS_TEST_CHECK(Store::load(fsPath(trim_backup.restored))==project);
+    CS_TEST_CHECK(std::filesystem::exists(Store::load(fsPath(trim_backup.restored)).layers.front().source_path));
     auto future=QJsonDocument::fromJson(readBytes(blend_path)).object();future.insert("version",Store::current_format_version+1);
-    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v16.motion");writeBytes(future_path,QJsonDocument(future).toJson());
+    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v17.motion");writeBytes(future_path,QJsonDocument(future).toJson());
     creative_suite::hub::BackupManager manager(QDir(root).filePath("future-vault"));QString rejected_path,error;
     CS_TEST_CHECK(!manager.createBackup(future_path,&rejected_path,&error)&&!error.isEmpty());
 

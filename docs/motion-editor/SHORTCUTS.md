@@ -48,3 +48,7 @@ Open **Settings > Keyboard Shortcuts** to edit an action's key sequence. Changes
 ## Pen tool local keys
 
 In [Pen mode](features/BEZIER_PATHS.md), Enter finishes an open shape or closes a mask; Escape cancels the draft. Backspace removes the last point during creation. Delete removes a selected static point when topology permits. Undo cancels only an active draft and Redo is unavailable during it. There is no new global shortcut.
+
+Trim Paths adds no shortcut. Its three scalar channels use the existing
+Inspector key buttons, timeline key dragging and Graph Editor easing controls;
+Viewer/Pen gestures are cancelled before a Trim edit is committed.

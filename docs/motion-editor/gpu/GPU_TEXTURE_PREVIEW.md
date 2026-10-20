@@ -181,3 +181,9 @@ the same graph and transform override. No intermediate readback is added.
 See [matte contracts and pending native acceptance](../features/TRACK_MATTES.md).
 
 [Pen path editing](../features/BEZIER_PATHS.md) reuses the common gesture session counter, immutable scene and bounded queue with a shared geometry override. Path edits rerasterize the affected content/coverage on the worker and reuse existing CPU/GPU effects, masks and composition. Commit/cancel invalidate late RGBA/texture delivery; fallback retains the current path candidate.
+
+[Trim Paths](../features/TRIM_PATHS.md) evaluates local scalar curves and
+bounded cubic cuts before the existing path raster pipeline. Scene snapshots
+share its immutable curves. Pen geometry overrides invalidate the length index
+when geometry changes; presentation sessions/fallback retain the same scene,
+frame and candidate. No new GPU image operation or readback is introduced.

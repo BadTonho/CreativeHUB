@@ -290,3 +290,7 @@ Manual native restore/reopen and rendered comparisons remain pending.
 ## Motion Bezier path boundary
 
 Motion native v15 owns freeform shape/mask geometry and complete-path animation. `.cscomp` remains v3: export refuses every Bezier shape or associated mask, including hidden/inactive layers, with layer names/IDs and mask IDs. Primitive mask records remain unchanged through explicit adapters; imports contain no Bezier paths.
+
+Motion native v16 adds Bezier-only Trim Paths bases and scalar curves. The
+existing `.cscomp` v3 Bezier refusal remains in force and additionally names
+Trim Paths when configured; no interchange schema or Video/Image UI changes.

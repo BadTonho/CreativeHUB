@@ -788,6 +788,13 @@ QJsonObject writeLayer(const CompositionLayer& layer,
         content.insert(QStringLiteral("stroke_color"), writeColor(shape.stroke_color));
         content.insert(QStringLiteral("stroke_width_pixels"), shape.stroke_width_pixels);
         if(shape.path)content.insert("path",writePathAnimation(*shape.path));
+        if(!shape.trim_paths.isDefault()) {
+            const auto& data=shape.trim_paths.get();QJsonObject trim{{"enabled",data.base.enabled},
+                {"start_percent",data.base.start_percent},{"end_percent",data.base.end_percent},{"offset_degrees",data.base.offset_degrees}};
+            QJsonObject curves;const std::array<const char*,3> names{"start_percent","end_percent","offset_degrees"};
+            for(std::size_t i=0;i<3;++i)if(!data.keys[i].empty())curves.insert(names[i],writeKeyframes(data.keys[i]));
+            if(!curves.empty())trim.insert("keyframes",curves);content.insert("trim_paths",trim);
+        }
         object.insert(QStringLiteral("shape_content"), content);
     }
     object.insert(QStringLiteral("effects"), writeEffects(layer.effects));
@@ -867,6 +874,8 @@ CompositionLayer parseLayer(const QJsonValue& value,
     layer.id = requiredUInt64(object, "id", document_path);
     layer.kind = parseLayerKind(requiredString(object, "kind", document_path), document_path);
     const auto path_content=object.value("shape_content").toObject();
+    if(path_content.contains("trim_paths") && (document_version<16 || layer.kind!=LayerKind::Shape || path_content.value("primitive")!="bezier_path"))
+        fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Trim Paths requires Bezier shape content and document version 16."));
     if(path_content.contains("path")||path_content.value("primitive")=="bezier_path") {
         if(document_version<15||layer.kind!=LayerKind::Shape)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Bezier content requires a Shape layer and format version 15."));
     }
@@ -1029,6 +1038,17 @@ CompositionLayer parseLayer(const QJsonValue& value,
             if(document_version<15)fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Bezier paths require version 15."));
             try {shape.path=readPathAnimation(content.value("path"));}catch(const std::exception& e){fail(MotionDocumentErrorCode::InvalidValue,document_path,QString::fromUtf8(e.what()));}
         }
+        if(content.contains("trim_paths")) {
+            const auto trim=requiredObject(content,"trim_paths",document_path);model::TrimPathAnimation data;
+            data.base={requiredBool(trim,"enabled",document_path),requiredNumber(trim,"start_percent",document_path),
+                requiredNumber(trim,"end_percent",document_path),requiredNumber(trim,"offset_degrees",document_path)};
+            if(trim.contains("keyframes")) {
+                const auto curves=requiredObject(trim,"keyframes",document_path);const std::array<const char*,3> names{"start_percent","end_percent","offset_degrees"};
+                for(std::size_t i=0;i<3;++i)if(curves.contains(names[i]))data.keys[i]=parseKeyframes(requiredArray(curves,names[i],document_path),document_path,keyframe_count,document_version);
+            }
+            if(!model::validTrimAnimation(data))fail(MotionDocumentErrorCode::InvalidValue,document_path,QStringLiteral("Invalid Trim Paths values or keyframes."));
+            shape.trim_paths=std::move(data);
+        }
         layer.content = shape;
     }
     if (document_version >= 4) {
@@ -1129,6 +1149,7 @@ MotionProjectData parseDocument(const QJsonObject& root,
             for(auto value:array){
                 if(!value.isObject())throw std::invalid_argument("Invalid mask object");
                 auto object=value.toObject();const bool path=object.contains("path")||object.value("kind")=="bezier_path";
+                if(object.contains("trim_paths"))throw std::invalid_argument("Masks do not support Trim Paths");
                 if(path && version<15)throw std::invalid_argument("Bezier masks require version 15");
                 if(path && object.value("kind")!="bezier_path")throw std::invalid_argument("Concurrent primitive and path mask");
                 if(path)object.insert("kind","rectangle");

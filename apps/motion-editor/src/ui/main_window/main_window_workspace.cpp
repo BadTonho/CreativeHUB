@@ -1,4 +1,5 @@
 #include "ui/viewer/pen_tool.h"
+#include "ui/inspector/trim_paths_inspector.h"
 #include "ui/translation_helpers.h"
 #include "ui/inspector/mask_inspector_widget.h"
 #include "main_window.h"
@@ -83,6 +84,10 @@ void MainWindow::createWorkspace()
         }
     });
     inspector_ = new InspectorWidget(this);
+    trim_paths_inspector_=new TrimPathsInspector(inspector_);
+    inspector_->addTab(trim_paths_inspector_,MotionUiTranslation::tr("Trim Paths"));
+    trim_paths_inspector_->setHandlers([this](auto edit){editTrimPaths(std::move(edit));},
+        [this](model::LayerId id,model::TrimPathProperty property,std::int64_t frame){selectTrimCurveSegment(id,property,frame);});
     inspector_->masksInspector()->setContextChangedHandler([this]{finishPendingTransformEdit();if(pen_tool_)pen_tool_->sync();});
     connect(inspector_,&InspectorWidget::scaleValueEdited,this,[this](int axis){editSelectedScaleAxis(static_cast<std::size_t>(axis));});
     connect(inspector_,&InspectorWidget::scaleKeyframeToggleRequested,this,[this](int axis){toggleSelectedScaleAxisKeyframe(static_cast<std::size_t>(axis));});
@@ -152,6 +157,10 @@ void MainWindow::createWorkspace()
                 applySelectedEffectStack(std::move(effects));
             });
     timeline_ = new TimelineNavigator(this);
+    timeline_->setTrimKeyframeHandlers([this](model::LayerId id,model::TrimPathProperty property,std::int64_t frame){selectLayer(id);selectTrimCurveSegment(id,property,frame);},
+        [this](model::LayerId id,model::TrimPathProperty property,std::int64_t from,std::int64_t to){
+            bool changed=false;editTrimPaths([&](auto& doc){changed=doc.moveLayerTrimKeyframe(id,property,from,to);return changed;});
+            if(changed)selectTrimCurveSegment(id,property,to);return changed;});
     timeline_->setParentPickWhipHandlers({
         [this](model::LayerId child) { return beginParentPickWhip(child); },
         [this](model::LayerId child,model::LayerId parent) { commitParentPickWhip(child,parent); },
