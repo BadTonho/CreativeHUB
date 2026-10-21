@@ -18,11 +18,11 @@ public:
         EditWorkspace* edit_workspace,
         FusionWorkspace* fusion_workspace,
         RenderWorkspace* render_workspace,
-        QWidget* preview_dock_contents,
+        QWidget* preview_canvas_area,
         QWidget* parent = nullptr);
     explicit WorkspaceHost(
         QWidget* preview_widget,
-        QWidget* preview_dock_contents,
+        QWidget* preview_canvas_area,
         QWidget* edit_inspector,
         QWidget* timeline_panel,
         FusionWorkspace* fusion_workspace,
@@ -44,7 +44,7 @@ public:
 
 private:
     QWidget* preview_widget_ = nullptr;
-    QWidget* preview_dock_contents_ = nullptr;
+    QWidget* preview_canvas_area_ = nullptr;
     FusionWorkspace* fusion_workspace_ = nullptr;
     RenderWorkspace* render_workspace_ = nullptr;
     QWidget* timeline_panel_ = nullptr;

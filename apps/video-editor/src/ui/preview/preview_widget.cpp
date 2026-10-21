@@ -137,6 +137,9 @@ void PreviewWidget::setFrame(rendering::PreviewFramePayload frame, quint64 deliv
         rendering::PreviewFrameDeliveryStage::PreviewSubmitted);
     current_payload_ = std::move(frame);
     current_frame_ = current_payload_.rgba;
+    if (parentWidget() != nullptr && parentWidget()->layout() != nullptr) {
+        parentWidget()->layout()->invalidate();
+    }
 
     if (vulkan_surface_ != nullptr && gpu_enabled_) {
         cpu_surface_->setDeliveryTraceId(0); frame_image_ = {};
@@ -172,6 +175,9 @@ void PreviewWidget::clearFrame(const QString& message) {
     current_frame_.reset();
     frame_image_ = {};
     empty_message_ = message;
+    if (parentWidget() != nullptr && parentWidget()->layout() != nullptr) {
+        parentWidget()->layout()->invalidate();
+    }
     if (cpu_surface_ != nullptr) {
         cpu_surface_->setDeliveryTraceId(0);
         cpu_surface_->setPixmap({});

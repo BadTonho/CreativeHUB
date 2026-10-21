@@ -190,6 +190,15 @@ restored with the workspace. `Preview` is a native dock that can be moved,
 resized, floated, closed, re-docked, and tabified like the other panels. Its
 `View > Preview` action reopens it when closed. The default layout keeps the
 Preview as a wide dock between Media Pool and Inspector. Outside Render, the
+Edit Preview canvas follows the active project's frame aspect ratio and stays
+centered inside its dock. When the Timeline dock is hidden with its title-bar
+close control or `View > Timeline`, the Preview dock grows into the freed
+vertical area; portrait canvases use the available height and leave equal,
+unpainted side areas. Showing Timeline restores its lower dock area. With no
+frame available, the Preview placeholder uses the available canvas area. This
+aspect-constrained layout is active only on Edit: Fusion keeps its full-width
+Viewer, and Render continues to host the same Preview widget in its middle
+column without the Edit canvas constraint.
 workspace host remains the central widget so Qt retains the draggable outer
 separator above the bottom Timeline dock. Its maximum width is one logical pixel while
 visible, non-floating side docks occupy the editing workspace, avoiding a blank

@@ -19,11 +19,11 @@ WorkspaceHost::WorkspaceHost(
     EditWorkspace* edit_workspace,
     FusionWorkspace* fusion_workspace,
     RenderWorkspace* render_workspace,
-    QWidget* preview_dock_contents,
+    QWidget* preview_canvas_area,
     QWidget* parent)
     : WorkspaceHost(
           edit_workspace != nullptr ? edit_workspace->previewWidget() : nullptr,
-          preview_dock_contents,
+          preview_canvas_area,
           edit_workspace != nullptr ? edit_workspace->inspectorPanel() : nullptr,
           edit_workspace != nullptr ? edit_workspace->timelinePanel() : nullptr,
           fusion_workspace,
@@ -32,7 +32,7 @@ WorkspaceHost::WorkspaceHost(
 
 WorkspaceHost::WorkspaceHost(
     QWidget* preview_widget,
-    QWidget* preview_dock_contents,
+    QWidget* preview_canvas_area,
     QWidget* edit_inspector,
     QWidget* timeline_panel,
     FusionWorkspace* fusion_workspace,
@@ -40,7 +40,7 @@ WorkspaceHost::WorkspaceHost(
     QWidget* parent)
     : QWidget(parent),
       preview_widget_(preview_widget),
-      preview_dock_contents_(preview_dock_contents),
+      preview_canvas_area_(preview_canvas_area),
       fusion_workspace_(fusion_workspace),
       render_workspace_(render_workspace),
       timeline_panel_(timeline_panel),
@@ -60,6 +60,10 @@ WorkspaceHost::WorkspaceHost(
     setObjectName("workspaceHost");
     setMinimumSize(0, 0);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+    if (preview_canvas_area_ != nullptr) {
+        preview_canvas_area_->setProperty("previewAspectConstrained", true);
+    }
 
     auto* viewer_layout = new QVBoxLayout(this);
     viewer_layout->setContentsMargins(0, 0, 0, 0);
@@ -107,6 +111,14 @@ WorkspaceHost::WorkspaceHost(
 
 void WorkspaceHost::setPage(WorkspacePageId page) {
     if (current_page_ == page) {
+        if (preview_canvas_area_ != nullptr) {
+            preview_canvas_area_->setProperty(
+                "previewAspectConstrained", page == WorkspacePageId::Edit);
+            if (auto* layout = preview_canvas_area_->layout()) {
+                layout->invalidate();
+                layout->activate();
+            }
+        }
         if (viewer_title_ != nullptr) {
             viewer_title_->setVisible(page == WorkspacePageId::Fusion);
         }
@@ -121,6 +133,15 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
         page != WorkspacePageId::Render &&
         current_page_ == WorkspacePageId::Render;
 
+    if (preview_canvas_area_ != nullptr) {
+        preview_canvas_area_->setProperty(
+            "previewAspectConstrained", page == WorkspacePageId::Edit);
+        if (auto* layout = preview_canvas_area_->layout()) {
+            layout->invalidate();
+            layout->activate();
+        }
+    }
+
     if (fusion_workspace_ != nullptr) {
         fusion_workspace_->setActive(page == WorkspacePageId::Fusion);
     }
@@ -128,9 +149,9 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
         render_workspace_->setActive(page == WorkspacePageId::Render);
     }
     if (entering_render) {
-        if (preview_widget_ != nullptr && preview_dock_contents_ != nullptr &&
-            preview_widget_->parentWidget() == preview_dock_contents_) {
-            if (auto* layout = preview_dock_contents_->layout()) {
+        if (preview_widget_ != nullptr && preview_canvas_area_ != nullptr &&
+            preview_widget_->parentWidget() == preview_canvas_area_) {
+            if (auto* layout = preview_canvas_area_->layout()) {
                 layout->removeWidget(preview_widget_);
             }
             preview_widget_->setParent(nullptr);
@@ -154,9 +175,9 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
     if (leaving_render && render_workspace_ != nullptr &&
         render_workspace_->previewWidget() == preview_widget_) {
         auto* preview_widget = render_workspace_->takePreviewWidget();
-        if (preview_widget != nullptr && preview_dock_contents_ != nullptr &&
-            preview_dock_contents_->layout() != nullptr) {
-            preview_dock_contents_->layout()->addWidget(preview_widget);
+        if (preview_widget != nullptr && preview_canvas_area_ != nullptr &&
+            preview_canvas_area_->layout() != nullptr) {
+            preview_canvas_area_->layout()->addWidget(preview_widget);
             preview_widget->show();
         }
     }

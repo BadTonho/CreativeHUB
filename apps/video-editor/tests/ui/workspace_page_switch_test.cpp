@@ -107,6 +107,10 @@ int main(int argc, char* argv[]) {
         preview_dock_contents->setObjectName("previewDockContents");
         auto* preview_layout = new QVBoxLayout(preview_dock_contents);
         preview_layout->setContentsMargins(0, 0, 0, 0);
+        auto* preview_canvas_area = new QWidget(preview_dock_contents);
+        preview_canvas_area->setObjectName("previewCanvasArea");
+        auto* preview_canvas_layout = new QVBoxLayout(preview_canvas_area);
+        preview_canvas_layout->setContentsMargins(0, 0, 0, 0);
         auto* edit_inspector = new QWidget;
         edit_inspector->setObjectName("editInspectorPage");
         auto* timeline = new QWidget;
@@ -164,13 +168,14 @@ int main(int argc, char* argv[]) {
         render_workspace->createPanels(&window);
         auto* viewer_title = fusion_workspace->viewerTitle();
         preview_layout->addWidget(viewer_title);
-        preview_layout->addWidget(preview, 1);
+        preview_canvas_layout->addWidget(preview, 1);
+        preview_layout->addWidget(preview_canvas_area, 1);
         auto* preview_dock = new QDockWidget("Preview", &window);
         preview_dock->setObjectName("previewDock");
         preview_dock->setWidget(preview_dock_contents);
         window.addDockWidget(Qt::RightDockWidgetArea, preview_dock);
         auto* workspace_host = new ui::WorkspaceHost(
-            preview, preview_dock_contents, edit_inspector, timeline,
+            preview, preview_canvas_area, edit_inspector, timeline,
             fusion_workspace, render_workspace, &window);
         window.setCentralWidget(workspace_host);
 
@@ -545,7 +550,7 @@ int main(int argc, char* argv[]) {
                     workspace_host->previewWidget() == preview && preview->isVisible(),
                 "Returning to Fusion must restore the shared Preview.");
         require(render_workspace->previewWidget() == nullptr &&
-                    preview->parentWidget() == preview_dock_contents,
+                    preview->parentWidget() == preview_canvas_area,
                 "Leaving Render must return the Preview to its dock contents.");
         require(!render_workspace->isActive() && !timeline_read_only,
                 "Leaving Render for Fusion must restore Timeline interaction.");
@@ -593,7 +598,7 @@ int main(int argc, char* argv[]) {
         buttons.edit->click();
         application.processEvents();
         require(preview_dock->isHidden() &&
-                    preview->parentWidget() == preview_dock_contents &&
+                    preview->parentWidget() == preview_canvas_area &&
                     render_workspace->previewWidget() == nullptr,
                 "Leaving Render must restore a previously hidden Preview to its dock.");
         preview_dock->show();
@@ -605,7 +610,7 @@ int main(int argc, char* argv[]) {
         buttons.fusion->click();
         application.processEvents();
         require(preview_dock->isFloating() && preview_dock->isVisible() &&
-                    preview->parentWidget() == preview_dock_contents &&
+                    preview->parentWidget() == preview_canvas_area &&
                     render_workspace->previewWidget() == nullptr,
                 "Leaving Render must restore a floating Preview dock.");
         preview_dock->setFloating(false);

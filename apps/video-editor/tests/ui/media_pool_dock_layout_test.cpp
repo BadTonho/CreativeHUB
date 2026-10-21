@@ -1,4 +1,8 @@
 #include "main_window/main_window.h"
+#include "ui/preview/preview_widget.h"
+#include "ui/workspace/workspace_host.h"
+#include "ui/workspace/workspace_page_id.h"
+#include "media/video_frame.h"
 
 #include <QRect>
 #include <QAction>
@@ -178,6 +182,90 @@ void requireMediaPoolNotExpanded(const Docks& docks) {
     require(docks.media->geometry().bottom() <
                 docks.timeline->geometry().bottom() - 24,
             "Inspector-only expansion stretched the Media Pool to full height.");
+}
+
+void requirePreviewAspect(
+    const QRect& area,
+    const QRect& canvas,
+    double expected_aspect,
+    const char* message) {
+    require(area.isValid() && canvas.isValid(), message);
+    const double actual_aspect = static_cast<double>(canvas.width()) /
+        static_cast<double>(canvas.height());
+    require(std::abs(actual_aspect - expected_aspect) < 0.015, message);
+    require(std::abs((canvas.left() + canvas.right()) -
+                     (area.left() + area.right())) <= 2,
+            "The Preview canvas must remain horizontally centered.");
+}
+
+void verifyTimelineCollapsedPreviewAspect(MainWindow& window) {
+    auto* preview = window.findChild<PreviewWidget*>("sharedPreviewWidget");
+    auto* area = window.findChild<QWidget*>("previewCanvasArea");
+    auto* host_widget = window.findChild<QWidget*>("workspaceHost");
+    auto* host = static_cast<ui::WorkspaceHost*>(host_widget);
+    const auto docks = findDocks(window);
+    require(preview != nullptr && area != nullptr && host_widget != nullptr,
+            "The Edit Preview aspect layout is missing.");
+    require(preview->parentWidget() == area,
+            "Edit must keep the shared Preview inside its canvas area.");
+
+    const auto applyFrame = [preview](int width, int height) {
+        auto frame = std::make_shared<media::VideoFrame>();
+        frame->width = width;
+        frame->height = height;
+        frame->stride = width * 4;
+        frame->rgba_pixels.resize(static_cast<std::size_t>(frame->stride) *
+                                  static_cast<std::size_t>(height));
+        preview->setFrame(std::move(frame));
+        settleLayout();
+    };
+    const auto verify = [area, preview](double aspect) {
+        requirePreviewAspect(area->rect(), preview->geometry(), aspect,
+                             "The Preview canvas does not match the project aspect ratio.");
+    };
+
+    window.resize(1920, 1080);
+    applyFrame(9, 16);
+    verify(9.0 / 16.0);
+    require(preview->height() >= area->height() - 4,
+            "The portrait Preview should use the available vertical space.");
+    const auto left_space = preview->x();
+    const auto right_space = area->width() - preview->geometry().right() - 1;
+    require(std::abs(left_space - right_space) <= 2,
+            "The portrait Preview must have equal invisible side spaces.");
+
+    const bool bins_visible = docks.bins->isVisible();
+    const bool media_visible = docks.media->isVisible();
+    const bool inspector_visible = docks.inspector->isVisible();
+    docks.timeline->toggleViewAction()->trigger();
+    settleLayout();
+    require(!docks.timeline->isVisible() && docks.preview->isVisible() &&
+                docks.bins->isVisible() == bins_visible &&
+                docks.media->isVisible() == media_visible &&
+                docks.inspector->isVisible() == inspector_visible,
+            "Hiding Timeline must leave other dock visibility unchanged.");
+    require(area->height() > 0 && preview->height() >= area->height() - 4,
+            "The portrait Preview must expand vertically when Timeline is hidden.");
+
+    window.resize(1280, 900);
+    settleLayout();
+    verify(9.0 / 16.0);
+    applyFrame(16, 9);
+    verify(16.0 / 9.0);
+
+    docks.timeline->toggleViewAction()->trigger();
+    settleLayout();
+    require(docks.timeline->isVisible() && docks.preview->isVisible(),
+            "Showing Timeline must restore the Edit dock layout.");
+    verify(16.0 / 9.0);
+
+    host->setPage(ui::WorkspacePageId::Fusion);
+    settleLayout();
+    require(preview->geometry() == area->rect(),
+            "Fusion must keep the Preview unconstrained by the Edit canvas aspect layout.");
+    host->setPage(ui::WorkspacePageId::Edit);
+    settleLayout();
+    verify(16.0 / 9.0);
 }
 
 void verifyAnimatedInspectorExpansion() {
@@ -573,6 +661,16 @@ int main(int argc, char** argv) {
         reopened_docks.media->show();
         settleLayout();
         require(reopened.close(), "The reopened editor did not close cleanly.");
+
+        QSettings().clear();
+        MainWindow aspect_window;
+        aspect_window.setDockOptions(
+            aspect_window.dockOptions() & ~QMainWindow::AnimatedDocks);
+        aspect_window.showNormal();
+        aspect_window.resize(1920, 1080);
+        settleLayout();
+        verifyTimelineCollapsedPreviewAspect(aspect_window);
+        require(aspect_window.close(), "The Preview aspect test window did not close cleanly.");
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

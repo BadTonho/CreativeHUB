@@ -31,6 +31,8 @@
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
+#include <QLayout>
+#include <QLayoutItem>
 #include <QAbstractItemView>
 #include <QListWidget>
 #include <QListWidgetItem>
@@ -73,6 +75,72 @@ using namespace main_window_detail;
 
 namespace {
 
+class PreviewAspectLayout final : public QLayout {
+public:
+    explicit PreviewAspectLayout(QWidget* parent) : QLayout(parent) {
+        setContentsMargins(0, 0, 0, 0);
+        setSpacing(0);
+    }
+
+    void addItem(QLayoutItem* item) override { item_ = item; }
+
+    int count() const override { return item_ != nullptr ? 1 : 0; }
+
+    QLayoutItem* itemAt(int index) const override {
+        return index == 0 ? item_ : nullptr;
+    }
+
+    QLayoutItem* takeAt(int index) override {
+        if (index != 0) return nullptr;
+        auto* item = item_;
+        item_ = nullptr;
+        return item;
+    }
+
+    QSize sizeHint() const override { return QSize(640, 360); }
+
+    QSize minimumSize() const override { return QSize(0, 0); }
+
+    void setGeometry(const QRect& geometry) override {
+        QLayout::setGeometry(geometry);
+        if (item_ == nullptr) return;
+
+        auto canvas = geometry;
+        const auto* preview = qobject_cast<const PreviewWidget*>(item_->widget());
+        const auto* host = parentWidget();
+        if (preview == nullptr || host == nullptr ||
+            !host->property("previewAspectConstrained").toBool()) {
+            item_->setGeometry(canvas);
+            return;
+        }
+
+        const auto payload = preview->currentPayload();
+        if (!payload.valid() || payload.width() <= 0 || payload.height() <= 0 ||
+            canvas.width() <= 0 || canvas.height() <= 0) {
+            item_->setGeometry(canvas);
+            return;
+        }
+
+        const double aspect = static_cast<double>(payload.width()) /
+            static_cast<double>(payload.height());
+        int width = canvas.width();
+        int height = qRound(static_cast<double>(width) / aspect);
+        if (height > canvas.height()) {
+            height = canvas.height();
+            width = qRound(static_cast<double>(height) * aspect);
+        }
+        canvas.setRect(
+            canvas.x() + (canvas.width() - width) / 2,
+            canvas.y() + (canvas.height() - height) / 2,
+            width,
+            height);
+        item_->setGeometry(canvas);
+    }
+
+private:
+    QLayoutItem* item_ = nullptr;
+};
+
 void refreshMenuVisibility(QMenu* menu) {
     if (menu == nullptr) return;
 
@@ -101,6 +169,7 @@ void refreshMenuVisibility(QMenu* menu) {
 
 void MainWindow::createWorkspace() {
     preview_widget_ = new PreviewWidget(this);
+    preview_widget_->setObjectName("sharedPreviewWidget");
     edit_workspace_ = new ui::EditWorkspace(
         editor_session_, timeline_command_service_, preview_widget_,
         *shortcut_manager_, this,
@@ -493,7 +562,13 @@ void MainWindow::createWorkspace() {
     if (fusion_workspace_->viewerTitle() != nullptr) {
         preview_dock_layout->addWidget(fusion_workspace_->viewerTitle());
     }
-    preview_dock_layout->addWidget(preview_widget_, 1);
+    auto* preview_canvas_area = new QWidget(preview_dock_contents);
+    preview_canvas_area->setObjectName("previewCanvasArea");
+    preview_canvas_area->setMinimumSize(0, 0);
+    preview_canvas_area->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    auto* preview_canvas_layout = new PreviewAspectLayout(preview_canvas_area);
+    preview_canvas_layout->addWidget(preview_widget_);
+    preview_dock_layout->addWidget(preview_canvas_area, 1);
     preview_dock_ = createDock(
         "Preview",
         "previewDock",
@@ -512,7 +587,7 @@ void MainWindow::createWorkspace() {
     }
     workspace_host_ = new ui::WorkspaceHost(
         edit_workspace_, fusion_workspace_, render_workspace_,
-        preview_dock_contents, this);
+        preview_canvas_area, this);
     setCentralWidget(workspace_host_);
     statusBar()->setSizeGripEnabled(false);
     statusBar()->setFixedHeight(26);
