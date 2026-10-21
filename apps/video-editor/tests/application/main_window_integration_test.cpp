@@ -1532,11 +1532,22 @@ public:
                         "Shift+Alt+Down must reverse the normal Edit Inspector step.");
                 send_position_x_key(Qt::Key_Up, Qt::ControlModifier);
                 require(std::abs(position_x->value() -
-                                 (initial_position_x + position_x_step)) < 1e-9,
-                        "Other Edit Inspector modifiers must retain the normal step.");
+                                 (initial_position_x + 1.000)) < 1e-9,
+                        "Ctrl+Up must increase an Edit Inspector field by 1.000.");
                 send_position_x_key(Qt::Key_Down, Qt::ControlModifier);
                 require(std::abs(position_x->value() - initial_position_x) < 1e-9,
-                        "Other Edit Inspector modifiers must retain the normal step in both directions.");
+                        "Ctrl+Down must reverse the coarse Edit Inspector step.");
+                for (const auto modifiers : {
+                         Qt::KeyboardModifiers(Qt::ControlModifier | Qt::ShiftModifier),
+                         Qt::KeyboardModifiers(Qt::ControlModifier | Qt::AltModifier)}) {
+                    send_position_x_key(Qt::Key_Up, modifiers);
+                    require(std::abs(position_x->value() -
+                                     (initial_position_x + position_x_step)) < 1e-9,
+                            "Ctrl combined with Shift or Alt must retain the normal Edit Inspector step.");
+                    send_position_x_key(Qt::Key_Down, modifiers);
+                    require(std::abs(position_x->value() - initial_position_x) < 1e-9,
+                            "Combined Edit Inspector modifiers must reverse the normal step.");
+                }
                 position_x->setValue(position_x->maximum());
                 send_position_x_key(Qt::Key_Up);
                 require(position_x->value() == position_x->maximum(),

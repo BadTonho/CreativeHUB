@@ -35,6 +35,8 @@ bool InspectorDoubleSpinBox::handleArrowKey(QKeyEvent* event) {
             step = 0.001;
         } else if (event->modifiers() == Qt::AltModifier) {
             step = 0.100;
+        } else if (event->modifiers() == Qt::ControlModifier) {
+            step = 1.000;
         }
         setValue(value() + (event->key() == Qt::Key_Up ? step : -step));
         event->accept();

@@ -488,11 +488,21 @@ int runFusionWorkspaceTest() {
     require(std::abs(scale->value() - 2.0) < 1e-9,
             "Shift+Alt+Down must reverse the normal Fusion Inspector step.");
     send_scale_key(Qt::Key_Up, Qt::ControlModifier);
-    require(std::abs(scale->value() - (2.0 + scale_step)) < 1e-9,
-            "Other Fusion Inspector modifiers must retain the normal step.");
+    require(std::abs(scale->value() - 3.0) < 1e-9,
+            "Ctrl+Up must increase a Fusion Inspector field by 1.000.");
     send_scale_key(Qt::Key_Down, Qt::ControlModifier);
     require(std::abs(scale->value() - 2.0) < 1e-9,
-            "Other Fusion Inspector modifiers must retain the normal step in both directions.");
+            "Ctrl+Down must reverse the coarse Fusion Inspector step.");
+    for (const auto modifiers : {
+             Qt::KeyboardModifiers(Qt::ControlModifier | Qt::ShiftModifier),
+             Qt::KeyboardModifiers(Qt::ControlModifier | Qt::AltModifier)}) {
+        send_scale_key(Qt::Key_Up, modifiers);
+        require(std::abs(scale->value() - (2.0 + scale_step)) < 1e-9,
+                "Ctrl combined with Shift or Alt must retain the normal Fusion Inspector step.");
+        send_scale_key(Qt::Key_Down, modifiers);
+        require(std::abs(scale->value() - 2.0) < 1e-9,
+                "Combined Fusion Inspector modifiers must reverse the normal step.");
+    }
     scale->setValue(scale->maximum());
     QKeyEvent increase_at_limit(
         QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);

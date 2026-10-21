@@ -743,12 +743,11 @@ that remains the precise value display; numeric fields do not show increment or
 decrement arrow buttons. Decimal fields show three fractional digits. Focus a
 numeric field and press Up or Down to adjust it by that field's configured
 step. Shift+Up/Down changes it by 0.001; Alt+Up/Down changes it by 0.100.
-Combining Shift and Alt or using another modifier keeps the configured step.
-These modifier steps apply to decimal fields throughout the Edit and Fusion
-Inspectors; integer fields retain their normal behavior. Fields remain directly
-editable. Slider drags
-update the preview while the pointer moves and are stored as one coalesced
-Undo/Redo edit.
+Ctrl+Up/Down changes it by 1.000. Combining modifiers keeps the configured
+step. These modifier steps apply to decimal fields throughout the Edit and
+Fusion Inspectors; integer fields retain their normal behavior. Fields remain
+directly editable. Slider drags update the preview while the pointer moves and
+are stored as one coalesced Undo/Redo edit.
 
 The preview composes all visible tracks in worker-owned code, from the bottom
 track to the top track, before handing one frame to the GPU/CPU preview. A gap
