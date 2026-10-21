@@ -49,6 +49,7 @@
 #include <QSaveFile>
 #include <QProgressDialog>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSettings>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -1477,6 +1478,36 @@ public:
                         inspector_ui.clip_effects_controls->isEnabled() &&
                         inspector_ui.effect_selection_hint->isHidden(),
                     "Selecting a compatible clip must enable Effects without changing the active tab.");
+            auto* position_x = inspector_ui.transform_spins[0];
+            auto* position_x_text = position_x->findChild<QLineEdit*>();
+            require(position_x_text != nullptr,
+                    "The Position X Inspector field has no editable text input.");
+            const auto initial_position_x = position_x->value();
+            const auto position_x_step = position_x->singleStep();
+            const auto send_position_x_key = [position_x_text](int key) {
+                QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
+                QApplication::sendEvent(position_x_text, &event);
+            };
+            inspector_ui.inspector_tabs->setCurrentIndex(0);
+            QApplication::processEvents();
+            position_x->setFocus();
+            {
+                const QSignalBlocker block_position_x(position_x);
+                send_position_x_key(Qt::Key_Up);
+                require(std::abs(position_x->value() -
+                                 (initial_position_x + position_x_step)) < 1e-9,
+                        "Up must increase the focused Edit Inspector field by its configured step.");
+                send_position_x_key(Qt::Key_Down);
+                require(std::abs(position_x->value() - initial_position_x) < 1e-9,
+                        "Down must reverse one Edit Inspector step.");
+                position_x->setValue(position_x->maximum());
+                send_position_x_key(Qt::Key_Up);
+                require(position_x->value() == position_x->maximum(),
+                        "Up must respect the Edit Inspector field's maximum.");
+                position_x->setValue(initial_position_x);
+            }
+            inspector_ui.inspector_tabs->setCurrentIndex(2);
+            QApplication::processEvents();
 
             auto* edit_controller = window.edit_workspace_->controller();
             const auto selected_clip_id = first_track.clips.front().clip_id;

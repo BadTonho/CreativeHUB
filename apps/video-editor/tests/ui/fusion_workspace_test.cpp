@@ -457,6 +457,25 @@ int runFusionWorkspaceTest() {
     QApplication::sendEvent(scale_text, &commit_typed_value);
     require(scale->value() == 2.0,
             "Typing and committing a value must still work without step buttons.");
+    scale->setFocus();
+    const auto scale_step = scale->singleStep();
+    QKeyEvent increase_scale(
+        QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);
+    QApplication::sendEvent(scale_text, &increase_scale);
+    require(std::abs(scale->value() - (2.0 + scale_step)) < 1e-9,
+            "Up must increase the focused Fusion Inspector field by its configured step.");
+    QKeyEvent decrease_scale(
+        QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier);
+    QApplication::sendEvent(scale_text, &decrease_scale);
+    require(std::abs(scale->value() - 2.0) < 1e-9,
+            "Down must reverse one Fusion Inspector step.");
+    scale->setValue(scale->maximum());
+    QKeyEvent increase_at_limit(
+        QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);
+    QApplication::sendEvent(scale_text, &increase_at_limit);
+    require(scale->value() == scale->maximum(),
+            "Up must respect the Fusion Inspector field's maximum.");
+    scale->setValue(2.0);
     apply->click();
     const auto* transformed = fusion::nodes::findNode(edited, transform_id);
     require(edit_count == 10 && transformed && transformed->transform.scale == 2.0,

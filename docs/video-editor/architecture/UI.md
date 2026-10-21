@@ -740,9 +740,11 @@ updates that keyframe; otherwise it changes the static base value. Timeline
 keyframe markers are visual and not draggable in this milestone. Each property
 also has a horizontal slider for quick adjustment and an editable numeric field
 that remains the precise value display; numeric fields do not show increment or
-decrement arrow buttons. Other numeric fields in the Edit and Fusion Inspectors
-follow the same rule and remain directly editable. Slider drags update the
-preview while the pointer moves and are stored as one coalesced Undo/Redo edit.
+decrement arrow buttons. Focus a numeric field and press Up or Down to adjust
+it by that field's configured step. Other numeric fields in the Edit and Fusion
+Inspectors follow the same rule and remain directly editable. Slider drags
+update the preview while the pointer moves and are stored as one coalesced
+Undo/Redo edit.
 
 The preview composes all visible tracks in worker-owned code, from the bottom
 track to the top track, before handing one frame to the GPU/CPU preview. A gap
