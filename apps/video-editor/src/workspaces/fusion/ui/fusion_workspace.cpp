@@ -1,6 +1,7 @@
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/fusion/nodes/ui/node_canvas.h"
 #include "ui/effects/effects_catalog.h"
+#include "ui/inspector/inspector_double_spin_box.h"
 
 #include <creative_suite/effects/effects.h>
 
@@ -508,11 +509,10 @@ void FusionWorkspace::refreshInspector() {
     remove->setObjectName("fusionRemoveNodeButton");
     auto spin = [this, layout](const QString& name, const QString& label, double value,
                                double minimum, double maximum, double step) {
-        auto* control = new QDoubleSpinBox(node_properties_);
+        auto* control = new InspectorDoubleSpinBox(node_properties_);
         control->setObjectName(name);
         control->setRange(minimum, maximum);
         control->setSingleStep(step);
-        control->setDecimals(3);
         control->setValue(value);
         layout->addRow(label, control);
         return control;
@@ -525,11 +525,10 @@ void FusionWorkspace::refreshInspector() {
         auto* row_layout = new QHBoxLayout(row);
         row_layout->setContentsMargins(0, 0, 0, 0);
         row_layout->setSpacing(4);
-        auto* control = new QDoubleSpinBox(row);
+        auto* control = new InspectorDoubleSpinBox(row);
         control->setObjectName(name);
         control->setRange(minimum, maximum);
         control->setSingleStep(step);
-        control->setDecimals(3);
         control->setValue(value);
         auto* key = new QPushButton(keyed ? QStringLiteral("â—†") : QStringLiteral("â—‡"), row);
         key->setObjectName(name + QStringLiteral("Keyframe"));
@@ -605,7 +604,7 @@ void FusionWorkspace::refreshInspector() {
             // Apply together so graph refresh does not interrupt text entry.
             auto* text_apply = new QPushButton(QCoreApplication::translate("FusionWorkspace", "Apply Text"), node_properties_); text_apply->setObjectName("fusionApplyText"); layout->addRow(text_apply);
             auto* font = new QFontComboBox(node_properties_); font->setObjectName("fusionTextFont"); font->setCurrentFont(QFont(QString::fromUtf8(node->text.font_family.c_str()))); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Font"), font);
-            auto* size = new QDoubleSpinBox(node_properties_); size->setObjectName("fusionTextSize"); size->setRange(1, 512); size->setValue(node->text.font_size_pixels); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Size"), size);
+            auto* size = new InspectorDoubleSpinBox(node_properties_); size->setObjectName("fusionTextSize"); size->setRange(1, 512); size->setValue(node->text.font_size_pixels); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Size"), size);
             auto* alignment = new QComboBox(node_properties_); alignment->setObjectName("fusionTextAlignment"); alignment->addItems({QCoreApplication::translate("FusionWorkspace", "Left"), QCoreApplication::translate("FusionWorkspace", "Center"), QCoreApplication::translate("FusionWorkspace", "Right")}); alignment->setCurrentIndex(static_cast<int>(node->text.alignment)); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Alignment"), alignment);
             connect(text_apply, &QPushButton::clicked, this, [this, node_id, content, font, size, alignment] {
                 auto candidate = graph_; auto* target = findMutableNode(candidate, node_id); if (!target) return;

@@ -446,7 +446,7 @@ int runFusionWorkspaceTest() {
     auto* apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
     require(scale && apply &&
                 scale->buttonSymbols() == QAbstractSpinBox::NoButtons &&
-                !scale->isReadOnly(),
+                !scale->isReadOnly() && scale->decimals() == 3,
             "Transform numeric fields must hide step buttons and remain editable.");
     auto* scale_text = scale->findChild<QLineEdit*>();
     require(scale_text != nullptr,
@@ -459,22 +459,50 @@ int runFusionWorkspaceTest() {
             "Typing and committing a value must still work without step buttons.");
     scale->setFocus();
     const auto scale_step = scale->singleStep();
-    QKeyEvent increase_scale(
-        QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);
-    QApplication::sendEvent(scale_text, &increase_scale);
+    const auto send_scale_key = [scale_text](int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+        QKeyEvent event(QEvent::KeyPress, key, modifiers);
+        QApplication::sendEvent(scale_text, &event);
+    };
+    send_scale_key(Qt::Key_Up);
     require(std::abs(scale->value() - (2.0 + scale_step)) < 1e-9,
             "Up must increase the focused Fusion Inspector field by its configured step.");
-    QKeyEvent decrease_scale(
-        QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier);
-    QApplication::sendEvent(scale_text, &decrease_scale);
+    send_scale_key(Qt::Key_Down);
     require(std::abs(scale->value() - 2.0) < 1e-9,
             "Down must reverse one Fusion Inspector step.");
+    send_scale_key(Qt::Key_Up, Qt::ShiftModifier);
+    require(std::abs(scale->value() - 2.001) < 1e-9,
+            "Shift+Up must increase a Fusion Inspector field by 0.001.");
+    send_scale_key(Qt::Key_Down, Qt::ShiftModifier);
+    require(std::abs(scale->value() - 2.0) < 1e-9,
+            "Shift+Down must reverse the fine Fusion Inspector step.");
+    send_scale_key(Qt::Key_Up, Qt::AltModifier);
+    require(std::abs(scale->value() - 2.100) < 1e-9,
+            "Alt+Up must increase a Fusion Inspector field by 0.100.");
+    send_scale_key(Qt::Key_Down, Qt::AltModifier);
+    require(std::abs(scale->value() - 2.0) < 1e-9,
+            "Alt+Down must reverse the coarse Fusion Inspector step.");
+    send_scale_key(Qt::Key_Up, Qt::ShiftModifier | Qt::AltModifier);
+    require(std::abs(scale->value() - (2.0 + scale_step)) < 1e-9,
+            "Shift+Alt+Up must retain the normal Fusion Inspector step.");
+    send_scale_key(Qt::Key_Down, Qt::ShiftModifier | Qt::AltModifier);
+    require(std::abs(scale->value() - 2.0) < 1e-9,
+            "Shift+Alt+Down must reverse the normal Fusion Inspector step.");
+    send_scale_key(Qt::Key_Up, Qt::ControlModifier);
+    require(std::abs(scale->value() - (2.0 + scale_step)) < 1e-9,
+            "Other Fusion Inspector modifiers must retain the normal step.");
+    send_scale_key(Qt::Key_Down, Qt::ControlModifier);
+    require(std::abs(scale->value() - 2.0) < 1e-9,
+            "Other Fusion Inspector modifiers must retain the normal step in both directions.");
     scale->setValue(scale->maximum());
     QKeyEvent increase_at_limit(
         QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);
     QApplication::sendEvent(scale_text, &increase_at_limit);
     require(scale->value() == scale->maximum(),
             "Up must respect the Fusion Inspector field's maximum.");
+    scale->setValue(scale->minimum());
+    send_scale_key(Qt::Key_Down);
+    require(scale->value() == scale->minimum(),
+            "Down must respect the Fusion Inspector field's minimum.");
     scale->setValue(2.0);
     apply->click();
     const auto* transformed = fusion::nodes::findNode(edited, transform_id);

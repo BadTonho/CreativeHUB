@@ -740,9 +740,13 @@ updates that keyframe; otherwise it changes the static base value. Timeline
 keyframe markers are visual and not draggable in this milestone. Each property
 also has a horizontal slider for quick adjustment and an editable numeric field
 that remains the precise value display; numeric fields do not show increment or
-decrement arrow buttons. Focus a numeric field and press Up or Down to adjust
-it by that field's configured step. Other numeric fields in the Edit and Fusion
-Inspectors follow the same rule and remain directly editable. Slider drags
+decrement arrow buttons. Decimal fields show three fractional digits. Focus a
+numeric field and press Up or Down to adjust it by that field's configured
+step. Shift+Up/Down changes it by 0.001; Alt+Up/Down changes it by 0.100.
+Combining Shift and Alt or using another modifier keeps the configured step.
+These modifier steps apply to decimal fields throughout the Edit and Fusion
+Inspectors; integer fields retain their normal behavior. Fields remain directly
+editable. Slider drags
 update the preview while the pointer moves and are stored as one coalesced
 Undo/Redo edit.
 

@@ -6,6 +6,7 @@
 #include "timeline/timeline_zoom.h"
 #include "timeline/timeline_widget.h"
 #include "ui/system/system_memory_indicator.h"
+#include "ui/inspector/inspector_double_spin_box.h"
 
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
@@ -256,10 +257,9 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         auto* row_layout = new QHBoxLayout(row);
         row_layout->setContentsMargins(0, 0, 0, 0);
         row_layout->setSpacing(4);
-        auto* spin = new QDoubleSpinBox(row);
+        auto* spin = new InspectorDoubleSpinBox(row);
         spin->setRange(transform_minimums[index], transform_maximums[index]);
         spin->setSingleStep(transform_steps[index]);
-        spin->setDecimals(index == 3 ? 1 : 3);
         spin->setEnabled(false);
         spin->setFixedWidth(82);
         ui_.transform_spins[static_cast<std::size_t>(index)] = spin;
@@ -359,7 +359,8 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     effect_parameter_layout->setContentsMargins(0, 0, 0, 0);
     ui_.clip_effect_parameter_label = new QLabel(QCoreApplication::translate("EditWorkspace", "Parameter"), effect_parameter_row);
     ui_.clip_effect_parameter_slider = new QSlider(Qt::Horizontal, effect_parameter_row);
-    ui_.clip_effect_parameter_value = new QDoubleSpinBox(effect_parameter_row);
+    ui_.clip_effect_parameter_value =
+        new InspectorDoubleSpinBox(effect_parameter_row);
     ui_.clip_effect_parameter_value->setFixedWidth(74);
     ui_.clip_effect_parameter_slider->setEnabled(false);
     ui_.clip_effect_parameter_value->setEnabled(false);

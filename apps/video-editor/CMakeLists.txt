@@ -159,6 +159,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/ui/effects/effects_toolbox_widget.h
     src/ui/effects/effects_list_widget.cpp
     src/ui/effects/effects_list_widget.h
+    src/ui/inspector/inspector_double_spin_box.cpp
+    src/ui/inspector/inspector_double_spin_box.h
     src/ui/functions/function_palette.cpp
     src/ui/functions/function_palette.h
     src/ui/functions/function_palette_item_delegate.cpp

@@ -751,8 +751,10 @@ public:
             require(!inspector_number_fields.isEmpty(),
                     "The Edit Inspector should expose its numeric fields to the UI regression.");
             for (const auto* field : inspector_number_fields) {
+                const auto* decimal_field = qobject_cast<const QDoubleSpinBox*>(field);
                 require(field->buttonSymbols() == QAbstractSpinBox::NoButtons &&
-                            !field->isReadOnly(),
+                            !field->isReadOnly() &&
+                            (decimal_field == nullptr || decimal_field->decimals() == 3),
                         "Edit Inspector numeric fields must hide step buttons and remain editable.");
             }
             require(inspector_ui.transform_sliders[0] != nullptr &&
@@ -1484,8 +1486,9 @@ public:
                     "The Position X Inspector field has no editable text input.");
             const auto initial_position_x = position_x->value();
             const auto position_x_step = position_x->singleStep();
-            const auto send_position_x_key = [position_x_text](int key) {
-                QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
+            const auto send_position_x_key =
+                [position_x_text](int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+                QKeyEvent event(QEvent::KeyPress, key, modifiers);
                 QApplication::sendEvent(position_x_text, &event);
             };
             inspector_ui.inspector_tabs->setCurrentIndex(0);
@@ -1493,6 +1496,12 @@ public:
             position_x->setFocus();
             {
                 const QSignalBlocker block_position_x(position_x);
+                position_x_text->setText(
+                    position_x->locale().toString(0.123, 'f', position_x->decimals()));
+                send_position_x_key(Qt::Key_Return);
+                require(std::abs(position_x->value() - 0.123) < 1e-9,
+                        "Typing and committing a value must remain available in Edit Inspector fields.");
+                position_x->setValue(initial_position_x);
                 send_position_x_key(Qt::Key_Up);
                 require(std::abs(position_x->value() -
                                  (initial_position_x + position_x_step)) < 1e-9,
@@ -1500,10 +1509,42 @@ public:
                 send_position_x_key(Qt::Key_Down);
                 require(std::abs(position_x->value() - initial_position_x) < 1e-9,
                         "Down must reverse one Edit Inspector step.");
+                send_position_x_key(Qt::Key_Up, Qt::ShiftModifier);
+                require(std::abs(position_x->value() - (initial_position_x + 0.001)) < 1e-9,
+                        "Shift+Up must increase an Edit Inspector field by 0.001.");
+                send_position_x_key(Qt::Key_Down, Qt::ShiftModifier);
+                require(std::abs(position_x->value() - initial_position_x) < 1e-9,
+                        "Shift+Down must reverse the fine Edit Inspector step.");
+                send_position_x_key(Qt::Key_Up, Qt::AltModifier);
+                require(std::abs(position_x->value() - (initial_position_x + 0.100)) < 1e-9,
+                        "Alt+Up must increase an Edit Inspector field by 0.100.");
+                send_position_x_key(Qt::Key_Down, Qt::AltModifier);
+                require(std::abs(position_x->value() - initial_position_x) < 1e-9,
+                        "Alt+Down must reverse the coarse Edit Inspector step.");
+                send_position_x_key(
+                    Qt::Key_Up, Qt::ShiftModifier | Qt::AltModifier);
+                require(std::abs(position_x->value() -
+                                 (initial_position_x + position_x_step)) < 1e-9,
+                        "Shift+Alt+Up must retain the normal Edit Inspector step.");
+                send_position_x_key(
+                    Qt::Key_Down, Qt::ShiftModifier | Qt::AltModifier);
+                require(std::abs(position_x->value() - initial_position_x) < 1e-9,
+                        "Shift+Alt+Down must reverse the normal Edit Inspector step.");
+                send_position_x_key(Qt::Key_Up, Qt::ControlModifier);
+                require(std::abs(position_x->value() -
+                                 (initial_position_x + position_x_step)) < 1e-9,
+                        "Other Edit Inspector modifiers must retain the normal step.");
+                send_position_x_key(Qt::Key_Down, Qt::ControlModifier);
+                require(std::abs(position_x->value() - initial_position_x) < 1e-9,
+                        "Other Edit Inspector modifiers must retain the normal step in both directions.");
                 position_x->setValue(position_x->maximum());
                 send_position_x_key(Qt::Key_Up);
                 require(position_x->value() == position_x->maximum(),
                         "Up must respect the Edit Inspector field's maximum.");
+                position_x->setValue(position_x->minimum());
+                send_position_x_key(Qt::Key_Down);
+                require(position_x->value() == position_x->minimum(),
+                        "Down must respect the Edit Inspector field's minimum.");
                 position_x->setValue(initial_position_x);
             }
             inspector_ui.inspector_tabs->setCurrentIndex(2);
