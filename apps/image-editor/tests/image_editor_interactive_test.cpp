@@ -339,6 +339,41 @@ private slots:
         qInfo()<<"blend_gpu_1080p constrained_capacity"<<"refusal_ms"<<refusal_ms<<"cpu_recovery_ms"<<timer.elapsed()<<"operation"<<refused.operation.c_str()<<"cause"<<refused.cause.c_str()<<"gpu_bytes"<<limited.resourceUsage().texture_bytes;
         QCOMPARE(recovered,baseline(session));
     }
+    void gpuGradientMaps() {
+        if(QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
+        auto surface=OpenGlFrameCompositor::createSurface();QVERIFY(surface);auto budget=std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,3);
+        OpenGlFrameCompositor gpu(surface.get(),OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),budget);
+        ImageDocumentSession s;QVERIFY(s.createCanvas({160,100},QColor(40,80,120,150)));const auto base=s.selectedLayerId();
+        QVERIFY(s.applyPaintStroke({{5,40},{145,40}},QColor(200,70,130,190),50));
+        QPainterPath selection;selection.addRect(0,0,160,100);selection.addEllipse(40,25,30,25);
+        const auto id=s.addGradientMapAdjustment(selection);creative_suite::effects::GradientMapParameters points{{{0,{210,20,70}},{.4,{30,210,100}},{1,{20,70,240}}}};QVERIFY(s.setGradientMap(id,points));
+        ImageInteractiveRasterCache cache;
+        const auto verify=[&](bool no_upload=false,std::optional<std::uint64_t> expected_upload={}){
+            const auto comp=cache.prepare(s.exportSnapshot(),"gradient-gpu");OpenGlCompositionTimings timing;auto result=gpu.composeRasterTexture(makeGpuRasterRequest(comp),{},&timing);QVERIFY2(result.status==OpenGlCompositionStatus::Complete,result.cause.c_str());if(no_upload)QCOMPARE(timing.uploaded_bytes,std::uint64_t(0));if(expected_upload)QCOMPARE(timing.uploaded_bytes,*expected_upload);
+            const auto read=gpu.readback(result.frame);QVERIFY(read.frame);const auto actual=QImage(read.frame->rgba_pixels.data(),read.frame->width,read.frame->height,read.frame->stride,QImage::Format_RGBA8888_Premultiplied).convertToFormat(QImage::Format_ARGB32_Premultiplied);const auto expected=baseline(s);
+            for(int y=0;y<actual.height();++y)for(int x=0;x<actual.width();++x){auto a=actual.pixel(x,y),b=expected.pixel(x,y);QVERIFY2(std::abs(qRed(a)-qRed(b))<=2 && std::abs(qGreen(a)-qGreen(b))<=2 && std::abs(qBlue(a)-qBlue(b))<=2 && qAlpha(a)==qAlpha(b),qPrintable(QString("Gradient pixel %1,%2: %3 / %4").arg(x).arg(y).arg(a,0,16).arg(b,0,16)));}
+        };
+        verify();const auto work=cache.reconstructedPixels();for(int mode=1;mode<6;++mode){QVERIFY(s.setStackBlendMode(id,false,static_cast<BlendMode>(mode)));verify(true);QCOMPARE(cache.reconstructedPixels(),work);}
+        points.stops[1].position=.6;QVERIFY(s.setGradientMap(id,points));verify(true);QCOMPARE(cache.reconstructedPixels(),work);
+        QVERIFY(s.setLayerOpacity(id,47));verify(true);QVERIFY(s.setLayerOpacity(id,0));verify(true);QVERIFY(s.setLayerOpacity(id,100));verify(false,160*100); // Re-admit the evicted Grayscale8 mask only.
+        auto invalid=makeGpuRasterRequest(cache.prepare(s.exportSnapshot(),"gradient-gpu"));invalid.nodes.back().layers.back().adjustment->stops[1].position=0;
+        QCOMPARE(gpu.composeRasterTexture(invalid).status,OpenGlCompositionStatus::Unsupported);
+        QCOMPARE(gpu.composeRasterTexture(makeGpuRasterRequest(cache.prepare(s.exportSnapshot(),"gradient-gpu")),[]{return true;}).status,OpenGlCompositionStatus::Cancelled);
+        QVERIFY(s.setLayerClipping(id,true));verify();const auto upper=s.addLayer();QVERIFY(s.applyPaintStroke({{5,40},{145,40}},QColor(40,180,210,170),16));QVERIFY(s.setLayerClipping(upper,true));verify();
+        ImageLayerOutlineData outline;outline.color=Qt::green;QVERIFY(s.setLayerOutline(base,outline));verify();
+        const auto group=s.groupLayers({base,id,upper});QVERIFY(!group.isEmpty());QVERIFY(s.setGroupOpacity(group,65));s.rotateRight();verify();
+        static_cast<void>(s.selectGroup(group));QVERIFY(s.setStackBlendMode(group,true,BlendMode::Overlay));const auto top=s.addGradientMapAdjustment();QVERIFY(s.setGradientMap(top,points));verify();
+        auto dense=points;dense.stops.insert(dense.stops.begin()+2,{.601,{240,20,220}});QVERIFY(s.setGradientMap(top,dense));verify();
+        // Reference workload: five raster layers, one isolated group and one adjustment.
+        QVERIFY(s.createCanvas({1920,1080},Qt::transparent));QStringList ids;for(int i=0;i<5;++i){if(i)QVERIFY(!s.addLayer().isEmpty());ids.append(s.selectedLayerId());QVERIFY(s.applyPaintStroke({{200.,300.+i*30},{1600.,300.+i*30}},QColor(30*i,80,180,190),220));}
+        QVERIFY(!s.groupLayers(ids).isEmpty());const auto adjustment=s.addGradientMapAdjustment();QVERIFY(s.setGradientMap(adjustment,points));cache.clear();
+        OpenGlTextureFramePtr lease;QElapsedTimer timer;
+        const auto measure=[&](const char* label,bool no_upload){timer.restart();const auto c=cache.prepare(s.exportSnapshot(),"gradient-1080p");const auto prepare=timer.elapsed();OpenGlCompositionTimings timing;auto result=gpu.composeRasterTexture(makeGpuRasterRequest(c),{},&timing);QVERIFY2(result.status==OpenGlCompositionStatus::Complete,result.cause.c_str());lease=result.frame;QVERIFY(gpu.readback(lease).frame);if(no_upload)QCOMPARE(timing.uploaded_bytes,std::uint64_t(0));qInfo()<<"gradient_gpu_1080p"<<label<<"prepare_ms"<<prepare<<"total_readback_ms"<<timer.elapsed()<<"uploaded_bytes"<<timing.uploaded_bytes<<"gpu_bytes"<<gpu.resourceUsage().texture_bytes<<"cache_bytes"<<cache.retainedBytes();};
+        measure("cold",false);const auto pixels=cache.reconstructedPixels();measure("warm",true);points.stops[1].color={200,100,30};QVERIFY(s.setGradientMap(adjustment,points));measure("color",true);points.stops[1].position=.5;QVERIFY(s.setGradientMap(adjustment,points));measure("position",true);QCOMPARE(cache.reconstructedPixels(),pixels);
+        QVERIFY(s.selectLayer(ids.front()));QVERIFY(s.applyPaintStroke({{800,450}},Qt::yellow,30));measure("base",false);
+        auto limited_budget=std::make_shared<OpenGlTexturePoolBudget>(64ULL*1024*1024,3);OpenGlFrameCompositor limited(surface.get(),OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),limited_budget);
+        const auto comp=cache.prepare(s.exportSnapshot(),"gradient-1080p");timer.restart();const auto refused=limited.composeRasterTexture(makeGpuRasterRequest(comp));QCOMPARE(refused.status,OpenGlCompositionStatus::Unsupported);const auto refusal=timer.elapsed();timer.restart();const auto recovered=ImageInteractiveRasterCache::composite(comp);QVERIFY(!recovered.isNull());qInfo()<<"gradient_capacity refusal_ms"<<refusal<<"cpu_ms"<<timer.elapsed()<<"gpu_bytes"<<limited.resourceUsage().texture_bytes;QCOMPARE(recovered,baseline(s));
+    }
     void gpuEditableBlendObjects() {
         if(QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
         auto surface=OpenGlFrameCompositor::createSurface();QVERIFY(surface);
@@ -370,6 +405,7 @@ private slots:
             QVERIFY(s.setStackBlendMode(shapeLayer,false,m));QVERIFY(s.setStackBlendMode(textLayer,false,m));QVERIFY(s.setStackBlendMode(rasterLayer,false,m));verify();}
         const auto group=s.groupLayers({shapeLayer,textLayer,rasterLayer});QVERIFY(!group.isEmpty());
         QVERIFY(s.setStackBlendMode(group,true,BlendMode::Overlay));QVERIFY(s.setGroupOpacity(group,73));s.rotateRight();verify();
+        QVERIFY(!s.addGradientMapAdjustment().isEmpty());verify();
     }
     void gpuPixelsUploadsAndPresentation() {
         if (QGuiApplication::platformName() == "offscreen") QSKIP("Native GPU validation is registered separately.");

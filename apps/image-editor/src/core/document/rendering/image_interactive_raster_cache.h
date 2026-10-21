@@ -15,6 +15,7 @@ struct InteractiveLayer {
     InteractiveRaster content, mask;
     int opacity = 100;
     creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
+    std::optional<creative_suite::effects::GradientMapParameters> adjustment;
 };
 struct InteractiveNode {
     QVector<InteractiveLayer> layers;
@@ -22,10 +23,12 @@ struct InteractiveNode {
     int opacity = 100;
     bool group = false;
     creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
+    QString id;
 };
 struct InteractiveComposition {
     QSize size;
     QVector<InteractiveNode> nodes;
+    bool adjustment_document = false;
 };
 // One worker owns this cache. Transient requests reuse confirmed pixels but do
 // not replace them. The 64 MiB budget covers content, masks and Background.
@@ -52,10 +55,11 @@ private:
         std::optional<ImageLayerOutlineData> outline;
         std::optional<ImageLayerMaskData> layer_mask;
         std::optional<ImageDocumentData> clipping_signature;
+        std::optional<QPainterPath> initial_selection;
     };
     InteractiveRaster raster(const QString& identity, const QSize& size,
         const QVector<ImageOperation>& operations, const QHash<QString, QImage>& resources,
-        bool mask, bool transient, const std::atomic_bool* cancel);
+        bool mask, bool transient, const std::atomic_bool* cancel,const std::optional<QPainterPath>& initial_selection = {});
     QHash<QString, Entry> entries_;
     // Semantic revisions survive pixel eviction; unchanged sources need no GPU upload.
     QHash<QString, Entry> revisions_;

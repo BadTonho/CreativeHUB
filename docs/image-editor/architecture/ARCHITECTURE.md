@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 19; host links live in the Video Editor's
+  The `.cimg` schema is version 20; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -663,7 +663,7 @@ export error paths; cancellation publishes no partial output.
 
 Raw editable targets exclude outlines. Layer/group thumbnail invalidation
 includes the outline, and composite Eyedropper sampling includes its pixels.
-Hub backup rebasing accepts v19 and retains outline/clipping properties; linked PNG
+Hub backup rebasing accepts v20 and retains outline/clipping properties; linked PNG
 publication retains the existing protocol. See [the contract](../features/LAYER_OUTLINE.md).
 
 ## Clipping composition
@@ -700,3 +700,18 @@ Capacity-driven GPU refusal records informational CPU recovery in the bounded
 local log before publishing the recovered frame. Repeated identical recovery
 is deduplicated until GPU success or a changed cause/document; stale/cancelled
 frames do not emit recovery. Technical failures retain error severity.
+
+
+## Gradient Map adjustment boundary
+
+Optional shared Gradient Map parameters distinguish app-owned pixel-less layers.
+Session capabilities separate raster editing from mask editing; scope remains in
+the Image stack resolver. Reference/export/CPU preview use the same cancellable
+alpha-preserving adapter; document adjustment paths accumulate premultiplied
+pixels from the start while documents without adjustments keep their old path.
+The shared OpenGL raster layer adds a trailing optional adjustment, evaluated
+against a budgeted GPU-only backdrop copy. Internal clipped adjustments reuse
+CPU chain assembly. Point/color changes retain unchanged source planes; group
+thumbnails with adjustments reuse prepared composition members. A mask's optional
+selection seed participates in rendering, geometry, persistence and cache keys.
+See [parameters, scope, errors and verification](../features/GRADIENT_MAP.md).

@@ -2858,5 +2858,33 @@ Executável: %2</translation>
         <source>A layer or group blend mode is invalid.</source>
         <translation>O modo de mesclagem da camada ou do grupo é inválido.</translation>
     </message>
+    <message>
+        <source>New Adjustment Layer</source>
+        <translation>Nova camada de ajuste</translation>
+    </message>
+    <message>
+        <source>Gradient Map</source>
+        <translation>Mapa de degradê</translation>
+    </message>
+    <message>
+        <source>Add Point</source>
+        <translation>Adicionar ponto</translation>
+    </message>
+    <message>
+        <source>Remove Point</source>
+        <translation>Remover ponto</translation>
+    </message>
+    <message>
+        <source>A Gradient Map adjustment is invalid.</source>
+        <translation>Um ajuste de mapa de degradê é inválido.</translation>
+    </message>
+    <message>
+        <source>The mask selection exceeds the supported range.</source>
+        <translation>A seleção da máscara excede o intervalo permitido.</translation>
+    </message>
+    <message>
+        <source>Adjustment layers have no pixels to export. Export the document or its group.</source>
+        <translation>Camadas de ajuste não possuem pixels para exportar. Exporte o documento ou seu grupo.</translation>
+    </message>
 </context>
 </TS>

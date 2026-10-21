@@ -472,6 +472,15 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
                     updateView(true);
                 }
             });
+    connect(layer_panel_,&LayerPanel::addGradientMapRequested,this,[this]{
+        if(!hasActiveDocumentTab())return;
+        auto* canvas=activeCanvas();canvas->commitTextEditing();canvas->cancelTransientGestures();clearInteractivePreview(canvas);
+        const auto id=activeSession().addGradientMapAdjustment(canvas->areaSelectionClipPath());
+        if(!id.isEmpty()){selectedMaskLayerId().clear();selectedObjectIds().clear();deactivateCanvasTools();updateView(true);}
+    });
+    connect(layer_panel_,&LayerPanel::adjustmentEditStarted,this,[this]{if(!hasActiveDocumentTab())return;activeCanvas()->commitTextEditing();activeCanvas()->cancelTransientGestures();clearInteractivePreview(activeCanvas());activeSession().beginLayerAdjustmentEdit();});
+    connect(layer_panel_,&LayerPanel::adjustmentEditFinished,this,[this]{if(hasActiveDocumentTab()){activeSession().endLayerAdjustmentEdit();updateView(true);}});
+    connect(layer_panel_,&LayerPanel::gradientMapChanged,this,[this](const QString& id,const creative_suite::effects::GradientMapParameters& value){if(hasActiveDocumentTab() && activeSession().setGradientMap(id,value))updateView(true);});
     connect(layer_panel_, &LayerPanel::stackBlendModeChanged, this,
         [this](const QString& id, bool group, int mode) {
             if (!hasActiveDocumentTab()) return;
@@ -1796,6 +1805,7 @@ void ImageEditorWindow::createActions() {
 
     undo_action_ = makeAction(
         QCoreApplication::translate("ImageEditorUI", "Undo"), QKeySequence::Undo, [this]() {
+            layer_panel_->finishOutlineEdit();
             activeCanvas()->commitTextEditing();
             const QPoint old_offset = activeSession().data().canvas_base_offset;
             if (activeSession().undo()) {
@@ -1809,6 +1819,7 @@ void ImageEditorWindow::createActions() {
     undo_action_->setObjectName(QStringLiteral("undoAction"));
     redo_action_ = makeAction(
         QCoreApplication::translate("ImageEditorUI", "Redo"), QKeySequence::Redo, [this]() {
+            layer_panel_->finishOutlineEdit();
             activeCanvas()->commitTextEditing();
             const QPoint old_offset = activeSession().data().canvas_base_offset;
             if (activeSession().redo()) {
@@ -2329,7 +2340,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     requestCanvasRender();
     tool_sidebar_->setDocumentAvailable(activeSession().hasSource());
     tool_sidebar_->setPaintingAllowed(activeSession().hasSource() &&
-                                      activeSession().selectedLayerIsEditable());
+                                      (activeSession().selectedLayerIsEditable() || (editingMask() && activeSession().selectedLayerCanEditMask())));
     updateLayerPanel();
     updateObjectPlacements();
     updateToolOptions();
@@ -2339,8 +2350,11 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     save_action_->setEnabled(activeSession().hasSource());
     save_as_action_->setEnabled(activeSession().hasSource());
     export_action_->setEnabled(activeSession().hasSource());
-    quick_export_action_->setEnabled(activeSession().hasSource());
-    layer_panel_->setQuickExportEnabled(activeSession().hasSource());
+    const auto* export_layer=findLayer(activeSession().data(),activeSession().selectedLayerId());
+    const bool export_pixels=activeSession().hasSource() && (!export_layer || !export_layer->adjustment);
+    quick_export_action_->setEnabled(export_pixels);
+    quick_export_action_->setToolTip(export_pixels?QString{}:QCoreApplication::translate("ImageEditorUI","Adjustment layers have no pixels to export. Export the document or its group."));
+    layer_panel_->setQuickExportEnabled(export_pixels);
     relink_action_->setEnabled(activeSession().sourceIsMissing());
     import_layer_action_->setEnabled(activeSession().hasSource() && !importing_);
     relink_raster_action_->setEnabled(activeSession().hasSource() && !importing_ &&
@@ -2412,7 +2426,8 @@ void ImageEditorWindow::updateSelectionContext() {
     const bool selected_layer_editable = activeSession().selectedLayerIsEditable();
     const bool selected_item_transformable = selected_layer_editable ||
         activeSession().selectedGroupIsActive();
-    tool_sidebar_->setPaintingAllowed(selected_layer_editable);
+    const bool paintable=selected_layer_editable || (editingMask() && activeSession().selectedLayerCanEditMask());
+    tool_sidebar_->setPaintingAllowed(paintable);
     crop_action_->setEnabled(selected_item_transformable);
     rotate_left_action_->setEnabled(selected_item_transformable);
     rotate_right_action_->setEnabled(selected_item_transformable);
@@ -2422,8 +2437,8 @@ void ImageEditorWindow::updateSelectionContext() {
     cancel_crop_action_->setEnabled((crop_action_->isChecked() && selected_item_transformable) ||
         tool_sidebar_->activeTool() == ToolSidebar::Tool::AreaSelect ||
         tool_sidebar_->activeTool() == ToolSidebar::Tool::Lasso);
-    paint_tool_action_->setEnabled(selected_layer_editable);
-    eraser_tool_action_->setEnabled(selected_layer_editable);
+    paint_tool_action_->setEnabled(paintable);
+    eraser_tool_action_->setEnabled(paintable);
     shapes_tool_action_->setEnabled(true);
     text_tool_action_->setEnabled(true);
     select_tool_action_->setEnabled(true);

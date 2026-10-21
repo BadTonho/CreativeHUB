@@ -26,6 +26,10 @@ ImageExportResult exportImageSnapshot(
     if (snapshot.source_image.isNull()) {
         return failed(QStringLiteral("Open or relink an image before exporting."));
     }
+    if(options.scope==ImageExportScope::SelectedLayer) {
+        const auto* layer=findLayer(snapshot.document,snapshot.selected_layer_id);
+        if(layer && layer->adjustment)return failed(QStringLiteral("Adjustment layers have no pixels to export. Export the document or its group."));
+    }
     const QString suffix = QFileInfo(output_path).suffix().toLower();
     const QString output_absolute = absoluteCleanPath(output_path);
     const auto would_overwrite_source = [&output_path, &output_absolute](const QString& source_path) {

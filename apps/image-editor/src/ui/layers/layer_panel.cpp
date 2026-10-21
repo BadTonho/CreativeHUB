@@ -1,5 +1,6 @@
 #include "../../core/document/image_layer_clipping.h"
 #include "layer_panel.h"
+#include "gradient_map_editor.h"
 #include "../translation_helpers.h"
 
 #include "../transparency_checkerboard.h"
@@ -329,6 +330,12 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
 
     layer_context_menu_ = new QMenu(this);
     layer_context_menu_->setObjectName(QStringLiteral("imageLayerContextMenu"));
+    auto* adjustments=layer_context_menu_->addMenu(QCoreApplication::translate("ImageEditorUI","New Adjustment Layer"));
+    add_gradient_action_=adjustments->addAction(QCoreApplication::translate("ImageEditorUI","Gradient Map"));add_gradient_action_->setObjectName("addGradientMapAction");
+    connect(add_gradient_action_,&QAction::triggered,this,[this]{finishOutlineEdit();emit addGradientMapRequested();});
+    gradient_editor_=new GradientMapEditor(this);layout->addWidget(gradient_editor_);gradient_editor_->hide();
+    gradient_editor_->started=[this]{emit adjustmentEditStarted();};gradient_editor_->finished=[this]{emit adjustmentEditFinished();};
+    gradient_editor_->changed=[this](const auto& value){emit gradientMapChanged(selectedItemId(),value);};
     QAction* group_context_action = layer_context_menu_->addAction(
         QCoreApplication::translate("ImageEditorUI", "Group Selected"));
     group_context_action->setObjectName(QStringLiteral("groupSelectedLayersContextAction"));
@@ -808,6 +815,7 @@ void LayerPanel::beginOutlineEdit() {
 }
 
 void LayerPanel::finishOutlineEdit() {
+    if(gradient_editor_)gradient_editor_->finish();
     if (!outline_editing_) return;
     outline_editing_ = false; emit outlineEditFinished();
 }
@@ -969,8 +977,13 @@ void LayerPanel::updateControls() {
         blend_mode_->setCurrentIndex(blend_mode_->findData(static_cast<int>(mode)));
         blend_mode_->setEnabled(editable && layer_tree_->selectedItems().size()==1);
     }
-    const bool outline_editable = has_layer && !layer->background && layer_tree_->selectedItems().size() == 1;
-    clipping_action_->setEnabled(outline_editable && (layer->clip_to_base || clippingBases(document_).contains(id)));
+    add_gradient_action_->setEnabled(!document_.root_stack.isEmpty() && layer_tree_->selectedItems().size()==1);
+    const bool adjustment=has_layer && layer->adjustment.has_value();
+    quick_export_button_->setToolTip(adjustment?QCoreApplication::translate("ImageEditorUI","Adjustment layers have no pixels to export. Export the document or its group."):QString{});
+    gradient_editor_->setVisible(adjustment && layer_tree_->selectedItems().size()==1);
+    if(adjustment)gradient_editor_->setValue(id,*layer->adjustment);
+    const bool outline_editable = has_layer && !adjustment && !layer->background && layer_tree_->selectedItems().size() == 1;
+    clipping_action_->setEnabled(has_layer && !layer->background && layer_tree_->selectedItems().size()==1 && (layer->clip_to_base || clippingBases(document_).contains(id)));
     clipping_action_->setText(has_layer && layer->clip_to_base
         ? QCoreApplication::translate("ImageEditorUI", "Release Clipping Mask")
         : QCoreApplication::translate("ImageEditorUI", "Create Clipping Mask"));

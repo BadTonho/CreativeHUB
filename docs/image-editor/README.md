@@ -32,3 +32,5 @@ This directory groups the current scope, implementation contracts, feature deliv
 - [Layer and group blend modes](features/BLEND_MODES.md): transparent composition, v19 and regression coverage.
 
 - [Blend-mode Windows profile](performance/blend-modes-windows-2026-10-20.json): 1080p CPU/GPU, caches, uploads, capacity recovery and canonical builds.
+
+- [Gradient Map adjustment layers](features/GRADIENT_MAP.md): multi-point editing, masks, scope, v20, CPU/GPU and verification.

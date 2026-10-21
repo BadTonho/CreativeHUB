@@ -221,3 +221,13 @@ budget and released for Normal-only work/retirement. Insufficient capacity uses
 logged CPU recovery; it must not loop indefinitely on Busy. No GPU readback is
 needed for blending itself. Source rasters/textures survive outer mode edits;
 clipped child changes recompose their CPU chain. See [contract and evidence](../features/BLEND_MODES.md).
+
+
+## Gradient Map adjustments
+
+Native raster adjustment draws evaluate shared validated RGB stops against a
+GPU-only copy of the accumulated target, preserving its alpha and applying mask,
+opacity and mode once. Clipped adjustments run in the reusable CPU chain stage.
+All intermediates retain the 256 MiB worker budget; raster/thumbnail retention
+stays at 64 MiB. Uniform point/color edits retain resident content/mask textures.
+No adjustment application needs GPU readback. See [contract and measurements](../features/GRADIENT_MAP.md).

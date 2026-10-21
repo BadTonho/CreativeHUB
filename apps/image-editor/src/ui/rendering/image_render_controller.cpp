@@ -30,7 +30,7 @@ struct ImageRenderController::WorkerState {
         cache.setByteLimit(cache.maximum_bytes-reserved);
     }
     void prepareThumbnails(const ImageExportSnapshot& snapshot, const QString& id, InteractiveFrame& frame,
-        const std::atomic_bool* cancellation) {
+        const std::atomic_bool* cancellation,const InteractiveComposition& composition) {
         bool reset = thumbnail_document_id != id || thumbnail_snapshot.source_image.cacheKey() != snapshot.source_image.cacheKey() ||
             thumbnail_snapshot.document.canvas_size != snapshot.document.canvas_size ||
             thumbnail_snapshot.document.operations != snapshot.document.operations ||
@@ -46,7 +46,7 @@ struct ImageRenderController::WorkerState {
             if (cancellation->load()) return;
             const auto* before = findLayer(thumbnail_snapshot.document,layer.id);
             const bool unchanged = !reset && before && before->operations==layer.operations && before->mask==layer.mask &&
-                before->outline==layer.outline && before->clip_to_base==layer.clip_to_base &&
+                before->outline==layer.outline && before->adjustment==layer.adjustment && before->clip_to_base==layer.clip_to_base &&
                 (!layer.clip_to_base || thumbnail_snapshot.document==snapshot.document);
             next.insert(layer.id, unchanged && thumbnails.contains(layer.id) ? thumbnails.value(layer.id) :
                 ImageDocumentRenderer::layerThumbnail(snapshot.document,snapshot.source_image,snapshot.raster_images,layer,size,cancellation));
@@ -66,7 +66,16 @@ struct ImageRenderController::WorkerState {
                 const auto* old = findLayer(thumbnail_snapshot.document,child); const auto* current=findLayer(snapshot.document,child);
                 if (!old || !current || *old != *current) { unchanged=false; break; }
             }
-            next.insert(group.id, unchanged && thumbnails.contains(group.id) ? thumbnails.value(group.id) :
+            const bool adjusted=std::any_of(group.layer_ids.cbegin(),group.layer_ids.cend(),[&](const QString& child){const auto* layer=findLayer(snapshot.document,child);return layer && layer->adjustment;});
+            if(!unchanged && adjusted){
+                const auto node=std::find_if(composition.nodes.cbegin(),composition.nodes.cend(),[&](const auto& value){return value.id==group.id;});
+                QImage image(size,QImage::Format_ARGB32_Premultiplied);image.fill(Qt::transparent);
+                if(node!=composition.nodes.cend()){
+                    InteractiveComposition isolated;isolated.size=composition.size;isolated.adjustment_document=true;isolated.nodes={*node};isolated.nodes[0].blend_mode=BlendMode::Normal;
+                    image=ImageInteractiveRasterCache::composite(isolated,cancellation).scaled(size,Qt::KeepAspectRatio,Qt::SmoothTransformation);
+                }
+                next.insert(group.id,image);
+            }else next.insert(group.id, unchanged && thumbnails.contains(group.id) ? thumbnails.value(group.id) :
                 ImageDocumentRenderer::groupThumbnail(snapshot.document,snapshot.raster_images,group,size,cancellation));
         }
         if (cancellation->load()) return;
@@ -91,7 +100,7 @@ OpenGlRasterRequest makeGpuRasterRequest(const InteractiveComposition& compositi
             const auto input = [](const InteractiveRaster& value) {
                 return OpenGlRasterInput{value.identity.toStdString(), value.pixels, value.previous_key, value.dirty, value.revision};
             };
-            node.layers.push_back({input(layer.content), input(layer.mask), layer.opacity, layer.blend_mode});
+            node.layers.push_back({input(layer.content), input(layer.mask), layer.opacity, layer.blend_mode,layer.adjustment});
         }
         for (const auto& op : source.transforms) {
             OpenGlRasterTransform transform;
@@ -206,7 +215,7 @@ void ImageRenderController::start(Request request) {
                 frame.gpu_bytes = state->gpu ? state->gpu->resourceUsage().texture_bytes : 0;
                 if (!cancelled() && !frame.texture) frame.image = ImageInteractiveRasterCache::composite(composition, request.cancellation.get());
                 if (!cancelled() && !request.transient && (!frame.image.isNull() || frame.texture))
-                    state->prepareThumbnails(request.snapshot, request.document_id, frame, request.cancellation.get());
+                    state->prepareThumbnails(request.snapshot, request.document_id, frame, request.cancellation.get(),composition);
                 if (!cancelled() && !frame.texture && frame.image.isNull()) {
                     operation = QStringLiteral("interactive_render"); failure = QStringLiteral("The document could not be rendered.");
                 }

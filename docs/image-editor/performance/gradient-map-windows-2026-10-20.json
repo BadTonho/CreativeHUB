@@ -1,0 +1,123 @@
+{
+  "date": "2026-10-20",
+  "platform": "Windows 11 x64",
+  "configuration": "Release",
+  "qt_version": "6.7.2",
+  "hardware": {
+    "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+    "gpu": "NVIDIA GeForce GTX 1660 SUPER",
+    "driver": "617.42",
+    "vram_mib": 6144,
+    "source": "Local processor registry and nvidia-smi"
+  },
+  "workload": {
+    "width": 1920,
+    "height": 1080,
+    "editable_raster_layers": 5,
+    "background_layers": 1,
+    "groups": 1,
+    "adjustment_layers": 1,
+    "content": "Five partially transparent painted layers in one isolated group, followed by a three-stop Gradient Map."
+  },
+  "cpu": {
+    "prepare_and_composite_ms": {
+      "cold": 49,
+      "warm": 41,
+      "color_change": 40,
+      "base_content_update": 39
+    },
+    "retained_raster_cache_bytes": 49766400,
+    "sampled_peak_working_set_bytes_profile_process": 104730624
+  },
+  "gpu": {
+    "texture_budget_bytes": 268435456,
+    "phases": {
+      "cold": {
+        "prepare_ms": 16,
+        "prepare_compose_readback_ms": 66,
+        "uploaded_bytes": 49766400,
+        "gpu_texture_bytes": 74649600,
+        "cpu_cache_bytes": 49766400
+      },
+      "warm": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 7,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "color": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 4,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "position": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 5,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "base": {
+        "prepare_ms": 2,
+        "prepare_compose_readback_ms": 6,
+        "uploaded_bytes": 4624,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      }
+    },
+    "sampled_peak_working_set_bytes_profile_process": 267472896,
+    "constrained_capacity": {
+      "budget_bytes": 67108864,
+      "status": "Unsupported: resource capacity; CPU reference recovery matched",
+      "refusal_ms": 247,
+      "cpu_recovery_ms": 37,
+      "gpu_texture_bytes": 66355200
+    }
+  },
+  "verification": {
+    "distinct_ctest_passed": 50,
+    "image_ctest_passed": 32,
+    "shared_ctest_passed": 4,
+    "video_ctest_passed": 8,
+    "motion_ctest_passed": 4,
+    "hub_ctest_passed": 2,
+    "native_gpu_qttest_passed": 17,
+    "maximum_allowed_gpu_channel_difference": 2,
+    "alpha_difference": 0,
+    "note": "Thirty Image gates passed in the full scoped run; two native shader gates initially failed and passed after correction. The shared OpenGL gate was also repeated successfully. Other 18 scoped consumer/shared gates passed."
+  },
+  "canonical_executables": [
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\image-editor\\Release\\creative-suite-image-editor.exe",
+      "modified_local": "2026-10-20T22:17:53-03:00"
+    },
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\image-editor\\Debug\\creative-suite-image-editor.exe",
+      "modified_local": "2026-10-20T22:18:38-03:00"
+    },
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\hub\\Debug\\creative-suite-hub.exe",
+      "modified_local": "2026-10-20T22:18:15-03:00"
+    },
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\video-editor\\Release\\creative-suite-video-editor.exe",
+      "modified_local": "2026-10-20T22:17:58-03:00"
+    },
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\motion-editor\\Release\\creative-suite-motion-editor.exe",
+      "modified_local": "2026-10-20T22:18:02-03:00"
+    }
+  ],
+  "limits": [
+    "Single native profile after scoped builds/tests; no general latency or memory guarantee.",
+    "Cold recreates CPU/GPU application caches and context/program resources; driver shader caches were not cleared.",
+    "GPU totals include synchronous readback for measurement; production preview delivers texture leases directly.",
+    "Sampled process peaks include Qt/driver/session state; GPU profile also includes the separate constrained-capacity context and CPU recovery. These are not whole-application or VRAM peak measurements.",
+    "Changing the base appends a 30 px painted point, enabling bounded raster/upload updates. Point/color edits re-use existing rasters with zero uploads.",
+    "CPU and GPU raster reconstruction/upload assertions are deterministic; timing and process peaks are observations.",
+    "Native visual acceptance, macOS/Linux builds and native driver/runtime validation remain pending."
+  ]
+}

@@ -1,6 +1,6 @@
 # Image Editor Document Format
 
-Status: **provisional version 19**. The `.cimg` extension is temporary until a
+Status: **provisional version 20**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
 version 7 adds stable IDs to paint and eraser strokes; version 8 adds
@@ -10,9 +10,9 @@ version 12 adds independently resizable canvas bounds; version 13 adds optional
 area-selection clipping to paint and eraser strokes; version 14 adds editable
 bucket-fill operations; version 15 adds editable linear-gradient operations;
 version 16 adds editable blur strokes; version 17 adds editable layer outlines.
-Version 18 adds editable clipping masks. Version 19 adds layer/group blend modes. Versions 1 through 18 remain readable and save as v19.
+Version 18 adds editable clipping masks. Version 19 adds layer/group blend modes. Version 20 adds Gradient Map adjustment layers and selection-seeded masks. Versions 1 through 19 remain readable and save as v20.
 
-Hub snapshots preserve versions 1–19 and rebase relative source/import paths
+Hub snapshots preserve versions 1–20 and rebase relative source/import paths
 to their original absolute locations. The native save contract remains the
 same; media are not bundled. See [Hub backups](../../hub/BACKUPS.md) and the
 producer/consumer `hub-backup-format-test` for relocation coverage.
@@ -24,7 +24,7 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `19`. |
+| `version` | integer | Current version is `20`. |
 | `base` | object | A linked source image or a self-contained canvas. |
 | `canvas` | object | Version 12 current document bounds and base-image offset. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
@@ -73,8 +73,8 @@ for relink validation.
 Versions 1 through 11 have no `canvas` object. They load with the canvas equal
 to the dimensions produced by their existing base operations and a zero base
 offset, preserving their previous appearance. Saving any supported version
-writes version 19. Recovery wrapper version 1 accepts document payloads through
-v19.
+writes version 20. Recovery wrapper version 1 accepts document payloads through
+v20.
 
 ## Area-selection stroke clipping (version 13)
 
@@ -131,7 +131,7 @@ no pixel change does not create an operation. Bucket fills are not addressable
 individually through Object Selection. Replaying earlier operations before the
 fill recomputes its target region, so the saved operation remains editable.
 Versions 1 through 13 contain no bucket-fill operations and remain readable;
-saving any supported document writes version 19.
+saving any supported document writes version 20.
 
 ## Linear Gradient (version 15)
 
@@ -162,7 +162,7 @@ Each changed gradient is one undoable operation and cannot be selected or moved
 individually through Object Selection.
 
 Versions 1 through 14 contain no linear-gradient operations and remain
-readable; saving any supported document writes version 19.
+readable; saving any supported document writes version 20.
 
 ## Blur Stroke (version 16)
 
@@ -188,7 +188,7 @@ grayscale because the mask's preceding operation sequence is grayscale. A
 zero radius or stroke that changes no pixels is a no-op; each changed stroke
 is one undoable operation and cannot be selected or moved individually through
 Object Selection. Versions 1 through 15 contain no blur operations and remain
-readable; saving any supported document writes version 19.
+readable; saving any supported document writes version 20.
 
 ## Linked raster images (version 11)
 
@@ -228,7 +228,7 @@ crop, quarter-turn, and flip commands continue to transform rendered content
 and layer masks. Image pixels render at their position in the operation list,
 then the layer mask, layer opacity, and group composition apply.
 
-Recovery retains envelope version 1 and accepts document payloads through v19.
+Recovery retains envelope version 1 and accepts document payloads through v20.
 The Video Editor consumes flattened published PNG files; its .csp schema does
 not change.
 
@@ -269,7 +269,7 @@ to an existing mask's operation sequence. Mask strokes in transformed groups
 are mapped back into the child's coordinates. Creating, removing, toggling,
 and painting a mask are undoable document edits. Mask editing target selection
 is temporary UI state and is not persisted. Versions 1–9 load without masks;
-saving upgrades the document payload to v19. A mask in an older envelope is rejected.
+saving upgrades the document payload to v20. A mask in an older envelope is rejected.
 Recovery, full export, Quick Export, and linked PNG publication include masks.
 
 ## Layer stack
@@ -350,7 +350,7 @@ group to preserve the one-level rule.
 
 The top-level `operations` array preserves the ordered, non-destructive edits
 from versions 1–3 and renders them as part of `Background`. This keeps old
-documents visually unchanged when they are opened and later saved as version 19.
+documents visually unchanged when they are opened and later saved as version 20.
 New edits are stored in the selected raster layer's `operations` array.
 
 Each layer operation is evaluated on the current fixed document canvas. Crop
@@ -448,7 +448,7 @@ Version 1 uses the legacy `source` object. Version 2 adds canvas bases. Version
 layer-local eraser strokes. Version 6 adds editable shapes to layer operations.
 Version 7 adds IDs to paint and eraser operations. When reading versions 1–6,
 the loader generates in-memory IDs for operations that do not contain them;
-the next save writes those IDs in version 19. Versions 1 through 18 retain their existing Normal rendering. Saving any supported version writes version 19. New text
+the next save writes those IDs in version 19. Versions 1 through 18 retain their existing Normal rendering. Saving any supported version writes version 20. New text
 layers are named `Text N` and inserted using the same stack placement rule as
 shape layers; they can be grouped, hidden, assigned opacity, selected, moved,
 resized by changing their box width, and deleted as editable operations.
@@ -523,4 +523,21 @@ The optional `blend_mode` string on raster layers and groups uses `normal`,
 writers omit Normal. Background never carries the field. v1-18 load as Normal;
 reject fields in older schemas and unknown/non-string values. Recovery wrapper
 v1 accepts v19, and Hub preserves modes during path rebasing. Older editor
-binaries reject v19; future v20 is unsupported. See [pixel/export contract](../features/BLEND_MODES.md).
+binaries reject v19; future v21 is unsupported. See [pixel/export contract](../features/BLEND_MODES.md).
+
+
+## Adjustment layers and selection masks (version 20)
+
+An adjustment uses `kind: "adjustment"`, empty `operations`, and an `adjustment`
+object with `type: "gradient_map"` and `stops`. Each stop has a normalized
+numeric `position` and opaque `#RRGGBB` color. Require 2-32 strictly ordered
+points on the 0.001 grid, with endpoints 0/1. Reject unknown kinds, invalid
+points, Background adjustments and adjustment outlines/raster operations.
+
+Any layer mask may optionally carry `initial_selection: {fill_rule, path}`.
+The path uses the existing element encoding and fill-rule identifiers 0/1.
+It seeds black outside and white inside, before existing mask operations;
+absence retains the legacy white mask. Geometry follows canvas offsets/group
+transforms. Both new payloads are rejected before v20. Recovery retains envelope
+v1. Hub supports v1-20 and rejects v21; linked publication remains PNG. See
+[the full contract](../features/GRADIENT_MAP.md).

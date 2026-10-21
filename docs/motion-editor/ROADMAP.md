@@ -631,3 +631,8 @@ preview and export remain unchanged. Shared composition/OpenGL/Vulkan and Motion
 blend, preview, GPU composition and export gates protect this additive boundary.
 See [Image contract and execution evidence](../image-editor/features/BLEND_MODES.md).
 Native visual and other-platform acceptance remain pending.
+
+
+## Shared Gradient Map maintenance
+
+Shared effects/composition/OpenGL/Vulkan and Motion blend, preview, GPU composition and export gates protect default raster records and opaque output while Image adds optional Gradient Map adjustments. Motion UI, effects registries and formats remain unchanged. See [Image contract](../image-editor/features/GRADIENT_MAP.md).

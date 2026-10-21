@@ -1017,3 +1017,25 @@ Status: pending owner visual acceptance on Windows; macOS/Linux pending.
    uses. Verify original source bytes stay unchanged and all output matches.
 7. Repeat a 1080p five-layer/group workload; record build path/date, OS/GPU,
    responsiveness, memory, GPU recovery and any technical errors in local logs.
+
+
+## Gradient Map adjustments
+
+Status: pending Windows owner visual acceptance; macOS/Linux builds/runtime pending.
+
+1. Create above Background, a root layer, a group and a group child. Check creation
+   above whole clipping chains, single-selection requirements and independent tabs.
+2. Capture area selections with separate regions and holes; inspect antialiasing,
+   paint/erase/fill/gradient/blur the mask, remove/disable it and resize the canvas.
+3. Add/move/remove points up to 32. Check fixed endpoints, 0.1% precision, live
+   preview, one Undo per continuous edit and complete color-dialog cancellation.
+4. Combine alpha holes/partial coverage, every mode/opacity, both outline positions,
+   clipped adjustments between raster children, groups, reordering, deletion and
+   release/Undo. Confirm alpha preservation and protected base outline colors.
+5. Compare CPU/Automatic, thumbnails, Eyedropper, full/group export and PNG linked
+   refresh in Video. Adjustment-only Quick Export must be disabled and explained;
+   isolated raster exports and editable raw targets must remain unchanged.
+6. Save/reopen/recover v20, open old documents and restore Hub backups elsewhere.
+   Confirm gradient colors, initial selection masks and original source links.
+7. Record 1080p cold/warm/parameter/content updates, GPU recovery, memory, build
+   paths/configuration, OS/driver, responsiveness and any logged technical errors.

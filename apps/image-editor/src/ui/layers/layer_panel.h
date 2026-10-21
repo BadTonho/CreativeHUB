@@ -22,6 +22,7 @@ class QTreeWidgetItem;
 
 namespace image_editor {
 
+class GradientMapEditor;
 class LayerPanel final : public QWidget {
     Q_OBJECT
 
@@ -51,6 +52,10 @@ public:
 
 signals:
     void quickExportRequested();
+    void addGradientMapRequested();
+    void adjustmentEditStarted();
+    void adjustmentEditFinished();
+    void gradientMapChanged(const QString&,const creative_suite::effects::GradientMapParameters&);
     void stackBlendModeChanged(const QString& id, bool group, int mode);
     void layerClippingChanged(const QString& id, bool enabled);
     void layerSelected(const QString& layer_id);
@@ -91,6 +96,8 @@ private:
     QPushButton* quick_export_button_ = nullptr;
     QTreeWidget* layer_tree_ = nullptr;
     QMenu* layer_context_menu_ = nullptr;
+    GradientMapEditor* gradient_editor_ = nullptr;
+    QAction* add_gradient_action_ = nullptr;
     QAction* clipping_action_ = nullptr;
     QLabel* edit_hint_ = nullptr;
     QSlider* opacity_slider_ = nullptr;

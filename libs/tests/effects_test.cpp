@@ -1,4 +1,5 @@
 #include <creative_suite/effects/effects.h>
+#include <creative_suite/effects/gradient_map.h>
 #include <creative_suite/effects/gaussian_blur.h>
 
 #include <algorithm>
@@ -125,6 +126,17 @@ void verifySharedBlur() {
 }
 
 int main() {
+    {
+        using namespace creative_suite::effects;
+        GradientMapParameters map{{{0,{220,20,50}},{.4,{20,210,60}},{1,{30,70,240}}}};
+        require(validGradientMap(map),"Gradient Map points rejected");
+        require(gradientMapColor(map,.2)==std::array<unsigned char,3>{120,115,55},"Gradient Map interpolation changed");
+        require(gradientMapColor(map,-1)==map.stops.front().color && gradientMapColor(map,2)==map.stops.back().color,"Gradient Map endpoints changed");
+        map.stops[1].position=std::numeric_limits<double>::quiet_NaN();require(!validGradientMap(map),"Nonfinite Gradient Map accepted");
+        map.stops[1].position=0;require(!validGradientMap(map),"Duplicate Gradient Map position accepted");
+        map.stops.resize(33);require(!validGradientMap(map),"Unbounded Gradient Map accepted");
+    }
+
     verifySharedBlur();
     using namespace creative_suite::effects;
     require(builtInEffects().size() == 4, "The built-in visual effect catalog is incomplete.");

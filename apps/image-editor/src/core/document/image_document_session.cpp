@@ -248,7 +248,7 @@ ImageExportSnapshot ImageDocumentSession::interactiveSnapshot(const ImagePreview
         return snapshot;
     }
     auto* layer = findLayer(snapshot.document, selected_layer_id_);
-    if (!hasSource() || !selectedLayerIsEditable() || !layer) return snapshot;
+    if (!hasSource() || (!selectedLayerIsEditable() && !(preview.mask && selectedLayerCanEditMask())) || !layer) return snapshot;
     std::optional<ImageOperation> operation;
     if (preview.kind == ImagePreviewKind::Gradient)
         operation = prepareLinearGradientOperation(preview.start, preview.end, preview.color, preview.clipping, preview.mask, nullptr);
@@ -330,6 +330,7 @@ bool ImageDocumentSession::createCanvas(const QSize& size,
     force_dirty_ = true;
     history_.clear();
     opacity_edit_active_ = false;
+    adjustment_edit_active_=false;adjustment_edit_snapshot_={};
     outline_edit_active_ = false; outline_edit_snapshot_ = {};
     return true;
 }
@@ -386,6 +387,7 @@ bool ImageDocumentSession::openImage(const QString& source_path, QString* error)
     force_dirty_ = false;
     history_.clear();
     opacity_edit_active_ = false;
+    adjustment_edit_active_=false;adjustment_edit_snapshot_={};
     outline_edit_active_ = false; outline_edit_snapshot_ = {};
     return true;
 }
@@ -442,6 +444,7 @@ bool ImageDocumentSession::openDocument(const QString& document_path, QString* e
     force_dirty_ = false;
     history_.clear();
     opacity_edit_active_ = false;
+    adjustment_edit_active_=false;adjustment_edit_snapshot_={};
     outline_edit_active_ = false; outline_edit_snapshot_ = {};
     return true;
 }
@@ -501,6 +504,7 @@ bool ImageDocumentSession::restoreRecovery(const QString& recovery_path, QString
     force_dirty_ = true;
     history_.clear();
     opacity_edit_active_ = false;
+    adjustment_edit_active_=false;adjustment_edit_snapshot_={};
     outline_edit_active_ = false; outline_edit_snapshot_ = {};
     return true;
 }
@@ -652,6 +656,10 @@ bool ImageDocumentSession::resizeCanvas(const QSize& size,
     };
     for (auto& layer : candidate.layers) {
         if (layer.background) continue;
+        if(layer.mask && layer.mask->initial_selection){
+            QTransform shift;shift.translate(delta.x(),delta.y());layer.mask->initial_selection=shift.map(*layer.mask->initial_selection);
+            if(!ImageDocumentGeometry::isValidStrokeClipPath(*layer.mask->initial_selection)){assignError(error,QStringLiteral("The mask selection exceeds the supported range."));return false;}
+        }
         if (!shift_operations(&layer.operations) ||
             (layer.mask.has_value() && !shift_operations(&layer.mask->operations))) {
             assignError(error, QStringLiteral("The canvas change would move existing content beyond the supported edit range."));
@@ -682,6 +690,7 @@ bool ImageDocumentSession::resizeCanvas(const QSize& size,
 }
 
 bool ImageDocumentSession::saveDocument(QString document_path, QString* error) {
+    endLayerAdjustmentEdit();
     endLayerOutlineEdit();
     if (!hasSource()) {
         assignError(error, QStringLiteral("Relink the source image before saving the document."));
@@ -1138,7 +1147,7 @@ bool ImageDocumentSession::applyBucketFill(
     const QPoint& seed, const QColor& color, int tolerance, QString* error,
     std::optional<QPainterPath> clipping_path, bool mask_target) {
     if (error != nullptr) error->clear();
-    if (!hasSource() || !selectedLayerIsEditable()) {
+    if (!hasSource() || (!selectedLayerIsEditable() && !(mask_target && selectedLayerCanEditMask()))) {
         assignError(error, QStringLiteral("Select an editable layer before filling."));
         return false;
     }
@@ -1227,7 +1236,7 @@ std::function<std::optional<ImageEditableSelectionTarget>()>
 ImageDocumentSession::makeEditableSelectionTargetTask(
     const QPoint& canvas_seed, bool mask_target, QString* error) const {
     if (error != nullptr) error->clear();
-    if (!hasSource() || !selectedLayerIsEditable()) {
+    if (!hasSource() || (!selectedLayerIsEditable() && !(mask_target && selectedLayerCanEditMask()))) {
         assignError(error, QStringLiteral("Select an editable layer before using the Magic Wand."));
         return {};
     }
@@ -1292,7 +1301,7 @@ std::optional<ImageOperation> ImageDocumentSession::prepareLinearGradientOperati
     std::optional<QPainterPath> clipping_path, bool mask_target,
     QString* error) const {
     if (error != nullptr) error->clear();
-    if (!hasSource() || !selectedLayerIsEditable()) {
+    if (!hasSource() || (!selectedLayerIsEditable() && !(mask_target && selectedLayerCanEditMask()))) {
         assignError(error, QStringLiteral("Select an editable layer before applying a gradient."));
         return std::nullopt;
     }
@@ -1407,7 +1416,7 @@ std::optional<ImageOperation> ImageDocumentSession::prepareBlurStrokeOperation(
     std::optional<QPainterPath> clipping_path, bool mask_target,
     QString* error) const {
     if (error != nullptr) error->clear();
-    if (!hasSource() || !selectedLayerIsEditable()) {
+    if (!hasSource() || (!selectedLayerIsEditable() && !(mask_target && selectedLayerCanEditMask()))) {
         assignError(error, QStringLiteral("Select an editable layer before applying blur."));
         return std::nullopt;
     }
@@ -1642,6 +1651,40 @@ bool ImageDocumentSession::findShape(const QString& shape_id,
     return false;
 }
 
+QString ImageDocumentSession::addGradientMapAdjustment(std::optional<QPainterPath> selection) {
+    if(selection && !ImageDocumentGeometry::isValidStrokeClipPath(*selection))return {};
+    if(selection){if(const auto* selected=findLayer(data_,selected_layer_id_)){QVector<QPointF> unused;ImageDocumentGeometry::mapStrokeGeometryThroughGroup(&unused,&selection,findGroup(data_,selected->parent_group_id),renderedSize());}}
+    QString insert_above=selected_layer_id_;
+    if(const auto* selected=findLayer(data_,insert_above)){
+        const auto base=selected->clip_to_base?clippingBases(data_).value(selected->id):selected->id;
+        insert_above=clippingChain(data_,base).last();
+    }
+    auto edit=ImageLayerStackEditor::addLayer(data_,insert_above,selected_group_id_);
+    if(!edit)return {};
+    const auto id=edit->selected_layer_id;auto* layer=findLayer(edit->document,id);
+    layer->adjustment=creative_suite::effects::GradientMapParameters{};
+    int number=1;QString name;
+    do{name=QStringLiteral("Gradient Map %1").arg(number++);}while(std::any_of(data_.layers.cbegin(),data_.layers.cend(),[&](const auto& value){return value.name.compare(name,Qt::CaseInsensitive)==0;}) || std::any_of(data_.groups.cbegin(),data_.groups.cend(),[&](const auto& value){return value.name.compare(name,Qt::CaseInsensitive)==0;}));
+    layer->name=name;
+    layer->mask=ImageLayerMaskData{true,{},std::move(selection)};
+    commitDocumentEdit(std::move(edit->document),id,{});return id;
+}
+bool ImageDocumentSession::setGradientMap(const QString& id,const creative_suite::effects::GradientMapParameters& value) {
+    const auto* layer=findLayer(data_,id);
+    if(!layer || !layer->adjustment || *layer->adjustment==value || !creative_suite::effects::validGradientMap(value))return false;
+    if(!adjustment_edit_active_)pushEdit();
+    findLayer(data_,id)->adjustment=value;layer_thumbnail_cache_.clear();invalidateGroupThumbnailCache();return true;
+}
+void ImageDocumentSession::beginLayerAdjustmentEdit() {
+    if(adjustment_edit_active_)return;
+    endLayerOutlineEdit();endLayerOpacityEdit();adjustment_edit_snapshot_=data_;adjustment_edit_active_=true;
+}
+void ImageDocumentSession::endLayerAdjustmentEdit() {
+    if(!adjustment_edit_active_)return;
+    adjustment_edit_active_=false;
+    if(adjustment_edit_snapshot_!=data_)recordEditSnapshot(std::move(adjustment_edit_snapshot_),selected_layer_id_,selected_group_id_);
+    adjustment_edit_snapshot_={};
+}
 QString ImageDocumentSession::addLayer() {
     auto edit = ImageLayerStackEditor::addLayer(
         data_, selected_layer_id_, selected_group_id_);
@@ -1731,6 +1774,7 @@ bool ImageDocumentSession::setLayerClipping(const QString& layer_id, bool enable
     endLayerOpacityEdit();
     pushEdit();
     data_.layers[index].clip_to_base = enabled;
+    releaseOrphanClipping(data_);
     layer_thumbnail_cache_.clear();
     invalidateGroupThumbnailCache();
     return true;
@@ -1739,7 +1783,7 @@ bool ImageDocumentSession::setLayerClipping(const QString& layer_id, bool enable
 bool ImageDocumentSession::setLayerOutline(const QString& layer_id,
     std::optional<ImageLayerOutlineData> outline) {
     const auto index = layerIndex(layer_id);
-    if (index <= 0 || (outline && !validLayerOutline(*outline)) ||
+    if (index <= 0 || data_.layers.at(index).adjustment || (outline && !validLayerOutline(*outline)) ||
         data_.layers.at(index).outline == outline) return false;
     if (!outline_edit_active_) pushEdit();
     data_.layers[index].outline = std::move(outline);
@@ -1750,6 +1794,7 @@ bool ImageDocumentSession::setLayerOutline(const QString& layer_id,
 }
 
 void ImageDocumentSession::beginLayerOutlineEdit() {
+    endLayerAdjustmentEdit();
     if (outline_edit_active_) return;
     endLayerOpacityEdit();
     outline_edit_snapshot_ = data_;
@@ -1812,7 +1857,7 @@ bool ImageDocumentSession::applyLayerMaskStrokeInternal(
     const QVector<QPointF>& points, const QColor& color, int diameter,
     QString* error, std::optional<QPainterPath> clipping_path, bool erase) {
     if (error != nullptr) error->clear();
-    if (!hasSource() || !selectedLayerIsEditable()) {
+    if (!hasSource() || !selectedLayerCanEditMask()) {
         assignError(error, QStringLiteral(
             "Select a raster layer with a mask before painting its mask."));
         return false;
@@ -1836,7 +1881,7 @@ bool ImageDocumentSession::applyLayerMaskStrokeInternal(
 QImage ImageDocumentSession::renderedImageWithMaskStroke(
     const QVector<QPointF>& points, const QColor& color, int diameter,
     std::optional<QPainterPath> clipping_path) const {
-    if (!hasSource() || !selectedLayerIsEditable()) return renderedImage();
+    if (!hasSource() || !selectedLayerCanEditMask()) return renderedImage();
     auto operation = ImageLayerMaskEditor::prepareStroke(
         data_, selected_layer_id_, renderedSize(), points, color, diameter,
         std::move(clipping_path), ImageLayerMaskStrokeKind::Paint);
@@ -1958,6 +2003,7 @@ bool ImageDocumentSession::moveStackItemBy(const QString& item_id,
 }
 
 void ImageDocumentSession::beginLayerOpacityEdit() {
+    endLayerAdjustmentEdit();
     if (opacity_edit_active_) return;
     opacity_edit_snapshot_ = data_;
     opacity_edit_active_ = true;
@@ -1974,6 +2020,7 @@ void ImageDocumentSession::endLayerOpacityEdit() {
 }
 
 bool ImageDocumentSession::selectLayer(const QString& layer_id) {
+    endLayerAdjustmentEdit();
     endLayerOutlineEdit();
     if (layerIndex(layer_id) < 0 ||
         (selected_layer_id_ == layer_id && selected_group_id_.isEmpty())) return false;
@@ -1983,6 +2030,7 @@ bool ImageDocumentSession::selectLayer(const QString& layer_id) {
 }
 
 bool ImageDocumentSession::selectGroup(const QString& group_id) {
+    endLayerAdjustmentEdit();
     endLayerOutlineEdit();
     if (groupIndex(group_id) < 0 ||
         (selected_group_id_ == group_id && selected_layer_id_.isEmpty())) return false;
@@ -2000,7 +2048,10 @@ qsizetype ImageDocumentSession::layerIndex(const QString& layer_id) const noexce
 
 bool ImageDocumentSession::selectedLayerIsEditable() const noexcept {
     const qsizetype index = layerIndex(selected_layer_id_);
-    return selected_group_id_.isEmpty() && index > 0 && index < data_.layers.size();
+    return selected_group_id_.isEmpty() && index > 0 && index < data_.layers.size() && !data_.layers.at(index).adjustment;
+}
+bool ImageDocumentSession::selectedLayerCanEditMask() const noexcept {
+    const auto* layer=findLayer(data_,selected_layer_id_);return selected_group_id_.isEmpty() && layer && !layer->background && layer->mask.has_value();
 }
 
 bool ImageDocumentSession::selectedGroupIsActive() const noexcept {
@@ -2074,6 +2125,7 @@ void ImageDocumentSession::restoreHistorySnapshot(
 }
 
 void ImageDocumentSession::pushEdit() {
+    endLayerAdjustmentEdit();
     endLayerOutlineEdit();
     endLayerOpacityEdit();
     recordEditSnapshot(data_, selected_layer_id_, selected_group_id_);
@@ -2182,6 +2234,7 @@ void ImageDocumentSession::flipVertical() {
 }
 
 bool ImageDocumentSession::undo() {
+    endLayerAdjustmentEdit();
     endLayerOutlineEdit();
     endLayerOpacityEdit();
     auto previous = history_.undo(
@@ -2192,6 +2245,7 @@ bool ImageDocumentSession::undo() {
 }
 
 bool ImageDocumentSession::redo() {
+    endLayerAdjustmentEdit();
     endLayerOutlineEdit();
     endLayerOpacityEdit();
     auto next = history_.redo(

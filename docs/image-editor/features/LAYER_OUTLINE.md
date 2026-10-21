@@ -1,7 +1,7 @@
 # Editable layer outline
 
 Introduced in v17 on 2026-10-20. Application versions are unchanged; `.cimg` now writes
-v19 and reads v1-18. Native visual acceptance, macOS and Linux remain pending.
+v20 and reads v1-19. Native visual acceptance, macOS and Linux remain pending.
 
 ## Editing contract
 
@@ -48,7 +48,7 @@ The optional layer `outline` stores boolean `enabled`, integer `thickness`,
 RGBA `color` and `position` (`inside`/`outside`). See [format](../architecture/FORMAT.md).
 Older supported documents open without the property; older editor binaries
 reject v17. Recovery envelope v1 carries v17. Hub backup/restore accepts v17,
-rebases media paths and preserves the property; future Image v20 is rejected.
+rebases media paths and preserves the property; future Image v21 is rejected.
 Linked PNG publication uses the existing atomic save/refresh protocol.
 
 ## Regression coverage and evidence
@@ -91,3 +91,6 @@ The repeatable visual checklist is in [manual validation](../validation/MANUAL_V
 
 Clipping in v18 composes children before applying the base outline, preserving
 its own color. See [clipping semantics](CLIPPING_MASKS.md).
+
+Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
+see [adjustment scope and alpha contract](GRADIENT_MAP.md).

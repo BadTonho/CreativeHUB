@@ -121,3 +121,7 @@ eligible lower sibling base; Background, groups and multiple selections are
 disabled. Mask thumbnail selection still targets its owning layer.
 
 Blend Mode uses the Layers selector and introduces no keyboard shortcut.
+
+Gradient Map adjustment creation and point editing add no keyboard shortcut. Existing Undo/Redo, mask tools and layer commands apply.
+
+With the Gradient Map bar focused, Left/Right selects the previous/next point; the position field supports its usual arrow-key editing. These are local control keys, not application shortcut assignments.

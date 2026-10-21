@@ -1,4 +1,4 @@
-#include "image_layer_blending.h"
+#include "image_layer_adjustment.h"
 #include "image_layer_clipping.h"
 #include "image_interactive_raster_cache.h"
 #include "image_layer_outline.h"
@@ -41,21 +41,21 @@ void ImageInteractiveRasterCache::setByteLimit(std::uint64_t limit) {
 }
 InteractiveRaster ImageInteractiveRasterCache::raster(const QString& identity, const QSize& size,
     const QVector<ImageOperation>& operations, const QHash<QString, QImage>& resources,
-    bool mask, bool transient, const std::atomic_bool* cancel) {
+    bool mask, bool transient, const std::atomic_bool* cancel,const std::optional<QPainterPath>& initial_selection) {
     QHash<QString, qint64> signatures;
     for (const auto& op : operations) if (op.kind == OperationKind::RasterImage)
         signatures.insert(op.raster.id, resources.value(op.raster.id, resources.value(op.raster.source_path)).cacheKey());
     const auto old_revision = revisions_.constFind(identity);
-    const bool unchanged = old_revision != revisions_.cend() && old_revision->resources == signatures && old_revision->operations == operations;
+    const bool unchanged = old_revision != revisions_.cend() && old_revision->resources == signatures && old_revision->operations == operations && old_revision->initial_selection==initial_selection;
     const qint64 revision = unchanged ? old_revision->revision : ++next_revision_;
-    if (!transient) revisions_.insert(identity, {operations, signatures, {}, 0, revision});
+    if (!transient) {Entry entry;entry.operations=operations;entry.resources=signatures;entry.revision=revision;entry.initial_selection=initial_selection;revisions_.insert(identity,std::move(entry));}
     auto found = entries_.find(identity);
-    if (found != entries_.end() && found->pixels.size() == size && found->resources == signatures && found->operations == operations) {
+    if (found != entries_.end() && found->pixels.size() == size && found->resources == signatures && found->operations == operations && found->initial_selection==initial_selection) {
         found->used = ++clock_;
         return {identity, found->pixels, found->revision, {}, revision};
     }
     QImage previous; QRect dirty; qint64 previous_key = 0;
-    if (found != entries_.end() && found->pixels.size() == size && found->resources == signatures &&
+    if (!initial_selection && found != entries_.end() && found->pixels.size() == size && found->resources == signatures &&
         std::all_of(operations.cbegin(), operations.cend(), local) &&
         std::all_of(found->operations.cbegin(), found->operations.cend(), local)) {
         const auto& before = found->operations;
@@ -71,7 +71,7 @@ InteractiveRaster ImageInteractiveRasterCache::raster(const QString& identity, c
         if (bounded && !dirty.isEmpty()) { previous = found->pixels; previous_key = found->revision; }
         else dirty = {};
     }
-    QImage pixels = ImageDocumentRenderer::rasterize(size, operations, resources, mask, std::move(previous), dirty, cancel);
+    QImage pixels = ImageDocumentRenderer::rasterize(size, operations, resources, mask, std::move(previous), dirty, cancel,initial_selection);
     if (pixels.isNull() || cancelled(cancel)) return {};
     if (mask) {
         QImage coverage(size,QImage::Format_Grayscale8);
@@ -92,7 +92,7 @@ InteractiveRaster ImageInteractiveRasterCache::raster(const QString& identity, c
             bytes_ -= victim->pixels.sizeInBytes(); entries_.erase(victim);
         }
         if (requested <= byte_limit_ && bytes_ + requested <= byte_limit_) {
-            entries_.insert(identity, {operations, signatures, pixels, ++clock_, revision}); bytes_ += requested;
+            Entry entry;entry.operations=operations;entry.resources=signatures;entry.pixels=pixels;entry.used=++clock_;entry.revision=revision;entry.initial_selection=initial_selection;entries_.insert(identity,std::move(entry)); bytes_ += requested;
         }
     }
     return {identity, std::move(pixels), previous_key, dirty, revision};
@@ -103,7 +103,7 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
     const auto& doc = snapshot.document;
     const QSize size = ImageDocumentRenderer::documentSize(doc, snapshot.source_image.size());
     if (snapshot.source_image.isNull() || cancelled(cancel)) return {};
-    InteractiveComposition result; result.size = size;
+    InteractiveComposition result; result.size = size;result.adjustment_document=std::any_of(doc.layers.cbegin(),doc.layers.cend(),[](const auto& l){return l.adjustment.has_value();});
     QSet<QString> live;
     for (const auto& layer : doc.layers) {
         if (!layer.clip_to_base && clippingChain(doc, layer.id).size() > 1) live.insert(layer.id + "/clipping");
@@ -158,10 +158,19 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
                 value.opacity = layer.opacity; value.blend_mode = layer.blend_mode; return value;
             }
         }
+        if(layer.adjustment){
+            value.adjustment=layer.adjustment;value.opacity=layer.opacity;value.blend_mode=layer.blend_mode;
+            if(layer.mask && layer.mask->enabled && (!layer.mask->operations.isEmpty() || layer.mask->initial_selection)) {
+                value.mask=raster(layer.id+"/mask",size,layer.mask->operations,{},true,transient,cancel,layer.mask->initial_selection);
+                value.mask.identity=document_id+"/"+value.mask.identity;
+                if(value.mask.pixels.isNull())value.adjustment.reset();
+            }
+            return value;
+        }
         value.content = raster(layer.id + "/content", size, layer.operations, snapshot.raster_images, false, transient, cancel);
         value.content.identity = document_id + "/" + value.content.identity;
-        if (layer.mask && layer.mask->enabled && !layer.mask->operations.isEmpty()) {
-            value.mask = raster(layer.id + "/mask", size, layer.mask->operations, {}, true, transient, cancel);
+        if (layer.mask && layer.mask->enabled && (!layer.mask->operations.isEmpty() || layer.mask->initial_selection)) {
+            value.mask = raster(layer.id + "/mask", size, layer.mask->operations, {}, true, transient, cancel,layer.mask->initial_selection);
             value.mask.identity = document_id + "/" + value.mask.identity;
             if (value.mask.pixels.isNull()) value.content.pixels = {};
         }
@@ -249,6 +258,7 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
                 if (layer.background) return ImageDocumentRenderer::selectedLayer(doc,snapshot.source_image,
                     snapshot.raster_images,layer.id,cancel);
                 const auto member=layer_input(layer);
+                if(layer.adjustment)return member.mask.pixels;
                 QImage pixels=member.content.pixels;
                 if (!member.mask.pixels.isNull() && !pixels.isNull()) {
                     for (int y=0;y<size.height();++y) {
@@ -275,7 +285,7 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
             // Normal chains retain only their finished pixels. Blended children
             // keep available member rasters for mode edits within the same budget.
             const bool keep_members=std::any_of(entry.clipping_signature->layers.cbegin()+1,entry.clipping_signature->layers.cend(),
-                [](const auto& layer){return layer.blend_mode!=creative_suite::composition::BlendMode::Normal;});
+                [](const auto& layer){return layer.adjustment || layer.blend_mode!=creative_suite::composition::BlendMode::Normal;});
             for (const auto& id : ids) for (const auto& suffix : {"/content", "/mask", "/outline", "/clipping"}) {
                 if (keep_members && QString::fromLatin1(suffix) != QStringLiteral("/clipping")) continue;
                 const auto old = entries_.find(id + suffix);
@@ -295,7 +305,7 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
         return input;
     };
     for (qsizetype i = 0; i < doc.root_stack.size(); ++i) {
-        const auto& item = doc.root_stack[i]; InteractiveNode node;
+        const auto& item = doc.root_stack[i]; InteractiveNode node;node.id=item.id;
         if (item.group) {
             const auto* group = findGroup(doc, item.id);
             if (!group || !group->visible || group->opacity == 0) continue;
@@ -304,7 +314,7 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
                 const auto* layer = findLayer(doc, id);
                 if (layer && !layer->clip_to_base && layer->visible && layer->opacity > 0) {
                     auto input = chain_input(*layer);
-                    if (input.content.pixels.isNull()) return {};
+                    if (!input.adjustment && input.content.pixels.isNull()) return {};
                     node.layers.append(std::move(input));
                 }
             }
@@ -313,24 +323,25 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
             if (!layer || layer->clip_to_base || !layer->visible || layer->opacity == 0 ||
                 (layer->background && !clipped_background)) continue;
             auto input = chain_input(*layer);
-            if (input.content.pixels.isNull()) return {};
+            if (!input.adjustment && input.content.pixels.isNull()) return {};
             node.layers.append(std::move(input));
         }
         if (cancelled(cancel)) return {};
-        for (const auto& layer : node.layers) if (layer.content.pixels.isNull()) return {};
+        for (const auto& layer : node.layers) if (!layer.adjustment && layer.content.pixels.isNull()) return {};
         result.nodes.append(std::move(node));
     }
     return result;
 }
 QImage ImageInteractiveRasterCache::composite(const InteractiveComposition& composition, const std::atomic_bool* cancel) {
     ImageEditorPerformanceScope scope(ImageEditorPerformanceMetrics::instance(),ImageEditorPerformanceStage::Composite);
-    QImage output(composition.size, QImage::Format_ARGB32);
+    QImage output(composition.size, composition.adjustment_document?QImage::Format_ARGB32_Premultiplied:QImage::Format_ARGB32);
     if (output.isNull()) return {}; output.fill(Qt::transparent);
     for (const auto& node : composition.nodes) {
         if (cancelled(cancel)) return {};
         QImage group;
         if (node.group) { group = QImage(composition.size, QImage::Format_ARGB32_Premultiplied); if (group.isNull()) return {}; group.fill(Qt::transparent); }
         for (const auto& layer : node.layers) {
+            if(layer.adjustment){if(!applyLayerAdjustment(node.group?&group:&output,*layer.adjustment,layer.mask.pixels,layer.blend_mode,layer.opacity,cancel))return {};continue;}
             QImage pixels = layer.content.pixels;
             if (!layer.mask.pixels.isNull()) {
                 for (int y = 0; y < pixels.height(); ++y) {

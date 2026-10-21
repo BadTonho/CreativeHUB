@@ -671,12 +671,13 @@ struct OpenGlFrameCompositor::Impl {
         if (!selected_output) return result(OpenGlCompositionStatus::Failed, "raster-target", "No raster output target.");
         const int width = request.size.width(), height = request.size.height();
         bool blending = false;
+        const bool adjustments=std::any_of(request.nodes.begin(),request.nodes.end(),[](const auto& node){return std::any_of(node.layers.begin(),node.layers.end(),[](const auto& layer){return layer.adjustment.has_value();});});
         for (const auto& node : request.nodes) {
             if (!validBlendMode(node.blend_mode)) return result(OpenGlCompositionStatus::Unsupported,"raster-blend-mode","Invalid group blend mode.");
             blending |= node.blend_mode != BlendMode::Normal;
             for (const auto& layer : node.layers) {
                 if (!validBlendMode(layer.blend_mode)) return result(OpenGlCompositionStatus::Unsupported,"raster-blend-mode","Invalid layer blend mode.");
-                blending |= layer.blend_mode != BlendMode::Normal;
+                blending |= layer.adjustment.has_value() || layer.blend_mode != BlendMode::Normal;
             }
         }
         if (!blending) discardBlendBackdrop();
@@ -701,6 +702,8 @@ struct OpenGlFrameCompositor::Impl {
                     return result(OpenGlCompositionStatus::Unsupported, "raster-input", "Raster inputs must be canvas-sized premultiplied ARGB32 images with identities.");
                 needed.insert(input->identity);
             }
+            if(layer.adjustment && (!effects::validGradientMap(*layer.adjustment) || !layer.content.pixels.isNull()))
+                return result(OpenGlCompositionStatus::Unsupported,"raster-adjustment","Invalid Gradient Map adjustment.");
             if (layer.opacity < 0 || layer.opacity > 100)
                 return result(OpenGlCompositionStatus::Unsupported, "raster-opacity", "Invalid layer opacity.");
         }
@@ -722,6 +725,9 @@ uniform sampler2D mask_image;
 uniform sampler2D backdrop_image;
 uniform int blend_mode;
 uniform float blend_opacity;
+uniform int gradient_count;
+uniform bool quantize_blend_opacity;
+uniform vec4 gradient_stops[32];
 uniform bool has_mask;
 uniform bool mask_gray;
 uniform bool bottom_left;
@@ -732,6 +738,25 @@ uniform ivec4 clip_rect;
 out vec4 color;
 void main() {
     vec2 point = vec2(gl_FragCoord.x, float(canvas_height) - gl_FragCoord.y);
+    if(gradient_count>0) {
+        vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
+        vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
+        float t=dot(cb,vec3(0.2126,0.7152,0.0722));
+        vec3 mapped=gradient_stops[gradient_count-1].rgb;
+        for(int i=1;i<gradient_count;++i) {
+            if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
+        }
+        vec3 cs=floor(mapped*255.0+0.5)/255.0;
+        vec3 mixed=cs;
+        if(blend_mode==1)mixed=cb*cs;
+        else if(blend_mode==2)mixed=1.0-(1.0-cb)*(1.0-cs);
+        else if(blend_mode==3)mixed=mix(1.0-2.0*(1.0-cb)*(1.0-cs),2.0*cb*cs,lessThanEqual(cb,vec3(0.5)));
+        else if(blend_mode==4)mixed=min(vec3(1),cb+cs);
+        else if(blend_mode==5)mixed=abs(cb-cs);
+        float coverage=1.0;
+        if(has_mask){ivec4 m=ivec4(floor(texelFetch(mask_image,ivec2(floor(point)),0)*255.0+0.5));coverage=float(mask_gray?m.r:(m.r*11+m.g*16+m.b*5)/32)/255.0;}
+        color=vec4(mix(b.rgb,mixed*b.a,blend_opacity*coverage),b.a);return;
+    }
     ivec2 pixel = ivec2(floor((inverse_matrix * vec3(point, 1.0)).xy));
     ivec2 size = textureSize(source_image, 0);
     if (pixel.x < 0 || pixel.y < 0 || pixel.x >= size.x || pixel.y >= size.y ||
@@ -745,6 +770,7 @@ void main() {
     }
     if(blend_mode!=0) {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
+        if(quantize_blend_opacity)bytes=(bytes*opacity256)/256;
         vec3 cs=bytes.a>0 ? clamp(vec3(bytes.rgb)/float(bytes.a),0.0,1.0) : vec3(0);
         float as=float(bytes.a)/255.0*blend_opacity;
         vec3 cb=b.a>0.0 ? clamp(b.rgb/b.a,0.0,1.0) : vec3(0);
@@ -839,7 +865,7 @@ void main() {
         raster_program->setUniformValue("source_image", 0); raster_program->setUniformValue("mask_image", 1);
         raster_program->setUniformValue("canvas_height", height);
         raster_program->setUniformValue("backdrop_image", 2);
-        const auto draw = [&](GLuint source, bool bottom, GLuint mask, int opacity, const OpenGlRasterTransform& transform, BlendMode mode = BlendMode::Normal) -> bool {
+        const auto draw = [&](GLuint source, bool bottom, GLuint mask, int opacity, const OpenGlRasterTransform& transform, BlendMode mode = BlendMode::Normal,const effects::GradientMapParameters* adjustment=nullptr,bool quantize_group_opacity=false) -> bool {
             bool invertible = false; const auto inverse = transform.matrix.inverted(&invertible);
             if (!invertible || !transform.matrix.isAffine()) return false;
             QMatrix3x3 matrix;
@@ -852,9 +878,12 @@ void main() {
             raster_program->setUniformValue("bottom_left", bottom); raster_program->setUniformValue("has_mask", mask != 0);
             raster_program->setUniformValue("opacity256", opacity * 256 / 100);
             raster_program->setUniformValue("blend_mode",static_cast<int>(mode));
-            raster_program->setUniformValue("blend_opacity",float(opacity)/100.f);
+            raster_program->setUniformValue("blend_opacity",quantize_group_opacity?1.f:float(opacity)/100.f);
+            raster_program->setUniformValue("quantize_blend_opacity",quantize_group_opacity);
+            raster_program->setUniformValue("gradient_count",adjustment?int(adjustment->stops.size()):0);
+            if(adjustment){std::array<QVector4D,32> points;int count=0;for(const auto& stop:adjustment->stops)points[count++]=QVector4D(stop.color[0]/255.f,stop.color[1]/255.f,stop.color[2]/255.f,float(stop.position));raster_program->setUniformValueArray("gradient_stops",points.data(),count);}
             const bool was_blending=gl->glIsEnabled(GL_BLEND);
-            if (mode!=BlendMode::Normal) {
+            if (adjustment || mode!=BlendMode::Normal) {
                 gl->glActiveTexture(GL_TEXTURE2); gl->glBindTexture(GL_TEXTURE_2D,blend_backdrop->texture());
                 gl->glCopyTexSubImage2D(GL_TEXTURE_2D,0,0,0,0,0,width,height);
                 gl->glDisable(GL_BLEND);
@@ -862,7 +891,7 @@ void main() {
             gl->glActiveTexture(GL_TEXTURE0); gl->glBindTexture(GL_TEXTURE_2D, source);
             gl->glActiveTexture(GL_TEXTURE1); gl->glBindTexture(GL_TEXTURE_2D, mask);
             gl->glDrawArrays(GL_TRIANGLES, 0, 3);
-            if (mode!=BlendMode::Normal && was_blending) gl->glEnable(GL_BLEND);
+            if ((adjustment || mode!=BlendMode::Normal) && was_blending) gl->glEnable(GL_BLEND);
             return true;
         };
         const auto clear = [&](QOpenGLFramebufferObject* target) { target->bind(); gl->glClearColor(0,0,0,0); gl->glClear(GL_COLOR_BUFFER_BIT); };
@@ -875,15 +904,16 @@ void main() {
             gl->glEnable(GL_BLEND);
             for (const auto& layer : node.layers) {
                 if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
-                if (layer.content.pixels.isNull()) continue;
-                auto loaded = upload(layer.content, 0); if (loaded.status != OpenGlCompositionStatus::Complete) return loaded;
+                if (layer.content.pixels.isNull() && !layer.adjustment) continue;
+                auto loaded=result(OpenGlCompositionStatus::Complete);
+                if(!layer.adjustment){loaded=upload(layer.content,0);if(loaded.status!=OpenGlCompositionStatus::Complete)return loaded;}
                 GLuint mask = 0;
                 if (!layer.mask.pixels.isNull()) {
                     loaded = upload(layer.mask, 1); if (loaded.status != OpenGlCompositionStatus::Complete) return loaded;
                     mask = raster_textures.at(layer.mask.identity).texture;
                 }
                 raster_program->setUniformValue("mask_gray", layer.mask.pixels.format()==QImage::Format_Grayscale8);
-                if (!draw(raster_textures.at(layer.content.identity).texture, false, mask, layer.opacity, {}, layer.blend_mode))
+                if (!draw(layer.adjustment?0:raster_textures.at(layer.content.identity).texture, false, mask, layer.opacity, {}, layer.blend_mode,layer.adjustment?&*layer.adjustment:nullptr))
                     return result(OpenGlCompositionStatus::Unsupported, "raster-transform", "Invalid raster transform.");
             }
             if (!node.group) continue;
@@ -896,7 +926,7 @@ void main() {
                 target = next;
             }
             selected_output->bind(); gl->glEnable(GL_BLEND);
-            draw(target->texture(), true, 0, node.opacity, {}, node.blend_mode);
+            draw(target->texture(), true, 0, node.opacity, {}, node.blend_mode,nullptr,adjustments && node.blend_mode!=BlendMode::Normal);
         }
         measured.draw_submission_nanoseconds += elapsed(started);
         rememberResourcePeak();
@@ -1586,7 +1616,7 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, 
         if(!p.image_operation || p.image_operation->kind!=OpenGlImageOperationKind::ApplyTrackMatte)p.discardMatteUploads();
         if(!p.raster_request && std::none_of(layers.begin(),layers.end(),[](const auto& l){return l.blend_mode!=BlendMode::Normal;}))p.discardBlendBackdrop();
         if (p.raster_request && std::all_of(p.raster_request->nodes.begin(),p.raster_request->nodes.end(),[](const auto& node) {
-            return node.blend_mode==BlendMode::Normal && std::all_of(node.layers.begin(),node.layers.end(),[](const auto& layer){return layer.blend_mode==BlendMode::Normal;});
+            return node.blend_mode==BlendMode::Normal && std::all_of(node.layers.begin(),node.layers.end(),[](const auto& layer){return !layer.adjustment && layer.blend_mode==BlendMode::Normal;});
         })) p.discardBlendBackdrop();
         auto collected = p.collect();
         if (collected.status != OpenGlCompositionStatus::Complete) return converted(std::move(collected));
@@ -1611,7 +1641,7 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, 
                 // Recover instead of retrying Busy forever when the backdrop
                 // leaves no room for that replacement output.
                 const bool raster_blend=p.raster_request && std::any_of(p.raster_request->nodes.begin(),p.raster_request->nodes.end(),[](const auto& node) {
-                    return node.blend_mode!=BlendMode::Normal || std::any_of(node.layers.begin(),node.layers.end(),[](const auto& layer){return layer.blend_mode!=BlendMode::Normal;});
+                    return node.blend_mode!=BlendMode::Normal || std::any_of(node.layers.begin(),node.layers.end(),[](const auto& layer){return layer.adjustment || layer.blend_mode!=BlendMode::Normal;});
                 });
                 if(p.blend_reserved || raster_blend)return {OpenGlCompositionStatus::Unsupported,{},"blend-output-budget",
                     "Leased composition outputs and blend backdrop exceed the shared texture budget."};

@@ -32,7 +32,7 @@ bool ImageLayerRasterCache::sameMask(
     const std::optional<ImageLayerMaskData>& right) noexcept {
     if (left.has_value() != right.has_value()) return false;
     if (!left.has_value()) return true;
-    return left->enabled == right->enabled &&
+    return left->enabled == right->enabled && left->initial_selection==right->initial_selection &&
         sameOperations(left->operations, right->operations);
 }
 

@@ -1,4 +1,4 @@
-#include "image_layer_blending.h"
+#include "image_layer_adjustment.h"
 #include "image_layer_clipping.h"
 #include "rendering/image_document_renderer.h"
 #include "rendering/image_layer_outline.h"
@@ -374,12 +374,8 @@ QImage renderRasterLayer(const QHash<QString, QImage>& resources,
             }), operations.end());
     }
     pixels = applyOperations(std::move(pixels), operations, true, cancellation_requested, resources);
-    if (layer.mask.has_value() && layer.mask->enabled && !layer.mask->operations.isEmpty() && !pixels.isNull()) {
-        QImage mask(size, QImage::Format_ARGB32_Premultiplied);
-        if (mask.isNull()) return {};
-        mask.fill(Qt::white);
-        mask = applyOperations(std::move(mask), maskRenderOperations(*layer.mask),
-                               true, cancellation_requested);
+    if (layer.mask.has_value() && layer.mask->enabled && (!layer.mask->operations.isEmpty() || layer.mask->initial_selection) && !pixels.isNull()) {
+        const QImage mask = ImageDocumentRenderer::maskPixels(size,*layer.mask,cancellation_requested);
         if (!multiplyLayerMask(&pixels, mask, cancellation_requested)) return {};
     }
     if (layer.outline && layer.outline->enabled && !pixels.isNull())
@@ -422,6 +418,12 @@ QImage renderChain(const QHash<QString, QImage>& resources, const ImageDocumentD
     for (qsizetype i = 1; i < ids.size(); ++i) {
         const auto* child = findLayer(document, ids[i]);
         if (!child || !child->visible || child->opacity == 0) continue;
+        if(child->adjustment) {
+            const auto mask=child->mask && child->mask->enabled && (!child->mask->operations.isEmpty() || child->mask->initial_selection) ? (input?input(*child):ImageDocumentRenderer::maskPixels(size,*child->mask,cancel)) : QImage{};
+            if(child->mask && child->mask->enabled && (!child->mask->operations.isEmpty() || child->mask->initial_selection) && mask.isNull())return {};
+            if(!applyLayerAdjustment(&pixels,*child->adjustment,mask,child->blend_mode,child->opacity,cancel))return {};
+            continue;
+        }
         const auto content = input ? input(*child) : renderRasterLayer(resources, *child, size, cancel, excluded, cache);
         if (content.isNull()) return {};
         if (!blendLayerPixels(&pixels,content,child->blend_mode,child->opacity,cancel,true)) return {};
@@ -452,6 +454,12 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
         }
         const auto* layer = findLayer(document, layer_id);
         if (layer == nullptr || layer->clip_to_base || !layer->visible || layer->opacity == 0) continue;
+        if(layer->adjustment) {
+            const auto mask=layer->mask && layer->mask->enabled && (!layer->mask->operations.isEmpty() || layer->mask->initial_selection) ? ImageDocumentRenderer::maskPixels(size,*layer->mask,cancellation_requested) : QImage{};
+            if(layer->mask && layer->mask->enabled && (!layer->mask->operations.isEmpty() || layer->mask->initial_selection) && mask.isNull())return {};
+            if(!applyLayerAdjustment(&composite,*layer->adjustment,mask,layer->blend_mode,layer->opacity,cancellation_requested))return {};
+            continue;
+        }
         QImage pixels = renderChain(resources, document, {}, *layer, size,
             cancellation_requested, excluded_object_ids, layer_raster_cache);
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
@@ -496,6 +504,7 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
         if (!composite.isNull()) composite.fill(Qt::transparent);
     }
     if (composite.isNull()) return {};
+    if(std::any_of(document.layers.cbegin(),document.layers.cend(),[](const auto& l){return l.adjustment.has_value();}))composite=composite.convertToFormat(QImage::Format_ARGB32_Premultiplied);
 
     for (qsizetype index = clipping_background ? 0 : 1; index < document.root_stack.size(); ++index) {
         if (exportWasCancelled(cancellation_requested)) {
@@ -516,6 +525,12 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
             const auto* layer = findLayer(document, item.id);
             if (layer == nullptr || layer->clip_to_base || !layer->visible || layer->opacity == 0) continue;
             opacity = layer->opacity; mode = layer->blend_mode;
+            if(layer->adjustment) {
+                const auto mask=layer->mask && layer->mask->enabled && (!layer->mask->operations.isEmpty() || layer->mask->initial_selection) ? ImageDocumentRenderer::maskPixels(size,*layer->mask,cancellation_requested) : QImage{};
+                if(layer->mask && layer->mask->enabled && (!layer->mask->operations.isEmpty() || layer->mask->initial_selection) && mask.isNull())return {};
+                if(!applyLayerAdjustment(&composite,*layer->adjustment,mask,mode,opacity,cancellation_requested))return {};
+                continue;
+            }
             pixels = renderChain(resources, document, source_image, *layer, size,
                 cancellation_requested, excluded_object_ids, layer_raster_cache);
         }
@@ -543,7 +558,7 @@ QImage renderSelectedLayer(const QHash<QString, QImage>& resources,
         [&selected_layer_id](const ImageLayerData& layer) {
             return layer.id == selected_layer_id;
         });
-    if (selected == document.layers.cend()) return {};
+    if (selected == document.layers.cend() || selected->adjustment) return {};
 
     const QSize size = ImageDocumentRenderer::documentSize(document, source_image.size());
     if (!size.isValid() || size.isEmpty()) return {};
@@ -787,7 +802,8 @@ QSize ImageDocumentRenderer::documentSize(const ImageDocumentData& document,
 
 QImage ImageDocumentRenderer::rasterize(const QSize& size,
     const QVector<ImageOperation>& operations, const QHash<QString, QImage>& resources,
-    bool mask, QImage previous, const QRect& region, const std::atomic_bool* cancel) {
+    bool mask, QImage previous, const QRect& region, const std::atomic_bool* cancel,const std::optional<QPainterPath>& initial_selection) {
+    if(initial_selection) { previous=initialMaskPixels(size,initial_selection); return applyOperations(std::move(previous),maskRenderOperations(ImageLayerMaskData{true,operations,initial_selection}),true,cancel,resources); }
     if (previous.isNull() || previous.size() != size) {
         previous = QImage(size, QImage::Format_ARGB32_Premultiplied);
         if (previous.isNull()) return {};
@@ -804,6 +820,9 @@ QImage ImageDocumentRenderer::rasterize(const QSize& size,
         true, cancel, resources, region);
 }
 
+QImage ImageDocumentRenderer::maskPixels(const QSize& size,const ImageLayerMaskData& mask,const std::atomic_bool* cancel) {
+    return rasterize(size,mask.operations,{},true,{}, {},cancel,mask.initial_selection);
+}
 QImage ImageDocumentRenderer::transformRaster(QImage pixels,
     const QVector<ImageOperation>& operations, const std::atomic_bool* cancel) {
     return applyOperations(std::move(pixels), operations, true, cancel);
@@ -846,7 +865,9 @@ QImage ImageDocumentRenderer::editableLayerTarget(
 
     QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
     if (pixels.isNull()) return {};
-    pixels.fill(mask_target ? Qt::white : Qt::transparent);
+    if(mask_target)return maskPixels(size,*layer->mask);
+    if(layer->adjustment)return {};
+    pixels.fill(Qt::transparent);
     const auto& operations = mask_target
         ? maskRenderOperations(*layer->mask) : layer->operations;
     return applyOperations(std::move(pixels), operations, true, nullptr,
@@ -870,6 +891,11 @@ QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,
     if (exportWasCancelled(cancellation_requested) || maximum_size.width() <= 0 || maximum_size.height() <= 0) return {};
     const QSize canvas_size = documentSize(document, source_image.size());
     QImage thumbnail;
+    if(layer.adjustment) {
+        thumbnail=QImage(maximum_size,QImage::Format_ARGB32);if(thumbnail.isNull())return {};
+        for(int x=0;x<thumbnail.width();++x){const auto c=creative_suite::effects::gradientMapColor(*layer.adjustment,double(x)/std::max(1,thumbnail.width()-1));for(int y=0;y<thumbnail.height();++y)thumbnail.setPixel(x,y,qRgb(c[0],c[1],c[2]));}
+        return thumbnail;
+    }
     if (layer.clip_to_base) {
         const auto pixels = renderSelectedLayer(raster_images, source_image, document, layer.id, cancellation_requested);
         return pixels.isNull() ? QImage{} : pixels.scaled(maximum_size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -896,6 +922,10 @@ QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,
             layer.operations, true, maximum_size, true);
     }
     if (layer.mask.has_value() && layer.mask->enabled && !thumbnail.isNull()) {
+        if(layer.mask->initial_selection) {
+            const auto mask=maskPixels(canvas_size,*layer.mask,cancellation_requested).scaled(thumbnail.size(),Qt::IgnoreAspectRatio,Qt::SmoothTransformation);
+            if(mask.isNull() || !multiplyLayerMask(&thumbnail,mask,cancellation_requested))return {};return thumbnail;
+        }
         QImage white(thumbnail.size(), QImage::Format_ARGB32_Premultiplied);
         white.fill(Qt::white);
         const QImage mask = renderLayerThumbnail(raster_images, white, canvas_size,
@@ -934,6 +964,7 @@ QHash<QString, QImage> ImageDocumentRenderer::maskThumbnails(
     white.fill(Qt::white);
     for (const auto& layer : document.layers) {
         if (!layer.mask.has_value()) continue;
+        if(layer.mask->initial_selection){const auto mask=maskPixels(size,*layer.mask).scaled(maximum_size,Qt::KeepAspectRatio,Qt::SmoothTransformation);thumbnails.insert(layer.id,mask);continue;}
         thumbnails.insert(layer.id, renderLayerThumbnail(raster_images, white, size,
             maskRenderOperations(*layer.mask), true, maximum_size, false));
     }

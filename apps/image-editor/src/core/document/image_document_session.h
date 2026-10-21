@@ -132,6 +132,11 @@ public:
                                          const ImageShapeData& style,
                                          QString* error = nullptr);
     [[nodiscard]] bool deleteObjects(const QStringList& object_ids);
+    [[nodiscard]] QString addGradientMapAdjustment(std::optional<QPainterPath> selection = {});
+    [[nodiscard]] bool setGradientMap(const QString&,const creative_suite::effects::GradientMapParameters&);
+    void beginLayerAdjustmentEdit();
+    void endLayerAdjustmentEdit();
+    [[nodiscard]] bool selectedLayerCanEditMask() const noexcept;
     [[nodiscard]] QString addLayer();
     [[nodiscard]] bool deleteLayer(const QString& layer_id);
     // Removes valid editable items and group children in one history edit.
@@ -302,6 +307,8 @@ private:
     mutable QHash<QString, LayerThumbnailCacheEntry> layer_thumbnail_cache_;
     mutable QHash<QString, GroupThumbnailCacheEntry> group_thumbnail_cache_;
     mutable ImageLayerRasterCache layer_raster_cache_;
+    bool adjustment_edit_active_ = false;
+    ImageDocumentData adjustment_edit_snapshot_;
     ImageDocumentData opacity_edit_snapshot_;
     bool opacity_edit_active_ = false;
     bool outline_edit_active_ = false;

@@ -2089,3 +2089,8 @@ workspace-page-switch, transform/text compositor, GPU timeline and render/GPU
 export gates protect this boundary. Image producer blend UI tests compare its
 published PNG with the reference rendering. See [contract and execution evidence](../../image-editor/features/BLEND_MODES.md).
 Native cross-application visual acceptance remains pending.
+
+
+## Shared Gradient Map maintenance
+
+Shared effects/composition/OpenGL/Vulkan and main-window, application-media, workspace switching, transform/text, GPU timeline and CPU/GPU export regressions protect opaque output and existing PNG refresh contracts. No Video adjustment selector or schema is added. See [producer contract](../../image-editor/features/GRADIENT_MAP.md).

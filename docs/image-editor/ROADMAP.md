@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map adjustments, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,8 +41,9 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Implement non-destructive adjustment and fill layers**, beginning with the
-application-owned contract in section 4.3. Outlines, clipping masks and six layer/
+**Add brightness/contrast as the second adjustment type** in section 4.3.
+The adjustment-layer contract and Gradient Map are implemented; see
+[Gradient Map](features/GRADIENT_MAP.md). Outlines, clipping masks and six layer/
 group blend modes are implemented; see [blend modes](features/BLEND_MODES.md).
 Manual and platform acceptance remains pending.
 
@@ -275,10 +276,10 @@ Native visual and macOS/Linux acceptance remains pending.
 
 #### 4.3. Non-destructive adjustments and fill layers
 
-- [ ] Establish an application-owned adjustment-layer contract for affected
+- [x] Establish an application-owned adjustment-layer contract for affected
   lower layers, masks, groups, clipping, and operation order; reuse compatible
   shared effect processing without importing Video Editor timeline models.
-- [ ] Implement Gradient Map, mapping luminance to editable gradient colors.
+- [x] Implement Gradient Map, mapping luminance to editable gradient colors.
   This is separate from the existing linear painting tool.
 - [ ] Add brightness/contrast, exposure/offset/gamma, hue/saturation, levels,
   and per-channel/global curves in bounded increments.
@@ -627,3 +628,12 @@ Motion Drop Shadow extends shared CPU effects/GPU image operations only; Image a
 | Six layer/group modes, alpha, clipping, history/v19/recovery/export/cache | `image_editor_blend_test.cpp` (`creative-suite-image-editor-blend`), shared `composition_test.cpp` | Coverage present; evidence in [feature contract](features/BLEND_MODES.md). |
 | Selector restrictions, mask ownership, tabs, history, linked PNG | `image_editor_blend_ui_test.cpp` (`creative-suite-image-editor-blend-ui`, full UI), Video consumer tests | [Visual checklist](validation/MANUAL_VALIDATION.md#blend-modes) pending. |
 | CPU/OpenGL parity, uploads, budget/cancellation and Hub restoration | Interactive/native GPU, shared composition/OpenGL and Hub backup format/manager tests; Motion/Video consumer gates | Native macOS/Linux and manual acceptance pending. |
+
+
+## Gradient Map regression coverage
+
+| Behavior | Automated coverage | Acceptance |
+| --- | --- | --- |
+| RGB mapping, preserved alpha, masks/selection seed, history/scope/stack, v20/recovery/export/cache | `creative-suite-image-editor-gradient-map`, shared effects tests | [Contract and execution evidence](features/GRADIENT_MAP.md); native visual pending. |
+| Creation, multi-point UI/history/color cancel, mask owner/tools, restrictions and PNG publication | `creative-suite-image-editor-gradient-map-ui`, full UI | [Manual checklist](validation/MANUAL_VALIDATION.md#gradient-map-adjustments) pending. |
+| CPU/OpenGL, source upload reuse, budgets, GPU recovery and Hub restore | Interactive/native GPU, shared composition, Hub backup format/manager, Video/Motion consumer gates | Native macOS/Linux pending. |

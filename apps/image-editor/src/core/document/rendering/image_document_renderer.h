@@ -19,7 +19,9 @@ public:
     [[nodiscard]] static QImage rasterize(const QSize& size,
         const QVector<ImageOperation>& operations, const QHash<QString, QImage>& resources,
         bool mask, QImage previous = {}, const QRect& region = {},
-        const std::atomic_bool* cancellation_requested = nullptr);
+        const std::atomic_bool* cancellation_requested = nullptr,
+        const std::optional<QPainterPath>& initial_selection = {});
+    [[nodiscard]] static QImage maskPixels(const QSize&,const ImageLayerMaskData&,const std::atomic_bool* = nullptr);
     [[nodiscard]] static QImage transformRaster(QImage pixels,
         const QVector<ImageOperation>& operations,
         const std::atomic_bool* cancellation_requested = nullptr);

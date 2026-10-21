@@ -160,6 +160,13 @@ void testImageDocuments(const QString& root) {
             auto child=children[1].toObject(); child.insert("blend_mode","difference"); children[1]=child;
             group.insert("children",children); layers[layers.size()-1]=group; fixture.insert("layers",layers);
         }
+        if(version>=20){
+            auto layers=fixture.value("layers").toArray();auto group=layers.last().toObject();auto children=group.value("children").toArray();auto adjustment=children.last().toObject();
+            adjustment.insert("id",QUuid::createUuid().toString(QUuid::WithoutBraces));adjustment.insert("kind","adjustment");adjustment.remove("outline");
+            adjustment.insert("adjustment",QJsonObject{{"type","gradient_map"},{"stops",QJsonArray{QJsonObject{{"position",0},{"color","#ff0000"}},QJsonObject{{"position",1},{"color","#0000ff"}}}}});
+            adjustment.insert("mask",QJsonObject{{"enabled",true},{"operations",QJsonArray{}},{"initial_selection",QJsonObject{{"fill_rule",0},{"path",QJsonArray{QJsonObject{{"type",0},{"x",0},{"y",0}},QJsonObject{{"type",1},{"x",20},{"y",0}},QJsonObject{{"type",1},{"x",20},{"y",20}},QJsonObject{{"type",1},{"x",0},{"y",20}},QJsonObject{{"type",1},{"x",0},{"y",0}}}}}}});
+            children.append(adjustment);group.insert("children",children);layers[layers.size()-1]=group;fixture.insert("layers",layers);
+        }
         // Use the producer's assets in every case, including legacy documents.
         const auto path = QDir(QFileInfo(assets).absolutePath()).filePath(QStringLiteral("image-v%1.cimg").arg(version));
         writeBytes(path, QJsonDocument(fixture).toJson());

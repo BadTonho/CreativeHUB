@@ -28,7 +28,7 @@ namespace image_editor {
             const auto* layer = layers.value(id, nullptr);
             if (!layer) continue;
             if (!base.isEmpty()) bases.insert(id, base);
-            if (!layer->clip_to_base) base = id;
+            if (!layer->clip_to_base) base = layer->adjustment ? QString{} : id;
         }
     }
     return bases;

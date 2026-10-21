@@ -45,7 +45,7 @@ namespace image_editor {
 
 [[nodiscard]] inline bool documentHasBlendModes(const ImageDocumentData& document) {
     using creative_suite::composition::BlendMode;
-    return std::any_of(document.layers.cbegin(),document.layers.cend(),[](const auto& l){return l.blend_mode!=BlendMode::Normal;}) ||
+    return std::any_of(document.layers.cbegin(),document.layers.cend(),[](const auto& l){return l.adjustment || l.blend_mode!=BlendMode::Normal;}) ||
         std::any_of(document.groups.cbegin(),document.groups.cend(),[](const auto& g){return g.blend_mode!=BlendMode::Normal;});
 }
 

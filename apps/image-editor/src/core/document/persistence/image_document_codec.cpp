@@ -1,3 +1,4 @@
+#include "rendering/image_document_geometry.h"
 #include "image_layer_clipping.h"
 #include "persistence/image_document_codec.h"
 
@@ -820,6 +821,12 @@ bool validateLayers(const ImageDocumentData& document,
             return false;
         }
         ids.insert(normalized_id);
+        if(layer.adjustment && (layer.background || layer.outline || !layer.operations.isEmpty() || !creative_suite::effects::validGradientMap(*layer.adjustment))) {
+            assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;
+        }
+        if(layer.mask && layer.mask->initial_selection && !ImageDocumentGeometry::isValidStrokeClipPath(*layer.mask->initial_selection)) {
+            assignError(error,QStringLiteral("A layer mask has invalid properties."));return false;
+        }
         if (layer.background) {
             ++background_count;
             if (index != 0 || layer.name != QStringLiteral("Background") ||
@@ -1074,7 +1081,11 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
         QJsonObject encoded;
         encoded.insert("id", layer.id);
         encoded.insert("name", layer.name);
-        encoded.insert("kind", layer.background ? "background" : "raster");
+        encoded.insert("kind", layer.background ? "background" : layer.adjustment ? "adjustment" : "raster");
+        if(layer.adjustment){
+            QJsonArray stops;for(const auto& stop:layer.adjustment->stops)stops.append(QJsonObject{{"position",stop.position},{"color",QColor(stop.color[0],stop.color[1],stop.color[2]).name()}});
+            encoded.insert("adjustment",QJsonObject{{"type","gradient_map"},{"stops",stops}});
+        }
         encoded.insert("visible", layer.visible);
         encoded.insert("opacity", layer.opacity);
         encoded.insert("operations", encodeOperations(layer.operations, document_path));
@@ -1082,6 +1093,7 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
             QJsonObject mask;
             mask.insert("enabled", layer.mask->enabled);
             mask.insert("operations", encodeOperations(layer.mask->operations));
+            if(layer.mask->initial_selection)mask.insert("initial_selection",QJsonObject{{"path",encodeClipPath(*layer.mask->initial_selection)},{"fill_rule",int(layer.mask->initial_selection->fillRule())}});
             encoded.insert("mask", mask);
         }
         if (layer.blend_mode != creative_suite::composition::BlendMode::Normal)
@@ -1143,6 +1155,14 @@ bool decodeDocumentJson(const QJsonObject& root,
         return false;
     }
 
+    if(version<20){
+        const auto forbidden=[](const QJsonObject& layer){return layer.contains("adjustment") || layer.value("kind")=="adjustment" || layer.value("mask").toObject().contains("initial_selection");};
+        for(const auto& value:root.value("layers").toArray()){
+            const auto layer=value.toObject();bool invalid=forbidden(layer);
+            for(const auto& child:layer.value("children").toArray())invalid|=forbidden(child.toObject());
+            if(invalid){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
+        }
+    }
     if (version < 19) {
         for (const auto& value : root.value("layers").toArray()) {
             const auto layer=value.toObject();
@@ -1255,7 +1275,19 @@ bool decodeDocumentJson(const QJsonObject& root,
             layer->visible = encoded.value("visible").toBool();
             layer->opacity = opacity;
             if (!decodeBlendMode(encoded,version,&layer->blend_mode,error,layer->background)) return false;
-            if (kind != QStringLiteral("background") && kind != QStringLiteral("raster")) {
+            if(kind=="adjustment" || encoded.contains("adjustment")) {
+                const auto a=encoded.value("adjustment").toObject();creative_suite::effects::GradientMapParameters parameters;parameters.stops.clear();
+                bool valid=version>=20 && kind=="adjustment" && a.value("type")=="gradient_map" && a.value("stops").isArray();
+                if(!valid || a.value("stops").toArray().size()<2 || a.value("stops").toArray().size()>32){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
+                for(const auto& v:a.value("stops").toArray()){
+                    const auto stop=v.toObject();const QString color_text=stop.value("color").toString();const QColor color(color_text);
+                    valid &= stop.value("position").isDouble() && color_text.size()==7 && color_text.startsWith('#') && color.isValid() && color.alpha()==255;
+                    parameters.stops.push_back({stop.value("position").toDouble(),{static_cast<unsigned char>(color.red()),static_cast<unsigned char>(color.green()),static_cast<unsigned char>(color.blue())}});
+                }
+                if(!valid || !creative_suite::effects::validGradientMap(parameters)){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
+                layer->adjustment=std::move(parameters);
+            }
+            if (kind != QStringLiteral("background") && kind != QStringLiteral("raster") && kind!="adjustment") {
                 assignError(error, QStringLiteral("The document contains an unsupported layer type."));
                 return false;
             }
@@ -1300,6 +1332,13 @@ bool decodeDocumentJson(const QJsonObject& root,
                 }
                 ImageLayerMaskData decoded_mask;
                 decoded_mask.enabled = mask.value("enabled").toBool();
+                if(mask.contains("initial_selection")){
+                    const auto initial=mask.value("initial_selection").toObject();int rule=-1;QPainterPath path;
+                    if(version<20 || !isInteger(initial.value("fill_rule"),&rule) || (rule!=0 && rule!=1) || !decodeClipPath(initial.value("path"),static_cast<Qt::FillRule>(rule),&path)){
+                        assignError(error,QStringLiteral("A layer mask has invalid properties."));return false;
+                    }
+                    decoded_mask.initial_selection=std::move(path);
+                }
                 QSize mask_size = layer_canvas_size;
                 if (!decodeOperations(mask.value("operations"), version, &mask_size, true,
                                       &decoded_mask.operations, error)) return false;
@@ -1328,6 +1367,7 @@ bool decodeDocumentJson(const QJsonObject& root,
                     return false;
                 }
                 ImageGroupData group;
+                if(encoded.contains("adjustment")){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
                 group.id = encoded.value("id").toString();
                 group.name = encoded.value("name").toString();
                 group.visible = encoded.value("visible").toBool();

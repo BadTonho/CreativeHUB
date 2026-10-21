@@ -82,7 +82,7 @@ private slots:
         QVERIFY(ImageDocumentStore::saveRecovery(dir.filePath("recovery.json"),r));
         QVERIFY(ImageDocumentStore::loadRecovery(dir.filePath("recovery.json"),&recovered)); QCOMPARE(recovered.document,s.data());
         QFile f(path); QVERIFY(f.open(QIODevice::ReadOnly)); const auto root=QJsonDocument::fromJson(f.readAll()).object();f.close();
-        QCOMPARE(root.value("version").toInt(),19);
+        QCOMPARE(root.value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         for(int bad=0;bad<4;++bad) {
             auto json=root;auto layers=json.value("layers").toArray();auto g=layers.last().toObject();
             if(bad==0) g.insert("blend_mode","unsupported");
