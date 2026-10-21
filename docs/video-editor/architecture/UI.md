@@ -749,6 +749,11 @@ Fusion Inspectors; integer fields retain their normal behavior. Fields remain
 directly editable. In the Edit Transform Inspector, arrow-key changes update
 the matching slider and preview immediately. A key press and its auto-repeat
 sequence form one Undo/Redo edit, as does a slider drag.
+Double-click a property name with the left mouse button to reset its associated
+numeric control to the model's default. Edit applies the reset immediately and
+updates the Transform slider and preview. Fusion applies only the reset property
+immediately, preserving other unapplied Inspector values; animated properties
+reset at the current local frame without removing other keyframes.
 
 The preview composes all visible tracks in worker-owned code, from the bottom
 track to the top track, before handing one frame to the GPU/CPU preview. A gap

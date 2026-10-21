@@ -2,7 +2,9 @@
 
 #include <QEvent>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLineEdit>
+#include <QMouseEvent>
 
 namespace ui {
 
@@ -13,7 +15,27 @@ InspectorDoubleSpinBox::InspectorDoubleSpinBox(QWidget* parent)
     lineEdit()->installEventFilter(this);
 }
 
+void InspectorDoubleSpinBox::setResetLabel(QLabel* label, double reset_value) {
+    if (reset_label_ != nullptr) reset_label_->removeEventFilter(this);
+    reset_label_ = label;
+    reset_value_ = reset_value;
+    if (reset_label_ == nullptr) return;
+    reset_label_->installEventFilter(this);
+    reset_label_->setCursor(Qt::PointingHandCursor);
+    reset_label_->setToolTip(
+        tr("Double-click the property name to reset its value."));
+}
+
 bool InspectorDoubleSpinBox::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == reset_label_ && event->type() == QEvent::MouseButtonDblClick) {
+        auto* mouse_event = static_cast<QMouseEvent*>(event);
+        if (mouse_event->button() == Qt::LeftButton && isEnabled()) {
+            setValue(reset_value_);
+            emit resetRequested(value());
+            mouse_event->accept();
+            return true;
+        }
+    }
     if (watched == lineEdit()) {
         if (event->type() == QEvent::KeyPress &&
             handleArrowKey(static_cast<QKeyEvent*>(event))) {

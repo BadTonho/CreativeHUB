@@ -101,6 +101,15 @@ void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
 }
 
+void sendLeftDoubleClick(QWidget* widget) {
+    require(widget != nullptr, "Cannot double-click a missing Inspector widget.");
+    const auto local_position = QPointF(widget->rect().center());
+    QMouseEvent event(QEvent::MouseButtonDblClick,
+        local_position, QPointF(widget->mapToGlobal(local_position.toPoint())),
+        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(widget, &event);
+}
+
 void verifyInspectorScrollArea(QScrollArea* scroll_area, const char* name) {
     require(scroll_area != nullptr && scroll_area->widgetResizable() &&
                 scroll_area->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff &&
@@ -1644,6 +1653,36 @@ public:
                         edit_controller->undo().changed() &&
                         std::abs(position_x->value() - live_initial_position_x) < 1e-9,
                     "Separate arrow taps must create separate Undo entries with synchronized sliders.");
+            edit_controller->beginTransformEdit();
+            edit_controller->applyTransformProperty(0, 0.303);
+            edit_controller->finishTransformEdit();
+            auto* position_x_label = inspector_ui.inspector_panel
+                ->findChild<QLabel*>("transformPropertyLabel0");
+            require(std::abs(selected_position_x() - 0.303) < 1e-9 &&
+                        position_x_label != nullptr,
+                    "The Transform reset test could not set up a non-default value and find its label.");
+            sendLeftDoubleClick(position_x);
+            require(std::abs(selected_position_x() - 0.303) < 1e-9 &&
+                        std::abs(position_x->value() - 0.303) < 1e-9,
+                    "Double-clicking the numeric field must not reset its value.");
+            const auto refreshes_before_reset = live_composition_refreshes;
+            sendLeftDoubleClick(position_x_label);
+            require(std::abs(selected_position_x() - 0.5) < 1e-9 &&
+                        std::abs(position_x->value() - 0.5) < 1e-9 &&
+                        position_x_slider->value() ==
+                            slider_value_for_position_x(0.5) &&
+                        live_composition_refreshes == refreshes_before_reset + 1,
+                    "Double-clicking the Transform property name must reset the model, slider, and preview immediately.");
+            require(edit_controller->undo().changed() &&
+                        std::abs(selected_position_x() - 0.303) < 1e-9 &&
+                        position_x_slider->value() ==
+                            slider_value_for_position_x(0.303) &&
+                        edit_controller->redo().changed() &&
+                        std::abs(selected_position_x() - 0.5) < 1e-9 &&
+                        edit_controller->undo().changed() &&
+                        edit_controller->undo().changed() &&
+                        std::abs(selected_position_x() - live_initial_position_x) < 1e-9,
+                    "A property-name reset must be one undoable edit with working Undo/Redo.");
             QObject::disconnect(live_edit_connection);
             inspector_ui.inspector_tabs->setCurrentIndex(2);
             QApplication::processEvents();
@@ -1790,6 +1829,55 @@ public:
                         fusion_canvas->isEnabled() && fusion_canvas->scene() != nullptr &&
                         fusion_canvas->scene()->items().size() >= 2,
                     "Timeline Open in Fusion did not open the selected clip's node graph.");
+            const auto fusion_graph_snapshot = [&window, selected_clip_id]() {
+                const auto location = window.editor_session_.timeline().locateClip(
+                    selected_clip_id);
+                require(location.has_value(),
+                        "The Fusion reset test lost its selected clip.");
+                const auto& clip = window.editor_session_.timeline()
+                    .tracks()[location->track_index].clips[location->clip_index];
+                return clip.node_graph.value_or(
+                    fusion::nodes::makePassthroughGraph());
+            };
+            const auto graph_before_reset = fusion_graph_snapshot();
+            require(window.fusion_workspace_->addCatalogNode(
+                        QStringLiteral("fusion.transform")),
+                    "The Main Window Fusion reset test could not add a Transform node.");
+            const auto reset_node_id = window.fusion_workspace_->selectedNodeId();
+            auto* fusion_scale = window.fusion_workspace_->inspectorPanel()
+                ->findChild<QDoubleSpinBox*>("fusionTransformScale");
+            auto* fusion_apply = window.fusion_workspace_->inspectorPanel()
+                ->findChild<QPushButton*>("fusionApplyNodeSettingsButton");
+            require(fusion_scale && fusion_apply,
+                    "The new Fusion Transform node has no scale control or Apply button.");
+            fusion_scale->setValue(2.0);
+            fusion_apply->click();
+            fusion_scale = window.fusion_workspace_->inspectorPanel()
+                ->findChild<QDoubleSpinBox*>("fusionTransformScale");
+            auto* fusion_scale_label = window.fusion_workspace_->inspectorPanel()
+                ->findChild<QLabel*>("fusionTransformScaleLabel");
+            auto* fusion_pending_y = window.fusion_workspace_->inspectorPanel()
+                ->findChild<QDoubleSpinBox*>("fusionTransformY");
+            require(fusion_scale && fusion_scale_label && fusion_pending_y,
+                    "The Fusion Inspector did not rebuild its reset controls after Apply.");
+            fusion_pending_y->setValue(2.25);
+            sendLeftDoubleClick(fusion_scale_label);
+            const auto reset_graph = fusion_graph_snapshot();
+            const auto* reset_node = fusion::nodes::findNode(
+                reset_graph, reset_node_id);
+            require(reset_node && reset_node->transform.scale == 1.0 &&
+                        reset_node->transform.position_y == 0.5 &&
+                        fusion_pending_y->value() == 2.25,
+                    "The Main Window must apply only the named Fusion reset while preserving other pending controls.");
+            require(edit_controller->undo().changed() &&
+                        fusion_graph_snapshot().nodes.back().transform.scale == 2.0 &&
+                        edit_controller->redo().changed() &&
+                        fusion_graph_snapshot().nodes.back().transform.scale == 1.0 &&
+                        edit_controller->undo().changed() &&
+                        edit_controller->undo().changed() &&
+                        edit_controller->undo().changed() &&
+                        fusion_graph_snapshot() == graph_before_reset,
+                    "A Fusion property-name reset must be one Undo/Redo graph edit and leave the original graph after cleanup.");
             setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
             QApplication::processEvents();
             require(window.workspace_host_->currentPage() == ui::WorkspacePageId::Edit &&
@@ -1819,6 +1907,30 @@ public:
                                 .clips[selected_clip_location->clip_index].effects.front(),
                             "amount") == 37.0,
                     "A disabled filter's parameters must remain editable without re-enabling it.");
+            const auto* grayscale_definition =
+                creative_suite::effects::findDefinition("video.grayscale");
+            require(grayscale_definition != nullptr &&
+                        !grayscale_definition->parameters.empty(),
+                    "The grayscale effect has no default parameter for reset coverage.");
+            const auto grayscale_default =
+                grayscale_definition->parameters.front().default_value;
+            sendLeftDoubleClick(inspector_ui.clip_effect_parameter_label);
+            selected_clip_location = window.timeline_model_.locateClip(selected_clip_id);
+            require(selected_clip_location.has_value() &&
+                        std::abs(creative_suite::effects::parameterValue(
+                            window.timeline_model_.tracks()[selected_clip_location->track_index]
+                                .clips[selected_clip_location->clip_index].effects.front(),
+                            "amount") - grayscale_default) < 1e-9 &&
+                        inspector_ui.clip_effect_parameter_slider->value() ==
+                            static_cast<int>(std::lround(grayscale_default)),
+                    "Double-clicking an Edit effect parameter name must restore its declared default and slider immediately.");
+            require(edit_controller->undo().changed() &&
+                        std::abs(inspector_ui.clip_effect_parameter_value->value() - 37.0) < 1e-9 &&
+                        edit_controller->redo().changed() &&
+                        std::abs(inspector_ui.clip_effect_parameter_value->value() -
+                                 grayscale_default) < 1e-9 &&
+                        edit_controller->undo().changed(),
+                    "An Edit effect parameter reset must be one undoable edit.");
             require(edit_controller->undo().changed() && edit_controller->undo().changed() &&
                         edit_controller->undo().changed(),
                     "Effect parameter, checkbox, and insertion actions must each be undoable.");

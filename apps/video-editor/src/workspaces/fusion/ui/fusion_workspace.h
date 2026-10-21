@@ -80,6 +80,7 @@ private:
     bool active_ = false;
     bool independent_composition_ = false;
     bool refreshing_ = false;
+    bool preserving_pending_inspector_values_ = false;
     void publishPreviewTarget();
     void refreshCanvas();
     void refreshInspector();
@@ -90,7 +91,13 @@ private:
     void toggleEffectParameterKeyframe(
         fusion::nodes::NodeId node_id,
         const std::string& parameter_id);
-    void commitGraph(fusion::nodes::NodeGraph graph, const QString& status);
+    void resetNodeProperty(
+        fusion::nodes::NodeId node_id,
+        const QString& property_name,
+        double value);
+    void commitGraph(fusion::nodes::NodeGraph graph, const QString& status,
+                     bool refresh_inspector = true,
+                     bool preserve_pending_values = false);
     bool createCatalogNode(const QString& id, const QPointF& position,
                            std::optional<fusion::nodes::Connection> cable);
 };

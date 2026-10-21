@@ -408,7 +408,10 @@ void FusionWorkspace::setSelection(const timeline::TimelineClip* clip,
         fusion::nodes::findNode(graph_, previous_preview_node_id) != nullptr
             ? previous_preview_node_id : output_id;
     refreshCanvas();
-    refreshInspector();
+    if (!(preserving_pending_inspector_values_ &&
+          clip_id_ == previous_clip_id && selected_node_id_ == previous_node_id)) {
+        refreshInspector();
+    }
     if (active_) publishPreviewTarget();
 }
 
@@ -507,19 +510,35 @@ void FusionWorkspace::refreshInspector() {
     apply->setObjectName("fusionApplyNodeSettingsButton");
     auto* remove = new QPushButton(QCoreApplication::translate("FusionWorkspace", "Remove Node"), node_properties_);
     remove->setObjectName("fusionRemoveNodeButton");
-    auto spin = [this, layout](const QString& name, const QString& label, double value,
-                               double minimum, double maximum, double step) {
+    const auto bindReset = [this, node_id = node->id](
+        InspectorDoubleSpinBox* control, const QString& text,
+        double reset_value) {
+        auto* property_label = new QLabel(text, node_properties_);
+        property_label->setObjectName(
+            control->objectName() + QStringLiteral("Label"));
+        control->setResetLabel(property_label, reset_value);
+        const auto property_name = control->objectName();
+        connect(control, &InspectorDoubleSpinBox::resetRequested, this,
+            [this, node_id, property_name](double value) {
+                resetNodeProperty(node_id, property_name, value);
+            });
+        return property_label;
+    };
+    auto spin = [this, layout, &bindReset](
+        const QString& name, const QString& label, double value,
+        double minimum, double maximum, double step, double reset_value) {
         auto* control = new InspectorDoubleSpinBox(node_properties_);
         control->setObjectName(name);
         control->setRange(minimum, maximum);
         control->setSingleStep(step);
         control->setValue(value);
-        layout->addRow(label, control);
+        layout->addRow(bindReset(control, label, reset_value), control);
         return control;
     };
-    const auto animatedSpin = [this, layout](
+    const auto animatedSpin = [this, layout, &bindReset](
         const QString& name, const QString& label, double value,
-        double minimum, double maximum, double step, bool keyed,
+        double minimum, double maximum, double step, double reset_value,
+        bool keyed,
         std::function<void()> toggle_keyframe) {
         auto* row = new QWidget(node_properties_);
         auto* row_layout = new QHBoxLayout(row);
@@ -530,6 +549,7 @@ void FusionWorkspace::refreshInspector() {
         control->setRange(minimum, maximum);
         control->setSingleStep(step);
         control->setValue(value);
+        auto* property_label = bindReset(control, label, reset_value);
         auto* key = new QPushButton(keyed ? QStringLiteral("â—†") : QStringLiteral("â—‡"), row);
         key->setObjectName(name + QStringLiteral("Keyframe"));
         key->setCheckable(true);
@@ -543,7 +563,7 @@ void FusionWorkspace::refreshInspector() {
             : QCoreApplication::translate("FusionWorkspace", "Add keyframe at the current frame"));
         row_layout->addWidget(control, 1);
         row_layout->addWidget(key);
-        layout->addRow(label, row);
+        layout->addRow(property_label, row);
         connect(key, &QPushButton::clicked, this,
             [this, toggle_keyframe = std::move(toggle_keyframe)] {
                 if (refreshing_) return;
@@ -565,6 +585,7 @@ void FusionWorkspace::refreshInspector() {
             const auto name=QStringLiteral("fusionMask%1").arg(i);
             animatedSpin(name,QString::fromLatin1(labels[i]),fusion::nodes::maskValue(evaluated,i)*(i<4 ? 100 : 1),
                 i<2 ? -200 : i<4 ? 0 : -3600, i<2 ? 300 : i<4 ? 400 : 3600,1,
+                i<4 ? 50.0 : 0.0,
                 hasKeyAtFrame(node->mask_keyframes[i],local_frame_),[this,id=node->id,i] {
                     auto candidate=graph_; auto* n=findMutableNode(candidate,id);
                     if (!n || local_frame_<0 || local_frame_>=clip_duration_frames_) return;
@@ -577,7 +598,7 @@ void FusionWorkspace::refreshInspector() {
                     commitGraph(std::move(candidate),QStringLiteral("Mask keyframe updated."));
                 });
         }
-        spin("fusionMaskSoftEdge","Soft Edge (%)",node->mask.soft_edge*100,0,100,1);
+        spin("fusionMaskSoftEdge","Soft Edge (%)",node->mask.soft_edge*100,0,100,1,0.0);
         auto* invert=new QCheckBox(QCoreApplication::translate("FusionWorkspace", "Invert"),node_properties_); invert->setObjectName("fusionMaskInvert");
         invert->setChecked(node->mask.invert); layout->addRow(invert);
     }
@@ -604,7 +625,7 @@ void FusionWorkspace::refreshInspector() {
             // Apply together so graph refresh does not interrupt text entry.
             auto* text_apply = new QPushButton(QCoreApplication::translate("FusionWorkspace", "Apply Text"), node_properties_); text_apply->setObjectName("fusionApplyText"); layout->addRow(text_apply);
             auto* font = new QFontComboBox(node_properties_); font->setObjectName("fusionTextFont"); font->setCurrentFont(QFont(QString::fromUtf8(node->text.font_family.c_str()))); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Font"), font);
-            auto* size = new InspectorDoubleSpinBox(node_properties_); size->setObjectName("fusionTextSize"); size->setRange(1, 512); size->setValue(node->text.font_size_pixels); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Size"), size);
+            auto* size = new InspectorDoubleSpinBox(node_properties_); size->setObjectName("fusionTextSize"); size->setRange(1, 512); size->setValue(node->text.font_size_pixels); layout->addRow(bindReset(size, QCoreApplication::translate("FusionWorkspace", "Size"), 48.0), size);
             auto* alignment = new QComboBox(node_properties_); alignment->setObjectName("fusionTextAlignment"); alignment->addItems({QCoreApplication::translate("FusionWorkspace", "Left"), QCoreApplication::translate("FusionWorkspace", "Center"), QCoreApplication::translate("FusionWorkspace", "Right")}); alignment->setCurrentIndex(static_cast<int>(node->text.alignment)); layout->addRow(QCoreApplication::translate("FusionWorkspace", "Alignment"), alignment);
             connect(text_apply, &QPushButton::clicked, this, [this, node_id, content, font, size, alignment] {
                 auto candidate = graph_; auto* target = findMutableNode(candidate, node_id); if (!target) return;
@@ -656,6 +677,14 @@ void FusionWorkspace::refreshInspector() {
             const auto value = timeline::evaluateProperty(
                 node->transform, node->transform_keyframes, property, local_frame_);
             animatedSpin(name, label, value, minimum, maximum, step,
+                property == timeline::TransformProperty::PositionX ||
+                        property == timeline::TransformProperty::PositionY
+                    ? 0.5
+                    : property == timeline::TransformProperty::Scale
+                        ? 1.0
+                        : property == timeline::TransformProperty::Opacity
+                            ? 1.0
+                            : 0.0,
                 hasKeyAtFrame(keys, local_frame_),
                 [this, node_id = node->id, property] {
                     toggleTransformKeyframe(node_id, property);
@@ -676,16 +705,16 @@ void FusionWorkspace::refreshInspector() {
         enabled->setObjectName("fusionBlurEnabled");
         enabled->setChecked(node->gaussian_blur.enabled);
         layout->addRow(QCoreApplication::translate("FusionWorkspace", "Enabled"), enabled);
-        auto* radius = spin("fusionBlurRadius", "Radius", node->gaussian_blur.radius_pixels, 0, 100, .5);
+        auto* radius = spin("fusionBlurRadius", "Radius", node->gaussian_blur.radius_pixels, 0, 100, .5, 10.0);
         radius->setDecimals(1);radius->setSuffix(" px");
     } else if (node->type == fusion::nodes::NodeType::Color) {
         auto* enabled = new QCheckBox(node_properties_);
         enabled->setObjectName("fusionColorEnabled");
         enabled->setChecked(node->color.enabled);
         layout->addRow(QCoreApplication::translate("FusionWorkspace", "Enabled"), enabled);
-        spin("fusionColorBrightness", "Brightness", node->color.brightness, -100.0, 100.0, 1.0);
-        spin("fusionColorContrast", "Contrast %", node->color.contrast_percent, 0.0, 200.0, 1.0);
-        spin("fusionColorSaturation", "Saturation %", node->color.saturation_percent, 0.0, 200.0, 1.0);
+        spin("fusionColorBrightness", "Brightness", node->color.brightness, -100.0, 100.0, 1.0, 0.0);
+        spin("fusionColorContrast", "Contrast %", node->color.contrast_percent, 0.0, 200.0, 1.0, 100.0);
+        spin("fusionColorSaturation", "Saturation %", node->color.saturation_percent, 0.0, 200.0, 1.0, 100.0);
     } else if (node->type == fusion::nodes::NodeType::Effect) {
         auto* enabled = new QCheckBox(node_properties_);
         enabled->setObjectName("fusionEffectEnabled");
@@ -708,6 +737,7 @@ void FusionWorkspace::refreshInspector() {
                         *node, effect_parameter_id, local_frame_);
                     animatedSpin(control_name, parameter_name, evaluated,
                         parameter.minimum, parameter.maximum, parameter.step,
+                        parameter.default_value,
                         keys != nullptr && hasKeyAtFrame(*keys, local_frame_),
                         [this, node_id = node->id, effect_parameter_id] {
                             toggleEffectParameterKeyframe(
@@ -716,7 +746,8 @@ void FusionWorkspace::refreshInspector() {
                 } else {
                     spin(control_name, parameter_name,
                         creative_suite::effects::parameterValue(node->effect, parameter.id),
-                        parameter.minimum, parameter.maximum, parameter.step);
+                        parameter.minimum, parameter.maximum, parameter.step,
+                        parameter.default_value);
                 }
             }
         }
@@ -968,15 +999,124 @@ void FusionWorkspace::toggleEffectParameterKeyframe(
     commitGraph(std::move(candidate), QStringLiteral("Node keyframe updated."));
 }
 
-void FusionWorkspace::commitGraph(fusion::nodes::NodeGraph graph, const QString& status) {
+void FusionWorkspace::resetNodeProperty(
+    fusion::nodes::NodeId node_id,
+    const QString& property_name,
+    double value) {
+    auto candidate = graph_;
+    auto* node = findMutableNode(candidate, node_id);
+    if (node == nullptr || !std::isfinite(value)) return;
+    const auto frame = std::clamp<std::int64_t>(local_frame_, 0,
+        std::max<std::int64_t>(0, clip_duration_frames_ - 1));
+    bool recognized = false;
+    if (property_name.startsWith(QStringLiteral("fusionMask")) &&
+        property_name != QStringLiteral("fusionMaskSoftEdge")) {
+        bool index_ok = false;
+        const auto index = property_name.mid(QStringLiteral("fusionMask").size())
+            .toInt(&index_ok);
+        if (index_ok && index >= 0 && index < 5 && fusion::nodes::isMaskNode(node->type)) {
+            const auto model_value = index < 4 ? value / 100.0 : value;
+            auto& keys = node->mask_keyframes[static_cast<std::size_t>(index)];
+            if (keys.empty()) {
+                fusion::nodes::setMaskValue(node->mask,
+                    static_cast<std::size_t>(index), model_value);
+            } else {
+                static_cast<void>(creative_suite::animation::setKeyframe(
+                    keys, frame, model_value));
+            }
+            recognized = true;
+        }
+    } else if (property_name == QStringLiteral("fusionMaskSoftEdge") &&
+               fusion::nodes::isMaskNode(node->type)) {
+        node->mask.soft_edge = value / 100.0;
+        recognized = true;
+    } else if (property_name == QStringLiteral("fusionTransformX") ||
+               property_name == QStringLiteral("fusionTransformY") ||
+               property_name == QStringLiteral("fusionTransformScale") ||
+               property_name == QStringLiteral("fusionTransformRotation") ||
+               property_name == QStringLiteral("fusionTransformOpacity")) {
+        if (node->type != fusion::nodes::NodeType::Transform) return;
+        const auto property = property_name == QStringLiteral("fusionTransformX")
+            ? timeline::TransformProperty::PositionX
+            : property_name == QStringLiteral("fusionTransformY")
+                ? timeline::TransformProperty::PositionY
+                : property_name == QStringLiteral("fusionTransformScale")
+                    ? timeline::TransformProperty::Scale
+                    : property_name == QStringLiteral("fusionTransformRotation")
+                        ? timeline::TransformProperty::Rotation
+                        : timeline::TransformProperty::Opacity;
+        auto& keys = timeline::keyframesFor(node->transform_keyframes, property);
+        if (keys.empty()) {
+            switch (property) {
+            case timeline::TransformProperty::PositionX:
+                node->transform.position_x = value; break;
+            case timeline::TransformProperty::PositionY:
+                node->transform.position_y = value; break;
+            case timeline::TransformProperty::Scale:
+                node->transform.scale = value; break;
+            case timeline::TransformProperty::Rotation:
+                node->transform.rotation_degrees = value; break;
+            case timeline::TransformProperty::Opacity:
+                node->transform.opacity = value; break;
+            }
+        } else {
+            static_cast<void>(timeline::setKeyframe(
+                node->transform_keyframes, property, frame, value));
+        }
+        recognized = true;
+    } else if (property_name == QStringLiteral("fusionBlurRadius") &&
+               node->type == fusion::nodes::NodeType::GaussianBlur) {
+        node->gaussian_blur.radius_pixels = value;
+        recognized = true;
+    } else if (node->type == fusion::nodes::NodeType::Color &&
+               property_name == QStringLiteral("fusionColorBrightness")) {
+        node->color.brightness = value;
+        recognized = true;
+    } else if (node->type == fusion::nodes::NodeType::Color &&
+               property_name == QStringLiteral("fusionColorContrast")) {
+        node->color.contrast_percent = value;
+        recognized = true;
+    } else if (node->type == fusion::nodes::NodeType::Color &&
+               property_name == QStringLiteral("fusionColorSaturation")) {
+        node->color.saturation_percent = value;
+        recognized = true;
+    } else if (property_name == QStringLiteral("fusionTextSize") &&
+               (node->type == fusion::nodes::NodeType::Text ||
+                node->type == fusion::nodes::NodeType::Background)) {
+        node->text.font_size_pixels = value;
+        recognized = true;
+    } else if (property_name.startsWith(QStringLiteral("fusionEffectParameter_")) &&
+               node->type == fusion::nodes::NodeType::Effect) {
+        const auto parameter_id = property_name.mid(
+            QStringLiteral("fusionEffectParameter_").size()).toStdString();
+        auto* keys = effectParameterKeyframes(*node, parameter_id);
+        if (keys != nullptr && !keys->empty()) {
+            static_cast<void>(creative_suite::animation::setKeyframe(
+                *keys, frame, value));
+        } else if (!creative_suite::effects::setParameterValue(
+                       node->effect, parameter_id, value)) {
+            return;
+        }
+        recognized = true;
+    }
+    if (!recognized || candidate == graph_) return;
+    commitGraph(std::move(candidate),
+        QStringLiteral("Property reset to its default."), false, true);
+}
+
+void FusionWorkspace::commitGraph(
+    fusion::nodes::NodeGraph graph, const QString& status,
+    bool refresh_inspector, bool preserve_pending_values) {
     if (clip_id_ == 0 || !fusion::nodes::validate(graph) ||
         !fusion::nodes::validKeyframeRange(graph, clip_duration_frames_)) return;
     emit playbackPauseRequested();
     graph_ = std::move(graph);
     refreshCanvas();
-    refreshInspector();
+    if (refresh_inspector) refreshInspector();
     if (auto* label = inspector_panel_->findChild<QLabel*>("fusionNodeStatus")) label->setText(status);
+    preserving_pending_inspector_values_ = preserve_pending_values;
     emit graphEditRequested(clip_id_, graph_);
+    preserving_pending_inspector_values_ = false;
 }
 
 }  // namespace ui

@@ -41,6 +41,15 @@ void require(bool value, const char* message) {
     if (!value) throw std::runtime_error(message);
 }
 
+void sendLeftDoubleClick(QWidget* widget) {
+    require(widget != nullptr, "Cannot double-click a missing Fusion Inspector widget.");
+    const auto local_position = QPointF(widget->rect().center());
+    QMouseEvent event(QEvent::MouseButtonDblClick,
+        local_position, QPointF(widget->mapToGlobal(local_position.toPoint())),
+        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(widget, &event);
+}
+
 void verifyFusionInspectorScrolling(QScrollArea* scroll_area) {
     require(scroll_area != nullptr && scroll_area->widgetResizable() &&
                 scroll_area->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff &&
@@ -733,6 +742,80 @@ int runFusionWorkspaceTest() {
     require(animated_brightness && edit_count == 22 &&
                 animated_brightness->effect_parameter_keyframes.empty(),
             "The Brightness diamond did not remove the keyframe at the current frame.");
+
+    brightness_amount = root.findChild<QDoubleSpinBox*>(
+        "fusionEffectParameter_amount");
+    apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
+    brightness_amount->setValue(25.0);
+    apply->click();
+    animated_brightness = fusion::nodes::findNode(edited, animated_brightness_id);
+    require(animated_brightness && edit_count == 23 &&
+                creative_suite::effects::parameterValue(
+                    animated_brightness->effect, "amount") == 25.0,
+            "The Brightness reset test could not set a non-default base value.");
+    brightness_amount = root.findChild<QDoubleSpinBox*>(
+        "fusionEffectParameter_amount");
+    auto* brightness_enabled = root.findChild<QCheckBox*>("fusionEffectEnabled");
+    auto* brightness_label = root.findChild<QLabel*>(
+        "fusionEffectParameter_amountLabel");
+    require(brightness_enabled && brightness_label,
+            "The Brightness Inspector did not expose its resettable property name.");
+    const auto refresh_selection_connection = QObject::connect(
+        &workspace, &ui::FusionWorkspace::graphEditRequested, &workspace,
+        [&workspace, &selected](timeline::ClipId,
+                                const fusion::nodes::NodeGraph& graph) {
+            selected.node_graph = graph;
+            workspace.setSelection(&selected, {});
+        });
+    brightness_enabled->setChecked(false);
+    sendLeftDoubleClick(brightness_amount);
+    require(edit_count == 23 &&
+                creative_suite::effects::parameterValue(
+                    animated_brightness->effect, "amount") == 25.0,
+            "Double-clicking the Fusion numeric field must not reset or commit its value.");
+    sendLeftDoubleClick(brightness_label);
+    animated_brightness = fusion::nodes::findNode(edited, animated_brightness_id);
+    const auto* brightness_definition =
+        creative_suite::effects::findDefinition("video.brightness");
+    require(brightness_definition != nullptr &&
+                !brightness_definition->parameters.empty() &&
+                animated_brightness && edit_count == 24 &&
+                creative_suite::effects::parameterValue(
+                    animated_brightness->effect, "amount") ==
+                    brightness_definition->parameters.front().default_value &&
+                animated_brightness->effect.enabled &&
+                brightness_enabled->isChecked() == false,
+            "Double-clicking a Fusion effect property name must apply only its default, preserving other pending controls.");
+
+    node_canvas->setSelectedNode(animated_transform_id);
+    workspace.setTimelinePlayheadFrame(110);
+    auto* reset_scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
+    auto* reset_scale_label = root.findChild<QLabel*>("fusionTransformScaleLabel");
+    auto* pending_y = root.findChild<QDoubleSpinBox*>("fusionTransformY");
+    animated_transform = fusion::nodes::findNode(edited, animated_transform_id);
+    require(reset_scale && reset_scale_label && pending_y && animated_transform,
+            "The animated Transform Inspector reset controls were not available.");
+    require(animated_transform->transform_keyframes.scale.size() == 2 &&
+                animated_transform->transform_keyframes.scale[1] ==
+                    creative_suite::animation::Keyframe{10, 2.0},
+            "The animated Transform reset test did not find its later keyframe.");
+    pending_y->setValue(2.25);
+    sendLeftDoubleClick(reset_scale);
+    require(edit_count == 24 && reset_scale->value() == 2.0,
+            "Double-clicking the animated Transform numeric field must not reset it.");
+    sendLeftDoubleClick(reset_scale_label);
+    animated_transform = fusion::nodes::findNode(edited, animated_transform_id);
+    require(animated_transform && edit_count == 25 &&
+                reset_scale->value() == 1.0 &&
+                animated_transform->transform_keyframes.scale.size() == 2 &&
+                animated_transform->transform_keyframes.scale[0] ==
+                    creative_suite::animation::Keyframe{0, 1.0} &&
+                animated_transform->transform_keyframes.scale[1] ==
+                    creative_suite::animation::Keyframe{10, 1.0} &&
+                pending_y->value() == 2.25 &&
+                animated_transform->transform.position_y == 0.5,
+            "Resetting an animated property name must change only the current keyframe and preserve other pending fields.");
+    QObject::disconnect(refresh_selection_connection);
 
     const auto preview_requests_before_reentry = preview_request_count;
     workspace.setActive(false);

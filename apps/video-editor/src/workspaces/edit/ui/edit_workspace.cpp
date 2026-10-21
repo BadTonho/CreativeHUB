@@ -252,6 +252,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     form->setVerticalSpacing(6);
     const std::array<QString, 5> labels{
         "Position X", "Position Y", "Scale", "Rotation", "Opacity"};
+    const std::array<double, 5> transform_defaults{0.5, 0.5, 1.0, 0.0, 1.0};
     for (int index = 0; index < 5; ++index) {
         auto* row = new QWidget(inspector_page);
         auto* row_layout = new QHBoxLayout(row);
@@ -295,7 +296,11 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         row_layout->addWidget(slider, 1);
         row_layout->addWidget(spin);
         row_layout->addWidget(key);
-        form->addRow(labels[index], row);
+        auto* property_label = new QLabel(labels[index], inspector_page);
+        property_label->setObjectName(
+            QStringLiteral("transformPropertyLabel%1").arg(index));
+        spin->setResetLabel(property_label, transform_defaults[index]);
+        form->addRow(property_label, row);
 
         connect(spin, &QDoubleSpinBox::editingFinished, edit_controller,
                 [edit_controller, spin, index]() {
@@ -319,6 +324,20 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         connect(spin, &InspectorDoubleSpinBox::arrowAdjustmentFinished,
                 edit_controller,
                 &ui::EditWorkspaceController::finishTransformEdit);
+        connect(spin, &InspectorDoubleSpinBox::resetRequested,
+                edit_controller,
+                [edit_controller, spin, slider, index,
+                 minimum = transform_minimums[index],
+                 maximum = transform_maximums[index]](double value) {
+                    edit_controller->beginTransformEdit();
+                    {
+                        const QSignalBlocker blocker(slider);
+                        slider->setValue(
+                            transformSliderValue(value, minimum, maximum));
+                    }
+                    edit_controller->applyTransformProperty(index, value);
+                    edit_controller->finishTransformEdit();
+                });
         connect(slider, &QSlider::sliderPressed,
                 edit_controller, &ui::EditWorkspaceController::beginTransformEdit);
         connect(slider, &QSlider::valueChanged, edit_controller,
@@ -376,10 +395,15 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     auto* effect_parameter_layout = new QHBoxLayout(effect_parameter_row);
     effect_parameter_layout->setContentsMargins(0, 0, 0, 0);
     ui_.clip_effect_parameter_label = new QLabel(QCoreApplication::translate("EditWorkspace", "Parameter"), effect_parameter_row);
+    ui_.clip_effect_parameter_label->setObjectName(
+        QStringLiteral("editEffectParameterLabel"));
     ui_.clip_effect_parameter_slider = new QSlider(Qt::Horizontal, effect_parameter_row);
-    ui_.clip_effect_parameter_value =
+    auto* effect_parameter_spin =
         new InspectorDoubleSpinBox(effect_parameter_row);
-    ui_.clip_effect_parameter_value->setFixedWidth(74);
+    ui_.clip_effect_parameter_value = effect_parameter_spin;
+    effect_parameter_spin->setResetLabel(
+        ui_.clip_effect_parameter_label, 0.0);
+    effect_parameter_spin->setFixedWidth(74);
     ui_.clip_effect_parameter_slider->setEnabled(false);
     ui_.clip_effect_parameter_value->setEnabled(false);
     effect_parameter_layout->addWidget(ui_.clip_effect_parameter_label);
@@ -542,6 +566,19 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
             edit_controller, [edit_controller]() {
                 edit_controller->applySelectedClipEffectParameter(
                     edit_controller->ui().clip_effect_parameter_value->value());
+            });
+    connect(effect_parameter_spin,
+            &InspectorDoubleSpinBox::resetRequested, edit_controller,
+            [edit_controller](double value) {
+                auto& ui = edit_controller->ui();
+                edit_controller->beginEffectEdit();
+                if (ui.clip_effect_parameter_slider != nullptr) {
+                    const QSignalBlocker blocker(ui.clip_effect_parameter_slider);
+                    ui.clip_effect_parameter_slider->setValue(
+                        static_cast<int>(std::lround(value)));
+                }
+                edit_controller->applySelectedClipEffectParameter(value);
+                edit_controller->finishEffectEdit();
             });
     connect(ui_.clip_volume, &QSlider::sliderPressed,
             edit_controller, &ui::EditWorkspaceController::beginAudioEdit);

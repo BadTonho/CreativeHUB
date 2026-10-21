@@ -1,4 +1,5 @@
 #include "workspaces/edit/controllers/edit_workspace_controller.h"
+#include "ui/inspector/inspector_double_spin_box.h"
 
 #include <creative_suite/effects/effects.h>
 
@@ -1922,6 +1923,9 @@ void EditWorkspaceController::updateInspector() {
             spin->setRange(selected_parameter->minimum, selected_parameter->maximum);
             spin->setSingleStep(selected_parameter->step);
             spin->setDecimals(0);
+            if (auto* inspector_spin = qobject_cast<InspectorDoubleSpinBox*>(spin)) {
+                inspector_spin->setResetValue(selected_parameter->default_value);
+            }
             const QSignalBlocker slider_blocker(slider);
             const QSignalBlocker spin_blocker(spin);
             slider->setValue(static_cast<int>(std::lround(selected_parameter_value)));
