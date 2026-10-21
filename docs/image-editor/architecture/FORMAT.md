@@ -1,6 +1,6 @@
 # Image Editor Document Format
 
-Status: **provisional version 21**. The `.cimg` extension is temporary until a
+Status: **provisional version 22**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
 version 7 adds stable IDs to paint and eraser strokes; version 8 adds
@@ -10,9 +10,9 @@ version 12 adds independently resizable canvas bounds; version 13 adds optional
 area-selection clipping to paint and eraser strokes; version 14 adds editable
 bucket-fill operations; version 15 adds editable linear-gradient operations;
 version 16 adds editable blur strokes; version 17 adds editable layer outlines.
-Version 18 adds editable clipping masks. Version 19 adds layer/group blend modes. Version 20 adds Gradient Map adjustment layers and selection-seeded masks. Version 21 adds Brightness/Contrast adjustments. Versions 1 through 20 remain readable and save as v21.
+Version 18 adds editable clipping masks. Version 19 adds layer/group blend modes. Version 20 adds Gradient Map adjustment layers and selection-seeded masks. Version 21 adds Brightness/Contrast adjustments. Version 22 adds Exposure / Offset / Gamma adjustments. Versions 1 through 21 remain readable and save as v22.
 
-Hub snapshots preserve versions 1–21 and rebase relative source/import paths
+Hub snapshots preserve versions 1–22 and rebase relative source/import paths
 to their original absolute locations. The native save contract remains the
 same; media are not bundled. See [Hub backups](../../hub/BACKUPS.md) and the
 producer/consumer `hub-backup-format-test` for relocation coverage.
@@ -24,7 +24,7 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `20`. |
+| `version` | integer | Current version is `22`. |
 | `base` | object | A linked source image or a self-contained canvas. |
 | `canvas` | object | Version 12 current document bounds and base-image offset. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
@@ -228,7 +228,7 @@ crop, quarter-turn, and flip commands continue to transform rendered content
 and layer masks. Image pixels render at their position in the operation list,
 then the layer mask, layer opacity, and group composition apply.
 
-Recovery retains envelope version 1 and accepts document payloads through v21.
+Recovery retains envelope version 1 and accepts document payloads through v22.
 The Video Editor consumes flattened published PNG files; its .csp schema does
 not change.
 
@@ -269,7 +269,7 @@ to an existing mask's operation sequence. Mask strokes in transformed groups
 are mapped back into the child's coordinates. Creating, removing, toggling,
 and painting a mask are undoable document edits. Mask editing target selection
 is temporary UI state and is not persisted. Versions 1–9 load without masks;
-saving upgrades the document payload to v21. A mask in an older envelope is rejected.
+saving upgrades the document payload to v22. A mask in an older envelope is rejected.
 Recovery, full export, Quick Export, and linked PNG publication include masks.
 
 ## Layer stack
@@ -523,7 +523,7 @@ The optional `blend_mode` string on raster layers and groups uses `normal`,
 writers omit Normal. Background never carries the field. v1-18 load as Normal;
 reject fields in older schemas and unknown/non-string values. Recovery wrapper
 v1 accepts v19, and Hub preserves modes during path rebasing. Older editor
-binaries reject v19; future v22 is unsupported. See [pixel/export contract](../features/BLEND_MODES.md).
+binaries reject v19; future v23 is unsupported. See [pixel/export contract](../features/BLEND_MODES.md).
 
 
 ## Adjustment layers and selection masks (version 20)
@@ -539,7 +539,7 @@ The path uses the existing element encoding and fill-rule identifiers 0/1.
 It seeds black outside and white inside, before existing mask operations;
 absence retains the legacy white mask. Geometry follows canvas offsets/group
 transforms. Both new payloads are rejected before v20. Recovery retains envelope
-v1. Hub supports v1-21 and rejects v22; linked publication remains PNG. See
+v1. Hub supports v1-22 and rejects v23; linked publication remains PNG. See
 [the full contract](../features/GRADIENT_MAP.md).
 
 ## Version 21: Brightness/Contrast adjustments
@@ -548,5 +548,15 @@ Write `adjustment: {"type":"brightness_contrast","brightness":0,"contrast":0}`
 on `kind:"adjustment"`. Both parameters are required integers in [-100,100].
 Reject this type before v21, invalid/non-numeric/fractional values and incompatible
 Background/content/outline fields. Gradient Map keeps its v20 encoding; older
-versions remain readable. Recovery envelope v1 is unchanged. Hub accepts v1-21
-and rejects v22. See [processing contract](../features/BRIGHTNESS_CONTRAST.md).
+versions remain readable. Recovery envelope v1 is unchanged. Hub accepts v1-22
+and rejects v23. See [processing contract](../features/BRIGHTNESS_CONTRAST.md).
+
+## Exposure / Offset / Gamma (version 22)
+
+An adjustment layer may contain `adjustment: {type: "exposure_offset_gamma",
+exposure: 1.25, offset: -0.0123, gamma: 1.4}`. All three fields are required JSON
+numbers: exposure [-20,20], offset [-.5,.5], gamma [.01,9.99], finite. Defaults
+are 0/0/1. Reject the payload in earlier versions, mismatched type fields and
+incompatible Background/raster content/outlines; failed Open retains the session.
+Saving supported v1-21 upgrades to v22. Recovery retains envelope v1; Hub accepts
+v1-22 and rejects v23. See [processing and editing contract](../features/EXPOSURE_OFFSET_GAMMA.md).

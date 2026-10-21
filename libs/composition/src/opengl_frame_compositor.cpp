@@ -730,6 +730,7 @@ uniform bool quantize_blend_opacity;
 uniform vec4 gradient_stops[32];
 uniform int adjustment_kind;
 uniform vec2 brightness_contrast;
+uniform vec3 exposure_offset_gamma;
 uniform bool has_mask;
 uniform bool mask_gray;
 uniform bool bottom_left;
@@ -738,15 +739,20 @@ uniform int opacity256;
 uniform mat3 inverse_matrix;
 uniform ivec4 clip_rect;
 out vec4 color;
+vec3 exposeSrgb(vec3 rgb) {
+    vec3 linear = mix(pow((rgb + .055) / 1.055, vec3(2.4)), rgb / 12.92, lessThanEqual(rgb, vec3(.04045)));
+    vec3 corrected = pow(clamp(linear * exp2(exposure_offset_gamma.x) + exposure_offset_gamma.y, 0.0, 1.0), vec3(1.0 / exposure_offset_gamma.z));
+    return clamp(mix(1.055 * pow(corrected, vec3(1.0 / 2.4)) - .055, corrected * 12.92, lessThanEqual(corrected, vec3(.0031308))), 0.0, 1.0);
+}
 void main() {
     vec2 point = vec2(gl_FragCoord.x, float(canvas_height) - gl_FragCoord.y);
     if(adjustment_kind>0) {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
         vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
         float t=dot(cb,vec3(0.2126,0.7152,0.0722));
-        if(adjustment_kind==2 && brightness_contrast==vec2(0) && blend_mode==0){color=b;return;}
-        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : gradient_stops[gradient_count-1].rgb;
-        for(int i=1;i<gradient_count;++i) {
+        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1))) && blend_mode==0){color=b;return;}
+        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : gradient_stops[gradient_count-1].rgb;
+        for(int i=1;adjustment_kind==1 && i<gradient_count;++i) {
             if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
         }
         vec3 cs=floor(mapped*255.0+0.5)/255.0;
@@ -885,7 +891,10 @@ void main() {
             raster_program->setUniformValue("quantize_blend_opacity",quantize_group_opacity);
             const auto* gradient=adjustment?std::get_if<effects::GradientMapParameters>(adjustment):nullptr;
             const auto* bc=adjustment?std::get_if<effects::BrightnessContrastParameters>(adjustment):nullptr;
-            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:0);
+            const auto* exposure = adjustment ? std::get_if<effects::ExposureOffsetGammaParameters>(adjustment) : nullptr;
+            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:0);
+            raster_program->setUniformValue("exposure_offset_gamma", exposure ?
+                QVector3D(float(exposure->exposure), float(exposure->offset), float(exposure->gamma)) : QVector3D(0,0,1));
             raster_program->setUniformValue("brightness_contrast",bc?QVector2D(bc->brightness/100.f,bc->contrast/100.f):QVector2D{});
             raster_program->setUniformValue("gradient_count",gradient?int(gradient->stops.size()):0);
             if(gradient){std::array<QVector4D,32> points;int count=0;for(const auto& stop:gradient->stops)points[count++]=QVector4D(stop.color[0]/255.f,stop.color[1]/255.f,stop.color[2]/255.f,float(stop.position));raster_program->setUniformValueArray("gradient_stops",points.data(),count);}

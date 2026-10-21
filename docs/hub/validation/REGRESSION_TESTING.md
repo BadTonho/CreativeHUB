@@ -447,14 +447,27 @@ See [Image execution evidence](../../image-editor/features/BLEND_MODES.md#window
 
 ## Image v20 adjustment backup coverage
 
-Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future Image v21 is refused. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
+Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future unsupported Image versions are refused; current v22 coverage is below. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
 
 ## Image v21 adjustment backup coverage
 
 Hub format/manager gates round trip actual Image v1-21 documents, including both
-adjustment types and seeded masks during relocation/restoration; v22 is refused.
+adjustment types and seeded masks during relocation/restoration. The current
+v22 gate below extends this boundary.
 [Contract](../../image-editor/features/BRIGHTNESS_CONTRAST.md). Native UI/platform acceptance remains pending.
 
 Windows Release evidence (2026-10-20): both v21 backup gates passed; the actual
 Image reader preserved both adjustment types and seeded masks in vault/restored
 documents. Native Hub UI/macOS/Linux acceptance remains pending.
+
+## Image v22 adjustment backup coverage
+
+`hub-backup-format-test` uses the actual Image reader for v1-22 vault and relocated
+restores, including mixed Gradient Map/Brightness/Contrast/Exposure adjustment
+payloads, selection masks and rebased media. `hub-backup-manager-test` rejects
+v23. See [Image contract and execution evidence](../../image-editor/features/EXPOSURE_OFFSET_GAMMA.md).
+Native restore UI/platform acceptance remains pending.
+
+Linux Release evidence (2026-10-21): both backup gates passed against Image v22
+using the actual reader, including all three adjustment payloads. This does not
+establish native backup UI or Windows/macOS acceptance for v22.

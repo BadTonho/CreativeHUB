@@ -19,8 +19,8 @@ The adjustment thumbnail has a half-light/half-dark symbol; groups show results.
 
 ## Shared processing
 
-`effects::AdjustmentParameters` is a typed variant of Gradient Map and
-Brightness/Contrast parameters. Image owns stack scope and history. Existing
+`effects::AdjustmentParameters` is a typed variant of Gradient Map,
+Brightness/Contrast and Exposure / Offset / Gamma parameters. Image owns stack scope and history. Existing
 Gradient Map session APIs remain; typed creation/set operations are added for
 the second type and cannot change a layer's type. No new Video/Motion UI effect
 is registered. The shared color-adjustment RGB evaluator retains existing
@@ -47,7 +47,8 @@ technical failures. Raw content tools and isolated raster exports keep targets.
 
 ## Format and compatibility
 
-Native writer v21 reads versions 1-20, including v20 Gradient Map layers. Write
+Introduced in v21; the current v22 writer reads versions 1-21, including v20
+Gradient Map layers. Write
 `kind: "adjustment"`, with `adjustment: {type: "brightness_contrast", brightness,
 contrast}`; both values are required integers in [-100,100]. The optional typed
 payload remains absent on ordinary layers. Reject the new type before v21,
@@ -55,7 +56,7 @@ unknown types, invalid values, Background adjustments and incompatible raster
 content/outline. Invalid Open preserves the current document. Selection mask
 encoding and recovery envelope v1 are unchanged.
 
-Hub accepts Image v1-21, refuses v22 and retains both adjustment payloads/masks
+Hub accepts Image v1-22, refuses v23 and retains all three adjustment payloads/masks
 through backup, relocation and restoration, verified by the actual Image reader.
 Application versions and linked PNG protocol are unchanged.
 
@@ -90,4 +91,5 @@ completed without installers or application version changes. Exact executable
 paths/modification times are in the profile. Visual checks and macOS/Linux
 builds/native runtime acceptance remain **pending**; follow the
 [manual checklist](../validation/MANUAL_VALIDATION.md#brightnesscontrast-adjustments).
-Next feature: Exposure/Offset/Gamma adjustments.
+Exposure / Offset / Gamma is implemented; see [contract](EXPOSURE_OFFSET_GAMMA.md).
+Next feature: Hue/Saturation adjustments.

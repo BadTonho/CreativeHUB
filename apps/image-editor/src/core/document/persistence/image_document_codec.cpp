@@ -1086,9 +1086,12 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
             if(const auto* gradient=std::get_if<creative_suite::effects::GradientMapParameters>(&*layer.adjustment)){
                 QJsonArray stops;for(const auto& stop:gradient->stops)stops.append(QJsonObject{{"position",stop.position},{"color",QColor(stop.color[0],stop.color[1],stop.color[2]).name()}});
                 encoded.insert("adjustment",QJsonObject{{"type","gradient_map"},{"stops",stops}});
-            }else{
-                const auto& value=std::get<creative_suite::effects::BrightnessContrastParameters>(*layer.adjustment);
-                encoded.insert("adjustment",QJsonObject{{"type","brightness_contrast"},{"brightness",value.brightness},{"contrast",value.contrast}});
+            } else if (const auto* brightness = std::get_if<creative_suite::effects::BrightnessContrastParameters>(&*layer.adjustment)) {
+                encoded.insert("adjustment", QJsonObject{{"type", "brightness_contrast"}, {"brightness", brightness->brightness}, {"contrast", brightness->contrast}});
+            } else {
+                const auto& value = std::get<creative_suite::effects::ExposureOffsetGammaParameters>(*layer.adjustment);
+                encoded.insert("adjustment", QJsonObject{{"type", "exposure_offset_gamma"},
+                    {"exposure", value.exposure}, {"offset", value.offset}, {"gamma", value.gamma}});
             }
         }
         encoded.insert("visible", layer.visible);
@@ -1282,15 +1285,26 @@ bool decodeDocumentJson(const QJsonObject& root,
             if (!decodeBlendMode(encoded,version,&layer->blend_mode,error,layer->background)) return false;
             if(kind=="adjustment" || encoded.contains("adjustment")) {
                 const auto a=encoded.value("adjustment").toObject();
-                if(a.value("type")=="brightness_contrast"){
+                if (a.value("type") == "exposure_offset_gamma") {
+                    const creative_suite::effects::ExposureOffsetGammaParameters parameters{
+                        a.value("exposure").toDouble(), a.value("offset").toDouble(), a.value("gamma").toDouble()};
+                    if (version < 22 || kind != "adjustment" || !a.value("exposure").isDouble() ||
+                        !a.value("offset").isDouble() || !a.value("gamma").isDouble() ||
+                        !creative_suite::effects::validExposureOffsetGamma(parameters) ||
+                        a.contains("stops") || a.contains("brightness") || a.contains("contrast")) {
+                        assignError(error, QStringLiteral("An Exposure / Offset / Gamma adjustment is invalid."));
+                        return false;
+                    }
+                    layer->adjustment = parameters;
+                } else if(a.value("type")=="brightness_contrast"){
                     const auto integer=[](const QJsonValue& v){return v.isDouble() && std::isfinite(v.toDouble()) && v.toDouble()>=-100 && v.toDouble()<=100 && std::floor(v.toDouble())==v.toDouble();};
-                    if(version<21 || kind!="adjustment" || !integer(a.value("brightness")) || !integer(a.value("contrast")) || a.contains("stops")){
+                    if(version<21 || kind!="adjustment" || !integer(a.value("brightness")) || !integer(a.value("contrast")) || a.contains("stops") || a.contains("exposure") || a.contains("offset") || a.contains("gamma")){
                         assignError(error,QStringLiteral("A Brightness/Contrast adjustment is invalid."));return false;
                     }
                     layer->adjustment=creative_suite::effects::BrightnessContrastParameters{a.value("brightness").toInt(),a.value("contrast").toInt()};
                 }else{
                     creative_suite::effects::GradientMapParameters parameters;parameters.stops.clear();
-                    bool valid=version>=20 && kind=="adjustment" && a.value("type")=="gradient_map" && a.value("stops").isArray() && !a.contains("brightness") && !a.contains("contrast");
+                    bool valid=version>=20 && kind=="adjustment" && a.value("type")=="gradient_map" && a.value("stops").isArray() && !a.contains("brightness") && !a.contains("contrast") && !a.contains("exposure") && !a.contains("offset") && !a.contains("gamma");
                     if(!valid || a.value("stops").toArray().size()<2 || a.value("stops").toArray().size()>32){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
                     for(const auto& v:a.value("stops").toArray()){
                         const auto stop=v.toObject();const QString color_text=stop.value("color").toString();const QColor color(color_text);

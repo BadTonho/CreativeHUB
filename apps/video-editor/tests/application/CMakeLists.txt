@@ -99,3 +99,8 @@ if(BUILD_MOTION_EDITOR)
             ENVIRONMENT "QT_QPA_PLATFORM=windows;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
     endif()
 endif()
+
+add_creative_suite_test(NAME creative-suite-main-editor-linked-image
+    COMMAND creative-suite-main-editor-main-window-tests --linked-image-only)
+set_tests_properties(creative-suite-main-editor-linked-image PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")

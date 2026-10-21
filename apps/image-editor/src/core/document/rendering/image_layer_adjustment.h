@@ -14,7 +14,7 @@ namespace image_editor {
     if(!pixels || pixels->isNull() || !effects::validAdjustment(parameters) || !composition::validBlendMode(mode) ||
        opacity<0 || opacity>100 || (!mask.isNull() && mask.size()!=pixels->size()) || exportWasCancelled(cancel))return false;
     if(!opacity)return true;
-    if(const auto* p=std::get_if<effects::BrightnessContrastParameters>(&parameters);p && !p->brightness && !p->contrast && mode==composition::BlendMode::Normal)return true;
+    if(effects::identityAdjustment(parameters) && mode==composition::BlendMode::Normal)return true;
     *pixels=pixels->convertToFormat(QImage::Format_ARGB32_Premultiplied);
     if(pixels->isNull())return false;
     for(int y=0;y<pixels->height();++y){

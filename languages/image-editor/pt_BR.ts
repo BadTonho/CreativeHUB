@@ -3,6 +3,12 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>ImageEditorUI</name>
+    <message><source>Exposure / Offset / Gamma</source><translation>Exposição / Offset / Gamma</translation></message>
+    <message><source>Exposure</source><translation>Exposição</translation></message>
+    <message><source>Offset</source><translation>Offset</translation></message>
+    <message><source>Gamma</source><translation>Gamma</translation></message>
+    <message><source> stops</source><translation> stops</translation></message>
+    <message><source>An Exposure / Offset / Gamma adjustment is invalid.</source><translation>Um ajuste de Exposição / Offset / Gamma é inválido.</translation></message>
     <message><source>A Brightness/Contrast adjustment is invalid.</source><translation>Um ajuste de Brilho/Contraste é inválido.</translation></message>
     <message><source>Brightness/Contrast</source><translation>Brilho/Contraste</translation></message>
     <message><source>Brightness</source><translation>Brilho</translation></message>

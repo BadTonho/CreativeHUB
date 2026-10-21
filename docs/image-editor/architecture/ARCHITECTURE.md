@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 20; host links live in the Video Editor's
+  The `.cimg` schema is version 22; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -719,7 +719,18 @@ See [parameters, scope, errors and verification](../features/GRADIENT_MAP.md).
 
 ## Typed adjustments
 
-Shared `AdjustmentParameters` is a variant of Gradient Map and Brightness/Contrast.
+Shared `AdjustmentParameters` is a variant of Gradient Map, Brightness/Contrast and Exposure / Offset / Gamma.
 The Image session owns typed editing/history and stack scope; effects owns RGB
 math and validation. CPU adapter and native raster shader dispatch by type, reusing
 mask/content caches and preserving alpha. [Contract](../features/BRIGHTNESS_CONTRAST.md).
+
+## Exposure / Offset / Gamma processing
+
+The third typed adjustment shares Image-owned stack/mask/history orchestration.
+Its Qt-free evaluator converts encoded sRGB to linear, applies exposure/offset/
+gamma, reencodes and quantizes before the existing masked blend. OpenGL uses
+matching shader branches and uniforms on the retained GPU backdrop. Neutral
+Normal preserves the old byte path. Decimal properties use continuous edit
+transactions; the v22 codec and Hub preserve all three numbers and reject invalid
+payloads. No new dependency, effect registry or Video/Motion document field is
+introduced. See [contract](../features/EXPOSURE_OFFSET_GAMMA.md).

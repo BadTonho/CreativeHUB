@@ -1,0 +1,119 @@
+{
+  "date": "2026-10-21",
+  "platform": "Fedora Linux 44 x86_64, Wayland",
+  "configuration": "Release",
+  "qt_version": "6.11.2",
+  "compiler": "GCC 16.2.1",
+  "ffmpeg_version": "8.1.3",
+  "hardware": {
+    "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+    "gpu": "NVIDIA GeForce GTX 1660 SUPER (NVK TU116)",
+    "renderer": "Mesa zink over Vulkan 1.4 / NVK, OpenGL 4.6 core, Mesa 26.2.4",
+    "source": "lscpu and native shared OpenGL test context"
+  },
+  "workload": {
+    "width": 1920,
+    "height": 1080,
+    "editable_raster_layers": 5,
+    "background_layers": 1,
+    "groups": 1,
+    "adjustment_layers": 1,
+    "content": "Five partially transparent painted raster layers in one isolated group followed by Exposure / Offset / Gamma."
+  },
+  "cpu": {
+    "prepare_and_composite_ms": {
+      "cold": 173,
+      "warm": 137,
+      "exposure_change": 141,
+      "offset_change": 144,
+      "gamma_change": 145
+    },
+    "retained_raster_cache_bytes": 49766400
+  },
+  "gpu": {
+    "texture_budget_bytes": 268435456,
+    "phases": {
+      "cold": {
+        "prepare_ms": 17,
+        "prepare_compose_readback_ms": 34,
+        "uploaded_bytes": 49766400,
+        "gpu_texture_bytes": 74649600,
+        "cpu_cache_bytes": 49766400
+      },
+      "warm": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 6,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "exposure": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 3,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "offset": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 3,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "gamma": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 4,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "base": {
+        "prepare_ms": 1,
+        "prepare_compose_readback_ms": 4,
+        "uploaded_bytes": 4624,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      }
+    },
+    "constrained_capacity": {
+      "budget_bytes": 67108864,
+      "status": "Unsupported: resource capacity; CPU recovery matched the reference exactly",
+      "refusal_ms": 11,
+      "cpu_recovery_ms": 147,
+      "gpu_texture_bytes": 66355200
+    }
+  },
+  "verification": {
+    "scoped_ctest_run": {
+      "selected": 47,
+      "passed": 40,
+      "failed": 6,
+      "skipped": 1
+    },
+    "additional_linked_image_ctest": "Passed; actual Image v22 exposure producer to Video refresh",
+    "final_new_adjustment_ui_recheck": "Passed, including keyboard and all three sliders",
+    "native_image_interactive_qttest": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "native_shared_opengl": "Passed; offscreen CTest skipped this gate because no native context was available",
+    "baseline_commit": "acdb5362819f37b31a7a97399eb3d4fbc354a286",
+    "baseline_comparison": {
+      "selected": 6,
+      "failed": 6,
+      "result": "All six failures reproduced in pre-feature HEAD, with only the same two Motion LP64 compile fixes and local FFmpeg 8 profile-name aliases; same Qt/runtime and synthetic media fixtures."
+    }
+  },
+  "limitations": [
+    "Single observations, no percentile, speed guarantee or minimum hardware requirement.",
+    "CPU and GPU samples were collected in separate runs; other regression/build activity was present during this session.",
+    "GPU total includes explicit verification readback; it is not a GPU-only timer. Context was already initialized by earlier suite cases.",
+    "Qt LinguistTools and matching FFmpeg development headers were extracted to temporary local storage, without system installation or repository dependency changes.",
+    "Local CMake used a temporary FFmpeg discovery module and build-only FF_PROFILE_ to AV_PROFILE_ aliases for the installed FFmpeg 8 runtime.",
+    "Two Motion LP64 integer-type compile fixes were needed for actual Hub/consumer targets; no application version was advanced.",
+    "Six broader Linux regression failures are documented in the feature contract and compared against pre-feature source.",
+    "Windows/macOS, packaged runtime, owner visual checks and the controlled Windows reference-PC measurements remain pending."
+  ]
+}

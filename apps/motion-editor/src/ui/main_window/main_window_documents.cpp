@@ -887,7 +887,7 @@ void MainWindow::finishLinkedHandoffInitialization()
                 throw std::runtime_error("The selected clip source range has invalid duration metadata.");
             }
             const auto maximum_frames = static_cast<std::int64_t>(maximum_timeline);
-            const auto duration = std::min(request.timeline_duration_frames, maximum_frames);
+            const auto duration = std::min<std::int64_t>(request.timeline_duration_frames, maximum_frames);
             if (!document_->setVideoSourceRange(
                     layer_id, source_start, duration, maximum_frames)) {
                 throw std::runtime_error("The selected clip source range could not be applied.");

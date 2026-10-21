@@ -37,3 +37,8 @@ This directory groups the current scope, implementation contracts, feature deliv
 
 [Brightness/Contrast adjustment layers](features/BRIGHTNESS_CONTRAST.md) use the
 existing mask/history/export contract; native visual/platform acceptance is pending.
+
+[Exposure / Offset / Gamma adjustment layers](features/EXPOSURE_OFFSET_GAMMA.md) add linear-sRGB controls and v22 persistence; native visual/platform acceptance is tracked separately.
+
+[Exposure Linux profile](performance/exposure-offset-gamma-linux-2026-10-21.json):
+1080p CPU/GPU observations and baseline-confirmed broader regression failures.

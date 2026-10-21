@@ -24,6 +24,7 @@ namespace image_editor {
 
 class GradientMapEditor;
 class BrightnessContrastEditor;
+class ExposureOffsetGammaEditor;
 class LayerPanel final : public QWidget {
     Q_OBJECT
 
@@ -54,6 +55,8 @@ public:
 signals:
     void quickExportRequested();
     void addGradientMapRequested();
+    void addExposureOffsetGammaRequested();
+    void exposureOffsetGammaChanged(const QString&, const creative_suite::effects::ExposureOffsetGammaParameters&);
     void addBrightnessContrastRequested();
     void brightnessContrastChanged(const QString&,const creative_suite::effects::BrightnessContrastParameters&);
     void adjustmentEditStarted();
@@ -99,6 +102,8 @@ private:
     QPushButton* quick_export_button_ = nullptr;
     QTreeWidget* layer_tree_ = nullptr;
     QMenu* layer_context_menu_ = nullptr;
+    ExposureOffsetGammaEditor* exposure_editor_ = nullptr;
+    QAction* add_exposure_action_ = nullptr;
     BrightnessContrastEditor* brightness_editor_ = nullptr;
     QAction* add_brightness_action_ = nullptr;
     GradientMapEditor* gradient_editor_ = nullptr;

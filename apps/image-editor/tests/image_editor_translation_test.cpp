@@ -63,6 +63,12 @@ int main(int argc, char** argv) {
         CS_TEST_CHECK(image_editor::ui::translateMessage(
                           QStringLiteral("The paint brush diameter must be between 1 and 1024 pixels.")) ==
                       QStringLiteral("O diâmetro do pincel deve estar entre 1 e 1024 pixels."));
+        CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Exposure / Offset / Gamma") ==
+                      QStringLiteral("Exposição / Offset / Gamma"));
+        CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Exposure") == QStringLiteral("Exposição"));
+        CS_TEST_CHECK(image_editor::ui::translateMessage(
+                          QStringLiteral("An Exposure / Offset / Gamma adjustment is invalid.")) ==
+                      QStringLiteral("Um ajuste de Exposição / Offset / Gamma é inválido."));
         CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Text not in catalog") ==
                       QStringLiteral("Text not in catalog"));
     }

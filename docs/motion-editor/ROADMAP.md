@@ -642,3 +642,14 @@ Shared effects/composition/OpenGL/Vulkan and Motion blend, preview, GPU composit
 The shared RGB evaluator and typed Image raster adjustment add no Motion effect
 registry entries. Preserve effects and native composition semantics; run shared
 effects/composition and Motion gates. [Contract](../image-editor/features/BRIGHTNESS_CONTRAST.md).
+
+## Shared Image exposure adjustment maintenance
+
+The shared raster compositor/effects API adds an Exposure / Offset / Gamma
+alternative for Image Editor; Motion formats, UI and published PNG consumption
+retain their existing contracts. Preview/GPU-composition, persistence, export
+and UI regressions protect the consumer boundary. Export queue metrics use
+an explicit `std::uint64_t` frame count to avoid mixed unsigned-long/unsigned-
+long-long `std::max` deduction on LP64 Linux; queue limits/accounting are unchanged. Source-range duration comparison likewise
+uses explicit `std::int64_t` to accommodate Qt qint64 on LP64.
+Execution evidence is tracked in the [Image contract](../image-editor/features/EXPOSURE_OFFSET_GAMMA.md).

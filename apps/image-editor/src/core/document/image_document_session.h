@@ -132,6 +132,9 @@ public:
                                          const ImageShapeData& style,
                                          QString* error = nullptr);
     [[nodiscard]] bool deleteObjects(const QStringList& object_ids);
+    [[nodiscard]] QString addExposureOffsetGammaAdjustment(std::optional<QPainterPath> selection = {});
+    [[nodiscard]] bool setExposureOffsetGamma(const QString& id,
+        const creative_suite::effects::ExposureOffsetGammaParameters& parameters);
     [[nodiscard]] QString addBrightnessContrastAdjustment(std::optional<QPainterPath> selection = {});
     [[nodiscard]] bool setBrightnessContrast(const QString&,const creative_suite::effects::BrightnessContrastParameters&);
     [[nodiscard]] QString addGradientMapAdjustment(std::optional<QPainterPath> selection = {});

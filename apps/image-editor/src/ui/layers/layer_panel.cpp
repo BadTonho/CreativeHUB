@@ -2,6 +2,7 @@
 #include "layer_panel.h"
 #include "gradient_map_editor.h"
 #include "brightness_contrast_editor.h"
+#include "exposure_offset_gamma_editor.h"
 #include "../translation_helpers.h"
 
 #include "../transparency_checkerboard.h"
@@ -336,6 +337,13 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     connect(add_gradient_action_,&QAction::triggered,this,[this]{finishOutlineEdit();emit addGradientMapRequested();});
     add_brightness_action_=adjustments->addAction(QCoreApplication::translate("ImageEditorUI","Brightness/Contrast"));add_brightness_action_->setObjectName("addBrightnessContrastAction");
     connect(add_brightness_action_,&QAction::triggered,this,[this]{finishOutlineEdit();emit addBrightnessContrastRequested();});
+    add_exposure_action_ = adjustments->addAction(QCoreApplication::translate("ImageEditorUI", "Exposure / Offset / Gamma"));
+    add_exposure_action_->setObjectName("addExposureOffsetGammaAction");
+    connect(add_exposure_action_, &QAction::triggered, this, [this] { finishOutlineEdit(); emit addExposureOffsetGammaRequested(); });
+    exposure_editor_ = new ExposureOffsetGammaEditor(this); layout->addWidget(exposure_editor_); exposure_editor_->hide();
+    exposure_editor_->started = [this] { emit adjustmentEditStarted(); };
+    exposure_editor_->finished = [this] { emit adjustmentEditFinished(); };
+    exposure_editor_->changed = [this](const auto& value) { emit exposureOffsetGammaChanged(selectedItemId(), value); };
     brightness_editor_=new BrightnessContrastEditor(this);layout->addWidget(brightness_editor_);brightness_editor_->hide();
     brightness_editor_->started=[this]{emit adjustmentEditStarted();};brightness_editor_->finished=[this]{emit adjustmentEditFinished();};
     brightness_editor_->changed=[this](const auto& value){emit brightnessContrastChanged(selectedItemId(),value);};
@@ -823,6 +831,7 @@ void LayerPanel::beginOutlineEdit() {
 void LayerPanel::finishOutlineEdit() {
     if(gradient_editor_)gradient_editor_->finish();
     if(brightness_editor_)brightness_editor_->finish();
+    if(exposure_editor_)exposure_editor_->finish();
     if (!outline_editing_) return;
     outline_editing_ = false; emit outlineEditFinished();
 }
@@ -986,6 +995,7 @@ void LayerPanel::updateControls() {
     }
     add_gradient_action_->setEnabled(!document_.root_stack.isEmpty() && layer_tree_->selectedItems().size()==1);
     add_brightness_action_->setEnabled(add_gradient_action_->isEnabled());
+    add_exposure_action_->setEnabled(add_gradient_action_->isEnabled());
     const bool adjustment=has_layer && layer->adjustment.has_value();
     quick_export_button_->setToolTip(adjustment?QCoreApplication::translate("ImageEditorUI","Adjustment layers have no pixels to export. Export the document or its group."):QString{});
     const auto* gradient=adjustment?std::get_if<creative_suite::effects::GradientMapParameters>(&*layer->adjustment):nullptr;
@@ -994,6 +1004,9 @@ void LayerPanel::updateControls() {
     brightness_editor_->setVisible(brightness && layer_tree_->selectedItems().size()==1);
     if(gradient)gradient_editor_->setValue(id,*gradient);
     if(brightness)brightness_editor_->setValue(id,*brightness);
+    const auto* exposure = adjustment ? std::get_if<creative_suite::effects::ExposureOffsetGammaParameters>(&*layer->adjustment) : nullptr;
+    exposure_editor_->setVisible(exposure && layer_tree_->selectedItems().size() == 1);
+    if (exposure) exposure_editor_->setValue(id, *exposure);
     const bool outline_editable = has_layer && !adjustment && !layer->background && layer_tree_->selectedItems().size() == 1;
     clipping_action_->setEnabled(has_layer && !layer->background && layer_tree_->selectedItems().size()==1 && (layer->clip_to_base || clippingBases(document_).contains(id)));
     clipping_action_->setText(has_layer && layer->clip_to_base

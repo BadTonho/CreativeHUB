@@ -473,7 +473,7 @@ void MotionVideoExporter::exportVideo(
                 if (item.ticket) ++pbo_frames;
                 else if (item.frame || item.owned_frame) ++cpu_pending_frames;
             }
-            const auto encoding_frames = encoder_frame_pending || encoder.outstandingFrames() != 0
+            const std::uint64_t encoding_frames = encoder_frame_pending || encoder.outstandingFrames() != 0
                 ? 1ULL : 0ULL;
             const auto pbo_bytes = performance_summary != nullptr
                 ? performance_summary->gpu.readback_slots * output_frame_bytes : 0;

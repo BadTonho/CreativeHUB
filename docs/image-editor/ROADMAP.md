@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map adjustments, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast and Exposure / Offset / Gamma adjustments, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,7 +41,8 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Add Exposure/Offset/Gamma as the third adjustment type** in section 4.3.
+**Add Hue/Saturation as the fourth adjustment type** in section 4.3.
+Exposure / Offset / Gamma is implemented; see its [contract](features/EXPOSURE_OFFSET_GAMMA.md).
 The adjustment-layer contract and Gradient Map are implemented; see
 [Gradient Map](features/GRADIENT_MAP.md). Outlines, clipping masks and six layer/
 group blend modes are implemented; see [blend modes](features/BLEND_MODES.md).
@@ -282,7 +283,8 @@ Native visual and macOS/Linux acceptance remains pending.
 - [x] Implement Gradient Map, mapping luminance to editable gradient colors.
   This is separate from the existing linear painting tool.
 - [x] Add editable brightness/contrast; see [contract](features/BRIGHTNESS_CONTRAST.md).
-- [ ] Add exposure/offset/gamma, hue/saturation, levels,
+- [x] Add Exposure / Offset / Gamma; see [contract](features/EXPOSURE_OFFSET_GAMMA.md).
+- [ ] Add hue/saturation, levels,
   and per-channel/global curves in bounded increments.
 - [ ] Add color balance, Black & White channel controls, LUT loading, selective
   color, invert, posterize, and threshold.
@@ -568,7 +570,7 @@ validation.
 - **P2 — editable text visual validation:** automated editing, rendering,
   formatting, transform, history, persistence, export, recovery, and publication
   checks are implemented; the manual canvas and visual review is pending.
-- **Planned, not implemented:** additional section 4.2 modes and section 4.3 onward are excluded from current coverage until implementation begins.
+- **Planned, not implemented:** additional section 4.2 modes and unchecked section 4.3 items onward are excluded from current coverage until implementation begins.
   Add actual regression mappings as each feature is delivered.
 
 ## Status legend
@@ -646,3 +648,19 @@ Motion Drop Shadow extends shared CPU effects/GPU image operations only; Image a
 | Integer parameters, shared RGB math, preserved alpha, mixed adjustment stacks, history, v21/recovery/export/cache | `creative-suite-image-editor-brightness-contrast`, shared effects | [Contract and evidence](features/BRIGHTNESS_CONTRAST.md); manual/platform checks pending. |
 | Creation, sliders/numeric controls, Reset, no-ops/Redo, mask tools, tabs and PNG publication | `creative-suite-image-editor-brightness-contrast-ui`, full UI | Native visual checklist pending. |
 | Native OpenGL equivalence, budgets, zero-upload parameter edits and 1080p | `creative-suite-image-editor-gpu-raster` | Maximum two RGB levels, exact alpha; [Windows profile](performance/brightness-contrast-windows-2026-10-20.json). |
+
+## Exposure / Offset / Gamma regression coverage
+
+| Behavior | Automated coverage | Acceptance |
+| --- | --- | --- |
+| Linear-sRGB math, preserved alpha, mixed stacks, history, v22/recovery/export/cache | `creative-suite-image-editor-exposure-offset-gamma`, shared effects | [Contract and execution evidence](features/EXPOSURE_OFFSET_GAMMA.md); visual/platform acceptance recorded separately. |
+| Creation, decimal controls, atomic Reset, masks, tabs and linked PNG | `creative-suite-image-editor-exposure-offset-gamma-ui`, full UI | [Manual checklist](validation/MANUAL_VALIDATION.md#exposure--offset--gamma-adjustments) pending. |
+| CPU/OpenGL parity, zero-upload edits, budgets/cancellation and Hub restoration | Interactive `gpuExposureOffsetGamma`, shared composition/OpenGL, Hub backup format/manager, Video/Motion consumers | Native and reference-PC evidence remains separate from offscreen checks. |
+
+The 2026-10-21 Linux scoped run includes 40 passing CTest gates, six broader
+failures and one offscreen OpenGL skip, plus a passing focused Video handoff.
+Native Image interactive cases passed 19/19 and native shared OpenGL passed.
+See [execution evidence and unresolved gates](features/EXPOSURE_OFFSET_GAMMA.md#linux-execution-evidence--2026-10-21)
+and the [Linux measurements](performance/exposure-offset-gamma-linux-2026-10-21.json).
+All six failures reproduced in the pre-feature baseline on the same environment.
+These results do not complete the existing release/manual acceptance gates.

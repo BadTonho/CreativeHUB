@@ -1052,3 +1052,29 @@ Status: pending on Windows/macOS/Linux native UI.
   contours and clipping; compare CPU/OpenGL, thumbnails and composite Eyedropper.
 - Verify Quick Export refusal, raster isolation, full/group export and published
   linked PNG in Video; save/reopen/recover and Hub backup/restore without data loss.
+
+## Exposure / Offset / Gamma adjustments
+
+Status: pending owner visual/native acceptance. Record OS, Qt, build, GPU,
+driver, canvas dimensions and outcome; use copies of source images.
+
+1. In English and pt-BR, create the adjustment above a raster, Background and
+   group. Check default 0/0/1, range/decimal precision and readable controls.
+2. Use a gray ramp and photo: +1 stop should brighten, -1 should darken;
+   positive/negative offset should lift/lower blacks, gamma above/below one
+   should brighten/darken midtones. Confirm transparent areas stay transparent.
+3. Seed an elliptical selection, paint the adjustment mask, vary opacity and
+   each blend mode; test a clipped chain inside a transformed group with all
+   three adjustment types and check their order.
+4. Drag/type each control; verify one Undo per continuous edit, atomic Reset,
+   Redo after a no-op, and state isolation after switching layers and tabs.
+5. Switch Automatic/CPU and compare preview, thumbnails and PNG/JPEG/group
+   export. Save/reopen `.cimg` v22, recover autosave and restore a Hub backup.
+6. Open a linked image from Video Editor and Motion Studio, change all three
+   controls, Save, and confirm refresh/reopen uses the published PNG without
+   altering source bytes. Verify repeated linked uses.
+7. On the reference Windows PC, measure 1080p/five layers/one group: cold/warm
+   preview, each parameter edit, uploads/cache bytes, cancellation and capacity
+   recovery. Keep native results distinct from headless or software-GPU runs.
+
+Automated mappings and execution evidence: [feature contract](../features/EXPOSURE_OFFSET_GAMMA.md).

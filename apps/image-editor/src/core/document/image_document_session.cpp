@@ -1654,6 +1654,23 @@ bool ImageDocumentSession::findShape(const QString& shape_id,
 QString ImageDocumentSession::addGradientMapAdjustment(std::optional<QPainterPath> selection) {
     return addAdjustment(creative_suite::effects::GradientMapParameters{},QStringLiteral("Gradient Map"),std::move(selection));
 }
+QString ImageDocumentSession::addExposureOffsetGammaAdjustment(std::optional<QPainterPath> selection) {
+    return addAdjustment(creative_suite::effects::ExposureOffsetGammaParameters{},
+        QStringLiteral("Exposure / Offset / Gamma"), std::move(selection));
+}
+bool ImageDocumentSession::setExposureOffsetGamma(const QString& id,
+    const creative_suite::effects::ExposureOffsetGammaParameters& value) {
+    const auto* layer = findLayer(data_, id);
+    if (!layer || !layer->adjustment ||
+        !std::holds_alternative<creative_suite::effects::ExposureOffsetGammaParameters>(*layer->adjustment) ||
+        *layer->adjustment == creative_suite::effects::AdjustmentParameters{value} ||
+        !creative_suite::effects::validExposureOffsetGamma(value)) return false;
+    if (!adjustment_edit_active_) pushEdit();
+    findLayer(data_, id)->adjustment = value;
+    layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
+    return true;
+}
 QString ImageDocumentSession::addBrightnessContrastAdjustment(std::optional<QPainterPath> selection) {
     return addAdjustment(creative_suite::effects::BrightnessContrastParameters{},QStringLiteral("Brightness/Contrast"),std::move(selection));
 }

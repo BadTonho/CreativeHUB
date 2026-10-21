@@ -484,6 +484,17 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
         const auto id=activeSession().addBrightnessContrastAdjustment(canvas->areaSelectionClipPath());
         if(!id.isEmpty()){selectedMaskLayerId().clear();selectedObjectIds().clear();deactivateCanvasTools();updateView(true);}
     });
+    connect(layer_panel_, &LayerPanel::addExposureOffsetGammaRequested, this, [this] {
+        if (!hasActiveDocumentTab()) return;
+        auto* canvas = activeCanvas();
+        canvas->commitTextEditing(); canvas->cancelTransientGestures(); clearInteractivePreview(canvas);
+        const auto id = activeSession().addExposureOffsetGammaAdjustment(canvas->areaSelectionClipPath());
+        if (!id.isEmpty()) { selectedMaskLayerId().clear(); selectedObjectIds().clear(); deactivateCanvasTools(); updateView(true); }
+    });
+    connect(layer_panel_, &LayerPanel::exposureOffsetGammaChanged, this,
+        [this](const QString& id, const creative_suite::effects::ExposureOffsetGammaParameters& value) {
+            if (hasActiveDocumentTab() && activeSession().setExposureOffsetGamma(id, value)) updateView(true);
+        });
     connect(layer_panel_,&LayerPanel::adjustmentEditStarted,this,[this]{if(!hasActiveDocumentTab())return;activeCanvas()->commitTextEditing();activeCanvas()->cancelTransientGestures();clearInteractivePreview(activeCanvas());activeSession().beginLayerAdjustmentEdit();});
     connect(layer_panel_,&LayerPanel::adjustmentEditFinished,this,[this]{if(hasActiveDocumentTab()){activeSession().endLayerAdjustmentEdit();updateView(true);}});
     connect(layer_panel_,&LayerPanel::brightnessContrastChanged,this,[this](const QString& id,const creative_suite::effects::BrightnessContrastParameters& value){if(hasActiveDocumentTab() && activeSession().setBrightnessContrast(id,value))updateView(true);});

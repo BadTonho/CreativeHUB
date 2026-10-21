@@ -144,6 +144,20 @@ int main() {
         require(adjustmentRgb(BrightnessContrastParameters{100,-100},{0.,.5,1.})==std::array<unsigned char,3>{128,128,128},"Zero contrast midpoint");
         require(adjustmentRgb(BrightnessContrastParameters{-100,0},{0.,.5,1.})==std::array<unsigned char,3>{0,0,0},"Brightness saturation");
     }
+    {
+        using namespace creative_suite::effects;
+        require(validAdjustment(ExposureOffsetGammaParameters{-20,-.5,.01}) &&
+            validAdjustment(ExposureOffsetGammaParameters{20,.5,9.99}), "Exposure bounds");
+        require(!validAdjustment(ExposureOffsetGammaParameters{0,0,0}) &&
+            !validAdjustment(ExposureOffsetGammaParameters{0,std::numeric_limits<double>::quiet_NaN(),1}), "Exposure invalid parameters");
+        require(identityAdjustment(ExposureOffsetGammaParameters{}), "Neutral exposure identity");
+        require(adjustmentRgb(ExposureOffsetGammaParameters{1,0,1},{.5,.5,.5}) ==
+            std::array<unsigned char,3>{175,175,175}, "One stop uses linear light");
+        require(adjustmentRgb(ExposureOffsetGammaParameters{0,0,2},{0,0,0}) ==
+            std::array<unsigned char,3>{0,0,0}, "Gamma preserves zero");
+        require(adjustmentRgb(ExposureOffsetGammaParameters{20,.5,.01},{0,1,.5}) ==
+            std::array<unsigned char,3>{0,255,255}, "Extreme exposure/gamma remains bounded");
+    }
     verifySharedBlur();
     using namespace creative_suite::effects;
     require(builtInEffects().size() == 4, "The built-in visual effect catalog is incomplete.");

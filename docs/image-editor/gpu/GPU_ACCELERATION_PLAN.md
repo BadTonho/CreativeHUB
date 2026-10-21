@@ -238,3 +238,12 @@ The shared raster record carries a typed adjustment; the fragment shader evaluat
 Brightness/Contrast on its GPU-only backdrop copy. Parameter edits preserve raw
 rasters and uploads. Existing CPU/GPU budgets, cancellation and capacity recovery
 remain. [Contract](../features/BRIGHTNESS_CONTRAST.md).
+
+## Exposure / Offset / Gamma raster adjustments
+
+The third adjustment dispatch uses piecewise sRGB decode/encode and linear
+exposure/offset/gamma entirely in the retained OpenGL backdrop pass. Parameters
+are uniforms; edits reuse raw content and mask textures. Neutral Normal keeps
+exact identity; alpha and existing budgets/cancellation/recovery remain unchanged.
+Native parity and 1080p tests are in `gpuExposureOffsetGamma`; execution and
+platform limitations are recorded in the [feature contract](../features/EXPOSURE_OFFSET_GAMMA.md).

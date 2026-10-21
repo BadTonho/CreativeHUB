@@ -452,11 +452,22 @@ Image, Video and Motion consumer gates protect the additive boundary. See
 
 ## Shared Gradient Map adjustment processing
 
-Image native v20 introduces app-owned adjustment scope and selection-seeded masks. Hub preserves these in backups and rejects Image v21. Shared effects provide validated RGB stop interpolation; optional trailing OpenGL raster fields preserve Image alpha without changing general Video/Motion opaque output, registries or formats. PNG publication remains unchanged. See [Image contract](image-editor/features/GRADIENT_MAP.md).
+Image native v20 introduces app-owned adjustment scope and selection-seeded masks. Hub preserves these in backups and rejects Image v23. Shared effects provide validated RGB stop interpolation; optional trailing OpenGL raster fields preserve Image alpha without changing general Video/Motion opaque output, registries or formats. PNG publication remains unchanged. See [Image contract](image-editor/features/GRADIENT_MAP.md).
 
 ## Brightness/Contrast shared boundary
 
 Image v21 adds a typed adjustment without changing PNG publication. Hub preserves
-both adjustment types and masks and accepts v1-21, rejecting v22. The shared RGB
+all current adjustment types and masks and accepts v1-22, rejecting v23. The shared RGB
 evaluator preserves existing Video/Motion effects; no new registry entries are
 added. [Contract](image-editor/features/BRIGHTNESS_CONTRAST.md).
+
+## Exposure / Offset / Gamma shared boundary
+
+Image native v22 adds the third typed adjustment. Shared effects provide the
+validated linear-sRGB evaluator and the OpenGL raster compositor evaluates it
+on its own backdrop without readback; Image owns workflow and stack order.
+Video/Motion effects, native formats and PNG handoff remain unchanged. Hub
+accepts Image v1-22, rejects v23 and preserves all three adjustment payloads and
+masks through real-reader restoration. Existing consumers and shared regressions
+protect the additive API; native workflow acceptance remains separate. See
+[Image contract](image-editor/features/EXPOSURE_OFFSET_GAMMA.md).

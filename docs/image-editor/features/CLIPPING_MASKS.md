@@ -121,5 +121,5 @@ Clipped children now support six blend modes inside their chain; see
 Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
 see [adjustment scope and alpha contract](GRADIENT_MAP.md).
 
-Current writer: v21. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
+Current writer: v22. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
 adjustment stack contract; historical execution evidence above is unchanged.

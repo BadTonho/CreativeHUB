@@ -128,3 +128,8 @@ With the Gradient Map bar focused, Left/Right selects the previous/next point; t
 
 Brightness/Contrast adjustment creation adds no shortcut. Its sliders and integer
 fields use standard keyboard navigation; existing Undo/Redo and mask tools apply.
+
+Exposure / Offset / Gamma creation adds no shortcut. Decimal fields retain
+standard text editing; sliders accept keyboard steps and wheel input. Each
+continuous field edit or slider gesture is one Undo, and Reset restores all
+three controls in one Undo.
