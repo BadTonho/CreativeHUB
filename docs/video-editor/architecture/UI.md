@@ -241,6 +241,21 @@ The saved dock and toolbar state is restored only after the workspace docks,
 menus, and top toolbar have all been created, so Qt can resolve every saved
 layout item before applying its geometry.
 
+Edit and Fusion expose a `Layouts` button at the right of the top toolbar and
+`View > Layouts...`. The gallery offers Default, Preview Focus, and Timeline
+Focus arrangements plus named user layouts with schematic panel thumbnails.
+Users can save the current dock arrangement, apply it later, or confirm an
+update or deletion; names can also be changed. The gallery is unavailable in
+Render, whose page has its own fixed arrangement. User layouts are stored in
+the Video Editor's local settings, globally across projects, under
+`workspace/saved_layouts`. Each record contains a version 9 Qt dock state,
+floating panel geometry, the related expansion and Preview-side width settings,
+and normalized geometry
+for its thumbnail. The last used arrangement continues to restore from
+`workspace/dock_layout_state` at startup. Applying a user layout does not
+overwrite its saved record, and neither layouts nor thumbnails store project
+content or the application window geometry.
+
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
 drag MIME, show a visual folder preview when dragged, and support inline

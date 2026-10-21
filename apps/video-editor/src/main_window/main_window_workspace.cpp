@@ -1025,6 +1025,12 @@ void MainWindow::createMenus() {
         "playbackPreviewQualityQuarter",
         playback::PreviewQuality::Quarter);
     view_menu->addSeparator();
+    auto* layouts_view_action = view_menu->addAction(
+        QCoreApplication::translate("MainWindow", "Layouts..."));
+    layouts_view_action->setObjectName(QStringLiteral("layoutsViewAction"));
+    register_menu_action(layouts_view_action, settings::ShortcutScope::Shared);
+    connect(layouts_view_action, &QAction::triggered,
+            this, &MainWindow::showWorkspaceLayouts);
     auto* restore_layout_action = view_menu->addAction(QCoreApplication::translate("MainWindow", "Restore &Default Layout"));
     register_menu_action(restore_layout_action, settings::ShortcutScope::Application);
     connect(restore_layout_action, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);
@@ -1070,6 +1076,14 @@ void MainWindow::createMenus() {
     workspace_toolbar_spacer->setSizePolicy(
         QSizePolicy::Expanding, QSizePolicy::Preferred);
     media_pool_toolbar->addWidget(workspace_toolbar_spacer);
+    auto* layouts_toolbar_action = media_pool_toolbar->addAction(
+        QCoreApplication::translate("MainWindow", "Layouts"));
+    layouts_toolbar_action->setObjectName(QStringLiteral("layoutsToolbarAction"));
+    layouts_toolbar_action->setToolTip(
+        QCoreApplication::translate("MainWindow", "Open panel layouts"));
+    register_menu_action(layouts_toolbar_action, settings::ShortcutScope::Shared);
+    connect(layouts_toolbar_action, &QAction::triggered,
+            this, &MainWindow::showWorkspaceLayouts);
     connect(media_pool_action_, &QAction::triggered,
             this, [this](bool) { activateMediaPoolGroup(); });
     connect(bins_dock_, &QDockWidget::visibilityChanged, this,

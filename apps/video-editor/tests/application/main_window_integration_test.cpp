@@ -736,8 +736,8 @@ public:
                         render_window.preview_dock_->isVisible() &&
                         render_window.dockWidgetArea(
                             render_window.preview_dock_) == Qt::RightDockWidgetArea &&
-                        render_window.preview_widget_->parentWidget() ==
-                            render_window.preview_dock_->widget() &&
+                        render_window.preview_dock_->widget()->isAncestorOf(
+                            render_window.preview_widget_) &&
                         render_window.preview_dock_->geometry().left() <
                             render_window.inspector_dock_->geometry().left() &&
                         render_window.preview_dock_->height() > 100 &&

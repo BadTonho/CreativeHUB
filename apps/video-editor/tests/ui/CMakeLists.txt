@@ -34,6 +34,24 @@ add_creative_suite_test(
 set_tests_properties(creative-suite-main-editor-media-pool-dock-layout PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
 
+add_executable(creative-suite-main-editor-workspace-layout-gallery-tests
+    workspace_layout_gallery_test.cpp)
+target_link_libraries(creative-suite-main-editor-workspace-layout-gallery-tests PRIVATE
+    creative-suite-main-editor-core)
+target_compile_features(creative-suite-main-editor-workspace-layout-gallery-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-workspace-layout-gallery-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-workspace-layout-gallery-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+copy_ffmpeg_test_runtime(creative-suite-main-editor-workspace-layout-gallery-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-workspace-layout-gallery-tests)
+add_creative_suite_test(
+    NAME creative-suite-main-editor-workspace-layout-gallery
+    COMMAND creative-suite-main-editor-workspace-layout-gallery-tests)
+set_tests_properties(creative-suite-main-editor-workspace-layout-gallery PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
+
 add_executable(creative-suite-main-editor-media-browser-list-widget-tests
     media_browser_list_widget_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/main_window/main_window_support.cpp

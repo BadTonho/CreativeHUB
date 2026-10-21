@@ -42,6 +42,7 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/main_window/main_window_support.h
     src/main_window/main_window_interchange.cpp
     src/main_window/main_window_workspace.cpp
+    src/main_window/main_window_layouts.cpp
     src/main_window/main_window_effects.cpp
     src/main_window/main_window_project.cpp
     src/main_window/main_window_media.cpp

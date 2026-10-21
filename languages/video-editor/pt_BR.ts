@@ -1812,6 +1812,82 @@
         <translation>Restaurar layout &amp;padrão</translation>
     </message>
     <message>
+        <source>Layouts...</source>
+        <translation>Layouts...</translation>
+    </message>
+    <message>
+        <source>Layouts</source>
+        <translation>Layouts</translation>
+    </message>
+    <message>
+        <source>Open panel layouts</source>
+        <translation>Abrir layouts dos painéis</translation>
+    </message>
+    <message>
+        <source>Panel Layouts</source>
+        <translation>Layouts dos painéis</translation>
+    </message>
+    <message>
+        <source>Save Current Layout...</source>
+        <translation>Salvar layout atual...</translation>
+    </message>
+    <message>
+        <source>The layout could not be saved or restored. Check the error log.</source>
+        <translation>Não foi possível salvar ou restaurar o layout. Consulte o registro de erros.</translation>
+    </message>
+    <message>
+        <source>Layout name:</source>
+        <translation>Nome do layout:</translation>
+    </message>
+    <message>
+        <source>Save Layout</source>
+        <translation>Salvar layout</translation>
+    </message>
+    <message>
+        <source>Choose a unique name of 1 to 60 characters, or check the error log.</source>
+        <translation>Escolha um nome exclusivo de 1 a 60 caracteres ou consulte o registro de erros.</translation>
+    </message>
+    <message>
+        <source>Ready layouts</source>
+        <translation>Layouts prontos</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>Padrão</translation>
+    </message>
+    <message>
+        <source>Preview Focus</source>
+        <translation>Foco na pré-visualização</translation>
+    </message>
+    <message>
+        <source>Timeline Focus</source>
+        <translation>Foco na linha do tempo</translation>
+    </message>
+    <message>
+        <source>Your layouts</source>
+        <translation>Seus layouts</translation>
+    </message>
+    <message>
+        <source>Update</source>
+        <translation>Atualizar</translation>
+    </message>
+    <message>
+        <source>Rename</source>
+        <translation>Renomear</translation>
+    </message>
+    <message>
+        <source>Replace this saved layout with the current panel arrangement?</source>
+        <translation>Substituir este layout salvo pela disposição atual dos painéis?</translation>
+    </message>
+    <message>
+        <source>Rename Layout</source>
+        <translation>Renomear layout</translation>
+    </message>
+    <message>
+        <source>Delete this saved layout?</source>
+        <translation>Excluir este layout salvo?</translation>
+    </message>
+    <message>
         <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="973"/>
         <source>Media Pool</source>
         <translation>Media Pool</translation>

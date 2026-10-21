@@ -22,6 +22,7 @@
 #include <QMainWindow>
 #include <QByteArray>
 #include <QString>
+#include <QVariantMap>
 #include <QThreadPool>
 #include <QtGlobal>
 
@@ -85,6 +86,7 @@ struct AutosaveSnapshotItem;
 }
 
 class MainWindowIntegrationTest;
+class WorkspaceLayoutGalleryTest;
 class QShowEvent;
 class QResizeEvent;
 
@@ -101,6 +103,7 @@ protected:
 
 private:
     friend class MainWindowIntegrationTest;
+    friend class WorkspaceLayoutGalleryTest;
 
     using ImportedMedia = application::ImportedMedia;
     using ActiveTransition = timeline::TransitionSelection;
@@ -123,6 +126,14 @@ private:
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
+    void showWorkspaceLayouts();
+    void applyBuiltInWorkspaceLayout(int preset);
+    QVariantMap captureWorkspaceLayout() const;
+    bool applyWorkspaceLayout(const QVariantMap& snapshot);
+    bool saveNamedWorkspaceLayout(const QString& name, const QString& id = {});
+    bool renameNamedWorkspaceLayout(const QString& id, const QString& name);
+    bool removeNamedWorkspaceLayout(const QString& id);
+    bool applyNamedWorkspaceLayout(const QString& id);
     void restoreExpandedDockLayout();
     void persistMediaPoolWidth();
     void persistPreviewSidePanelWidths();
