@@ -1039,3 +1039,16 @@ Status: pending Windows owner visual acceptance; macOS/Linux builds/runtime pend
    Confirm gradient colors, initial selection masks and original source links.
 7. Record 1080p cold/warm/parameter/content updates, GPU recovery, memory, build
    paths/configuration, OS/driver, responsiveness and any logged technical errors.
+
+## Brightness/Contrast adjustments
+
+Status: pending on Windows/macOS/Linux native UI.
+
+- Create above Background, a group and a chain child; verify chain/group scope.
+- Capture a feathered selection with holes; edit its mask without painting content.
+- Drag both signed controls, type values and Reset; check Undo/Redo, unchanged
+  values and independent state after changing layer/tab during an edit.
+- Mix both adjustment types with text, shapes, images, group transformations,
+  contours and clipping; compare CPU/OpenGL, thumbnails and composite Eyedropper.
+- Verify Quick Export refusal, raster isolation, full/group export and published
+  linked PNG in Video; save/reopen/recover and Hub backup/restore without data loss.

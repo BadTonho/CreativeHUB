@@ -1,6 +1,6 @@
 #pragma once
 #include <creative_suite/composition/blend_mode.h>
-#include <creative_suite/effects/gradient_map.h>
+#include <creative_suite/effects/adjustment.h>
 
 #include <QColor>
 #include <QPointF>
@@ -204,7 +204,7 @@ struct ImageLayerData {
     bool clip_to_base = false;
     creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
 
-    std::optional<creative_suite::effects::GradientMapParameters> adjustment;
+    std::optional<creative_suite::effects::AdjustmentParameters> adjustment;
 
     bool operator==(const ImageLayerData&) const = default;
 };
@@ -258,7 +258,7 @@ struct RecoveryDocumentData {
 
 class ImageDocumentStore final {
 public:
-    static constexpr int kCurrentDocumentVersion = 20;
+    static constexpr int kCurrentDocumentVersion = 21;
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr qsizetype kMaximumStrokeClipPathElements = 100'000;

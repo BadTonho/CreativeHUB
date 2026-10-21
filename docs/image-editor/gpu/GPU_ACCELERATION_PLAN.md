@@ -231,3 +231,10 @@ opacity and mode once. Clipped adjustments run in the reusable CPU chain stage.
 All intermediates retain the 256 MiB worker budget; raster/thumbnail retention
 stays at 64 MiB. Uniform point/color edits retain resident content/mask textures.
 No adjustment application needs GPU readback. See [contract and measurements](../features/GRADIENT_MAP.md).
+
+## Brightness/Contrast raster adjustments
+
+The shared raster record carries a typed adjustment; the fragment shader evaluates
+Brightness/Contrast on its GPU-only backdrop copy. Parameter edits preserve raw
+rasters and uploads. Existing CPU/GPU budgets, cancellation and capacity recovery
+remain. [Contract](../features/BRIGHTNESS_CONTRAST.md).

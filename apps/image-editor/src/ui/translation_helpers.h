@@ -10,6 +10,7 @@
 namespace image_editor::ui {
 
 [[maybe_unused]] inline constexpr const char* kDynamicUiMessages[] = {
+    QT_TRANSLATE_NOOP("ImageEditorUI", "A Brightness/Contrast adjustment is invalid."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "A layer outline has invalid properties."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "Group masks and outlines are not supported."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "A document group has invalid properties."),

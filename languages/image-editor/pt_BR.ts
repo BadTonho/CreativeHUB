@@ -3,6 +3,11 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>ImageEditorUI</name>
+    <message><source>A Brightness/Contrast adjustment is invalid.</source><translation>Um ajuste de Brilho/Contraste é inválido.</translation></message>
+    <message><source>Brightness/Contrast</source><translation>Brilho/Contraste</translation></message>
+    <message><source>Brightness</source><translation>Brilho</translation></message>
+    <message><source>Contrast</source><translation>Contraste</translation></message>
+    <message><source>Reset</source><translation>Redefinir</translation></message>
     <message>
         <location filename="../../apps/image-editor/src/ui/canvas/image_canvas.cpp" line="857"/>
         <source>Open an image to start editing</source>

@@ -34,3 +34,6 @@ This directory groups the current scope, implementation contracts, feature deliv
 - [Blend-mode Windows profile](performance/blend-modes-windows-2026-10-20.json): 1080p CPU/GPU, caches, uploads, capacity recovery and canonical builds.
 
 - [Gradient Map adjustment layers](features/GRADIENT_MAP.md): multi-point editing, masks, scope, v20, CPU/GPU and verification.
+
+[Brightness/Contrast adjustment layers](features/BRIGHTNESS_CONTRAST.md) use the
+existing mask/history/export contract; native visual/platform acceptance is pending.

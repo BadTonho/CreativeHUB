@@ -636,3 +636,9 @@ Native visual and other-platform acceptance remain pending.
 ## Shared Gradient Map maintenance
 
 Shared effects/composition/OpenGL/Vulkan and Motion blend, preview, GPU composition and export gates protect default raster records and opaque output while Image adds optional Gradient Map adjustments. Motion UI, effects registries and formats remain unchanged. See [Image contract](../image-editor/features/GRADIENT_MAP.md).
+
+## Brightness/Contrast shared maintenance
+
+The shared RGB evaluator and typed Image raster adjustment add no Motion effect
+registry entries. Preserve effects and native composition semantics; run shared
+effects/composition and Motion gates. [Contract](../image-editor/features/BRIGHTNESS_CONTRAST.md).

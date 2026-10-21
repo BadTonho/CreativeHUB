@@ -1,6 +1,6 @@
 # Layer and group blend modes
 
-Implementation: 2026-10-20. `.cimg` writes v20 and reads v1-19. Recovery retains
+Implementation: 2026-10-20. `.cimg` writes v21 and reads v1-20. Recovery retains
 envelope v1; application versions and linked PNG publication are unchanged.
 Native visual acceptance and macOS/Linux validation remain pending.
 
@@ -83,7 +83,7 @@ Optional `blend_mode` strings on layers/groups are `normal`, `multiply`, `screen
 `overlay`, `add`, `difference`; Normal is omitted. v1-18 load as Normal. Reject
 fields before v19, non-string/unknown values and any Background mode field.
 Invalid Open preserves the current document. History/recovery preserve modes.
-Hub accepts v1-20 and preserves properties when rebasing media; v21 is rejected.
+Hub accepts v1-21 and preserves properties when rebasing media; v21 is rejected.
 The Video consumer still reads atomic published PNG, not the native schema.
 Shared Motion/Video Normal, blend, GPU and export contracts are regression gates.
 
@@ -102,7 +102,7 @@ Shared Motion/Video Normal, blend, GPU and export contracts are regression gates
   invalid mode/cancellation/budget recovery. Shared composition tests verify
   transparent and source-atop reference values while preserving existing consumers.
 - Hub format/manager gates round trip v1-19 with actual Image reader, including
-  group/base/clipped-child modes, and reject future v21.
+  group/base/clipped-child modes, and reject future v22.
 
 ## Windows execution evidence ? 2026-10-20
 
@@ -168,3 +168,6 @@ build/runtime acceptance stay pending in the
 
 Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
 see [adjustment scope and alpha contract](GRADIENT_MAP.md).
+
+Current writer: v21. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
+adjustment stack contract; historical execution evidence above is unchanged.

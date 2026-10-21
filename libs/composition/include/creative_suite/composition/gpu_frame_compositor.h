@@ -3,7 +3,7 @@
 #include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/composition/graphics_backend.h>
 #include <creative_suite/effects/drop_shadow.h>
-#include <creative_suite/effects/gradient_map.h>
+#include <creative_suite/effects/adjustment.h>
 
 #include <functional>
 #include <memory>
@@ -172,7 +172,7 @@ struct OpenGlRasterLayer {
     OpenGlRasterInput mask;
     int opacity = 100;
     BlendMode blend_mode = BlendMode::Normal;
-    std::optional<effects::GradientMapParameters> adjustment;
+    std::optional<effects::AdjustmentParameters> adjustment;
 };
 struct OpenGlRasterNode {
     std::vector<OpenGlRasterLayer> layers;

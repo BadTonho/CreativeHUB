@@ -23,6 +23,7 @@ class QTreeWidgetItem;
 namespace image_editor {
 
 class GradientMapEditor;
+class BrightnessContrastEditor;
 class LayerPanel final : public QWidget {
     Q_OBJECT
 
@@ -53,6 +54,8 @@ public:
 signals:
     void quickExportRequested();
     void addGradientMapRequested();
+    void addBrightnessContrastRequested();
+    void brightnessContrastChanged(const QString&,const creative_suite::effects::BrightnessContrastParameters&);
     void adjustmentEditStarted();
     void adjustmentEditFinished();
     void gradientMapChanged(const QString&,const creative_suite::effects::GradientMapParameters&);
@@ -96,6 +99,8 @@ private:
     QPushButton* quick_export_button_ = nullptr;
     QTreeWidget* layer_tree_ = nullptr;
     QMenu* layer_context_menu_ = nullptr;
+    BrightnessContrastEditor* brightness_editor_ = nullptr;
+    QAction* add_brightness_action_ = nullptr;
     GradientMapEditor* gradient_editor_ = nullptr;
     QAction* add_gradient_action_ = nullptr;
     QAction* clipping_action_ = nullptr;

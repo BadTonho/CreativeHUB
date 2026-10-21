@@ -207,28 +207,14 @@ ProcessingResult applyColorAdjustment(
         return ProcessingResult::Completed;
     }
 
-    const double brightness = parameters.brightness / 100.0;
-    const double contrast = parameters.contrast_percent / 100.0;
-    const double saturation = parameters.saturation_percent / 100.0;
     for (int y = 0; y < frame.height; ++y) {
         if (should_cancel && should_cancel()) return ProcessingResult::Cancelled;
         auto* row = frame.rgba_pixels.data() +
             static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
         for (int x = 0; x < frame.width; ++x) {
             auto* pixel = row + static_cast<std::size_t>(x) * 4U;
-            double red = static_cast<double>(pixel[0]) / 255.0 + brightness;
-            double green = static_cast<double>(pixel[1]) / 255.0 + brightness;
-            double blue = static_cast<double>(pixel[2]) / 255.0 + brightness;
-            red = (red - 0.5) * contrast + 0.5;
-            green = (green - 0.5) * contrast + 0.5;
-            blue = (blue - 0.5) * contrast + 0.5;
-            const double luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-            red = luma + (red - luma) * saturation;
-            green = luma + (green - luma) * saturation;
-            blue = luma + (blue - luma) * saturation;
-            pixel[0] = toByteFromUnit(red);
-            pixel[1] = toByteFromUnit(green);
-            pixel[2] = toByteFromUnit(blue);
+            const auto rgb=colorAdjustmentRgb({pixel[0]/255.,pixel[1]/255.,pixel[2]/255.},parameters);
+            for(int c=0;c<3;++c)pixel[c]=rgb[c];
         }
     }
     return ProcessingResult::Completed;

@@ -2094,3 +2094,10 @@ Native cross-application visual acceptance remains pending.
 ## Shared Gradient Map maintenance
 
 Shared effects/composition/OpenGL/Vulkan and main-window, application-media, workspace switching, transform/text, GPU timeline and CPU/GPU export regressions protect opaque output and existing PNG refresh contracts. No Video adjustment selector or schema is added. See [producer contract](../../image-editor/features/GRADIENT_MAP.md).
+
+## Brightness/Contrast shared maintenance
+
+Image v21 does not change the linked PNG consumer. Shared color-adjustment RGB
+math is reused without changing Video effect semantics. Run effects/composition,
+linked-image/main-window, GPU timeline, transform/text and render/export gates.
+[Image contract](../../image-editor/features/BRIGHTNESS_CONTRAST.md).

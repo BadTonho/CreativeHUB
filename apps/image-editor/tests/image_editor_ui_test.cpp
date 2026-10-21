@@ -96,6 +96,7 @@
 bool testLayerOutlineUi(const QString& root);
 bool testLayerClippingUi(const QString& root);
 bool testGradientMapUi(const QString& root);
+bool testBrightnessContrastUi(const QString& root);
 bool testLayerBlendUi(const QString& root);
 
 namespace {
@@ -3944,6 +3945,10 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     }
+    if (application.arguments().contains(QStringLiteral("--brightness-contrast-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testBrightnessContrastUi(temporary.path()) ? 0 : 1;
+    }
     if (application.arguments().contains(QStringLiteral("--gradient-map-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testGradientMapUi(temporary.path()) ? 0 : 1;
@@ -4143,6 +4148,7 @@ int main(int argc, char* argv[]) {
     if (!testLayerClippingUi(temporary.path())) return 1;
     if (!testLayerBlendUi(temporary.path())) return 1;
     if (!testGradientMapUi(temporary.path())) return 1;
+    if (!testBrightnessContrastUi(temporary.path())) return 1;
     if (!testEyedropperTool()) return 1;
     if (!testBucketFillTool()) return 1;
     if (!testMagicWandTool()) return 1;

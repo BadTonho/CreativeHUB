@@ -41,7 +41,7 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Add brightness/contrast as the second adjustment type** in section 4.3.
+**Add Exposure/Offset/Gamma as the third adjustment type** in section 4.3.
 The adjustment-layer contract and Gradient Map are implemented; see
 [Gradient Map](features/GRADIENT_MAP.md). Outlines, clipping masks and six layer/
 group blend modes are implemented; see [blend modes](features/BLEND_MODES.md).
@@ -281,7 +281,8 @@ Native visual and macOS/Linux acceptance remains pending.
   shared effect processing without importing Video Editor timeline models.
 - [x] Implement Gradient Map, mapping luminance to editable gradient colors.
   This is separate from the existing linear painting tool.
-- [ ] Add brightness/contrast, exposure/offset/gamma, hue/saturation, levels,
+- [x] Add editable brightness/contrast; see [contract](features/BRIGHTNESS_CONTRAST.md).
+- [ ] Add exposure/offset/gamma, hue/saturation, levels,
   and per-channel/global curves in bounded increments.
 - [ ] Add color balance, Black & White channel controls, LUT loading, selective
   color, invert, posterize, and threshold.
@@ -637,3 +638,11 @@ Motion Drop Shadow extends shared CPU effects/GPU image operations only; Image a
 | RGB mapping, preserved alpha, masks/selection seed, history/scope/stack, v20/recovery/export/cache | `creative-suite-image-editor-gradient-map`, shared effects tests | [Contract and execution evidence](features/GRADIENT_MAP.md); native visual pending. |
 | Creation, multi-point UI/history/color cancel, mask owner/tools, restrictions and PNG publication | `creative-suite-image-editor-gradient-map-ui`, full UI | [Manual checklist](validation/MANUAL_VALIDATION.md#gradient-map-adjustments) pending. |
 | CPU/OpenGL, source upload reuse, budgets, GPU recovery and Hub restore | Interactive/native GPU, shared composition, Hub backup format/manager, Video/Motion consumer gates | Native macOS/Linux pending. |
+
+## Brightness/Contrast regression coverage
+
+| Behavior | Automated coverage | Acceptance |
+| --- | --- | --- |
+| Integer parameters, shared RGB math, preserved alpha, mixed adjustment stacks, history, v21/recovery/export/cache | `creative-suite-image-editor-brightness-contrast`, shared effects | [Contract and evidence](features/BRIGHTNESS_CONTRAST.md); manual/platform checks pending. |
+| Creation, sliders/numeric controls, Reset, no-ops/Redo, mask tools, tabs and PNG publication | `creative-suite-image-editor-brightness-contrast-ui`, full UI | Native visual checklist pending. |
+| Native OpenGL equivalence, budgets, zero-upload parameter edits and 1080p | `creative-suite-image-editor-gpu-raster` | Maximum two RGB levels, exact alpha; [Windows profile](performance/brightness-contrast-windows-2026-10-20.json). |

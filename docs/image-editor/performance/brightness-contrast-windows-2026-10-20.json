@@ -1,0 +1,127 @@
+{
+  "date": "2026-10-20",
+  "platform": "Windows 11 x64",
+  "configuration": "Release",
+  "qt_version": "6.7.2",
+  "hardware": {
+    "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+    "gpu": "NVIDIA GeForce GTX 1660 SUPER",
+    "driver": "617.42",
+    "vram_mib": 6144,
+    "source": "Local processor registry and nvidia-smi"
+  },
+  "workload": {
+    "width": 1920,
+    "height": 1080,
+    "editable_raster_layers": 5,
+    "background_layers": 1,
+    "groups": 1,
+    "adjustment_layers": 1,
+    "content": "Five partially transparent painted raster layers in one isolated group followed by a Brightness/Contrast adjustment."
+  },
+  "cpu": {
+    "prepare_and_composite_ms": {
+      "cold": 51,
+      "warm": 38,
+      "brightness_change": 37,
+      "contrast_change": 38,
+      "base_content_update": 39
+    },
+    "retained_raster_cache_bytes": 49766400,
+    "sampled_peak_working_set_bytes_profile_process": 104833024
+  },
+  "gpu": {
+    "texture_budget_bytes": 268435456,
+    "phases": {
+      "cold": {
+        "prepare_ms": 13,
+        "prepare_compose_readback_ms": 49,
+        "uploaded_bytes": 49766400,
+        "gpu_texture_bytes": 74649600,
+        "cpu_cache_bytes": 49766400
+      },
+      "warm": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 3,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "brightness": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 3,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "contrast": {
+        "prepare_ms": 0,
+        "prepare_compose_readback_ms": 3,
+        "uploaded_bytes": 0,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      },
+      "base": {
+        "prepare_ms": 1,
+        "prepare_compose_readback_ms": 5,
+        "uploaded_bytes": 4624,
+        "gpu_texture_bytes": 82944000,
+        "cpu_cache_bytes": 49766400
+      }
+    },
+    "sampled_peak_working_set_bytes_profile_process": 225099776,
+    "constrained_capacity": {
+      "budget_bytes": 67108864,
+      "status": "Unsupported: resource capacity; CPU recovery matched the reference",
+      "refusal_ms": 36,
+      "cpu_recovery_ms": 41,
+      "gpu_texture_bytes": 66355200
+    }
+  },
+  "verification": {
+    "distinct_ctest_passed": 52,
+    "image_ctest_passed": 34,
+    "shared_ctest_passed": 4,
+    "video_ctest_passed": 8,
+    "motion_ctest_passed": 4,
+    "hub_ctest_passed": 2,
+    "native_gpu_qttest_passed": 18,
+    "maximum_allowed_gpu_channel_difference": 2,
+    "adjustment_alpha_difference": 0,
+    "full_scoped_run_passed": 51,
+    "full_scoped_run_failed": 1,
+    "isolated_retest_passed": 1,
+    "note": "The Video render/export gate initially failed when replacing an output file and passed on an isolated rerun with no code changes. Record the intermittent failure; investigate if it recurs. The earlier neutral-adjustment rounding regression was corrected and its core/native gates passed."
+  },
+  "canonical_executables": [
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\image-editor\\Release\\creative-suite-image-editor.exe",
+      "modified_local": "2026-10-20T22:53:44-03:00"
+    },
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\image-editor\\Debug\\creative-suite-image-editor.exe",
+      "modified_local": "2026-10-20T22:48:11-03:00"
+    },
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\hub\\Debug\\creative-suite-hub.exe",
+      "modified_local": "2026-10-20T22:47:39-03:00"
+    },
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\video-editor\\Release\\creative-suite-video-editor.exe",
+      "modified_local": "2026-10-20T22:57:58-03:00"
+    },
+    {
+      "path": "C:\\Users\\Admin\\Desktop\\ProjetosCode\\AdobeShoppee\\build\\apps\\motion-editor\\Release\\creative-suite-motion-editor.exe",
+      "modified_local": "2026-10-20T22:58:07-03:00"
+    }
+  ],
+  "limits": [
+    "Single local profile after scoped builds/tests; timings and sampled memory are observations, not latency or memory guarantees.",
+    "Cold means the first 1080p preparation/composition with empty application content caches; the GPU correctness scenes warmed the context/program and driver caches were not cleared.",
+    "GPU totals include synchronous readback for measurement; production preview delivers texture leases directly and the adjustment itself performs no GPU-to-CPU readback.",
+    "Sampled process peaks include Qt/driver/session state and correctness scenes; the GPU process includes a separate constrained-capacity context and CPU recovery. These are not whole-application or VRAM peaks.",
+    "The base update appends a 30 px painted point. Parameter changes assert no source reconstruction/uploads; timings are measured separately for brightness and contrast.",
+    "Production limits remain 64 MiB CPU raster cache and 256 MiB GPU textures; the 64 MiB GPU scenario is an artificial capacity-recovery test.",
+    "Native visual acceptance and macOS/Linux builds and native runtime/driver validation remain pending."
+  ]
+}

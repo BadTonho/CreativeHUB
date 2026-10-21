@@ -1,7 +1,7 @@
 # Editable layer outline
 
 Introduced in v17 on 2026-10-20. Application versions are unchanged; `.cimg` now writes
-v20 and reads v1-19. Native visual acceptance, macOS and Linux remain pending.
+v21 and reads v1-20. Native visual acceptance, macOS and Linux remain pending.
 
 ## Editing contract
 
@@ -94,3 +94,6 @@ its own color. See [clipping semantics](CLIPPING_MASKS.md).
 
 Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
 see [adjustment scope and alpha contract](GRADIENT_MAP.md).
+
+Current writer: v21. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
+adjustment stack contract; historical execution evidence above is unchanged.

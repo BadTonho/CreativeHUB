@@ -1,5 +1,5 @@
 #include <creative_suite/effects/effects.h>
-#include <creative_suite/effects/gradient_map.h>
+#include <creative_suite/effects/adjustment.h>
 #include <creative_suite/effects/gaussian_blur.h>
 
 #include <algorithm>
@@ -137,6 +137,13 @@ int main() {
         map.stops.resize(33);require(!validGradientMap(map),"Unbounded Gradient Map accepted");
     }
 
+    {
+        using namespace creative_suite::effects;
+        require(validAdjustment(BrightnessContrastParameters{-100,100}) && !validAdjustment(BrightnessContrastParameters{101,0}),"Brightness/Contrast validation");
+        require(adjustmentRgb(BrightnessContrastParameters{25,50},{.2,.4,.8})==std::array<unsigned char,3>{108,185,255},"Brightness-before-contrast reference");
+        require(adjustmentRgb(BrightnessContrastParameters{100,-100},{0.,.5,1.})==std::array<unsigned char,3>{128,128,128},"Zero contrast midpoint");
+        require(adjustmentRgb(BrightnessContrastParameters{-100,0},{0.,.5,1.})==std::array<unsigned char,3>{0,0,0},"Brightness saturation");
+    }
     verifySharedBlur();
     using namespace creative_suite::effects;
     require(builtInEffects().size() == 4, "The built-in visual effect catalog is incomplete.");

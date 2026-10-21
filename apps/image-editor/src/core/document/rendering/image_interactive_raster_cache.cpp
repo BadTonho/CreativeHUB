@@ -103,7 +103,7 @@ InteractiveComposition ImageInteractiveRasterCache::prepare(const ImageExportSna
     const auto& doc = snapshot.document;
     const QSize size = ImageDocumentRenderer::documentSize(doc, snapshot.source_image.size());
     if (snapshot.source_image.isNull() || cancelled(cancel)) return {};
-    InteractiveComposition result; result.size = size;result.adjustment_document=std::any_of(doc.layers.cbegin(),doc.layers.cend(),[](const auto& l){return l.adjustment.has_value();});
+    InteractiveComposition result; result.size = size;result.adjustment_document=std::any_of(doc.layers.cbegin(),doc.layers.cend(),[](const auto& l){return needsAdjustmentPrecision(l);});
     QSet<QString> live;
     for (const auto& layer : doc.layers) {
         if (!layer.clip_to_base && clippingChain(doc, layer.id).size() > 1) live.insert(layer.id + "/clipping");

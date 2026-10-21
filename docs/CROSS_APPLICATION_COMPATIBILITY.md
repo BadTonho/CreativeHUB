@@ -453,3 +453,10 @@ Image, Video and Motion consumer gates protect the additive boundary. See
 ## Shared Gradient Map adjustment processing
 
 Image native v20 introduces app-owned adjustment scope and selection-seeded masks. Hub preserves these in backups and rejects Image v21. Shared effects provide validated RGB stop interpolation; optional trailing OpenGL raster fields preserve Image alpha without changing general Video/Motion opaque output, registries or formats. PNG publication remains unchanged. See [Image contract](image-editor/features/GRADIENT_MAP.md).
+
+## Brightness/Contrast shared boundary
+
+Image v21 adds a typed adjustment without changing PNG publication. Hub preserves
+both adjustment types and masks and accepts v1-21, rejecting v22. The shared RGB
+evaluator preserves existing Video/Motion effects; no new registry entries are
+added. [Contract](image-editor/features/BRIGHTNESS_CONTRAST.md).

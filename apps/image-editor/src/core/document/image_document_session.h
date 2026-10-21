@@ -132,6 +132,8 @@ public:
                                          const ImageShapeData& style,
                                          QString* error = nullptr);
     [[nodiscard]] bool deleteObjects(const QStringList& object_ids);
+    [[nodiscard]] QString addBrightnessContrastAdjustment(std::optional<QPainterPath> selection = {});
+    [[nodiscard]] bool setBrightnessContrast(const QString&,const creative_suite::effects::BrightnessContrastParameters&);
     [[nodiscard]] QString addGradientMapAdjustment(std::optional<QPainterPath> selection = {});
     [[nodiscard]] bool setGradientMap(const QString&,const creative_suite::effects::GradientMapParameters&);
     void beginLayerAdjustmentEdit();
@@ -307,6 +309,7 @@ private:
     mutable QHash<QString, LayerThumbnailCacheEntry> layer_thumbnail_cache_;
     mutable QHash<QString, GroupThumbnailCacheEntry> group_thumbnail_cache_;
     mutable ImageLayerRasterCache layer_raster_cache_;
+    [[nodiscard]] QString addAdjustment(creative_suite::effects::AdjustmentParameters, const QString& name, std::optional<QPainterPath>);
     bool adjustment_edit_active_ = false;
     ImageDocumentData adjustment_edit_snapshot_;
     ImageDocumentData opacity_edit_snapshot_;

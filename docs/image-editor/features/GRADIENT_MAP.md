@@ -1,6 +1,6 @@
 # Gradient Map adjustment layers
 
-Implementation: 2026-10-20. Native `.cimg` v20; readers accept v1-19 without
+Implementation: 2026-10-20. Introduced in `.cimg` v20; current writer v21. Readers accept v1-19 without
 adjustments. Recovery envelope v1 and linked PNG publication are unchanged.
 Application versions remain unchanged. Native visual and macOS/Linux acceptance
 remain pending.
@@ -58,7 +58,7 @@ The exporter also refuses a programmatic adjustment-only export before writing.
 
 ## Boundaries and storage
 
-`ImageLayerData::adjustment` is an optional shared Gradient Map payload; absence
+`ImageLayerData::adjustment` is an optional shared typed adjustment payload; absence
 retains legacy raster behavior. Session creation/set/begin/end operations own
 history. Content-editability and mask-editability are separate capabilities.
 `ImageLayerMaskData::initial_selection` optionally seeds a black mask filled white
@@ -90,7 +90,7 @@ Masks optionally write `initial_selection: {fill_rule, path}` using existing pat
 elements and Qt fill-rule identifiers. Reject invalid point counts/order/grid,
 unknown types, incompatible properties and these fields before v20. Failed Open
 preserves the existing session. Hub preserves both payloads while rebasing media,
-accepts Image through v20 and rejects v21. Recovery stays envelope v1.
+accepts Image through v21 and rejects v22. Recovery stays envelope v1.
 
 ## Verification
 
@@ -103,8 +103,8 @@ accepts Image through v20 and rejects v21. Recovery stays envelope v1.
 - Interactive/native GPU: CPU/OpenGL parity, clipping/group transforms, point/color
   edits with zero source uploads/rasterization, 1080p resources and constrained CPU
   recovery. Shared effects/composition and Video/Motion gates protect consumers.
-- Hub backup format/manager: actual Image reader, v1-20 round trips, gradient points
-  and initial masks through relocation/restoration; future v21 refusal.
+- Hub backup format/manager: actual Image reader, v1-21 round trips, gradient points
+  and initial masks through relocation/restoration; future v22 refusal.
 
 Windows Release evidence (2026-10-20): 50 distinct scoped CTest gates passed:
 32 Image, four shared effects/composition, eight Video, four Motion and two Hub.
@@ -124,3 +124,6 @@ Canonical Image Release/Debug, Hub Debug and affected Video/Motion Release build
 completed without installers; exact paths and modification times are in the
 profile. Native visual checks and macOS/Linux builds/runtime acceptance remain
 **pending**; see [manual checks](../validation/MANUAL_VALIDATION.md#gradient-map-adjustments).
+
+The v21 Brightness/Contrast type shares this stack/mask contract; see
+[second adjustment](BRIGHTNESS_CONTRAST.md). Historical v20 evidence above is unchanged.

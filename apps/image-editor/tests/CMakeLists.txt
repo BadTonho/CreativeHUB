@@ -497,3 +497,8 @@ set_tests_properties(creative-suite-image-editor-blend-ui PROPERTIES ENVIRONMENT
 
 add_creative_suite_test(NAME creative-suite-image-editor-gradient-map-ui COMMAND creative-suite-image-editor-ui-tests --gradient-map-only)
 set_tests_properties(creative-suite-image-editor-gradient-map-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_creative_suite_test(NAME creative-suite-image-editor-brightness-contrast COMMAND creative-suite-image-editor-gradient-map-tests brightnessNumeric brightnessModelPersistence brightnessReference1080p -o -,txt)
+set_tests_properties(creative-suite-image-editor-brightness-contrast PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+add_creative_suite_test(NAME creative-suite-image-editor-brightness-contrast-ui COMMAND creative-suite-image-editor-ui-tests --brightness-contrast-only)
+set_tests_properties(creative-suite-image-editor-brightness-contrast-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

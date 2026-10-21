@@ -1652,6 +1652,12 @@ bool ImageDocumentSession::findShape(const QString& shape_id,
 }
 
 QString ImageDocumentSession::addGradientMapAdjustment(std::optional<QPainterPath> selection) {
+    return addAdjustment(creative_suite::effects::GradientMapParameters{},QStringLiteral("Gradient Map"),std::move(selection));
+}
+QString ImageDocumentSession::addBrightnessContrastAdjustment(std::optional<QPainterPath> selection) {
+    return addAdjustment(creative_suite::effects::BrightnessContrastParameters{},QStringLiteral("Brightness/Contrast"),std::move(selection));
+}
+QString ImageDocumentSession::addAdjustment(creative_suite::effects::AdjustmentParameters parameters,const QString& prefix,std::optional<QPainterPath> selection) {
     if(selection && !ImageDocumentGeometry::isValidStrokeClipPath(*selection))return {};
     if(selection){if(const auto* selected=findLayer(data_,selected_layer_id_)){QVector<QPointF> unused;ImageDocumentGeometry::mapStrokeGeometryThroughGroup(&unused,&selection,findGroup(data_,selected->parent_group_id),renderedSize());}}
     QString insert_above=selected_layer_id_;
@@ -1662,16 +1668,22 @@ QString ImageDocumentSession::addGradientMapAdjustment(std::optional<QPainterPat
     auto edit=ImageLayerStackEditor::addLayer(data_,insert_above,selected_group_id_);
     if(!edit)return {};
     const auto id=edit->selected_layer_id;auto* layer=findLayer(edit->document,id);
-    layer->adjustment=creative_suite::effects::GradientMapParameters{};
+    layer->adjustment=std::move(parameters);
     int number=1;QString name;
-    do{name=QStringLiteral("Gradient Map %1").arg(number++);}while(std::any_of(data_.layers.cbegin(),data_.layers.cend(),[&](const auto& value){return value.name.compare(name,Qt::CaseInsensitive)==0;}) || std::any_of(data_.groups.cbegin(),data_.groups.cend(),[&](const auto& value){return value.name.compare(name,Qt::CaseInsensitive)==0;}));
+    do{name=QStringLiteral("%1 %2").arg(prefix).arg(number++);}while(std::any_of(data_.layers.cbegin(),data_.layers.cend(),[&](const auto& value){return value.name.compare(name,Qt::CaseInsensitive)==0;}) || std::any_of(data_.groups.cbegin(),data_.groups.cend(),[&](const auto& value){return value.name.compare(name,Qt::CaseInsensitive)==0;}));
     layer->name=name;
     layer->mask=ImageLayerMaskData{true,{},std::move(selection)};
     commitDocumentEdit(std::move(edit->document),id,{});return id;
 }
 bool ImageDocumentSession::setGradientMap(const QString& id,const creative_suite::effects::GradientMapParameters& value) {
     const auto* layer=findLayer(data_,id);
-    if(!layer || !layer->adjustment || *layer->adjustment==value || !creative_suite::effects::validGradientMap(value))return false;
+    if(!layer || !layer->adjustment || !std::holds_alternative<creative_suite::effects::GradientMapParameters>(*layer->adjustment) || *layer->adjustment==creative_suite::effects::AdjustmentParameters{value} || !creative_suite::effects::validGradientMap(value))return false;
+    if(!adjustment_edit_active_)pushEdit();
+    findLayer(data_,id)->adjustment=value;layer_thumbnail_cache_.clear();invalidateGroupThumbnailCache();return true;
+}
+bool ImageDocumentSession::setBrightnessContrast(const QString& id,const creative_suite::effects::BrightnessContrastParameters& value) {
+    const auto* layer=findLayer(data_,id);
+    if(!layer || !layer->adjustment || !std::holds_alternative<creative_suite::effects::BrightnessContrastParameters>(*layer->adjustment) || *layer->adjustment==creative_suite::effects::AdjustmentParameters{value} || !creative_suite::effects::validBrightnessContrast(value))return false;
     if(!adjustment_edit_active_)pushEdit();
     findLayer(data_,id)->adjustment=value;layer_thumbnail_cache_.clear();invalidateGroupThumbnailCache();return true;
 }

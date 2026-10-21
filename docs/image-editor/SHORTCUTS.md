@@ -125,3 +125,6 @@ Blend Mode uses the Layers selector and introduces no keyboard shortcut.
 Gradient Map adjustment creation and point editing add no keyboard shortcut. Existing Undo/Redo, mask tools and layer commands apply.
 
 With the Gradient Map bar focused, Left/Right selects the previous/next point; the position field supports its usual arrow-key editing. These are local control keys, not application shortcut assignments.
+
+Brightness/Contrast adjustment creation adds no shortcut. Its sliders and integer
+fields use standard keyboard navigation; existing Undo/Redo and mask tools apply.

@@ -663,7 +663,7 @@ export error paths; cancellation publishes no partial output.
 
 Raw editable targets exclude outlines. Layer/group thumbnail invalidation
 includes the outline, and composite Eyedropper sampling includes its pixels.
-Hub backup rebasing accepts v20 and retains outline/clipping properties; linked PNG
+Hub backup rebasing accepts v21 and retains outline/clipping properties; linked PNG
 publication retains the existing protocol. See [the contract](../features/LAYER_OUTLINE.md).
 
 ## Clipping composition
@@ -708,10 +708,18 @@ Optional shared Gradient Map parameters distinguish app-owned pixel-less layers.
 Session capabilities separate raster editing from mask editing; scope remains in
 the Image stack resolver. Reference/export/CPU preview use the same cancellable
 alpha-preserving adapter; document adjustment paths accumulate premultiplied
-pixels from the start while documents without adjustments keep their old path.
+pixels from the start while documents without effective color adjustments keep
+their old path. Neutral Normal Brightness/Contrast preserves that byte path.
 The shared OpenGL raster layer adds a trailing optional adjustment, evaluated
 against a budgeted GPU-only backdrop copy. Internal clipped adjustments reuse
 CPU chain assembly. Point/color changes retain unchanged source planes; group
 thumbnails with adjustments reuse prepared composition members. A mask's optional
 selection seed participates in rendering, geometry, persistence and cache keys.
 See [parameters, scope, errors and verification](../features/GRADIENT_MAP.md).
+
+## Typed adjustments
+
+Shared `AdjustmentParameters` is a variant of Gradient Map and Brightness/Contrast.
+The Image session owns typed editing/history and stack scope; effects owns RGB
+math and validation. CPU adapter and native raster shader dispatch by type, reusing
+mask/content caches and preserving alpha. [Contract](../features/BRIGHTNESS_CONTRAST.md).

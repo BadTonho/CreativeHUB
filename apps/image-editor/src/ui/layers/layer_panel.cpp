@@ -1,6 +1,7 @@
 #include "../../core/document/image_layer_clipping.h"
 #include "layer_panel.h"
 #include "gradient_map_editor.h"
+#include "brightness_contrast_editor.h"
 #include "../translation_helpers.h"
 
 #include "../transparency_checkerboard.h"
@@ -333,6 +334,11 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     auto* adjustments=layer_context_menu_->addMenu(QCoreApplication::translate("ImageEditorUI","New Adjustment Layer"));
     add_gradient_action_=adjustments->addAction(QCoreApplication::translate("ImageEditorUI","Gradient Map"));add_gradient_action_->setObjectName("addGradientMapAction");
     connect(add_gradient_action_,&QAction::triggered,this,[this]{finishOutlineEdit();emit addGradientMapRequested();});
+    add_brightness_action_=adjustments->addAction(QCoreApplication::translate("ImageEditorUI","Brightness/Contrast"));add_brightness_action_->setObjectName("addBrightnessContrastAction");
+    connect(add_brightness_action_,&QAction::triggered,this,[this]{finishOutlineEdit();emit addBrightnessContrastRequested();});
+    brightness_editor_=new BrightnessContrastEditor(this);layout->addWidget(brightness_editor_);brightness_editor_->hide();
+    brightness_editor_->started=[this]{emit adjustmentEditStarted();};brightness_editor_->finished=[this]{emit adjustmentEditFinished();};
+    brightness_editor_->changed=[this](const auto& value){emit brightnessContrastChanged(selectedItemId(),value);};
     gradient_editor_=new GradientMapEditor(this);layout->addWidget(gradient_editor_);gradient_editor_->hide();
     gradient_editor_->started=[this]{emit adjustmentEditStarted();};gradient_editor_->finished=[this]{emit adjustmentEditFinished();};
     gradient_editor_->changed=[this](const auto& value){emit gradientMapChanged(selectedItemId(),value);};
@@ -816,6 +822,7 @@ void LayerPanel::beginOutlineEdit() {
 
 void LayerPanel::finishOutlineEdit() {
     if(gradient_editor_)gradient_editor_->finish();
+    if(brightness_editor_)brightness_editor_->finish();
     if (!outline_editing_) return;
     outline_editing_ = false; emit outlineEditFinished();
 }
@@ -978,10 +985,15 @@ void LayerPanel::updateControls() {
         blend_mode_->setEnabled(editable && layer_tree_->selectedItems().size()==1);
     }
     add_gradient_action_->setEnabled(!document_.root_stack.isEmpty() && layer_tree_->selectedItems().size()==1);
+    add_brightness_action_->setEnabled(add_gradient_action_->isEnabled());
     const bool adjustment=has_layer && layer->adjustment.has_value();
     quick_export_button_->setToolTip(adjustment?QCoreApplication::translate("ImageEditorUI","Adjustment layers have no pixels to export. Export the document or its group."):QString{});
-    gradient_editor_->setVisible(adjustment && layer_tree_->selectedItems().size()==1);
-    if(adjustment)gradient_editor_->setValue(id,*layer->adjustment);
+    const auto* gradient=adjustment?std::get_if<creative_suite::effects::GradientMapParameters>(&*layer->adjustment):nullptr;
+    const auto* brightness=adjustment?std::get_if<creative_suite::effects::BrightnessContrastParameters>(&*layer->adjustment):nullptr;
+    gradient_editor_->setVisible(gradient && layer_tree_->selectedItems().size()==1);
+    brightness_editor_->setVisible(brightness && layer_tree_->selectedItems().size()==1);
+    if(gradient)gradient_editor_->setValue(id,*gradient);
+    if(brightness)brightness_editor_->setValue(id,*brightness);
     const bool outline_editable = has_layer && !adjustment && !layer->background && layer_tree_->selectedItems().size() == 1;
     clipping_action_->setEnabled(has_layer && !layer->background && layer_tree_->selectedItems().size()==1 && (layer->clip_to_base || clippingBases(document_).contains(id)));
     clipping_action_->setText(has_layer && layer->clip_to_base

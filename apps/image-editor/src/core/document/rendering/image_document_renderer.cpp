@@ -504,7 +504,7 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
         if (!composite.isNull()) composite.fill(Qt::transparent);
     }
     if (composite.isNull()) return {};
-    if(std::any_of(document.layers.cbegin(),document.layers.cend(),[](const auto& l){return l.adjustment.has_value();}))composite=composite.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if(std::any_of(document.layers.cbegin(),document.layers.cend(),[](const auto& l){return needsAdjustmentPrecision(l);}))composite=composite.convertToFormat(QImage::Format_ARGB32_Premultiplied);
 
     for (qsizetype index = clipping_background ? 0 : 1; index < document.root_stack.size(); ++index) {
         if (exportWasCancelled(cancellation_requested)) {
@@ -893,7 +893,11 @@ QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,
     QImage thumbnail;
     if(layer.adjustment) {
         thumbnail=QImage(maximum_size,QImage::Format_ARGB32);if(thumbnail.isNull())return {};
-        for(int x=0;x<thumbnail.width();++x){const auto c=creative_suite::effects::gradientMapColor(*layer.adjustment,double(x)/std::max(1,thumbnail.width()-1));for(int y=0;y<thumbnail.height();++y)thumbnail.setPixel(x,y,qRgb(c[0],c[1],c[2]));}
+        for(int x=0;x<thumbnail.width();++x){const auto c=creative_suite::effects::adjustmentRgb(*layer.adjustment,{double(x)/std::max(1,thumbnail.width()-1),double(x)/std::max(1,thumbnail.width()-1),double(x)/std::max(1,thumbnail.width()-1)});for(int y=0;y<thumbnail.height();++y)thumbnail.setPixel(x,y,qRgb(c[0],c[1],c[2]));}
+        if(std::holds_alternative<creative_suite::effects::BrightnessContrastParameters>(*layer.adjustment)){
+            QPainter painter(&thumbnail);const int d=std::max(4,std::min(thumbnail.width(),thumbnail.height())-4);QRect circle(2,2,d,d);
+            painter.setPen(QPen(Qt::gray,1));painter.setBrush(Qt::black);painter.drawEllipse(circle);painter.setBrush(Qt::white);painter.drawPie(circle,90*16,180*16);
+        }
         return thumbnail;
     }
     if (layer.clip_to_base) {

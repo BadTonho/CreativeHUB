@@ -821,8 +821,8 @@ bool validateLayers(const ImageDocumentData& document,
             return false;
         }
         ids.insert(normalized_id);
-        if(layer.adjustment && (layer.background || layer.outline || !layer.operations.isEmpty() || !creative_suite::effects::validGradientMap(*layer.adjustment))) {
-            assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;
+        if(layer.adjustment && (layer.background || layer.outline || !layer.operations.isEmpty() || !creative_suite::effects::validAdjustment(*layer.adjustment))) {
+            assignError(error,QStringLiteral("A document layer has invalid properties."));return false;
         }
         if(layer.mask && layer.mask->initial_selection && !ImageDocumentGeometry::isValidStrokeClipPath(*layer.mask->initial_selection)) {
             assignError(error,QStringLiteral("A layer mask has invalid properties."));return false;
@@ -1083,8 +1083,13 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
         encoded.insert("name", layer.name);
         encoded.insert("kind", layer.background ? "background" : layer.adjustment ? "adjustment" : "raster");
         if(layer.adjustment){
-            QJsonArray stops;for(const auto& stop:layer.adjustment->stops)stops.append(QJsonObject{{"position",stop.position},{"color",QColor(stop.color[0],stop.color[1],stop.color[2]).name()}});
-            encoded.insert("adjustment",QJsonObject{{"type","gradient_map"},{"stops",stops}});
+            if(const auto* gradient=std::get_if<creative_suite::effects::GradientMapParameters>(&*layer.adjustment)){
+                QJsonArray stops;for(const auto& stop:gradient->stops)stops.append(QJsonObject{{"position",stop.position},{"color",QColor(stop.color[0],stop.color[1],stop.color[2]).name()}});
+                encoded.insert("adjustment",QJsonObject{{"type","gradient_map"},{"stops",stops}});
+            }else{
+                const auto& value=std::get<creative_suite::effects::BrightnessContrastParameters>(*layer.adjustment);
+                encoded.insert("adjustment",QJsonObject{{"type","brightness_contrast"},{"brightness",value.brightness},{"contrast",value.contrast}});
+            }
         }
         encoded.insert("visible", layer.visible);
         encoded.insert("opacity", layer.opacity);
@@ -1276,16 +1281,25 @@ bool decodeDocumentJson(const QJsonObject& root,
             layer->opacity = opacity;
             if (!decodeBlendMode(encoded,version,&layer->blend_mode,error,layer->background)) return false;
             if(kind=="adjustment" || encoded.contains("adjustment")) {
-                const auto a=encoded.value("adjustment").toObject();creative_suite::effects::GradientMapParameters parameters;parameters.stops.clear();
-                bool valid=version>=20 && kind=="adjustment" && a.value("type")=="gradient_map" && a.value("stops").isArray();
-                if(!valid || a.value("stops").toArray().size()<2 || a.value("stops").toArray().size()>32){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
-                for(const auto& v:a.value("stops").toArray()){
-                    const auto stop=v.toObject();const QString color_text=stop.value("color").toString();const QColor color(color_text);
-                    valid &= stop.value("position").isDouble() && color_text.size()==7 && color_text.startsWith('#') && color.isValid() && color.alpha()==255;
-                    parameters.stops.push_back({stop.value("position").toDouble(),{static_cast<unsigned char>(color.red()),static_cast<unsigned char>(color.green()),static_cast<unsigned char>(color.blue())}});
+                const auto a=encoded.value("adjustment").toObject();
+                if(a.value("type")=="brightness_contrast"){
+                    const auto integer=[](const QJsonValue& v){return v.isDouble() && std::isfinite(v.toDouble()) && v.toDouble()>=-100 && v.toDouble()<=100 && std::floor(v.toDouble())==v.toDouble();};
+                    if(version<21 || kind!="adjustment" || !integer(a.value("brightness")) || !integer(a.value("contrast")) || a.contains("stops")){
+                        assignError(error,QStringLiteral("A Brightness/Contrast adjustment is invalid."));return false;
+                    }
+                    layer->adjustment=creative_suite::effects::BrightnessContrastParameters{a.value("brightness").toInt(),a.value("contrast").toInt()};
+                }else{
+                    creative_suite::effects::GradientMapParameters parameters;parameters.stops.clear();
+                    bool valid=version>=20 && kind=="adjustment" && a.value("type")=="gradient_map" && a.value("stops").isArray() && !a.contains("brightness") && !a.contains("contrast");
+                    if(!valid || a.value("stops").toArray().size()<2 || a.value("stops").toArray().size()>32){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
+                    for(const auto& v:a.value("stops").toArray()){
+                        const auto stop=v.toObject();const QString color_text=stop.value("color").toString();const QColor color(color_text);
+                        valid &= stop.value("position").isDouble() && color_text.size()==7 && color_text.startsWith('#') && color.isValid() && color.alpha()==255;
+                        parameters.stops.push_back({stop.value("position").toDouble(),{static_cast<unsigned char>(color.red()),static_cast<unsigned char>(color.green()),static_cast<unsigned char>(color.blue())}});
+                    }
+                    if(!valid || !creative_suite::effects::validGradientMap(parameters)){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
+                    layer->adjustment=std::move(parameters);
                 }
-                if(!valid || !creative_suite::effects::validGradientMap(parameters)){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
-                layer->adjustment=std::move(parameters);
             }
             if (kind != QStringLiteral("background") && kind != QStringLiteral("raster") && kind!="adjustment") {
                 assignError(error, QStringLiteral("The document contains an unsupported layer type."));

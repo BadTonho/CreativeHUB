@@ -671,7 +671,7 @@ struct OpenGlFrameCompositor::Impl {
         if (!selected_output) return result(OpenGlCompositionStatus::Failed, "raster-target", "No raster output target.");
         const int width = request.size.width(), height = request.size.height();
         bool blending = false;
-        const bool adjustments=std::any_of(request.nodes.begin(),request.nodes.end(),[](const auto& node){return std::any_of(node.layers.begin(),node.layers.end(),[](const auto& layer){return layer.adjustment.has_value();});});
+        const bool adjustments=std::any_of(request.nodes.begin(),request.nodes.end(),[](const auto& node){return std::any_of(node.layers.begin(),node.layers.end(),[](const auto& layer){return layer.adjustment && (!effects::identityAdjustment(*layer.adjustment) || layer.blend_mode!=BlendMode::Normal);});});
         for (const auto& node : request.nodes) {
             if (!validBlendMode(node.blend_mode)) return result(OpenGlCompositionStatus::Unsupported,"raster-blend-mode","Invalid group blend mode.");
             blending |= node.blend_mode != BlendMode::Normal;
@@ -702,8 +702,8 @@ struct OpenGlFrameCompositor::Impl {
                     return result(OpenGlCompositionStatus::Unsupported, "raster-input", "Raster inputs must be canvas-sized premultiplied ARGB32 images with identities.");
                 needed.insert(input->identity);
             }
-            if(layer.adjustment && (!effects::validGradientMap(*layer.adjustment) || !layer.content.pixels.isNull()))
-                return result(OpenGlCompositionStatus::Unsupported,"raster-adjustment","Invalid Gradient Map adjustment.");
+            if(layer.adjustment && (!effects::validAdjustment(*layer.adjustment) || !layer.content.pixels.isNull()))
+                return result(OpenGlCompositionStatus::Unsupported,"raster-adjustment","Invalid raster adjustment.");
             if (layer.opacity < 0 || layer.opacity > 100)
                 return result(OpenGlCompositionStatus::Unsupported, "raster-opacity", "Invalid layer opacity.");
         }
@@ -728,6 +728,8 @@ uniform float blend_opacity;
 uniform int gradient_count;
 uniform bool quantize_blend_opacity;
 uniform vec4 gradient_stops[32];
+uniform int adjustment_kind;
+uniform vec2 brightness_contrast;
 uniform bool has_mask;
 uniform bool mask_gray;
 uniform bool bottom_left;
@@ -738,11 +740,12 @@ uniform ivec4 clip_rect;
 out vec4 color;
 void main() {
     vec2 point = vec2(gl_FragCoord.x, float(canvas_height) - gl_FragCoord.y);
-    if(gradient_count>0) {
+    if(adjustment_kind>0) {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
         vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
         float t=dot(cb,vec3(0.2126,0.7152,0.0722));
-        vec3 mapped=gradient_stops[gradient_count-1].rgb;
+        if(adjustment_kind==2 && brightness_contrast==vec2(0) && blend_mode==0){color=b;return;}
+        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : gradient_stops[gradient_count-1].rgb;
         for(int i=1;i<gradient_count;++i) {
             if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
         }
@@ -865,7 +868,7 @@ void main() {
         raster_program->setUniformValue("source_image", 0); raster_program->setUniformValue("mask_image", 1);
         raster_program->setUniformValue("canvas_height", height);
         raster_program->setUniformValue("backdrop_image", 2);
-        const auto draw = [&](GLuint source, bool bottom, GLuint mask, int opacity, const OpenGlRasterTransform& transform, BlendMode mode = BlendMode::Normal,const effects::GradientMapParameters* adjustment=nullptr,bool quantize_group_opacity=false) -> bool {
+        const auto draw = [&](GLuint source, bool bottom, GLuint mask, int opacity, const OpenGlRasterTransform& transform, BlendMode mode = BlendMode::Normal,const effects::AdjustmentParameters* adjustment=nullptr,bool quantize_group_opacity=false) -> bool {
             bool invertible = false; const auto inverse = transform.matrix.inverted(&invertible);
             if (!invertible || !transform.matrix.isAffine()) return false;
             QMatrix3x3 matrix;
@@ -880,8 +883,12 @@ void main() {
             raster_program->setUniformValue("blend_mode",static_cast<int>(mode));
             raster_program->setUniformValue("blend_opacity",quantize_group_opacity?1.f:float(opacity)/100.f);
             raster_program->setUniformValue("quantize_blend_opacity",quantize_group_opacity);
-            raster_program->setUniformValue("gradient_count",adjustment?int(adjustment->stops.size()):0);
-            if(adjustment){std::array<QVector4D,32> points;int count=0;for(const auto& stop:adjustment->stops)points[count++]=QVector4D(stop.color[0]/255.f,stop.color[1]/255.f,stop.color[2]/255.f,float(stop.position));raster_program->setUniformValueArray("gradient_stops",points.data(),count);}
+            const auto* gradient=adjustment?std::get_if<effects::GradientMapParameters>(adjustment):nullptr;
+            const auto* bc=adjustment?std::get_if<effects::BrightnessContrastParameters>(adjustment):nullptr;
+            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:0);
+            raster_program->setUniformValue("brightness_contrast",bc?QVector2D(bc->brightness/100.f,bc->contrast/100.f):QVector2D{});
+            raster_program->setUniformValue("gradient_count",gradient?int(gradient->stops.size()):0);
+            if(gradient){std::array<QVector4D,32> points;int count=0;for(const auto& stop:gradient->stops)points[count++]=QVector4D(stop.color[0]/255.f,stop.color[1]/255.f,stop.color[2]/255.f,float(stop.position));raster_program->setUniformValueArray("gradient_stops",points.data(),count);}
             const bool was_blending=gl->glIsEnabled(GL_BLEND);
             if (adjustment || mode!=BlendMode::Normal) {
                 gl->glActiveTexture(GL_TEXTURE2); gl->glBindTexture(GL_TEXTURE_2D,blend_backdrop->texture());

@@ -15,7 +15,7 @@ struct InteractiveLayer {
     InteractiveRaster content, mask;
     int opacity = 100;
     creative_suite::composition::BlendMode blend_mode = creative_suite::composition::BlendMode::Normal;
-    std::optional<creative_suite::effects::GradientMapParameters> adjustment;
+    std::optional<creative_suite::effects::AdjustmentParameters> adjustment;
 };
 struct InteractiveNode {
     QVector<InteractiveLayer> layers;

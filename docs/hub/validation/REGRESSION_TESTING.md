@@ -416,7 +416,7 @@ for output times, separate native GPU/fallback evidence and pending acceptance.
 
 `hub-backup-format-test` covers Image schemas 1-17 and preserves an outlined
 group child with its source/imported paths. The actual reader compares complete
-vault/restored documents. `hub-backup-manager-test` rejects future Image v21.
+vault/restored documents. `hub-backup-manager-test` rejects future Image v22.
 Manual follow-up: back up an outlined image, restore to another directory, open
 in Image Editor, and confirm outline settings and source links. Native acceptance
 remains pending.
@@ -426,7 +426,7 @@ remains pending.
 `hub-backup-format-test` exercises actual Image producer/reader round trips for
 schemas 1-18 and a v18 masked/outlined chain in a group, including vault and
 restored payload equality and media-path rebasing. `hub-backup-manager-test`
-rejects future Image v21. Manual Hub backup/restore UI acceptance is pending;
+rejects future Image v22. Manual Hub backup/restore UI acceptance is pending;
 see the [Image checklist](../../image-editor/validation/MANUAL_VALIDATION.md#clipping-masks).
 
 Windows Release evidence (2026-10-20): both Hub backup gates passed in the final
@@ -438,7 +438,7 @@ Native backup/restore UI and macOS/Linux acceptance remain pending.
 
 `hub-backup-format-test` round trips actual Image schemas 1-19 including group,
 base and clipped-child modes, metadata equality and relocated media. The manager
-gate rejects future Image v21. Native Hub UI/macOS/Linux acceptance is pending.
+gate rejects future Image v22. Native Hub UI/macOS/Linux acceptance is pending.
 
 Windows Release evidence (2026-10-20): both v19 backup gates passed in the
 38-gate blend-mode selection; canonical Hub Debug was rebuilt successfully.
@@ -448,3 +448,13 @@ See [Image execution evidence](../../image-editor/features/BLEND_MODES.md#window
 ## Image v20 adjustment backup coverage
 
 Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future Image v21 is refused. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
+
+## Image v21 adjustment backup coverage
+
+Hub format/manager gates round trip actual Image v1-21 documents, including both
+adjustment types and seeded masks during relocation/restoration; v22 is refused.
+[Contract](../../image-editor/features/BRIGHTNESS_CONTRAST.md). Native UI/platform acceptance remains pending.
+
+Windows Release evidence (2026-10-20): both v21 backup gates passed; the actual
+Image reader preserved both adjustment types and seeded masks in vault/restored
+documents. Native Hub UI/macOS/Linux acceptance remains pending.
