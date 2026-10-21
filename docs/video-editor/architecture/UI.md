@@ -191,14 +191,24 @@ resized, floated, closed, re-docked, and tabified like the other panels. Its
 `View > Preview` action reopens it when closed. The default layout keeps the
 Preview as a wide dock between Media Pool and Inspector. Outside Render, the
 Edit Preview canvas follows the active project's frame aspect ratio and stays
-centered inside its dock. When the Timeline dock is hidden with its title-bar
-close control or `View > Timeline`, the Preview dock grows into the freed
-vertical area; portrait canvases use the available height and leave equal,
-unpainted side areas. Showing Timeline restores its lower dock area. With no
-frame available, the Preview placeholder uses the available canvas area. This
-aspect-constrained layout is active only on Edit: Fusion keeps its full-width
-Viewer, and Render continues to host the same Preview widget in its middle
-column without the Edit canvas constraint.
+centered inside its dock. The user can drag Preview to the outermost left or
+right edge of the workspace; only when the dock touches that application edge
+does its side area own the matching lower corner, allowing Preview to extend
+from the top of the workspace to the footer while Timeline remains visible in
+the bottom area beside it. A Preview docked between other panels keeps its
+normal height, even when Qt reports a left or right dock area. The selected
+outer-edge layout is restored when the application reopens. Portrait canvases
+use the available height and leave equal, unpainted side areas. The canvas can
+scale below its former 320×180 minimum when the dock is constrained. With no
+frame available, the Preview placeholder uses the available canvas area. This aspect-constrained
+layout is active only on Edit: Fusion keeps its full-width Viewer, and Render
+continues to host the same Preview widget in its middle column without the Edit
+canvas constraint; their existing 320×180 Preview minimum remains in effect.
+Manual Windows check: drag Preview by its title to the outer left and right
+edges, then between existing docks on each side. Only the outer-edge drops
+should extend Preview to the footer. Resize the dock and window with 9:16 and
+16:9 projects, then restart and confirm the selected outer-edge layout returns.
+Confirm Timeline and other visible docks remain available.
 workspace host remains the central widget so Qt retains the draggable outer
 separator above the bottom Timeline dock. Its maximum width is one logical pixel while
 visible, non-floating side docks occupy the editing workspace, avoiding a blank

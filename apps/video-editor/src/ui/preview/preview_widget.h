@@ -28,6 +28,7 @@ public:
     void setDeliveryEpoch(quint64 epoch, bool retry_texture_delivery = false) noexcept;
     void releaseGpuFrames();
     [[nodiscard]] rendering::PreviewFramePayload currentPayload() const { return current_payload_; }
+    void setAspectConstrained(bool constrained);
     [[nodiscard]] bool textureDeliveryAvailable() const noexcept;
     void clearFrame(const QString& message);
     void setGrayscaleEnabled(bool enabled);

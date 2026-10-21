@@ -124,6 +124,8 @@ private:
     void restoreExpandedDockLayout();
     void persistMediaPoolWidth();
     void persistInspectorWidth();
+    void schedulePreviewDockLayoutUpdate();
+    void updatePreviewDockLayout();
     void setMediaPoolExpanded(
         bool expanded,
         std::optional<int> expanded_width_override = std::nullopt);
@@ -347,6 +349,9 @@ private:
     QByteArray workspace_expansion_restore_layout_state_;
     bool media_pool_expanded_ = false;
     bool inspector_expanded_ = false;
+    bool preview_side_dock_full_height_ = false;
+    bool preview_dock_layout_update_pending_ = false;
+    bool restoring_default_dock_layout_ = false;
     bool expanded_dock_layout_restore_pending_ = false;
     bool expanded_dock_layout_change_in_progress_ = false;
     QTimer* media_pool_width_save_timer_ = nullptr;

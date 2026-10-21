@@ -1262,6 +1262,13 @@ void MainWindow::createMenus() {
 
 void MainWindow::restoreWorkspaceLayout() {
     QSettings settings;
+    // Start with the ordinary lower Timeline corners. The persisted marker is
+    // only a hint from older layouts; the restored dock geometry determines
+    // whether Preview is truly on an outer edge.
+    preview_side_dock_full_height_ = false;
+    settings.remove("workspace/preview_side_dock_area");
+    setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
+    setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     const auto saved_state = settings.value(
         "workspace/dock_layout_state").toByteArray();
     const auto restoreMediaPoolExpansion = [this, &settings] {
@@ -1340,6 +1347,19 @@ void MainWindow::restoreWorkspaceLayout() {
 void MainWindow::saveWorkspaceLayout() {
     QSettings settings;
     settings.setValue("workspace/dock_layout_state", saveState(9));
+    if (preview_side_dock_full_height_ && preview_dock_ != nullptr &&
+        !preview_dock_->isFloating()) {
+        const auto area = dockWidgetArea(preview_dock_);
+        if (area == Qt::LeftDockWidgetArea || area == Qt::RightDockWidgetArea) {
+            settings.setValue("workspace/preview_side_dock_area",
+                              static_cast<int>(area));
+        } else {
+            preview_side_dock_full_height_ = false;
+            settings.remove("workspace/preview_side_dock_area");
+        }
+    } else if (!preview_side_dock_full_height_) {
+        settings.remove("workspace/preview_side_dock_area");
+    }
     settings.setValue("workspace/media_pool_expanded", media_pool_expanded_);
     settings.setValue("workspace/inspector_expanded", inspector_expanded_);
     if ((media_pool_expanded_ || inspector_expanded_) &&
@@ -1355,6 +1375,11 @@ void MainWindow::saveWorkspaceLayout() {
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == preview_dock_ && event != nullptr &&
+        (event->type() == QEvent::Move || event->type() == QEvent::Resize ||
+         event->type() == QEvent::Show || event->type() == QEvent::Hide)) {
+        schedulePreviewDockLayoutUpdate();
+    }
     if (event != nullptr && event->type() == QEvent::Resize &&
         !expanded_dock_layout_change_in_progress_) {
         if (watched == media_dock_ && media_pool_width_save_timer_ != nullptr) {
@@ -1365,6 +1390,60 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
         }
     }
     return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::schedulePreviewDockLayoutUpdate() {
+    if (preview_dock_layout_update_pending_ ||
+        restoring_default_dock_layout_ || preview_dock_ == nullptr) {
+        return;
+    }
+    preview_dock_layout_update_pending_ = true;
+    QTimer::singleShot(0, this, [this] {
+        preview_dock_layout_update_pending_ = false;
+        updatePreviewDockLayout();
+    });
+}
+
+void MainWindow::updatePreviewDockLayout() {
+    if (restoring_default_dock_layout_ || preview_dock_ == nullptr ||
+        preview_dock_->isHidden()) {
+        return;
+    }
+
+    const auto area = dockWidgetArea(preview_dock_);
+    auto full_height_side = Qt::NoDockWidgetArea;
+    if (!preview_dock_->isFloating()) {
+        const auto dock_origin = preview_dock_->mapTo(this, QPoint(0, 0));
+        const auto client_rect = contentsRect();
+        const auto dock_rect = QRect(dock_origin, preview_dock_->size());
+        constexpr int kOuterEdgeTolerance = 16;
+        if (area == Qt::LeftDockWidgetArea &&
+            dock_rect.left() <= client_rect.left() + kOuterEdgeTolerance) {
+            full_height_side = Qt::LeftDockWidgetArea;
+        } else if (area == Qt::RightDockWidgetArea &&
+                   dock_rect.right() >= client_rect.right() - kOuterEdgeTolerance) {
+            full_height_side = Qt::RightDockWidgetArea;
+        }
+    }
+
+    const bool should_be_full_height = full_height_side != Qt::NoDockWidgetArea;
+    const bool layout_changed =
+        preview_side_dock_full_height_ != should_be_full_height ||
+        corner(Qt::BottomLeftCorner) !=
+            (full_height_side == Qt::LeftDockWidgetArea
+                 ? Qt::LeftDockWidgetArea : Qt::BottomDockWidgetArea) ||
+        corner(Qt::BottomRightCorner) !=
+            (full_height_side == Qt::RightDockWidgetArea
+                 ? Qt::RightDockWidgetArea : Qt::BottomDockWidgetArea);
+
+    preview_side_dock_full_height_ = should_be_full_height;
+    setCorner(Qt::BottomLeftCorner,
+              full_height_side == Qt::LeftDockWidgetArea
+                  ? Qt::LeftDockWidgetArea : Qt::BottomDockWidgetArea);
+    setCorner(Qt::BottomRightCorner,
+              full_height_side == Qt::RightDockWidgetArea
+                  ? Qt::RightDockWidgetArea : Qt::BottomDockWidgetArea);
+    if (layout_changed) saveWorkspaceLayout();
 }
 
 void MainWindow::persistMediaPoolWidth() {
@@ -1798,6 +1877,11 @@ void MainWindow::updateEffectsActionState() {
 }
 
 void MainWindow::restoreDefaultLayout() {
+    [[maybe_unused]] const QSignalBlocker preview_dock_signals(preview_dock_);
+    restoring_default_dock_layout_ = true;
+    preview_side_dock_full_height_ = false;
+    setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
+    setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     media_pool_expanded_ = false;
     inspector_expanded_ = false;
     workspace_expansion_restore_layout_state_.clear();
@@ -1844,5 +1928,6 @@ void MainWindow::restoreDefaultLayout() {
     updateMediaPoolExpandButton();
     updateMediaPoolActionState();
     updateEffectsActionState();
+    restoring_default_dock_layout_ = false;
     saveWorkspaceLayout();
 }

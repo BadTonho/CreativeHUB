@@ -85,6 +85,12 @@ PreviewWidget::PreviewWidget(QWidget* parent)
         "PreviewWidget", "Preview area\n\nImport media to display its first frame."));
 }
 
+void PreviewWidget::setAspectConstrained(bool constrained) {
+    const QSize minimum = constrained ? QSize(0, 0) : QSize(320, 180);
+    setMinimumSize(minimum);
+    if (cpu_surface_ != nullptr) cpu_surface_->setMinimumSize(minimum);
+}
+
 void PreviewWidget::setFrame(const media::VideoFrame& frame) {
     setFrame(std::make_shared<const media::VideoFrame>(frame));
 }

@@ -13,6 +13,7 @@
 #include <QAbstractItemView>
 #include <QFileInfo>
 #include <QCloseEvent>
+#include <QDockWidget>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -82,6 +83,14 @@ MainWindow::MainWindow(QWidget* parent)
     createWorkspace();
     createMenus();
     restoreWorkspaceLayout();
+    if (preview_dock_ != nullptr) {
+        connect(preview_dock_, &QDockWidget::dockLocationChanged,
+                this, [this](Qt::DockWidgetArea) {
+                    schedulePreviewDockLayoutUpdate();
+                });
+        preview_dock_->installEventFilter(this);
+        schedulePreviewDockLayoutUpdate();
+    }
     expanded_dock_layout_restore_pending_ =
         settings.contains("workspace/media_pool_width") ||
         settings.contains("workspace/media_pool_expanded_width") ||

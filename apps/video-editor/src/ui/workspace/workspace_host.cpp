@@ -1,4 +1,5 @@
 #include "ui/workspace/workspace_host.h"
+#include "ui/preview/preview_widget.h"
 #include "workspaces/edit/ui/edit_workspace.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/render/ui/render_workspace.h"
@@ -64,6 +65,9 @@ WorkspaceHost::WorkspaceHost(
     if (preview_canvas_area_ != nullptr) {
         preview_canvas_area_->setProperty("previewAspectConstrained", true);
     }
+    if (auto* preview = qobject_cast<PreviewWidget*>(preview_widget_)) {
+        preview->setAspectConstrained(true);
+    }
 
     auto* viewer_layout = new QVBoxLayout(this);
     viewer_layout->setContentsMargins(0, 0, 0, 0);
@@ -119,6 +123,9 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
                 layout->activate();
             }
         }
+        if (auto* preview = qobject_cast<PreviewWidget*>(preview_widget_)) {
+            preview->setAspectConstrained(page == WorkspacePageId::Edit);
+        }
         if (viewer_title_ != nullptr) {
             viewer_title_->setVisible(page == WorkspacePageId::Fusion);
         }
@@ -140,6 +147,9 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
             layout->invalidate();
             layout->activate();
         }
+    }
+    if (auto* preview = qobject_cast<PreviewWidget*>(preview_widget_)) {
+        preview->setAspectConstrained(page == WorkspacePageId::Edit);
     }
 
     if (fusion_workspace_ != nullptr) {

@@ -106,6 +106,22 @@ void requireInspectorExpandedGeometry(const Docks& docks) {
                 docks.timeline->geometry().right() <= docks.inspector->x() + 2,
             "Inspector-only expansion must keep Timeline below Media Pool and Preview without an empty left column.");
     if (!media_expanded) {
+        if (std::abs(docks.media->geometry().bottom() -
+                     docks.preview->geometry().bottom()) > 3 ||
+            docks.timeline->y() <= docks.media->geometry().bottom() ||
+            docks.timeline->y() > docks.media->geometry().bottom() + 12) {
+            QString geometries;
+            const auto* main_window =
+                static_cast<const MainWindow*>(docks.media->window());
+            QDebug(&geometries) << "Inspector-only Media/Preview/Timeline/window:"
+                               << docks.media->geometry() << docks.preview->geometry()
+                               << docks.timeline->geometry()
+                               << main_window->contentsRect()
+                               << "Preview area:" << main_window->dockWidgetArea(docks.preview)
+                               << "Lower-right owner:"
+                               << main_window->corner(Qt::BottomRightCorner);
+            std::cerr << geometries.toStdString() << '\n';
+        }
         require(std::abs(docks.media->geometry().bottom() -
                          docks.preview->geometry().bottom()) <= 3 &&
                     docks.timeline->y() > docks.media->geometry().bottom() &&
@@ -198,7 +214,7 @@ void requirePreviewAspect(
             "The Preview canvas must remain horizontally centered.");
 }
 
-void verifyTimelineCollapsedPreviewAspect(MainWindow& window) {
+void verifyPreviewSideDockAspect(MainWindow& window) {
     auto* preview = window.findChild<PreviewWidget*>("sharedPreviewWidget");
     auto* area = window.findChild<QWidget*>("previewCanvasArea");
     auto* host_widget = window.findChild<QWidget*>("workspaceHost");
@@ -220,52 +236,127 @@ void verifyTimelineCollapsedPreviewAspect(MainWindow& window) {
         settleLayout();
     };
     const auto verify = [area, preview](double aspect) {
-        requirePreviewAspect(area->rect(), preview->geometry(), aspect,
+        const auto canvas = preview->geometry();
+        if (!canvas.isValid() || std::abs(static_cast<double>(canvas.width()) /
+                                          static_cast<double>(canvas.height()) - aspect) >= 0.015) {
+            QString geometry;
+            const auto payload = preview->currentPayload();
+            QDebug(&geometry) << "Aspect/area/canvas/payload/expected:"
+                              << area->rect() << canvas << payload.width()
+                              << payload.height() << aspect;
+            std::cerr << geometry.toStdString() << '\n';
+        }
+        requirePreviewAspect(area->rect(), canvas, aspect,
                              "The Preview canvas does not match the project aspect ratio.");
     };
 
-    window.resize(1920, 1080);
-    applyFrame(9, 16);
-    verify(9.0 / 16.0);
-    require(preview->height() >= area->height() - 4,
-            "The portrait Preview should use the available vertical space.");
-    const auto left_space = preview->x();
-    const auto right_space = area->width() - preview->geometry().right() - 1;
-    require(std::abs(left_space - right_space) <= 2,
-            "The portrait Preview must have equal invisible side spaces.");
+    const auto dockPreviewOnSide = [&window, &docks, &applyFrame, &verify](
+        Qt::DockWidgetArea side, bool outermost) {
+        window.addDockWidget(side, docks.preview);
+        if (side == Qt::LeftDockWidgetArea) {
+            window.splitDockWidget(
+                outermost ? docks.preview : docks.bins,
+                outermost ? docks.bins : docks.preview,
+                Qt::Horizontal);
+        } else {
+            window.splitDockWidget(
+                outermost ? docks.inspector : docks.preview,
+                outermost ? docks.preview : docks.inspector,
+                Qt::Horizontal);
+        }
+        settleLayout();
+        require(window.dockWidgetArea(docks.preview) == side,
+                "The Preview must remain dockable in either side area.");
+        require(docks.preview->isVisible() && docks.timeline->isVisible(),
+                "Docking the Preview must not hide Preview or Timeline.");
+        const auto corner = side == Qt::LeftDockWidgetArea
+            ? Qt::BottomLeftCorner : Qt::BottomRightCorner;
+        require(window.corner(corner) ==
+                    (outermost ? side : Qt::BottomDockWidgetArea),
+                "Only an outermost Preview dock may own the lower corner.");
+        const auto saved_side = QSettings().value(
+            "workspace/preview_side_dock_area", -1).toInt();
+        require(saved_side == (outermost ? static_cast<int>(side) : -1),
+                "Only an outermost Preview dock may persist full-height mode.");
+        const auto window_edge = window.contentsRect();
+        const auto preview_rect = QRect(
+            docks.preview->mapTo(&window, QPoint(0, 0)),
+            docks.preview->size());
+        if (outermost) {
+            require(side == Qt::LeftDockWidgetArea
+                        ? preview_rect.left() <= window_edge.left() + 16
+                        : preview_rect.right() >= window_edge.right() - 16,
+                    "A full-height Preview must touch the matching outer window edge.");
+            require(docks.preview->geometry().bottom() >=
+                        docks.timeline->geometry().bottom() - 24,
+                    "An outermost Preview must extend beside the bottom Timeline.");
+        } else {
+            require(docks.preview->geometry().bottom() <
+                        docks.timeline->geometry().bottom() - 24,
+                    "An internal side Preview must keep its normal height.");
+        }
+        if (outermost) {
+            applyFrame(9, 16);
+            verify(9.0 / 16.0);
+            window.resize(1280, 900);
+            settleLayout();
+            verify(9.0 / 16.0);
+            applyFrame(16, 9);
+            verify(16.0 / 9.0);
+            window.resize(1920, 1080);
+            settleLayout();
+            verify(16.0 / 9.0);
+        }
+    };
 
     const bool bins_visible = docks.bins->isVisible();
     const bool media_visible = docks.media->isVisible();
     const bool inspector_visible = docks.inspector->isVisible();
-    docks.timeline->toggleViewAction()->trigger();
-    settleLayout();
-    require(!docks.timeline->isVisible() && docks.preview->isVisible() &&
-                docks.bins->isVisible() == bins_visible &&
-                docks.media->isVisible() == media_visible &&
-                docks.inspector->isVisible() == inspector_visible,
-            "Hiding Timeline must leave other dock visibility unchanged.");
-    require(area->height() > 0 && preview->height() >= area->height() - 4,
-            "The portrait Preview must expand vertically when Timeline is hidden.");
+    const bool timeline_visible = docks.timeline->isVisible();
+    require(preview->minimumSize() == QSize(0, 0),
+            "Edit must let the Preview scale below its non-Edit minimum size.");
+    window.resize(1920, 1080);
+    applyFrame(9, 16);
+    verify(9.0 / 16.0);
+    const auto left_space = preview->x();
+    const auto right_space = area->width() - preview->geometry().right() - 1;
+    require(std::abs(left_space - right_space) <= 2,
+            "The portrait Preview must have equal invisible side spaces.");
 
     window.resize(1280, 900);
     settleLayout();
     verify(9.0 / 16.0);
     applyFrame(16, 9);
     verify(16.0 / 9.0);
-
-    docks.timeline->toggleViewAction()->trigger();
+    window.resize(1920, 1080);
     settleLayout();
-    require(docks.timeline->isVisible() && docks.preview->isVisible(),
-            "Showing Timeline must restore the Edit dock layout.");
     verify(16.0 / 9.0);
+
+    preview->clearFrame(QStringLiteral("Preview placeholder"));
+    settleLayout();
+    require(preview->geometry() == area->rect(),
+            "Without a frame, the Preview placeholder must use the available canvas area.");
+
+    dockPreviewOnSide(Qt::LeftDockWidgetArea, false);
+    dockPreviewOnSide(Qt::LeftDockWidgetArea, true);
+    dockPreviewOnSide(Qt::RightDockWidgetArea, false);
+    dockPreviewOnSide(Qt::RightDockWidgetArea, true);
 
     host->setPage(ui::WorkspacePageId::Fusion);
     settleLayout();
-    require(preview->geometry() == area->rect(),
-            "Fusion must keep the Preview unconstrained by the Edit canvas aspect layout.");
+    require(preview->minimumSize() == QSize(320, 180),
+            "Fusion must retain the Preview's existing minimum size.");
+    require(!area->property("previewAspectConstrained").toBool(),
+            "Fusion must disable the Edit Preview aspect constraint.");
     host->setPage(ui::WorkspacePageId::Edit);
     settleLayout();
-    verify(16.0 / 9.0);
+    require(preview->minimumSize() == QSize(0, 0),
+            "Returning to Edit must restore unconstrained Preview sizing.");
+    require(docks.bins->isVisible() == bins_visible &&
+                docks.media->isVisible() == media_visible &&
+                docks.inspector->isVisible() == inspector_visible &&
+                docks.timeline->isVisible() == timeline_visible,
+            "Docking the Preview must preserve the other docks' visibility.");
 }
 
 void verifyAnimatedInspectorExpansion() {
@@ -318,8 +409,12 @@ void verifyAnimatedInspectorExpansion() {
     migrated.showNormal();
     waitForWidthPersistence(300);
     const auto migrated_docks = findDocks(migrated);
-    requireInspectorExpandedGeometry(migrated_docks);
+    requireAllPanelsVisible(migrated_docks);
     requireMediaPoolNotExpanded(migrated_docks);
+    require(migrated.corner(Qt::BottomRightCorner) == Qt::BottomDockWidgetArea &&
+                migrated_docks.preview->geometry().bottom() <
+                    migrated_docks.timeline->y(),
+            "A restored internal Preview split must not expand to the Timeline footer.");
     captureLayout(migrated, QStringLiteral("inspector-migrated"));
     const auto actions = migrated.findChildren<QAction*>();
     const auto restore = std::find_if(actions.begin(), actions.end(), [](QAction* action) {
@@ -669,8 +764,18 @@ int main(int argc, char** argv) {
         aspect_window.showNormal();
         aspect_window.resize(1920, 1080);
         settleLayout();
-        verifyTimelineCollapsedPreviewAspect(aspect_window);
+        verifyPreviewSideDockAspect(aspect_window);
         require(aspect_window.close(), "The Preview aspect test window did not close cleanly.");
+        MainWindow side_reopened;
+        side_reopened.showNormal();
+        settleLayout();
+        const auto side_reopened_docks = findDocks(side_reopened);
+        require(side_reopened.dockWidgetArea(side_reopened_docks.preview) ==
+                    Qt::RightDockWidgetArea &&
+                    side_reopened.corner(Qt::BottomRightCorner) ==
+                    Qt::RightDockWidgetArea && side_reopened_docks.timeline->isVisible(),
+                "The right-side Preview layout and visible Timeline must restore after reopening.");
+        require(side_reopened.close(), "The restored side Preview window did not close cleanly.");
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
