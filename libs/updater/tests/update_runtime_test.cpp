@@ -1,5 +1,6 @@
 #include <creative_suite/updater/update_service.h>
 #include <creative_suite/diagnostics/logger.h>
+#include "../src/directory_restore.h"
 #include "../../../cmake/test_support/test_check.h"
 
 #include <QCryptographicHash>
@@ -69,6 +70,33 @@ QByteArray readBytes(const QString& path) {
 class UpdateRuntimeTest final : public QObject {
     Q_OBJECT
 private slots:
+    void restoresDirectorySnapshotAsAWhole() {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto snapshot = QDir(root.path()).filePath("snapshot");
+        const auto install = QDir(root.path()).filePath("install");
+        QVERIFY(QDir().mkpath(snapshot));
+        QVERIFY(QDir().mkpath(install));
+        QFile old_file(QDir(snapshot).filePath("suite.dll"));
+        QVERIFY(old_file.open(QIODevice::WriteOnly));
+        const QByteArray old_bytes("old-version");
+        QCOMPARE(old_file.write(old_bytes), qint64(old_bytes.size()));
+        old_file.close();
+        QFile stale_file(QDir(install).filePath("renamed-v2.dll"));
+        QVERIFY(stale_file.open(QIODevice::WriteOnly));
+        const QByteArray stale_bytes("new-version-only");
+        QCOMPARE(stale_file.write(stale_bytes), qint64(stale_bytes.size()));
+        stale_file.close();
+
+        QVERIFY(!creative_suite::updater::detail::restoreDirectorySnapshot(
+            QDir(root.path()).filePath("missing-snapshot"), install));
+        QVERIFY(QFile::exists(QDir(install).filePath("renamed-v2.dll")));
+        QVERIFY(creative_suite::updater::detail::restoreDirectorySnapshot(snapshot, install));
+        QVERIFY(QFile::exists(QDir(install).filePath("suite.dll")));
+        QVERIFY(!QFile::exists(QDir(install).filePath("renamed-v2.dll")));
+        QCOMPARE(readBytes(QDir(install).filePath("suite.dll")), old_bytes);
+    }
+
     void initTestCase() {
         QStandardPaths::setTestModeEnabled(true);
         qRegisterMetaType<UpdateState>();

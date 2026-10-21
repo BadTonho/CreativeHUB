@@ -30,6 +30,8 @@ retains legacy inference. Preview, node Viewer and export use the same preparer
 and evaluator. Independent input videos add the persisted project-frame offset
 before sampling; negative/past-end times are transparent. Output remains a
 normal layer before clip effects/transform and any higher adjustment stage.
+Every successful `EvaluatedGraphFrame` must carry either an RGBA frame or a GPU
+texture; playback and offline export reject an empty payload as a render error.
 See [Fusion Composition](../features/FUSION_COMPOSITION.md).
 
 

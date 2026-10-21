@@ -2,6 +2,7 @@
 #include "../../../cmake/test_support/test_check.h"
 #include <iostream>
 #include <QTemporaryDir>
+#include <QFile>
 #include <QThread>
 
 using namespace creative_suite::hub;
@@ -43,6 +44,14 @@ int main() {
         CS_TEST_CHECK(manager.unreadCount() == 0);
         CS_TEST_CHECK(manager.activities()[0].isRead);
         CS_TEST_CHECK(manager.activities()[1].isRead);
+
+        QFile corrupt(customJsonPath);
+        CS_TEST_CHECK(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        CS_TEST_CHECK(corrupt.write("{") == 1);
+        corrupt.close();
+        CS_TEST_CHECK(!manager.load());
+        CS_TEST_CHECK(manager.activities().size() == 2);
+        CS_TEST_CHECK(manager.save());
     }
 
     // 2. Persistence reload

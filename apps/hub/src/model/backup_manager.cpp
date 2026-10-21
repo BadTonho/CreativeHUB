@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QStandardPaths>
 #include <QJsonDocument>
+#include <QJsonParseError>
 #include <QJsonObject>
 #include <QDesktopServices>
 #include <QUrl>
@@ -118,15 +119,26 @@ void BackupManager::loadSettings() {
     }
 
     QFile file(settingsFile);
-    if (file.open(QIODevice::ReadOnly)) {
-        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-        if (doc.isObject()) {
-            const QString savedDir = doc.object().value(QStringLiteral("backupDirectory")).toString();
-            if (!savedDir.isEmpty()) {
-                m_backupDirectory = savedDir;
-            }
-        }
+    if (!file.open(QIODevice::ReadOnly)) {
+        HubLogger::instance().logError(QStringLiteral("BackupManager"), QStringLiteral("loadSettings"),
+            QStringLiteral("Could not open backup settings: %1").arg(file.errorString()), settingsFile);
+        return;
     }
+    const auto settings_bytes = file.readAll();
+    if (file.error() != QFileDevice::NoError) {
+        HubLogger::instance().logError(QStringLiteral("BackupManager"), QStringLiteral("loadSettings"),
+            QStringLiteral("Could not read backup settings: %1").arg(file.errorString()), settingsFile);
+        return;
+    }
+    QJsonParseError parse_error;
+    const QJsonDocument doc = QJsonDocument::fromJson(settings_bytes, &parse_error);
+    if (parse_error.error != QJsonParseError::NoError || !doc.isObject()) {
+        HubLogger::instance().logError(QStringLiteral("BackupManager"), QStringLiteral("loadSettings"),
+            QStringLiteral("Backup settings are invalid JSON: %1").arg(parse_error.errorString()), settingsFile);
+        return;
+    }
+    const QString savedDir = doc.object().value(QStringLiteral("backupDirectory")).toString();
+    if (!savedDir.isEmpty()) m_backupDirectory = savedDir;
 }
 
 void BackupManager::saveSettings() const {
@@ -134,11 +146,13 @@ void BackupManager::saveSettings() const {
     QDir().mkpath(dataDir);
     const QString settingsFile = QDir(dataDir).filePath(QStringLiteral("backup_settings.json"));
 
-    QFile file(settingsFile);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        QJsonObject obj;
-        obj.insert(QStringLiteral("backupDirectory"), m_backupDirectory);
-        file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    QSaveFile file(settingsFile);
+    QJsonObject obj;
+    obj.insert(QStringLiteral("backupDirectory"), m_backupDirectory);
+    const auto settings_bytes = QJsonDocument(obj).toJson(QJsonDocument::Indented);
+    if (!file.open(QIODevice::WriteOnly) || file.write(settings_bytes) != settings_bytes.size() || !file.commit()) {
+        HubLogger::instance().logError(QStringLiteral("BackupManager"), QStringLiteral("saveSettings"),
+            QStringLiteral("Could not save backup settings: %1").arg(file.errorString()), settingsFile);
     }
 }
 
@@ -220,13 +234,11 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
         return fail(QStringLiteral("Não foi possível reservar a pasta do backup: %1")
             .arg(pending.errorString()), m_backupDirectory);
     const QString targetPath = QDir(pending.path()).filePath(targetFileName);
-    QFile snapshot(targetPath);
-    if (!snapshot.open(QIODevice::WriteOnly | QIODevice::NewOnly)
-        || snapshot.write(prepared) != prepared.size() || !snapshot.flush())
+    QSaveFile snapshot(targetPath);
+    if (!snapshot.open(QIODevice::WriteOnly)
+        || snapshot.write(prepared) != prepared.size() || !snapshot.commit())
         return fail(QStringLiteral("Falha ao gravar o backup (código %1): %2")
             .arg(static_cast<int>(snapshot.error())).arg(snapshot.errorString()), targetPath);
-    snapshot.close();
-
     BackupRecord record;
     record.originalFilePath = projectIdentity(projectFilePath);
     record.backupFilePath = targetPath;

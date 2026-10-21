@@ -12,6 +12,10 @@
 #include <unordered_set>
 
 namespace fusion::nodes {
+
+bool hasFramePayload(const EvaluatedGraphFrame& frame) noexcept {
+    return frame.rgba.has_value() || static_cast<bool>(frame.texture);
+}
 namespace {
 const Connection* incoming(const NodeGraph& graph, NodeId id, std::uint8_t input) {
     const auto it = std::find_if(graph.connections.begin(), graph.connections.end(),

@@ -927,6 +927,14 @@ void MainWindow::closeEvent(QCloseEvent* event)
         event->ignore();
         return;
     }
+    if (open_cancel_requested_)
+        open_cancel_requested_->store(true, std::memory_order_relaxed);
+    ++open_generation_;
+    if (open_progress_ != nullptr) {
+        open_progress_->close();
+        open_progress_->deleteLater();
+        open_progress_ = nullptr;
+    }
     if (audio_keyframe_worker_) {
         audio_keyframe_worker_->cancelAndWait();
         audio_keyframe_worker_.reset();

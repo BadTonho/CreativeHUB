@@ -2979,6 +2979,8 @@ PlaybackWorker::decodeCompositionLayers(
             if (should_cancel && should_cancel()) return std::nullopt;
             if (!evaluated.has_value())
                 throw media::MediaError("The Fusion node graph did not produce a frame.");
+            if (!fusion::nodes::hasFramePayload(*evaluated))
+                throw media::MediaError("The Fusion node graph produced no CPU frame or GPU texture.");
             if (evaluated->rgba) frame = std::make_shared<const media::VideoFrame>(*evaluated->rgba);
             else {
                 graph_texture = evaluated->texture;

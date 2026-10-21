@@ -49,6 +49,10 @@ media::VideoFrame renderGraph(const NodeGraph& graph, int w = 320, int h = 180) 
     const auto frame = evaluate(graph, inputs, context); CS_TEST_CHECK(frame); return *frame;
 }
 void generators() {
+    CS_TEST_CHECK(!hasFramePayload(EvaluatedGraphFrame{}));
+    EvaluatedGraphFrame rgba_frame;
+    rgba_frame.rgba.emplace(media::VideoFrame{1, 1, 4, {0, 0, 0, 0}});
+    CS_TEST_CHECK(hasFramePayload(rgba_frame));
     auto graph = makeCompositionGraph();
     CS_TEST_CHECK(validate(graph));
     auto blank = renderGraph(graph);

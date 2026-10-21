@@ -8,7 +8,10 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QStandardPaths>
+#include <QSaveFile>
+#include <QJsonParseError>
 #include <algorithm>
+#include <utility>
 
 namespace creative_suite::hub {
 
@@ -41,8 +44,6 @@ QString ActivityManager::storagePath() const {
 }
 
 bool ActivityManager::load() {
-    m_activities.clear();
-
     if (m_storagePath.isEmpty() || !QFile::exists(m_storagePath)) {
         return false;
     }
@@ -52,20 +53,31 @@ bool ActivityManager::load() {
         HubLogger::instance().logError(
             QStringLiteral("ActivityManager"),
             QStringLiteral("load"),
-            QStringLiteral("Falha ao abrir arquivo de atividades"),
+            QStringLiteral("Could not open activities: %1").arg(file.errorString()),
             m_storagePath
         );
         return false;
     }
 
     const QByteArray data = file.readAll();
+    if (file.error() != QFileDevice::NoError) {
+        HubLogger::instance().logError(QStringLiteral("ActivityManager"),
+            QStringLiteral("load"), QStringLiteral("Could not read activities: %1").arg(file.errorString()),
+            m_storagePath);
+        return false;
+    }
     file.close();
 
-    const QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (!doc.isArray()) {
+    QJsonParseError parse_error;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parse_error);
+    if (parse_error.error != QJsonParseError::NoError || !doc.isArray()) {
+        HubLogger::instance().logError(QStringLiteral("ActivityManager"),
+            QStringLiteral("load"), QStringLiteral("Activities storage must be a valid JSON array: %1").arg(parse_error.errorString()),
+            m_storagePath);
         return false;
     }
 
+    std::vector<ActivityItem> loaded_activities;
     const QJsonArray array = doc.array();
     for (const auto& val : array) {
         if (!val.isObject()) continue;
@@ -80,14 +92,15 @@ bool ActivityManager::load() {
         item.isRead = obj.value(QStringLiteral("isRead")).toBool(false);
 
         if (item.isValid()) {
-            m_activities.push_back(item);
+            loaded_activities.push_back(item);
         }
     }
 
-    std::sort(m_activities.begin(), m_activities.end(), [](const ActivityItem& a, const ActivityItem& b) {
+    std::sort(loaded_activities.begin(), loaded_activities.end(), [](const ActivityItem& a, const ActivityItem& b) {
         return a.timestamp > b.timestamp;
     });
 
+    m_activities = std::move(loaded_activities);
     emit activitiesChanged();
     return true;
 }
@@ -100,12 +113,12 @@ bool ActivityManager::save() const {
     const QFileInfo info(m_storagePath);
     QDir().mkpath(info.absolutePath());
 
-    QFile file(m_storagePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    QSaveFile file(m_storagePath);
+    if (!file.open(QIODevice::WriteOnly)) {
         HubLogger::instance().logError(
             QStringLiteral("ActivityManager"),
             QStringLiteral("save"),
-            QStringLiteral("Falha ao salvar atividades"),
+            QStringLiteral("Could not open activities for atomic save: %1").arg(file.errorString()),
             m_storagePath
         );
         return false;
@@ -124,8 +137,13 @@ bool ActivityManager::save() const {
     }
 
     const QJsonDocument doc(array);
-    file.write(doc.toJson(QJsonDocument::Indented));
-    file.close();
+    const auto bytes = doc.toJson(QJsonDocument::Indented);
+    if (file.write(bytes) != bytes.size() || !file.commit()) {
+        HubLogger::instance().logError(QStringLiteral("ActivityManager"),
+            QStringLiteral("save"), QStringLiteral("Could not write activities: %1").arg(file.errorString()),
+            m_storagePath);
+        return false;
+    }
 
     return true;
 }

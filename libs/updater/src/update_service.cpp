@@ -1,4 +1,5 @@
 #include <creative_suite/updater/update_service.h>
+#include "directory_restore.h"
 
 #include <creative_suite/diagnostics/logger.h>
 #include <creative_suite/updater/update_dialog.h>
@@ -90,25 +91,6 @@ bool isWithinDirectory(const QString& file_path, const QString& root_path) {
     return relative != QStringLiteral("..") &&
         !relative.startsWith(QStringLiteral("../")) &&
         !QDir::isAbsolutePath(relative);
-}
-
-bool copyDirectoryContents(const QString& source_path, const QString& destination_path) {
-    QDir source(source_path);
-    if (!source.exists() || !QDir().mkpath(destination_path)) return false;
-    const auto entries = source.entryInfoList(
-        QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
-        QDir::Name);
-    for (const auto& entry : entries) {
-        if (entry.isSymLink()) return false;
-        const auto destination = QDir(destination_path).filePath(entry.fileName());
-        if (entry.isDir()) {
-            if (!copyDirectoryContents(entry.absoluteFilePath(), destination)) return false;
-        } else {
-            QFile::remove(destination);
-            if (!QFile::copy(entry.absoluteFilePath(), destination)) return false;
-        }
-    }
-    return true;
 }
 
 #ifdef Q_OS_WIN
@@ -235,7 +217,7 @@ bool restorePreviousVersion(const QString& app_id, QString* error) {
         if (error) *error = QStringLiteral("Close the application before restoring its previous version.");
         return false;
     }
-    if (!copyDirectoryContents(rollback_path, install_path)) {
+    if (!detail::restoreDirectorySnapshot(rollback_path, install_path)) {
         logMessage(creative_suite::diagnostics::Level::Error,
                    QStringLiteral("restore_previous_version"),
                    QStringLiteral("Could not restore all files from the previous version."), app_id);

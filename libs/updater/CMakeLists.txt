@@ -5,6 +5,7 @@ find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Network Widgets)
 add_library(creative-suite-updater STATIC
     src/release_catalog.cpp
     src/update_service.cpp
+    src/directory_restore.cpp
     src/update_dialog.cpp
     include/creative_suite/updater/release_catalog.h
     include/creative_suite/updater/update_service.h

@@ -905,13 +905,21 @@ std::optional<media::RgbaFrame> FrameCompositor::compose(
         }
         const double center_x = layer.transform.position_x * width;
         const double center_y = layer.transform.position_y * height;
-        if(blending && (!std::isfinite(center_x)||!std::isfinite(center_y))){record_layer_elapsed();continue;}
+        if (!std::isfinite(center_x) || !std::isfinite(center_y)) {
+            record_layer_elapsed();
+            continue;
+        }
         const double angle = layer.transform.rotation_degrees * 3.14159265358979323846 / 180.0;
         const double cosine = std::cos(angle);
         const double sine = std::sin(angle);
         const double radius = std::hypot(displayed_width, displayed_height) * 0.5;
-        const auto coordinate=[blending](double value,int limit) {
-            return static_cast<int>(blending?std::clamp(value,0.,static_cast<double>(limit-1)):value);
+        if (!std::isfinite(radius)) {
+            record_layer_elapsed();
+            continue;
+        }
+        const auto coordinate=[](double value,int limit) {
+            const auto bounded = std::clamp(value, 0.0, static_cast<double>(limit - 1));
+            return static_cast<int>(bounded);
         };
         const auto left = std::max(0, coordinate(std::floor(center_x - radius - 1.0),width));
         const auto right = std::min(width - 1, coordinate(std::ceil(center_x + radius + 1.0),width));

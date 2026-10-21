@@ -34,6 +34,7 @@ struct EvaluatedGraphFrame {
     std::optional<media::VideoFrame> rgba;
     creative_suite::composition::OpenGlTextureFramePtr texture;
 };
+[[nodiscard]] bool hasFramePayload(const EvaluatedGraphFrame& frame) noexcept;
 // Keeps a completed GPU graph on its device. CPU fallback is an owned RGBA
 // result evaluated from original inputs, including explicit native downloads.
 [[nodiscard]] std::optional<EvaluatedGraphFrame> evaluateFrame(

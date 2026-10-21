@@ -474,6 +474,8 @@ std::optional<media::VideoFrame> composeFrame(
                 checkCanceled(canceled);
                 if (!evaluated.has_value())
                     throw std::runtime_error("The Fusion node graph did not produce a frame.");
+                if (!fusion::nodes::hasFramePayload(*evaluated))
+                    throw std::runtime_error("The Fusion node graph produced no CPU frame or GPU texture.");
                 graph_texture = evaluated->texture; native_frame.reset();
                 if (graph_texture) source_frame = std::make_shared<const media::VideoFrame>(
                     media::VideoFrame{graph_texture->width(), graph_texture->height(), graph_texture->width() * 4});

@@ -129,6 +129,10 @@ files. After a successful setup, the updated app marks its first startup
 healthy. If that confirmation is still pending when the Hub opens, the Hub can
 offer restoration of the retained previous version. The complete GitHub
 installer remains the recovery route if the installed updater cannot continue.
+Hub restoration copies the snapshot into a temporary directory beside the
+installation before replacing the installed tree. A failed staging copy leaves
+the current installation untouched, and a successful restore removes files
+that existed only in the newer version.
 
 The Windows package includes the official Visual C++ runtime DLLs beside each
 application executable so a per-user setup does not need to install a

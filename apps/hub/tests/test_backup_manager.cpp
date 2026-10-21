@@ -304,6 +304,25 @@ void testRejectedBackups(const QString& root) {
     CS_TEST_CHECK(readBytes(blockedVault) == "keep these bytes");
 }
 
+void testBackupSettingsPersistence(const QString& root) {
+    const auto data_directory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    CS_TEST_CHECK(QDir().mkpath(data_directory));
+    const auto settings_path = QDir(data_directory).filePath(QStringLiteral("backup_settings.json"));
+    {
+        QFile corrupt(settings_path);
+        CS_TEST_CHECK(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        CS_TEST_CHECK(corrupt.write("{") == 1);
+    }
+
+    BackupManager manager;
+    CS_TEST_CHECK(manager.backupDirectory() == BackupManager::defaultBackupDirectory());
+    const auto selected = QDir(root).filePath(QStringLiteral("settings-backup-folder"));
+    manager.setBackupDirectory(selected);
+    BackupManager reloaded;
+    CS_TEST_CHECK(reloaded.backupDirectory() == selected);
+    CS_TEST_CHECK(QFile::remove(settings_path));
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -316,6 +335,7 @@ int main(int argc, char* argv[]) {
 
     testBackupIdentity(tempDir.path());
     testLegacyAndInvalidRecords(tempDir.path());
+    testBackupSettingsPersistence(tempDir.path());
 
     const QString backupDir = tempDir.filePath(QStringLiteral("test_backups"));
     BackupManager manager(backupDir);

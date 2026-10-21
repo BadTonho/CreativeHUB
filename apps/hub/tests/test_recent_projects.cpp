@@ -81,6 +81,14 @@ int main() {
         CS_TEST_CHECK(manager.projects()[0].name == QStringLiteral("anim_gamma"));
         CS_TEST_CHECK(manager.projects()[1].name == QStringLiteral("project_alpha"));
 
+        QFile corrupt(customJsonPath);
+        CS_TEST_CHECK(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        CS_TEST_CHECK(corrupt.write("{") == 1);
+        corrupt.close();
+        CS_TEST_CHECK(!manager.load());
+        CS_TEST_CHECK(manager.projects().size() == 2);
+        CS_TEST_CHECK(manager.save());
+
         manager.clear();
         CS_TEST_CHECK(manager.projects().empty());
     }

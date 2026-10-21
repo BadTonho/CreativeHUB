@@ -108,6 +108,18 @@ void blendModes() {
     huge.transform.rotation_degrees=45;
     const auto huge_rotated=composition::FrameCompositor::compose(2,1,{huge});
     require(huge_rotated&&pixelEquals(*huge_rotated,0,0,255,0,0,255),"Huge rotated blend bounds do not overflow integers");
+    auto extreme = animation::Transform2D{};
+    extreme.position_x = 1e12;
+    const auto offscreen = composition::FrameCompositor::compose(
+        2, 1, {composition::CompositionLayer{&source, extreme}});
+    require(offscreen && pixelEquals(*offscreen, 0, 0, 0, 0, 0, 255) &&
+                pixelEquals(*offscreen, 1, 0, 0, 0, 0, 255),
+            "Extreme finite non-blending positions are clipped safely");
+    extreme.position_x = std::numeric_limits<double>::quiet_NaN();
+    const auto non_finite = composition::FrameCompositor::compose(
+        2, 1, {composition::CompositionLayer{&source, extreme}});
+    require(non_finite && pixelEquals(*non_finite, 0, 0, 0, 0, 0, 255),
+            "Non-finite non-blending positions are skipped safely");
     top.blend_mode=BlendMode::Normal;
     const auto normal=composition::FrameCompositor::compose(1,1,{{&background},top});
     const auto legacy=composition::FrameCompositor::compose(1,1,{{&background},{&source}});
