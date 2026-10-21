@@ -746,8 +746,9 @@ step. Shift+Up/Down changes it by 0.001; Alt+Up/Down changes it by 0.100.
 Ctrl+Up/Down changes it by 1.000. Combining modifiers keeps the configured
 step. These modifier steps apply to decimal fields throughout the Edit and
 Fusion Inspectors; integer fields retain their normal behavior. Fields remain
-directly editable. Slider drags update the preview while the pointer moves and
-are stored as one coalesced Undo/Redo edit.
+directly editable. In the Edit Transform Inspector, arrow-key changes update
+the matching slider and preview immediately. A key press and its auto-repeat
+sequence form one Undo/Redo edit, as does a slider drag.
 
 The preview composes all visible tracks in worker-owned code, from the bottom
 track to the top track, before handing one frame to the GPU/CPU preview. A gap

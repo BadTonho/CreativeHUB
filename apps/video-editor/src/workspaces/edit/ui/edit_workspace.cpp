@@ -301,6 +301,24 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
                 [edit_controller, spin, index]() {
             edit_controller->applyTransformProperty(index, spin->value());
         });
+        connect(spin, &InspectorDoubleSpinBox::arrowAdjustmentStarted,
+                edit_controller,
+                &ui::EditWorkspaceController::beginTransformEdit);
+        connect(spin, &InspectorDoubleSpinBox::arrowValueChanged,
+                edit_controller,
+                [edit_controller, slider, index,
+                 minimum = transform_minimums[index],
+                 maximum = transform_maximums[index]](double value) {
+                    {
+                        const QSignalBlocker blocker(slider);
+                        slider->setValue(
+                            transformSliderValue(value, minimum, maximum));
+                    }
+                    edit_controller->applyTransformProperty(index, value);
+                });
+        connect(spin, &InspectorDoubleSpinBox::arrowAdjustmentFinished,
+                edit_controller,
+                &ui::EditWorkspaceController::finishTransformEdit);
         connect(slider, &QSlider::sliderPressed,
                 edit_controller, &ui::EditWorkspaceController::beginTransformEdit);
         connect(slider, &QSlider::valueChanged, edit_controller,

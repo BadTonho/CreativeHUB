@@ -21,6 +21,7 @@
 #include "ui/media_browser/media_browser_bin_tree_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "ui/system/system_memory_indicator.h"
+#include "ui/inspector/inspector_double_spin_box.h"
 #include <creative_suite/effects/effects.h>
 #if defined(CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS)
 #include "image_document_session.h"
@@ -1473,8 +1474,10 @@ public:
             const auto& first_track = window.editor_session_.timeline().tracks().front();
             require(!first_track.clips.empty(),
                     "The Inspector tab test requires the opened project to contain a video clip.");
+            const auto selected_track_id = first_track.track_id;
+            const auto selected_clip_id = first_track.clips.front().clip_id;
             window.edit_workspace_->controller()->handleTimelineClipSelectionChanged(
-                first_track.track_id, first_track.clips.front().clip_id);
+                selected_track_id, selected_clip_id);
             QApplication::processEvents();
             require(inspector_ui.inspector_tabs->currentIndex() == 2 &&
                         inspector_ui.clip_effects_controls->isEnabled() &&
@@ -1488,8 +1491,10 @@ public:
             const auto position_x_step = position_x->singleStep();
             const auto send_position_x_key =
                 [position_x_text](int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
-                QKeyEvent event(QEvent::KeyPress, key, modifiers);
-                QApplication::sendEvent(position_x_text, &event);
+                QKeyEvent press(QEvent::KeyPress, key, modifiers);
+                QApplication::sendEvent(position_x_text, &press);
+                QKeyEvent release(QEvent::KeyRelease, key, modifiers);
+                QApplication::sendEvent(position_x_text, &release);
             };
             inspector_ui.inspector_tabs->setCurrentIndex(0);
             QApplication::processEvents();
@@ -1558,15 +1563,95 @@ public:
                         "Down must respect the Edit Inspector field's minimum.");
                 position_x->setValue(initial_position_x);
             }
+            auto* position_x_slider = inspector_ui.transform_sliders[0];
+            auto* edit_controller = window.edit_workspace_->controller();
+            const auto slider_value_for_position_x = [](double value) {
+                return static_cast<int>(std::lround(
+                    std::clamp((value + 10.0) / 20.0, 0.0, 1.0) * 1000.0));
+            };
+            const auto selected_position_x = [&window, selected_clip_id]() {
+                const auto location = window.editor_session_.timeline().locateClip(
+                    selected_clip_id);
+                require(location.has_value(),
+                        "The selected clip disappeared during a Transform edit.");
+                return window.editor_session_.timeline().tracks()[location->track_index]
+                    .clips[location->clip_index].transform.position_x;
+            };
+            int live_composition_refreshes = 0;
+            const auto live_edit_connection = QObject::connect(
+                edit_controller,
+                &ui::EditWorkspaceController::timelineEditCommitted,
+                &window,
+                [&live_composition_refreshes](
+                    const application::TimelineEditResult&,
+                    bool, bool refresh_composition, const QString&) {
+                    if (refresh_composition) ++live_composition_refreshes;
+                });
+            const auto send_position_x_event =
+                [position_x_text](QEvent::Type type, int key, bool auto_repeat = false) {
+                    QKeyEvent event(
+                        type, key, Qt::NoModifier, QString(), auto_repeat, 1);
+                    QApplication::sendEvent(position_x_text, &event);
+                };
+            inspector_ui.inspector_tabs->setCurrentIndex(0);
+            QApplication::processEvents();
+            position_x->setFocus();
+            const auto live_initial_position_x = selected_position_x();
+            send_position_x_event(QEvent::KeyPress, Qt::Key_Up);
+            require(std::abs(position_x->value() -
+                             (live_initial_position_x + position_x_step)) < 1e-9 &&
+                        position_x_slider->value() ==
+                            slider_value_for_position_x(position_x->value()) &&
+                        std::abs(selected_position_x() - position_x->value()) < 1e-9 &&
+                        live_composition_refreshes == 1,
+                    "An arrow press must immediately update the Transform value, slider, and preview composition.");
+            send_position_x_event(QEvent::KeyRelease, Qt::Key_Up);
+            require(edit_controller->undo().changed() &&
+                        std::abs(position_x->value() - live_initial_position_x) < 1e-9 &&
+                        position_x_slider->value() ==
+                            slider_value_for_position_x(live_initial_position_x),
+                    "One arrow press must create one Undo entry and restore its value and slider.");
+            require(edit_controller->redo().changed() &&
+                        std::abs(position_x->value() -
+                                 (live_initial_position_x + position_x_step)) < 1e-9,
+                    "Redo must restore the live Transform value and synchronized slider.");
+            require(edit_controller->undo().changed(),
+                    "The live Transform redo could not be undone for the following checks.");
+
+            const auto refreshes_before_repeat = live_composition_refreshes;
+            send_position_x_event(QEvent::KeyPress, Qt::Key_Up);
+            send_position_x_event(QEvent::KeyPress, Qt::Key_Up, true);
+            require(std::abs(position_x->value() -
+                             (live_initial_position_x + 2.0 * position_x_step)) < 1e-9 &&
+                        position_x_slider->value() ==
+                            slider_value_for_position_x(position_x->value()) &&
+                        live_composition_refreshes == refreshes_before_repeat + 2,
+                    "Held-arrow repeats must update the slider and preview on each repeat.");
+            send_position_x_event(QEvent::KeyRelease, Qt::Key_Up);
+            require(edit_controller->undo().changed() &&
+                        std::abs(position_x->value() - live_initial_position_x) < 1e-9,
+                    "A held-arrow sequence must group all repeats into one Undo entry.");
+
+            send_position_x_event(QEvent::KeyPress, Qt::Key_Up);
+            send_position_x_event(QEvent::KeyRelease, Qt::Key_Up);
+            send_position_x_event(QEvent::KeyPress, Qt::Key_Up);
+            send_position_x_event(QEvent::KeyRelease, Qt::Key_Up);
+            require(edit_controller->undo().changed() &&
+                        std::abs(position_x->value() -
+                                 (live_initial_position_x + position_x_step)) < 1e-9 &&
+                        position_x_slider->value() ==
+                            slider_value_for_position_x(position_x->value()) &&
+                        edit_controller->undo().changed() &&
+                        std::abs(position_x->value() - live_initial_position_x) < 1e-9,
+                    "Separate arrow taps must create separate Undo entries with synchronized sliders.");
+            QObject::disconnect(live_edit_connection);
             inspector_ui.inspector_tabs->setCurrentIndex(2);
             QApplication::processEvents();
 
-            auto* edit_controller = window.edit_workspace_->controller();
-            const auto selected_clip_id = first_track.clips.front().clip_id;
             auto* timeline_widget = window.edit_workspace_->ui().timeline;
             auto* timeline_viewport = window.edit_workspace_->ui().timeline_scroll->viewport();
             const auto clicked_track_index =
-                window.editor_session_.timeline().locateTrack(first_track.track_id);
+                window.editor_session_.timeline().locateTrack(selected_track_id);
             require(timeline_widget != nullptr && timeline_viewport != nullptr &&
                         clicked_track_index.has_value(),
                     "The Timeline track-menu integration could not locate its fixed header.");
