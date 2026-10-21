@@ -50,7 +50,7 @@ Detailed subsystem contracts and design notes are listed below; see the [archite
 ## Technical decisions
 
 - [Technical prototype comparison](decisions/TECHNICAL_PROTOTYPE_COMPARISON.md)
-- [Future Rust implementation proposal](decisions/FUTURE_RUST_IMPLEMENTATION.md)
+- [Suite-wide future Rust implementation proposal](../FUTURE_RUST_IMPLEMENTATION.md)
 
 For experimental Vulkan/NVENC export, see [qualified settings and recovery](gpu/VULKAN_NATIVE_EXPORT.md).
 Select Vulkan on launch, enable GPU export, then choose H.264 or HEVC NVENC.

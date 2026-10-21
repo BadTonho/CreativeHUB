@@ -205,6 +205,7 @@ Before contributing, read the [contributor guide](CONTRIBUTING.md) and repositor
 | :--- | :--- | :--- |
 | **Architecture** | [Video Editor Architecture](docs/video-editor/architecture/ARCHITECTURE.md) | Video Editor modules and subsystem architecture. |
 | | [Cross-Application Compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared contracts, linked-document handoffs, and extraction criteria. |
+| | [Future Rust Implementation](docs/FUTURE_RUST_IMPLEMENTATION.md) | Provisional assessment of isolated Rust modules across all applications and shared libraries. |
 | | [Windows Update Contract](docs/WINDOWS_UPDATES.md) | Update catalog format, verification, staging, and rollback mechanics. |
 | **Hub** | [Hub Documentation Index](docs/hub/README.md) | Scope, backup, storage, updates, and validation references. |
 | | [Hub Scope and Readiness](docs/hub/SCOPE_AND_READINESS.md) | Responsibilities, implementation evidence, and acceptance status. |
