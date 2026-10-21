@@ -4,6 +4,7 @@
 #include "ui/effects/effects_list_widget.h"
 
 #include <QApplication>
+#include <QAbstractSpinBox>
 #include <QByteArray>
 #include <QComboBox>
 #include <QDragEnterEvent>
@@ -19,6 +20,8 @@
 #include <QCheckBox>
 #include <QDropEvent>
 #include <QImage>
+#include <QKeyEvent>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QDialog>
 #include <QScrollArea>
@@ -441,8 +444,19 @@ int runFusionWorkspaceTest() {
     verifyFusionInspectorScrolling(inspector_scroll);
     auto* scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
     auto* apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
-    require(scale && apply, "Transform settings were not shown for the selected node.");
-    scale->setValue(2.0);
+    require(scale && apply &&
+                scale->buttonSymbols() == QAbstractSpinBox::NoButtons &&
+                !scale->isReadOnly(),
+            "Transform numeric fields must hide step buttons and remain editable.");
+    auto* scale_text = scale->findChild<QLineEdit*>();
+    require(scale_text != nullptr,
+            "The Transform numeric field no longer exposes its editable text input.");
+    scale_text->setText(scale->locale().toString(2.0, 'f', 3));
+    QKeyEvent commit_typed_value(
+        QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(scale_text, &commit_typed_value);
+    require(scale->value() == 2.0,
+            "Typing and committing a value must still work without step buttons.");
     apply->click();
     const auto* transformed = fusion::nodes::findNode(edited, transform_id);
     require(edit_count == 10 && transformed && transformed->transform.scale == 2.0,
@@ -559,6 +573,9 @@ int runFusionWorkspaceTest() {
     apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
     require(effect_enabled && effect_amount && apply,
             "The effect Inspector did not show the effect's enabled state and parameters.");
+    require(effect_amount->buttonSymbols() == QAbstractSpinBox::NoButtons &&
+                !effect_amount->isReadOnly(),
+            "Fusion effect numeric fields must hide step buttons and remain editable.");
     effect_enabled->setChecked(false);
     effect_amount->setValue(45.0);
     apply->click();
@@ -576,6 +593,9 @@ int runFusionWorkspaceTest() {
     apply = root.findChild<QPushButton*>("fusionApplyNodeSettingsButton");
     require(animated_scale && scale_key && apply,
             "Transform animation controls were not shown in the Inspector.");
+    require(animated_scale->buttonSymbols() == QAbstractSpinBox::NoButtons &&
+                scale_key->isCheckable(),
+            "Hiding Fusion numeric step buttons must preserve keyframe controls.");
     scale_key->click();
     auto* animated_transform = fusion::nodes::findNode(edited, animated_transform_id);
     require(animated_transform && edit_count == 17 &&

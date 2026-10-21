@@ -8,6 +8,7 @@
 #include "ui/system/system_memory_indicator.h"
 
 #include <QAbstractItemView>
+#include <QAbstractSpinBox>
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -473,6 +474,9 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
             effects_page, QStringLiteral("effectsInspectorScrollArea"),
             ui_.inspector_tabs),
         QCoreApplication::translate("EditWorkspace", "Effects"));
+    for (auto* field : ui_.inspector_tabs->findChildren<QAbstractSpinBox*>()) {
+        field->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    }
     outer_layout->addWidget(ui_.inspector_tabs);
 
     QSettings settings;

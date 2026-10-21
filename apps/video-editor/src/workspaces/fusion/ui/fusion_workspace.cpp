@@ -4,6 +4,7 @@
 
 #include <creative_suite/effects/effects.h>
 
+#include <QAbstractSpinBox>
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QFontComboBox>
@@ -720,6 +721,9 @@ void FusionWorkspace::refreshInspector() {
                 }
             }
         }
+    }
+    for (auto* field : node_properties_->findChildren<QAbstractSpinBox*>()) {
+        field->setButtonSymbols(QAbstractSpinBox::NoButtons);
     }
     layout->addRow(apply);
     layout->addRow(remove);

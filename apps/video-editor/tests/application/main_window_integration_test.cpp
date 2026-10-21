@@ -28,6 +28,7 @@
 
 #include <QApplication>
 #include <QAction>
+#include <QAbstractSpinBox>
 #include <QDialog>
 #include <QColorDialog>
 #include <QDialogButtonBox>
@@ -744,6 +745,19 @@ public:
                         inspector_tabs->widget(2)->isAncestorOf(
                             inspector_ui.effect_selection_hint),
                     "Inspector, Audio, and Effects controls must live on their dedicated tabs.");
+            const auto inspector_number_fields =
+                inspector_tabs->findChildren<QAbstractSpinBox*>();
+            require(!inspector_number_fields.isEmpty(),
+                    "The Edit Inspector should expose its numeric fields to the UI regression.");
+            for (const auto* field : inspector_number_fields) {
+                require(field->buttonSymbols() == QAbstractSpinBox::NoButtons &&
+                            !field->isReadOnly(),
+                        "Edit Inspector numeric fields must hide step buttons and remain editable.");
+            }
+            require(inspector_ui.transform_sliders[0] != nullptr &&
+                        inspector_ui.transform_keys[0] != nullptr &&
+                        inspector_ui.transform_keys[0]->isCheckable(),
+                    "Hiding numeric step buttons must preserve transform sliders and keyframe toggles.");
             for (int index = 0; index < inspector_tabs->count(); ++index) {
                 inspector_tabs->setCurrentIndex(index);
                 QApplication::processEvents();
