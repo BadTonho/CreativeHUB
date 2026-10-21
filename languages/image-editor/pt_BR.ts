@@ -3,6 +3,11 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>ImageEditorUI</name>
+    <message><source>Hue/Saturation</source><translation>Matiz/Saturação</translation></message>
+    <message><source>Hue</source><translation>Matiz</translation></message>
+    <message><source>Saturation</source><translation>Saturação</translation></message>
+    <message><source>Lightness</source><translation>Luminosidade</translation></message>
+    <message><source>A Hue/Saturation adjustment is invalid.</source><translation>Um ajuste de Matiz/Saturação é inválido.</translation></message>
     <message><source>Exposure / Offset / Gamma</source><translation>Exposição / Offset / Gamma</translation></message>
     <message><source>Exposure</source><translation>Exposição</translation></message>
     <message><source>Offset</source><translation>Offset</translation></message>

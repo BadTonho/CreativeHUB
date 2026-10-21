@@ -731,6 +731,7 @@ uniform vec4 gradient_stops[32];
 uniform int adjustment_kind;
 uniform vec2 brightness_contrast;
 uniform vec3 exposure_offset_gamma;
+uniform vec3 hue_saturation;
 uniform bool has_mask;
 uniform bool mask_gray;
 uniform bool bottom_left;
@@ -739,6 +740,25 @@ uniform int opacity256;
 uniform mat3 inverse_matrix;
 uniform ivec4 clip_rect;
 out vec4 color;
+float adjustHsl(float value, float amount) {
+    return amount < 0.0 ? value * (1.0 + amount) : value + (1.0 - value) * amount;
+}
+vec3 adjustHueSaturation(vec3 rgb) {
+    float lo = min(rgb.r, min(rgb.g, rgb.b)), hi = max(rgb.r, max(rgb.g, rgb.b));
+    float delta = hi - lo, original_lightness = (hi + lo) * .5;
+    float lightness = adjustHsl(original_lightness, hue_saturation.z);
+    float hue = 0.0, saturation = 0.0;
+    if (delta > 0.0) {
+        saturation = adjustHsl(clamp(delta / (1.0 - abs(2.0 * original_lightness - 1.0)), 0.0, 1.0), hue_saturation.y);
+        hue = hi == rgb.r ? (rgb.g-rgb.b)/delta : hi == rgb.g ? (rgb.b-rgb.r)/delta+2.0 : (rgb.r-rgb.g)/delta+4.0;
+        hue = mod(hue + hue_saturation.x, 6.0);
+    }
+    float chroma = (1.0 - abs(2.0 * lightness - 1.0)) * saturation;
+    float x = chroma * (1.0 - abs(mod(hue,2.0)-1.0));
+    vec3 result = hue < 1.0 ? vec3(chroma,x,0) : hue < 2.0 ? vec3(x,chroma,0) :
+        hue < 3.0 ? vec3(0,chroma,x) : hue < 4.0 ? vec3(0,x,chroma) : hue < 5.0 ? vec3(x,0,chroma) : vec3(chroma,0,x);
+    return clamp(result + lightness - chroma * .5, 0.0, 1.0);
+}
 vec3 exposeSrgb(vec3 rgb) {
     vec3 linear = mix(pow((rgb + .055) / 1.055, vec3(2.4)), rgb / 12.92, lessThanEqual(rgb, vec3(.04045)));
     vec3 corrected = pow(clamp(linear * exp2(exposure_offset_gamma.x) + exposure_offset_gamma.y, 0.0, 1.0), vec3(1.0 / exposure_offset_gamma.z));
@@ -750,8 +770,8 @@ void main() {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
         vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
         float t=dot(cb,vec3(0.2126,0.7152,0.0722));
-        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1))) && blend_mode==0){color=b;return;}
-        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : gradient_stops[gradient_count-1].rgb;
+        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0))) && blend_mode==0){color=b;return;}
+        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : gradient_stops[gradient_count-1].rgb;
         for(int i=1;adjustment_kind==1 && i<gradient_count;++i) {
             if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
         }
@@ -892,7 +912,10 @@ void main() {
             const auto* gradient=adjustment?std::get_if<effects::GradientMapParameters>(adjustment):nullptr;
             const auto* bc=adjustment?std::get_if<effects::BrightnessContrastParameters>(adjustment):nullptr;
             const auto* exposure = adjustment ? std::get_if<effects::ExposureOffsetGammaParameters>(adjustment) : nullptr;
-            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:0);
+            const auto* hue = adjustment ? std::get_if<effects::HueSaturationParameters>(adjustment) : nullptr;
+            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:hue?4:0);
+            raster_program->setUniformValue("hue_saturation", hue ?
+                QVector3D(hue->hue / 60.f, hue->saturation / 100.f, hue->lightness / 100.f) : QVector3D{});
             raster_program->setUniformValue("exposure_offset_gamma", exposure ?
                 QVector3D(float(exposure->exposure), float(exposure->offset), float(exposure->gamma)) : QVector3D(0,0,1));
             raster_program->setUniformValue("brightness_contrast",bc?QVector2D(bc->brightness/100.f,bc->contrast/100.f):QVector2D{});

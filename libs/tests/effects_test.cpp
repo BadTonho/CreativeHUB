@@ -158,6 +158,16 @@ int main() {
         require(adjustmentRgb(ExposureOffsetGammaParameters{20,.5,.01},{0,1,.5}) ==
             std::array<unsigned char,3>{0,255,255}, "Extreme exposure/gamma remains bounded");
     }
+    {
+        using namespace creative_suite::effects;
+        require(validAdjustment(HueSaturationParameters{-180,-100,100}) && !validAdjustment(HueSaturationParameters{181,0,0}), "HSL control validation");
+        require(identityAdjustment(HueSaturationParameters{}), "Neutral HSL identity");
+        require(colorAdjustmentRgb({1,0,0},{0,100,0})==std::array<unsigned char,3>{54,54,54}, "Video keeps Rec709 saturation semantics");
+        require(adjustmentRgb(HueSaturationParameters{120,0,0},{1,0,0})==std::array<unsigned char,3>{0,255,0}, "Positive hue rotates red to green");
+        require(adjustmentRgb(HueSaturationParameters{0,-100,0},{1,0,0})==std::array<unsigned char,3>{128,128,128}, "HSL uses lightness rather than Rec709 luma");
+        require(adjustmentRgb(HueSaturationParameters{80,100,0},{.5,.5,.5})==std::array<unsigned char,3>{128,128,128}, "HSL does not colorize gray");
+        require(adjustmentRgb(HueSaturationParameters{0,0,100},{.2,.4,.8})==std::array<unsigned char,3>{255,255,255}, "HSL lightness ceiling");
+    }
     verifySharedBlur();
     using namespace creative_suite::effects;
     require(builtInEffects().size() == 4, "The built-in visual effect catalog is incomplete.");

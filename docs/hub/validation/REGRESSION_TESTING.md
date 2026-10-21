@@ -414,6 +414,9 @@ for output times, separate native GPU/fallback evidence and pending acceptance.
 
 ## Image Editor v17 outline backup coverage
 
+The following v17-v22 subsections retain earlier delivery evidence. Current
+schema coverage is recorded in the v23 subsection below.
+
 `hub-backup-format-test` covers Image schemas 1-17 and preserves an outlined
 group child with its source/imported paths. The actual reader compares complete
 vault/restored documents. `hub-backup-manager-test` rejects future Image v22.
@@ -447,13 +450,13 @@ See [Image execution evidence](../../image-editor/features/BLEND_MODES.md#window
 
 ## Image v20 adjustment backup coverage
 
-Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future unsupported Image versions are refused; current v22 coverage is below. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
+Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future unsupported Image versions are refused; current v23 coverage is below. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
 
 ## Image v21 adjustment backup coverage
 
 Hub format/manager gates round trip actual Image v1-21 documents, including both
-adjustment types and seeded masks during relocation/restoration. The current
-v22 gate below extends this boundary.
+adjustment types and seeded masks during relocation/restoration. The v23
+gate below extends this boundary.
 [Contract](../../image-editor/features/BRIGHTNESS_CONTRAST.md). Native UI/platform acceptance remains pending.
 
 Windows Release evidence (2026-10-20): both v21 backup gates passed; the actual
@@ -471,3 +474,14 @@ Native restore UI/platform acceptance remains pending.
 Linux Release evidence (2026-10-21): both backup gates passed against Image v22
 using the actual reader, including all three adjustment payloads. This does not
 establish native backup UI or Windows/macOS acceptance for v22.
+
+## Image v23 Hue/Saturation backup coverage
+
+`hub-backup-format-test` round trips actual Image v1-23 documents, retaining all
+four adjustment kinds, masks and relocated media; `hub-backup-manager-test`
+rejects v24. See [Image contract and results](../../image-editor/features/HUE_SATURATION.md).
+Native backup UI/platform acceptance remains pending.
+
+Linux Release evidence (2026-10-21): both v23 backup gates passed with the real
+Image reader, all four kinds, selection masks and relocated media. Native backup
+UI/platform acceptance remains pending.

@@ -63,7 +63,7 @@ Photoshop equivalence.
 
 ## Persistence and compatibility
 
-The v22 writer reads supported v1-21 documents and writes:
+Introduced in v22; the current v23 writer reads supported v1-22 and writes:
 
 ```json
 {"kind":"adjustment","adjustment":{"type":"exposure_offset_gamma","exposure":1.25,"offset":-0.0123,"gamma":1.4}}
@@ -75,7 +75,7 @@ incompatible raster content/outlines. Invalid Open retains the current session.
 Earlier binaries cannot open v22; no downgrade writer is introduced. Existing
 v20 Gradient Map and v21 Brightness/Contrast fixtures remain readable.
 Recovery envelope v1, application versions and published PNG protocol are unchanged.
-Hub accepts Image v1-22, rejects v23 and preserves all three adjustment types,
+Hub accepts Image v1-23, rejects v24 and preserves all four adjustment types,
 masks and rebased media through vault/relocated restore with the actual reader.
 
 ## Regression coverage and acceptance

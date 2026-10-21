@@ -108,8 +108,8 @@ void ImageLayerRasterCache::synchronize(
             !sameOperations(entry->operations, layer->operations) ||
             !sameMask(entry->mask, layer->mask) || entry->outline != layer->outline ||
             entry->raster_resources != resourceSignatures(*layer, raster_images)) {
-            const auto stale = entry++;
-            removeEntry(stale);
+            // QHash can relocate the next entry when compacting an erased bucket.
+            entry = removeEntry(entry);
         } else {
             ++entry;
         }
@@ -126,10 +126,10 @@ void ImageLayerRasterCache::clear() noexcept {
     retained_bytes_ = 0;
 }
 
-void ImageLayerRasterCache::removeEntry(
-    QHash<QString, Entry>::iterator entry) noexcept {
+auto ImageLayerRasterCache::removeEntry(
+    QHash<QString, Entry>::iterator entry) noexcept -> QHash<QString, Entry>::iterator {
     retained_bytes_ -= entry->bytes;
-    entries_.erase(entry);
+    return entries_.erase(entry);
 }
 
 } // namespace image_editor

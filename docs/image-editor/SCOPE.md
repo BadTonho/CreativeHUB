@@ -1,6 +1,6 @@
 # Image Editor Scope
 
-Status: **editable text, raster masks, linked image layers, canvas resizing, layer outlines, clipping masks, six blend modes and Gradient Map, Brightness/Contrast and Exposure / Offset / Gamma adjustments are implemented;
+Status: **editable text, raster masks, linked image layers, canvas resizing, layer outlines, clipping masks, six blend modes and Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma and global Hue/Saturation adjustments are implemented;
 manual visual validation and release acceptance remain pending**. The Image Editor is a standalone raster
 editor in `apps/image-editor/`. Its current behavior and the approved next
 release direction are recorded separately below. See the
@@ -266,4 +266,13 @@ The third editable adjustment provides decimal controls, linear-sRGB processing,
 selection-seeded masks, atomic Reset, history, CPU/OpenGL preview, exports and
 PNG publication. Native format v22 retains supported older documents and Hub
 backup/restore. See [contract](features/EXPOSURE_OFFSET_GAMMA.md). Visual/platform
-acceptance is separate; Hue/Saturation is the next planned adjustment.
+acceptance is separate; global Hue/Saturation is also implemented.
+
+## Global Hue/Saturation adjustments
+
+The fourth adjustment provides integer Hue, Saturation and Lightness controls,
+HSL processing on encoded sRGB, chromatic thumbnails, masks, atomic Reset,
+history, CPU/OpenGL preview and document/group exports. Native v23 and Hub
+backup/restore retain supported older documents. See [contract](features/HUE_SATURATION.md).
+Colorize and per-color targeting remain planned; Levels is the next code step.
+Native visual/platform acceptance is tracked independently.

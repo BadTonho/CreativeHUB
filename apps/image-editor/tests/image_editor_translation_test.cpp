@@ -63,6 +63,9 @@ int main(int argc, char** argv) {
         CS_TEST_CHECK(image_editor::ui::translateMessage(
                           QStringLiteral("The paint brush diameter must be between 1 and 1024 pixels.")) ==
                       QStringLiteral("O diâmetro do pincel deve estar entre 1 e 1024 pixels."));
+        CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Hue/Saturation") == QStringLiteral("Matiz/Saturação"));
+        CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Lightness") == QStringLiteral("Luminosidade"));
+        CS_TEST_CHECK(image_editor::ui::translateMessage(QStringLiteral("A Hue/Saturation adjustment is invalid.")) == QStringLiteral("Um ajuste de Matiz/Saturação é inválido."));
         CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Exposure / Offset / Gamma") ==
                       QStringLiteral("Exposição / Offset / Gamma"));
         CS_TEST_CHECK(QCoreApplication::translate("ImageEditorUI", "Exposure") == QStringLiteral("Exposição"));

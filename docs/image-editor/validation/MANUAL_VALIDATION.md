@@ -1078,3 +1078,30 @@ driver, canvas dimensions and outcome; use copies of source images.
    recovery. Keep native results distinct from headless or software-GPU runs.
 
 Automated mappings and execution evidence: [feature contract](../features/EXPOSURE_OFFSET_GAMMA.md).
+
+## Global Hue/Saturation adjustments
+
+Status: owner visual/native acceptance pending. Record OS, Qt, build, GPU/driver,
+canvas dimensions and outcome; use copies of original images.
+
+1. In English and pt-BR, create Hue/Saturation above a layer, Background and
+   group. Check integer ranges, units, default 0/0/0, layout and chromatic strip.
+2. On primary/secondary colors, rotate hue both directions; +120° turns red
+   green, and -180°/+180° match. Positive saturation strengthens existing color;
+   gray stays gray. Saturation -100 removes color; Lightness -100/+100 reaches
+   black/white while transparency remains unchanged.
+3. Seed a selection, paint/erase the mask, vary opacity and six modes, then
+   test a clipping chain and transformed group containing all four adjustments.
+   Reorder adjustments and confirm the visible operation order.
+4. Drag, type, use arrow keys and wheel for each control; verify atomic Reset,
+   one Undo per edit, no-op Redo, and correct state after layer/tab changes.
+5. Compare Automatic/CPU preview, chromatic/group thumbnails and PNG/JPEG/group
+   exports. Save/reopen v23, recover autosave and restore a relocated Hub backup.
+6. From Video Editor and Motion Studio, edit a linked image and Save. Confirm
+   refreshed PNG colors, alpha, repeated uses, isolated variants and reopen;
+   verify original source bytes remain unchanged.
+7. Record 1080p/five layers/one group cold/warm rendering and each control edit,
+   upload/cache bytes, cancellation and constrained GPU recovery on the Windows
+   reference PC. Keep native results separate from offscreen checks.
+
+Automated coverage and scoped results: [feature contract](../features/HUE_SATURATION.md).

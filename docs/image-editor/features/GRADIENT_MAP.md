@@ -1,6 +1,6 @@
 # Gradient Map adjustment layers
 
-Implementation: 2026-10-20. Introduced in `.cimg` v20; current writer v22. Readers accept v1-19 without
+Implementation: 2026-10-20. Introduced in `.cimg` v20; current writer v23. Readers accept v1-19 without
 adjustments. Recovery envelope v1 and linked PNG publication are unchanged.
 Application versions remain unchanged. Native visual and macOS/Linux acceptance
 remain pending.
@@ -90,7 +90,7 @@ Masks optionally write `initial_selection: {fill_rule, path}` using existing pat
 elements and Qt fill-rule identifiers. Reject invalid point counts/order/grid,
 unknown types, incompatible properties and these fields before v20. Failed Open
 preserves the existing session. Hub preserves both payloads while rebasing media,
-accepts Image through v22 and rejects v23. Recovery stays envelope v1.
+accepts Image through v23 and rejects v24. Recovery stays envelope v1.
 
 ## Verification
 

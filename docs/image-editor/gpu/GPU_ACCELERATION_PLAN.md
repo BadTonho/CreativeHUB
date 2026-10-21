@@ -247,3 +247,13 @@ are uniforms; edits reuse raw content and mask textures. Neutral Normal keeps
 exact identity; alpha and existing budgets/cancellation/recovery remain unchanged.
 Native parity and 1080p tests are in `gpuExposureOffsetGamma`; execution and
 platform limitations are recorded in the [feature contract](../features/EXPOSURE_OFFSET_GAMMA.md).
+
+## Global Hue/Saturation raster adjustments
+
+The fourth kind applies circular hue, signed saturation/lightness and achromatic
+preservation in the retained OpenGL backdrop pass, followed by the existing
+quantized masked blend. Parameters remain uniforms; no readback executes the
+effect and edits retain raw content/mask textures. Neutral Normal, alpha,
+budgets, cancellation and capacity recovery keep their contracts. Native
+`gpuHueSaturation` checks exact alpha/two-level RGB parity, uploads, mixed types
+and 1080p. See [contract and evidence](../features/HUE_SATURATION.md).

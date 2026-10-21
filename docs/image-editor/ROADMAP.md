@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast and Exposure / Offset / Gamma adjustments, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma and global Hue/Saturation adjustments, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,7 +41,8 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Add Hue/Saturation as the fourth adjustment type** in section 4.3.
+**Add Levels as the fifth adjustment type** in section 4.3.
+Global Hue/Saturation is implemented; see its [contract](features/HUE_SATURATION.md).
 Exposure / Offset / Gamma is implemented; see its [contract](features/EXPOSURE_OFFSET_GAMMA.md).
 The adjustment-layer contract and Gradient Map are implemented; see
 [Gradient Map](features/GRADIENT_MAP.md). Outlines, clipping masks and six layer/
@@ -284,8 +285,9 @@ Native visual and macOS/Linux acceptance remains pending.
   This is separate from the existing linear painting tool.
 - [x] Add editable brightness/contrast; see [contract](features/BRIGHTNESS_CONTRAST.md).
 - [x] Add Exposure / Offset / Gamma; see [contract](features/EXPOSURE_OFFSET_GAMMA.md).
-- [ ] Add hue/saturation, levels,
-  and per-channel/global curves in bounded increments.
+- [x] Add global Hue/Saturation; see [contract](features/HUE_SATURATION.md).
+- [ ] Add levels and per-channel/global curves in bounded increments.
+- [ ] Extend Hue/Saturation with Colorize and per-color-range controls in separate bounded increments.
 - [ ] Add color balance, Black & White channel controls, LUT loading, selective
   color, invert, posterize, and threshold.
 - [ ] Add editable solid-color, gradient, and pattern fill layers and reusable
@@ -663,4 +665,30 @@ Native Image interactive cases passed 19/19 and native shared OpenGL passed.
 See [execution evidence and unresolved gates](features/EXPOSURE_OFFSET_GAMMA.md#linux-execution-evidence--2026-10-21)
 and the [Linux measurements](performance/exposure-offset-gamma-linux-2026-10-21.json).
 All six failures reproduced in the pre-feature baseline on the same environment.
+These results do not complete the existing release/manual acceptance gates.
+
+## Hue/Saturation regression coverage
+
+| Behavior | Automated coverage | Acceptance |
+| --- | --- | --- |
+| HSL reference/gray/bounds/alpha, four-kind stacks, history, v23/recovery/export/cache and chromatic thumbnails | `creative-suite-image-editor-hue-saturation`, shared effects | [Contract and execution evidence](features/HUE_SATURATION.md); visual/platform acceptance remains separate. |
+| Menu, integer fields, gestures/Reset, masks, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI, translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-huesaturation-adjustments) pending. |
+| CPU/OpenGL parity, zero-upload edits, budgets/cancellation, handoff and restore | Interactive `gpuHueSaturation`, native shared OpenGL, Video linked-image, Hub backup gates and Motion consumers | Record native versus offscreen execution separately; compare known baseline failures. |
+
+Raster cache collision invalidation is covered by
+`creative-suite-image-editor-performance`
+(`layerRasterCacheInvalidatesCollidingEntriesSafely`). The regression fails
+before the erase-iterator fix; retained memory and hit/miss behavior are checked
+after partial and complete removal. See [HSL delivery evidence](features/HUE_SATURATION.md#raster-cache-invalidation-fix).
+
+The full `creative-suite-image-editor-ui` gate checks raster-import cancellation
+before the queued worker completion is delivered, so fast decoding cannot skip
+the cancellation request. Production import behavior is unchanged.
+
+Linux Release evidence (2026-10-21): 50 scoped CTest gates selected, 43 passed,
+six known pre-HSL failures and one offscreen shared-OpenGL skip. Native Image
+interactive passed 21/21, and native shared OpenGL passed separately. The
+offscreen Image interactive gate contains 9 passed and 12 skipped QtTest cases.
+See [execution evidence](features/HUE_SATURATION.md#linux-execution-evidence--2026-10-21)
+and [1080p measurements](performance/hue-saturation-linux-2026-10-21.json).
 These results do not complete the existing release/manual acceptance gates.

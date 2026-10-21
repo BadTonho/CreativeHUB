@@ -42,3 +42,8 @@ existing mask/history/export contract; native visual/platform acceptance is pend
 
 [Exposure Linux profile](performance/exposure-offset-gamma-linux-2026-10-21.json):
 1080p CPU/GPU observations and baseline-confirmed broader regression failures.
+
+[Global Hue/Saturation](features/HUE_SATURATION.md): integer HSL controls, chromatic thumbnails, CPU/OpenGL preview and v23 persistence/Hub compatibility.
+
+[Hue/Saturation Linux profile](performance/hue-saturation-linux-2026-10-21.json):
+1080p CPU/OpenGL, zero-upload edits, capacity recovery and separate baseline failures.

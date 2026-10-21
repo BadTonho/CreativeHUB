@@ -2110,3 +2110,12 @@ an actual v22 document with canvas resize, raster mask and +1-stop linear exposu
 Video verifies the new encoded RGB values, alpha, stale-revision rejection and
 clip-variant isolation. The full main-window suite reuses the same scenario.
 See [Image delivery evidence](../../image-editor/features/EXPOSURE_OFFSET_GAMMA.md).
+
+## Image v23 Hue/Saturation publication
+
+The focused `creative-suite-main-editor-linked-image` gate and full main-window
+scenario now use an actual Image v23 producer with raster mask, resized canvas,
++1 stop exposure and +120° hue. Expected RGB rotates from (38,58,255) to
+(255,38,58), while alpha, stale-revision refusal and clip variants retain their
+contracts. Shared effects checks retain Video's Rec.709 saturation. See
+[Image execution evidence](../../image-editor/features/HUE_SATURATION.md).

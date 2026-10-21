@@ -1088,10 +1088,13 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
                 encoded.insert("adjustment",QJsonObject{{"type","gradient_map"},{"stops",stops}});
             } else if (const auto* brightness = std::get_if<creative_suite::effects::BrightnessContrastParameters>(&*layer.adjustment)) {
                 encoded.insert("adjustment", QJsonObject{{"type", "brightness_contrast"}, {"brightness", brightness->brightness}, {"contrast", brightness->contrast}});
-            } else {
-                const auto& value = std::get<creative_suite::effects::ExposureOffsetGammaParameters>(*layer.adjustment);
+            } else if (const auto* value = std::get_if<creative_suite::effects::ExposureOffsetGammaParameters>(&*layer.adjustment)) {
                 encoded.insert("adjustment", QJsonObject{{"type", "exposure_offset_gamma"},
-                    {"exposure", value.exposure}, {"offset", value.offset}, {"gamma", value.gamma}});
+                    {"exposure", value->exposure}, {"offset", value->offset}, {"gamma", value->gamma}});
+            } else {
+                const auto& hue = std::get<creative_suite::effects::HueSaturationParameters>(*layer.adjustment);
+                encoded.insert("adjustment", QJsonObject{{"type", "hue_saturation"},
+                    {"hue", hue.hue}, {"saturation", hue.saturation}, {"lightness", hue.lightness}});
             }
         }
         encoded.insert("visible", layer.visible);
@@ -1285,26 +1288,41 @@ bool decodeDocumentJson(const QJsonObject& root,
             if (!decodeBlendMode(encoded,version,&layer->blend_mode,error,layer->background)) return false;
             if(kind=="adjustment" || encoded.contains("adjustment")) {
                 const auto a=encoded.value("adjustment").toObject();
-                if (a.value("type") == "exposure_offset_gamma") {
+                if (a.value("type") == "hue_saturation") {
+                    const auto integer = [](const QJsonValue& v, int bound) {
+                        return v.isDouble() && std::isfinite(v.toDouble()) &&
+                            v.toDouble() >= -bound && v.toDouble() <= bound && std::floor(v.toDouble()) == v.toDouble();
+                    };
+                    if (version < 23 || kind != "adjustment" || !integer(a.value("hue"), 180) ||
+                        !integer(a.value("saturation"), 100) || !integer(a.value("lightness"), 100) ||
+                        a.contains("stops") || a.contains("brightness") || a.contains("contrast") ||
+                        a.contains("exposure") || a.contains("offset") || a.contains("gamma")) {
+                        assignError(error, QStringLiteral("A Hue/Saturation adjustment is invalid."));
+                        return false;
+                    }
+                    layer->adjustment = creative_suite::effects::HueSaturationParameters{
+                        a.value("hue").toInt(), a.value("saturation").toInt(), a.value("lightness").toInt()};
+                } else if (a.value("type") == "exposure_offset_gamma") {
                     const creative_suite::effects::ExposureOffsetGammaParameters parameters{
                         a.value("exposure").toDouble(), a.value("offset").toDouble(), a.value("gamma").toDouble()};
                     if (version < 22 || kind != "adjustment" || !a.value("exposure").isDouble() ||
                         !a.value("offset").isDouble() || !a.value("gamma").isDouble() ||
                         !creative_suite::effects::validExposureOffsetGamma(parameters) ||
-                        a.contains("stops") || a.contains("brightness") || a.contains("contrast")) {
+                        a.contains("stops") || a.contains("brightness") || a.contains("contrast") ||
+                        a.contains("hue") || a.contains("saturation") || a.contains("lightness")) {
                         assignError(error, QStringLiteral("An Exposure / Offset / Gamma adjustment is invalid."));
                         return false;
                     }
                     layer->adjustment = parameters;
                 } else if(a.value("type")=="brightness_contrast"){
                     const auto integer=[](const QJsonValue& v){return v.isDouble() && std::isfinite(v.toDouble()) && v.toDouble()>=-100 && v.toDouble()<=100 && std::floor(v.toDouble())==v.toDouble();};
-                    if(version<21 || kind!="adjustment" || !integer(a.value("brightness")) || !integer(a.value("contrast")) || a.contains("stops") || a.contains("exposure") || a.contains("offset") || a.contains("gamma")){
+                    if(version<21 || kind!="adjustment" || !integer(a.value("brightness")) || !integer(a.value("contrast")) || a.contains("stops") || a.contains("exposure") || a.contains("offset") || a.contains("gamma") || a.contains("hue") || a.contains("saturation") || a.contains("lightness")){
                         assignError(error,QStringLiteral("A Brightness/Contrast adjustment is invalid."));return false;
                     }
                     layer->adjustment=creative_suite::effects::BrightnessContrastParameters{a.value("brightness").toInt(),a.value("contrast").toInt()};
                 }else{
                     creative_suite::effects::GradientMapParameters parameters;parameters.stops.clear();
-                    bool valid=version>=20 && kind=="adjustment" && a.value("type")=="gradient_map" && a.value("stops").isArray() && !a.contains("brightness") && !a.contains("contrast") && !a.contains("exposure") && !a.contains("offset") && !a.contains("gamma");
+                    bool valid=version>=20 && kind=="adjustment" && a.value("type")=="gradient_map" && a.value("stops").isArray() && !a.contains("brightness") && !a.contains("contrast") && !a.contains("exposure") && !a.contains("offset") && !a.contains("gamma") && !a.contains("hue") && !a.contains("saturation") && !a.contains("lightness");
                     if(!valid || a.value("stops").toArray().size()<2 || a.value("stops").toArray().size()>32){assignError(error,QStringLiteral("A Gradient Map adjustment is invalid."));return false;}
                     for(const auto& v:a.value("stops").toArray()){
                         const auto stop=v.toObject();const QString color_text=stop.value("color").toString();const QColor color(color_text);

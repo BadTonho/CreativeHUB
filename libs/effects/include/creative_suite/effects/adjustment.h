@@ -1,6 +1,7 @@
 #pragma once
 #include "gradient_map.h"
 #include "effects.h"
+#include "hue_saturation.h"
 #include <cmath>
 #include <variant>
 #include <type_traits>
@@ -18,12 +19,14 @@ struct ExposureOffsetGammaParameters {
     bool operator==(const ExposureOffsetGammaParameters&) const = default;
 };
 using AdjustmentParameters = std::variant<GradientMapParameters,
-    BrightnessContrastParameters, ExposureOffsetGammaParameters>;
+    BrightnessContrastParameters, ExposureOffsetGammaParameters, HueSaturationParameters>;
 [[nodiscard]] inline bool identityAdjustment(const AdjustmentParameters& p) noexcept {
     if (const auto* value = std::get_if<BrightnessContrastParameters>(&p))
         return *value == BrightnessContrastParameters{};
     if (const auto* value = std::get_if<ExposureOffsetGammaParameters>(&p))
         return *value == ExposureOffsetGammaParameters{};
+    if (const auto* value = std::get_if<HueSaturationParameters>(&p))
+        return *value == HueSaturationParameters{};
     return false;
 }
 [[nodiscard]] inline bool validBrightnessContrast(const BrightnessContrastParameters& p) noexcept {
@@ -39,7 +42,8 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, GradientMapParameters>) return validGradientMap(value);
         else if constexpr (std::is_same_v<T, BrightnessContrastParameters>) return validBrightnessContrast(value);
-        else return validExposureOffsetGamma(value);
+        else if constexpr (std::is_same_v<T, ExposureOffsetGammaParameters>) return validExposureOffsetGamma(value);
+        else return validHueSaturation(value);
     }, p);
 }
 // Callers validate parameters and pass finite channels in [0,1]. Alpha is untouched.
@@ -65,7 +69,8 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
             return gradientMapColor(value,.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2]);
         else if constexpr (std::is_same_v<T, BrightnessContrastParameters>)
             return colorAdjustmentRgb(rgb,{double(value.brightness),double(100+value.contrast),100.});
-        else return exposureOffsetGammaRgb(value, rgb);
+        else if constexpr (std::is_same_v<T, ExposureOffsetGammaParameters>) return exposureOffsetGammaRgb(value, rgb);
+        else return hueSaturationRgb(value, rgb);
     }, p);
 }
 } // namespace creative_suite::effects

@@ -133,3 +133,7 @@ Exposure / Offset / Gamma creation adds no shortcut. Decimal fields retain
 standard text editing; sliders accept keyboard steps and wheel input. Each
 continuous field edit or slider gesture is one Undo, and Reset restores all
 three controls in one Undo.
+
+Hue/Saturation creation adds no shortcut. Integer fields and sliders accept
+standard keyboard input and wheel steps. Each continuous field/slider gesture
+is one Undo; Reset restores Hue, Saturation and Lightness in one Undo.

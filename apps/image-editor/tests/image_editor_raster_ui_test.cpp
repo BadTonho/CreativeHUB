@@ -21,6 +21,24 @@
 #include <iostream>
 #include <cmath>
 using namespace image_editor;
+namespace {
+class CancelImportBeforeCompletion final : public QObject {
+public:
+    bool requested = false;
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (!requested && event->type()==QEvent::MetaCall &&
+            watched->objectName()==QStringLiteral("imageImportProgressDialog")) {
+            if (auto* button=watched->findChild<QPushButton*>(
+                    QStringLiteral("imageExportCancelButton"))) {
+                button->click();
+                requested = true;
+            }
+        }
+        return false;
+    }
+};
+}
 bool testRasterImagesUi(const QString& root) {
     std::cerr << "Running testRasterImagesUi.\n";
     const auto check=[](bool ok,const char* cause) { if (!ok) std::cerr<<cause<<'\n'; return ok; };
@@ -139,17 +157,14 @@ bool testRasterImagesUi(const QString& root) {
     if (!saved.openDocument(doc)) return false;
     const auto drop_raster=saved.data().layers.back().operations.front().raster;
     if (!check(std::abs(drop_raster.transform.dx()+4)<1,"Drop placement incorrect.")) return false;
-    // Cancellation arrives while the modal decoder is active; nothing is inserted.
-    QTimer cancel; QObject::connect(&cancel,&QTimer::timeout,&window,[&]() {
-        for (auto* widget : QApplication::topLevelWidgets()) if (widget->objectName()=="imageImportProgressDialog") {
-            auto* button=widget->findChild<QPushButton*>("imageExportCancelButton");
-            if (button) { button->click(); cancel.stop(); return; }
-        }
-    });
-    cancel.start(0);
+    // Cancel before delivering the worker's queued completion to the dialog.
+    // A polling timer can lose that race without ever requesting cancellation.
+    CancelImportBeforeCompletion cancel;
+    qApp->installEventFilter(&cancel);
     const bool cancelled=window.importImagePaths({source});
-    cancel.stop();
-    if (!check(!cancelled && tree->topLevelItemCount()==5,"Cancelled import committed layers.")) return false;
+    qApp->removeEventFilter(&cancel);
+    if (!check(cancel.requested && !cancelled && tree->topLevelItemCount()==5,
+        "Cancelled import committed layers or cancellation was not requested.")) return false;
     const QByteArray previous=[&](){QFile f(output); f.open(QIODevice::ReadOnly); return f.readAll();}();
     if (!QFile::remove(source)) return false;
     ImageDocumentSession unavailable;

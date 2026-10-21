@@ -653,3 +653,11 @@ an explicit `std::uint64_t` frame count to avoid mixed unsigned-long/unsigned-
 long-long `std::max` deduction on LP64 Linux; queue limits/accounting are unchanged. Source-range duration comparison likewise
 uses explicit `std::int64_t` to accommodate Qt qint64 on LP64.
 Execution evidence is tracked in the [Image contract](../image-editor/features/EXPOSURE_OFFSET_GAMMA.md).
+
+## Shared Image Hue/Saturation maintenance
+
+The fourth shared raster adjustment adds global HSL for Image; Motion adds no
+effect selector or persisted field. Existing PNG consumption and Video-style
+Rec.709 saturation retain their contracts. Preview/GPU-composition, persistence,
+export and UI gates protect this additive API. Known local baseline failures
+remain separately recorded in the [Image contract](../image-editor/features/HUE_SATURATION.md).

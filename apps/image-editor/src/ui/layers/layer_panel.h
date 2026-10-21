@@ -25,6 +25,7 @@ namespace image_editor {
 class GradientMapEditor;
 class BrightnessContrastEditor;
 class ExposureOffsetGammaEditor;
+class HueSaturationEditor;
 class LayerPanel final : public QWidget {
     Q_OBJECT
 
@@ -55,6 +56,8 @@ public:
 signals:
     void quickExportRequested();
     void addGradientMapRequested();
+    void addHueSaturationRequested();
+    void hueSaturationChanged(const QString&, const creative_suite::effects::HueSaturationParameters&);
     void addExposureOffsetGammaRequested();
     void exposureOffsetGammaChanged(const QString&, const creative_suite::effects::ExposureOffsetGammaParameters&);
     void addBrightnessContrastRequested();
@@ -102,6 +105,8 @@ private:
     QPushButton* quick_export_button_ = nullptr;
     QTreeWidget* layer_tree_ = nullptr;
     QMenu* layer_context_menu_ = nullptr;
+    HueSaturationEditor* hue_editor_ = nullptr;
+    QAction* add_hue_action_ = nullptr;
     ExposureOffsetGammaEditor* exposure_editor_ = nullptr;
     QAction* add_exposure_action_ = nullptr;
     BrightnessContrastEditor* brightness_editor_ = nullptr;

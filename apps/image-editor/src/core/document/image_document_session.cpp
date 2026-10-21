@@ -1654,6 +1654,23 @@ bool ImageDocumentSession::findShape(const QString& shape_id,
 QString ImageDocumentSession::addGradientMapAdjustment(std::optional<QPainterPath> selection) {
     return addAdjustment(creative_suite::effects::GradientMapParameters{},QStringLiteral("Gradient Map"),std::move(selection));
 }
+QString ImageDocumentSession::addHueSaturationAdjustment(std::optional<QPainterPath> selection) {
+    return addAdjustment(creative_suite::effects::HueSaturationParameters{},
+        QStringLiteral("Hue/Saturation"), std::move(selection));
+}
+bool ImageDocumentSession::setHueSaturation(const QString& id,
+    const creative_suite::effects::HueSaturationParameters& value) {
+    const auto* layer = findLayer(data_, id);
+    if (!layer || !layer->adjustment ||
+        !std::holds_alternative<creative_suite::effects::HueSaturationParameters>(*layer->adjustment) ||
+        *layer->adjustment == creative_suite::effects::AdjustmentParameters{value} ||
+        !creative_suite::effects::validHueSaturation(value)) return false;
+    if (!adjustment_edit_active_) pushEdit();
+    findLayer(data_, id)->adjustment = value;
+    layer_thumbnail_cache_.clear();
+    invalidateGroupThumbnailCache();
+    return true;
+}
 QString ImageDocumentSession::addExposureOffsetGammaAdjustment(std::optional<QPainterPath> selection) {
     return addAdjustment(creative_suite::effects::ExposureOffsetGammaParameters{},
         QStringLiteral("Exposure / Offset / Gamma"), std::move(selection));

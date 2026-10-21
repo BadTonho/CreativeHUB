@@ -72,7 +72,8 @@ private:
     [[nodiscard]] static bool sameMask(
         const std::optional<ImageLayerMaskData>& left,
         const std::optional<ImageLayerMaskData>& right) noexcept;
-    void removeEntry(QHash<QString, Entry>::iterator entry) noexcept;
+    QHash<QString, Entry>::iterator removeEntry(
+        QHash<QString, Entry>::iterator entry) noexcept;
 
     QHash<QString, Entry> entries_;
     std::uint64_t retained_bytes_ = 0;

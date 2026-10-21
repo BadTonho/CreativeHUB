@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 22; host links live in the Video Editor's
+  The `.cimg` schema is version 23; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -719,7 +719,7 @@ See [parameters, scope, errors and verification](../features/GRADIENT_MAP.md).
 
 ## Typed adjustments
 
-Shared `AdjustmentParameters` is a variant of Gradient Map, Brightness/Contrast and Exposure / Offset / Gamma.
+Shared `AdjustmentParameters` is a variant of Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma and Hue/Saturation.
 The Image session owns typed editing/history and stack scope; effects owns RGB
 math and validation. CPU adapter and native raster shader dispatch by type, reusing
 mask/content caches and preserving alpha. [Contract](../features/BRIGHTNESS_CONTRAST.md).
@@ -734,3 +734,20 @@ Normal preserves the old byte path. Decimal properties use continuous edit
 transactions; the v22 codec and Hub preserve all three numbers and reject invalid
 payloads. No new dependency, effect registry or Video/Motion document field is
 introduced. See [contract](../features/EXPOSURE_OFFSET_GAMMA.md).
+
+## Global HSL adjustment boundary
+
+The fourth typed alternative uses the Qt-free `effects/hue_saturation.h` evaluator
+for encoded-sRGB HSL; Video's Rec.709 saturation keeps its existing semantics.
+Image owns typed edits/history, scope, masks and persistence. CPU and OpenGL
+raster dispatch explicitly by kind; shader uniforms reuse the retained backdrop
+and content/mask caches. The neutral Normal path remains byte-exact. A chromatic
+thumbnail strip uses the same evaluator; older grayscale thumbnails retain their
+sampling. The codec writes v23 and Hub preserves all four kinds. See
+[contract](../features/HUE_SATURATION.md).
+
+Raster cache synchronization consumes QHash's erase-returned iterator because
+bucket compaction can relocate a successor. Byte accounting remains centralized
+in the removal helper, and the collision regression verifies partial/full
+invalidation without retained stale images. This fixes a pre-existing intermittent
+render-cache crash exposed during HSL validation.

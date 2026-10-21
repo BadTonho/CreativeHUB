@@ -6,6 +6,7 @@
 
 #include <QFile>
 #include <QImage>
+#include <QHashFunctions>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -487,6 +488,35 @@ private slots:
         QCOMPARE(session.cachedRasterLayerBytes(), std::uint64_t{0});
         QCOMPARE(session.renderedImage(), ImageDocumentRenderer::composite(
             session.data(), replacement_pixels, {}));
+    }
+
+    void layerRasterCacheInvalidatesCollidingEntriesSafely() {
+        ImageLayerRasterCache cache;
+        const QSize size(8,8);
+        QImage pixels(size,QImage::Format_ARGB32_Premultiplied);pixels.fill(Qt::cyan);
+        QVector<ImageLayerData> layers;
+        const size_t seed=QHashSeed::globalSeed();
+        // Collide within every bucket table up to 1024 buckets, independently
+        // of Qt's randomized seed. Removing a bucket can relocate its successor.
+        for(int candidate=0;layers.size()<32 && candidate<1000000;++candidate){
+            const auto id=QStringLiteral("collision-%1").arg(candidate);
+            if((qHash(id,seed)&1023U)!=0)continue;
+            ImageLayerData layer;layer.id=id;layers.append(layer);cache.insert(layer,size,{},pixels);
+        }
+        QCOMPARE(layers.size(),32);
+        const auto bytes=std::uint64_t(pixels.sizeInBytes());
+        QCOMPARE(cache.retainedBytes(),32*bytes);
+        QVector<ImageLayerData> retained;
+        for(int i=0;i<layers.size();i+=2)retained.append(layers[i]);
+        cache.synchronize(retained,size,{});
+        QCOMPARE(cache.retainedBytes(),16*bytes);
+        for(int i=0;i<layers.size();++i){
+            const auto expected=i%2==0?ImageLayerRasterCache::LookupState::Hit:ImageLayerRasterCache::LookupState::Miss;
+            QCOMPARE(cache.lookup(layers[i],size,{}).state,expected);
+        }
+        cache.synchronize({},size,{});
+        QCOMPARE(cache.retainedBytes(),std::uint64_t{0});
+        for(const auto& layer:layers)QCOMPARE(cache.lookup(layer,size,{}).state,ImageLayerRasterCache::LookupState::Miss);
     }
 
     void layerRasterCacheStaysWithinItsMemoryBudget() {

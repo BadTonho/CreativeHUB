@@ -355,7 +355,7 @@ public:
 #if defined(CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS)
             image_editor::ImageDocumentSession masked_image;
             QString mask_error;
-            const QColor refreshed_image_color(38, 58, 255, 255);
+            const QColor refreshed_image_color(255, 38, 58, 255);
             QImage imported_source(16, 16, QImage::Format_ARGB32);
             imported_source.fill(QColor(25, 40, 235));
             const QString imported_path = QString::fromStdString((directory / "imported-layer.png").string());
@@ -367,9 +367,11 @@ public:
                         masked_image.resizeCanvas(QSize(24, 12), image_editor::CanvasAnchor::TopLeft, &mask_error) &&
                         !masked_image.addExposureOffsetGammaAdjustment().isEmpty() &&
                         masked_image.setExposureOffsetGamma(masked_image.selectedLayerId(), {1, 0, 1}) &&
+                        !masked_image.addHueSaturationAdjustment().isEmpty() &&
+                        masked_image.setHueSaturation(masked_image.selectedLayerId(), {120, 0, 0}) &&
                         masked_image.saveDocument(QString::fromStdString(linked_document.string()), &mask_error) &&
                         masked_image.exportImage(QString::fromStdString(linked_output.string()), &mask_error),
-                    "The Image Editor could not publish its resized, masked and exposure-adjusted v22 image: " + mask_error.toStdString());
+                    "The Image Editor could not publish its resized, masked and exposure- and hue-adjusted v23 image: " + mask_error.toStdString());
 #else
             const QColor refreshed_image_color(25, 40, 235, 255);
             QImage next_output(24, 12, QImage::Format_ARGB32);

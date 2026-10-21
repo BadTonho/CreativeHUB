@@ -122,13 +122,13 @@ private slots:
     void persistenceValidation() {
         QTemporaryDir dir; const auto path=dir.filePath("exposure.cimg"); ImageDocumentSession s; QVERIFY(s.createCanvas({8,8},Qt::red));
         const auto id=s.addExposureOffsetGammaAdjustment(); QVERIFY(s.setExposureOffsetGamma(id,{1.25,-.0123,1.4})); QVERIFY(s.saveDocument(path));
-        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); const auto json=QJsonDocument::fromJson(file.readAll()).object(); file.close(); QCOMPARE(json.value("version").toInt(),22);
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); const auto json=QJsonDocument::fromJson(file.readAll()).object(); file.close(); QCOMPARE(json.value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         ImageDocumentSession loaded; QVERIFY(loaded.openDocument(path)); QCOMPARE(loaded.data(),s.data());
         for (int bad=0; bad<18; ++bad) {
             auto root=json; auto layers=root.value("layers").toArray(); auto layer=layers.last().toObject(); auto a=layer.value("adjustment").toObject();
             switch(bad) {
             case 0: root.insert("version",21); break;
-            case 1: root.insert("version",23); break;
+            case 1: root.insert("version",ImageDocumentStore::kCurrentDocumentVersion+1); break;
             case 2: a.insert("exposure",20.01); break;
             case 3: a.insert("offset",-.5001); break;
             case 4: a.insert("gamma",0); break;
@@ -150,12 +150,12 @@ private slots:
             QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate)); QVERIFY(file.write(QJsonDocument(root).toJson())>0); file.close();
             const auto before=loaded.data(); QVERIFY2(!loaded.openDocument(path),qPrintable(QString::number(bad))); QCOMPARE(loaded.data(),before);
         }
-        // Actual old adjustment formats remain readable and save through the v22 writer.
+        // Actual old adjustment formats remain readable and save through the current writer.
         for (int version : {20,21}) {
             auto root=json; root.insert("version",version); auto layers=root.value("layers").toArray(); auto layer=layers.last().toObject();
             layer.insert("adjustment",version==20 ? QJsonObject{{"type","gradient_map"},{"stops",QJsonArray{QJsonObject{{"position",0},{"color","#000000"}},QJsonObject{{"position",1},{"color","#ffffff"}}}}} : QJsonObject{{"type","brightness_contrast"},{"brightness",25},{"contrast",-30}});
             layers[layers.size()-1]=layer; root.insert("layers",layers); QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate)); file.write(QJsonDocument(root).toJson()); file.close();
-            QVERIFY(loaded.openDocument(path)); QVERIFY(loaded.saveDocument(path)); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),22); file.close();
+            QVERIFY(loaded.openDocument(path)); QVERIFY(loaded.saveDocument(path)); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion); file.close();
         }
     }
     void reference1080p() {

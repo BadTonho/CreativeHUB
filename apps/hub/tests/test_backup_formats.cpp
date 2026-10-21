@@ -185,6 +185,19 @@ void testImageDocuments(const QString& root) {
             layers[layers.size()-1] = group;
             fixture.insert("layers", layers);
         }
+        if (version >= 23) {
+            auto layers = fixture.value("layers").toArray();
+            auto group = layers.last().toObject();
+            auto children = group.value("children").toArray();
+            auto adjustment = children.last().toObject();
+            adjustment.insert("id", QUuid::createUuid().toString(QUuid::WithoutBraces));
+            adjustment.insert("adjustment", QJsonObject{{"type", "hue_saturation"},
+                {"hue", 75}, {"saturation", -25}, {"lightness", 10}});
+            children.append(adjustment);
+            group.insert("children", children);
+            layers[layers.size()-1] = group;
+            fixture.insert("layers", layers);
+        }
         // Use the producer's assets in every case, including legacy documents.
         const auto path = QDir(QFileInfo(assets).absolutePath()).filePath(QStringLiteral("image-v%1.cimg").arg(version));
         writeBytes(path, QJsonDocument(fixture).toJson());

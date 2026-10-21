@@ -893,7 +893,15 @@ QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,
     QImage thumbnail;
     if(layer.adjustment) {
         thumbnail=QImage(maximum_size,QImage::Format_ARGB32);if(thumbnail.isNull())return {};
-        for(int x=0;x<thumbnail.width();++x){const auto c=creative_suite::effects::adjustmentRgb(*layer.adjustment,{double(x)/std::max(1,thumbnail.width()-1),double(x)/std::max(1,thumbnail.width()-1),double(x)/std::max(1,thumbnail.width()-1)});for(int y=0;y<thumbnail.height();++y)thumbnail.setPixel(x,y,qRgb(c[0],c[1],c[2]));}
+        const bool hue_adjustment = std::holds_alternative<creative_suite::effects::HueSaturationParameters>(*layer.adjustment);
+        for (int x = 0; x < thumbnail.width(); ++x) {
+            const double position = double(x) / std::max(1, thumbnail.width()-1);
+            const QColor sample = hue_adjustment ? QColor::fromHslF(position, 1., .5) : QColor::fromRgbF(position, position, position);
+            // Keep the existing grayscale ramp's full precision for older types.
+            const std::array<double,3> rgb = hue_adjustment ? std::array{double(sample.redF()), double(sample.greenF()), double(sample.blueF())} : std::array{position,position,position};
+            const auto c = creative_suite::effects::adjustmentRgb(*layer.adjustment, rgb);
+            for (int y = 0; y < thumbnail.height(); ++y) thumbnail.setPixel(x,y,qRgb(c[0],c[1],c[2]));
+        }
         if(std::holds_alternative<creative_suite::effects::BrightnessContrastParameters>(*layer.adjustment)){
             QPainter painter(&thumbnail);const int d=std::max(4,std::min(thumbnail.width(),thumbnail.height())-4);QRect circle(2,2,d,d);
             painter.setPen(QPen(Qt::gray,1));painter.setBrush(Qt::black);painter.drawEllipse(circle);painter.setBrush(Qt::white);painter.drawPie(circle,90*16,180*16);
