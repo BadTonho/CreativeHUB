@@ -19,6 +19,8 @@ public:
 
     void setFilterQuery(const QString& query);
     void refreshCards();
+    void setDownloadingProgress(const QString& app_id, double percentage,
+                                const QString& status_text);
 
 signals:
     void appDetailsRequested(const QString& appId, const QRect& originRect = QRect());

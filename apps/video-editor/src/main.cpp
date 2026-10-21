@@ -1,4 +1,5 @@
 #include "main_window/main_window.h"
+#include "update_ui/update_center.h"
 
 #include "logging/logger.h"
 #include "settings/renderer_startup.h"

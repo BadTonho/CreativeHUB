@@ -1,4 +1,5 @@
 #include "image_editor_window.h"
+#include "../update_ui/update_center.h"
 #include <creative_suite/translations/language_preference.h>
 #include <creative_suite/translations/translation_runtime.h>
 #include <QCoreApplication>

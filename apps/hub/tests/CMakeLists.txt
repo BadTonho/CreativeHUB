@@ -114,9 +114,9 @@ if(BUILD_IMAGE_EDITOR OR BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
     endif()
     if(BUILD_VIDEO_EDITOR)
         set(HUB_VIDEO_SOURCE_DIR "${PROJECT_SOURCE_DIR}/apps/video-editor/src")
-        target_include_directories(hub-backup-format-test PRIVATE "${HUB_VIDEO_SOURCE_DIR}"
-            "${PROJECT_SOURCE_DIR}/libs/motion-handoff/include")
+        target_include_directories(hub-backup-format-test PRIVATE "${HUB_VIDEO_SOURCE_DIR}")
         target_link_libraries(hub-backup-format-test PRIVATE creative-suite::media-assets)
+        target_link_libraries(hub-backup-format-test PRIVATE creative-suite::motion-handoff)
         target_compile_definitions(hub-backup-format-test PRIVATE HUB_BACKUP_VIDEO_CONTRACT)
         target_sources(hub-backup-format-test PRIVATE
             ${HUB_VIDEO_SOURCE_DIR}/project/project_file.cpp

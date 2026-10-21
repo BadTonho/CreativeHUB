@@ -17,6 +17,7 @@ struct InteractiveFrame {
     std::uint64_t document_revision = 0, gesture = 0;
     QSize size;
     QHash<QString,QImage> thumbnails, mask_thumbnails;
+    bool thumbnails_valid = false;
     QImage image;
     creative_suite::composition::OpenGlTextureFramePtr texture;
     bool transient = false;

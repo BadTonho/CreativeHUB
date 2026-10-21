@@ -712,6 +712,33 @@ int main(int argc, char** argv) {
                     timeline::TransitionKind::AudioCrossfade &&
                 reopened_audio.timeline_tracks.front().transitions.front().duration_frames == 15,
                 "Version 16 did not preserve Audio track types, envelopes, source offsets, and crossfades.");
+        auto invalid_audio_envelope_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(audio_json)).object();
+        auto invalid_audio_timeline = invalid_audio_envelope_json.value("timeline").toObject();
+        auto invalid_audio_tracks = invalid_audio_timeline.value("tracks").toArray();
+        auto invalid_audio_track = invalid_audio_tracks.at(0).toObject();
+        auto invalid_audio_clips = invalid_audio_track.value("clips").toArray();
+        auto invalid_audio_clip = invalid_audio_clips.at(0).toObject();
+        auto invalid_envelope = invalid_audio_clip.value("audio_gain_keyframes").toArray();
+        auto invalid_envelope_point = invalid_envelope.at(0).toObject();
+        invalid_envelope_point.insert("frame", 1.0e100);
+        invalid_envelope.replace(0, invalid_envelope_point);
+        invalid_audio_clip.insert("audio_gain_keyframes", invalid_envelope);
+        invalid_audio_clips.replace(0, invalid_audio_clip);
+        invalid_audio_track.insert("clips", invalid_audio_clips);
+        invalid_audio_tracks.replace(0, invalid_audio_track);
+        invalid_audio_timeline.insert("tracks", invalid_audio_tracks);
+        invalid_audio_envelope_json.insert("timeline", invalid_audio_timeline);
+        writeText(audio_project_path,
+                  QJsonDocument(invalid_audio_envelope_json).toJson().toStdString());
+        bool rejected_out_of_range_envelope = false;
+        try {
+            static_cast<void>(project::load(audio_project_path));
+        } catch (const project::ProjectError& error) {
+            rejected_out_of_range_envelope = error.code() == project::ProjectErrorCode::InvalidValue;
+        }
+        require(rejected_out_of_range_envelope,
+                "An out-of-range audio envelope frame was converted before validation.");
         auto version_15_audio_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(audio_json)).object();
         version_15_audio_json.insert("version", 15);

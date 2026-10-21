@@ -2,7 +2,6 @@
 #include "directory_restore.h"
 
 #include <creative_suite/diagnostics/logger.h>
-#include <creative_suite/updater/update_dialog.h>
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -10,20 +9,15 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QMainWindow>
-#include <QMenu>
-#include <QMenuBar>
 #include <QNetworkReply>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
-#include <QStatusBar>
+#include <QTemporaryDir>
 #include <QTimer>
-#include <QToolButton>
 #include <QUrlQuery>
-#include <QWidget>
 
 #ifdef Q_OS_WIN
 #ifndef WIN32_LEAN_AND_MEAN
@@ -37,7 +31,7 @@ namespace creative_suite::updater {
 namespace {
 
 constexpr auto kGitHubReleaseDirectory =
-    "https://github.com/BadTonho/AdobeShoppee/releases/latest/download/";
+    "https://github.com/BadTonho/CreativeHUB/releases/latest/download/";
 constexpr auto kCatalogAsset = "updates.json";
 constexpr auto kInstallRegistryRoot =
     "HKEY_CURRENT_USER\\Software\\Tonho Studios\\Creative Suite\\Installations\\";
@@ -129,9 +123,43 @@ bool processUsesExecutable(const QString& install_path, const QString& executabl
 } // namespace
 
 QString sharedUpdateDirectory() {
-    auto root = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation);
-    if (root.isEmpty()) root = QDir::tempPath();
-    return QDir(root).filePath(QStringLiteral("Tonho Studios/Creative Suite/Updater"));
+    auto data_root = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    auto cache_root = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation);
+    if (data_root.isEmpty()) data_root = QDir::tempPath();
+    if (cache_root.isEmpty()) cache_root = QDir::tempPath();
+    const auto persistent = QDir(data_root).filePath(QStringLiteral("Tonho Studios/Creative Suite/Updater"));
+    const auto legacy = QDir(cache_root).filePath(QStringLiteral("Tonho Studios/Creative Suite/Updater"));
+    // Keep staged installers, pending state, and rollback snapshots across cache cleanup.
+    // Migrate the old tree once so an interrupted update from earlier builds can resume.
+    QDir().mkpath(QFileInfo(persistent).absolutePath());
+    QLockFile migration_lock(persistent + QStringLiteral(".migration.lock"));
+    migration_lock.setStaleLockTime(30000);
+    if (!QFileInfo::exists(persistent) && QFileInfo::exists(legacy) &&
+        migration_lock.tryLock(3000)) {
+        if (QFileInfo::exists(persistent)) return persistent;
+        QTemporaryDir staging(persistent + QStringLiteral(".migration-XXXXXX"));
+        if (!staging.isValid()) return legacy;
+        const auto copy_tree = [&](const auto& self, const QString& from, const QString& to) -> bool {
+            if (!QDir().mkpath(to)) return false;
+            const QDir source(from);
+            for (const auto& entry : source.entryInfoList(
+                     QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System)) {
+                if (entry.isSymLink()) return false;
+                const auto destination = QDir(to).filePath(entry.fileName());
+                if (entry.isDir()) {
+                    if (!self(self, entry.absoluteFilePath(), destination)) return false;
+                } else if (!QFile::copy(entry.absoluteFilePath(), destination)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        if (!copy_tree(copy_tree, legacy, staging.path()) ||
+            !QDir().rename(staging.path(), persistent)) {
+            return legacy;
+        }
+    }
+    return persistent;
 }
 
 UpdateServiceConfig defaultConfig(
@@ -580,7 +608,10 @@ UpdateService::UpdateService(UpdateServiceConfig config,
 }
 
 UpdateService::~UpdateService() {
-    if (m_reply) m_reply->abort();
+    auto* reply = m_reply.data();
+    m_reply.clear();
+    m_cancel_requested = true;
+    if (reply) reply->abort();
     releaseDownloadLock();
 }
 
@@ -606,7 +637,14 @@ void UpdateService::fail(QString operation, QString message, QString context) {
 }
 
 void UpdateService::checkForUpdates() {
-    if (m_reply) m_reply->abort();
+    // A catalog refresh must never interrupt a user-requested installer download.
+    if (m_state == UpdateState::Downloading) return;
+    if (m_reply) {
+        auto* previous = m_reply.data();
+        m_reply.clear();
+        previous->abort();
+        previous->deleteLater();
+    }
     m_release.reset();
     setState(UpdateState::Checking);
 
@@ -627,9 +665,13 @@ void UpdateService::checkForUpdates() {
         return;
     }
     m_reply = reply;
-    connect(m_reply, &QNetworkReply::finished, this, [this] {
-        auto* reply = m_reply.data();
-        if (!reply) return;
+    const QPointer<QNetworkReply> request_reply(reply);
+    connect(reply, &QNetworkReply::finished, this, [this, request_reply] {
+        auto* reply = request_reply.data();
+        if (!reply || m_reply != request_reply) {
+            if (reply) reply->deleteLater();
+            return;
+        }
         const auto network_error = reply->error();
         const auto network_message = reply->errorString();
         const auto status_code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -846,74 +888,6 @@ void UpdateService::releaseDownloadLock() {
     if (!m_download_lock) return;
     if (m_download_lock->isLocked()) m_download_lock->unlock();
     m_download_lock.reset();
-}
-
-UpdateCenter::UpdateCenter(QMainWindow* window,
-                           UpdateServiceConfig config,
-                           QObject* parent)
-    : QObject(parent ? parent : window)
-    , m_window(window)
-    , m_config(std::move(config)) {
-    if (!m_window) return;
-    m_runtime = new UpdateRuntime(m_config.app_id, this);
-    m_service = new UpdateService(m_config, this);
-    m_status_button = new QToolButton(m_window);
-    m_status_button->setText(QStringLiteral("Update available"));
-    m_status_button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    m_status_button->setAutoRaise(true);
-    m_status_button->setVisible(false);
-    m_status_button->setObjectName(QStringLiteral("updateCenterStatusButton"));
-    m_window->statusBar()->addPermanentWidget(m_status_button);
-    connect(m_status_button, &QToolButton::clicked, this, &UpdateCenter::openUpdateDialog);
-
-    if (auto* menu_bar = m_window->menuBar()) {
-        QMenu* help_menu = nullptr;
-        for (auto* action : menu_bar->actions()) {
-            if (action->menu() && action->menu()->title().contains(QStringLiteral("Help"), Qt::CaseInsensitive)) {
-                help_menu = action->menu();
-                break;
-            }
-        }
-        if (!help_menu) help_menu = menu_bar->addMenu(QStringLiteral("&Help"));
-        auto* check_action = help_menu->addAction(QStringLiteral("Check for Updates..."));
-        check_action->setObjectName(QStringLiteral("checkForUpdatesAction"));
-        connect(check_action, &QAction::triggered, this, [this] {
-            if (m_service && m_service->state() == UpdateState::Idle) m_service->checkForUpdates();
-            openUpdateDialog();
-        });
-    }
-    connect(m_service, &UpdateService::updateAvailable, this,
-            [this](const ReleaseEntry& entry) {
-                if (!m_status_button) return;
-                m_status_button->setText(QStringLiteral("Update available · %1").arg(entry.version));
-                m_status_button->setVisible(true);
-            });
-    connect(m_service, &UpdateService::downloadReady, this,
-            [this](const QString& installer, const ReleaseEntry& entry) {
-                if (!m_runtime || !m_service) return;
-                const bool accepted = m_runtime->installOrWait(
-                    entry.app_id,
-                    m_config.install_path,
-                    m_config.executable_name,
-                    installer,
-                    entry.sha256_hex,
-                    m_config.installed);
-                if (accepted && m_status_button) {
-                    m_status_button->setText(QStringLiteral("Update ready · %1").arg(entry.version));
-                    m_status_button->setVisible(true);
-                }
-            });
-
-    if (m_config.installed) {
-        QTimer::singleShot(0, m_service, &UpdateService::checkForUpdates);
-        m_runtime->resumePendingInstalls({m_config.app_id});
-    }
-}
-
-void UpdateCenter::openUpdateDialog() {
-    if (!m_window || !m_service || !m_runtime) return;
-    UpdateDialog dialog(m_service, m_runtime, m_window);
-    dialog.exec();
 }
 
 } // namespace creative_suite::updater

@@ -131,8 +131,8 @@ graph LR
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/BadTonho/AdobeShoppee.git
-cd AdobeShoppee
+git clone https://github.com/BadTonho/CreativeHUB.git
+cd CreativeHUB
 ```
 
 ### 2. Configure with CMake

@@ -19,12 +19,15 @@
 #include <QScrollArea>
 #include <QComboBox>
 #include <QSignalBlocker>
+#include <QSettings>
+#include <QDir>
 #include <creative_suite/translations/language_preference.h>
 
 namespace creative_suite::hub {
 
-SettingsPage::SettingsPage(QWidget* parent)
+SettingsPage::SettingsPage(QWidget* parent, bool enableStartupIntegration)
     : QWidget(parent)
+    , m_enableStartupIntegration(enableStartupIntegration)
 {
     setupUi();
 }
@@ -166,17 +169,55 @@ void SettingsPage::setupUi() {
             "SettingsPage", "Changes take effect the next time you open this app."));
     });
 
+    const bool notify_updates = m_enableStartupIntegration
+        ? QSettings().value(QStringLiteral("hub/notify_updates"), true).toBool() : true;
     m_autostartCheck = new QCheckBox(QCoreApplication::translate("SettingsPage", "Start Creative Suite Hub with Windows"), generalCard);
+    m_autostartCheck->setObjectName(QStringLiteral("hubAutostartCheckBox"));
     m_autostartCheck->setMinimumHeight(24);
     m_autostartCheck->setStyleSheet(QStringLiteral(
         "QCheckBox { color: #d0d0d0; font-size: 13px; font-weight: 500; spacing: 8px; }"
         "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #383838; background: #1a1a1a; }"
         "QCheckBox::indicator:checked { background: #ffffff; border-color: #ffffff; }"
     ));
+    const QString run_key = QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run");
+    const QString startup_name = QStringLiteral("CreativeSuiteHub");
+#ifdef Q_OS_WIN
+    if (m_enableStartupIntegration) {
+        QSettings startup(run_key, QSettings::NativeFormat);
+        m_autostartCheck->setChecked(startup.contains(startup_name));
+        connect(m_autostartCheck, &QCheckBox::toggled, this,
+                [this, run_key, startup_name](bool enabled) {
+            QSettings startup_settings(run_key, QSettings::NativeFormat);
+            if (enabled) {
+                startup_settings.setValue(startup_name,
+                    QLatin1Char('"') + QDir::toNativeSeparators(QCoreApplication::applicationFilePath()) + QLatin1Char('"'));
+            } else {
+                startup_settings.remove(startup_name);
+            }
+            startup_settings.sync();
+            if (startup_settings.status() != QSettings::NoError) {
+                HubLogger::instance().logError(QStringLiteral("SettingsPage"),
+                    QStringLiteral("set_startup_preference"),
+                    QStringLiteral("Could not update the current-user startup entry."),
+                    QCoreApplication::applicationFilePath());
+                QSignalBlocker blocker(m_autostartCheck);
+                m_autostartCheck->setChecked(!enabled);
+            }
+        });
+    } else {
+        m_autostartCheck->setChecked(false);
+        m_autostartCheck->setEnabled(false);
+    }
+#else
+    m_autostartCheck->setChecked(false);
+    m_autostartCheck->setEnabled(false);
+    m_autostartCheck->setVisible(false);
+#endif
     generalLayout->addWidget(m_autostartCheck);
 
     m_notificationsCheck = new QCheckBox(QCoreApplication::translate("SettingsPage", "Notify me automatically about available updates"), generalCard);
-    m_notificationsCheck->setChecked(true);
+    m_notificationsCheck->setObjectName(QStringLiteral("hubUpdateNotificationsCheckBox"));
+    m_notificationsCheck->setChecked(notify_updates);
     m_notificationsCheck->setMinimumHeight(24);
     m_notificationsCheck->setStyleSheet(QStringLiteral(
         "QCheckBox { color: #d0d0d0; font-size: 13px; font-weight: 500; spacing: 8px; }"
@@ -184,6 +225,16 @@ void SettingsPage::setupUi() {
         "QCheckBox::indicator:checked { background: #ffffff; border-color: #ffffff; }"
     ));
     generalLayout->addWidget(m_notificationsCheck);
+    if (m_enableStartupIntegration) connect(m_notificationsCheck, &QCheckBox::toggled, this, [](bool enabled) {
+        QSettings settings;
+        settings.setValue(QStringLiteral("hub/notify_updates"), enabled);
+        settings.sync();
+        if (settings.status() != QSettings::NoError) {
+            HubLogger::instance().logError(QStringLiteral("SettingsPage"),
+                QStringLiteral("save_update_notification_preference"),
+                QStringLiteral("Could not save the update notification preference."));
+        }
+    });
 
     mainLayout->addWidget(generalCard);
 

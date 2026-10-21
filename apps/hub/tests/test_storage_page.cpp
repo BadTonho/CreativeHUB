@@ -15,6 +15,8 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QThread>
 #include <iostream>
 #ifdef Q_OS_WIN
 #define NOMINMAX
@@ -52,6 +54,19 @@ static void clearCache(StoragePage& page, bool accept) {
 static bool hasLabel(const StoragePage& page, const QString& text) {
     for (auto* label : page.findChildren<QLabel*>()) {
         if (label->text().contains(text)) return true;
+    }
+    return false;
+}
+
+static bool waitForLabelText(const StoragePage& page, const QString& object_name,
+                             const QString& expected) {
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < 5000) {
+        auto* label = page.findChild<QLabel*>(object_name);
+        if (label && label->text() == expected) return true;
+        QCoreApplication::processEvents();
+        QThread::msleep(10);
     }
     return false;
 }
@@ -127,7 +142,8 @@ int main(int argc, char* argv[]) {
     clearCache(cleanPage, true);
     CS_TEST_CHECK(hasLabel(cleanPage, "Cache limpo com sucesso"));
     CS_TEST_CHECK(hasLabel(cleanPage, "Foram liberados " + StorageManager::formatBytes(1000)));
-    CS_TEST_CHECK(hasLabel(cleanPage, "0 B")); // The overview refreshed after removal.
+    CS_TEST_CHECK(waitForLabelText(cleanPage, QStringLiteral("storageTotalSizeLabel"),
+                                   StorageManager::formatBytes(0))); // Async overview refreshed after removal.
     const auto activityCount = ActivityManager::instance().activities().size();
     const auto logCount = HubLogger::instance().entries().size();
     clearCache(cleanPage, false);

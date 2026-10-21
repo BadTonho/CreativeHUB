@@ -61,9 +61,9 @@ TranslationUpdateService::TranslationUpdateService(TranslationUpdateConfig confi
 }
 
 TranslationUpdateService::~TranslationUpdateService() {
-    if (m_reply != nullptr) {
-        m_reply->abort();
-    }
+    auto* reply = m_reply;
+    m_reply = nullptr;
+    if (reply != nullptr) reply->abort();
 }
 
 bool TranslationUpdateService::isBusy() const noexcept {

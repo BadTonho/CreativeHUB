@@ -248,8 +248,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
             activeCanvas()->setRenderFrame(frame);
             if (!frame.transient) {
                 auto* tab=document_tabs_.at(active_document_tab_);
-                tab->thumbnails=frame.thumbnails; tab->mask_thumbnails=frame.mask_thumbnails;
-                layer_panel_->setThumbnails(tab->thumbnails, tab->mask_thumbnails);
+                if (frame.thumbnails_valid) {
+                    tab->thumbnails=frame.thumbnails; tab->mask_thumbnails=frame.mask_thumbnails;
+                    layer_panel_->setThumbnails(tab->thumbnails, tab->mask_thumbnails);
+                }
             }
         });
     empty_document_state_ = std::make_unique<ImageEditorDocumentTab>();
@@ -618,15 +620,20 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
         if (activeCanvas() != canvas) return;
         const auto snapshot = activeSession().interactiveSnapshot();
         const auto sequence = render_controller_->sequence(); const QPointer<ImageCanvas> target(canvas);
-        background_task_pool_.start(QRunnable::create([this, target, snapshot, sequence, pixel] {
+        const QPointer<ImageEditorWindow> window_guard(this);
+        background_task_pool_.start(QRunnable::create([window_guard, target, snapshot, sequence, pixel] {
             const auto image = ImageDocumentRenderer::composite(snapshot.document, snapshot.source_image, snapshot.raster_images);
             const bool valid = !image.isNull() && image.rect().contains(pixel);
             const QColor color = valid ? image.pixelColor(pixel) : QColor();
-            QMetaObject::invokeMethod(this, [this, target, sequence, color, valid] {
-                if (target && activeCanvas() == target && render_controller_ && render_controller_->sequence() == sequence) {
-                    if (valid && color.alpha() != 0) tool_sidebar_->setBrushColor(color);
-                    else if (!valid) logger_.logError(QStringLiteral("sample_color"), QStringLiteral("The committed document could not be sampled."));
-                }
+            if (!window_guard) return;
+            QMetaObject::invokeMethod(window_guard.data(), [window_guard, target, sequence, color, valid] {
+                if (!window_guard || !target || window_guard->activeCanvas() != target ||
+                    !window_guard->render_controller_ ||
+                    window_guard->render_controller_->sequence() != sequence) return;
+                if (valid && color.alpha() != 0) window_guard->tool_sidebar_->setBrushColor(color);
+                else if (!valid) window_guard->logger_.logError(
+                    QStringLiteral("sample_color"),
+                    QStringLiteral("The committed document could not be sampled."));
             }, Qt::QueuedConnection);
         }));
     });
@@ -656,8 +663,10 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
                 const std::uint64_t sequence = ++magic_wand_sequence_;
                 const QString target_layer_id = activeSession().selectedLayerId();
                 const bool mask_target = editingMask();
+                const QPointer<ImageEditorWindow> window_guard(this);
+                const QPointer<ImageCanvas> canvas_guard(canvas);
                 background_task_pool_.start(QRunnable::create(
-                    [this, canvas, sequence, target_layer_id, mask_target,
+                    [window_guard, canvas_guard, sequence, target_layer_id, mask_target,
                      target_task = std::move(target_task), tolerance]() mutable {
                         auto target = target_task();
                         MagicWandTool::Result result;
@@ -669,28 +678,32 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
                             failure = QStringLiteral(
                                 "The active layer could not be rendered for Magic Wand selection.");
                         }
-                        QMetaObject::invokeMethod(this,
-                            [this, canvas, sequence, target_layer_id, mask_target, failure,
+                        if (!window_guard) return;
+                        QMetaObject::invokeMethod(window_guard.data(),
+                            [window_guard, canvas_guard, sequence, target_layer_id, mask_target, failure,
                              result = std::move(result)]() mutable {
-                                if (sequence != magic_wand_sequence_ ||
-                                    activeCanvas() != canvas || !activeSession().hasSource() ||
-                                    activeSession().selectedLayerId() != target_layer_id ||
-                                    editingMask() != mask_target ||
-                                    tool_sidebar_->activeTool() != ToolSidebar::Tool::MagicWand) {
+                                if (!window_guard || !canvas_guard ||
+                                    sequence != window_guard->magic_wand_sequence_ ||
+                                    window_guard->activeCanvas() != canvas_guard ||
+                                    !window_guard->activeSession().hasSource() ||
+                                    window_guard->activeSession().selectedLayerId() != target_layer_id ||
+                                    window_guard->editingMask() != mask_target ||
+                                    window_guard->tool_sidebar_->activeTool() != ToolSidebar::Tool::MagicWand) {
                                     return;
                                 }
                                 if (!failure.isEmpty()) {
-                                    reportError(QStringLiteral("magic_wand_render"), failure);
+                                    window_guard->reportError(QStringLiteral("magic_wand_render"), failure);
                                     return;
                                 }
                                 if (result.status == MagicWandTool::Status::Rejected) {
-                                    statusBar()->showMessage(ui::translateMessage(result.rejection_reason), 4000);
+                                    window_guard->statusBar()->showMessage(
+                                        ui::translateMessage(result.rejection_reason), 4000);
                                     return;
                                 }
                                 if (result.status != MagicWandTool::Status::Selected) return;
                                 const QPainterPath canvas_path =
-                                    activeSession().mapEditableSelectionPathToCanvas(result.path);
-                                static_cast<void>(canvas->applyAreaSelectionPath(canvas_path));
+                                    window_guard->activeSession().mapEditableSelectionPathToCanvas(result.path);
+                                static_cast<void>(canvas_guard->applyAreaSelectionPath(canvas_path));
                             }, Qt::QueuedConnection);
                     }));
             });

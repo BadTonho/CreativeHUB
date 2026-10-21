@@ -1,4 +1,4 @@
-#include <creative_suite/updater/update_dialog.h>
+#include "update_dialog.h"
 
 #include <creative_suite/updater/update_service.h>
 

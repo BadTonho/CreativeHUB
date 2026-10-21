@@ -66,6 +66,8 @@ int main() {
     CS_TEST_CHECK(!reader.hasChangelogs(QStringLiteral("motion-editor")));
     CS_TEST_CHECK(reader.availableVersions(QStringLiteral("motion-editor")).isEmpty());
     CS_TEST_CHECK(reader.loadChangelog(QStringLiteral("video-editor"), QStringLiteral("9.9.9")).isEmpty());
+    CS_TEST_CHECK(reader.loadChangelog(QStringLiteral("video-editor"), QStringLiteral("../outside")).isEmpty());
+    CS_TEST_CHECK(reader.loadChangelog(QStringLiteral("../video-editor"), QStringLiteral("0.2.0")).isEmpty());
 
     // 8. Test single version app
     CS_TEST_CHECK(reader.hasChangelogs(QStringLiteral("image-editor")));

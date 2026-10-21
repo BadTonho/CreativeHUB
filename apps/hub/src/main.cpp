@@ -1,4 +1,5 @@
 #include "ui/main_window.h"
+#include "update_ui/update_center.h"
 #include "diagnostics/hub_logger.h"
 #include <creative_suite/translations/translation_runtime.h>
 #include <creative_suite/translations/language_preference.h>

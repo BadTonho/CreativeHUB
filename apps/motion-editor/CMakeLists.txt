@@ -139,10 +139,10 @@ add_library(creative-suite-motion-editor-core STATIC
 )
 target_include_directories(creative-suite-motion-editor-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/libs/motion-handoff/include
 )
 target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::composition-exchange
+    creative-suite::motion-handoff
     creative-suite::translations
     creative-suite::animation
     creative-suite::composition
@@ -162,6 +162,10 @@ target_compile_features(creative-suite-motion-editor-core PUBLIC cxx_std_20)
 
 add_executable(creative-suite-motion-editor
     src/main.cpp
+    src/update_ui/update_center.cpp
+    src/update_ui/update_center.h
+    src/update_ui/update_dialog.cpp
+    src/update_ui/update_dialog.h
     resources/app_icon.qrc
     resources/translations.qrc
 )

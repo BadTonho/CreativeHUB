@@ -148,6 +148,11 @@ remain available for manual opening through the vault.
 
 ## Verification
 
+Project-card backup creation runs in a worker task. The card remains disabled
+until the snapshot operation completes; success or logged failure feedback is
+delivered on the Hub UI thread. Closing or rebuilding the card does not leave a
+callback that references a destroyed widget.
+
 `hub-backup-manager-test` reproduces the original relative-image failure and
 checks original bytes, unknown fields, failed preparation, unsupported
 versions, malformed paths, opaque files, log context, and an unwritable vault.

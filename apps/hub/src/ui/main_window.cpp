@@ -7,7 +7,7 @@
 #include "../model/activity_manager.h"
 #include "../model/backup_manager.h"
 #ifdef Q_OS_WIN
-#include <creative_suite/updater/update_dialog.h>
+#include "../update_ui/update_dialog.h"
 #include <creative_suite/updater/update_service.h>
 #endif
 
@@ -17,10 +17,12 @@
 #include <QResizeEvent>
 #include <QStatusBar>
 #include <QTimer>
+#include <QSettings>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QFileInfo>
 #include <QLocale>
+#include <algorithm>
 #include <creative_suite/translations/language_preference.h>
 
 namespace creative_suite::hub {
@@ -229,6 +231,7 @@ void MainWindow::scanInstalledApps() {
     }
 
     m_sidebarWidget->setUpdatesCount(updatesCount);
+    if (m_appsPage) m_appsPage->refreshCards();
     if (m_updatesPage) {
         m_updatesPage->refreshUpdates();
     }
@@ -267,6 +270,13 @@ void MainWindow::configureUpdateServices() {
             if (service->config().installed) {
                 m_catalog.updateAppStatus(entry.app_id, AppStatus::UpdateAvailable);
             }
+            QSettings preferences;
+            if (preferences.value(QStringLiteral("hub/notify_updates"), true).toBool()) {
+                const auto app = m_catalog.findApp(entry.app_id);
+                statusBar()->showMessage(
+                    QCoreApplication::translate("MainWindow", "%1 update %2 is available.")
+                        .arg(app ? app->name() : entry.app_id, entry.version), 10000);
+            }
             scanInstalledApps();
         });
         connect(service, &creative_suite::updater::UpdateService::stateChanged,
@@ -291,6 +301,16 @@ void MainWindow::configureUpdateServices() {
                     m_catalog.updateAppStatus(app_id, AppStatus::NotInstalled);
                 }
             }
+            if (m_appsPage) m_appsPage->refreshCards();
+        });
+        connect(service, &creative_suite::updater::UpdateService::downloadProgress,
+                this, [this, app_id = app.id()](qint64 received, qint64 total) {
+            if (!m_appsPage) return;
+            const double percentage = total > 0
+                ? std::clamp(100.0 * static_cast<double>(received) / static_cast<double>(total), 0.0, 100.0)
+                : 0.0;
+            m_appsPage->setDownloadingProgress(app_id, percentage,
+                QCoreApplication::translate("MainWindow", "Downloading update…"));
         });
         connect(service, &creative_suite::updater::UpdateService::operationFailed,
                 this, [this](const QString& message) {

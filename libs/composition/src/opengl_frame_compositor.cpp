@@ -252,7 +252,8 @@ void main() {
     if (operation == 4 || operation == 5) {
         ivec2 mp = pixel;
         if (mask_bottom_left) mp.y = textureSize(mask_image,0).y-1-mp.y;
-        int coverage = int(floor(texelFetch(mask_image,mp,0).r*255.0+0.5));
+        ivec3 mask_bytes=ivec3(floor(texelFetch(mask_image,mp,0).rgb*255.0+0.5));
+        int coverage=(mask_bytes.r*2126+mask_bytes.g*7152+mask_bytes.b*722+5000)/10000;
         ivec4 bg=ivec4(floor(color*255.0+0.5));
         if (operation == 4) { color.a=float((bg.a*coverage+127)/255)/255.0; return; }
         if (coverage==0) return;
@@ -733,7 +734,6 @@ uniform vec2 brightness_contrast;
 uniform vec3 exposure_offset_gamma;
 uniform vec3 hue_saturation;
 uniform bool has_mask;
-uniform bool mask_gray;
 uniform bool bottom_left;
 uniform int canvas_height;
 uniform int opacity256;
@@ -783,7 +783,7 @@ void main() {
         else if(blend_mode==4)mixed=min(vec3(1),cb+cs);
         else if(blend_mode==5)mixed=abs(cb-cs);
         float coverage=1.0;
-        if(has_mask){ivec4 m=ivec4(floor(texelFetch(mask_image,ivec2(floor(point)),0)*255.0+0.5));coverage=float(mask_gray?m.r:(m.r*11+m.g*16+m.b*5)/32)/255.0;}
+        if(has_mask){ivec4 m=ivec4(floor(texelFetch(mask_image,ivec2(floor(point)),0)*255.0+0.5));int luma=(m.r*2126+m.g*7152+m.b*722+5000)/10000;coverage=float(luma)/255.0;}
         color=vec4(mix(b.rgb,mixed*b.a,blend_opacity*coverage),b.a);return;
     }
     ivec2 pixel = ivec2(floor((inverse_matrix * vec3(point, 1.0)).xy));
@@ -794,7 +794,7 @@ void main() {
     ivec4 bytes = ivec4(floor(texelFetch(source_image, source_pixel, 0) * 255.0 + 0.5));
     if (has_mask) {
         ivec3 mask_bytes = ivec3(floor(texelFetch(mask_image, pixel, 0).rgb * 255.0 + 0.5));
-        int coverage = mask_gray ? mask_bytes.r : (mask_bytes.r * 11 + mask_bytes.g * 16 + mask_bytes.b * 5) / 32;
+        int coverage = (mask_bytes.r * 2126 + mask_bytes.g * 7152 + mask_bytes.b * 722 + 5000) / 10000;
         bytes = (bytes * coverage + ivec4(127)) / 255;
     }
     if(blend_mode!=0) {
@@ -951,7 +951,6 @@ void main() {
                     loaded = upload(layer.mask, 1); if (loaded.status != OpenGlCompositionStatus::Complete) return loaded;
                     mask = raster_textures.at(layer.mask.identity).texture;
                 }
-                raster_program->setUniformValue("mask_gray", layer.mask.pixels.format()==QImage::Format_Grayscale8);
                 if (!draw(layer.adjustment?0:raster_textures.at(layer.content.identity).texture, false, mask, layer.opacity, {}, layer.blend_mode,layer.adjustment?&*layer.adjustment:nullptr))
                     return result(OpenGlCompositionStatus::Unsupported, "raster-transform", "Invalid raster transform.");
             }

@@ -1,4 +1,5 @@
 #include "ui/main_window/main_window.h"
+#include "update_ui/update_center.h"
 #include <creative_suite/translations/language_preference.h>
 #include <creative_suite/translations/translation_runtime.h>
 #ifdef Q_OS_WIN

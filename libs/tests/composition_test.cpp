@@ -214,6 +214,16 @@ int main() {
         require(pixelEquals(processed,1,0,100,20,40,128) && pixelEquals(processed,2,0,99,88,77,0),"Mask blend endpoints changed RGBA bytes.");
         processed=processed_source; require(composition::applyMask(processed,mask),"CPU ApplyMask failed.");
         require(pixelEquals(processed,0,0,0,0,255,128) && pixelEquals(processed,1,0,30,40,50,0),"ApplyMask changed straight RGB or alpha coverage.");
+        auto colored_mask = frame(1, 1, {255, 0, 0, 255});
+        auto colored_target = frame(1, 1, {1, 2, 3, 255});
+        require(composition::applyMask(colored_target, colored_mask) &&
+                    colored_target.rgba_pixels[3] == 54,
+                "CPU ApplyMask must use Rec.709 luminance for colored masks.");
+        auto original_pixel = frame(1, 1, {10, 20, 30, 255});
+        auto processed_pixel = frame(1, 1, {200, 210, 220, 255});
+        require(composition::maskedBlend(original_pixel, processed_pixel, colored_mask) &&
+                    processed_pixel.rgba_pixels[0] == 50,
+                "CPU MaskedBlend must use Rec.709 luminance for colored masks.");
         require(!composition::applyMask(processed,mask,[]{return true;}),"Cancelled ApplyMask completed.");
         mask.height=2; require(!composition::maskedBlend(original,processed,mask),"Invalid mask dimensions were accepted.");
 

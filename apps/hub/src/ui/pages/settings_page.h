@@ -15,7 +15,7 @@ class SettingsPage : public QWidget {
     Q_OBJECT
 
 public:
-    explicit SettingsPage(QWidget* parent = nullptr);
+    explicit SettingsPage(QWidget* parent = nullptr, bool enableStartupIntegration = true);
 
 private slots:
     void onBrowseInstallPath();
@@ -27,6 +27,7 @@ private:
     QLineEdit* m_installPathEdit{nullptr};
     QCheckBox* m_autostartCheck{nullptr};
     QCheckBox* m_notificationsCheck{nullptr};
+    bool m_enableStartupIntegration{true};
     QLineEdit* m_logPathEdit{nullptr};
     QComboBox* m_languageCombo{nullptr};
     QLabel* m_languageNote{nullptr};

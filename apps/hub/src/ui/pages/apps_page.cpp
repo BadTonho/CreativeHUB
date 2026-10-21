@@ -181,6 +181,16 @@ void AppsPage::refreshCards() {
     applyFilters();
 }
 
+void AppsPage::setDownloadingProgress(const QString& app_id, double percentage,
+                                      const QString& status_text) {
+    for (auto* card : m_cardWidgets) {
+        if (card && card->appInfo().id() == app_id) {
+            card->setDownloadingProgress(percentage, status_text);
+            return;
+        }
+    }
+}
+
 void AppsPage::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     applyFilters();

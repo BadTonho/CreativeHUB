@@ -234,7 +234,8 @@ Qt platform provides one.
 When Save As creates a different composition file, linked Image Editor
 sidecars are copied to new per-layer directories and the copy stores those new
 paths. The original composition continues to reference its original `.cimg`
-and published PNG.
+and published PNG. If cloning, rebasing, or saving fails, newly created
+sidecar directories are removed and the original in-memory links are restored.
 
 Motion Studio compares the current composition and persisted Media Pool fields
 against the last saved state to track unsaved changes. A dirty document offers

@@ -45,7 +45,7 @@ int main(int argc, char* argv[])
         catalog_root.path());
     CS_TEST_CHECK(loaded.bundled_loaded);
 
-    SettingsPage page;
+    SettingsPage page(nullptr, false);
     auto* language = page.findChild<QComboBox*>(QStringLiteral("languagePreferenceComboBox"));
     auto* note = page.findChild<QLabel*>(QStringLiteral("languagePreferenceNote"));
     CS_TEST_CHECK(language != nullptr);

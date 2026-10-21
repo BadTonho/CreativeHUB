@@ -83,6 +83,7 @@ struct ImageRenderController::WorkerState {
             if (thumbnail.isNull()) throw std::runtime_error("Layer/group thumbnail rendering failed.");
         thumbnail_snapshot=snapshot; thumbnail_document_id=id; thumbnails=std::move(next); mask_thumbnails=std::move(masks);
         frame.thumbnails=thumbnails; frame.mask_thumbnails=mask_thumbnails;
+        frame.thumbnails_valid=true;
         std::uint64_t thumbnail_bytes=0;
         for(const auto& image:thumbnails) thumbnail_bytes+=image.sizeInBytes();
         for(const auto& image:mask_thumbnails) thumbnail_bytes+=image.sizeInBytes();

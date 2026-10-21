@@ -43,8 +43,10 @@ closing editors and retrying and refer to the log for detailed causes.
 The optional `RemoveEntry` callback isolates deletion failures in tests; all
 enumeration, measurement, and other removals remain real filesystem operations.
 `StoragePage` accepts explicit roots for widget regressions. Production uses
-the platform-derived suite roots and native filesystem deletion. No dependency
-or persisted format is added by this change.
+the platform-derived suite roots and native filesystem deletion. Size scans run
+on a worker pool; the page applies only the latest completed snapshot on its UI
+thread. Cleanup still returns one detailed result to the UI. Qt Concurrent is
+used for this task; no persisted format changes.
 
 ## Verification
 
@@ -55,6 +57,7 @@ or persisted format is added by this change.
   Permission-denied deletion is simulated deterministically on every platform.
 - `hub-storage-page-test` drives the real confirmation dialog and checks
   cancellation, feedback, history, refreshed totals, success, and empty cache.
+  It also waits for the asynchronous total-size refresh after cleanup.
   On Windows it holds a real file handle denying deletion and verifies partial
   cleanup, total failure, and successful retry after releasing the handle.
   Other platforms exercise failure/unknown measurement with an invalid root.

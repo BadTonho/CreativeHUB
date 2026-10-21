@@ -320,6 +320,8 @@ int AudioPlaybackSession::source_channel_count() const noexcept {
 }
 
 const AudioPlaybackSession::OutputSpec& AudioPlaybackSession::output_spec() const noexcept {
+    static const OutputSpec empty{};
+    if (impl_ == nullptr) return empty;
     return impl_->output;
 }
 
@@ -334,6 +336,9 @@ bool AudioPlaybackSession::at_end() const noexcept {
 void AudioPlaybackSession::seek_to_source_frame(
     std::int64_t source_frame,
     double video_frame_rate) {
+    if (impl_ == nullptr) {
+        throw MediaError("The audio playback session is not initialized.");
+    }
     if (source_frame < 0 || !std::isfinite(video_frame_rate) ||
         video_frame_rate <= 0.0) {
         const MediaError error("The requested audio source position is invalid.");

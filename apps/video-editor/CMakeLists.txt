@@ -203,6 +203,10 @@ add_library(creative-suite-main-editor-core STATIC
 
 add_executable(creative-suite-main-editor
     src/main.cpp
+    src/update_ui/update_center.cpp
+    src/update_ui/update_center.h
+    src/update_ui/update_dialog.cpp
+    src/update_ui/update_dialog.h
     resources/app_icon.qrc
     resources/translations.qrc
 )
@@ -250,6 +254,7 @@ add_custom_target(update-video-editor-translations
 
 target_link_libraries(creative-suite-main-editor-core PUBLIC
     creative-suite::composition-exchange
+    creative-suite::motion-handoff
     creative-suite::translations
     Qt6::Widgets
     Qt6::OpenGL
@@ -279,7 +284,6 @@ endif()
 
 target_include_directories(creative-suite-main-editor-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/libs/motion-handoff/include
     ${FFMPEG_INCLUDE_DIRS}
 )
 

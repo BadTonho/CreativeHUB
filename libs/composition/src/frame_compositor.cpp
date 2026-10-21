@@ -22,6 +22,11 @@ bool maskFrameValid(const media::RgbaFrame& f) {
 bool maskSameSize(const media::RgbaFrame& a, const media::RgbaFrame& b) {
     return maskFrameValid(a) && maskFrameValid(b) && a.width==b.width && a.height==b.height;
 }
+std::uint8_t maskCoverage(const std::uint8_t* rgba) noexcept {
+    const auto luma = std::uint32_t(rgba[0]) * 2126u +
+        std::uint32_t(rgba[1]) * 7152u + std::uint32_t(rgba[2]) * 722u;
+    return static_cast<std::uint8_t>((luma + 5000u) / 10000u);
+}
 }
 bool applyMask(media::RgbaFrame& frame, const media::RgbaFrame& mask, const std::function<bool()>& cancel) {
     if (!maskSameSize(frame,mask)) return false;
@@ -30,7 +35,8 @@ bool applyMask(media::RgbaFrame& frame, const media::RgbaFrame& mask, const std:
         for (int x=0; x<frame.width; ++x) {
             const auto f=static_cast<std::size_t>(y)*frame.stride+x*4;
             const auto m=static_cast<std::size_t>(y)*mask.stride+x*4;
-            frame.rgba_pixels[f+3]=static_cast<std::uint8_t>((unsigned(frame.rgba_pixels[f+3])*mask.rgba_pixels[m]+127)/255);
+            frame.rgba_pixels[f+3]=static_cast<std::uint8_t>(
+                (unsigned(frame.rgba_pixels[f+3]) * maskCoverage(mask.rgba_pixels.data() + m) + 127) / 255);
         }
     }
     return true;
@@ -67,7 +73,8 @@ bool maskedBlend(const media::RgbaFrame& original, media::RgbaFrame& processed,
         for (int x=0; x<processed.width; ++x) {
             const auto o=static_cast<std::size_t>(y)*original.stride+x*4;
             const auto p=static_cast<std::size_t>(y)*processed.stride+x*4;
-            const auto m=mask.rgba_pixels[static_cast<std::size_t>(y)*mask.stride+x*4];
+            const auto m=maskCoverage(mask.rgba_pixels.data() +
+                static_cast<std::size_t>(y)*mask.stride+x*4);
             if (m==255) continue;
             if (m==0) { std::copy_n(original.rgba_pixels.data()+o,4,processed.rgba_pixels.data()+p); continue; }
             const unsigned oa=original.rgba_pixels[o+3]*(255-m), pa=processed.rgba_pixels[p+3]*m;

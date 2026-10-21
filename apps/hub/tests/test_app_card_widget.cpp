@@ -1,6 +1,7 @@
 #include "ui/cards/app_card_widget.h"
 #include <QApplication>
 #include <QMouseEvent>
+#include <QProgressBar>
 #include "../../../cmake/test_support/test_check.h"
 #include <iostream>
 
@@ -25,6 +26,10 @@ int main(int argc, char* argv[]) {
 
     AppCardWidget card;
     card.setAppInfo(info);
+    card.setDownloadingProgress(42.0, QStringLiteral("Downloading update"));
+    auto* progress = card.findChild<QProgressBar*>();
+    CS_TEST_CHECK(progress != nullptr);
+    CS_TEST_CHECK(progress->value() == 42);
 
     // Verify compact block dimensions
     CS_TEST_CHECK(card.width() == AppCardWidget::kCardWidth);

@@ -4,6 +4,7 @@
 #include <QTextStream>
 #include <QStandardPaths>
 #include <QDir>
+#include <QFileInfo>
 
 namespace creative_suite::hub {
 
@@ -53,6 +54,16 @@ void HubLogger::log(LogLevel level,
     m_entries.push_back(entry);
 
     if (!m_logFilePath.isEmpty()) {
+        constexpr qint64 max_file_bytes = 2 * 1024 * 1024;
+        const QFileInfo current(m_logFilePath);
+        if (current.exists() && current.size() >= max_file_bytes) {
+            const auto previous_path = m_logFilePath + QStringLiteral(".1");
+            QFile::remove(previous_path);
+            if (!QFile::rename(m_logFilePath, previous_path)) {
+                // Keep the in-memory entry even when the filesystem refuses rotation.
+                return;
+            }
+        }
         QFile file(m_logFilePath);
         if (file.open(QIODevice::Append | QIODevice::Text)) {
             QTextStream out(&file);
@@ -62,11 +73,13 @@ void HubLogger::log(LogLevel level,
                 case LogLevel::Warning: levelStr = QStringLiteral("WARN"); break;
                 case LogLevel::Error: levelStr = QStringLiteral("ERROR"); break;
             }
+            const auto bounded_message = message.left(32 * 1024);
+            const auto bounded_context = context.left(16 * 1024);
             out << entry.timestamp.toString(Qt::ISODate) << " [" << levelStr << "] ["
-                << subsystem << "::" << operation << "] "
-                << message;
+                << subsystem.left(256) << "::" << operation.left(256) << "] "
+                << bounded_message;
             if (!context.isEmpty()) {
-                out << " | context: " << context;
+                out << " | context: " << bounded_context;
             }
             out << "\n";
         }

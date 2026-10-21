@@ -298,3 +298,7 @@ Trim Paths when configured; no interchange schema or Video/Image UI changes.
 ## Drop Shadow contract maintenance
 
 Motion native v17 adds ordered Drop Shadow effects. `.cscomp` remains v3 and refuses every instance, including disabled or hidden/inactive usage, by layer name/ID and effect position. No shadow is flattened or added to Video/Image interchange.
+
+Motion export remains all-or-nothing. Every unsupported Bezier mask is reported,
+including masks that are not referenced by a layer; export does not publish a
+partial document.

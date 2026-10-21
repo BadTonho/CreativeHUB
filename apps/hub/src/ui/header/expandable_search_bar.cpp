@@ -175,6 +175,7 @@ void ExpandableSearchBar::expand() {
     m_animation->stop();
     m_animation->setStartValue(width());
     m_animation->setEndValue(kExpandedWidth);
+    disconnect(m_animation, &QPropertyAnimation::finished, this, nullptr);
     connect(m_animation, &QPropertyAnimation::finished, this, [this]() {
         if (m_expanded) {
             m_lineEdit->setFocus();
@@ -195,6 +196,7 @@ void ExpandableSearchBar::collapse() {
     m_animation->stop();
     m_animation->setStartValue(width());
     m_animation->setEndValue(kCollapsedWidth);
+    disconnect(m_animation, &QPropertyAnimation::finished, this, nullptr);
     connect(m_animation, &QPropertyAnimation::finished, this, [this]() {
         if (!m_expanded) {
             m_lineEdit->setVisible(false);

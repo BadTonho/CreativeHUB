@@ -180,6 +180,20 @@ void document(const QString &root) {
                   text.find(std::to_string(id)) != std::string::npos;
     }
     check(refused, "interchange explicit mask/layer rejection");
+    MotionProjectData unused_path_mask_project;
+    unused_path_mask_project.composition = {{160, 90}, {30, 1}};
+    auto unused_path_mask = project(CompositionDocument(160, 90, {30, 1}));
+    unused_path_mask.masks = project(doc).masks;
+    unused_path_mask.layers.clear();
+    refused = false;
+    try {
+        (void)exportComposition(unused_path_mask);
+    } catch (const creative_suite::composition_exchange::Unsupported& e) {
+        const std::string text = e.what();
+        refused = text.find("Unreferenced Bezier mask") != std::string::npos &&
+            text.find(std::to_string(mask)) != std::string::npos;
+    }
+    check(refused, "interchange refuses and identifies unreferenced Bezier masks");
     for (int version = 1; version <= 14; ++version) {
         CompositionDocument legacy(160, 90, {30, 1});
         check(legacy.addContentLayer(LayerKind::Shape, "Old", 0), "legacy fixture");

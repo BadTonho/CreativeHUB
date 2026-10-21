@@ -29,6 +29,10 @@ Input paths; its supported upper bound is 28, rejecting future 29. Shared
 composition ApplyMask/MaskedBlend uses straight RGBA with premultiplied blending.
 Video Preview/export plus shared OpenGL, Image raster and Motion GPU/export
 consumer regressions cover the affected boundary without changing their formats.
+Shared CPU and OpenGL mask coverage uses Rec.709 luminance with the same
+integer rounding rule for colored mask pixels. Grayscale masks retain their
+existing coverage. Track mattes and effect masks follow the same RGB weights;
+mask alpha continues to follow each operation's existing contract.
 
 ## Fusion Composition backups
 

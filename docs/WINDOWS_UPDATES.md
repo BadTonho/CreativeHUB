@@ -48,6 +48,18 @@ versions, invalid sizes, and invalid SHA-256 values. It compares the installed
 application's version with that application's catalog entry; a suite release
 alone does not make an unchanged app appear out of date.
 
+The current trust model uses HTTPS transport and the SHA-256 published in the
+same release catalog as the installer. The catalog is not digitally signed, so
+the hash detects transfer or artifact mismatch but does not authenticate the
+publisher if the release metadata and installer are both compromised.
+
+Updater downloads, pending-install records, and rollback snapshots live in the
+per-user persistent data directory. On first startup after this storage change,
+the updater copies the former cache-based tree before resuming pending work. If
+migration cannot complete, it continues using the old tree so a pending update
+is not stranded. The Qt Widgets adapter is built inside each application; the
+shared updater contains only service and runtime behavior.
+
 ## Application behavior
 
 Each editor checks and updates only its own installation. It offers a discreet

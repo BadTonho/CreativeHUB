@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <algorithm>
 
 namespace creative_suite::hub {
@@ -27,7 +28,9 @@ void ChangelogReader::setBasePath(const QString& path) {
 }
 
 QString ChangelogReader::changelogDirForApp(const QString& appId) const {
-    if (m_basePath.isEmpty() || appId.isEmpty()) {
+    static const QRegularExpression app_id_pattern(
+        QStringLiteral("^(hub|video-editor|image-editor|motion-editor)$"));
+    if (m_basePath.isEmpty() || !app_id_pattern.match(appId).hasMatch()) {
         return QString();
     }
     return QDir(m_basePath).filePath(appId);
@@ -127,7 +130,6 @@ QString ChangelogReader::loadChangelog(const QString& appId, const QString& vers
     if (targetVersion.startsWith(QLatin1Char('v')) || targetVersion.startsWith(QLatin1Char('V'))) {
         targetVersion = targetVersion.mid(1);
     }
-
     if (targetVersion.isEmpty()) {
         const auto versions = availableVersions(appId);
         if (versions.isEmpty()) {
@@ -135,6 +137,9 @@ QString ChangelogReader::loadChangelog(const QString& appId, const QString& vers
         }
         targetVersion = versions.first();
     }
+    static const QRegularExpression version_pattern(
+        QStringLiteral("^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$"));
+    if (!version_pattern.match(targetVersion).hasMatch()) return QString();
 
     QDir dir(appDir);
     QString candidatePath = dir.filePath(targetVersion + QStringLiteral(".md"));

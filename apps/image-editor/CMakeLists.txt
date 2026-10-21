@@ -78,6 +78,10 @@ target_compile_features(creative-suite-image-editor-rendering PUBLIC cxx_std_20)
 
 add_executable(creative-suite-image-editor
     src/app/main.cpp
+    src/update_ui/update_center.cpp
+    src/update_ui/update_center.h
+    src/update_ui/update_dialog.cpp
+    src/update_ui/update_dialog.h
     resources/app_icon.qrc
     resources/translations.qrc
     src/ui/windows/image_editor_window.cpp

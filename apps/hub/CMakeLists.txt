@@ -3,7 +3,7 @@ include(GNUInstallDirs)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets LinguistTools)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets Concurrent LinguistTools)
 
 add_library(creative-suite-hub-core STATIC
     src/model/app_status.h
@@ -68,6 +68,8 @@ add_library(creative-suite-hub-core STATIC
     src/ui/pages/settings_page.cpp
     src/ui/main_window.h
     src/ui/main_window.cpp
+    src/update_ui/update_dialog.cpp
+    src/update_ui/update_dialog.h
 )
 
 target_include_directories(creative-suite-hub-core PUBLIC
@@ -78,6 +80,7 @@ target_link_libraries(creative-suite-hub-core PUBLIC
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::Concurrent
     creative-suite::updater
     creative-suite::translations
     creative-suite::translation-updater
@@ -92,6 +95,8 @@ target_compile_features(creative-suite-hub-core PUBLIC cxx_std_20)
 
 add_executable(creative-suite-hub
     src/main.cpp
+    src/update_ui/update_center.cpp
+    src/update_ui/update_center.h
     resources/hub_resources.qrc
     resources/translations.qrc
 )

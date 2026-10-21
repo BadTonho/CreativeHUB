@@ -245,7 +245,14 @@ void ExportComposition::fallback(const composition::OpenGlCompositionResult& res
             catch (...) { logging::Logger::instance().log(logging::Level::Error, "export", "warning_callback", "The export warning callback failed."); }
         }
     }
-    if (technical) { failed_ = true; ++metrics_.gpu_failures; gpu_.reset(); }
+    if (technical) {
+        failed_ = true;
+        cpu_source_recovery_ = true;
+        ++metrics_.gpu_failures;
+        gpu_.reset();
+        native_gpu_.reset();
+        graph_gpu_.reset();
+    }
 }
 
 std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const std::vector<composition::CompositionLayer>& layers,
@@ -308,6 +315,10 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
         ExportTimedScope gpu_time(metrics_.gpu_composition_nanoseconds);
         if (!native_gpu_) native_gpu_ = composition::createGpuFrameCompositor(options_.gpu_surface,
             composition::OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext());
+        if (!native_gpu_) {
+            fallback({composition::OpenGlCompositionStatus::Failed, {}, "create-native-export-backend",
+                      "The native export GPU adapter is unavailable."}, output_frame, timeline_frame);
+        } else {
         composition::OpenGlCompositionTimings timings;
         auto texture = native_gpu_->composeTexture(job_.settings.width, job_.settings.height, layers,
             [&] { return canceled.load(); }, &timings);
@@ -344,6 +355,7 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
         }
         if (copied.status == composition::OpenGlCompositionStatus::Cancelled || canceled.load()) throw ExportCanceled{};
         fallback(copied, output_frame, timeline_frame, true);
+        }
     }
     if (job_.settings.gpu_composition_enabled && job_.settings.graphics_backend != composition::GraphicsBackend::Cpu && !failed_ && !cpu_source_recovery_) {
         composition::OpenGlCompositionTimings timings;

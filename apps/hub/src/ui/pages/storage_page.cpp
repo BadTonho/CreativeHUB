@@ -13,6 +13,8 @@
 #include <QUrl>
 #include <QDir>
 #include <QMessageBox>
+#include <QFutureWatcher>
+#include <QtConcurrent/QtConcurrentRun>
 
 namespace creative_suite::hub {
 
@@ -92,6 +94,7 @@ void StoragePage::setupUi() {
     sizeRow->addWidget(labelDesc);
 
     m_totalSizeLabel = new QLabel(QCoreApplication::translate("StoragePage", "Calculating..."), overviewCard);
+    m_totalSizeLabel->setObjectName(QStringLiteral("storageTotalSizeLabel"));
     m_totalSizeLabel->setStyleSheet(QStringLiteral("color: #ffffff; font-size: 18px; font-weight: 800; background: transparent;"));
     sizeRow->addWidget(m_totalSizeLabel);
     sizeRow->addStretch();
@@ -182,9 +185,8 @@ void StoragePage::setupUi() {
 }
 
 void StoragePage::refreshStorageInfo() {
-    const auto totalBytes = StorageManager::calculateCacheSize(m_cachePaths);
     if (m_totalSizeLabel) {
-        m_totalSizeLabel->setText(StorageManager::formatBytes(totalBytes));
+        m_totalSizeLabel->setText(QCoreApplication::translate("StoragePage", "Calculating…"));
     }
 
     // Refresh breakdown list
@@ -194,6 +196,7 @@ void StoragePage::refreshStorageInfo() {
         }
         delete item;
     }
+    m_sizeLabels.clear();
 
     const auto& paths = m_cachePaths;
     for (const auto& path : paths) {
@@ -217,13 +220,37 @@ void StoragePage::refreshStorageInfo() {
 
         rowLayout->addLayout(col, 1);
 
-        const qint64 dirSize = StorageManager::calculateDirectorySize(path);
-        auto* sizeLabel = new QLabel(StorageManager::formatBytes(dirSize), row);
+        auto* sizeLabel = new QLabel(QCoreApplication::translate("StoragePage", "Calculating…"), row);
         sizeLabel->setStyleSheet(QStringLiteral("color: #aaaaaa; font-size: 12px; font-weight: 700; background: transparent; border: none;"));
         rowLayout->addWidget(sizeLabel);
+        m_sizeLabels.push_back(sizeLabel);
 
         m_breakdownLayout->addWidget(row);
     }
+
+    const auto generation = ++m_refresh_generation;
+    const auto paths_snapshot = m_cachePaths;
+    auto* watcher = new QFutureWatcher<QVector<qint64>>(this);
+    connect(watcher, &QFutureWatcher<QVector<qint64>>::finished, this,
+            [this, watcher, generation]() {
+        const auto sizes = watcher->result();
+        watcher->deleteLater();
+        if (generation != m_refresh_generation) return;
+        qint64 total = 0;
+        for (qsizetype i = 0; i < sizes.size(); ++i) {
+            total += sizes[i];
+            if (i < m_sizeLabels.size() && m_sizeLabels[i])
+                m_sizeLabels[i]->setText(StorageManager::formatBytes(sizes[i]));
+        }
+        if (m_totalSizeLabel) m_totalSizeLabel->setText(StorageManager::formatBytes(total));
+    });
+    watcher->setFuture(QtConcurrent::run([paths_snapshot]() {
+        QVector<qint64> sizes;
+        sizes.reserve(paths_snapshot.size());
+        for (const auto& path : paths_snapshot)
+            sizes.push_back(StorageManager::calculateDirectorySize(path));
+        return sizes;
+    }));
 }
 
 void StoragePage::onClearCache() {

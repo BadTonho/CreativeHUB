@@ -16,8 +16,6 @@
 
 class QNetworkReply;
 class QTimer;
-class QToolButton;
-class QMainWindow;
 
 namespace creative_suite::updater {
 
@@ -184,27 +182,6 @@ private:
     qint64 m_resume_offset{0};
     bool m_response_prepared{false};
     bool m_cancel_requested{false};
-};
-
-class UpdateCenter final : public QObject {
-    Q_OBJECT
-
-public:
-    UpdateCenter(QMainWindow* window,
-                 UpdateServiceConfig config,
-                 QObject* parent = nullptr);
-
-    [[nodiscard]] UpdateService* service() const noexcept { return m_service; }
-    [[nodiscard]] UpdateRuntime* runtime() const noexcept { return m_runtime; }
-
-private:
-    void openUpdateDialog();
-
-    QMainWindow* m_window{nullptr};
-    UpdateServiceConfig m_config;
-    UpdateRuntime* m_runtime{nullptr};
-    UpdateService* m_service{nullptr};
-    QToolButton* m_status_button{nullptr};
 };
 
 } // namespace creative_suite::updater

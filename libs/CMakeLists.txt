@@ -5,6 +5,13 @@ target_include_directories(creative-suite-media-frame INTERFACE
 )
 target_compile_features(creative-suite-media-frame INTERFACE cxx_std_20)
 
+add_library(creative-suite-motion-handoff INTERFACE)
+add_library(creative-suite::motion-handoff ALIAS creative-suite-motion-handoff)
+target_include_directories(creative-suite-motion-handoff INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/motion-handoff/include
+)
+target_compile_features(creative-suite-motion-handoff INTERFACE cxx_std_20)
+
 set(_build_shared_media_default OFF)
 if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
     set(_build_shared_media_default ON)

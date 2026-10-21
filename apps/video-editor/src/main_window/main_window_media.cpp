@@ -1857,13 +1857,18 @@ bool MainWindow::startMediaImport(
         [guard, work_id, project_generation, selection_generation,
          paths = std::move(paths), cancel]() mutable {
             application::MediaImportService service;
-            auto result = service.process(
-                work_id,
-                project_generation,
-                selection_generation,
-                paths,
-                *cancel,
-                [guard, work_id](std::size_t current,
+            application::MediaImportBatchResult result;
+            result.work_id = work_id;
+            result.project_generation = project_generation;
+            result.selection_generation = selection_generation;
+            try {
+                result = service.process(
+                    work_id,
+                    project_generation,
+                    selection_generation,
+                    paths,
+                    *cancel,
+                    [guard, work_id](std::size_t current,
                                  std::size_t total,
                                  const std::filesystem::path& path) {
                     if (guard.isNull()) return;
@@ -1880,7 +1885,15 @@ bool MainWindow::startMediaImport(
                                     .arg(fromUtf8(path_text)));
                         },
                         Qt::QueuedConnection);
-                });
+                    });
+            } catch (const std::exception& error) {
+                result.files.push_back({paths.empty() ? std::filesystem::path{} : paths.front(),
+                    application::MediaImportFileStatus::Failed, std::nullopt, std::nullopt, error.what()});
+            } catch (...) {
+                result.files.push_back({paths.empty() ? std::filesystem::path{} : paths.front(),
+                    application::MediaImportFileStatus::Failed, std::nullopt, std::nullopt,
+                    "Unknown error while importing media."});
+            }
             if (guard.isNull()) return;
             QMetaObject::invokeMethod(
                 guard.data(),

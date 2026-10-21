@@ -377,6 +377,13 @@ bool MainWindow::saveCompositionAs()
         model::LinkedImageDocument new_link;
     };
     std::vector<RebasedImageLink> rebased_links;
+    std::vector<std::filesystem::path> created_sidecar_directories;
+    const auto remove_created_sidecars = [&created_sidecar_directories]() {
+        for (const auto& directory : created_sidecar_directories) {
+            std::error_code ignored;
+            std::filesystem::remove_all(directory, ignored);
+        }
+    };
     if (!same_document) {
         auto sidecar_root = target_path;
         sidecar_root += ".motion-studio";
@@ -385,6 +392,7 @@ bool MainWindow::saveCompositionAs()
             const auto identity = QUuid::createUuid().toString(QUuid::WithoutBraces);
             const auto directory = sidecar_root / "image-editor" /
                 (std::to_string(layer.id) + "-" + identity.toUtf8().toStdString());
+            created_sidecar_directories.push_back(directory);
             std::error_code directory_error;
             std::filesystem::create_directories(directory, directory_error);
             if (directory_error) {
@@ -394,6 +402,7 @@ bool MainWindow::saveCompositionAs()
                     directory_error.message(), {{"path", pathForLog(directory)}});
                 QMessageBox::warning(this, MotionUiTranslation::tr("Save As Failed"),
                     MotionUiTranslation::tr("A linked image folder could not be copied."));
+                remove_created_sidecars();
                 return false;
             }
             model::LinkedImageDocument new_link{
@@ -433,6 +442,7 @@ bool MainWindow::saveCompositionAs()
                 !copy_file(old_link.published_output_path, new_link.published_output_path, false)) {
                 QMessageBox::warning(this, MotionUiTranslation::tr("Save As Failed"),
                     MotionUiTranslation::tr("The linked image files could not be cloned. The original composition remains unchanged."));
+                remove_created_sidecars();
                 return false;
             }
             rebased_links.push_back({layer.id, old_link, std::move(new_link)});
@@ -442,6 +452,7 @@ bool MainWindow::saveCompositionAs()
                 for (const auto& rollback : rebased_links)
                     (void)document_->setLayerLinkedImage(rollback.id, rollback.old_link);
                 updateDocumentState();
+                remove_created_sidecars();
                 return false;
             }
         }
@@ -455,6 +466,7 @@ bool MainWindow::saveCompositionAs()
             updateDocumentState();
             initializeLinkedImageFrames();
         }
+        remove_created_sidecars();
         return false;
     }
     if (!rebased_links.empty()) initializeLinkedImageFrames();

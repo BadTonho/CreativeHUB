@@ -5,6 +5,8 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QStringList>
+#include <QPointer>
+#include <QVector>
 
 namespace creative_suite::hub {
 
@@ -29,6 +31,8 @@ private:
     QLabel* m_totalSizeLabel{nullptr};
     QLabel* m_statusNote{nullptr};
     QVBoxLayout* m_breakdownLayout{nullptr};
+    QVector<QPointer<QLabel>> m_sizeLabels;
+    quint64 m_refresh_generation{0};
 };
 
 } // namespace creative_suite::hub

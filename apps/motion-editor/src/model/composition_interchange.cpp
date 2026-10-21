@@ -19,7 +19,23 @@ x::Document exportComposition(const MotionProjectData &project) {
     d.name = project.composition.name;
     d.duration = std::max<std::int64_t>(1, project.composition.duration);
     std::vector<x::Issue> issues;
-    for(const auto& mask:project.masks)if(!mask.path)d.masks.push_back(static_cast<const x::Mask&>(mask));
+    for(const auto& mask:project.masks) {
+        if (!mask.path) {
+            d.masks.push_back(static_cast<const x::Mask&>(mask));
+            continue;
+        }
+        const bool referenced = std::any_of(project.layers.begin(), project.layers.end(),
+            [&mask](const auto& layer) {
+                return layer.source_mask == mask.id || layer.transform_mask == mask.id ||
+                    std::any_of(layer.effects.begin(), layer.effects.end(), [&mask](const auto& effect) {
+                        return std::visit([&mask](const auto& value) { return value.mask == mask.id; }, effect);
+                    });
+            });
+        if (!referenced) {
+            issues.push_back({0, "Unreferenced Bezier mask #" + std::to_string(mask.id) +
+                " is not supported by composition interchange."});
+        }
+    }
     for (const auto &layer : project.layers) {
         bool shadow_found=false;
         for(std::size_t i=0;i<layer.effects.size();++i)if(std::holds_alternative<DropShadowEffect>(layer.effects[i])){issues.push_back({layer.id,"Layer '"+layer.name+"' (#"+std::to_string(layer.id)+") effect #"+std::to_string(i+1)+" uses Drop Shadow, unsupported by composition interchange."});shadow_found=true;}
@@ -116,8 +132,10 @@ x::Document exportComposition(const MotionProjectData &project) {
     issues.insert(issues.end(), invalid.begin(), invalid.end());
     if (!issues.empty()) {
         std::ostringstream m;
-        for (auto i : issues)
-            m << "Layer " << i.id << ": " << i.reason << '\n';
+        for (const auto& i : issues) {
+            if (i.id != 0) m << "Layer " << i.id << ": ";
+            m << i.reason << '\n';
+        }
         throw x::Unsupported(m.str());
     }
     return d;

@@ -12,6 +12,9 @@
 #include <QMessageBox>
 #include <QStringList>
 #include <QTimer>
+#include <QFutureWatcher>
+#include <QPointer>
+#include <QtConcurrent/QtConcurrentRun>
 
 namespace creative_suite::hub {
 
@@ -495,30 +498,43 @@ void ProjectsPage::onOpenBackupFolder() {
 }
 
 void ProjectsPage::onBackupProject(const QString& filePath, QPushButton* triggerBtn) {
-    QString outBackupPath;
-    QString outError;
-    const bool success = BackupManager::instance().createBackup(filePath, &outBackupPath, &outError);
-
-    if (success) {
-        if (triggerBtn) {
-            triggerBtn->setText(QCoreApplication::translate("ProjectsPage", "✓ Saved"));
-            triggerBtn->setEnabled(false);
-            QTimer::singleShot(2500, triggerBtn, [triggerBtn]() {
-                if (triggerBtn) {
-                    triggerBtn->setText(QCoreApplication::translate("ProjectsPage", "Create Backup"));
-                    triggerBtn->setEnabled(true);
-                }
-            });
-        }
-    } else {
-        QMessageBox::warning(
-            this,
-            QCoreApplication::translate("ProjectsPage", "Backup Failed"),
-            QCoreApplication::translate("ProjectsPage", "Could not create the backup:\n%1").arg(outError)
-        );
+    QPointer<QPushButton> button_guard(triggerBtn);
+    if (button_guard) {
+        button_guard->setEnabled(false);
+        button_guard->setText(QCoreApplication::translate("ProjectsPage", "Creating backup…"));
     }
+    auto* watcher = new QFutureWatcher<QPair<bool, QString>>(this);
+    connect(watcher, &QFutureWatcher<QPair<bool, QString>>::finished, this,
+            [this, watcher, button_guard]() {
+        const auto result = watcher->result();
+        watcher->deleteLater();
+        if (result.first) {
+            if (button_guard) {
+                button_guard->setText(QCoreApplication::translate("ProjectsPage", "✓ Saved"));
+                QTimer::singleShot(2500, button_guard, [button_guard]() {
+                    if (!button_guard) return;
+                    button_guard->setText(QCoreApplication::translate("ProjectsPage", "Create Backup"));
+                    button_guard->setEnabled(true);
+                });
+            }
+        } else {
+            if (button_guard) {
+                button_guard->setText(QCoreApplication::translate("ProjectsPage", "Create Backup"));
+                button_guard->setEnabled(true);
+            }
+            QMessageBox::warning(this,
+                QCoreApplication::translate("ProjectsPage", "Backup Failed"),
+                QCoreApplication::translate("ProjectsPage", "Could not create the backup:\n%1").arg(result.second));
+        }
+    });
+    watcher->setFuture(QtConcurrent::run([filePath]() {
+        QString outBackupPath;
+        QString outError;
+        const bool success = BackupManager::instance().createBackup(
+            filePath, &outBackupPath, &outError);
+        return qMakePair(success, outError);
+    }));
 }
-
 void ProjectsPage::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
 }

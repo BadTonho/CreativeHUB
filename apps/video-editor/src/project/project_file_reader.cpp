@@ -948,10 +948,13 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     if (version < fusion_composition_format_version || clip.kind != timeline::ClipKind::FusionComposition)
                         throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Unexpected composition input offset.");
                     const auto offset = clip_object.value("composition_input_offset_frames");
-                    if (!offset.isDouble() || !std::isfinite(offset.toDouble()) || std::trunc(offset.toDouble()) != offset.toDouble() ||
-                        offset.toDouble() != static_cast<double>(offset.toInteger()))
+                    const double value = offset.toDouble();
+                    constexpr double int64_upper_exclusive = 9223372036854775808.0;
+                    constexpr double int64_lower_inclusive = -9223372036854775808.0;
+                    if (!offset.isDouble() || !std::isfinite(value) || std::trunc(value) != value ||
+                        value < int64_lower_inclusive || value >= int64_upper_exclusive)
                         throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Invalid composition input offset.");
-                    clip.composition_input_offset_frames = offset.toInteger();
+                    clip.composition_input_offset_frames = static_cast<std::int64_t>(value);
                 }
                 if (timeline::isMediaClipKind(clip.kind)) {
                     clip.source_path = resolvedPath(
@@ -1036,9 +1039,18 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                             throwJson(ProjectErrorCode::InvalidValue, project_path,
                                       "Project JSON contains an invalid audio gain envelope point.");
                         }
+                        const double frame_value = value.toObject().value("frame").toDouble();
+                        const double gain_value = value.toObject().value("gain").toDouble();
+                        constexpr double int64_upper_exclusive = 9223372036854775808.0;
+                        constexpr double int64_lower_inclusive = -9223372036854775808.0;
+                        if (!std::isfinite(frame_value) || std::trunc(frame_value) != frame_value ||
+                            frame_value < int64_lower_inclusive || frame_value >= int64_upper_exclusive ||
+                            !std::isfinite(gain_value)) {
+                            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                      "Project JSON contains an out-of-range audio gain envelope point.");
+                        }
                         clip.audio_gain_keyframes.push_back({
-                            value.toObject().value("frame").toInteger(),
-                            value.toObject().value("gain").toDouble()});
+                            static_cast<std::int64_t>(frame_value), gain_value});
                     }
                 }
                 if (version >= clip_effects_format_version &&

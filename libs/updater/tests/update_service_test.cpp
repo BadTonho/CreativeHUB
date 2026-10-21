@@ -200,6 +200,9 @@ void UpdateServiceTest::cancellationPreservesPartialDownload() {
     const QByteArray partial("resumable-");
     network.replies[1]->beginResponse(200);
     network.replies[1]->pushData(partial);
+    service.checkForUpdates();
+    QVERIFY(service.state() == UpdateState::Downloading);
+    QCOMPARE(network.requests.size(), 2);
     service.cancelDownload();
     QVERIFY(service.state() == UpdateState::UpdateAvailable);
     QCOMPARE(QFileInfo(QDir(directory.path()).filePath(
