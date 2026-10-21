@@ -2,6 +2,7 @@
 #include "workspaces/fusion/nodes/ui/node_canvas.h"
 #include "ui/effects/effects_catalog.h"
 #include "ui/inspector/inspector_double_spin_box.h"
+#include "ui/inspector/keyframe_icon.h"
 
 #include <creative_suite/effects/effects.h>
 
@@ -550,14 +551,14 @@ void FusionWorkspace::refreshInspector() {
         control->setSingleStep(step);
         control->setValue(value);
         auto* property_label = bindReset(control, label, reset_value);
-        auto* key = new QPushButton(keyed ? QStringLiteral("â—†") : QStringLiteral("â—‡"), row);
+        auto* key = new QPushButton(row);
+        key->setIcon(keyframeIcon());
+        key->setIconSize(QSize(18, 18));
         key->setObjectName(name + QStringLiteral("Keyframe"));
         key->setCheckable(true);
         key->setChecked(keyed);
         key->setFixedWidth(30);
-        key->setStyleSheet(
-            "QPushButton { font-size: 16px; font-weight: 600; padding: 0px; }"
-            "QPushButton:checked { color: #171a20; background: #e8b94f; }");
+        key->setStyleSheet("QPushButton { padding: 0px; }");
         key->setToolTip(keyed
             ? QCoreApplication::translate("FusionWorkspace", "Remove keyframe at the current frame")
             : QCoreApplication::translate("FusionWorkspace", "Add keyframe at the current frame"));
@@ -910,7 +911,6 @@ void FusionWorkspace::refreshAnimatedControls() {
         if (button == nullptr) return;
         const QSignalBlocker blocker(button);
         button->setChecked(keyed);
-        button->setText(keyed ? QStringLiteral("â—†") : QStringLiteral("â—‡"));
         button->setToolTip(keyed
             ? QCoreApplication::translate("FusionWorkspace", "Remove keyframe at the current frame")
             : QCoreApplication::translate("FusionWorkspace", "Add keyframe at the current frame"));

@@ -755,6 +755,10 @@ updates the Transform slider and preview. Fusion applies only the reset property
 immediately, preserving other unapplied Inspector values; animated properties
 reset at the current local frame without removing other keyframes.
 
+Keyframe toggles in the Edit and Fusion Inspectors use a shared vector diamond
+icon: the inactive state is outlined and the active state is filled gold. The
+icon changes with the keyframe at the current local frame.
+
 The preview composes all visible tracks in worker-owned code, from the bottom
 track to the top track, before handing one frame to the GPU/CPU preview. A gap
 or an empty canvas is not an error and uses the dark preview background.

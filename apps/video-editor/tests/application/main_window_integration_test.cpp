@@ -43,6 +43,7 @@
 #include <QImage>
 #include <QImageReader>
 #include <QImageWriter>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QMenu>
@@ -771,6 +772,15 @@ public:
                         inspector_ui.transform_keys[0] != nullptr &&
                         inspector_ui.transform_keys[0]->isCheckable(),
                     "Hiding numeric step buttons must preserve transform sliders and keyframe toggles.");
+            const auto* transform_key = inspector_ui.transform_keys[0];
+            const auto keyframe_off = transform_key->icon().pixmap(
+                QSize(24, 24), QIcon::Normal, QIcon::Off).toImage();
+            const auto keyframe_on = transform_key->icon().pixmap(
+                QSize(24, 24), QIcon::Normal, QIcon::On).toImage();
+            require(transform_key->text().isEmpty() && !transform_key->icon().isNull() &&
+                        keyframe_off.pixelColor(12, 12).alpha() == 0 &&
+                        keyframe_on.pixelColor(12, 12).alpha() > 0,
+                    "Edit keyframe toggles must render outlined and filled diamond icons without glyph text.");
             for (int index = 0; index < inspector_tabs->count(); ++index) {
                 inspector_tabs->setCurrentIndex(index);
                 QApplication::processEvents();

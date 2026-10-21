@@ -20,6 +20,7 @@
 #include <QCheckBox>
 #include <QDropEvent>
 #include <QImage>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QPushButton>
@@ -660,11 +661,24 @@ int runFusionWorkspaceTest() {
     require(animated_scale && scale_key && apply,
             "Transform animation controls were not shown in the Inspector.");
     require(animated_scale->buttonSymbols() == QAbstractSpinBox::NoButtons &&
-                scale_key->isCheckable(),
+                scale_key->isCheckable() && scale_key->text().isEmpty() &&
+                !scale_key->icon().isNull(),
             "Hiding Fusion numeric step buttons must preserve keyframe controls.");
+    const auto scale_key_off = scale_key->icon().pixmap(
+        QSize(24, 24), QIcon::Normal, QIcon::Off).toImage();
+    const auto scale_key_on = scale_key->icon().pixmap(
+        QSize(24, 24), QIcon::Normal, QIcon::On).toImage();
+    require(scale_key_off.pixelColor(12, 12).alpha() == 0 &&
+                scale_key_on.pixelColor(12, 12).alpha() > 0,
+            "Fusion keyframe toggles must render outlined and filled diamond icons.");
     scale_key->click();
     auto* animated_transform = fusion::nodes::findNode(edited, animated_transform_id);
+    scale_key = root.findChild<QPushButton*>("fusionTransformScaleKeyframe");
     require(animated_transform && edit_count == 17 &&
+                scale_key && scale_key->isChecked() &&
+                scale_key->icon().pixmap(QSize(24, 24), QIcon::Normal,
+                    scale_key->isChecked() ? QIcon::On : QIcon::Off)
+                        .toImage().pixelColor(12, 12).alpha() > 0 &&
                 animated_transform->transform_keyframes.scale.size() == 1 &&
                 animated_transform->transform_keyframes.scale.front() ==
                     creative_suite::animation::Keyframe{0, 1.0} && pause_request_count > 0,
@@ -675,7 +689,8 @@ int runFusionWorkspaceTest() {
     QApplication::processEvents();
     animated_scale = root.findChild<QDoubleSpinBox*>("fusionTransformScale");
     scale_key = root.findChild<QPushButton*>("fusionTransformScaleKeyframe");
-    require(animated_scale->value() == 1.0 && !scale_key->isChecked(),
+    require(animated_scale->value() == 1.0 && !scale_key->isChecked() &&
+                scale_key->text().isEmpty(),
             "The Transform Inspector did not follow the clip-local playhead frame.");
     animated_scale->setValue(2.0);
     apply->click();

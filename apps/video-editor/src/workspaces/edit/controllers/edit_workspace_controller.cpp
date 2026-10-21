@@ -1983,7 +1983,6 @@ void EditWorkspaceController::updateInspector() {
             if (button != nullptr) {
                 const QSignalBlocker blocker(button);
                 button->setChecked(false);
-                button->setText(QStringLiteral("â—‡"));
                 button->setToolTip(QCoreApplication::translate("EditWorkspaceController", "Select a clip to edit keyframes"));
             }
         }
@@ -2091,7 +2090,6 @@ void EditWorkspaceController::updateInspector() {
                     });
                 const QSignalBlocker blocker(ui_.transform_keys[index]);
                 ui_.transform_keys[index]->setChecked(has_key);
-                ui_.transform_keys[index]->setText(has_key ? QStringLiteral("â—†") : QStringLiteral("â—‡"));
                 ui_.transform_keys[index]->setToolTip(
                     has_key ? QCoreApplication::translate("EditWorkspaceController", "Remove keyframe at the current frame")
                             : QCoreApplication::translate("EditWorkspaceController", "Add keyframe at the current frame"));
@@ -2102,7 +2100,6 @@ void EditWorkspaceController::updateInspector() {
             if (button != nullptr) {
                 const QSignalBlocker blocker(button);
                 button->setChecked(false);
-                button->setText(QStringLiteral("â—‡"));
                 button->setToolTip(QCoreApplication::translate("EditWorkspaceController", "Add keyframe at the current frame"));
             }
         }

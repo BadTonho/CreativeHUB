@@ -7,6 +7,7 @@
 #include "timeline/timeline_widget.h"
 #include "ui/system/system_memory_indicator.h"
 #include "ui/inspector/inspector_double_spin_box.h"
+#include "ui/inspector/keyframe_icon.h"
 
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
@@ -264,7 +265,9 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         spin->setEnabled(false);
         spin->setFixedWidth(82);
         ui_.transform_spins[static_cast<std::size_t>(index)] = spin;
-        auto* key = new QPushButton(QStringLiteral("◇"), row);
+        auto* key = new QPushButton(row);
+        key->setIcon(keyframeIcon());
+        key->setIconSize(QSize(18, 18));
         key->setCheckable(true);
         auto* slider = new QSlider(Qt::Horizontal, row);
         slider->setRange(0, transform_slider_resolution);
@@ -288,9 +291,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         ui_.transform_sliders[static_cast<std::size_t>(index)] = slider;
         key->setEnabled(false);
         key->setFixedWidth(30);
-        key->setStyleSheet(
-            "QPushButton { font-size: 16px; font-weight: 600; padding: 0px; }"
-            "QPushButton:checked { color: #171a20; background: #e8b94f; }");
+        key->setStyleSheet("QPushButton { padding: 0px; }");
         key->setToolTip(QCoreApplication::translate("EditWorkspace", "Add keyframe at the current frame"));
         ui_.transform_keys[static_cast<std::size_t>(index)] = key;
         row_layout->addWidget(slider, 1);
