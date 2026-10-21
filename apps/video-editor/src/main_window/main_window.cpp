@@ -18,13 +18,16 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSettings>
 #include <QStatusBar>
 #include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <limits>
 #include <memory>
+#include <vector>
 #include <QCoreApplication>
 
 namespace {
@@ -157,6 +160,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
             { {"cause", error.what()} });
     }
     cleanupRestoredAutosave();
+    persistPreviewSidePanelWidths();
     saveWorkspaceLayout();
     saveWindowGeometry();
     event->accept();
@@ -164,6 +168,104 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 
 void MainWindow::showEvent(QShowEvent* event) {
     QMainWindow::showEvent(event);
+    if (preview_side_layout_restore_pending_) {
+        QTimer::singleShot(100, this, [this] {
+            preview_side_layout_restore_pending_ = false;
+            if (preview_side_width_restore_pending_ && preview_dock_ != nullptr &&
+                !preview_dock_->isHidden() && !preview_dock_->isFloating()) {
+                const auto area = dockWidgetArea(preview_dock_);
+                const auto preview_origin = preview_dock_->mapTo(this, QPoint(0, 0));
+                const auto preview_rect = QRect(preview_origin, preview_dock_->size());
+                const auto client_rect = contentsRect();
+                constexpr int kOuterEdgeTolerance = 64;
+                const bool at_outer_edge =
+                    (area == Qt::LeftDockWidgetArea &&
+                     preview_rect.left() <= client_rect.left() + kOuterEdgeTolerance) ||
+                    (area == Qt::RightDockWidgetArea &&
+                     preview_rect.right() >= client_rect.right() - kOuterEdgeTolerance);
+                QSettings settings;
+                if (at_outer_edge) {
+                    preview_side_panel_layout_change_in_progress_ = true;
+                    const int media_width = settings.value(
+                        "workspace/preview_side_media_pool_width", 0).toInt();
+                    const int toolbox_width = settings.value(
+                        "workspace/preview_side_toolbox_width", 0).toInt();
+                    const int effects_width = settings.value(
+                        "workspace/preview_side_effects_width", 0).toInt();
+                    const auto dockRect = [this](QDockWidget* dock) {
+                        return dock == nullptr ? QRect{} : QRect(
+                            dock->mapTo(this, QPoint(0, 0)), dock->size());
+                    };
+                    const auto nearestCompanion = [this, &dockRect](
+                        const QRect& group_rect,
+                        const std::vector<QDockWidget*>& group) -> QDockWidget* {
+                        const std::vector<QDockWidget*> candidates{
+                            bins_dock_, media_dock_, toolbox_dock_, favorites_dock_,
+                            effects_dock_, preview_dock_, inspector_dock_, timeline_dock_};
+                        QDockWidget* best = nullptr;
+                        int best_gap = std::numeric_limits<int>::max();
+                        for (auto* candidate : candidates) {
+                            if (candidate == nullptr || !candidate->isVisible() ||
+                                std::find(group.begin(), group.end(), candidate) != group.end()) {
+                                continue;
+                            }
+                            const auto rect = dockRect(candidate);
+                            const int overlap = std::max(0,
+                                std::min(group_rect.bottom(), rect.bottom()) -
+                                std::max(group_rect.top(), rect.top()) + 1);
+                            if (overlap < std::min(group_rect.height(), rect.height()) / 3) {
+                                continue;
+                            }
+                            const int gap = std::max(0,
+                                std::max(group_rect.left() - rect.right(),
+                                         rect.left() - group_rect.right()) - 1);
+                            if (gap < best_gap) {
+                                best_gap = gap;
+                                best = candidate;
+                            }
+                        }
+                        return best;
+                    };
+                    if (media_width > 0 && bins_dock_ != nullptr && media_dock_ != nullptr) {
+                        const std::vector<QDockWidget*> group{bins_dock_, media_dock_};
+                        const auto rect = dockRect(bins_dock_).united(dockRect(media_dock_));
+                        if (auto* companion = nearestCompanion(rect, group)) {
+                            const int current = std::max(bins_dock_->width(), media_dock_->width());
+                            resizeDocks(
+                                {bins_dock_, companion},
+                                {media_width, std::max(companion->minimumWidth(),
+                                    companion->width() + current - media_width)},
+                                Qt::Horizontal);
+                        }
+                    }
+                    if (toolbox_width > 0 && effects_width > 0 &&
+                        toolbox_dock_ != nullptr && effects_dock_ != nullptr) {
+                        const std::vector<QDockWidget*> group{
+                            toolbox_dock_, favorites_dock_, effects_dock_};
+                        const auto rect = dockRect(toolbox_dock_)
+                            .united(dockRect(favorites_dock_))
+                            .united(dockRect(effects_dock_));
+                        if (auto* companion = nearestCompanion(rect, group)) {
+                            const int current = toolbox_dock_->width() + effects_dock_->width();
+                            const int saved = toolbox_width + effects_width;
+                            resizeDocks(
+                                {toolbox_dock_, effects_dock_, companion},
+                                {toolbox_width, effects_width,
+                                 std::max(companion->minimumWidth(),
+                                     companion->width() + current - saved)},
+                                Qt::Horizontal);
+                        }
+                    }
+                    layout()->activate();
+                    preview_side_panel_layout_change_in_progress_ = false;
+                }
+                preview_side_width_restore_pending_ = false;
+            }
+            schedulePreviewDockLayoutUpdate();
+        });
+    } else {
+        schedulePreviewDockLayoutUpdate();
+    }
     if (!expanded_dock_layout_restore_pending_) return;
     expanded_dock_layout_restore_pending_ = false;
     QTimer::singleShot(0, this, [this] {
@@ -171,6 +273,11 @@ void MainWindow::showEvent(QShowEvent* event) {
             restoreExpandedDockLayout();
         });
     });
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    schedulePreviewDockLayoutUpdate();
 }
 
 void MainWindow::configureProjectAutosave(bool enabled, int interval_seconds) {

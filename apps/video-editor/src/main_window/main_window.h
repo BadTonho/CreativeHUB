@@ -86,6 +86,7 @@ struct AutosaveSnapshotItem;
 
 class MainWindowIntegrationTest;
 class QShowEvent;
+class QResizeEvent;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -95,6 +96,7 @@ public:
 protected:
     void closeEvent(QCloseEvent* event) override;
     void showEvent(QShowEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
@@ -123,6 +125,7 @@ private:
     void saveWorkspaceLayout();
     void restoreExpandedDockLayout();
     void persistMediaPoolWidth();
+    void persistPreviewSidePanelWidths();
     void persistInspectorWidth();
     void schedulePreviewDockLayoutUpdate();
     void updatePreviewDockLayout();
@@ -350,11 +353,16 @@ private:
     bool media_pool_expanded_ = false;
     bool inspector_expanded_ = false;
     bool preview_side_dock_full_height_ = false;
+    bool preview_side_panel_widths_active_ = false;
+    bool preview_side_layout_restore_pending_ = false;
+    bool preview_side_width_restore_pending_ = false;
+    bool preview_side_panel_layout_change_in_progress_ = false;
     bool preview_dock_layout_update_pending_ = false;
     bool restoring_default_dock_layout_ = false;
     bool expanded_dock_layout_restore_pending_ = false;
     bool expanded_dock_layout_change_in_progress_ = false;
     QTimer* media_pool_width_save_timer_ = nullptr;
+    QTimer* preview_side_panel_width_save_timer_ = nullptr;
     QTimer* inspector_width_save_timer_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     ui::FunctionPalette* function_palette_ = nullptr;

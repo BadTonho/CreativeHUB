@@ -11,9 +11,12 @@
 #include <QDir>
 #include <QDebug>
 #include <QEventLoop>
+#include <QMenuBar>
 #include <QSettings>
+#include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QToolBar>
 #include <QToolButton>
 
 #include <algorithm>
@@ -31,6 +34,29 @@ void settleLayout() {
     for (int index = 0; index < 10; ++index) {
         QApplication::processEvents(QEventLoop::AllEvents);
     }
+}
+
+int dockWorkspaceBottom(QMainWindow& window) {
+    auto* status_bar = window.statusBar();
+    return status_bar != nullptr && status_bar->isVisible()
+        ? status_bar->geometry().top() - 1
+        : window.contentsRect().bottom();
+}
+
+int dockWorkspaceTop(QMainWindow& window) {
+    auto* menu_bar = window.menuBar();
+    int top = menu_bar != nullptr && menu_bar->isVisible()
+        ? menu_bar->geometry().bottom() + 1
+        : window.contentsRect().top();
+    for (auto* toolbar : window.findChildren<QToolBar*>()) {
+        if (toolbar == nullptr || toolbar->isHidden() ||
+            window.toolBarArea(toolbar) != Qt::TopToolBarArea) {
+            continue;
+        }
+        top = std::max(top,
+            toolbar->mapTo(&window, QPoint(0, toolbar->height())).y());
+    }
+    return top;
 }
 
 void waitForWidthPersistence(int delay_ms = 180) {
@@ -55,6 +81,9 @@ struct Docks {
     QDockWidget* preview = nullptr;
     QDockWidget* inspector = nullptr;
     QDockWidget* timeline = nullptr;
+    QDockWidget* toolbox = nullptr;
+    QDockWidget* favorites = nullptr;
+    QDockWidget* effects = nullptr;
     QToolButton* expand = nullptr;
     QToolButton* inspector_expand = nullptr;
 };
@@ -66,6 +95,9 @@ Docks findDocks(QWidget& window) {
         window.findChild<QDockWidget*>("previewDock"),
         window.findChild<QDockWidget*>("inspectorDock"),
         window.findChild<QDockWidget*>("timelineDock"),
+        window.findChild<QDockWidget*>("toolboxDock"),
+        window.findChild<QDockWidget*>("favoritesDock"),
+        window.findChild<QDockWidget*>("effectsDock"),
         window.findChild<QToolButton*>("mediaPoolExpandButton"),
         window.findChild<QToolButton*>("inspectorExpandButton")};
 }
@@ -252,6 +284,12 @@ void verifyPreviewSideDockAspect(MainWindow& window) {
 
     const auto dockPreviewOnSide = [&window, &docks, &applyFrame, &verify](
         Qt::DockWidgetArea side, bool outermost) {
+        const bool had_saved_side_width = QSettings().contains(
+            "workspace/preview_side_media_pool_width");
+        const bool leaving_side_layout = !outermost && QSettings().value(
+            "workspace/preview_side_panel_widths_active", false).toBool();
+        const int expected_normal_media_width = QSettings().value(
+            "workspace/preview_side_saved_media_pool_width", 0).toInt();
         window.addDockWidget(side, docks.preview);
         if (side == Qt::LeftDockWidgetArea) {
             window.splitDockWidget(
@@ -278,6 +316,13 @@ void verifyPreviewSideDockAspect(MainWindow& window) {
             "workspace/preview_side_dock_area", -1).toInt();
         require(saved_side == (outermost ? static_cast<int>(side) : -1),
                 "Only an outermost Preview dock may persist full-height mode.");
+        if (leaving_side_layout) {
+            waitForWidthPersistence();
+            require(expected_normal_media_width > 0 &&
+                        std::abs(std::max(docks.bins->width(), docks.media->width()) -
+                                 expected_normal_media_width) <= 24,
+                    "Leaving the side layout must restore the normal Media Pool width.");
+        }
         const auto window_edge = window.contentsRect();
         const auto preview_rect = QRect(
             docks.preview->mapTo(&window, QPoint(0, 0)),
@@ -296,8 +341,53 @@ void verifyPreviewSideDockAspect(MainWindow& window) {
                     "An internal side Preview must keep its normal height.");
         }
         if (outermost) {
+            const auto* media_action = window.findChild<QAction*>(
+                "mediaPoolGroupAction");
+            const bool media_active = media_action != nullptr &&
+                media_action->isChecked();
             applyFrame(9, 16);
             verify(9.0 / 16.0);
+            const QRect current_preview_rect(
+                docks.preview->mapTo(&window, QPoint(0, 0)),
+                docks.preview->size());
+            const bool preview_fills_height =
+                current_preview_rect.top() <= dockWorkspaceTop(window) + 16 &&
+                current_preview_rect.bottom() >= dockWorkspaceBottom(window) - 16;
+            if (preview_fills_height) {
+                require(QSettings().value(
+                            "workspace/preview_side_panel_widths_active", false)
+                            .toBool(),
+                        "A full-height Preview must preserve the panel widths from before side docking.");
+                const int initial_cap = window.contentsRect().width() / 4;
+                if (media_active && !had_saved_side_width) {
+                    require(std::max(docks.bins->width(), docks.media->width()) <=
+                                initial_cap + 20,
+                            "The Media Pool must start within the 25% width target when Preview moves to an outer edge.");
+                    window.resizeDocks(
+                        {docks.bins, docks.media},
+                        {std::max(120, initial_cap - 60),
+                         std::max(120, initial_cap - 60)},
+                        Qt::Horizontal);
+                    settleLayout();
+                    require(std::max(docks.bins->width(), docks.media->width()) <
+                                initial_cap,
+                            "The Media Pool divider must allow a width below the initial 25% target.");
+                    window.resizeDocks(
+                        {docks.bins, docks.media},
+                        {initial_cap + 90, initial_cap + 90},
+                        Qt::Horizontal);
+                    settleLayout();
+                    waitForWidthPersistence();
+                    const int adjusted_width =
+                        std::max(docks.bins->width(), docks.media->width());
+                    require(adjusted_width > initial_cap + 20,
+                            "The Media Pool divider must allow a width above the initial 25% target.");
+                    require(QSettings().value(
+                                "workspace/preview_side_media_pool_width").toInt() ==
+                                adjusted_width,
+                            "The manually adjusted Media Pool width must be persisted.");
+                }
+            }
             window.resize(1280, 900);
             settleLayout();
             verify(9.0 / 16.0);
@@ -357,6 +447,153 @@ void verifyPreviewSideDockAspect(MainWindow& window) {
                 docks.inspector->isVisible() == inspector_visible &&
                 docks.timeline->isVisible() == timeline_visible,
             "Docking the Preview must preserve the other docks' visibility.");
+}
+
+void verifyEffectsPreviewSideLayout() {
+    for (const auto side : {Qt::LeftDockWidgetArea, Qt::RightDockWidgetArea}) {
+        QSettings().clear();
+        MainWindow window;
+        window.setDockOptions(window.dockOptions() & ~QMainWindow::AnimatedDocks);
+        window.showNormal();
+        window.resize(1920, 1080);
+        settleLayout();
+        const auto docks = findDocks(window);
+        auto* effects_action = window.findChild<QAction*>("effectsGroupAction");
+        require(effects_action != nullptr && docks.toolbox != nullptr &&
+                    docks.effects != nullptr,
+                "The Effects group or Preview docking controls are missing.");
+        effects_action->trigger();
+        settleLayout();
+        require(docks.toolbox->isVisible() && docks.effects->isVisible() &&
+                    docks.preview->isVisible() && docks.timeline->isVisible(),
+                "Activating Effects must keep the side Preview and Timeline visible.");
+        waitForWidthPersistence();
+        const int normal_effects_width =
+            docks.toolbox->width() + docks.effects->width();
+        window.removeDockWidget(docks.preview);
+        if (side == Qt::LeftDockWidgetArea) {
+            window.removeDockWidget(docks.toolbox);
+            window.removeDockWidget(docks.favorites);
+            window.removeDockWidget(docks.effects);
+            window.addDockWidget(side, docks.preview);
+            window.addDockWidget(side, docks.toolbox);
+            window.splitDockWidget(docks.preview, docks.toolbox, Qt::Horizontal);
+            window.addDockWidget(side, docks.effects);
+            window.splitDockWidget(docks.toolbox, docks.effects, Qt::Horizontal);
+            window.addDockWidget(side, docks.favorites);
+            window.splitDockWidget(docks.toolbox, docks.favorites, Qt::Vertical);
+            docks.toolbox->show();
+            docks.favorites->show();
+            docks.effects->show();
+        } else {
+            window.addDockWidget(side, docks.preview);
+            window.splitDockWidget(docks.inspector, docks.preview, Qt::Horizontal);
+        }
+        docks.preview->show();
+        docks.timeline->show();
+        settleLayout();
+        require(window.dockWidgetArea(docks.preview) == side &&
+                    !docks.preview->isHidden() && !docks.timeline->isHidden(),
+                "The Effects layout must keep Preview and Timeline visible on either side.");
+        const auto client = window.contentsRect();
+        const QRect preview_rect(docks.preview->mapTo(&window, QPoint(0, 0)),
+                                 docks.preview->size());
+        const bool fills_height = preview_rect.top() <= dockWorkspaceTop(window) + 16 &&
+            preview_rect.bottom() >= dockWorkspaceBottom(window) - 16;
+        require(fills_height,
+                "The Effects Preview must fill the dock workspace height at an outer edge.");
+        int custom_side_width = 0;
+        if (fills_height) {
+            const int initial_width =
+                docks.toolbox->width() + docks.effects->width();
+            const int initial_cap = client.width() / 4;
+            require(initial_width <= initial_cap + 20,
+                    "The Effects group must start within the 25% width target when Preview moves to an outer edge.");
+            require(QSettings().value(
+                        "workspace/preview_side_panel_widths_active", false)
+                        .toBool(),
+                    "The Effects layout must retain its original widths while Preview is on an outer edge.");
+            require(QSettings().value(
+                        "workspace/preview_side_saved_toolbox_width", 0).toInt() > 0 &&
+                        QSettings().value(
+                            "workspace/preview_side_saved_effects_width", 0).toInt() > 0,
+                    "The Effects layout must save both normal widths before side docking.");
+            window.resizeDocks(
+                {docks.toolbox, docks.effects},
+                {std::max(20, initial_cap / 2 - 40),
+                 std::max(30, initial_cap / 2 - 20)},
+                Qt::Horizontal);
+            settleLayout();
+            require(docks.toolbox->width() + docks.effects->width() < initial_cap,
+                    "The Effects dividers must allow a width below the initial 25% target.");
+            window.resizeDocks(
+                {docks.toolbox, docks.effects},
+                {initial_cap / 2 + 100, initial_cap / 2 + 100},
+                Qt::Horizontal);
+            settleLayout();
+            waitForWidthPersistence();
+            custom_side_width = docks.toolbox->width() + docks.effects->width();
+            require(custom_side_width > initial_cap + 20,
+                    "The Effects dividers must allow a width above the initial 25% target.");
+            require(QSettings().value(
+                        "workspace/preview_side_toolbox_width").toInt() ==
+                            docks.toolbox->width() &&
+                        QSettings().value(
+                            "workspace/preview_side_effects_width").toInt() ==
+                            docks.effects->width(),
+                    "Manually adjusted Effects widths must be persisted separately.");
+        }
+        window.resize(1800, 1000);
+        settleLayout();
+        settleLayout();
+        require(QSettings().value(
+                    "workspace/preview_side_panel_widths_active", false).toBool(),
+                "Resizing the side Preview must keep the normal-width snapshot active.");
+        require(window.close(), "The Effects side-dock test window did not close cleanly.");
+        MainWindow reopened;
+        reopened.setDockOptions(reopened.dockOptions() & ~QMainWindow::AnimatedDocks);
+        reopened.showNormal();
+        waitForWidthPersistence(300);
+        const auto reopened_docks = findDocks(reopened);
+        const int reopened_effects_width =
+            reopened_docks.toolbox->width() + reopened_docks.effects->width();
+        const QRect reopened_preview_rect(
+            reopened_docks.preview->mapTo(&reopened, QPoint(0, 0)),
+            reopened_docks.preview->size());
+        require(reopened.dockWidgetArea(reopened_docks.preview) == side &&
+                    reopened_docks.preview->isVisible() &&
+                    reopened_docks.timeline->isVisible(),
+                "The external Preview and Timeline must remain visible after reopening.");
+        if (custom_side_width > 0) {
+            const int reopened_initial_target = reopened.contentsRect().width() / 4;
+            const int persisted_side_width =
+                QSettings().value("workspace/preview_side_toolbox_width").toInt() +
+                QSettings().value("workspace/preview_side_effects_width").toInt();
+            require(reopened_effects_width > reopened_initial_target + 20 &&
+                        persisted_side_width > reopened_initial_target + 20,
+                    "The custom Effects width must persist when reopening the side Preview layout.");
+        }
+        const int saved_normal_width =
+            QSettings().value("workspace/preview_side_saved_toolbox_width", 0).toInt() +
+            QSettings().value("workspace/preview_side_saved_effects_width", 0).toInt();
+        reopened.addDockWidget(Qt::RightDockWidgetArea, reopened_docks.preview);
+        reopened.splitDockWidget(
+            reopened_docks.preview, reopened_docks.inspector, Qt::Horizontal);
+        settleLayout();
+        require(!QSettings().value(
+                     "workspace/preview_side_panel_widths_active", false).toBool(),
+                "Moving Preview inside the dock layout must clear its temporary panel-width snapshot.");
+        const int restored_normal_width = reopened_docks.toolbox->width() +
+            reopened_docks.effects->width();
+        if (std::abs(restored_normal_width - normal_effects_width) > 32) {
+            std::cerr << "Effects normal/snapshot/restored widths: "
+                      << normal_effects_width << '/' << saved_normal_width << '/'
+                      << restored_normal_width << '\n';
+        }
+        require(std::abs(restored_normal_width - normal_effects_width) <= 32,
+                "Leaving the side layout must restore the normal Effects widths.");
+        require(reopened.close(), "The reopened Effects layout test window did not close cleanly.");
+    }
 }
 
 void verifyAnimatedInspectorExpansion() {
@@ -766,16 +1003,40 @@ int main(int argc, char** argv) {
         settleLayout();
         verifyPreviewSideDockAspect(aspect_window);
         require(aspect_window.close(), "The Preview aspect test window did not close cleanly.");
+        const int saved_side_media_width = QSettings().value(
+            "workspace/preview_side_media_pool_width", 0).toInt();
         MainWindow side_reopened;
         side_reopened.showNormal();
-        settleLayout();
+        waitForWidthPersistence(300);
         const auto side_reopened_docks = findDocks(side_reopened);
         require(side_reopened.dockWidgetArea(side_reopened_docks.preview) ==
                     Qt::RightDockWidgetArea &&
                     side_reopened.corner(Qt::BottomRightCorner) ==
                     Qt::RightDockWidgetArea && side_reopened_docks.timeline->isVisible(),
                 "The right-side Preview layout and visible Timeline must restore after reopening.");
+        const QRect reopened_preview_rect(
+            side_reopened_docks.preview->mapTo(&side_reopened, QPoint(0, 0)),
+            side_reopened_docks.preview->size());
+        if (reopened_preview_rect.top() <=
+                dockWorkspaceTop(side_reopened) + 16 &&
+            reopened_preview_rect.bottom() >=
+                dockWorkspaceBottom(side_reopened) - 16) {
+            const int restored_side_width = std::max(
+                side_reopened_docks.bins->width(),
+                side_reopened_docks.media->width());
+            const int reopened_initial_target =
+                side_reopened.contentsRect().width() / 4;
+            require(QSettings().value(
+                        "workspace/preview_side_panel_widths_active", false)
+                        .toBool() && saved_side_media_width > 0 &&
+                        restored_side_width > reopened_initial_target + 20 &&
+                        QSettings().value(
+                            "workspace/preview_side_media_pool_width", 0).toInt() >
+                            reopened_initial_target + 20,
+                    "Reopening the outer-edge Preview must restore the custom Media Pool width.");
+        }
         require(side_reopened.close(), "The restored side Preview window did not close cleanly.");
+        verifyEffectsPreviewSideLayout();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

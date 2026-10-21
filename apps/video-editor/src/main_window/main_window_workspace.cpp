@@ -62,6 +62,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <filesystem>
 #include <functional>
 #include <iterator>
@@ -444,6 +445,7 @@ void MainWindow::createWorkspace() {
         "Bins",
         "binsDock",
         createMediaBins());
+    bins_dock_->installEventFilter(this);
     media_dock_ = createDock(
         "Media",
         "mediaDock",
@@ -455,6 +457,12 @@ void MainWindow::createWorkspace() {
     connect(
         media_pool_width_save_timer_, &QTimer::timeout,
         this, &MainWindow::persistMediaPoolWidth);
+    preview_side_panel_width_save_timer_ = new QTimer(this);
+    preview_side_panel_width_save_timer_->setSingleShot(true);
+    preview_side_panel_width_save_timer_->setInterval(150);
+    connect(
+        preview_side_panel_width_save_timer_, &QTimer::timeout,
+        this, &MainWindow::persistPreviewSidePanelWidths);
     media_pool_expand_button_ = addDockTitleBarAction(
         media_dock_,
         DockTitleBarAction{
@@ -473,14 +481,17 @@ void MainWindow::createWorkspace() {
         "Toolbox",
         "toolboxDock",
         createEffectsToolbox());
+    toolbox_dock_->installEventFilter(this);
     effects_dock_ = createDock(
         "Effects",
         "effectsDock",
         createEffectsPanel());
+    effects_dock_->installEventFilter(this);
     favorites_dock_ = createDock(
         "Favorites",
         "favoritesDock",
         createEffectsFavorites());
+    favorites_dock_->installEventFilter(this);
     toolbox_dock_->setMinimumWidth(20);
     favorites_dock_->setMinimumWidth(20);
     effects_dock_->setMinimumWidth(30);
@@ -1046,10 +1057,12 @@ void MainWindow::createMenus() {
         "}");
     addToolBar(Qt::TopToolBarArea, media_pool_toolbar);
     media_pool_action_ = media_pool_toolbar->addAction(QCoreApplication::translate("MainWindow", "Media Pool"));
+    media_pool_action_->setObjectName(QStringLiteral("mediaPoolGroupAction"));
     register_menu_action(media_pool_action_, settings::ShortcutScope::Shared);
     media_pool_action_->setCheckable(true);
     media_pool_action_->setToolTip(QCoreApplication::translate("MainWindow", "Show the Media Pool docks"));
     effects_action_ = media_pool_toolbar->addAction(QCoreApplication::translate("MainWindow", "Effects"));
+    effects_action_->setObjectName(QStringLiteral("effectsGroupAction"));
     register_menu_action(effects_action_, settings::ShortcutScope::Shared);
     effects_action_->setCheckable(true);
     effects_action_->setToolTip(QCoreApplication::translate("MainWindow", "Show the Effects docks"));
@@ -1266,6 +1279,10 @@ void MainWindow::restoreWorkspaceLayout() {
     // only a hint from older layouts; the restored dock geometry determines
     // whether Preview is truly on an outer edge.
     preview_side_dock_full_height_ = false;
+    preview_side_panel_widths_active_ = settings.value(
+        "workspace/preview_side_panel_widths_active", false).toBool();
+    preview_side_layout_restore_pending_ = preview_side_panel_widths_active_;
+    preview_side_width_restore_pending_ = preview_side_panel_widths_active_;
     settings.remove("workspace/preview_side_dock_area");
     setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
@@ -1381,8 +1398,14 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
         schedulePreviewDockLayoutUpdate();
     }
     if (event != nullptr && event->type() == QEvent::Resize &&
-        !expanded_dock_layout_change_in_progress_) {
-        if (watched == media_dock_ && media_pool_width_save_timer_ != nullptr) {
+        !expanded_dock_layout_change_in_progress_ &&
+        !preview_side_panel_layout_change_in_progress_) {
+        const bool is_side_panel = watched == bins_dock_ ||
+            watched == media_dock_ || watched == toolbox_dock_ ||
+            watched == favorites_dock_ || watched == effects_dock_;
+        if (is_side_panel && preview_side_panel_width_save_timer_ != nullptr) {
+            preview_side_panel_width_save_timer_->start();
+        } else if (watched == media_dock_ && media_pool_width_save_timer_ != nullptr) {
             media_pool_width_save_timer_->start();
         } else if (watched == inspector_dock_ &&
                    inspector_width_save_timer_ != nullptr) {
@@ -1406,17 +1429,17 @@ void MainWindow::schedulePreviewDockLayoutUpdate() {
 
 void MainWindow::updatePreviewDockLayout() {
     if (restoring_default_dock_layout_ || preview_dock_ == nullptr ||
-        preview_dock_->isHidden()) {
+        !isVisible() || preview_side_layout_restore_pending_) {
         return;
     }
 
     const auto area = dockWidgetArea(preview_dock_);
     auto full_height_side = Qt::NoDockWidgetArea;
-    if (!preview_dock_->isFloating()) {
+    if (!preview_dock_->isHidden() && !preview_dock_->isFloating()) {
         const auto dock_origin = preview_dock_->mapTo(this, QPoint(0, 0));
         const auto client_rect = contentsRect();
         const auto dock_rect = QRect(dock_origin, preview_dock_->size());
-        constexpr int kOuterEdgeTolerance = 16;
+        constexpr int kOuterEdgeTolerance = 64;
         if (area == Qt::LeftDockWidgetArea &&
             dock_rect.left() <= client_rect.left() + kOuterEdgeTolerance) {
             full_height_side = Qt::LeftDockWidgetArea;
@@ -1427,6 +1450,29 @@ void MainWindow::updatePreviewDockLayout() {
     }
 
     const bool should_be_full_height = full_height_side != Qt::NoDockWidgetArea;
+    const auto client_rect = contentsRect();
+    const auto preview_rect = QRect(
+        preview_dock_->mapTo(this, QPoint(0, 0)), preview_dock_->size());
+    constexpr int kFullHeightTolerance = 16;
+    const int dock_workspace_bottom = statusBar() != nullptr &&
+            statusBar()->isVisible()
+        ? statusBar()->geometry().top() - 1
+        : client_rect.bottom();
+    int dock_workspace_top = menuBar() != nullptr && menuBar()->isVisible()
+        ? menuBar()->geometry().bottom() + 1
+        : client_rect.top();
+    for (auto* toolbar : findChildren<QToolBar*>()) {
+        if (toolbar == nullptr || toolbar->isHidden() ||
+            toolBarArea(toolbar) != Qt::TopToolBarArea) {
+            continue;
+        }
+        dock_workspace_top = std::max(
+            dock_workspace_top,
+            toolbar->mapTo(this, QPoint(0, toolbar->height())).y());
+    }
+    const bool preview_fills_workspace_height = should_be_full_height &&
+        preview_rect.top() <= dock_workspace_top + kFullHeightTolerance &&
+        preview_rect.bottom() >= dock_workspace_bottom - kFullHeightTolerance;
     const bool layout_changed =
         preview_side_dock_full_height_ != should_be_full_height ||
         corner(Qt::BottomLeftCorner) !=
@@ -1443,15 +1489,271 @@ void MainWindow::updatePreviewDockLayout() {
     setCorner(Qt::BottomRightCorner,
               full_height_side == Qt::RightDockWidgetArea
                   ? Qt::RightDockWidgetArea : Qt::BottomDockWidgetArea);
+    if (layout_changed) {
+        saveWorkspaceLayout();
+        schedulePreviewDockLayoutUpdate();
+        return;
+    }
+
+    QSettings settings;
+    constexpr auto kMediaPoolWidthKey =
+        "workspace/preview_side_saved_media_pool_width";
+    constexpr auto kToolboxWidthKey =
+        "workspace/preview_side_saved_toolbox_width";
+    constexpr auto kEffectsWidthKey =
+        "workspace/preview_side_saved_effects_width";
+    constexpr auto kSideMediaPoolWidthKey =
+        "workspace/preview_side_media_pool_width";
+    constexpr auto kSideToolboxWidthKey =
+        "workspace/preview_side_toolbox_width";
+    constexpr auto kSideEffectsWidthKey =
+        "workspace/preview_side_effects_width";
+    constexpr auto kSideWidthsActiveKey =
+        "workspace/preview_side_panel_widths_active";
+    const auto dockRect = [this](QDockWidget* dock) {
+        return dock == nullptr
+            ? QRect{}
+            : QRect(dock->mapTo(this, QPoint(0, 0)), dock->size());
+    };
+    const auto nearestCompanion = [this, &dockRect](
+        const QRect& group_rect,
+        const std::vector<QDockWidget*>& group_docks) -> QDockWidget* {
+        const std::vector<QDockWidget*> candidates{
+            bins_dock_, media_dock_, toolbox_dock_, favorites_dock_,
+            effects_dock_, preview_dock_, inspector_dock_, timeline_dock_};
+        QDockWidget* result = nullptr;
+        auto best_gap = std::numeric_limits<int>::max();
+        for (auto* candidate : candidates) {
+            if (candidate == nullptr || !candidate->isVisible() ||
+                std::find(group_docks.begin(), group_docks.end(), candidate) !=
+                    group_docks.end()) {
+                continue;
+            }
+            const auto candidate_rect = dockRect(candidate);
+            const int overlap_height = std::max(
+                0, std::min(group_rect.bottom(), candidate_rect.bottom()) -
+                       std::max(group_rect.top(), candidate_rect.top()) + 1);
+            if (overlap_height < std::min(group_rect.height(),
+                                          candidate_rect.height()) / 3) {
+                continue;
+            }
+            const int gap = std::max(
+                0, std::max(group_rect.left() - candidate_rect.right(),
+                            candidate_rect.left() - group_rect.right()) - 1);
+            if (gap < best_gap) {
+                best_gap = gap;
+                result = candidate;
+            }
+        }
+        return result;
+    };
+
+    const auto clearSavedPanelWidths = [&settings] {
+        settings.remove("workspace/preview_side_saved_media_pool_width");
+        settings.remove("workspace/preview_side_saved_toolbox_width");
+        settings.remove("workspace/preview_side_saved_effects_width");
+        settings.remove("workspace/preview_side_panel_widths_active");
+    };
+    const auto restoreSavedPanelWidths = [this, &settings, &dockRect, &nearestCompanion] {
+        const int media_width = settings.value(
+            "workspace/preview_side_saved_media_pool_width", 0).toInt();
+        const int toolbox_width = settings.value(
+            "workspace/preview_side_saved_toolbox_width", 0).toInt();
+        const int effects_width = settings.value(
+            "workspace/preview_side_saved_effects_width", 0).toInt();
+        preview_side_panel_layout_change_in_progress_ = true;
+        if (media_width > 0 && bins_dock_ != nullptr && media_dock_ != nullptr) {
+            const std::vector<QDockWidget*> group{bins_dock_, media_dock_};
+            const auto rect = dockRect(bins_dock_).united(dockRect(media_dock_));
+            if (auto* companion = nearestCompanion(rect, group)) {
+                const int current = std::max(bins_dock_->width(), media_dock_->width());
+                resizeDocks(
+                    {bins_dock_, companion},
+                    {media_width, std::max(companion->minimumWidth(),
+                        companion->width() + current - media_width)},
+                    Qt::Horizontal);
+            }
+            settings.setValue("workspace/media_pool_width", media_width);
+        }
+        if (toolbox_width > 0 && effects_width > 0 &&
+            toolbox_dock_ != nullptr && effects_dock_ != nullptr) {
+            const std::vector<QDockWidget*> group{
+                toolbox_dock_, favorites_dock_, effects_dock_};
+            const auto rect = dockRect(toolbox_dock_)
+                .united(dockRect(favorites_dock_))
+                .united(dockRect(effects_dock_));
+            if (auto* companion = nearestCompanion(rect, group)) {
+                const int current = toolbox_dock_->width() + effects_dock_->width();
+                const int saved = toolbox_width + effects_width;
+                resizeDocks(
+                    {toolbox_dock_, effects_dock_, companion},
+                    {toolbox_width, effects_width,
+                     std::max(companion->minimumWidth(),
+                         companion->width() + current - saved)},
+                    Qt::Horizontal);
+            }
+        }
+        preview_side_panel_layout_change_in_progress_ = false;
+    };
+
+    const bool entering_side_layout =
+        preview_fills_workspace_height && !preview_side_panel_widths_active_;
+    if (entering_side_layout) {
+        // A previous session may have saved the external-edge layout while
+        // these widths were already compacted. Keep that original snapshot.
+        if (!settings.value(kSideWidthsActiveKey, false).toBool()) {
+            settings.setValue(kMediaPoolWidthKey, settings.value(
+                "workspace/media_pool_width",
+                std::max(0, media_dock_ ? media_dock_->width() : 0)).toInt());
+            settings.setValue(kToolboxWidthKey, settings.value(
+                "workspace/preview_normal_toolbox_width",
+                std::max(0, toolbox_dock_ ? toolbox_dock_->width() : 0)).toInt());
+            settings.setValue(kEffectsWidthKey, settings.value(
+                "workspace/preview_normal_effects_width",
+                std::max(0, effects_dock_ ? effects_dock_->width() : 0)).toInt());
+            settings.setValue(kSideWidthsActiveKey, true);
+        }
+        preview_side_panel_widths_active_ = true;
+    }
+
+    if (preview_fills_workspace_height) {
+        const bool media_pool_active = media_pool_action_ != nullptr &&
+            media_pool_action_->isChecked();
+        const bool effects_active = effects_action_ != nullptr &&
+            effects_action_->isChecked();
+        const int initial_group_width = std::max(
+            1, contentsRect().width() / 4 - 8);
+        if (media_pool_active && media_dock_ != nullptr && bins_dock_ != nullptr &&
+            !settings.contains(kSideMediaPoolWidthKey)) {
+            const int current_width = std::max(bins_dock_->width(), media_dock_->width());
+            const int target_width = std::min(current_width, initial_group_width);
+            if (current_width > target_width) {
+                if (media_pool_width_save_timer_ != nullptr) {
+                    media_pool_width_save_timer_->stop();
+                }
+                const std::vector<QDockWidget*> group{bins_dock_, media_dock_};
+                const auto companion = nearestCompanion(
+                    dockRect(bins_dock_).united(dockRect(media_dock_)), group);
+                if (companion != nullptr) {
+                    preview_side_panel_layout_change_in_progress_ = true;
+                    resizeDocks(
+                        {bins_dock_, companion},
+                        {target_width,
+                         std::max(companion->minimumWidth(),
+                                  companion->width() + current_width - target_width)},
+                        Qt::Horizontal);
+                    layout()->activate();
+                    preview_side_panel_layout_change_in_progress_ = false;
+                }
+            }
+            settings.setValue(
+                kSideMediaPoolWidthKey,
+                std::max(bins_dock_->width(), media_dock_->width()));
+            if (preview_side_panel_width_save_timer_ != nullptr) {
+                preview_side_panel_width_save_timer_->start();
+            }
+        } else if (effects_active && toolbox_dock_ != nullptr &&
+                   effects_dock_ != nullptr &&
+                   (!settings.contains(kSideToolboxWidthKey) ||
+                    !settings.contains(kSideEffectsWidthKey))) {
+            const int current_toolbox_width = toolbox_dock_->width();
+            const int current_effects_width = effects_dock_->width();
+            const int current_group_width =
+                current_toolbox_width + current_effects_width;
+            const int target_group_width =
+                std::min(current_group_width, initial_group_width);
+            if (current_group_width > target_group_width) {
+                if (media_pool_width_save_timer_ != nullptr) {
+                    media_pool_width_save_timer_->stop();
+                }
+                const int toolbox_target = std::max(
+                    20, static_cast<int>(std::lround(
+                            static_cast<double>(target_group_width) *
+                            current_toolbox_width /
+                                std::max(1, current_group_width))));
+                const int effects_target = std::max(
+                    30, target_group_width - toolbox_target);
+                const std::vector<QDockWidget*> group{
+                    toolbox_dock_, favorites_dock_, effects_dock_};
+                const auto group_rect = dockRect(toolbox_dock_)
+                    .united(dockRect(favorites_dock_))
+                    .united(dockRect(effects_dock_));
+                const auto companion = nearestCompanion(group_rect, group);
+                if (companion != nullptr) {
+                    preview_side_panel_layout_change_in_progress_ = true;
+                    resizeDocks(
+                        {toolbox_dock_, effects_dock_, companion},
+                        {toolbox_target, effects_target,
+                         std::max(companion->minimumWidth(),
+                                  companion->width() + current_group_width -
+                                      target_group_width)},
+                        Qt::Horizontal);
+                    layout()->activate();
+                    preview_side_panel_layout_change_in_progress_ = false;
+                }
+            }
+            settings.setValue(kSideToolboxWidthKey, toolbox_dock_->width());
+            settings.setValue(kSideEffectsWidthKey, effects_dock_->width());
+            if (preview_side_panel_width_save_timer_ != nullptr) {
+                preview_side_panel_width_save_timer_->start();
+            }
+        }
+    } else if (!should_be_full_height &&
+               (preview_side_panel_widths_active_ ||
+                settings.value(kSideWidthsActiveKey, false).toBool())) {
+        if (preview_side_panel_width_save_timer_ != nullptr) {
+            preview_side_panel_width_save_timer_->stop();
+        }
+        restoreSavedPanelWidths();
+        preview_side_panel_widths_active_ = false;
+        clearSavedPanelWidths();
+    }
+
     if (layout_changed) saveWorkspaceLayout();
 }
 
 void MainWindow::persistMediaPoolWidth() {
-    if (media_dock_ == nullptr || media_dock_->width() <= 0) {
+    if (preview_side_panel_widths_active_ || media_dock_ == nullptr ||
+        media_dock_->width() <= 0) {
         return;
     }
     QSettings settings;
     settings.setValue("workspace/media_pool_width", media_dock_->width());
+    settings.sync();
+}
+
+void MainWindow::persistPreviewSidePanelWidths() {
+    if (preview_side_panel_layout_change_in_progress_) {
+        return;
+    }
+    QSettings settings;
+    if (!preview_side_panel_widths_active_) {
+        if (media_dock_ != nullptr && media_dock_->isVisible() &&
+            media_dock_->width() > 0) {
+            settings.setValue("workspace/media_pool_width", media_dock_->width());
+        }
+        if (toolbox_dock_ != nullptr && effects_dock_ != nullptr &&
+            toolbox_dock_->isVisible() && effects_dock_->isVisible()) {
+            settings.setValue(
+                "workspace/preview_normal_toolbox_width", toolbox_dock_->width());
+            settings.setValue(
+                "workspace/preview_normal_effects_width", effects_dock_->width());
+            settings.sync();
+        }
+        return;
+    }
+    if (bins_dock_ != nullptr && media_dock_ != nullptr) {
+        settings.setValue(
+            "workspace/preview_side_media_pool_width",
+            std::max(bins_dock_->width(), media_dock_->width()));
+    }
+    if (toolbox_dock_ != nullptr && effects_dock_ != nullptr) {
+        settings.setValue(
+            "workspace/preview_side_toolbox_width", toolbox_dock_->width());
+        settings.setValue(
+            "workspace/preview_side_effects_width", effects_dock_->width());
+    }
+    saveWorkspaceLayout();
     settings.sync();
 }
 
@@ -1466,6 +1768,23 @@ void MainWindow::persistInspectorWidth() {
 
 void MainWindow::restoreExpandedDockLayout() {
     if (media_dock_ == nullptr || inspector_dock_ == nullptr) return;
+
+    // restoreState already restored the side-docked arrangement. Rebuilding
+    // the normal expansion layout here would overwrite its saved side widths.
+    if (preview_side_panel_widths_active_ && preview_dock_ != nullptr &&
+        !preview_dock_->isHidden() && !preview_dock_->isFloating()) {
+        const auto area = dockWidgetArea(preview_dock_);
+        const auto rect = QRect(
+            preview_dock_->mapTo(this, QPoint(0, 0)), preview_dock_->size());
+        const auto client = contentsRect();
+        constexpr int kOuterEdgeTolerance = 64;
+        const bool restored_on_outer_edge =
+            (area == Qt::LeftDockWidgetArea &&
+             rect.left() <= client.left() + kOuterEdgeTolerance) ||
+            (area == Qt::RightDockWidgetArea &&
+             rect.right() >= client.right() - kOuterEdgeTolerance);
+        if (restored_on_outer_edge) return;
+    }
 
     QSettings settings;
     const int saved_media_width = settings.value(
@@ -1836,6 +2155,7 @@ void MainWindow::activateMediaPoolGroup() {
     media_dock_->show();
     updateMediaPoolActionState();
     updateEffectsActionState();
+    schedulePreviewDockLayoutUpdate();
 }
 
 void MainWindow::activateEffectsGroup() {
@@ -1846,6 +2166,7 @@ void MainWindow::activateEffectsGroup() {
     effects_dock_->show();
     updateMediaPoolActionState();
     updateEffectsActionState();
+    schedulePreviewDockLayoutUpdate();
 }
 
 void MainWindow::updateMediaPoolActionState() {
@@ -1880,12 +2201,21 @@ void MainWindow::restoreDefaultLayout() {
     [[maybe_unused]] const QSignalBlocker preview_dock_signals(preview_dock_);
     restoring_default_dock_layout_ = true;
     preview_side_dock_full_height_ = false;
+    preview_side_panel_widths_active_ = false;
+    preview_side_layout_restore_pending_ = false;
     setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     media_pool_expanded_ = false;
     inspector_expanded_ = false;
     workspace_expansion_restore_layout_state_.clear();
     QSettings settings;
+    settings.remove("workspace/preview_side_saved_media_pool_width");
+    settings.remove("workspace/preview_side_saved_toolbox_width");
+    settings.remove("workspace/preview_side_saved_effects_width");
+    settings.remove("workspace/preview_side_panel_widths_active");
+    settings.remove("workspace/preview_side_media_pool_width");
+    settings.remove("workspace/preview_side_toolbox_width");
+    settings.remove("workspace/preview_side_effects_width");
     settings.remove("workspace/dock_expansion_restore_layout_state");
     settings.remove("workspace/media_pool_restore_layout_state");
     updateMediaPoolExpandButton();

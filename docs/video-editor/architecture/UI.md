@@ -208,6 +208,15 @@ Manual Windows check: drag Preview by its title to the outer left and right
 edges, then between existing docks on each side. Only the outer-edge drops
 should extend Preview to the footer. Resize the dock and window with 9:16 and
 16:9 projects, then restart and confirm the selected outer-edge layout returns.
+
+When Preview occupies an outer edge, the active Media Pool or Effects dock
+group starts at no more than one quarter of the useful window width so the
+Timeline can use the remaining space. Native dock minimum widths take
+precedence when needed. The user can resize the group freely with its native
+dividers, including above one quarter; those side-layout widths are saved and
+restored when the editor reopens. Moving Preview inside the dock layout,
+floating it, or closing it restores the panel widths saved before side
+docking. The normal and side-layout widths are persisted separately.
 Confirm Timeline and other visible docks remain available.
 workspace host remains the central widget so Qt retains the draggable outer
 separator above the bottom Timeline dock. Its maximum width is one logical pixel while
