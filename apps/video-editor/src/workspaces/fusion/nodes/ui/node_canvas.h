@@ -68,6 +68,8 @@ protected:
     void dropEvent(QDropEvent* event) override;
 
 private:
+    void updateConnectionLines();
+
     QGraphicsScene* scene_ = nullptr;
     QSettings settings_;
     BackgroundGridSettings grid_settings_;

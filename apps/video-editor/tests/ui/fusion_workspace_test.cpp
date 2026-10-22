@@ -14,6 +14,7 @@
 #include <QGraphicsLineItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <QLineF>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QMimeData>
@@ -34,8 +35,11 @@
 #include <QWidget>
 
 #include <cstdio>
+#include <algorithm>
 #include <memory>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 namespace {
 void require(bool value, const char* message) {
@@ -162,6 +166,187 @@ void testGridPreferencesAndRendering() {
             "Invalid grid preferences were not safely normalized.");
     fusion::nodes::NodeCanvas reset_defaults;
     reset_defaults.setBackgroundGridSettings(BackgroundGridSettings{});
+}
+
+void testLiveConnectionLines() {
+    using namespace fusion::nodes;
+
+    auto graph = makeCompositionGraph();
+    Node alternate_source;
+    alternate_source.id = graph.next_id++;
+    alternate_source.type = NodeType::Background;
+    alternate_source.x = 80.0;
+    alternate_source.y = 360.0;
+    graph.nodes.push_back(alternate_source);
+
+    NodeCanvas canvas;
+    canvas.resize(1000, 700);
+    canvas.setGraph(graph);
+    canvas.show();
+    QApplication::processEvents();
+
+    int position_edits = 0;
+    int connection_edits = 0;
+    bool rewire_was_accepted = false;
+    canvas.setPositionChangedHandler([&](NodeId id, double x, double y) {
+        const auto node = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+            [id](const Node& value) { return value.id == id; });
+        if (node == graph.nodes.end()) return;
+        node->x = x;
+        node->y = y;
+        ++position_edits;
+        canvas.setGraph(graph);
+    });
+    canvas.setConnectionRequestedHandler(
+        [&](NodeId from, NodeId to, std::uint8_t input) {
+            auto candidate = connect(graph, from, to, input);
+            if (!candidate) return;
+            graph = std::move(*candidate);
+            ++connection_edits;
+            rewire_was_accepted = true;
+            canvas.setGraph(graph);
+        });
+
+    const auto node_item = [&canvas](NodeId id) -> QGraphicsItem* {
+        for (auto* item : canvas.scene()->items()) {
+            if (item->data(0).toULongLong() == id && item->data(1).toInt() == 0)
+                return item;
+        }
+        return nullptr;
+    };
+    const auto port_item = [&canvas](NodeId id, int kind,
+                                     int port_index) -> QGraphicsItem* {
+        for (auto* item : canvas.scene()->items()) {
+            if (item->data(0).toULongLong() == id &&
+                item->data(1).toInt() == kind &&
+                item->data(2).toInt() == port_index)
+                return item;
+        }
+        return nullptr;
+    };
+    const auto edge_lines = [&canvas](NodeId from, NodeId to,
+                                      int input) {
+        std::vector<QGraphicsLineItem*> result;
+        for (auto* item : canvas.scene()->items()) {
+            if (item->data(0).toULongLong() != to ||
+                item->data(1).toInt() != 3 ||
+                item->data(2).toInt() != input ||
+                item->data(3).toULongLong() != from)
+                continue;
+            if (auto* line = qgraphicsitem_cast<QGraphicsLineItem*>(item))
+                result.push_back(line);
+        }
+        return result;
+    };
+    const auto pending_line = [&canvas]() -> QGraphicsLineItem* {
+        for (auto* item : canvas.scene()->items()) {
+            auto* line = qgraphicsitem_cast<QGraphicsLineItem*>(item);
+            if (line != nullptr && line->pen().style() == Qt::DashLine &&
+                !line->data(1).isValid())
+                return line;
+        }
+        return nullptr;
+    };
+    const auto require_edge_matches_ports = [&](NodeId from, NodeId to,
+                                                int input) {
+        const auto lines = edge_lines(from, to, input);
+        auto* output = port_item(from, 2, 0);
+        auto* destination = port_item(to, 1, input);
+        require(lines.size() == 2 && output != nullptr && destination != nullptr,
+                "A connected edge or its hit target is missing.");
+        for (auto* line : lines) {
+            require(QLineF(line->line().p1(), output->scenePos()).length() < 0.01 &&
+                        QLineF(line->line().p2(), destination->scenePos()).length() < 0.01,
+                    "A visible wire or its hit target does not meet its ports.");
+        }
+    };
+    const auto drag_node_to = [&canvas](QGraphicsItem* node, QPoint delta) {
+        require(node != nullptr, "Cannot drag a missing node.");
+        const auto start = canvas.mapFromScene(node->scenePos() + QPointF(100, 65));
+        const auto finish = start + delta;
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(start),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas.viewport(), &press);
+        QMouseEvent move(QEvent::MouseMove, QPointF(finish), Qt::NoButton,
+                         Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas.viewport(), &move);
+        return std::pair{start, finish};
+    };
+    const auto release_left = [&canvas](QPoint position) {
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(position),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas.viewport(), &release);
+    };
+
+    require_edge_matches_ports(1, 2, 0);
+    auto* source_node = node_item(1);
+    require(source_node != nullptr, "The connected source node is missing.");
+    const auto [source_start, source_finish] = drag_node_to(source_node, QPoint(50, 30));
+    static_cast<void>(source_start);
+    require(position_edits == 0 && graph.nodes[0].x == 80.0 &&
+                edge_lines(1, 2, 0).size() == 2,
+            "Dragging a node must not commit an edit before release.");
+    require_edge_matches_ports(1, 2, 0);
+    release_left(source_finish);
+    require(position_edits == 1 && graph.nodes[0].x != 80.0 &&
+                graph.connections == std::vector<Connection>{{1, 2, 0}},
+            "Moving a connected node must commit one position edit and preserve its cable.");
+    require_edge_matches_ports(1, 2, 0);
+
+    auto* output_node = node_item(2);
+    require(output_node != nullptr, "The connected destination node is missing.");
+    const auto [output_start, output_finish] = drag_node_to(output_node, QPoint(55, 35));
+    static_cast<void>(output_start);
+    require(position_edits == 1,
+            "Moving the destination node committed before the drag finished.");
+    require_edge_matches_ports(1, 2, 0);
+    release_left(output_finish);
+    require(position_edits == 2 && graph.connections.size() == 1,
+            "Moving the destination node must commit once without changing the graph links.");
+    require_edge_matches_ports(1, 2, 0);
+
+    const auto original_connections = graph.connections;
+    auto* alternate_output = port_item(3, 2, 0);
+    require(alternate_output != nullptr, "The alternate source output is missing.");
+    const auto invalid_drag_start = canvas.mapFromScene(alternate_output->scenePos());
+    const QPoint empty_position(900, 640);
+    QMouseEvent invalid_press(QEvent::MouseButtonPress, QPointF(invalid_drag_start),
+        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas.viewport(), &invalid_press);
+    QMouseEvent invalid_move(QEvent::MouseMove, QPointF(empty_position),
+        Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas.viewport(), &invalid_move);
+    auto* draft = pending_line();
+    require(draft != nullptr && QLineF(draft->line().p2(),
+                canvas.mapToScene(empty_position)).length() < 0.01,
+            "The provisional output cable did not follow the cursor.");
+    release_left(empty_position);
+    require(pending_line() == nullptr && connection_edits == 0 &&
+                graph.connections == original_connections,
+            "Dropping a provisional cable on empty canvas must cancel without editing the graph.");
+
+    auto* connected_input = port_item(2, 1, 0);
+    alternate_output = port_item(3, 2, 0);
+    require(connected_input != nullptr && alternate_output != nullptr,
+            "The ports required for rewiring are missing.");
+    const auto input_position = canvas.mapFromScene(connected_input->scenePos());
+    const auto alternate_output_position = canvas.mapFromScene(alternate_output->scenePos());
+    QMouseEvent rewire_press(QEvent::MouseButtonPress, QPointF(input_position),
+        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas.viewport(), &rewire_press);
+    QMouseEvent rewire_move(QEvent::MouseMove, QPointF(alternate_output_position),
+        Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas.viewport(), &rewire_move);
+    draft = pending_line();
+    require(draft != nullptr && QLineF(draft->line().p2(),
+                canvas.mapToScene(alternate_output_position)).length() < 0.01,
+            "The provisional rewire cable did not follow the cursor.");
+    release_left(alternate_output_position);
+    require(pending_line() == nullptr && rewire_was_accepted &&
+                connection_edits == 1 && graph.connections.size() == 1 &&
+                graph.connections.front() == Connection{3, 2, 0},
+            "Rewiring a connected input must replace its source with one graph edit.");
+    require_edge_matches_ports(3, 2, 0);
 }
 }
 
@@ -1011,6 +1196,7 @@ int main(int argc, char** argv) {
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                            settings_directory.path());
         testGridPreferencesAndRendering();
+        testLiveConnectionLines();
         verifyCatalogDrops();
         return runFusionWorkspaceTest();
     } catch (const std::exception& error) {

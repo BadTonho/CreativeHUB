@@ -28,6 +28,7 @@
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 #include <QCoreApplication>
 
 namespace fusion::nodes {
@@ -332,13 +333,50 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         line->setData(0, QVariant::fromValue<qulonglong>(edge.to));
         line->setData(1, 3);
         line->setData(2, static_cast<int>(edge.input));
+        line->setData(3, QVariant::fromValue<qulonglong>(edge.from));
         line->setZValue(-1);
         auto* hit_target = scene_->addLine(
             QLineF(start, end), QPen(QColor(0, 0, 0, 0), 12.0));
         hit_target->setData(0, QVariant::fromValue<qulonglong>(edge.to));
         hit_target->setData(1, 3);
         hit_target->setData(2, static_cast<int>(edge.input));
+        hit_target->setData(3, QVariant::fromValue<qulonglong>(edge.from));
         hit_target->setZValue(-0.5);
+    }
+}
+
+void NodeCanvas::updateConnectionLines() {
+    std::unordered_map<NodeId, QPointF> node_positions;
+    std::vector<QGraphicsLineItem*> connection_lines;
+    for (auto* item : scene_->items()) {
+        if (!item->data(0).isValid()) continue;
+        const auto item_kind = item->data(1).toInt();
+        if (item_kind == 0) {
+            node_positions.emplace(
+                static_cast<NodeId>(item->data(0).toULongLong()), item->scenePos());
+        } else if (item_kind == 3) {
+            if (auto* line = qgraphicsitem_cast<QGraphicsLineItem*>(item))
+                connection_lines.push_back(line);
+        }
+    }
+
+    for (auto* line : connection_lines) {
+        const auto from_id = static_cast<NodeId>(line->data(3).toULongLong());
+        const auto to_id = static_cast<NodeId>(line->data(0).toULongLong());
+        const auto input = static_cast<std::uint8_t>(line->data(2).toInt());
+        const auto from_position = node_positions.find(from_id);
+        const auto to_position = node_positions.find(to_id);
+        const auto* from_node = findNode(graph_, from_id);
+        const auto* to_node = findNode(graph_, to_id);
+        if (from_position == node_positions.end() || to_position == node_positions.end() ||
+            from_node == nullptr || to_node == nullptr)
+            continue;
+
+        const auto start = from_position->second +
+            QPointF(210.0, outputPortY(from_node->type));
+        const auto end = to_position->second + QPointF(
+            input == 2 ? 105.0 : 0.0, inputPortY(to_node->type, input));
+        line->setLine(QLineF(start, end));
     }
 }
 
@@ -551,6 +589,7 @@ void NodeCanvas::mouseMoveEvent(QMouseEvent* event) {
                 const auto scene_position = mapToScene(event->pos());
                 item->setPos(scene_position.x() - drag_offset_x_,
                              scene_position.y() - drag_offset_y_);
+                updateConnectionLines();
                 break;
             }
         }
