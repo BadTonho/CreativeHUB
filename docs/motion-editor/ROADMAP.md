@@ -66,11 +66,12 @@ other applications. Video Editor is the first consumer of the shared OpenGL
 compositor; Motion now has opt-in experimental preview and export integration
 with CPU fallback.
 
-**Status: experimental preview composition, Color Adjustment, Gaussian Blur,
+**Status: experimental preview composition, Color Adjustment, Gaussian Blur, Glow,
 offline export integration, and direct texture preview implemented; Windows
 reference preview measurements verified, broader acceptance pending.** Color Adjustment-only stacks run in the composition
-shader, while stacks containing Gaussian Blur use the shared ordered GPU effect
-path when supported. `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1` opts both preview
+shader, while stacks containing Gaussian Blur or Glow use their shared ordered
+GPU image paths when supported. Glow falls back to CPU when OpenGL or Vulkan
+cannot process it. `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1` opts both preview
 and export into the backend; both remain CPU-only by default. Export reads the
 composed result back to RGBA for the existing CPU encoder.
 [Controlled Windows reference measurements](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
@@ -171,7 +172,7 @@ readiness checks remain in this roadmap and
 | Undo/Redo and edit history | `composition_history_test.cpp` (`creative-suite-motion-editor-history`) | Pending manual validation: confirm interactive edit sequences during the broader Windows UI checklist. |
 | `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Windows invalid-file and path results remain part of Windows acceptance. |
 | Autosave and restart recovery | `motion_recovery_store_test.cpp` (`creative-suite-motion-editor-recovery`), `motion_editor_ui_test.cpp` | Automated snapshots and UI recovery paths exist. Basic recovery was reported working on the Windows 11 reference PC on 2026-10-01; detailed restart/recovery scenarios remain pending (**P0 validation**). |
-| Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; exported Color Adjustment pixels in `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`); shared evaluator coverage in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp`; shared color processing in `libs/tests/effects_test.cpp` (`creative-suite-effects`) | Offscreen tests cover preview, shared Color Adjustment delegation, export output, cancellation, timing, and interaction behavior. Real-hardware visual output and graphics-driver validation remain pending (**P2 validation**). |
+| Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; Glow CPU/mask/history/Inspector/Graph Editor in `drop_shadow_test.cpp`, decoded export and GPU fallback/parity in `motion_video_export_test.cpp`, and separate metrics in `performance_metrics_test.cpp`; shared evaluator in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp`; shared pixels/OpenGL/Vulkan in `libs/tests/effects_test.cpp`, `opengl_composition_test.cpp` and `vulkan_composition_test.cpp` | Glow regression sources were added but not executed in this work stage. Real-hardware visual output and graphics-driver acceptance remain pending (**P2 validation**). See the [Glow regression boundary](#glow-regression-boundary). |
 | Experimental GPU preview and offline export | `gpu_composition_test.cpp` (`creative-suite-motion-editor-gpu-composition`), `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), and shared `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`) | Automated coverage checks CPU fallback parity, GPU/CPU frame parity, worker-owned context lifecycle, two-PBO FIFO/reuse/backpressure, cancellation, budget fallback, mid-pipeline CPU recovery, and schema-3 metrics. The current Windows selection passes 16/16 in Debug and Release, including export; native lossless GPU export is checked separately with `--require-gpu`. See [current results and codec limits](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md). Three post-change Windows GPU exports and native macOS/Linux driver checks remain pending (**P2 validation**). |
 | Direct GPU texture preview | `gpu_texture_preview_test.cpp` (`creative-suite-motion-editor-gpu-texture`); native `--require-gpu`; `performance_metrics_test.cpp`; explicitly invoked `gpu_preview_benchmark.cpp` | Portable mailbox/fallback checks and native Windows texture parity, orientation, seek/replacement, resize, presentation recovery, pool backpressure, guide/context menu, GPU RGBA fallback without sharing, and actual MainWindow Play/Pause/Loop/shutdown pass in Debug and Release. Three 1080p five-layer trials per route at 30/60 fps confirm zero direct readback and reduced latency; see [Windows results](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md). Broader manual and native macOS/Linux checks remain pending. |
 | Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`) | Earlier Windows Release evidence passed all 11 Motion CTest targets before asynchronous readback. Existing 33.79 fps CPU and 54.96 s GPU exports remain historical; their export did not record its layer/effect setup. The current schema-3 summary records backend, async mode and transfer counts, CPU-side submission/wait/copy timings, staging and encoder queue peaks, fallbacks, and failures. Three post-change GPU runs use 54.96 s as baseline and 52.21 s as the 5% target; see [`PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md`](performance/PERFORMANCE_RESULTS_WINDOWS_2026-10-07.md). |
@@ -357,8 +358,8 @@ versions retain linear interpolation; create
 multiline Unicode text, change its font, size, alignment, box dimensions, and
 alpha color; create
 rectangles and ellipses, edit their dimensions, fill, optional stroke, and alpha;
-use the Effects inspector tab to add Gaussian Blur and Color Adjustment to
-different layers, adjust parameters, toggle, drag effects above and below other
+use the Effects inspector tab to add Gaussian Blur, Color Adjustment, Drop
+Shadow and Glow to layers, adjust parameters, toggle, drag effects above and below other
 rows, and remove effects, then verify preview, playback, export,
 Undo/Redo, and save/reopen preserve the stack and order; confirm Color
 Adjustment looks unchanged after the shared-processing integration and that
@@ -534,10 +535,9 @@ costs.
   - Native per-layer and composition-wide *Motion Blur* based on transform and
     path velocity.
   - Expanded effect families:
-    - *Color and light:* Glow, Curves, Levels, Hue/Saturation, Tint/Tritone,
-      LUTs, Vignette.
-    - *Layer styles and shading:* Drop Shadow, Inner Shadow, Outer/Inner Glow,
-      Bevel, Stroke.
+    - *Color and light:* Curves, Levels, Hue/Saturation, Tint/Tritone, LUTs,
+      Vignette.
+    - *Layer styles and shading:* Inner Shadow, Bevel, Stroke.
     - *Distortion and stylization:* Turbulent Displace, Wave Warp, Corner Pin,
       Displacement Map, Mirror, Chromatic Aberration, Posterize Time.
     - *Generators:* Fractal Noise, 4-Color Gradient, Grid, Checkerboard, Audio
@@ -579,11 +579,12 @@ architectural complexity:
    Adjustment properties across the document model, timeline, Graph Editor,
    preview, and export.
 2. **Layer hierarchy and transform ergonomics:** Inspector parenting and Null layers are implemented in native v10. Animated Anchor Point and compensated Inspector repositioning are implemented in native v11. Independent Scale X/Y with affine inheritance is implemented in native v12. Pan Behind adds pivot dragging with transient Inspector values and release-only commit without a format change. The timeline pick-whip adds direct parent selection, candidate feedback and wheel/edge scrolling using the same parent command. The Viewer Position handle adds live asynchronous movement preview and atomic Position commit. The Viewer Rotation handle adds local affine-aware rotation with full turns, live preview and release-only commit. Viewer Scale X/Y/XY handles add linked/free live scaling with positive clamping and atomic release-only edits. Manual acceptance remains pending.
-3. **Blending modes and Track Mattes:** six static per-layer modes are implemented in native v13 with transparent accumulation, opaque output and CPU/OpenGL composition; Vulkan requests fallback. Alpha/Luma and inverted track mattes with shared sources/chains are implemented in native v14. Pen-created animated shape/mask paths are implemented in native v15; Animated Trim Paths is implemented in native v16; Animated Drop Shadow is implemented in native v17; Glow and alpha export remain the next candidates.
+3. **Blending modes, Track Mattes and layer effects:** six static per-layer modes are implemented in native v13 with transparent accumulation, opaque output and CPU/OpenGL composition; Vulkan requests fallback. Alpha/Luma and inverted track mattes with shared sources/chains are implemented in native v14. Pen-created animated shape/mask paths are implemented in native v15; Animated Trim Paths is implemented in native v16; Animated Drop Shadow is implemented in native v17; Glow is implemented in native v18. Native visual/platform acceptance remains pending.
 4. **Pen tool (implemented in native v15) and Trim Paths:** freeform shapes and masks support animated vertices/tangents, local Viewer editing and complete-path easing. Trim Paths is implemented in native v16 with Start/End/Offset scalar animation; manual/platform/performance acceptance is pending.
-5. **Drop Shadow (implemented in native v17), Glow and Alpha-channel export:**
-   ordered local RGB shadows have four scalar animation channels. Glow and
-   transparent-background export remain planned. Manual acceptance is pending.
+5. **Drop Shadow and Glow:** ordered local RGB shadows are implemented in v17
+   with four scalar animation channels. Glow is implemented in v18 with static
+   RGB and mode plus animated opacity/radius. Transparent-background export
+   remains planned; manual acceptance is pending.
 
 ## Status legend
 
@@ -621,6 +622,12 @@ automated implementation coverage.
 | Feature | Automated coverage | Remaining acceptance |
 | --- | --- | --- |
 | Ordered shadows, expanded origins/fitting, masks/mattes, animation/history, v17/recovery and GPU image contract | [Drop Shadow tests](../../apps/motion-editor/tests/drop_shadow_test.cpp), [CTest registration](../../apps/motion-editor/tests/CMakeLists.txt): `creative-suite-motion-editor-drop-shadow` and `...-drop-shadow-hidpi`; `hub-backup-format-test`; existing shared/consumer regressions | [Manual checklist](features/DROP_SHADOW.md#verification-and-pending-acceptance); visual/platform/native Viewer presentation and benchmarks pending. |
+
+## Glow regression boundary
+
+| Feature | Automated coverage | Remaining acceptance |
+| --- | --- | --- |
+| Outer/Inner/Both pixels and alpha, bounded origins, cancellation, masks, ordered CPU rendering, animated parameters, Inspector/history, preview/export pixels, GPU metrics/fallback, native v18/recovery, `.cscomp` refusal and Hub v18 backup | `libs/tests/effects_test.cpp` (`creative-suite-effects`), `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`), `libs/tests/vulkan_composition_test.cpp` (`creative-suite-composition-vulkan`), `apps/motion-editor/tests/drop_shadow_test.cpp` (Glow model/render/UI and history coverage), `apps/motion-editor/tests/motion_video_export_test.cpp` (decoded export halo and backend parity/fallback), `apps/motion-editor/tests/performance_metrics_test.cpp` (separate Glow diagnostics), `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`) | [Glow guide](features/GLOW.md#verification-and-pending-acceptance); the regression sources were added but are not executed in this work stage. Native OpenGL presentation, visual/platform acceptance and representative performance measurements remain pending. |
 
 
 ## Image transparent blend composition maintenance

@@ -427,7 +427,7 @@ annotation. Producer/reader backup and exchange regressions protect this boundar
 
 ## Drop Shadow contract maintenance
 
-Motion native v17/Hub backup preserves Drop Shadow colors, four bases/curves and effect masks while rebasing existing media paths; Hub rejects v18. `.cscomp` v3 explicitly refuses it. Video/Image maintain the shared CPU/GPU operation contracts without shadow UI or persisted records.
+Motion native v17/Hub backup preserves Drop Shadow colors, four bases/curves and effect masks while rebasing existing media paths. Motion v18 adds Glow, and Hub now accepts through v18 and rejects v19. `.cscomp` v3 explicitly refuses both effects. Video/Image maintain the shared CPU/GPU operation contracts without these effect controls or persisted records.
 
 ## Image Editor v17 layer outlines
 

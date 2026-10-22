@@ -57,6 +57,10 @@ private:
         std::array<QDoubleSpinBox*,4> shadow_fields{};
         std::array<QToolButton*,4> shadow_keys{};
         QPushButton* shadow_color = nullptr;
+        QComboBox* glow_mode = nullptr;
+        QPushButton* glow_color = nullptr;
+        std::array<QDoubleSpinBox*, 2> glow_fields{};
+        std::array<QToolButton*, 2> glow_keys{};
         QDoubleSpinBox* blur_radius_field = nullptr;
         QToolButton* blur_radius_key_button = nullptr;
         QDoubleSpinBox* effect_brightness_field = nullptr;
@@ -148,6 +152,7 @@ signals:
     void effectEnabledChanged(int row, bool enabled);
     void shadowValueEdited(int property);
     void shadowColorRequested();
+    void glowColorRequested();
     void effectParametersEdited();
     void effectParametersEditFinished();
     void effectKeyframeToggleRequested(int property_index);

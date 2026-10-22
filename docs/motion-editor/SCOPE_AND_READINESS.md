@@ -47,14 +47,16 @@ with the shared CPU compositor by default or the experimental OpenGL adapter
 when `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`; failures fall back to CPU. The GPU
 composition shader applies Color Adjustment-only stacks before blending;
 stacks containing enabled Gaussian Blur use the shared ordered GPU effect path
-when supported, with bounded scratch storage and CPU fallback. [Controlled Windows preview results](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
+when supported, and Glow uses its origin-aware OpenGL operation. Both retain
+bounded scratch storage and CPU recovery; Vulkan explicitly falls back to CPU
+for Glow. [Controlled Windows preview results](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
 record the reference workload separately from broader manual/platform acceptance.
 Experimental preview now delivers shared GPU textures directly to the
 Motion-owned viewer, with a bounded mailbox and RGBA/CPU recovery; see
 [GPU_TEXTURE_PREVIEW.md](gpu/GPU_TEXTURE_PREVIEW.md). Offline export
 uses the same opt-in path and reads back RGBA for the existing CPU encoder.
 Manual Save, Save As, and Open use a versioned `.motion` document that includes
-the Media Pool. The writer emits schema v17 and reads versions 1–17; migrations
+the Media Pool. The writer emits schema v18 and reads versions 1–18; migrations
 and compatibility behavior are specified in [FORMAT.md](architecture/FORMAT.md). The
 separate recovery wrapper remains at version 1 and contains a nested native
 document. Undo/Redo and configurable autosave and recovery cover the
@@ -174,8 +176,9 @@ The first Motion Studio MVP is a 2D composition workflow with:
 - ordered layers for text, vector shapes, still images, and video sources;
 - a composition timeline, basic 2D transforms, keyframes, and editable property
   curves;
-- ordered per-layer Gaussian Blur and Color Adjustment effects with editable
-  parameters, enable/disable, reordering, and undoable stack operations;
+- ordered per-layer Gaussian Blur, Color Adjustment, Drop Shadow and Glow
+  effects with editable parameters, enable/disable, reordering, keyframes where
+  supported, and undoable stack operations;
 - editable project save and reopen, plus rendered video export;
 - document validation, actionable local error logging, undo/redo, autosave, and
   recovery appropriate to the supported workflow.
@@ -331,9 +334,9 @@ common, or custom dimensions, output frame rate, and quality/bitrate controls.
 Settings apply to the current job and are not persisted. Export jobs show
 progress, support cancellation, verify the staged file, and publish it only
 after successful completion; cancellation and failure preserve an existing
-destination. Audio and alpha are not exported. Static Gaussian Blur and Color
-Adjustment stacks run before each layer's transforms in the shared Motion frame
-renderer, so the preview, playback, and export evaluate the same effects. Blur
+destination. Audio and alpha are not exported. Gaussian Blur, Color Adjustment,
+Drop Shadow and Glow stacks run before each layer's transforms in the shared
+Motion frame renderer, so preview, playback, and export evaluate the same effects. Blur
 uses a bounded three-pass box approximation to a Gaussian with premultiplied
 alpha. Its rolling sums use integer arithmetic with byte-identical rounding,
 and the vertical pass traverses 32-pixel-wide tiles. The test suite compares
@@ -355,7 +358,7 @@ The blur duration is wall-clock time, including pool scheduling and pass barrier
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
-The native `.motion` writer emits schema v17 and reads versions 1–17, including
+The native `.motion` writer emits schema v18 and reads versions 1–18, including
 layer-local keyframes and Cubic Bezier easing on Gaussian Blur and Color
 Adjustment parameters. Migration
 details are maintained in [FORMAT.md](architecture/FORMAT.md); the recovery wrapper remains
@@ -389,7 +392,8 @@ discarded intermediate frames. Seek and forward-decode durations are
 submeasurements of total decode time and should not be added to it. The
 configured effect count remains distinct
 from per-interval application counts. A bounded sample window is used for
-percentile estimates. Current schema v8 additionally distinguishes texture/RGBA
+percentile estimates. Current schema v9 adds separate Glow effect timing and
+OpenGL effect/fallback/failure counters. Schema v8 distinguishes texture/RGBA
 mailbox delivery and successful presentation, recovery, bounded pool peaks and
 backpressure, and producer/viewer fence submission timing. Direct preview records
 zero readback and viewer-upload bytes; see [its contract](gpu/GPU_TEXTURE_PREVIEW.md).
@@ -449,14 +453,14 @@ unchanged.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The current implementation writes version 17 JSON documents and reads
-  versions 1 through 17, identified by
+- The current implementation writes version 18 JSON documents and reads
+  versions 1 through 18, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
   in [FORMAT.md](architecture/FORMAT.md).
 - Older text, shape, keyframe, effect, and linked-image records migrate as
   specified in [FORMAT.md](architecture/FORMAT.md); saving an older document writes version
-  17.
+  18.
   An unsupported future schema version is
   rejected without replacing the current composition or overwriting or
   normalizing the original file.
@@ -490,5 +494,12 @@ acceptance and benchmarks remain pending.
 
 [Animated Drop Shadow](features/DROP_SHADOW.md) adds ordered RGB shadows with four
 local scalar curves, expanded origins and stable fitting/mask references. Native
-v17/recovery v1 and Hub preserve the effect. Manual visual/platform/native Viewer
-presentation acceptance and benchmarks remain pending.
+v17 introduced the effect; the current v18/recovery v1 and Hub preserve it.
+Manual visual/platform/native Viewer presentation acceptance and benchmarks
+remain pending.
+
+[Glow](features/GLOW.md) adds ordered Outer, Inner and Both modes with static RGB,
+keyframed opacity/radius, source-space bounds, masks, CPU/OpenGL processing and
+Vulkan CPU fallback. Native v18 and Hub preserve Glow; `.cscomp` v3 refuses it
+with a diagnostic. Regression sources are registered; execution and manual
+visual/platform/native presentation acceptance remain pending.

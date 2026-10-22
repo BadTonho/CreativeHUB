@@ -542,7 +542,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         const auto consumers=matte_consumers.find(layer.id);
         const bool needs_matte_pixels=matte_graph && (layer.track_matte ||
             (consumers!=matte_consumers.end() && consumers->second>0));
-        if(hasLayerMasks(layer) || needs_matte_pixels || path_raster || hasActiveDropShadow(layer)) {
+        if(hasLayerMasks(layer) || needs_matte_pixels || path_raster || hasActiveExpandedEffect(layer)) {
             if(try_gpu_effects && !gpu_compositor_)gpu_compositor_=std::make_unique<creative_suite::composition::OpenGlFrameCompositor>(
                 gpu_surface_,creative_suite::composition::OpenGlPrecisionPolicy::Automatic,texture_share_context_,texture_budget_);
             MaskedLayerFrame processed;
@@ -578,15 +578,16 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             catch(const std::exception& e) {
                 if(should_cancel && should_cancel())return {};
                 creative_suite::diagnostics::Logger::instance().log(try_gpu_effects?creative_suite::diagnostics::Level::Warning:creative_suite::diagnostics::Level::Error,
-                    layer.track_matte?"motion_track_matte":hasActiveDropShadow(layer)?"motion_shadow":"motion_masks",try_gpu_effects?"gpu_cpu_recovery":"render_layer",e.what(),
+                    layer.track_matte?"motion_track_matte":hasActiveGlow(layer)?"motion_glow":hasActiveDropShadow(layer)?"motion_shadow":"motion_masks",try_gpu_effects?"gpu_cpu_recovery":"render_layer",e.what(),
                     {{"layer_id",std::to_string(layer.id)},
                      {"source_id",layer.track_matte?std::to_string(layer.track_matte->source_id):std::to_string(layer.id)},
                      {"track_mattes",matte_relations(layer.id)},
                      {"mode",layer.track_matte?std::string(creative_suite::composition::trackMatteModeIdentifier(layer.track_matte->mode)):"none"},
                      {"frame",std::to_string(request.composition_frame)},{"backend",try_gpu_effects?"opengl":"cpu"}});
                 if(record_preview_metrics_&&try_gpu_effects&&hasActiveDropShadow(layer))diagnostics::PerformanceMetrics::instance().recordGpuDropShadow(0,1,true,0);
+                if(record_preview_metrics_&&try_gpu_effects&&hasActiveGlow(layer))diagnostics::PerformanceMetrics::instance().recordGpuGlow(0,1,true,0);
                 if(try_gpu_effects)return cpu_mask_recovery();
-                if(fail_on_media_error||hasActiveDropShadow(layer))throw;
+                if(fail_on_media_error||hasActiveExpandedEffect(layer))throw;
                 return {};
             }
             if(!processed.rgba && !processed.texture)return {};

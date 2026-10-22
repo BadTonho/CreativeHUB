@@ -1158,6 +1158,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
     try {
         cancelled(cancel);
         if(operation.kind==OpenGlImageOperationKind::DropShadow)throw Failure("Drop Shadow is not implemented by Vulkan.",0,Status::Unsupported);
+        if(operation.kind==OpenGlImageOperationKind::Glow)throw Failure("Glow is not implemented by Vulkan.",0,Status::Unsupported);
         if(operation.kind==OpenGlImageOperationKind::ApplyTrackMatte)
             throw Failure("Track matte image operations are not implemented by Vulkan.",0,Status::Unsupported);
 #ifdef CS_HAS_VULKAN

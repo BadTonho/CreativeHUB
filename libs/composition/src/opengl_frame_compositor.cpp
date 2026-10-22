@@ -162,6 +162,11 @@ uniform ivec2 shadow_origin;
 uniform GEOMETRY_VEC2 shadow_delta;
 uniform ivec3 shadow_rgb;
 uniform GEOMETRY_VEC2 shadow_strength;
+uniform ivec2 glow_origin;
+uniform ivec2 glow_blur_origin;
+uniform ivec3 glow_rgb;
+uniform GEOMETRY_VEC2 glow_strength;
+uniform int glow_mode;
 uniform int color_count;
 layout(std140) uniform ColorAdjustments { vec4 color_adjustments[256]; };
 out vec4 color;
@@ -174,6 +179,11 @@ vec4 foreground(ivec2 pixel) {
     return texelFetch(foreground_image, pixel, 0);
 }
 int shadowAlphaByte(ivec2 p) {
+    ivec2 size=textureSize(foreground_image,0);
+    if(any(lessThan(p,ivec2(0)))||any(greaterThanEqual(p,size)))return 0;
+    return int(floor(foreground(p).a*255.0+0.5));
+}
+int glowAlphaByte(ivec2 p) {
     ivec2 size=textureSize(foreground_image,0);
     if(any(lessThan(p,ivec2(0)))||any(greaterThanEqual(p,size)))return 0;
     return int(floor(foreground(p).a*255.0+0.5));
@@ -222,6 +232,30 @@ void main() {
         for(int channel=0;channel<3;++channel) {
             PRECISE GEOMETRY_VEC2 numerator=GEOMETRY_VEC2(original[channel])*alpha.y+GEOMETRY_VEC2(shadow_rgb[channel])*alpha.x*(1.0-alpha.y);
             color[channel]=ao.x>0.0?float(floor(numerator.x/ao.x+0.5)/255.0):0.0;
+        }
+        return;
+    }
+    if(operation==9) {
+        ivec2 source_pixel=pixel-glow_origin;
+        ivec4 original=any(lessThan(source_pixel,ivec2(0)))||any(greaterThanEqual(source_pixel,size))
+            ? ivec4(0) : ivec4(floor(background(source_pixel)*255.0+0.5));
+        PRECISE GEOMETRY_VEC2 blurred=GEOMETRY_VEC2(glowAlphaByte(pixel+glow_blur_origin)/255.0,0);
+        PRECISE GEOMETRY_VEC2 source_alpha=GEOMETRY_VEC2(original.a/255.0,0);
+        PRECISE GEOMETRY_VEC2 outer_alpha=(glow_mode==1?GEOMETRY_VEC2(0):blurred)*glow_strength.x/100.0;
+        PRECISE GEOMETRY_VEC2 inner_mix=(glow_mode==0?GEOMETRY_VEC2(0):
+            max(GEOMETRY_VEC2(0),GEOMETRY_VEC2(1)-blurred))*glow_strength.x/100.0;
+        PRECISE GEOMETRY_VEC2 base_alpha=source_alpha+outer_alpha*(1.0-source_alpha);
+        PRECISE GEOMETRY_VEC2 output_alpha=base_alpha;
+        color.a=float(floor(output_alpha.x*255.0+0.5)/255.0);
+        for(int channel=0;channel<3;++channel) {
+            PRECISE GEOMETRY_VEC2 source_value=GEOMETRY_VEC2(original[channel]/255.0,0);
+            PRECISE GEOMETRY_VEC2 glow_value=GEOMETRY_VEC2(glow_rgb[channel]/255.0,0);
+            PRECISE GEOMETRY_VEC2 inner_value=source_value*source_alpha*(1.0-inner_mix)+
+                glow_value*source_alpha*inner_mix;
+            PRECISE GEOMETRY_VEC2 premultiplied=inner_value+
+                glow_value*outer_alpha*(1.0-source_alpha);
+            color[channel]=output_alpha.x>0.0
+                ? float(floor(premultiplied.x/output_alpha.x*255.0+0.5)/255.0) : 0.0;
         }
         return;
     }
@@ -1122,7 +1156,7 @@ void main() {
             measured.draw_submission_nanoseconds+=elapsed(started);
             rememberResourcePeak();return result(OpenGlCompositionStatus::Complete);
         }
-        if (operation.kind == OpenGlImageOperationKind::Merge || operation.kind == OpenGlImageOperationKind::MaskedBlend || operation.kind==OpenGlImageOperationKind::DropShadow) {
+        if (operation.kind == OpenGlImageOperationKind::Merge || operation.kind == OpenGlImageOperationKind::MaskedBlend || operation.kind==OpenGlImageOperationKind::DropShadow || operation.kind==OpenGlImageOperationKind::Glow) {
             bound = bind(operation.foreground, 1);
             if (bound.status != OpenGlCompositionStatus::Complete) return bound;
         }
@@ -1168,6 +1202,19 @@ void main() {
             const auto& c=operation.drop_shadow.color;
             geometry("shadow_strength",operation.drop_shadow.opacity_percent,0);
             gl->glUniform3i(image_program->uniformLocation("shadow_rgb"),c[0],c[1],c[2]);
+        }
+        if (operation.kind == OpenGlImageOperationKind::Glow) {
+            const auto bounds = effects::glowBounds(operation.background.width(),
+                operation.background.height(), operation.glow);
+            gl->glUniform2i(image_program->uniformLocation("glow_origin"), bounds.left, bounds.top);
+            const int inner_halo = operation.glow.mode == effects::GlowMode::Inner
+                ? 3 * static_cast<int>(std::lround(operation.glow.radius_pixels)) + 1 : 0;
+            gl->glUniform2i(image_program->uniformLocation("glow_blur_origin"), inner_halo, inner_halo);
+            gl->glUniform3i(image_program->uniformLocation("glow_rgb"), operation.glow.color[0],
+                operation.glow.color[1], operation.glow.color[2]);
+            geometry("glow_strength", operation.glow.opacity_percent, 0);
+            gl->glUniform1i(image_program->uniformLocation("glow_mode"),
+                static_cast<int>(operation.glow.mode));
         }
         image_program->setUniformValue("use_affine",operation.source_to_canvas.has_value());
         if(operation.source_to_canvas) {
@@ -1358,6 +1405,92 @@ OpenGlCompositionResult OpenGlFrameCompositor::copyToNative(const OpenGlTextureF
 
 OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
     const OpenGlImageOperation& operation, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    if (operation.kind == OpenGlImageOperationKind::Glow && !operation.foreground.texture) {
+        if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
+        if (!effects::validGlow(operation.glow))
+            return {OpenGlCompositionStatus::Unsupported, {}, "glow-parameters", "Invalid Glow parameters."};
+        effects::GlowBounds bounds;
+        try { bounds = effects::glowBounds(operation.background.width(), operation.background.height(), operation.glow); }
+        catch (const std::exception& error) {
+            return {OpenGlCompositionStatus::Unsupported, {}, "glow-bounds", error.what()};
+        }
+        if (operation.glow.opacity_percent == 0.0 || std::lround(operation.glow.radius_pixels) == 0) {
+            OpenGlImageOperation copy;
+            copy.background = operation.background;
+            return processImage(copy, cancel, timings);
+        }
+        OpenGlCompositionTimings total;
+        const auto pass = [&](OpenGlImageOperation image_operation) {
+            OpenGlCompositionTimings measured;
+            auto result = processImage(image_operation, cancel, &measured);
+            total.uploaded_bytes += measured.uploaded_bytes;
+            total.uploaded_layers += measured.uploaded_layers;
+            total.upload_nanoseconds += measured.upload_nanoseconds;
+            total.draw_submission_nanoseconds += measured.draw_submission_nanoseconds;
+            total.producer_fence_submission_nanoseconds += measured.producer_fence_submission_nanoseconds;
+            total.gaussian_blur_count += measured.gaussian_blur_count;
+            total.gaussian_blur_submission_nanoseconds += measured.gaussian_blur_submission_nanoseconds;
+            if (timings) *timings = total;
+            return result;
+        };
+        OpenGlImageInput source = operation.background;
+        int blur_width = bounds.width;
+        int blur_height = bounds.height;
+        int blur_left = bounds.left;
+        int blur_top = bounds.top;
+        if (operation.glow.mode == effects::GlowMode::Inner) {
+            const int halo = 3 * static_cast<int>(std::lround(operation.glow.radius_pixels)) + 1;
+            blur_width += 2 * halo;
+            blur_height += 2 * halo;
+            blur_left = halo;
+            blur_top = halo;
+        }
+        if (blur_width > 16384 || blur_height > 16384 ||
+            std::uint64_t(blur_width) * blur_height * 4 > 64ULL * 1024 * 1024)
+            return {OpenGlCompositionStatus::Unsupported, {}, "glow-blur-bounds",
+                "Glow blur image exceeds the 64 MiB / 16384 pixel limit."};
+        if (blur_left || blur_top || blur_width != source.width() || blur_height != source.height()) {
+            OpenGlImageOperation pad;
+            pad.kind = OpenGlImageOperationKind::Transform;
+            pad.background = source;
+            pad.output_width = blur_width;
+            pad.output_height = blur_height;
+            pad.source_to_canvas = AffineTransform2D{1, 0, 0, 1, double(blur_left), double(blur_top)};
+            auto padded = pass(pad);
+            if (padded.status != OpenGlCompositionStatus::Complete) return padded;
+            source = {nullptr, padded.frame};
+        }
+        OpenGlImageOperation blur;
+        blur.kind = OpenGlImageOperationKind::GaussianBlur;
+        blur.background = source;
+        blur.blur_radius_pixels = operation.glow.radius_pixels;
+        auto blurred = pass(blur);
+        if (blurred.status != OpenGlCompositionStatus::Complete) return blurred;
+        OpenGlImageOperation merge;
+        merge.kind = OpenGlImageOperationKind::Glow;
+        merge.background = operation.background;
+        merge.foreground = {nullptr, blurred.frame};
+        merge.glow = operation.glow;
+        merge.output_width = bounds.width;
+        merge.output_height = bounds.height;
+        return pass(merge);
+    }
+    if (operation.kind == OpenGlImageOperationKind::Glow) {
+        effects::GlowBounds bounds;
+        try { bounds = effects::glowBounds(operation.background.width(), operation.background.height(), operation.glow); }
+        catch (const std::exception& error) {
+            return {OpenGlCompositionStatus::Unsupported, {}, "glow-bounds", error.what()};
+        }
+        const int halo = operation.glow.mode == effects::GlowMode::Inner
+            ? 3 * static_cast<int>(std::lround(operation.glow.radius_pixels)) + 1 : 0;
+        const int expected_blur_width = bounds.width + 2 * halo;
+        const int expected_blur_height = bounds.height + 2 * halo;
+        if (operation.output_width != bounds.width || operation.output_height != bounds.height ||
+            operation.foreground.width() != expected_blur_width ||
+            operation.foreground.height() != expected_blur_height)
+            return {OpenGlCompositionStatus::Unsupported, {}, "glow-geometry",
+                "Prepared Glow dimensions do not match the requested mode."};
+    }
     if(operation.kind==OpenGlImageOperationKind::DropShadow) {
         if(!effects::validDropShadow(operation.drop_shadow))return {OpenGlCompositionStatus::Unsupported,{},"drop-shadow-parameters","Invalid Drop Shadow parameters."};
         if(!operation.foreground.texture) {
@@ -1406,7 +1539,7 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
     }
     if (operation.output_width < 0 || operation.output_height < 0 ||
         ((operation.output_width == 0) != (operation.output_height == 0)) ||
-        (operation.output_width > 0 && operation.kind != OpenGlImageOperationKind::Transform && operation.kind != OpenGlImageOperationKind::DropShadow))
+        (operation.output_width > 0 && operation.kind != OpenGlImageOperationKind::Transform && operation.kind != OpenGlImageOperationKind::DropShadow && operation.kind != OpenGlImageOperationKind::Glow))
         return {OpenGlCompositionStatus::Unsupported, {}, "image-output-geometry", "Explicit output dimensions require a Transform and a complete positive canvas."};
     auto& p = *impl_;
     struct Guard { Impl& p; ~Guard() { p.image_operation = nullptr; } } guard{p};

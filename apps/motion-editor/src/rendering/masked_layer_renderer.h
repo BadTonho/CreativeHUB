@@ -27,6 +27,8 @@ inline void addMaskTimings(creative_suite::composition::OpenGlCompositionTimings
 // Worker-only orchestration of existing image/effect operations. No decoder ownership.
 [[nodiscard]] bool hasLayerMasks(const PreviewLayerSnapshot&) noexcept;
 [[nodiscard]] bool hasActiveDropShadow(const PreviewLayerSnapshot&);
+[[nodiscard]] bool hasActiveGlow(const PreviewLayerSnapshot&);
+[[nodiscard]] bool hasActiveExpandedEffect(const PreviewLayerSnapshot&);
 [[nodiscard]] MaskedLayerFrame renderExpandedLayer(const PreviewLayerSnapshot&,
     creative_suite::media::RgbaFramePtr, const PreviewRequest&,MotionMaskRasterCache&,
     creative_suite::composition::OpenGlFrameCompositor*,const std::function<bool()>&,

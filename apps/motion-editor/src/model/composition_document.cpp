@@ -246,6 +246,8 @@ namespace {
     case EffectParameterProperty::GaussianBlurRadius:
     case EffectParameterProperty::ShadowOpacityPercent:
     case EffectParameterProperty::ShadowSoftnessPixels:
+    case EffectParameterProperty::GlowOpacityPercent:
+    case EffectParameterProperty::GlowRadiusPixels:
         return value >= 0.0 && value <= 100.0;
     case EffectParameterProperty::ShadowAngleDegrees:return std::abs(value)<=1e9;
     case EffectParameterProperty::ShadowDistancePixels:return value>=0 && value<=16384;
@@ -272,6 +274,12 @@ namespace {
 
 bool validLayerEffect(const LayerEffect& effect) noexcept
 {
+    if (const auto* glow = std::get_if<GlowEffect>(&effect)) {
+        if (!creative_suite::effects::validGlow(glow->parameters)) return false;
+        for (std::size_t index = 0; index < glow_properties.size(); ++index)
+            if (!validEffectKeyframes(glow->keyframes[index], glow_properties[index])) return false;
+        return true;
+    }
     if(const auto* shadow=std::get_if<DropShadowEffect>(&effect)) {
         if(!creative_suite::effects::validDropShadow(shadow->parameters))return false;
         for(std::size_t i=0;i<4;++i)if(!validEffectKeyframes(shadow->keyframes[i],shadow_properties[i]))return false;
@@ -317,6 +325,11 @@ const creative_suite::animation::ScalarKeyframes* effectKeyframesFor(
     const LayerEffect& effect,
     EffectParameterProperty property) noexcept
 {
+    if (const auto* glow = std::get_if<GlowEffect>(&effect)) {
+        for (std::size_t index = 0; index < glow_properties.size(); ++index)
+            if (property == glow_properties[index]) return &glow->keyframes[index];
+        return nullptr;
+    }
     if(const auto* shadow=std::get_if<DropShadowEffect>(&effect)) {
         for(std::size_t i=0;i<4;++i)if(property==shadow_properties[i])return &shadow->keyframes[i];
         return nullptr;
@@ -335,6 +348,8 @@ const creative_suite::animation::ScalarKeyframes* effectKeyframesFor(
         case EffectParameterProperty::ColorSaturationPercent:
             return &color->saturation_keyframes;
         case EffectParameterProperty::GaussianBlurRadius:
+        case EffectParameterProperty::GlowOpacityPercent:
+        case EffectParameterProperty::GlowRadiusPixels:
             return nullptr;
         }
     }
@@ -345,6 +360,11 @@ creative_suite::animation::ScalarKeyframes* mutableEffectKeyframesFor(
     LayerEffect& effect,
     EffectParameterProperty property) noexcept
 {
+    if (auto* glow = std::get_if<GlowEffect>(&effect)) {
+        for (std::size_t index = 0; index < glow_properties.size(); ++index)
+            if (property == glow_properties[index]) return &glow->keyframes[index];
+        return nullptr;
+    }
     if(auto* shadow=std::get_if<DropShadowEffect>(&effect)) {
         for(std::size_t i=0;i<4;++i)if(property==shadow_properties[i])return &shadow->keyframes[i];
         return nullptr;
@@ -363,6 +383,8 @@ creative_suite::animation::ScalarKeyframes* mutableEffectKeyframesFor(
         case EffectParameterProperty::ColorSaturationPercent:
             return &color->saturation_keyframes;
         case EffectParameterProperty::GaussianBlurRadius:
+        case EffectParameterProperty::GlowOpacityPercent:
+        case EffectParameterProperty::GlowRadiusPixels:
             return nullptr;
         }
     }
@@ -374,6 +396,14 @@ double evaluateEffectParameter(
     EffectParameterProperty property,
     std::int64_t local_frame) noexcept
 {
+    if (const auto* glow = std::get_if<GlowEffect>(&effect)) {
+        for (std::size_t index = 0; index < glow_properties.size(); ++index) {
+            if (property == glow_properties[index])
+                return std::clamp(creative_suite::animation::evaluateScalar(
+                    glowBaseValue(*glow, property), glow->keyframes[index], local_frame), 0.0, 100.0);
+        }
+        return 0.0;
+    }
     if(const auto* shadow=std::get_if<DropShadowEffect>(&effect)) {
         for(std::size_t i=0;i<4;++i)if(property==shadow_properties[i])return creative_suite::animation::evaluateScalar(shadowBaseValue(*shadow,property),shadow->keyframes[i],local_frame);
         return 0;
@@ -428,6 +458,9 @@ bool hasEffectKeyframeAtFrame(
 
 bool layerEffectHasKeyframes(const LayerEffect& effect) noexcept
 {
+    if (const auto* glow = std::get_if<GlowEffect>(&effect))
+        return std::any_of(glow->keyframes.begin(), glow->keyframes.end(),
+            [](const auto& keys) { return !keys.empty(); });
     if(const auto* shadow=std::get_if<DropShadowEffect>(&effect))return std::any_of(shadow->keyframes.begin(),shadow->keyframes.end(),[](const auto& keys){return !keys.empty();});
     if (const auto* blur = std::get_if<GaussianBlurEffect>(&effect)) {
         return !blur->radius_keyframes.empty();
@@ -480,6 +513,8 @@ LayerEffect evaluateLayerEffect(
     const LayerEffect& effect,
     std::int64_t local_frame)
 {
+    if (const auto* glow = std::get_if<GlowEffect>(&effect))
+        return evaluateGlowEffect(*glow, local_frame);
     if (const auto* blur = std::get_if<GaussianBlurEffect>(&effect)) {
         return evaluateGaussianBlurEffect(*blur, local_frame);
     }
@@ -1022,7 +1057,7 @@ bool CompositionDocument::setLayerEffects(
     if (layer == nullptr || !validLayerEffects(effects) ||
         (layer->kind == LayerKind::Null && !effects.empty())) return false;
     for(const auto& effect:effects)if(!std::visit([&](const auto& e){return !e.mask || findMask(e.mask);},effect))return false;
-    const auto count=[](const auto& stack){std::size_t n=0;for(const auto& e:stack)for(int i=0;i<8;++i)if(const auto* keys=effectKeyframesFor(e,static_cast<EffectParameterProperty>(i)))n+=keys->size();return n;};
+    const auto count=[](const auto& stack){std::size_t n=0;for(const auto& e:stack)for(int i=0;i<10;++i)if(const auto* keys=effectKeyframesFor(e,static_cast<EffectParameterProperty>(i)))n+=keys->size();return n;};
     const auto before=count(layer->effects),after=count(effects);
     if(effects==layer->effects || !canInsertKeyframes(after>before?after-before:0))return false;
     layer->effects = effects;

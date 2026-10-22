@@ -474,4 +474,5 @@ mask references and original media fit owned by Motion. Shared effects owns the
 Qt-free CPU primitive and bounds calculation; shared composition owns the GPU
 image operation. OpenGL reuses Gaussian Blur without intermediate readback;
 Vulkan explicitly refuses the new operation. Video/Image receive contract
-maintenance only. Native Motion v17 and Hub v17 are the persistence boundary.
+maintenance only. Native Motion v18 and Hub v18 are the current persistence
+boundary; Drop Shadow itself remains serialized in v17 records.

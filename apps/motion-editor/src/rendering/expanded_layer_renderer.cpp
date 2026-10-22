@@ -6,6 +6,7 @@
 #include <creative_suite/composition/frame_compositor.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <stdexcept>
 
 namespace motion::ui {
@@ -19,6 +20,21 @@ bool hasActiveDropShadow(const PreviewLayerSnapshot &layer) {
                model::evaluateEffectParameter(effect, model::EffectParameterProperty::ShadowOpacityPercent,
                                               layer.local_frame) > 0;
     });
+}
+bool hasActiveGlow(const PreviewLayerSnapshot& layer)
+{
+    return std::any_of(layer.effects.begin(), layer.effects.end(), [&](const auto& effect) {
+        const auto* glow = std::get_if<model::GlowEffect>(&effect);
+        return glow && glow->enabled &&
+            model::evaluateEffectParameter(effect, model::EffectParameterProperty::GlowOpacityPercent,
+                                           layer.local_frame) > 0.0 &&
+            std::lround(model::evaluateEffectParameter(effect,
+                model::EffectParameterProperty::GlowRadiusPixels, layer.local_frame)) > 0;
+    });
+}
+bool hasActiveExpandedEffect(const PreviewLayerSnapshot& layer)
+{
+    return hasActiveDropShadow(layer) || hasActiveGlow(layer);
 }
 MaskedLayerFrame renderExpandedLayer(const PreviewLayerSnapshot &layer, m::RgbaFramePtr source,
                                      const PreviewRequest &request, MotionMaskRasterCache &cache,
@@ -143,11 +159,21 @@ MaskedLayerFrame renderExpandedLayer(const PreviewLayerSnapshot &layer, m::RgbaF
         auto original_rgba = rgba;
         int left = 0, top = 0, width = current.width(), height = current.height();
         const auto *shadow = std::get_if<model::DropShadowEffect>(&effect);
+        const auto *glow = std::get_if<model::GlowEffect>(&effect);
         if (shadow && shadow->parameters.opacity_percent == 0)
+            continue;
+        if (glow && (glow->parameters.opacity_percent == 0.0 ||
+                     std::lround(glow->parameters.radius_pixels) == 0))
             continue;
         try {
             if (shadow) {
                 const auto b = creative_suite::effects::dropShadowBounds(width, height, shadow->parameters);
+                left = b.left;
+                top = b.top;
+                width = b.width;
+                height = b.height;
+            } else if (glow) {
+                const auto b = creative_suite::effects::glowBounds(width, height, glow->parameters);
                 left = b.left;
                 top = b.top;
                 width = b.width;
@@ -162,21 +188,34 @@ MaskedLayerFrame renderExpandedLayer(const PreviewLayerSnapshot &layer, m::RgbaF
             bounded(width, height);
             const auto image_bytes = std::uint64_t(width) * height * 4;
             const auto input_bytes = std::uint64_t(current.width()) * current.height() * 4;
-            const auto stage_peak = image_bytes * 4 + input_bytes + source_bytes;
+            int working_width = width;
+            int working_height = height;
+            if (glow && glow->parameters.mode == creative_suite::effects::GlowMode::Inner) {
+                const int halo = 3 * static_cast<int>(std::lround(glow->parameters.radius_pixels)) + 1;
+                working_width += 2 * halo;
+                working_height += 2 * halo;
+                bounded(working_width, working_height);
+            }
+            const auto processing_bytes = std::uint64_t(working_width) * working_height * 4;
+            const auto stage_peak = std::max(image_bytes, processing_bytes) * 4 + input_bytes + source_bytes;
             const auto transform_peak =
-                image_bytes * 2 + source_bytes + canvas_bytes * (layer.transform_mask ? 3 : 1);
+                std::max(image_bytes, processing_bytes) * 2 + source_bytes +
+                canvas_bytes * (layer.transform_mask ? 3 : 1);
             if (std::max(stage_peak, transform_peak) > preparation_budget_bytes)
                 throw std::runtime_error(
                     "Expanded effect working set exceeds the remaining frame preparation budget");
             const auto started = Clock::now();
             if (gpu) {
-                if (!shadow && (left || top))
+                if (!shadow && !glow && (left || top))
                     current = {nullptr, padGpu(current, width, height, left, top)};
                 c::OpenGlImageOperation op;
                 op.background = current;
                 if (shadow) {
                     op.kind = c::OpenGlImageOperationKind::DropShadow;
                     op.drop_shadow = shadow->parameters;
+                } else if (glow) {
+                    op.kind = c::OpenGlImageOperationKind::Glow;
+                    op.glow = glow->parameters;
                 } else if (const auto *blur = std::get_if<model::GaussianBlurEffect>(&effect)) {
                     op.kind = c::OpenGlImageOperationKind::GaussianBlur;
                     op.blur_radius_pixels = blur->radius_pixels;
@@ -197,6 +236,16 @@ MaskedLayerFrame renderExpandedLayer(const PreviewLayerSnapshot &layer, m::RgbaF
                     if (!result)
                         return {};
                     rgba = std::make_shared<const m::RgbaFrame>(std::move(*result));
+                } else if (glow) {
+                    auto result = creative_suite::effects::applyGlow(
+                        *rgba, glow->parameters, cancel,
+                        [](auto count, const auto& cancelled, const auto& operation) {
+                            return detail::sharedLayerEffectWorkerPool().parallelFor(count, cancelled,
+                                                                                     operation);
+                        });
+                    if (!result)
+                        return {};
+                    rgba = std::make_shared<const m::RgbaFrame>(std::move(*result));
                 } else {
                     auto next = left || top ? padCpu(*rgba, width, height, left, top)
                                             : std::make_shared<m::RgbaFrame>(*rgba);
@@ -208,17 +257,21 @@ MaskedLayerFrame renderExpandedLayer(const PreviewLayerSnapshot &layer, m::RgbaF
             }
             if (cancelled())
                 return {};
-            if (shadow) {
+            if (shadow || glow) {
                 if (record_metrics) {
                     const auto duration =
                         std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - started).count();
                     diagnostics::PerformanceMetrics::instance().recordEffectTiming(
-                        diagnostics::PreviewEffectKind::DropShadow, duration);
-                    if (gpu)
+                        shadow ? diagnostics::PreviewEffectKind::DropShadow : diagnostics::PreviewEffectKind::Glow,
+                        duration);
+                    if (gpu && shadow)
                         diagnostics::PerformanceMetrics::instance().recordGpuDropShadow(1, 0, false,
                                                                                         duration);
+                    else if (gpu && glow)
+                        diagnostics::PerformanceMetrics::instance().recordGpuGlow(1, 0, false, duration);
                 }
-                expanded = true;
+                if (shadow || (glow && glow->parameters.mode != creative_suite::effects::GlowMode::Inner))
+                    expanded = true;
             }
             ox -= left;
             oy -= top;
@@ -252,7 +305,8 @@ MaskedLayerFrame renderExpandedLayer(const PreviewLayerSnapshot &layer, m::RgbaF
                 }
             }
         } catch (const std::exception &error) {
-            throw std::runtime_error("Drop Shadow preparation layer " + std::to_string(layer.id) +
+            throw std::runtime_error(std::string(glow ? "Glow" : "Drop Shadow") +
+                                     " preparation layer " + std::to_string(layer.id) +
                                      ", effect " + std::to_string(index) + ", frame " +
                                      std::to_string(request.composition_frame) + ": " + error.what());
         }

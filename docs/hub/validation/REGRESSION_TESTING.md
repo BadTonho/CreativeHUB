@@ -1,13 +1,13 @@
 # Hub Regression Testing
 
-Current backup gates save Motion v17 and reject v18. Version-specific sections
+Current backup gates save Motion v18 and reject v19. Version-specific sections
 below retain the records and evidence from earlier deliveries.
 
 Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
-`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion18.
+`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion19.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v17 Drop Shadow, Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v18 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v18 Glow, Drop Shadow, Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v32/v19 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Motion v13 blend-mode backup coverage
 
@@ -416,6 +416,15 @@ On 2026-10-20, both backup gates passed within the **59/59** affected Windows
 Release gate. The four applications were built at their canonical Release paths;
 see the [Drop Shadow execution record](../../motion-editor/features/DROP_SHADOW.md#windows-release-execution-2026-10-20)
 for output times, separate native GPU/fallback evidence and pending acceptance.
+
+## Motion v18 Glow backup coverage
+
+`hub-backup-format-test` saves Motion v18 Glow with Both mode, static RGB,
+opacity/radius curves, a shared mask and existing media, then reopens both vault
+and relocated restore with the actual Motion reader. `hub-backup-manager-test`
+accepts v18 and rejects future v19. These regression sources were added in this
+implementation and have not been executed in this work stage. Native Hub
+restore UI/platform checks remain pending; see [Glow](../../motion-editor/features/GLOW.md).
 
 ## Image Editor v17 outline backup coverage
 

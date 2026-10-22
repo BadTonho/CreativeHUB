@@ -210,6 +210,7 @@ private:
     void addLayerEffect(int kind);
     void editSelectedShadowValue(int axis);
     void chooseShadowColor();
+    void chooseGlowColor();
     void editSelectedEffectParameters();
     void toggleSelectedEffectKeyframe(int property_index);
     void applySelectedEffectStack(std::vector<model::LayerEffect> effects,

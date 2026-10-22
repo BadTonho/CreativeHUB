@@ -8,6 +8,7 @@ find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui OpenGL OpenGLWidgets Widget
 add_library(creative-suite-motion-editor-core STATIC
     src/model/trim_paths.cpp
     src/model/drop_shadow_effect.cpp
+    src/model/glow_effect.cpp
     src/rendering/expanded_layer_renderer.cpp
     src/model/trim_paths.h
     src/model/trim_path_geometry.cpp
@@ -91,6 +92,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/main_window/main_window_anchor.cpp
     src/ui/main_window/main_window_trim_paths.cpp
     src/ui/main_window/main_window_shadow.cpp
+    src/ui/main_window/main_window_glow.cpp
     src/ui/main_window/main_window_pan_behind.cpp
     src/ui/main_window/main_window_parenting.cpp
     src/ui/main_window/main_window_scale_drag.cpp

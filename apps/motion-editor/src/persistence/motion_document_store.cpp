@@ -370,6 +370,19 @@ QJsonArray writeEffects(const std::vector<model::LayerEffect>& effects)
                 const std::array<const char*,4> names{"opacity_percent","angle_degrees","distance_pixels","softness_pixels"};QJsonObject keys;
                 for(std::size_t i=0;i<4;++i){object.insert(names[i],model::shadowBaseValue(value,model::shadow_properties[i]));if(!value.keyframes[i].empty())keys.insert(names[i],writeKeyframes(value.keyframes[i]));}
                 if(!keys.empty())object.insert("keyframes",keys);
+            } else if constexpr (std::is_same_v<Effect, model::GlowEffect>) {
+                object.insert("type", "glow");
+                object.insert("mode", value.parameters.mode == creative_suite::effects::GlowMode::Outer
+                    ? "outer" : value.parameters.mode == creative_suite::effects::GlowMode::Inner ? "inner" : "both");
+                QJsonArray rgb;
+                for (auto channel : value.parameters.color) rgb.append(int(channel));
+                object.insert("color_rgb", rgb);
+                object.insert("opacity_percent", value.parameters.opacity_percent);
+                object.insert("radius_pixels", value.parameters.radius_pixels);
+                QJsonObject keys;
+                if (!value.keyframes[0].empty()) keys.insert("opacity_percent", writeKeyframes(value.keyframes[0]));
+                if (!value.keyframes[1].empty()) keys.insert("radius_pixels", writeKeyframes(value.keyframes[1]));
+                if (!keys.empty()) object.insert("keyframes", keys);
             } else {
                 object.insert(QStringLiteral("type"), QStringLiteral("color_adjustment"));
                 object.insert(QStringLiteral("brightness"), value.brightness);
@@ -422,7 +435,43 @@ std::vector<model::LayerEffect> parseEffects(const QJsonArray& array,
         const auto mask=object.contains("mask")?requiredInt64(object,"mask",path):0;
         if(mask<0)fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Invalid mask reference."));
         const auto enabled = requiredBool(object, "enabled", path);
-        if(type==QLatin1String("drop_shadow")) {
+        if (type == QLatin1String("glow")) {
+            if (document_version < 18)
+                fail(MotionDocumentErrorCode::InvalidValue, path,
+                     QStringLiteral("Glow requires document version 18."));
+            model::GlowEffect glow;
+            glow.enabled = enabled;
+            glow.mask = mask;
+            const auto mode = requiredString(object, "mode", path);
+            if (mode == QLatin1String("outer")) glow.parameters.mode = creative_suite::effects::GlowMode::Outer;
+            else if (mode == QLatin1String("inner")) glow.parameters.mode = creative_suite::effects::GlowMode::Inner;
+            else if (mode == QLatin1String("both")) glow.parameters.mode = creative_suite::effects::GlowMode::Both;
+            else fail(MotionDocumentErrorCode::InvalidValue, path, QStringLiteral("Invalid Glow mode."));
+            const auto rgb = requiredArray(object, "color_rgb", path);
+            if (rgb.size() != 3)
+                fail(MotionDocumentErrorCode::InvalidValue, path, QStringLiteral("Glow requires three RGB bytes."));
+            for (int index = 0; index < 3; ++index) {
+                if (!rgb[index].isDouble() || rgb[index].toDouble() < 0 || rgb[index].toDouble() > 255 ||
+                    std::floor(rgb[index].toDouble()) != rgb[index].toDouble())
+                    fail(MotionDocumentErrorCode::InvalidValue, path, QStringLiteral("Invalid Glow RGB component."));
+                glow.parameters.color[index] = static_cast<std::uint8_t>(rgb[index].toInt());
+            }
+            glow.parameters.opacity_percent = requiredNumber(object, "opacity_percent", path);
+            glow.parameters.radius_pixels = requiredNumber(object, "radius_pixels", path);
+            if (object.contains("keyframes")) {
+                const auto curves = requiredObject(object, "keyframes", path);
+                for (auto it = curves.begin(); it != curves.end(); ++it)
+                    if (it.key() != QLatin1String("opacity_percent") && it.key() != QLatin1String("radius_pixels"))
+                        fail(MotionDocumentErrorCode::InvalidValue, path, QStringLiteral("Unknown Glow curve."));
+                if (curves.contains("opacity_percent"))
+                    glow.keyframes[0] = parseKeyframes(requiredArray(curves, "opacity_percent", path),
+                        path, keyframe_count, document_version);
+                if (curves.contains("radius_pixels"))
+                    glow.keyframes[1] = parseKeyframes(requiredArray(curves, "radius_pixels", path),
+                        path, keyframe_count, document_version);
+            }
+            effects.emplace_back(std::move(glow));
+        } else if(type==QLatin1String("drop_shadow")) {
             if(document_version<17)fail(MotionDocumentErrorCode::InvalidValue,path,QStringLiteral("Drop Shadow requires document version 17."));
             model::DropShadowEffect shadow;shadow.enabled=enabled;shadow.mask=mask;
             const auto rgb=requiredArray(object,"color_rgb",path);
@@ -589,6 +638,8 @@ void validateDocument(const MotionProjectData& document,
                     keyframe_count += value.radius_keyframes.size();
                 } else if constexpr(std::is_same_v<Effect,model::DropShadowEffect>) {
                     for(const auto& keys:value.keyframes)keyframe_count+=keys.size();
+                } else if constexpr (std::is_same_v<Effect, model::GlowEffect>) {
+                    for (const auto& keys : value.keyframes) keyframe_count += keys.size();
                 } else {
                     keyframe_count += value.brightness_keyframes.size() +
                         value.contrast_keyframes.size() +

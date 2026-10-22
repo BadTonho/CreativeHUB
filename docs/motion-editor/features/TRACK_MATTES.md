@@ -88,7 +88,8 @@ Writers omit absent bindings. v1-v13 read without bindings; earlier declared
 versions reject the field. Unknown modes/fields, wrong types, missing/Null/self
 sources and cyclic graphs are rejected before Open replaces a document.
 History, Save, autosave and recovery preserve confirmed bindings and eye states.
-Hub currently accepts v17, preserves records and media rebasing, and rejects v18. `.cscomp`
+Hub accepts Motion through v18, preserves records and media rebasing, and rejects
+v19. Glow extends the Hub backup ceiling without changing matte records. `.cscomp`
 remains v3 and refuses every matte binding by layer name/ID, including hidden or
 inactive targets; imports have no binding.
 

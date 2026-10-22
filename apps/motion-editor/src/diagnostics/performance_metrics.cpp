@@ -31,13 +31,14 @@ bool PreviewMetricsSnapshot::hasActivity() const noexcept
         gpu_composition_failures != 0 || gpu_color_adjustment_effects != 0 ||
         gpu_color_adjustment_fallbacks != 0 || gpu_color_adjustment_failures != 0 ||
         gpu_gaussian_blur_effects != 0 || gpu_gaussian_blur_fallbacks != 0 ||
-        gpu_gaussian_blur_failures != 0) return true;
+        gpu_gaussian_blur_failures != 0 || gpu_glow_effects || gpu_glow_fallbacks || gpu_glow_failures) return true;
     const auto has_timing = [](const auto& values) {
         return std::any_of(values.begin(), values.end(), [](const TimingSummary& timing) {
             return timing.count != 0;
         });
     };
-    return gpu_drop_shadow_effects || gpu_drop_shadow_fallbacks || gpu_drop_shadow_failures || has_timing(timings) || has_timing(effect_timings);
+    return gpu_drop_shadow_effects || gpu_drop_shadow_fallbacks || gpu_drop_shadow_failures ||
+        has_timing(timings) || has_timing(effect_timings);
 }
 
 PerformanceMetrics& PerformanceMetrics::instance() noexcept
@@ -64,6 +65,7 @@ void PerformanceMetrics::setEnabled(bool enabled) noexcept
         delivery_ = {};
         timings_ = {};
         gpu_drop_shadow_effects_=gpu_drop_shadow_fallbacks_=gpu_drop_shadow_failures_=0;
+        gpu_glow_effects_=gpu_glow_fallbacks_=gpu_glow_failures_=0;
         effect_timings_ = {};
         request_started_.clear();
     }
@@ -91,6 +93,7 @@ void PerformanceMetrics::reset() noexcept
         gpu_gaussian_blur_failures_ = 0;
     timings_ = {};
     gpu_drop_shadow_effects_=gpu_drop_shadow_fallbacks_=gpu_drop_shadow_failures_=0;
+    gpu_glow_effects_=gpu_glow_fallbacks_=gpu_glow_failures_=0;
     effect_timings_ = {};
     request_started_.clear();
 }
@@ -235,6 +238,19 @@ void PerformanceMetrics::recordGpuDropShadow(
         recordTimingLocked(PreviewTimingStage::GpuDropShadow, submission_nanoseconds);
 }
 
+void PerformanceMetrics::recordGpuGlow(std::uint64_t applied_effects,
+    std::uint64_t fallback_effects, bool failed,
+    std::uint64_t submission_nanoseconds) noexcept
+{
+    std::lock_guard lock(mutex_);
+    if (!enabled_) return;
+    gpu_glow_effects_ += applied_effects;
+    gpu_glow_fallbacks_ += fallback_effects;
+    if (failed) ++gpu_glow_failures_;
+    if (applied_effects != 0)
+        recordTimingLocked(PreviewTimingStage::GpuGlow, submission_nanoseconds);
+}
+
 void PerformanceMetrics::recordTiming(
     PreviewTimingStage stage,
     std::uint64_t duration_nanoseconds) noexcept
@@ -357,6 +373,7 @@ std::optional<PreviewMetricsSnapshot> PerformanceMetrics::takeSnapshotAndReset()
     result.gpu_gaussian_blur_fallbacks = std::exchange(gpu_gaussian_blur_fallbacks_, 0);
     result.gpu_gaussian_blur_failures = std::exchange(gpu_gaussian_blur_failures_, 0);
     result.gpu_drop_shadow_effects=std::exchange(gpu_drop_shadow_effects_,0);result.gpu_drop_shadow_fallbacks=std::exchange(gpu_drop_shadow_fallbacks_,0);result.gpu_drop_shadow_failures=std::exchange(gpu_drop_shadow_failures_,0);
+    result.gpu_glow_effects=std::exchange(gpu_glow_effects_,0);result.gpu_glow_fallbacks=std::exchange(gpu_glow_fallbacks_,0);result.gpu_glow_failures=std::exchange(gpu_glow_failures_,0);
     for (std::size_t index = 0; index < timings_.size(); ++index) {
         auto& source = timings_[index];
         auto& destination = result.timings[index];
@@ -396,6 +413,7 @@ const char* previewTimingStageName(PreviewTimingStage stage) noexcept
     case PreviewTimingStage::GpuColorAdjustment: return "gpu_color_adjustment";
     case PreviewTimingStage::GpuGaussianBlur: return "gpu_gaussian_blur";
     case PreviewTimingStage::GpuDropShadow: return "gpu_drop_shadow";
+    case PreviewTimingStage::GpuGlow: return "gpu_glow";
     case PreviewTimingStage::GpuProducerFenceSubmission: return "gpu_producer_fence_submission";
     case PreviewTimingStage::GpuViewerWaitSubmission: return "gpu_viewer_wait_submission";
     case PreviewTimingStage::GpuViewerDrawSubmission: return "gpu_viewer_draw_submission";
@@ -413,6 +431,7 @@ const char* previewEffectKindName(PreviewEffectKind effect) noexcept
     case PreviewEffectKind::GaussianBlur: return "gaussian_blur";
     case PreviewEffectKind::ColorAdjustment: return "color_adjustment";
     case PreviewEffectKind::DropShadow: return "drop_shadow";
+    case PreviewEffectKind::Glow: return "glow";
     case PreviewEffectKind::Count: break;
     }
     return "unknown_effect";
@@ -427,7 +446,7 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         return value.has_value() ? std::to_string(*value) : std::string("N/A");
     };
     creative_suite::diagnostics::Context context{
-        {"schema_version", "8"},
+        {"schema_version", "9"},
         {"interval_ms", "1000"},
         {"gpu_preview_texture_deliveries", std::to_string(metrics.delivery.texture_deliveries)},
         {"gpu_preview_rgba_deliveries", std::to_string(metrics.delivery.rgba_deliveries)},
@@ -469,6 +488,9 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         {"gpu_drop_shadow_effects",std::to_string(metrics.gpu_drop_shadow_effects)},
         {"gpu_drop_shadow_fallbacks",std::to_string(metrics.gpu_drop_shadow_fallbacks)},
         {"gpu_drop_shadow_failures",std::to_string(metrics.gpu_drop_shadow_failures)},
+        {"gpu_glow_effects",std::to_string(metrics.gpu_glow_effects)},
+        {"gpu_glow_fallbacks",std::to_string(metrics.gpu_glow_fallbacks)},
+        {"gpu_glow_failures",std::to_string(metrics.gpu_glow_failures)},
         {"gpu_gaussian_blur_effects", std::to_string(metrics.gpu_gaussian_blur_effects)},
         {"gpu_gaussian_blur_fallbacks", std::to_string(metrics.gpu_gaussian_blur_fallbacks)},
         {"gpu_gaussian_blur_failures", std::to_string(metrics.gpu_gaussian_blur_failures)},

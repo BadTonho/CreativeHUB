@@ -1,6 +1,6 @@
 # Hub Project Backups
 
-Drop Shadow extends native backup support to Motion v17; CSP v31 remains supported. Matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, and effect parameter keyframes are retained unchanged and existing media/Input paths are rebased. Future CSP v32 and Motion v18 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
+Glow extends native backup support to Motion v18; CSP v31 remains supported. Matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, and effect parameter keyframes are retained unchanged and existing media/Input paths are rebased. Future CSP v32 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
 
 ## Video Editor v29 Background presets
 
@@ -53,7 +53,7 @@ producer/consumer regression coverage when supported schemas gain path fields.
 | --- | --- | --- |
 | `creative-suite-image-document` | 1–23 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
 | `creative-suite.main-editor` | 1–31 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
-| `creative-suite.motion-studio` | 1–17 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
+| `creative-suite.motion-studio` | 1–18 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
 
 Video v26 adjustment clips have no source path. Their duration, effects and
 transform curves are preserved by backup and restoration. They do not cause
@@ -214,6 +214,14 @@ and masks alongside earlier geometry/effects. The actual Motion producer/reader
 reopens vault/restored files after media rebasing, and the gates reject v18.
 See [Drop Shadow](../motion-editor/features/DROP_SHADOW.md); native restore/UI and
 platform acceptance remain pending.
+
+## Motion v18 Glow backup coverage
+
+The Motion producer/reader round trips Outer, Inner and Both modes, static RGB,
+animated opacity/radius and repeated ordered effects through vault and relocated
+restore. Glow masks and rebased media remain intact; `hub-backup-manager-test`
+accepts v18 and rejects v19. See [Glow](../motion-editor/features/GLOW.md).
+Native Hub restore UI and platform acceptance remain pending.
 
 ## Image Editor v17 outlines
 

@@ -15,7 +15,8 @@ undoable edit. The destination project must have the same canvas and exact FPS.
 Normal overlap and audio-track rejection rules apply.
 
 Video, still images, Background, Text, ordered static color and Gaussian Blur stages, and one
-animated Transform per source are supported. Merge maps to a back-to-front layer
+animated Transform per source are supported. Motion Glow is explicitly refused
+by v3 with a layer/effect diagnostic. Merge maps to a back-to-front layer
 stack. Full-canvas Motion rectangles without strokes map to Background nodes.
 Text content, font, alignment, size, RGBA, layout, transforms and linear/Bézier
 curves remain editable. Media are referenced, not copied or embedded.
@@ -298,6 +299,13 @@ Trim Paths when configured; no interchange schema or Video/Image UI changes.
 ## Drop Shadow contract maintenance
 
 Motion native v17 adds ordered Drop Shadow effects. `.cscomp` remains v3 and refuses every instance, including disabled or hidden/inactive usage, by layer name/ID and effect position. No shadow is flattened or added to Video/Image interchange.
+
+## Glow contract maintenance
+
+Motion native v18 adds ordered Glow effects with Outer, Inner and Both modes.
+`.cscomp` remains v3 and refuses every Glow instance, including disabled or
+hidden/inactive usage, by layer name/ID and effect position. Glow is not
+flattened, omitted, or added to Video/Image interchange. See [Motion Glow](motion-editor/features/GLOW.md).
 
 Motion export remains all-or-nothing. Every unsupported Bezier mask is reported,
 including masks that are not referenced by a layer; export does not publish a

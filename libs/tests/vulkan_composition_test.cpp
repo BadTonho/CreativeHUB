@@ -46,6 +46,9 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
         require(stats.known_bytes==device->totalReservedBytes() && stats.known_bytes<=256ULL*1024*1024,"Memory diagnostics disagree with admission.");};
     checkMemory();
     VulkanFrameCompositor gpu(device);auto a=fixture(37,23,false),b=fixture(19,13);
+    OpenGlImageOperation glow;glow.kind=OpenGlImageOperationKind::Glow;glow.background={&b};
+    require(gpu.processImage(glow).status==OpenGlCompositionStatus::Unsupported,
+        "Vulkan must report Glow as unsupported so callers can fall back to CPU.");
     for(unsigned m=1;m<6;++m) {CompositionLayer blend{&a};blend.blend_mode=static_cast<BlendMode>(m);
         const auto refused=gpu.composeTexture(37,23,{blend});
         require(refused.status==OpenGlCompositionStatus::Unsupported&&!refused.frame,"Vulkan must explicitly refuse blend modes before rendering");}

@@ -12,6 +12,7 @@
 #include "export/motion_video_export.h"
 #include <creative_suite/composition/vulkan_frame_compositor.h>
 #include <creative_suite/effects/drop_shadow.h>
+#include <creative_suite/effects/glow.h>
 #include <creative_suite/media/video_playback.h>
 #include <creative_suite/media/video_encoder.h>
 #include <creative_suite/diagnostics/logger.h>
@@ -151,6 +152,104 @@ void numeric() {
                                [](auto v) { return v == 0; }),
           "transparent input stays empty");
 }
+void glowNumeric() {
+    auto source = pixels();
+    e::GlowParameters parameters;
+    parameters.color = {20, 90, 210};
+    parameters.opacity_percent = 65;
+    parameters.radius_pixels = 2;
+    for (const auto mode : {e::GlowMode::Outer, e::GlowMode::Inner, e::GlowMode::Both}) {
+        parameters.mode = mode;
+        const auto bounds = e::glowBounds(source.width, source.height, parameters);
+        const auto output = e::applyGlow(source, parameters);
+        check(output && output->width == bounds.width && output->height == bounds.height,
+              "each Glow mode returns its declared image bounds");
+        check((mode == e::GlowMode::Inner) == (bounds.width == source.width && bounds.height == source.height),
+              "only Inner Glow preserves the original bounds");
+    }
+}
+
+void glowModel(const QString& root) {
+    CompositionDocument doc(160, 90, {30, 1});
+    LayerId id = 0;
+    check(doc.addContentLayer(LayerKind::Shape, "Glow Shape", 0, &id), "Glow model fixture");
+    GlowEffect glow;
+    check(glow.parameters.mode == e::GlowMode::Outer && glow.parameters.color ==
+              std::array<std::uint8_t, 3>{255, 255, 255} && glow.parameters.radius_pixels == 10 &&
+              glow.parameters.opacity_percent == 50,
+          "Glow defaults match the Inspector contract");
+    for (const auto kind : {LayerKind::Text, LayerKind::Image, LayerKind::Video}) {
+        const auto visual_id = doc.addLayer(kind, "Glow visual layer");
+        check(doc.setLayerEffects(visual_id, {glow}),
+              "Glow is available on Text, Image and Video layers");
+    }
+    glow.parameters.mode = e::GlowMode::Both;
+    glow.parameters.color = {25, 90, 210};
+    check(doc.setLayerEffects(id, {glow, glow}), "ordered Glow instances are accepted");
+    check(doc.setEffectKeyframe(id, 0, EffectParameterProperty::GlowOpacityPercent, 0, 20) &&
+              doc.setEffectKeyframe(id, 0, EffectParameterProperty::GlowOpacityPercent, 20, 80) &&
+              doc.setEffectKeyframeInterpolation(id, 0, EffectParameterProperty::GlowOpacityPercent, 0,
+                  a::InterpolationMode::CubicBezier, {.42, 0, 1, 1}) &&
+              doc.setEffectKeyframe(id, 0, EffectParameterProperty::GlowRadiusPixels, 0, 2) &&
+              doc.setEffectKeyframe(id, 0, EffectParameterProperty::GlowRadiusPixels, 20, 8),
+          "Glow opacity and radius support keyframes and Graph Editor easing");
+    check(evaluateEffectParameter(doc.layers()[0].effects[0],
+              EffectParameterProperty::GlowRadiusPixels, 10) == 5.0,
+          "Glow radius evaluates in layer-local time");
+    LayerId null = 0;
+    check(doc.addContentLayer(LayerKind::Null, "Null", 0, &null) &&
+              !doc.setLayerEffects(null, {glow}),
+          "Null layers reject Glow");
+
+    auto data = project(doc);
+    const auto filename = root + "/glow.motion";
+    Store::save(file(filename), data);
+    check(Store::load(file(filename)) == data, "native v18 Glow and animation round-trip");
+    QFile input(filename);
+    check(input.open(QIODevice::ReadOnly), "read Glow document");
+    auto encoded = QJsonDocument::fromJson(input.readAll()).object();
+    input.close();
+    check(encoded.value("version").toInt() == 18, "Glow advances the native writer to v18");
+    encoded["version"] = 17;
+    QFile old_glow(root + "/glow-v17.motion");
+    check(old_glow.open(QIODevice::WriteOnly), "write invalid pre-Glow fixture");
+    old_glow.write(QJsonDocument(encoded).toJson());
+    old_glow.close();
+    bool rejected = false;
+    try { (void)Store::load(file(old_glow.fileName())); }
+    catch (const motion::persistence::MotionDocumentError&) { rejected = true; }
+    check(rejected, "v17 documents cannot claim a Glow payload");
+
+    const auto recovery = root + "/glow.recovery";
+    Store::saveRecovery(file(recovery), file(filename), "glow-session", data);
+    check(Store::loadRecovery(file(recovery)).document == data,
+          "Glow keeps the recovery wrapper at v1");
+    bool exchange_rejected = false;
+    try { (void)exportComposition(data); }
+    catch (const creative_suite::composition_exchange::Unsupported& error) {
+        exchange_rejected = std::string(error.what()).find("Glow") != std::string::npos;
+    }
+    check(exchange_rejected, "cscomp v3 refuses Glow with an explicit diagnostic");
+
+    CompositionDocument legacy(160, 90, {30, 1});
+    LayerId legacy_id = 0;
+    check(legacy.addContentLayer(LayerKind::Shape, "Legacy", 0, &legacy_id), "legacy fixture");
+    auto legacy_data = project(legacy);
+    Store::save(file(root + "/legacy.motion"), legacy_data);
+    QFile legacy_file(root + "/legacy.motion");
+    check(legacy_file.open(QIODevice::ReadOnly), "read legacy baseline");
+    auto legacy_json = QJsonDocument::fromJson(legacy_file.readAll()).object();
+    legacy_file.close();
+    for (int version = 1; version <= 17; ++version) {
+        legacy_json["version"] = version;
+        QFile fixture_file(root + QString("/legacy-v%1.motion").arg(version));
+        check(fixture_file.open(QIODevice::WriteOnly), "write legacy version fixture");
+        fixture_file.write(QJsonDocument(legacy_json).toJson());
+        fixture_file.close();
+        check(Store::load(file(fixture_file.fileName())).layers[0].effects.empty(),
+              "v1-v17 documents migrate with no Glow");
+    }
+}
 void model(const QString &root) {
     CompositionDocument doc(160, 90, {30, 1});
     LayerId id = 0;
@@ -180,7 +279,7 @@ void model(const QString &root) {
           "Null rejects effects");
     const auto filename = root + "/shadow.motion";
     Store::save(file(filename), project(doc));
-    check(Store::load(file(filename)) == project(doc), "v17 full roundtrip");
+    check(Store::load(file(filename)) == project(doc), "v18 full roundtrip");
     Store::saveRecovery(file(root + "/shadow.recovery"), file(filename), "shadow", project(doc));
     check(Store::loadRecovery(file(root + "/shadow.recovery")).document == project(doc),
           "recovery wrapper remains compatible");
@@ -205,7 +304,7 @@ void model(const QString &root) {
         if (code == 0)
             bad["version"] = 16;
         else if (code == 1)
-            bad["version"] = 18;
+            bad["version"] = 19;
         else if (code == 2)
             value["opacity_percent"] = 101;
         else if (code == 3)
@@ -236,7 +335,7 @@ void model(const QString &root) {
         }
         check(rejected, "invalid shadow document rejected");
     }
-    for (int version = 1; version <= 16; ++version) {
+    for (int version = 1; version <= 17; ++version) {
         CompositionDocument old(160, 90, {30, 1});
         LayerId oldid = 0;
         check(old.addContentLayer(LayerKind::Shape, "Old", 0, &oldid), "old fixture");
@@ -250,7 +349,7 @@ void model(const QString &root) {
         check(f.open(QIODevice::WriteOnly | QIODevice::Truncate), "old JSON write");
         f.write(QJsonDocument(oldjson).toJson());
         f.close();
-        check(Store::load(file(name)).layers[0].effects.empty(), "v1-v16 migration has no shadow");
+        check(Store::load(file(name)).layers[0].effects.empty(), "v1-v17 migration has no shadow or Glow");
     }
 }
 void keyBudget() {
@@ -523,6 +622,70 @@ void render(const QString &root) {
     check(a && b, "decode reference export");
     same(**a, **b);
 }
+
+void glowRender() {
+    auto source = std::make_shared<const media::RgbaFrame>(pixels());
+    CompositionLayer image{1, LayerKind::Image, "Glow image"};
+    image.source_path = "glow.png";
+    image.duration_frames = 30;
+    GlowEffect glow;
+    glow.parameters.color = {15, 120, 230};
+    glow.parameters.opacity_percent = 80;
+    glow.parameters.radius_pixels = 2;
+    image.effects = {glow};
+    CompositionDocument glow_doc(40, 20, {30, 1}, {image});
+    CompositionFrameRenderer renderer(false);
+    const auto glow_frame = renderer.render(request(glow_doc, 0, source));
+    const auto prepared = e::applyGlow(*source, glow.parameters);
+    const auto bounds = e::glowBounds(source->width, source->height, glow.parameters);
+    check(glow_frame && prepared, "CPU Motion pipeline processes an expanded Glow layer");
+    const auto transformed = c::transformAffineFrame(*prepared, 40, 20,
+        {10, 0, 0, 10, 10.0 - bounds.left * 10.0, -bounds.top * 10.0}, 1.0);
+    check(bool(transformed), "independent Glow affine transform");
+    const auto reference = c::FrameCompositor::compose(40, 20, {{&*transformed, {}}});
+    check(bool(reference), "independent Glow origin reference renders");
+    same(*reference, *glow_frame);
+
+    auto plain_layer = image;
+    plain_layer.effects.clear();
+    CompositionDocument plain_doc(40, 20, {30, 1}, {plain_layer});
+    const auto plain_frame = renderer.render(request(plain_doc, 0, source));
+    auto masked_doc = glow_doc;
+    const auto glow_mask = masked_doc.createMask(1, 0, c::ShapeMaskKind::Rectangle);
+    check(glow_mask != 0, "Glow effect mask fixture");
+    c::ShapeMaskParameters empty_mask;
+    empty_mask.width = 0;
+    check(masked_doc.setMaskParameters(glow_mask, empty_mask), "empty Glow mask parameters");
+    const auto masked_frame = renderer.render(request(masked_doc, 0, source));
+    check(plain_frame && masked_frame, "CPU Glow mask render");
+    same(*plain_frame, *masked_frame);
+
+    auto order_a = image;
+    order_a.effects = {glow, ColorAdjustmentEffect{true, 35, 100, 100}};
+    auto order_b = image;
+    order_b.effects = {ColorAdjustmentEffect{true, 35, 100, 100}, glow};
+    CompositionDocument first_order(40, 20, {30, 1}, {order_a});
+    CompositionDocument second_order(40, 20, {30, 1}, {order_b});
+    const auto first_frame = renderer.render(request(first_order, 0, source));
+    const auto second_frame = renderer.render(request(second_order, 0, source));
+    check(first_frame && second_frame && first_frame->rgba_pixels != second_frame->rgba_pixels,
+          "Motion preserves the order of Glow and neighboring color effects");
+
+    glow.parameters.opacity_percent = 0;
+    glow.parameters.radius_pixels = 0;
+    auto animated_layer = image;
+    animated_layer.effects = {glow};
+    CompositionDocument animated_doc(40, 20, {30, 1}, {animated_layer});
+    check(animated_doc.setEffectKeyframe(1, 0, EffectParameterProperty::GlowOpacityPercent, 0, 0) &&
+              animated_doc.setEffectKeyframe(1, 0, EffectParameterProperty::GlowOpacityPercent, 20, 100) &&
+              animated_doc.setEffectKeyframe(1, 0, EffectParameterProperty::GlowRadiusPixels, 0, 0) &&
+              animated_doc.setEffectKeyframe(1, 0, EffectParameterProperty::GlowRadiusPixels, 20, 4),
+          "animated Glow render fixture");
+    const auto animated_frame = renderer.render(request(animated_doc, 10, source));
+    check(animated_frame && plain_frame->rgba_pixels != animated_frame->rgba_pixels,
+          "keyframed Glow activates at the evaluated frame when base opacity and radius are zero");
+}
+
 void gpu(bool required) {
     motion::diagnostics::PerformanceMetrics::instance().reset();
     c::OpenGlImageOperation refused;
@@ -748,6 +911,72 @@ void ui(const QString &root) {
     check(window.compositionDocument()->layers() == before, "disable Undo retains keys");
     widget<QAction>(window, "motion-save-composition-action")->trigger();
     check(Store::load(file(filename)).layers == before, "save confirmed values");
+
+    widget<QAction>(window, "motion-add-glow")->trigger();
+    auto* glow_mode = widget<QComboBox>(window, "motion-glow-mode");
+    auto* glow_opacity = widget<QDoubleSpinBox>(window, "motion-glow-value-0");
+    auto* glow_radius = widget<QDoubleSpinBox>(window, "motion-glow-value-1");
+    auto* glow_opacity_key = widget<QToolButton>(window, "motion-glow-key-0");
+    auto* glow_radius_key = widget<QToolButton>(window, "motion-glow-key-1");
+    auto* glow_color = widget<QPushButton>(window, "motion-glow-color");
+    const auto glow_value = [&]() -> const GlowEffect& {
+        return std::get<GlowEffect>(window.compositionDocument()->layers()[0].effects.back());
+    };
+    check(glow_mode->currentData().toInt() == int(e::GlowMode::Outer) &&
+              glow_opacity->value() == 50 && glow_radius->value() == 10 &&
+              glow_value().parameters.color == std::array<std::uint8_t, 3>{255, 255, 255},
+          "Glow Inspector exposes its Outer/white/10 px/50% defaults");
+    glow_mode->setCurrentIndex(2);
+    check(glow_value().parameters.mode == e::GlowMode::Both,
+          "the Glow mode selector edits the static Both mode");
+    timeline->setCurrentFrame(20);
+    glow_opacity_key->click();
+    glow_opacity->setValue(90);
+    glow_radius_key->click();
+    glow_radius->setValue(30);
+    QMetaObject::invokeMethod(glow_opacity, "editingFinished", Qt::DirectConnection);
+    QMetaObject::invokeMethod(glow_radius, "editingFinished", Qt::DirectConnection);
+    check(glow_value().keyframes[0] == std::vector<a::Keyframe>{{20, 90}} &&
+              glow_value().keyframes[1] == std::vector<a::Keyframe>{{20, 30}},
+          "Glow opacity and radius keyframe controls update their respective curves");
+    timeline->setCurrentFrame(10);
+    check(glow_opacity->isReadOnly() && glow_radius->isReadOnly() &&
+              glow_opacity->value() == 90 && glow_radius->value() == 30,
+          "Glow fields stay read-only away from keyed frames and show interpolated values");
+    timeline->setCurrentFrame(0);
+    glow_opacity_key->click();
+    glow_radius_key->click();
+    timeline->setCurrentFrame(10);
+    const QPointF glow_segment(timeline->frameToViewportX(5), 255);
+    send(QEvent::MouseButtonPress, glow_segment, Qt::LeftButton, Qt::LeftButton);
+    send(QEvent::MouseButtonRelease, glow_segment, Qt::LeftButton, Qt::NoButton);
+    check(preset->isEnabled(), "Glow Timeline selects its animated Graph Editor segment");
+    preset->setCurrentIndex(1);
+    check(glow_value().keyframes[0][0].interpolation == a::InterpolationMode::CubicBezier,
+          "Glow Graph Editor applies easing to the opacity curve");
+    undo->trigger();
+    check(glow_value().keyframes[0][0].interpolation == a::InterpolationMode::Linear,
+          "Glow Graph Editor easing participates in Undo history");
+    redo->trigger();
+    const auto before_glow_color = window.compositionDocument()->layers()[0].effects;
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QColorDialog*>(QApplication::activeModalWidget());
+        check(dialog && !dialog->testOption(QColorDialog::ShowAlphaChannel),
+              "Glow uses an RGB-only color picker");
+        dialog->setCurrentColor(QColor(12, 34, 56));
+        dialog->accept();
+    });
+    glow_color->click();
+    check(glow_value().parameters.color == std::array<std::uint8_t, 3>{12, 34, 56},
+          "Glow color is edited as static RGB");
+    undo->trigger();
+    check(window.compositionDocument()->layers()[0].effects == before_glow_color && redo->isEnabled(),
+          "Glow color is one undoable static edit");
+    redo->trigger();
+    widget<QAction>(window, "motion-save-composition-action")->trigger();
+    check(Store::load(file(filename)).layers[0].effects ==
+              window.compositionDocument()->layers()[0].effects,
+          "Inspector Glow controls persist mode, color and curves in v18");
     widget<QAction>(window, "motion-new-null-layer-action")->trigger();
     check(!widget<QPushButton>(window, "motion-add-effect")->isEnabled(), "Null controls disabled");
     undo->trigger();
@@ -771,9 +1000,12 @@ int main(int argc, char **argv) {
         check(root.isValid(), "temporary fixture");
         check(creative_suite::diagnostics::Logger::instance().initialize(file(root.path() + "/logs")), "log");
         numeric();
+        glowNumeric();
         model(root.path());
+        glowModel(root.path());
         keyBudget();
         render(root.path());
+        glowRender();
         const bool native_required = app.arguments().contains("--require-gpu");
         gpu(native_required);
         if (!native_required)

@@ -1,6 +1,7 @@
 #include <creative_suite/effects/effects.h>
 #include <creative_suite/effects/adjustment.h>
 #include <creative_suite/effects/gaussian_blur.h>
+#include <creative_suite/effects/glow.h>
 
 #include <algorithm>
 #include <array>
@@ -125,7 +126,75 @@ void verifySharedBlur() {
     copy=input;copy.rgba_pixels.resize(1);require(applyGaussianBlur(copy,3)==ProcessingResult::InvalidInput,"blur incomplete frame");
 }
 
+void verifyGlow()
+{
+    using namespace creative_suite::effects;
+    using creative_suite::media::RgbaFrame;
+    RgbaFrame source{1, 1, 8, {200, 40, 20, 128, 0xCD, 0xCD, 0xCD, 0xCD}};
+    GlowParameters parameters;
+    parameters.color = {10, 80, 210};
+    parameters.opacity_percent = 100;
+    parameters.radius_pixels = 1;
+
+    const auto outer_bounds = glowBounds(1, 1, parameters);
+    require(outer_bounds.left == 4 && outer_bounds.top == 4 &&
+                outer_bounds.width == 9 && outer_bounds.height == 9,
+            "outer Glow bounds include the bounded blur halo");
+    const auto outer = applyGlow(source, parameters);
+    require(outer && outer->width == 9 && outer->height == 9,
+            "outer Glow expands the source frame");
+    const auto* source_pixel = outer->rgba_pixels.data() + 4 * outer->stride + 4 * 4;
+    require(source_pixel[0] == source.rgba_pixels[0] && source_pixel[1] == source.rgba_pixels[1] &&
+                source_pixel[2] == source.rgba_pixels[2] && source_pixel[3] == source.rgba_pixels[3],
+            "outer Glow preserves source RGB and alpha over the halo");
+    require(outer->rgba_pixels[3] == 0 && outer->rgba_pixels[4 * outer->stride + 1 * 4 + 3] > 0,
+            "outer Glow retains transparent bounds and a colored alpha halo");
+
+    parameters.mode = GlowMode::Inner;
+    const auto inner_bounds = glowBounds(1, 1, parameters);
+    const auto inner = applyGlow(source, parameters);
+    require(inner_bounds.left == 0 && inner_bounds.top == 0 && inner_bounds.width == 1 &&
+                inner_bounds.height == 1 && inner && inner->width == 1 && inner->height == 1,
+            "inner Glow keeps the original layer bounds");
+    require(inner->rgba_pixels[3] == source.rgba_pixels[3] && inner->rgba_pixels[2] > source.rgba_pixels[2],
+            "inner Glow adds its static color without changing source alpha");
+
+    parameters.mode = GlowMode::Both;
+    const auto both = applyGlow(source, parameters);
+    require(both && both->width == 9 && both->height == 9 && both->rgba_pixels != outer->rgba_pixels,
+            "Both combines inner color with the expanded outer halo");
+
+    RgbaFrame transparent{3, 2, 16, std::vector<std::uint8_t>(32, 0)};
+    parameters.mode = GlowMode::Outer;
+    const auto empty = applyGlow(transparent, parameters);
+    require(empty && std::all_of(empty->rgba_pixels.begin(), empty->rgba_pixels.end(),
+                                 [](std::uint8_t value) { return value == 0; }),
+            "transparent source pixels do not create a Glow");
+    require(!applyGlow(source, parameters, [] { return true; }),
+            "Glow honors cancellation before processing");
+    int polls = 0;
+    require(!applyGlow(source, parameters, [&] { return ++polls > 3; }) && polls > 3,
+            "Glow checks cancellation while processing its rows");
+
+    for (const auto radius : {-1.0, 100.5, std::numeric_limits<double>::quiet_NaN()}) {
+        auto invalid = parameters;
+        invalid.radius_pixels = radius;
+        bool rejected = false;
+        try { (void)glowBounds(1, 1, invalid); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        require(rejected, "Glow rejects an out-of-range or non-finite radius");
+    }
+    bool bounded = false;
+    try { (void)glowBounds(16384, 16384, parameters); }
+    catch (const std::runtime_error&) { bounded = true; }
+    require(bounded, "Glow refuses output beyond its bounded allocation");
+    auto invalid_mode = parameters;
+    invalid_mode.mode = static_cast<GlowMode>(255);
+    require(!validGlow(invalid_mode), "Glow rejects unknown modes");
+}
+
 int main() {
+    verifyGlow();
     {
         using namespace creative_suite::effects;
         GradientMapParameters map{{{0,{220,20,50}},{.4,{20,210,60}},{1,{30,70,240}}}};

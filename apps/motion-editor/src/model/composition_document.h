@@ -2,6 +2,7 @@
 #include "bezier_path.h"
 #include "trim_paths.h"
 #include <creative_suite/effects/drop_shadow.h>
+#include <creative_suite/effects/glow.h>
 #include <creative_suite/composition/blend_mode.h>
 #include <creative_suite/composition/track_matte.h>
 #include <creative_suite/composition/affine_transform.h>
@@ -189,6 +190,8 @@ enum class EffectParameterProperty : std::uint8_t {
     ShadowAngleDegrees,
     ShadowDistancePixels,
     ShadowSoftnessPixels,
+    GlowOpacityPercent,
+    GlowRadiusPixels,
 };
 
 struct GaussianBlurEffect {
@@ -221,13 +224,25 @@ struct DropShadowEffect {
     std::array<creative_suite::animation::ScalarKeyframes,4> keyframes;
     friend bool operator==(const DropShadowEffect&,const DropShadowEffect&) = default;
 };
+struct GlowEffect {
+    bool enabled = true;
+    creative_suite::effects::GlowParameters parameters;
+    MaskId mask = 0;
+    std::array<creative_suite::animation::ScalarKeyframes, 2> keyframes;
+    friend bool operator==(const GlowEffect&, const GlowEffect&) = default;
+};
+inline constexpr std::array glow_properties{EffectParameterProperty::GlowOpacityPercent,
+    EffectParameterProperty::GlowRadiusPixels};
+[[nodiscard]] double glowBaseValue(const GlowEffect&, EffectParameterProperty) noexcept;
+void setGlowBaseValue(GlowEffect&, EffectParameterProperty, double) noexcept;
+[[nodiscard]] GlowEffect evaluateGlowEffect(const GlowEffect&, std::int64_t);
 inline constexpr std::array shadow_properties{EffectParameterProperty::ShadowOpacityPercent,
     EffectParameterProperty::ShadowAngleDegrees,EffectParameterProperty::ShadowDistancePixels,
     EffectParameterProperty::ShadowSoftnessPixels};
 [[nodiscard]] double shadowBaseValue(const DropShadowEffect&,EffectParameterProperty) noexcept;
 void setShadowBaseValue(DropShadowEffect&,EffectParameterProperty,double) noexcept;
 [[nodiscard]] DropShadowEffect evaluateDropShadowEffect(const DropShadowEffect&,std::int64_t);
-using LayerEffect = std::variant<GaussianBlurEffect, ColorAdjustmentEffect, DropShadowEffect>;
+using LayerEffect = std::variant<GaussianBlurEffect, ColorAdjustmentEffect, DropShadowEffect, GlowEffect>;
 
 struct LinkedImageDocument {
     std::filesystem::path document_path;

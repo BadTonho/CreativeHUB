@@ -134,6 +134,7 @@ void MainWindow::createWorkspace()
             this, &MainWindow::selectEffectRow);
     connect(inspector_,&InspectorWidget::shadowValueEdited,this,&MainWindow::editSelectedShadowValue);
     connect(inspector_,&InspectorWidget::shadowColorRequested,this,&MainWindow::chooseShadowColor);
+    connect(inspector_,&InspectorWidget::glowColorRequested,this,&MainWindow::chooseGlowColor);
     connect(inspector_, &InspectorWidget::effectParametersEdited,
             this, &MainWindow::editSelectedEffectParameters);
     connect(inspector_, &InspectorWidget::effectParametersEditFinished,

@@ -82,6 +82,7 @@ bool CompositionDocument::canInsertKeyframes(std::size_t inserted) const noexcep
             using E = std::decay_t<decltype(e)>;
             if constexpr (std::is_same_v<E,GaussianBlurEffect>) add(e.radius_keyframes);
             else if constexpr(std::is_same_v<E,DropShadowEffect>){for(const auto& keys:e.keyframes)add(keys);}
+            else if constexpr(std::is_same_v<E,GlowEffect>){for(const auto& keys:e.keyframes)add(keys);}
             else {add(e.brightness_keyframes);add(e.contrast_keyframes);add(e.saturation_keyframes);}
         },effect);
     }

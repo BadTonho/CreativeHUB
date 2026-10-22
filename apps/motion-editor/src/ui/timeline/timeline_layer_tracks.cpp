@@ -119,6 +119,8 @@ QString effectPropertyName(std::size_t effect_index, EffectParameterProperty pro
     case P::ShadowAngleDegrees:prop_label=MotionUiTranslation::tr("Shadow Angle (degrees)");break;
     case P::ShadowDistancePixels:prop_label=MotionUiTranslation::tr("Shadow Distance (px)");break;
     case P::ShadowSoftnessPixels:prop_label=MotionUiTranslation::tr("Shadow Softness (px)");break;
+    case P::GlowOpacityPercent:prop_label=MotionUiTranslation::tr("Glow Opacity (%)");break;
+    case P::GlowRadiusPixels:prop_label=MotionUiTranslation::tr("Glow Radius (px)");break;
     case P::GaussianBlurRadius:
         prop_label = MotionUiTranslation::tr("Radius (sigma)");
         break;
@@ -145,6 +147,8 @@ QColor effectPropertyColor(EffectParameterProperty property)
     case P::ColorBrightness: return QColor(245, 205, 110);
     case P::ColorContrastPercent: return QColor(195, 155, 245);
     case P::ColorSaturationPercent: return QColor(245, 140, 175);
+    case P::GlowOpacityPercent: return QColor(255, 220, 95);
+    case P::GlowRadiusPixels: return QColor(255, 165, 70);
     }
     return QColor(255, 255, 255);
 }
@@ -1046,6 +1050,10 @@ private:
                                 model::EffectParameterProperty::GaussianBlurRadius});
                         } else if(std::holds_alternative<model::DropShadowEffect>(effect)) {
                             for(auto property:model::shadow_properties)visual_rows_.push_back({index,VisualTimelineRow::Kind::EffectProperty,std::nullopt,effect_index,property});
+                        } else if (std::holds_alternative<model::GlowEffect>(effect)) {
+                            for (auto property : model::glow_properties)
+                                visual_rows_.push_back({index, VisualTimelineRow::Kind::EffectProperty,
+                                    std::nullopt, effect_index, property});
                         } else if (std::holds_alternative<model::ColorAdjustmentEffect>(effect)) {
                             visual_rows_.push_back({
                                 index,

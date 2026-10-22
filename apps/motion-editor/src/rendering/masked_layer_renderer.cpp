@@ -4,6 +4,7 @@
 #include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/composition_exchange/raster.h>
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 namespace motion::ui {
 namespace c=creative_suite::composition;
@@ -56,7 +57,7 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
     const auto evaluated_effects=model::validLayerEffects(layer.effects)
         ? model::evaluateLayerEffects(layer.effects,layer.local_frame)
         : layer.effects;
-    if(hasActiveDropShadow(layer))return renderExpandedLayer(layer,source,request,cache,gpu,cancel,resolved_world,path_raster,preparation_budget_bytes,record_metrics);
+    if(hasActiveExpandedEffect(layer))return renderExpandedLayer(layer,source,request,cache,gpu,cancel,resolved_world,path_raster,preparation_budget_bytes,record_metrics);
     if(gpu) {
         c::OpenGlImageInput current{source.get()};
         const auto process=[&](c::OpenGlImageOperation operation) {
@@ -78,6 +79,7 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
             if(canceled())return {};
             if(!std::visit([](const auto& e){return e.enabled;},effect))continue;
             if(const auto* shadow=std::get_if<model::DropShadowEffect>(&effect);shadow&&shadow->parameters.opacity_percent==0)continue;
+            if(const auto* glow=std::get_if<model::GlowEffect>(&effect);glow&&(glow->parameters.opacity_percent==0||std::lround(glow->parameters.radius_pixels)==0))continue;
             auto original=current;
             c::OpenGlImageOperation op;op.background=current;
             std::visit([&](const auto& e){using E=std::decay_t<decltype(e)>;
@@ -114,6 +116,7 @@ MaskedLayerFrame renderMaskedLayer(const PreviewLayerSnapshot& layer,m::RgbaFram
         if(canceled())return {};
         if(!std::visit([](const auto& e){return e.enabled;},effect))continue;
         if(const auto* shadow=std::get_if<model::DropShadowEffect>(&effect);shadow&&shadow->parameters.opacity_percent==0)continue;
+        if(const auto* glow=std::get_if<model::GlowEffect>(&effect);glow&&(glow->parameters.opacity_percent==0||std::lround(glow->parameters.radius_pixels)==0))continue;
         const auto id=std::visit([](const auto& e){return e.mask;},effect);
         auto original=id?std::make_shared<m::RgbaFrame>(*frame):nullptr;
         if(!applyLayerEffects(*frame,{effect},cancel))return {};

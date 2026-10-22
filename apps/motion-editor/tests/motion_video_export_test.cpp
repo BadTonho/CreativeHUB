@@ -51,6 +51,7 @@ using creative_suite::media::RgbaFrame;
 using creative_suite::media::RgbaFramePtr;
 using motion::model::CompositionLayer;
 using motion::model::FrameRate;
+using motion::model::GlowEffect;
 using motion::model::LayerKind;
 using motion::ui::MotionExportSettings;
 using motion::ui::MotionExportSnapshot;
@@ -229,6 +230,27 @@ MotionExportSnapshot makeSnapshot(const std::filesystem::path& source_video)
     video.transform.position_y = 0.12;
     video.transform.scale = 0.12;
     snapshot.layers.push_back(std::move(video));
+
+    CompositionLayer glow_shape{};
+    glow_shape.id = 7;
+    glow_shape.kind = LayerKind::Shape;
+    glow_shape.name = "Glow export fixture";
+    glow_shape.timeline_start_frame = 3;
+    glow_shape.duration_frames = 4;
+    glow_shape.transform.position_x = 0.82;
+    glow_shape.transform.position_y = 0.82;
+    auto glow_content = motion::model::defaultShapeLayerContent(canvas,
+        motion::model::ShapeKind::Rectangle);
+    glow_content.width = 8;
+    glow_content.height = 8;
+    glow_content.fill_color = {240, 30, 20, 255};
+    glow_shape.content = glow_content;
+    GlowEffect glow;
+    glow.parameters.color = {10, 240, 255};
+    glow.parameters.opacity_percent = 100;
+    glow.parameters.radius_pixels = 8;
+    glow_shape.effects.push_back(glow);
+    snapshot.layers.push_back(std::move(glow_shape));
 
     CompositionLayer hidden{};
     hidden.id = 5;
@@ -506,6 +528,13 @@ int main(int argc, char* argv[])
                     decoded[3]->rgba_pixels[linked_image_offset + 1] < 70 &&
                     decoded[3]->rgba_pixels[linked_image_offset + 2] > 120,
                 "export resolves each same-source Image layer from its own linked frame");
+        const auto glow_halo_offset = static_cast<std::size_t>(39) * decoded[3]->stride +
+            static_cast<std::size_t>(44) * 4U;
+        require(decoded[3]->rgba_pixels[glow_halo_offset + 2] >
+                    decoded[3]->rgba_pixels[glow_halo_offset] + 25 &&
+                    decoded[3]->rgba_pixels[glow_halo_offset + 1] >
+                    decoded[3]->rgba_pixels[glow_halo_offset] + 25,
+                "CPU preview and video export include the colored Outer Glow halo");
         require(!has_non_black(*decoded.back()),
                 "hidden layers extend the export duration without rendering pixels");
 

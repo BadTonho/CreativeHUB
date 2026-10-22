@@ -193,6 +193,7 @@ void MainWindow::generateKeyframesFromAudio()
             using E=std::decay_t<decltype(e)>;
             if constexpr(std::is_same_v<E,model::GaussianBlurEffect>)add_other_keyframes(e.radius_keyframes.size());
             else if constexpr(std::is_same_v<E,model::DropShadowEffect>){for(const auto& keys:e.keyframes)add_other_keyframes(keys.size());}
+            else if constexpr(std::is_same_v<E,model::GlowEffect>){for(const auto& keys:e.keyframes)add_other_keyframes(keys.size());}
             else {add_other_keyframes(e.brightness_keyframes.size());add_other_keyframes(e.contrast_keyframes.size());add_other_keyframes(e.saturation_keyframes.size());}
         },effect);
         if(layer.scale_y && (layer.id!=selected->id || settings.property!=TransformProperty::Scale))

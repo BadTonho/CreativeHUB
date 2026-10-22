@@ -384,6 +384,9 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     auto* shadow_action=add_menu->addAction(MotionUiTranslation::tr("Drop Shadow"));
     shadow_action->setObjectName("motion-add-drop-shadow");
     connect(shadow_action,&QAction::triggered,this,[this]{emit effectAddRequested(2);});
+    auto* glow_action = add_menu->addAction(MotionUiTranslation::tr("Glow"));
+    glow_action->setObjectName(QStringLiteral("motion-add-glow"));
+    connect(glow_action, &QAction::triggered, this, [this] { emit effectAddRequested(3); });
     controls_.add_layer_effect_button->setMenu(add_menu);
     toolbar->addWidget(controls_.add_layer_effect_button);
     controls_.effect_up_button = new QPushButton(MotionUiTranslation::tr("Up"), controls_.effects_inspector);
@@ -516,6 +519,46 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
     auto* shadow_help=new QLabel(MotionUiTranslation::tr("Source pixels before fitting. The shadow follows layer transforms; 0 degrees points right and 90 degrees down. Color is not animated."),shadow_page);
     shadow_help->setWordWrap(true);shadow_form->addRow(shadow_help);
     controls_.effect_parameter_pages->addWidget(shadow_page);
+    auto* glow_page = new QWidget(controls_.effect_parameter_pages);
+    glow_page->setObjectName(QStringLiteral("motion-glow-parameters"));
+    auto* glow_form = new QFormLayout(glow_page);
+    controls_.glow_mode = new QComboBox(glow_page);
+    controls_.glow_mode->setObjectName(QStringLiteral("motion-glow-mode"));
+    controls_.glow_mode->addItem(MotionUiTranslation::tr("Outer"), int(creative_suite::effects::GlowMode::Outer));
+    controls_.glow_mode->addItem(MotionUiTranslation::tr("Inner"), int(creative_suite::effects::GlowMode::Inner));
+    controls_.glow_mode->addItem(MotionUiTranslation::tr("Both"), int(creative_suite::effects::GlowMode::Both));
+    glow_form->addRow(MotionUiTranslation::tr("Mode"), controls_.glow_mode);
+    controls_.glow_color = new QPushButton(MotionUiTranslation::tr("Glow Color"), glow_page);
+    controls_.glow_color->setObjectName(QStringLiteral("motion-glow-color"));
+    glow_form->addRow(MotionUiTranslation::tr("Color"), controls_.glow_color);
+    const std::array glow_names{MotionUiTranslation::tr("Glow Opacity (%)"),
+                                MotionUiTranslation::tr("Glow Radius (px)")};
+    const auto glow_props = model::glow_properties;
+    for (std::size_t index = 0; index < glow_names.size(); ++index) {
+        auto* field = controls_.glow_fields[index] = new QDoubleSpinBox(glow_page);
+        field->setObjectName(QStringLiteral("motion-glow-value-%1").arg(index));
+        field->setRange(0.0, 100.0);
+        field->setDecimals(6);
+        field->setKeyboardTracking(false);
+        field->setSuffix(index == 0 ? QStringLiteral(" %") : QStringLiteral(" px"));
+        auto* key = controls_.glow_keys[index] = make_effect_key_button(
+            glow_page, QStringLiteral("motion-glow-key-%1").arg(index), glow_props[index]);
+        glow_form->addRow(glow_names[index], make_effect_row(glow_page, field, key));
+        connect(field, &QDoubleSpinBox::valueChanged, this,
+            [this](double) { emit effectParametersEdited(); });
+        connect(field, &QDoubleSpinBox::editingFinished,
+            this, &InspectorWidget::effectParametersEditFinished);
+        field->installEventFilter(this);
+    }
+    auto* glow_help = new QLabel(MotionUiTranslation::tr(
+        "Glow uses source pixels before fitting. The color is static; opacity and radius can be animated."), glow_page);
+    glow_help->setWordWrap(true);
+    glow_form->addRow(glow_help);
+    connect(controls_.glow_mode, qOverload<int>(&QComboBox::currentIndexChanged), this,
+        [this](int) { emit effectParametersEdited(); });
+    connect(controls_.glow_color, &QPushButton::clicked, this,
+        &InspectorWidget::glowColorRequested);
+    controls_.effect_parameter_pages->addWidget(glow_page);
     effects_layout->addWidget(controls_.effect_parameter_pages);
     controls_.effects_tab_index = addTab(controls_.effects_inspector, MotionUiTranslation::tr("Effects"));
     setTabEnabled(controls_.effects_tab_index, false);
@@ -540,14 +583,14 @@ InspectorWidget::InspectorWidget(QWidget* parent) : QTabWidget(parent)
                                          item->checkState() == Qt::Checked);
             });
 
-    const std::array<QWidget*, 13> focus_fields{{
+    const std::array<QWidget*, 15> focus_fields{{
         controls_.text_content_field, controls_.text_font_field,
         controls_.text_alignment_field, controls_.text_font_size_field,
         controls_.text_box_width_field, controls_.text_box_height_field,
         controls_.shape_width_field, controls_.shape_height_field,
         controls_.shape_stroke_width_field, controls_.blur_radius_field,
         controls_.effect_brightness_field, controls_.effect_contrast_field,
-        controls_.effect_saturation_field}};
+        controls_.effect_saturation_field, controls_.glow_fields[0], controls_.glow_fields[1]}};
     for (auto* field : focus_fields) {
         field->installEventFilter(this);
     }
@@ -615,6 +658,10 @@ double InspectorWidget::effectFieldValue(model::EffectParameterProperty property
         return controls_.effect_contrast_field->value();
     case model::EffectParameterProperty::ColorSaturationPercent:
         return controls_.effect_saturation_field->value();
+    case model::EffectParameterProperty::GlowOpacityPercent:
+        return controls_.glow_fields[0]->value();
+    case model::EffectParameterProperty::GlowRadiusPixels:
+        return controls_.glow_fields[1]->value();
     }
     return 0.0;
 }
@@ -792,7 +839,9 @@ void InspectorWidget::syncLayer(const model::CompositionLayer* layer,
             const auto& effect = layer->effects[i];
             const bool enabled = std::visit([](const auto& value) { return value.enabled; }, effect);
             const QString name = std::holds_alternative<model::GaussianBlurEffect>(effect)
-                ? MotionUiTranslation::tr("Gaussian Blur") : std::holds_alternative<model::DropShadowEffect>(effect)?MotionUiTranslation::tr("Drop Shadow"):MotionUiTranslation::tr("Color Adjustment");
+                ? MotionUiTranslation::tr("Gaussian Blur") : std::holds_alternative<model::DropShadowEffect>(effect)
+                    ? MotionUiTranslation::tr("Drop Shadow") : std::holds_alternative<model::GlowEffect>(effect)
+                        ? MotionUiTranslation::tr("Glow") : MotionUiTranslation::tr("Color Adjustment");
             auto* item = new QListWidgetItem(name, controls_.layer_effect_list);
             item->setData(Qt::UserRole, static_cast<qulonglong>(i));
             item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsDragEnabled);
@@ -909,6 +958,14 @@ void InspectorWidget::syncSelectedEffect(const model::CompositionLayer* layer, i
         controls_.effect_parameter_pages->setCurrentIndex(3);
         setColorButton(controls_.shadow_color,{shadow->parameters.color[0],shadow->parameters.color[1],shadow->parameters.color[2],255});
         for(std::size_t i=0;i<4;++i)sync_parameter(controls_.shadow_fields[i],controls_.shadow_keys[i],model::shadow_properties[i]);
+    } else if (const auto* glow = std::get_if<model::GlowEffect>(&effect)) {
+        controls_.effect_parameter_pages->setCurrentIndex(4);
+        const QSignalBlocker mode_blocker(controls_.glow_mode);
+        controls_.glow_mode->setCurrentIndex(controls_.glow_mode->findData(int(glow->parameters.mode)));
+        setColorButton(controls_.glow_color, {glow->parameters.color[0], glow->parameters.color[1],
+                                              glow->parameters.color[2], 255});
+        for (std::size_t index = 0; index < model::glow_properties.size(); ++index)
+            sync_parameter(controls_.glow_fields[index], controls_.glow_keys[index], model::glow_properties[index]);
     } else if (std::holds_alternative<model::GaussianBlurEffect>(effect)) {
         controls_.effect_parameter_pages->setCurrentIndex(1);
         sync_parameter(controls_.blur_radius_field,
@@ -950,7 +1007,11 @@ model::ShapeLayerContent InspectorWidget::editedShapeContent(model::ShapeLayerCo
 
 model::LayerEffect InspectorWidget::editedEffect(model::LayerEffect value) const
 {
-    if (auto* blur = std::get_if<model::GaussianBlurEffect>(&value)) {
+    if (auto* glow = std::get_if<model::GlowEffect>(&value)) {
+        glow->parameters.mode = static_cast<creative_suite::effects::GlowMode>(controls_.glow_mode->currentData().toInt());
+        if (glow->keyframes[0].empty()) glow->parameters.opacity_percent = controls_.glow_fields[0]->value();
+        if (glow->keyframes[1].empty()) glow->parameters.radius_pixels = controls_.glow_fields[1]->value();
+    } else if (auto* blur = std::get_if<model::GaussianBlurEffect>(&value)) {
         if (blur->radius_keyframes.empty()) {
             blur->radius_pixels = controls_.blur_radius_field->value();
         }
@@ -978,6 +1039,7 @@ bool InspectorWidget::eventFilter(QObject* watched, QEvent* event)
             watched == controls_.shape_height_field || watched == controls_.shape_stroke_width_field)
             emit layerContentEditFinished();
         if(std::find(controls_.shadow_fields.begin(),controls_.shadow_fields.end(),watched)!=controls_.shadow_fields.end())emit effectParametersEditFinished();
+        if(std::find(controls_.glow_fields.begin(),controls_.glow_fields.end(),watched)!=controls_.glow_fields.end())emit effectParametersEditFinished();
         if (watched == controls_.blur_radius_field || watched == controls_.effect_brightness_field ||
             watched == controls_.effect_contrast_field || watched == controls_.effect_saturation_field)
             emit effectParametersEditFinished();

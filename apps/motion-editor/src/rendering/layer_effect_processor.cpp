@@ -67,7 +67,16 @@ void validateFrame(const creative_suite::media::RgbaFrame& frame)
 bool hasEnabledLayerEffects(const std::vector<model::LayerEffect>& effects) noexcept
 {
     return std::any_of(effects.begin(), effects.end(), [](const auto& effect) {
-        return std::visit([](const auto& value) { using E=std::decay_t<decltype(value)>;if constexpr(std::is_same_v<E,model::DropShadowEffect>)return value.enabled&&value.parameters.opacity_percent>0;else return value.enabled; }, effect);
+        return std::visit([](const auto& value) {
+            using E = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<E, model::DropShadowEffect>)
+                return value.enabled && value.parameters.opacity_percent > 0;
+            else if constexpr (std::is_same_v<E, model::GlowEffect>)
+                return value.enabled && value.parameters.opacity_percent > 0 &&
+                    std::lround(value.parameters.radius_pixels) > 0;
+            else
+                return value.enabled;
+        }, effect);
     });
 }
 
@@ -107,6 +116,10 @@ bool applyLayerEffects(
             } else if constexpr(std::is_same_v<Effect,model::DropShadowEffect>) {
                 if(value.parameters.opacity_percent==0)return true;
                 throw std::invalid_argument("Drop Shadow requires the origin-aware expanded layer pipeline");
+            } else if constexpr (std::is_same_v<Effect, model::GlowEffect>) {
+                if (value.parameters.opacity_percent == 0 || std::lround(value.parameters.radius_pixels) == 0)
+                    return true;
+                throw std::invalid_argument("Glow requires the origin-aware expanded layer pipeline");
             } else {
                 return measureEffect(record_effect_timing, LayerEffectKind::ColorAdjustment,
                     [&] {

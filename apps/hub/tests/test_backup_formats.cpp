@@ -562,8 +562,38 @@ void testMotionDocuments(const QString& root) {
     CS_TEST_CHECK(Store::load(fsPath(shadow_backup.vault))==project);
     CS_TEST_CHECK(Store::load(fsPath(shadow_backup.restored))==project);
     CS_TEST_CHECK(std::filesystem::exists(Store::load(fsPath(shadow_backup.restored)).layers.front().source_path));
-    auto future=QJsonDocument::fromJson(readBytes(blend_path)).object();future.insert("version",Store::current_format_version+1);
-    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v18.motion");writeBytes(future_path,QJsonDocument(future).toJson());
+    const auto glow_layer = std::find_if(hierarchy.layers().begin(), hierarchy.layers().end(),
+        [path_id](const auto& layer) { return layer.id == path_id; });
+    CS_TEST_CHECK(glow_layer != hierarchy.layers().end());
+    auto glow_effects = glow_layer->effects;
+    GlowEffect glow;
+    glow.parameters.mode = creative_suite::effects::GlowMode::Both;
+    glow.parameters.color = {18, 96, 224};
+    glow.parameters.radius_pixels = 7.5;
+    glow.parameters.opacity_percent = 68.0;
+    if (!hierarchy.masks().empty()) glow.mask = hierarchy.masks().front().id;
+    const auto glow_index = glow_effects.size();
+    glow_effects.emplace_back(glow);
+    CS_TEST_CHECK(hierarchy.setLayerEffects(path_id, glow_effects));
+    CS_TEST_CHECK(hierarchy.setEffectKeyframe(path_id, glow_index,
+        EffectParameterProperty::GlowOpacityPercent, 0, 40.0));
+    CS_TEST_CHECK(hierarchy.setEffectKeyframe(path_id, glow_index,
+        EffectParameterProperty::GlowOpacityPercent, 20, 80.0));
+    CS_TEST_CHECK(hierarchy.setEffectKeyframe(path_id, glow_index,
+        EffectParameterProperty::GlowRadiusPixels, 0, 4.0));
+    CS_TEST_CHECK(hierarchy.setEffectKeyframe(path_id, glow_index,
+        EffectParameterProperty::GlowRadiusPixels, 20, 12.0));
+    project.layers = hierarchy.layers();
+    project.masks = hierarchy.masks();
+    const auto glow_path = QDir(QFileInfo(assets).absolutePath()).filePath("glow.motion");
+    Store::save(fsPath(glow_path), project);
+    CS_TEST_CHECK(QJsonDocument::fromJson(readBytes(glow_path)).object().value("version").toInt() == 18);
+    const auto glow_backup = backup(QDir(root).filePath("motion-glow-v18"), glow_path);
+    CS_TEST_CHECK(Store::load(fsPath(glow_backup.vault)) == project);
+    CS_TEST_CHECK(Store::load(fsPath(glow_backup.restored)) == project);
+    CS_TEST_CHECK(std::filesystem::exists(Store::load(fsPath(glow_backup.restored)).layers.front().source_path));
+    auto future=QJsonDocument::fromJson(readBytes(glow_path)).object();future.insert("version",Store::current_format_version+1);
+    const auto future_path=QDir(QFileInfo(assets).absolutePath()).filePath("future-v19.motion");writeBytes(future_path,QJsonDocument(future).toJson());
     creative_suite::hub::BackupManager manager(QDir(root).filePath("future-vault"));QString rejected_path,error;
     CS_TEST_CHECK(!manager.createBackup(future_path,&rejected_path,&error)&&!error.isEmpty());
 

@@ -382,6 +382,8 @@ void MainWindow::refreshCurveEditor()
         case model::EffectParameterProperty::ShadowAngleDegrees:prop_label=MotionUiTranslation::tr("Shadow Angle (degrees)");break;
         case model::EffectParameterProperty::ShadowDistancePixels:prop_label=MotionUiTranslation::tr("Shadow Distance (px)");break;
         case model::EffectParameterProperty::ShadowSoftnessPixels:prop_label=MotionUiTranslation::tr("Shadow Softness (px)");break;
+        case model::EffectParameterProperty::GlowOpacityPercent:prop_label=MotionUiTranslation::tr("Glow Opacity (%)");break;
+        case model::EffectParameterProperty::GlowRadiusPixels:prop_label=MotionUiTranslation::tr("Glow Radius (px)");break;
         case model::EffectParameterProperty::GaussianBlurRadius:
             prop_label = MotionUiTranslation::tr("Radius (sigma)");
             break;
@@ -753,15 +755,16 @@ void MainWindow::addLayerEffect(int kind)
 {
     if(export_worker_||audio_keyframe_worker_)return;
     finishPendingTransformEdit();
-    if (!document_ || selected_layer_id_ == 0 || (kind < 0 || kind > 2)) return;
+    if (!document_ || selected_layer_id_ == 0 || (kind < 0 || kind > 3)) return;
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
         [this](const auto& layer) { return layer.id == selected_layer_id_; });
-    if (found == document_->layers().end()) return;
+    if (found == document_->layers().end() || found->kind == model::LayerKind::Null) return;
     auto before = captureEditState();
     auto effects = found->effects;
     if (kind == 0) effects.emplace_back(model::GaussianBlurEffect{});
     else if(kind==1)effects.emplace_back(model::ColorAdjustmentEffect{});
-    else effects.emplace_back(model::DropShadowEffect{});
+    else if (kind == 2) effects.emplace_back(model::DropShadowEffect{});
+    else effects.emplace_back(model::GlowEffect{});
     const auto new_index = effects.size() - 1;
     if (!document_->setLayerEffects(selected_layer_id_, effects)) return;
     selected_effect_ = std::pair{selected_layer_id_, new_index};
@@ -842,6 +845,8 @@ void MainWindow::editSelectedEffectParameters()
     update_keyframe_if_at_frame(model::EffectParameterProperty::ColorBrightness);
     update_keyframe_if_at_frame(model::EffectParameterProperty::ColorContrastPercent);
     update_keyframe_if_at_frame(model::EffectParameterProperty::ColorSaturationPercent);
+    update_keyframe_if_at_frame(model::EffectParameterProperty::GlowOpacityPercent);
+    update_keyframe_if_at_frame(model::EffectParameterProperty::GlowRadiusPixels);
     if (effects == found->effects) {
         syncEffectsInspector(&*found);
         return;
@@ -854,7 +859,7 @@ void MainWindow::toggleSelectedEffectKeyframe(int property_index)
     finishPendingTransformEdit();
     if (!document_ || !selected_effect_.has_value() ||
         selected_effect_->first != selected_layer_id_ || timeline_ == nullptr ||
-        property_index < 0 || property_index > 7) {
+        property_index < 0 || property_index > 9) {
         return;
     }
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),

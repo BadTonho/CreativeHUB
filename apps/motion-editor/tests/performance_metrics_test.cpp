@@ -72,6 +72,7 @@ int main(int argc, char* argv[])
                                  500'000, 600'000, 0);
     metrics.recordGpuColorAdjustment(3, 1, true, 450'000);
     metrics.recordGpuGaussianBlur(2, 1, true, 770'000);
+    metrics.recordGpuGlow(2, 1, true, 880'000);
     metrics.recordRenderedFrame();
     metrics.recordRenderedFrame();
     for (const std::uint64_t value : {1'000'000ULL, 2'000'000ULL, 3'000'000ULL,
@@ -84,6 +85,7 @@ int main(int argc, char* argv[])
         motion::diagnostics::PreviewEffectKind::GaussianBlur, 30'000'000);
     metrics.recordEffectTiming(
         motion::diagnostics::PreviewEffectKind::ColorAdjustment, 2'000'000);
+    metrics.recordEffectTiming(motion::diagnostics::PreviewEffectKind::Glow, 3'000'000);
     metrics.recordDelivery(true);
     metrics.recordDelivery(false);
     metrics.recordPresentation(true);
@@ -114,7 +116,9 @@ int main(int argc, char* argv[])
                 snapshot->gpu_color_adjustment_failures == 1 &&
                 snapshot->gpu_gaussian_blur_effects == 2 &&
                 snapshot->gpu_gaussian_blur_fallbacks == 1 &&
-                snapshot->gpu_gaussian_blur_failures == 1,
+                snapshot->gpu_gaussian_blur_failures == 1 &&
+                snapshot->gpu_glow_effects == 2 && snapshot->gpu_glow_fallbacks == 1 &&
+                snapshot->gpu_glow_failures == 1,
             "preview counters aggregate requests, rendered frames, coalescing, and stale work");
     require(snapshot->delivery.texture_deliveries == 1 && snapshot->delivery.rgba_deliveries == 1 &&
         snapshot->delivery.texture_presented == 1 && snapshot->delivery.rgba_presented == 1 &&
@@ -140,8 +144,12 @@ int main(int argc, char* argv[])
         static_cast<std::size_t>(motion::diagnostics::PreviewEffectKind::ColorAdjustment)];
     require(gaussian_blur.count == 2 && gaussian_blur.total_nanoseconds == 40'000'000 &&
                 gaussian_blur.maximum_nanoseconds == 30'000'000 &&
-                color_adjustment.count == 1 && color_adjustment.total_nanoseconds == 2'000'000,
-            "effect timing summaries distinguish Gaussian Blur and Color Adjustment");
+                color_adjustment.count == 1 && color_adjustment.total_nanoseconds == 2'000'000 &&
+                snapshot->effect_timings[static_cast<std::size_t>(
+                    motion::diagnostics::PreviewEffectKind::Glow)].count == 1 &&
+                snapshot->effect_timings[static_cast<std::size_t>(
+                    motion::diagnostics::PreviewEffectKind::Glow)].total_nanoseconds == 3'000'000,
+            "effect timing summaries distinguish Gaussian Blur, Color Adjustment and Glow");
     system_monitor::PerformanceSnapshot resources;
     resources.process_cpu_percent = 27.5;
     resources.process_working_set_bytes = 123456;
@@ -155,7 +163,7 @@ int main(int argc, char* argv[])
         serialized_context << key << '=' << value << '\n';
     const auto context_text = serialized_context.str();
     require(context_text.find("process_cpu_percent=27.500000") != std::string::npos &&
-                context_text.find("schema_version=8") != std::string::npos &&
+                context_text.find("schema_version=9") != std::string::npos &&
                 context_text.find("gpu_preview_texture_presented=1") != std::string::npos &&
                 context_text.find("gpu_preview_texture_viewer_uploaded_bytes=0") != std::string::npos &&
                 context_text.find("gpu_preview_pool_peak_bytes=8192") != std::string::npos &&
@@ -178,6 +186,12 @@ int main(int argc, char* argv[])
                 context_text.find("gpu_gaussian_blur_effects=2") != std::string::npos &&
                 context_text.find("gpu_gaussian_blur_fallbacks=1") != std::string::npos &&
                 context_text.find("gpu_gaussian_blur_failures=1") != std::string::npos &&
+                context_text.find("gpu_glow_effects=2") != std::string::npos &&
+                context_text.find("gpu_glow_fallbacks=1") != std::string::npos &&
+                context_text.find("gpu_glow_failures=1") != std::string::npos &&
+                context_text.find("gpu_glow_average_ms=0.880000") != std::string::npos &&
+                context_text.find("glow_apply_count=1") != std::string::npos &&
+                context_text.find("glow_average_ms=3.000000") != std::string::npos &&
                 context_text.find("gpu_gaussian_blur_average_ms=0.770000") != std::string::npos &&
                 context_text.find("gpu_color_adjustment_average_ms=0.450000") != std::string::npos &&
                 context_text.find("gpu_composition_upload_average_ms=0.750000") != std::string::npos &&

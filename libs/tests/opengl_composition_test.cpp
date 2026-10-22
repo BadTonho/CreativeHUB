@@ -313,6 +313,48 @@ void trackMatteParity(OpenGlFrameCompositor& gpu) {
     }
 }
 
+void glowParity(OpenGlFrameCompositor& gpu)
+{
+    auto source = fixture(9, 7, true, 12);
+    for (const auto mode : {effects::GlowMode::Outer, effects::GlowMode::Inner,
+                            effects::GlowMode::Both}) {
+        effects::GlowParameters parameters;
+        parameters.color = {231, 42, 117};
+        parameters.opacity_percent = 73.0;
+        parameters.radius_pixels = 1.5;
+        parameters.mode = mode;
+        const auto expected = effects::applyGlow(source, parameters);
+        OpenGlImageOperation operation;
+        operation.kind = OpenGlImageOperationKind::Glow;
+        operation.background = {&source};
+        operation.glow = parameters;
+        OpenGlCompositionTimings timings;
+        const auto output = gpu.processImage(operation, {}, &timings);
+        require(expected && output.status == OpenGlCompositionStatus::Complete && output.frame,
+            "OpenGL Glow operation failed: " + output.operation + ": " + output.cause);
+        const auto actual = gpu.readback(output.frame);
+        require(actual.frame && actual.frame->width == expected->width &&
+                actual.frame->height == expected->height,
+            "OpenGL Glow output bounds differ from CPU");
+        for (int y = 0; y < expected->height; ++y) {
+            for (int x = 0; x < expected->width * 4; ++x) {
+                const auto expected_byte = expected->rgba_pixels[std::size_t(y) * expected->stride + x];
+                const auto actual_byte = actual.frame->rgba_pixels[std::size_t(y) * actual.frame->stride + x];
+                require(std::abs(int(expected_byte) - int(actual_byte)) <= (x % 4 == 3 ? 0 : 2),
+                    "OpenGL Glow pixels differ from the CPU implementation");
+            }
+        }
+        require(timings.gaussian_blur_count == 1,
+            "OpenGL Glow records its internal alpha blur");
+    }
+    OpenGlImageOperation cancelled;
+    cancelled.kind = OpenGlImageOperationKind::Glow;
+    cancelled.background = {&source};
+    require(gpu.processImage(cancelled, [] { return true; }).status ==
+                OpenGlCompositionStatus::Cancelled,
+            "OpenGL Glow checks cancellation before allocating scratch targets");
+}
+
 void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
     auto source = fixture(23, 13, true, 7);
     auto adjusted = source;
@@ -762,6 +804,7 @@ int main(int argc, char** argv) {
                     parity(gpu);
                     colorAdjustmentParity(gpu);
                     trackMatteParity(gpu);
+                    glowParity(gpu);
                     {
                         auto source = fixture(93, 57, true);
                         auto brightness = effects::makeDefaultInstance("video.brightness");
@@ -796,6 +839,7 @@ int main(int argc, char** argv) {
                         auto f = fixture(13, 7, true, 3);
                         compare(baseline, 53, 39, {{&f}}, "OpenGL 3.2 without precision extensions");
                         trackMatteParity(baseline);
+                        glowParity(baseline);
                         CompositionLayer blended{&f};blended.blend_mode=BlendMode::Overlay;
                         compare(baseline,53,39,{{&f},blended},"OpenGL 3.2 blend without precision extensions");
                         animation::Transform2D rotated; rotated.rotation_degrees = 90;

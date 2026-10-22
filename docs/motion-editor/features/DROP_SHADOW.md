@@ -113,8 +113,9 @@ Null effects and excessive total keys before replacing an open document.
 All editing, replacement and persistence paths count shadow keys in the shared
 two-million document budget. Recovery retains wrapper version 1 with native v17.
 
-Hub accepts Motion v17 and rejects v18, preserving complete effect data while
-rebasing existing media/link paths. `.cscomp` stays v3 and refuses any Drop Shadow
+Hub accepts Motion through v18 and rejects v19, preserving complete effect data
+while rebasing existing media/link paths. Glow uses native v18; this Drop Shadow
+record remains native v17. `.cscomp` stays v3 and refuses any Drop Shadow
 instance, including disabled effects and hidden/inactive layers, identifying
 the layer name/ID and effect position. Application versions are unchanged.
 

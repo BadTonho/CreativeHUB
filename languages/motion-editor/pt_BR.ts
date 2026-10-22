@@ -3,6 +3,15 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>MotionUiTranslation</name>
+    <message><source>Glow</source><translation>Brilho</translation></message>
+    <message><source>Mode</source><translation>Modo</translation></message>
+    <message><source>Outer</source><translation>Externo</translation></message>
+    <message><source>Inner</source><translation>Interno</translation></message>
+    <message><source>Both</source><translation>Ambos</translation></message>
+    <message><source>Glow Color</source><translation>Cor do brilho</translation></message>
+    <message><source>Glow Opacity (%)</source><translation>Opacidade do brilho (%)</translation></message>
+    <message><source>Glow Radius (px)</source><translation>Raio do brilho (px)</translation></message>
+    <message><source>Glow uses source pixels before fitting. The color is static; opacity and radius can be animated.</source><translation>O brilho usa pixels da fonte antes do ajuste. A cor é estática; a opacidade e o raio podem ser animados.</translation></message>
     <message><source>The preview could not be rendered. Check the Motion Studio log for details.</source><translation>Não foi possível renderizar a prévia. Consulte o log do Motion Studio para obter detalhes.</translation></message>
     <message><source>Drop Shadow</source><translation>Sombra projetada</translation></message>
     <message><source>Shadow Color</source><translation>Cor da sombra</translation></message>
