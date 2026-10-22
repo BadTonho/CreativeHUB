@@ -6,19 +6,24 @@
 #include <creative_suite/effects/effects.h>
 
 #include <QApplication>
+#include <QAction>
+#include <QActionGroup>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QMimeData>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsItem>
-#include <QGraphicsLineItem>
+#include <QGraphicsPathItem>
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
+#include <QContextMenuEvent>
 #include <QLineF>
+#include <QMenu>
 #include <QMetaType>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPen>
 #include <QBrush>
 #include <QColor>
@@ -28,6 +33,8 @@
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
+#include <queue>
+#include <array>
 #include <vector>
 #include <QCoreApplication>
 
@@ -85,6 +92,280 @@ constexpr int kGridMinimumSpacing = 12;
 constexpr int kGridMaximumSpacing = 64;
 constexpr int kGridMinimumIntensity = 10;
 constexpr int kGridMaximumIntensity = 60;
+constexpr auto kNodeEditorSettingsGroup = "fusion/node_editor";
+
+struct NodeCanvasBehaviorSettings {
+    ConnectionLineStyle line_style = ConnectionLineStyle::Straight;
+    bool snap_to_grid = false;
+};
+
+NodeCanvasBehaviorSettings readNodeCanvasBehaviorSettings(QSettings& settings) {
+    NodeCanvasBehaviorSettings result;
+    settings.beginGroup(QString::fromLatin1(kNodeEditorSettingsGroup));
+    bool valid = false;
+    const auto style = settings.value(QStringLiteral("connection_line_style"), 0)
+                           .toInt(&valid);
+    if (valid && style == static_cast<int>(ConnectionLineStyle::Curved))
+        result.line_style = ConnectionLineStyle::Curved;
+    const auto snap = settings.value(QStringLiteral("snap_to_grid"), false);
+    const auto normalized = snap.toString().trimmed().toLower();
+    if (snap.metaType().id() == QMetaType::Bool || normalized == "true" ||
+        normalized == "false" || normalized == "1" || normalized == "0")
+        result.snap_to_grid = snap.toBool();
+    settings.endGroup();
+    return result;
+}
+
+struct GridPoint {
+    int x = 0;
+    int y = 0;
+    friend bool operator==(const GridPoint&, const GridPoint&) = default;
+};
+
+struct RouteEntry {
+    int x = 0;
+    int y = 0;
+    int direction = 4;
+    int cost = 0;
+    int estimate = 0;
+};
+
+struct RouteEntryLater {
+    bool operator()(const RouteEntry& left, const RouteEntry& right) const noexcept {
+        if (left.estimate != right.estimate) return left.estimate > right.estimate;
+        if (left.cost != right.cost) return left.cost > right.cost;
+        if (left.y != right.y) return left.y > right.y;
+        if (left.x != right.x) return left.x > right.x;
+        return left.direction > right.direction;
+    }
+};
+
+QPointF gridPosition(GridPoint point, int spacing) {
+    return QPointF(point.x * spacing, point.y * spacing);
+}
+
+int gridCoordinate(double value, int spacing) {
+    return static_cast<int>(std::lround(value / static_cast<double>(spacing)));
+}
+
+QPainterPath smoothOrthogonalPath(const std::vector<QPointF>& points,
+                                  double corner_radius) {
+    QPainterPath path;
+    if (points.empty()) return path;
+    path.moveTo(points.front());
+    if (points.size() == 1) return path;
+    for (std::size_t i = 1; i + 1 < points.size(); ++i) {
+        const auto before = points[i - 1];
+        const auto corner = points[i];
+        const auto after = points[i + 1];
+        const auto before_length = QLineF(before, corner).length();
+        const auto after_length = QLineF(corner, after).length();
+        const auto radius = std::min({corner_radius, before_length / 2.0,
+                                      after_length / 2.0});
+        if (radius <= 0.01) {
+            path.lineTo(corner);
+            continue;
+        }
+        const auto approach = corner + (before - corner) * (radius / before_length);
+        const auto depart = corner + (after - corner) * (radius / after_length);
+        path.lineTo(approach);
+        path.quadTo(corner, depart);
+    }
+    path.lineTo(points.back());
+    return path;
+}
+
+QPainterPath connectionPath(
+    const QPointF& start, const QPointF& end,
+    std::optional<NodeId> source_id, std::optional<NodeId> target_id,
+    std::uint8_t input, const NodeGraph& graph,
+    const std::unordered_map<NodeId, QPointF>& node_positions,
+    ConnectionLineStyle style, bool snap_to_grid, int spacing) {
+    QPainterPath direct;
+    direct.moveTo(start);
+    if (!snap_to_grid) {
+        if (style == ConnectionLineStyle::Straight) {
+            direct.lineTo(end);
+        } else {
+            const auto dx = end.x() - start.x();
+            const auto handle = std::max(40.0, std::abs(dx) * 0.45) *
+                                (dx >= 0.0 ? 1.0 : -1.0);
+            direct.cubicTo(start + QPointF(handle, 0.0),
+                           end - QPointF(handle, 0.0), end);
+        }
+        return direct;
+    }
+
+    const auto start_direction = source_id ? 1 :
+        (target_id && input == 2 ? 0 : 3); // right, up, or left
+    const auto end_direction = target_id ?
+        (input == 2 ? 0 : 3) : 4; // up for mask, left for image, or free
+    const auto start_grid_x = start_direction == 1
+        ? static_cast<int>(std::floor(start.x() / spacing)) + 1
+        : start_direction == 3
+            ? static_cast<int>(std::ceil(start.x() / spacing)) - 1
+            : gridCoordinate(start.x(), spacing);
+    const auto start_grid_y = start_direction == 2
+        ? static_cast<int>(std::floor(start.y() / spacing)) + 1
+        : start_direction == 0
+            ? static_cast<int>(std::ceil(start.y() / spacing)) - 1
+            : gridCoordinate(start.y(), spacing);
+    const auto end_grid_x = end_direction == 3
+        ? static_cast<int>(std::ceil(end.x() / spacing)) - 1
+        : gridCoordinate(end.x(), spacing);
+    const auto end_grid_y = end_direction == 0
+        ? static_cast<int>(std::ceil(end.y() / spacing)) - 1
+        : gridCoordinate(end.y(), spacing);
+    const GridPoint start_grid{start_grid_x, start_grid_y};
+    const GridPoint end_grid{end_grid_x, end_grid_y};
+
+    std::vector<QRectF> obstacles;
+    const auto margin = std::max(12.0, static_cast<double>(spacing) * 0.75);
+    for (const auto& node : graph.nodes) {
+        const auto position = node_positions.find(node.id);
+        if (position == node_positions.end()) continue;
+        const bool endpoint = (source_id && node.id == *source_id) ||
+                              (target_id && node.id == *target_id);
+        const auto node_margin = endpoint ? 0.0 : margin;
+        obstacles.push_back(QRectF(position->second,
+            QSizeF(210.0, nodeHeight(node.type))).adjusted(
+                -node_margin, -node_margin, node_margin, node_margin));
+    }
+
+    const auto blocked_segment = [&obstacles](QPointF first, QPointF second) {
+        constexpr auto epsilon = 0.01;
+        for (const auto& obstacle : obstacles) {
+            if (std::abs(first.y() - second.y()) < epsilon) {
+                if (first.y() > obstacle.top() + epsilon &&
+                    first.y() < obstacle.bottom() - epsilon &&
+                    std::max(first.x(), second.x()) > obstacle.left() + epsilon &&
+                    std::min(first.x(), second.x()) < obstacle.right() - epsilon)
+                    return true;
+            } else if (std::abs(first.x() - second.x()) < epsilon) {
+                if (first.x() > obstacle.left() + epsilon &&
+                    first.x() < obstacle.right() - epsilon &&
+                    std::max(first.y(), second.y()) > obstacle.top() + epsilon &&
+                    std::min(first.y(), second.y()) < obstacle.bottom() - epsilon)
+                    return true;
+            }
+        }
+        return false;
+    };
+
+    int min_x = std::min(start_grid.x, end_grid.x);
+    int max_x = std::max(start_grid.x, end_grid.x);
+    int min_y = std::min(start_grid.y, end_grid.y);
+    int max_y = std::max(start_grid.y, end_grid.y);
+    for (const auto& obstacle : obstacles) {
+        min_x = std::min(min_x, static_cast<int>(std::floor(obstacle.left() / spacing)));
+        max_x = std::max(max_x, static_cast<int>(std::ceil(obstacle.right() / spacing)));
+        min_y = std::min(min_y, static_cast<int>(std::floor(obstacle.top() / spacing)));
+        max_y = std::max(max_y, static_cast<int>(std::ceil(obstacle.bottom() / spacing)));
+    }
+    min_x -= 8; max_x += 8; min_y -= 8; max_y += 8;
+
+    const auto width = max_x - min_x + 1;
+    const auto state_key = [min_x, min_y, width](int x, int y, int direction) {
+        return (((y - min_y) * width + (x - min_x)) * 5) + direction;
+    };
+    const auto manhattan = [&end_grid](int x, int y) {
+        return (std::abs(x - end_grid.x) + std::abs(y - end_grid.y)) * 10;
+    };
+    std::priority_queue<RouteEntry, std::vector<RouteEntry>, RouteEntryLater> queue;
+    std::unordered_map<int, int> distances;
+    std::unordered_map<int, int> previous;
+    const auto start_key = state_key(start_grid.x, start_grid.y, 4);
+    distances.emplace(start_key, 0);
+    queue.push({start_grid.x, start_grid.y, 4, 0,
+                manhattan(start_grid.x, start_grid.y)});
+    constexpr std::array<int, 4> delta_x{0, 1, 0, -1};
+    constexpr std::array<int, 4> delta_y{-1, 0, 1, 0};
+    int finish_key = -1;
+    while (!queue.empty()) {
+        const auto current = queue.top();
+        queue.pop();
+        const auto current_key = state_key(current.x, current.y, current.direction);
+        const auto known = distances.find(current_key);
+        if (known == distances.end() || known->second != current.cost) continue;
+        if (current.x == end_grid.x && current.y == end_grid.y) {
+            finish_key = current_key;
+            break;
+        }
+        const auto current_position = gridPosition({current.x, current.y}, spacing);
+        for (int direction = 0; direction < 4; ++direction) {
+            const auto next_x = current.x + delta_x[direction];
+            const auto next_y = current.y + delta_y[direction];
+            if (next_x < min_x || next_x > max_x || next_y < min_y || next_y > max_y)
+                continue;
+            const auto next_position = gridPosition({next_x, next_y}, spacing);
+            if (blocked_segment(current_position, next_position)) continue;
+            const auto next_cost = current.cost + 10 +
+                (current.direction != 4 && current.direction != direction ? 4 : 0);
+            const auto next_key = state_key(next_x, next_y, direction);
+            const auto old = distances.find(next_key);
+            if (old != distances.end() && old->second <= next_cost) continue;
+            distances[next_key] = next_cost;
+            previous[next_key] = current_key;
+            queue.push({next_x, next_y, direction, next_cost,
+                        next_cost + manhattan(next_x, next_y)});
+        }
+    }
+
+    if (finish_key < 0) {
+        direct.lineTo(end);
+        return direct;
+    }
+    std::vector<QPointF> route;
+    for (auto key = finish_key; key != start_key;) {
+        const auto cell = key / 5;
+        const auto x = cell % width + min_x;
+        const auto y = cell / width + min_y;
+        route.push_back(gridPosition({x, y}, spacing));
+        const auto parent = previous.find(key);
+        if (parent == previous.end()) break;
+        key = parent->second;
+    }
+    route.push_back(gridPosition(start_grid, spacing));
+    std::reverse(route.begin(), route.end());
+    std::vector<QPointF> simplified;
+    simplified.push_back(start);
+    auto start_stub = gridPosition(start_grid, spacing);
+    if (start_direction == 1 || start_direction == 3) start_stub.setY(start.y());
+    else start_stub.setX(start.x());
+    if (QLineF(simplified.back(), start_stub).length() > 0.01)
+        simplified.push_back(start_stub);
+    if (QLineF(simplified.back(), route.front()).length() > 0.01)
+        simplified.push_back(route.front());
+    for (std::size_t i = 1; i < route.size(); ++i) {
+        const auto previous_point = simplified.back();
+        const auto point = route[i];
+        if (simplified.size() >= 2) {
+            const auto before = simplified[simplified.size() - 2];
+            if ((std::abs(before.x() - previous_point.x()) < 0.01 &&
+                 std::abs(previous_point.x() - point.x()) < 0.01) ||
+                (std::abs(before.y() - previous_point.y()) < 0.01 &&
+                 std::abs(previous_point.y() - point.y()) < 0.01)) {
+                simplified.back() = point;
+                continue;
+            }
+        }
+        simplified.push_back(point);
+    }
+    auto end_stub = gridPosition(end_grid, spacing);
+    if (end_direction == 3) end_stub.setY(end.y());
+    else if (end_direction == 0) end_stub.setX(end.x());
+    if (QLineF(simplified.back(), end_stub).length() > 0.01)
+        simplified.push_back(end_stub);
+    if (QLineF(simplified.back(), end).length() > 0.01)
+        simplified.push_back(end);
+    if (style == ConnectionLineStyle::Curved)
+        return smoothOrthogonalPath(simplified, static_cast<double>(spacing) * 0.35);
+    QPainterPath path;
+    path.moveTo(simplified.front());
+    for (std::size_t i = 1; i < simplified.size(); ++i)
+        path.lineTo(simplified[i]);
+    return path;
+}
 
 BackgroundGridSettings readGridSettings(QSettings& settings) {
     BackgroundGridSettings result;
@@ -126,6 +407,9 @@ BackgroundGridSettings readGridSettings(QSettings& settings) {
 
 NodeCanvas::NodeCanvas(QWidget* parent) : QGraphicsView(parent) {
     grid_settings_ = readGridSettings(settings_);
+    const auto behavior = readNodeCanvasBehaviorSettings(settings_);
+    connection_line_style_ = behavior.line_style;
+    snap_to_grid_ = behavior.snap_to_grid;
     scene_ = new QGraphicsScene(this);
     scene_->setSceneRect(0, 0, 1600, 900);
     setScene(scene_);
@@ -166,7 +450,43 @@ void NodeCanvas::setBackgroundGridSettings(BackgroundGridSettings settings) {
     settings_.setValue(QStringLiteral("intensity"),
                        grid_settings_.intensity_percent);
     settings_.endGroup();
+    updateConnectionLines();
+    if (pending_connection_line_ != nullptr)
+        updatePendingConnectionLine(pending_cursor_scene_);
     viewport()->update();
+}
+
+void NodeCanvas::setConnectionLineStyle(ConnectionLineStyle style) {
+    if (style != ConnectionLineStyle::Curved)
+        style = ConnectionLineStyle::Straight;
+    if (style == connection_line_style_) return;
+    connection_line_style_ = style;
+    settings_.beginGroup(QString::fromLatin1(kNodeEditorSettingsGroup));
+    settings_.setValue(QStringLiteral("connection_line_style"),
+                       static_cast<int>(connection_line_style_));
+    settings_.endGroup();
+    updateConnectionLines();
+    if (pending_connection_line_ != nullptr)
+        updatePendingConnectionLine(pending_cursor_scene_);
+}
+
+void NodeCanvas::setSnapToGrid(bool enabled) {
+    if (enabled == snap_to_grid_) return;
+    snap_to_grid_ = enabled;
+    settings_.beginGroup(QString::fromLatin1(kNodeEditorSettingsGroup));
+    settings_.setValue(QStringLiteral("snap_to_grid"), snap_to_grid_);
+    settings_.endGroup();
+    updateConnectionLines();
+    if (pending_connection_line_ != nullptr)
+        updatePendingConnectionLine(pending_cursor_scene_);
+}
+
+QPointF NodeCanvas::snapPositionToGrid(QPointF position) const noexcept {
+    if (!snap_to_grid_) return position;
+    const auto spacing = static_cast<double>(grid_settings_.spacing);
+    position.setX(std::round(position.x() / spacing) * spacing);
+    position.setY(std::round(position.y() / spacing) * spacing);
+    return position;
 }
 
 void NodeCanvas::drawBackground(QPainter* painter, const QRectF& rect) {
@@ -239,6 +559,8 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
     dragging_input_index_ = 0;
     dragging_node_ = 0;
     pending_connection_line_ = nullptr;
+    pending_fixed_node_ = 0;
+    pending_input_index_ = 0;
     connections_ = graph.connections;
     scene_->clear();
     std::unordered_map<NodeId, QGraphicsRectItem*> items;
@@ -321,6 +643,10 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         }
         items.emplace(node.id, item);
     }
+    std::unordered_map<NodeId, QPointF> node_positions;
+    node_positions.reserve(items.size());
+    for (const auto& [id, node_item] : items)
+        node_positions.emplace(id, node_item->pos());
     for (const auto& edge : graph.connections) {
         const auto from = items.find(edge.from), to = items.find(edge.to);
         if (from == items.end() || to == items.end()) continue;
@@ -329,14 +655,15 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
         if (from_node == nullptr || to_node == nullptr) continue;
         const auto start = from->second->pos() + QPointF(210, outputPortY(from_node->type));
         const auto end = to->second->pos() + QPointF(edge.input==2 ? 105 : 0, inputPortY(to_node->type, edge.input));
-        auto* line = scene_->addLine(QLineF(start, end), QPen(QColor(edge.input==2 ? "#d1aa52" : "#66b5ff"), 2.0));
+        const auto path = connectionPath(start, end, edge.from, edge.to, edge.input,
+            graph_, node_positions, connection_line_style_, snap_to_grid_, grid_settings_.spacing);
+        auto* line = scene_->addPath(path, QPen(QColor(edge.input==2 ? "#d1aa52" : "#66b5ff"), 2.0));
         line->setData(0, QVariant::fromValue<qulonglong>(edge.to));
         line->setData(1, 3);
         line->setData(2, static_cast<int>(edge.input));
         line->setData(3, QVariant::fromValue<qulonglong>(edge.from));
         line->setZValue(-1);
-        auto* hit_target = scene_->addLine(
-            QLineF(start, end), QPen(QColor(0, 0, 0, 0), 12.0));
+        auto* hit_target = scene_->addPath(path, QPen(QColor(0, 0, 0, 0), 12.0));
         hit_target->setData(0, QVariant::fromValue<qulonglong>(edge.to));
         hit_target->setData(1, 3);
         hit_target->setData(2, static_cast<int>(edge.input));
@@ -345,9 +672,9 @@ void NodeCanvas::setGraph(const NodeGraph& graph) {
     }
 }
 
-void NodeCanvas::updateConnectionLines() {
+void NodeCanvas::updateConnectionLines(NodeId moved_node) {
     std::unordered_map<NodeId, QPointF> node_positions;
-    std::vector<QGraphicsLineItem*> connection_lines;
+    std::vector<QGraphicsPathItem*> connection_lines;
     for (auto* item : scene_->items()) {
         if (!item->data(0).isValid()) continue;
         const auto item_kind = item->data(1).toInt();
@@ -355,8 +682,12 @@ void NodeCanvas::updateConnectionLines() {
             node_positions.emplace(
                 static_cast<NodeId>(item->data(0).toULongLong()), item->scenePos());
         } else if (item_kind == 3) {
-            if (auto* line = qgraphicsitem_cast<QGraphicsLineItem*>(item))
-                connection_lines.push_back(line);
+            if (auto* line = qgraphicsitem_cast<QGraphicsPathItem*>(item)) {
+                const auto from_id = static_cast<NodeId>(line->data(3).toULongLong());
+                const auto to_id = static_cast<NodeId>(line->data(0).toULongLong());
+                if (moved_node == 0 || from_id == moved_node || to_id == moved_node)
+                    connection_lines.push_back(line);
+            }
         }
     }
 
@@ -376,7 +707,8 @@ void NodeCanvas::updateConnectionLines() {
             QPointF(210.0, outputPortY(from_node->type));
         const auto end = to_position->second + QPointF(
             input == 2 ? 105.0 : 0.0, inputPortY(to_node->type, input));
-        line->setLine(QLineF(start, end));
+        line->setPath(connectionPath(start, end, from_id, to_id, input, graph_,
+            node_positions, connection_line_style_, snap_to_grid_, grid_settings_.spacing));
     }
 }
 
@@ -385,7 +717,8 @@ QPointF NodeCanvas::freeNodePosition(NodeType type) const {
     const auto origin = center - QPointF(105.0, nodeHeight(type) / 2.0);
     // Search outward with a fixed gap, bounded by the existing node count.
     const auto free = [&](const QPointF& position) {
-        const QRectF bounds(position, QSizeF(230.0, nodeHeight(type) + 20.0));
+        const auto snapped = snapPositionToGrid(position);
+        const QRectF bounds(snapped, QSizeF(230.0, nodeHeight(type) + 20.0));
         return std::none_of(graph_.nodes.begin(), graph_.nodes.end(),
             [&](const Node& node) {
                 return bounds.intersects(QRectF(node.x - 10.0, node.y - 10.0,
@@ -397,12 +730,13 @@ QPointF NodeCanvas::freeNodePosition(NodeType type) const {
         for (int y = -radius; y <= radius; ++y) {
             for (int x = -radius; x <= radius; ++x) {
                 if (std::max(std::abs(x), std::abs(y)) != radius) continue;
-                const auto position = origin + QPointF(x * 250.0, y * 170.0);
+                const auto position = snapPositionToGrid(
+                    origin + QPointF(x * 250.0, y * 170.0));
                 if (free(position)) return position;
             }
         }
     }
-    return origin;
+    return snapPositionToGrid(origin);
 }
 
 void NodeCanvas::setSelectedNode(NodeId id) {
@@ -473,7 +807,7 @@ void NodeCanvas::dropEvent(QDropEvent* event) {
         return;
     }
     const auto viewport_position = event->position().toPoint();
-    const auto scene_position = mapToScene(viewport_position);
+    const auto scene_position = snapPositionToGrid(mapToScene(viewport_position));
     std::optional<Connection> cable;
     for (auto* item : items(viewport_position)) {
         if (item->data(1).toInt() != 3) continue;
@@ -521,11 +855,16 @@ void NodeCanvas::mousePressEvent(QMouseEvent* event) {
                 dragging_from_input_ = node_id;
                 dragging_input_index_ = input;
                 dragging_input_start_ = event->pos();
-                const auto position = mapToScene(event->pos());
-                pending_connection_line_ = scene_->addLine(
-                    QLineF(position, position),
-                    QPen(QColor("#9ad3ff"), 2.0, Qt::DashLine));
+                pending_start_scene_ = item->scenePos();
+                pending_fixed_node_ = node_id;
+                pending_fixed_is_source_ = false;
+                pending_input_index_ = input;
+                QPainterPath preview;
+                preview.moveTo(pending_start_scene_);
+                pending_connection_line_ = scene_->addPath(
+                    preview, QPen(QColor("#9ad3ff"), 2.0, Qt::DashLine));
                 pending_connection_line_->setZValue(-2);
+                updatePendingConnectionLine(pending_start_scene_);
             }
             event->accept();
             return;
@@ -533,10 +872,16 @@ void NodeCanvas::mousePressEvent(QMouseEvent* event) {
         if (item != nullptr && item->data(1).toInt() == 2) {
             dragging_from_output_ = static_cast<NodeId>(item->data(0).toULongLong());
             if (item->parentItem() != nullptr) item->parentItem()->setSelected(true);
-            const auto position = mapToScene(event->pos());
-            pending_connection_line_ = scene_->addLine(
-                QLineF(position, position), QPen(QColor("#9ad3ff"), 2.0, Qt::DashLine));
+            pending_start_scene_ = item->scenePos();
+            pending_fixed_node_ = dragging_from_output_;
+            pending_fixed_is_source_ = true;
+            pending_input_index_ = 0;
+            QPainterPath preview;
+            preview.moveTo(pending_start_scene_);
+            pending_connection_line_ = scene_->addPath(
+                preview, QPen(QColor("#9ad3ff"), 2.0, Qt::DashLine));
             pending_connection_line_->setZValue(-2);
+            updatePendingConnectionLine(pending_start_scene_);
             event->accept();
             return;
         }
@@ -544,11 +889,16 @@ void NodeCanvas::mousePressEvent(QMouseEvent* event) {
             dragging_from_input_ = static_cast<NodeId>(item->data(0).toULongLong());
             dragging_input_index_ = static_cast<std::uint8_t>(item->data(2).toInt());
             dragging_input_start_ = event->pos();
-            const auto position = mapToScene(event->pos());
-            pending_connection_line_ = scene_->addLine(
-                QLineF(position, position),
-                QPen(QColor("#9ad3ff"), 2.0, Qt::DashLine));
+            pending_start_scene_ = mapToScene(event->pos());
+            pending_fixed_node_ = dragging_from_input_;
+            pending_fixed_is_source_ = false;
+            pending_input_index_ = dragging_input_index_;
+            QPainterPath preview;
+            preview.moveTo(pending_start_scene_);
+            pending_connection_line_ = scene_->addPath(
+                preview, QPen(QColor("#9ad3ff"), 2.0, Qt::DashLine));
             pending_connection_line_->setZValue(-2);
+            updatePendingConnectionLine(pending_start_scene_);
             event->accept();
             return;
         }
@@ -575,10 +925,7 @@ void NodeCanvas::mousePressEvent(QMouseEvent* event) {
 void NodeCanvas::mouseMoveEvent(QMouseEvent* event) {
     if ((dragging_from_output_ != 0 || dragging_from_input_ != 0) &&
         pending_connection_line_ != nullptr) {
-        const auto line = pending_connection_line_->line();
-        pending_connection_line_->setLine(line.x1(), line.y1(),
-                                           mapToScene(event->pos()).x(),
-                                           mapToScene(event->pos()).y());
+        updatePendingConnectionLine(mapToScene(event->pos()));
         event->accept();
         return;
     }
@@ -587,9 +934,10 @@ void NodeCanvas::mouseMoveEvent(QMouseEvent* event) {
             if (item->data(0).isValid() && item->data(1).toInt() == 0 &&
                 static_cast<NodeId>(item->data(0).toULongLong()) == dragging_node_) {
                 const auto scene_position = mapToScene(event->pos());
-                item->setPos(scene_position.x() - drag_offset_x_,
-                             scene_position.y() - drag_offset_y_);
-                updateConnectionLines();
+                item->setPos(snapPositionToGrid(QPointF(
+                    scene_position.x() - drag_offset_x_,
+                    scene_position.y() - drag_offset_y_)));
+                updateConnectionLines(snap_to_grid_ ? 0 : dragging_node_);
                 break;
             }
         }
@@ -605,7 +953,7 @@ void NodeCanvas::mouseReleaseEvent(QMouseEvent* event) {
         const auto target_input = dragging_input_index_;
         QGraphicsItem* target = nullptr;
         for (auto* candidate : items(event->pos())) {
-            if (dynamic_cast<QGraphicsLineItem*>(candidate) != nullptr) continue;
+            if (dynamic_cast<QGraphicsPathItem*>(candidate) != nullptr) continue;
             target = candidate;
             break;
         }
@@ -637,7 +985,7 @@ void NodeCanvas::mouseReleaseEvent(QMouseEvent* event) {
         const auto source = dragging_from_output_;
         QGraphicsItem* target = nullptr;
         for (auto* candidate : items(event->pos())) {
-            if (dynamic_cast<QGraphicsLineItem*>(candidate) != nullptr) continue;
+            if (dynamic_cast<QGraphicsPathItem*>(candidate) != nullptr) continue;
             target = candidate;
             break;
         }
@@ -674,5 +1022,75 @@ void NodeCanvas::mouseReleaseEvent(QMouseEvent* event) {
         return;
     }
     QGraphicsView::mouseReleaseEvent(event);
+}
+
+void NodeCanvas::updatePendingConnectionLine(const QPointF& cursor_position) {
+    if (pending_connection_line_ == nullptr) return;
+    pending_cursor_scene_ = snapPositionToGrid(cursor_position);
+    auto start = pending_start_scene_;
+    const auto end = pending_cursor_scene_;
+    std::optional<NodeId> source_id;
+    std::optional<NodeId> target_id;
+    if (pending_fixed_is_source_) {
+        source_id = pending_fixed_node_;
+    } else if (pending_fixed_node_ != 0) {
+        const auto* node = findNode(graph_, pending_fixed_node_);
+        if (node != nullptr) {
+            target_id = pending_fixed_node_;
+            start = QPointF(node->x, node->y) + QPointF(
+                pending_input_index_ == 2 ? 105.0 : 0.0,
+                inputPortY(node->type, pending_input_index_));
+        }
+    }
+    std::unordered_map<NodeId, QPointF> positions;
+    for (auto* item : scene_->items()) {
+        if (item->data(0).isValid() && item->data(1).toInt() == 0)
+            positions.emplace(static_cast<NodeId>(item->data(0).toULongLong()),
+                              item->scenePos());
+    }
+    pending_connection_line_->setPath(connectionPath(start, end, source_id,
+        target_id, pending_input_index_, graph_, positions,
+        connection_line_style_, snap_to_grid_, grid_settings_.spacing));
+}
+
+void NodeCanvas::contextMenuEvent(QContextMenuEvent* event) {
+    if (itemAt(event->pos()) != nullptr) {
+        event->ignore();
+        return;
+    }
+    auto* menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("fusionNodeCanvasContextMenu"));
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    auto* style_menu = menu->addMenu(
+        QCoreApplication::translate("NodeCanvas", "Wire style"));
+    auto* style_group = new QActionGroup(style_menu);
+    style_group->setExclusive(true);
+    auto* straight = style_menu->addAction(
+        QCoreApplication::translate("NodeCanvas", "Straight"));
+    straight->setObjectName(QStringLiteral("fusionWireStraightAction"));
+    straight->setCheckable(true);
+    straight->setChecked(connection_line_style_ == ConnectionLineStyle::Straight);
+    style_group->addAction(straight);
+    auto* curved = style_menu->addAction(
+        QCoreApplication::translate("NodeCanvas", "Curved"));
+    curved->setObjectName(QStringLiteral("fusionWireCurvedAction"));
+    curved->setCheckable(true);
+    curved->setChecked(connection_line_style_ == ConnectionLineStyle::Curved);
+    style_group->addAction(curved);
+    connect(straight, &QAction::triggered, this, [this] {
+        setConnectionLineStyle(ConnectionLineStyle::Straight);
+    });
+    connect(curved, &QAction::triggered, this, [this] {
+        setConnectionLineStyle(ConnectionLineStyle::Curved);
+    });
+    menu->addSeparator();
+    auto* snap = menu->addAction(
+        QCoreApplication::translate("NodeCanvas", "Snap to grid"));
+    snap->setObjectName(QStringLiteral("fusionSnapToGridAction"));
+    snap->setCheckable(true);
+    snap->setChecked(snap_to_grid_);
+    connect(snap, &QAction::toggled, this, &NodeCanvas::setSnapToGrid);
+    menu->popup(mapToGlobal(event->pos()));
+    event->accept();
 }
 } // namespace fusion::nodes

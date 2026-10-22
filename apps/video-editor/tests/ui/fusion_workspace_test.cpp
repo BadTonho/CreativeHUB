@@ -11,9 +11,13 @@
 #include <QDragMoveEvent>
 #include <QDoubleSpinBox>
 #include <QGraphicsItem>
-#include <QGraphicsLineItem>
+#include <QGraphicsPathItem>
+#include <QPainterPathStroker>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <QContextMenuEvent>
+#include <QMenu>
+#include <QAction>
 #include <QLineF>
 #include <QLabel>
 #include <QMouseEvent>
@@ -168,6 +172,178 @@ void testGridPreferencesAndRendering() {
     reset_defaults.setBackgroundGridSettings(BackgroundGridSettings{});
 }
 
+void testGridSnapAndConnectionStyles() {
+    using namespace fusion::nodes;
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("fusion/node_editor"));
+    settings.remove(QString());
+    settings.endGroup();
+    settings.sync();
+
+    auto graph = makeCompositionGraph();
+    graph.nodes[0].x = 80.0;
+    graph.nodes[0].y = 120.0;
+    graph.nodes[1].x = 700.0;
+    graph.nodes[1].y = 120.0;
+    Node obstacle;
+    obstacle.id = graph.next_id++;
+    obstacle.type = NodeType::Transform;
+    obstacle.x = 400.0;
+    obstacle.y = 120.0;
+    graph.nodes.push_back(obstacle);
+
+    NodeCanvas canvas;
+    canvas.resize(1000, 700);
+    canvas.setGraph(graph);
+    canvas.show();
+    QApplication::processEvents();
+    require(canvas.connectionLineStyle() == ConnectionLineStyle::Straight &&
+                !canvas.snapToGrid(),
+            "Connection style or snap defaults changed.");
+    require(std::abs(canvas.snapPositionToGrid(QPointF(113, 129)).x() - 113.0) < 0.01,
+            "Node positions should remain free while snap is disabled.");
+
+    QPoint blank;
+    bool found_blank = false;
+    for (int y = 8; y < canvas.viewport()->height() && !found_blank; y += 8) {
+        for (int x = 8; x < canvas.viewport()->width(); x += 8) {
+            if (canvas.itemAt(QPoint(x, y)) == nullptr) {
+                blank = QPoint(x, y);
+                found_blank = true;
+                break;
+            }
+        }
+    }
+    require(found_blank, "Could not find empty canvas for its context menu.");
+    const auto graph_before_menu = graph;
+    QContextMenuEvent menu_event(QContextMenuEvent::Mouse, blank,
+        canvas.viewport()->mapToGlobal(blank));
+    QApplication::sendEvent(canvas.viewport(), &menu_event);
+    QApplication::processEvents();
+    auto* menu = canvas.findChild<QMenu*>("fusionNodeCanvasContextMenu");
+    require(menu != nullptr, "Right-clicking the canvas background did not open its menu.");
+    auto* straight_action = menu->findChild<QAction*>("fusionWireStraightAction");
+    auto* curved_action = menu->findChild<QAction*>("fusionWireCurvedAction");
+    auto* snap_action = menu->findChild<QAction*>("fusionSnapToGridAction");
+    require(straight_action && curved_action && snap_action,
+            "The context menu omitted a wire style or grid snap option.");
+    curved_action->trigger();
+    snap_action->trigger();
+    QApplication::processEvents();
+    require(canvas.connectionLineStyle() == ConnectionLineStyle::Curved &&
+                canvas.snapToGrid() && graph == graph_before_menu,
+            "Context menu actions did not update the active canvas preferences.");
+    menu->close();
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    const auto node_position = canvas.mapFromScene(QPointF(120, 160));
+    QContextMenuEvent node_menu_event(QContextMenuEvent::Mouse, node_position,
+        canvas.viewport()->mapToGlobal(node_position));
+    QApplication::sendEvent(canvas.viewport(), &node_menu_event);
+    QApplication::processEvents();
+    require(canvas.findChild<QMenu*>("fusionNodeCanvasContextMenu") == nullptr,
+            "The canvas context menu should only open on empty background.");
+
+    auto hidden_grid = canvas.backgroundGridSettings();
+    hidden_grid.visible = false;
+    hidden_grid.spacing = 24;
+    canvas.setBackgroundGridSettings(hidden_grid);
+    const auto snapped = canvas.snapPositionToGrid(QPointF(113, 129));
+    require(snapped == QPointF(120, 120),
+            "Snap should use the configured spacing even when the grid is hidden.");
+    NodeCanvas restored;
+    require(restored.connectionLineStyle() == ConnectionLineStyle::Curved &&
+                restored.snapToGrid(),
+            "Wire style and snap preferences were not restored globally.");
+
+    const auto wire_items = [&canvas] {
+        std::vector<QGraphicsPathItem*> result;
+        for (auto* item : canvas.scene()->items()) {
+            if (item->data(1).toInt() == 3) {
+                if (auto* path = qgraphicsitem_cast<QGraphicsPathItem*>(item))
+                    result.push_back(path);
+            }
+        }
+        return result;
+    };
+    auto wires = wire_items();
+    const auto has_curve = [](const QPainterPath& path) {
+        for (int i = 0; i < path.elementCount(); ++i) {
+            if (path.elementAt(i).type == QPainterPath::CurveToElement) return true;
+        }
+        return false;
+    };
+    require(wires.size() == 2 && has_curve(wires.front()->path()),
+            "Curved style did not produce a routed path for the connection and hit target.");
+    QPainterPath blocker;
+    blocker.addRect(QRectF(400.0, 120.0, 210.0, 112.0));
+    for (auto* wire : wires) {
+        QPainterPathStroker stroker;
+        stroker.setWidth(wire->pen().widthF());
+        require(!stroker.createStroke(wire->path()).intersects(blocker),
+                "A curved routed wire overlaps an intervening node.");
+    }
+    canvas.setConnectionLineStyle(ConnectionLineStyle::Straight);
+    wires = wire_items();
+    require(wires.size() == 2 && wires.front()->path().elementCount() > 3,
+            "Straight grid style did not route around the intervening node.");
+    for (auto* wire : wires) {
+        const auto polygon = wire->path().toSubpathPolygons().front();
+        const QRectF inflated_obstacle(390.0, 110.0, 230.0, 132.0);
+        for (int i = 1; i < polygon.size(); ++i) {
+            const auto delta = polygon[i] - polygon[i - 1];
+            require(std::abs(delta.x()) < 0.01 || std::abs(delta.y()) < 0.01,
+                    "A straight snapped wire segment is not aligned to grid axes.");
+            const auto first = polygon[i - 1];
+            const auto second = polygon[i];
+            const bool crosses_obstacle = std::abs(delta.y()) < 0.01
+                ? first.y() > inflated_obstacle.top() &&
+                    first.y() < inflated_obstacle.bottom() &&
+                    std::max(first.x(), second.x()) > inflated_obstacle.left() &&
+                    std::min(first.x(), second.x()) < inflated_obstacle.right()
+                : first.x() > inflated_obstacle.left() &&
+                    first.x() < inflated_obstacle.right() &&
+                    std::max(first.y(), second.y()) > inflated_obstacle.top() &&
+                    std::min(first.y(), second.y()) < inflated_obstacle.bottom();
+            require(!crosses_obstacle,
+                    "The routed wire crosses an unrelated node's safety margin.");
+        }
+    }
+
+    auto* source = static_cast<QGraphicsItem*>(nullptr);
+    for (auto* item : canvas.scene()->items()) {
+        if (item->data(0).toULongLong() == 1 && item->data(1).toInt() == 0) {
+            source = item;
+            break;
+        }
+    }
+    require(source != nullptr, "The source node for snap-drag testing is missing.");
+    const auto start = canvas.mapFromScene(source->scenePos() + QPointF(100, 65));
+    const auto finish = start + QPoint(31, 23);
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(start), Qt::LeftButton,
+        Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas.viewport(), &press);
+    QMouseEvent move(QEvent::MouseMove, QPointF(finish), Qt::NoButton,
+        Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas.viewport(), &move);
+    require(source->pos() == QPointF(120, 144) && graph.nodes[0].x == 80.0,
+            "Dragging a node with snap enabled did not align its top-left live without editing the graph.");
+    int position_edits = 0;
+    canvas.setPositionChangedHandler([&](NodeId id, double x, double y) {
+        require(id == 1 && x == 120.0 && y == 144.0,
+                "The released node position was not the snapped position.");
+        ++position_edits;
+    });
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(finish),
+        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas.viewport(), &release);
+    require(position_edits == 1 && graph.nodes[0].x == 80.0,
+            "A snapped node drag must commit only once on release.");
+
+    canvas.setConnectionLineStyle(ConnectionLineStyle::Straight);
+    canvas.setSnapToGrid(false);
+    canvas.setBackgroundGridSettings(BackgroundGridSettings{});
+}
+
 void testLiveConnectionLines() {
     using namespace fusion::nodes;
 
@@ -226,21 +402,21 @@ void testLiveConnectionLines() {
     };
     const auto edge_lines = [&canvas](NodeId from, NodeId to,
                                       int input) {
-        std::vector<QGraphicsLineItem*> result;
+        std::vector<QGraphicsPathItem*> result;
         for (auto* item : canvas.scene()->items()) {
             if (item->data(0).toULongLong() != to ||
                 item->data(1).toInt() != 3 ||
                 item->data(2).toInt() != input ||
                 item->data(3).toULongLong() != from)
                 continue;
-            if (auto* line = qgraphicsitem_cast<QGraphicsLineItem*>(item))
+            if (auto* line = qgraphicsitem_cast<QGraphicsPathItem*>(item))
                 result.push_back(line);
         }
         return result;
     };
-    const auto pending_line = [&canvas]() -> QGraphicsLineItem* {
+    const auto pending_line = [&canvas]() -> QGraphicsPathItem* {
         for (auto* item : canvas.scene()->items()) {
-            auto* line = qgraphicsitem_cast<QGraphicsLineItem*>(item);
+            auto* line = qgraphicsitem_cast<QGraphicsPathItem*>(item);
             if (line != nullptr && line->pen().style() == Qt::DashLine &&
                 !line->data(1).isValid())
                 return line;
@@ -255,8 +431,8 @@ void testLiveConnectionLines() {
         require(lines.size() == 2 && output != nullptr && destination != nullptr,
                 "A connected edge or its hit target is missing.");
         for (auto* line : lines) {
-            require(QLineF(line->line().p1(), output->scenePos()).length() < 0.01 &&
-                        QLineF(line->line().p2(), destination->scenePos()).length() < 0.01,
+            require(QLineF(line->path().pointAtPercent(0.0), output->scenePos()).length() < 0.01 &&
+                        QLineF(line->path().pointAtPercent(1.0), destination->scenePos()).length() < 0.01,
                     "A visible wire or its hit target does not meet its ports.");
         }
     };
@@ -317,7 +493,7 @@ void testLiveConnectionLines() {
         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(canvas.viewport(), &invalid_move);
     auto* draft = pending_line();
-    require(draft != nullptr && QLineF(draft->line().p2(),
+    require(draft != nullptr && QLineF(draft->path().pointAtPercent(1.0),
                 canvas.mapToScene(empty_position)).length() < 0.01,
             "The provisional output cable did not follow the cursor.");
     release_left(empty_position);
@@ -338,7 +514,7 @@ void testLiveConnectionLines() {
         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(canvas.viewport(), &rewire_move);
     draft = pending_line();
-    require(draft != nullptr && QLineF(draft->line().p2(),
+    require(draft != nullptr && QLineF(draft->path().pointAtPercent(1.0),
                 canvas.mapToScene(alternate_output_position)).length() < 0.01,
             "The provisional rewire cable did not follow the cursor.");
     release_left(alternate_output_position);
@@ -1123,6 +1299,14 @@ void verifyCatalogDrops() {
             "Fusion Text must retain its generator defaults.");
     }
     require(edits == 9, "Each catalog drop must produce one graph edit.");
+    canvas->setSnapToGrid(true);
+    require(workspace.addCatalogNode("fusion.transform") && edits == 10,
+            "Catalog creation with snap enabled did not commit one node.");
+    const auto snap_spacing = canvas->backgroundGridSettings().spacing;
+    require(std::fmod(graph.nodes.back().x, snap_spacing) == 0.0 &&
+                std::fmod(graph.nodes.back().y, snap_spacing) == 0.0,
+            "Automatically inserted nodes did not snap to the Fusion grid.");
+    canvas->setSnapToGrid(false);
     require(workspace.addCatalogNode("fusion.merge"), "Double-click creation route failed.");
     const auto& added = graph.nodes.back();
     for (std::size_t i = 0; i + 1 < graph.nodes.size(); ++i) {
@@ -1139,13 +1323,18 @@ void verifyCatalogDrops() {
     clip.node_graph=fusion::nodes::makeCompositionGraph();workspace.setSelection(&clip,{});
     QPoint image_cable_position;
     for(auto* item:canvas->scene()->items())if(item->data(1).toInt()==3 && item->data(2).toInt()==0)
-        if(auto* line=qgraphicsitem_cast<QGraphicsLineItem*>(item)){image_cable_position=canvas->mapFromScene(line->line().pointAt(.5));break;}
+        if(auto* line=qgraphicsitem_cast<QGraphicsPathItem*>(item)){image_cable_position=canvas->mapFromScene(line->path().pointAtPercent(.5));break;}
     QMimeData blur_mime;blur_mime.setData(ui::kEffectIdMimeType,"video.gaussian_blur");
     QDragEnterEvent blur_enter(image_cable_position,Qt::CopyAction,&blur_mime,Qt::LeftButton,Qt::NoModifier);
     QApplication::sendEvent(canvas->viewport(),&blur_enter);
+    canvas->setSnapToGrid(true);
     QDropEvent blur_drop(QPointF(image_cable_position),Qt::CopyAction,&blur_mime,Qt::LeftButton,Qt::NoModifier);
     QApplication::sendEvent(canvas->viewport(),&blur_drop);
     require(blur_drop.isAccepted() && graph.nodes.back().type==fusion::nodes::NodeType::GaussianBlur && graph.connections.size()==2,"Blur must split image cables.");
+    require(std::fmod(graph.nodes.back().x, canvas->backgroundGridSettings().spacing) == 0.0 &&
+                std::fmod(graph.nodes.back().y, canvas->backgroundGridSettings().spacing) == 0.0,
+            "Dropped effect nodes did not snap to the Fusion grid.");
+    canvas->setSnapToGrid(false);
     auto masked_graph = fusion::nodes::makeCompositionGraph();
     fusion::nodes::Node mask;
     mask.id = masked_graph.next_id++;
@@ -1159,9 +1348,9 @@ void verifyCatalogDrops() {
     bool found_mask_cable = false;
     for (auto* item : canvas->scene()->items()) {
         if (item->data(1).toInt() == 3 && item->data(2).toInt() == 2) {
-            auto* line = qgraphicsitem_cast<QGraphicsLineItem*>(item);
+            auto* line = qgraphicsitem_cast<QGraphicsPathItem*>(item);
             require(line != nullptr, "Mask cable geometry is unavailable.");
-            mask_cable_position = canvas->mapFromScene(line->line().pointAt(0.5));
+            mask_cable_position = canvas->mapFromScene(line->path().pointAtPercent(0.5));
             found_mask_cable = true;
             break;
         }
@@ -1196,6 +1385,7 @@ int main(int argc, char** argv) {
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                            settings_directory.path());
         testGridPreferencesAndRendering();
+        testGridSnapAndConnectionStyles();
         testLiveConnectionLines();
         verifyCatalogDrops();
         return runFusionWorkspaceTest();

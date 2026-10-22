@@ -2051,6 +2051,26 @@ Executável: %2</translation>
         <source>Node input.</source>
         <translation>Entrada do nó.</translation>
     </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1065"/>
+        <source>Wire style</source>
+        <translation>Estilo do fio</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1069"/>
+        <source>Straight</source>
+        <translation>Reto</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1075"/>
+        <source>Curved</source>
+        <translation>Curvo</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1088"/>
+        <source>Snap to grid</source>
+        <translation>Encaixar à grade</translation>
+    </message>
 </context>
 <context>
     <name>PreviewWidget</name>

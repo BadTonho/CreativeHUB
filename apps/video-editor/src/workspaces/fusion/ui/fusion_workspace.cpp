@@ -350,14 +350,20 @@ bool FusionWorkspace::createCatalogNode(
     const QString& id, const QPointF& position,
     std::optional<fusion::nodes::Connection> cable) {
     if (!active_ || clip_id_ == 0) return false;
+    auto* canvas = node_editor_panel_ != nullptr
+        ? node_editor_panel_->findChild<fusion::nodes::NodeCanvas*>(
+              "fusionNodeCanvas")
+        : nullptr;
     auto node = catalogNode(id);
     if (!node) return false;
     const bool split_cable = cable && (node->type == fusion::nodes::NodeType::Effect || node->type == fusion::nodes::NodeType::GaussianBlur);
     if (split_cable && cable->input == 2) return false;
     auto candidate = graph_;
     node->id = candidate.next_id++;
-    node->x = position.x();
-    node->y = position.y();
+    const auto snapped_position = canvas != nullptr
+        ? canvas->snapPositionToGrid(position) : position;
+    node->x = snapped_position.x();
+    node->y = snapped_position.y();
     const auto node_id = node->id;
     candidate.nodes.push_back(std::move(*node));
     if (split_cable) {
