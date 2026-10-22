@@ -228,14 +228,15 @@ void RenderWorkspace::createPanels(QWidget* parent) {
     createSettingsPanel();
     createPreviewPanel();
     createQueuePanel();
-    splitter_->addWidget(settings_panel_);
     splitter_->addWidget(preview_panel_);
     splitter_->addWidget(queue_panel_);
-    splitter_->setStretchFactor(0, 5);
-    splitter_->setStretchFactor(1, 9);
-    splitter_->setStretchFactor(2, 6);
-    splitter_->setSizes({480, 860, 570});
+    splitter_->setStretchFactor(0, 9);
+    splitter_->setStretchFactor(1, 6);
+    splitter_->setSizes({860, 570});
     settings_panel_->setMinimumWidth(0);
+    settings_panel_->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Expanding);
+    preview_panel_->setMinimumWidth(0);
     queue_panel_->setMinimumWidth(0);
 
     populateContainerOptions();
@@ -303,8 +304,8 @@ void RenderWorkspace::updateResponsiveLayout() {
     if (use_compact_layout == compact_layout_) return;
 
     const auto current_sizes = splitter_->sizes();
-    if (current_sizes.size() == 3 &&
-        (current_sizes[0] > 0 || current_sizes[1] > 0 || current_sizes[2] > 0)) {
+    if (current_sizes.size() == 2 &&
+        (current_sizes[0] > 0 || current_sizes[1] > 0)) {
         auto& saved_sizes = compact_layout_
             ? vertical_splitter_sizes_
             : horizontal_splitter_sizes_;
@@ -314,27 +315,33 @@ void RenderWorkspace::updateResponsiveLayout() {
     }
 
     compact_layout_ = use_compact_layout;
+    if (preview_panel_ != nullptr) {
+        preview_panel_->setMinimumWidth(compact_layout_ ? 0 : 320);
+        auto policy = preview_panel_->sizePolicy();
+        policy.setHorizontalPolicy(
+            compact_layout_ ? QSizePolicy::Ignored : QSizePolicy::Expanding);
+        preview_panel_->setSizePolicy(policy);
+    }
+    if (queue_panel_ != nullptr) {
+        auto policy = queue_panel_->sizePolicy();
+        policy.setHorizontalPolicy(
+            compact_layout_ ? QSizePolicy::Ignored : QSizePolicy::Expanding);
+        queue_panel_->setSizePolicy(policy);
+    }
     splitter_->setOrientation(
         compact_layout_ ? Qt::Vertical : Qt::Horizontal);
     const auto& restored_sizes = compact_layout_
         ? vertical_splitter_sizes_
         : horizontal_splitter_sizes_;
     splitter_->setSizes({
-        restored_sizes[0], restored_sizes[1], restored_sizes[2]});
+        restored_sizes[0], restored_sizes[1]});
 }
 
 void RenderWorkspace::createSettingsPanel() {
-    settings_panel_ = new QWidget(splitter_);
+    settings_panel_ = new QWidget(central_page_);
     settings_panel_->setObjectName("renderSettingsPanel");
     auto* panel_layout = new QVBoxLayout(settings_panel_);
-    panel_layout->setContentsMargins(0, 0, 8, 0);
-
-    auto* heading = new QLabel(QCoreApplication::translate("RenderWorkspace", "Render Settings"), settings_panel_);
-    QFont heading_font = heading->font();
-    heading_font.setBold(true);
-    heading_font.setPointSize(heading_font.pointSize() + 1);
-    heading->setFont(heading_font);
-    panel_layout->addWidget(heading);
+    panel_layout->setContentsMargins(8, 8, 8, 0);
 
     settings_scroll_area_ = new QScrollArea(settings_panel_);
     settings_scroll_area_->setObjectName("renderSettingsScrollArea");
@@ -594,6 +601,10 @@ void RenderWorkspace::createSettingsPanel() {
 void RenderWorkspace::createQueuePanel() {
     queue_panel_ = new QWidget(splitter_);
     queue_panel_->setObjectName("renderQueuePanel");
+    auto queue_policy = queue_panel_->sizePolicy();
+    queue_policy.setHorizontalPolicy(
+        compact_layout_ ? QSizePolicy::Ignored : QSizePolicy::Expanding);
+    queue_panel_->setSizePolicy(queue_policy);
     auto* layout = new QVBoxLayout(queue_panel_);
     layout->setContentsMargins(8, 0, 0, 0);
 
@@ -678,7 +689,11 @@ void RenderWorkspace::createQueuePanel() {
 void RenderWorkspace::createPreviewPanel() {
     preview_panel_ = new QWidget(splitter_);
     preview_panel_->setObjectName("renderPreviewPanel");
-    preview_panel_->setMinimumWidth(320);
+    preview_panel_->setMinimumWidth(compact_layout_ ? 0 : 320);
+    auto preview_policy = preview_panel_->sizePolicy();
+    preview_policy.setHorizontalPolicy(
+        compact_layout_ ? QSizePolicy::Ignored : QSizePolicy::Expanding);
+    preview_panel_->setSizePolicy(preview_policy);
     auto* panel_layout = new QVBoxLayout(preview_panel_);
     panel_layout->setContentsMargins(8, 0, 8, 0);
     panel_layout->setSpacing(6);

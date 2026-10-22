@@ -13,10 +13,14 @@
 #include <QScrollBar>
 #include <QSettings>
 #include <QStackedWidget>
+#include <QStatusBar>
 #include <QTemporaryDir>
+#include <QTimer>
 
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace {
@@ -25,9 +29,9 @@ void require(bool condition, const char* message) {
 }
 
 void settleLayout() {
-    for (int index = 0; index < 10; ++index) {
-        QApplication::processEvents(QEventLoop::AllEvents);
-    }
+    QEventLoop loop;
+    QTimer::singleShot(25, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::AllEvents);
 }
 
 void dragDockTop(QMainWindow& window, QDockWidget& dock, int target_height) {
@@ -66,11 +70,13 @@ int main(int argc, char** argv) {
         window.resize(1400, 900);
         settleLayout();
         auto* dock = window.findChild<QDockWidget*>("timelineDock");
+        auto* settings_dock = window.findChild<QDockWidget*>("renderSettingsDock");
         auto* host = dynamic_cast<ui::WorkspaceHost*>(
             window.findChild<QWidget*>("workspaceHost"));
         auto* timeline = window.findChild<timeline::TimelineWidget*>();
-        require(dock != nullptr && host != nullptr && timeline != nullptr,
-                "The real editor did not mount its Timeline dock.");
+        require(dock != nullptr && settings_dock != nullptr && host != nullptr &&
+                    timeline != nullptr,
+                "The real editor did not mount its Timeline and Render Settings docks.");
         auto* scroll = host->timelinePanel()->findChild<QScrollArea*>();
         require(scroll != nullptr, "The Timeline viewport is missing.");
         window.resizeDocks({dock}, {460}, Qt::Vertical);
@@ -167,7 +173,10 @@ int main(int argc, char** argv) {
         host->refreshCentralWorkspaceVisibility();
         settleLayout();
 
+        auto timeline_height_before_render = -1;
         for (const char* name : {"timelineUnnamedButton", "timelineRenderButton", "timelineEditButton"}) {
+            if (std::string(name) == "timelineRenderButton")
+                timeline_height_before_render = dock->height();
             auto* button = window.findChild<QPushButton*>(name);
             require(button != nullptr, "A workspace navigation button is missing.");
             button->click();
@@ -175,10 +184,49 @@ int main(int argc, char** argv) {
             if (host->currentPage() == ui::WorkspacePageId::Render) {
                 require(host->maximumWidth() == QWIDGETSIZE_MAX && host->width() > 300,
                         "Entering Render retained the collapsed editing-center width.");
+                const auto settings_area = window.dockWidgetArea(settings_dock);
+                const auto timeline_area = window.dockWidgetArea(dock);
+                auto* render_page = host->renderPage();
+                auto* status_bar = window.statusBar();
+                require(render_page != nullptr && status_bar != nullptr,
+                        "The Render page or application footer is missing.");
+                const auto settings_origin = settings_dock->mapTo(
+                    &window, QPoint(0, 0));
+                const auto timeline_origin = dock->mapTo(&window, QPoint(0, 0));
+                const auto page_origin = render_page->mapTo(&window, QPoint(0, 0));
+                const auto footer_origin = status_bar->mapTo(&window, QPoint(0, 0));
+                const auto settings_bottom =
+                    settings_origin.y() + settings_dock->height();
+                const auto page_bottom = page_origin.y() + render_page->height();
+                require(settings_area == Qt::LeftDockWidgetArea &&
+                            settings_dock->isVisible() &&
+                            settings_dock->width() >= 460 &&
+                            settings_dock->width() <= 500 &&
+                            timeline_area == Qt::BottomDockWidgetArea &&
+                            dock->isVisible(),
+                        "Render must show a 480 px Settings dock on the left and keep Timeline at the bottom.");
+                require(status_bar->isVisible() &&
+                            std::abs(settings_bottom - footer_origin.y()) <= 3 &&
+                            timeline_origin.x() >=
+                                settings_origin.x() + settings_dock->width() - 3 &&
+                            std::abs(timeline_origin.y() - page_bottom) <= 8,
+                        "Settings must reach the application footer while Timeline remains below the central columns.");
+                const auto initial_settings_width = settings_dock->width();
+                window.resizeDocks({settings_dock}, {560}, Qt::Horizontal);
+                settleLayout();
+                require(settings_dock->width() >= initial_settings_width + 40,
+                        "The Render Settings dock must be resizable while Render is active.");
             }
         }
         require(host->currentPage() == ui::WorkspacePageId::Edit && host->width() <= 1,
                 "Returning to Edit did not restore the compact central layout.");
+        require(window.dockWidgetArea(dock) == Qt::BottomDockWidgetArea,
+                "Leaving Render must restore the Timeline to its previous dock area.");
+        require(settings_dock->isHidden(),
+                "Leaving Render must hide the temporary Render Settings dock.");
+        require(timeline_height_before_render > 0 &&
+                    std::abs(dock->height() - timeline_height_before_render) <= 3,
+                "Leaving Render must restore the Timeline's previous dock size.");
         window.resizeDocks({dock}, {460}, Qt::Vertical);
         settleLayout();
         dragDockTop(window, *dock, 1);

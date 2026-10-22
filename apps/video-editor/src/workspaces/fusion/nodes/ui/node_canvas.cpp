@@ -432,6 +432,15 @@ NodeCanvas::NodeCanvas(QWidget* parent) : QGraphicsView(parent) {
     });
 }
 
+NodeCanvas::~NodeCanvas() {
+    selection_changed_ = {};
+    viewer_node_requested_ = {};
+    position_changed_ = {};
+    connection_requested_ = {};
+    disconnection_requested_ = {};
+    effect_drop_requested_ = {};
+}
+
 void NodeCanvas::setBackgroundGridSettings(BackgroundGridSettings settings) {
     settings.spacing = std::clamp(
         settings.spacing, kGridMinimumSpacing, kGridMaximumSpacing);

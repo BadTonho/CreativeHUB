@@ -23,6 +23,7 @@
 #include <QPlainTextEdit>
 #include <QPalette>
 #include <QPushButton>
+#include <QPointer>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -1462,9 +1463,14 @@ void EditWorkspaceController::refreshInspectorPresentation() {
 
 void EditWorkspaceController::setTimelineReadOnly(bool read_only) {
     if (timeline_widget_ != nullptr) timeline_widget_->setReadOnly(read_only);
-    if (ui_.timeline_controls != nullptr) {
-        ui_.timeline_controls->setVisible(!read_only);
-    }
+    if (ui_.timeline_controls == nullptr) return;
+    const QPointer<QWidget> controls(ui_.timeline_controls);
+    const QPointer<timeline::TimelineWidget> timeline(timeline_widget_);
+    QTimer::singleShot(0, ui_.timeline_controls, [controls, timeline] {
+        if (controls != nullptr && timeline != nullptr) {
+            controls->setVisible(!timeline->isReadOnly());
+        }
+    });
 }
 
 void EditWorkspaceController::applyTimelineZoom(double factor) {

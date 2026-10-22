@@ -605,7 +605,7 @@ the selected clip, playhead,
 playback, project data, history, or dirty state.
 
 `workspaces/render/ui/RenderWorkspace` supplies the Render settings,
-shared Preview, and queue columns and activates the shared Timeline's read-only
+shared Preview, and queue panels and activates the shared Timeline's read-only
 presentation through a handler bound to `EditWorkspaceController`. Its queue
 model stores session-scoped jobs and execution state; each job contains a copy
 of the current project document and its output settings, while media remains
@@ -614,25 +614,28 @@ footer stays visible on every page.
 `WorkspaceHost` remains responsible for selecting that page and forwarding
 Fusion and Render activation to their workspaces, while
 `WorkspaceTransitionController` coordinates page changes, workspace selectors,
-the lower dock title, and Render's temporary dock layout snapshot.
+the lower dock title, and Render's temporary dock layout snapshot, including
+the lower-corner assignments used by the full-height Settings dock.
 `MainWindow` continues to own the native docks and persist their layout,
 including Preview's dock position, tab group, floating state, and visibility.
-Entering Render snapshots the full dock arrangement before hiding the panels;
-leaving Render restores that native layout after returning Preview to its dock.
-This preserves the previous dock position, tab groups, floating state, and
-visibility. Closing from Render performs the same restoration before saving
-the layout.
+Entering Render snapshots the full dock arrangement before hiding the panels,
+then shows Render Settings in a resizable 480 px left dock. The lower-left
+corner is assigned to that dock so the read-only Timeline stays below Preview
+and Queue, beginning to the right of Settings. Leaving Render restores the
+previous dock positions, sizes, tab groups, floating state, visibility, and
+corner assignments. The Settings dock is mounted only for Render, so it does
+not enter the saved layouts for Edit or Fusion. Closing from Render performs
+the same restoration before saving the layout.
 
-Render divides its central page into resizable settings, Preview, and queue
-columns from left to right. The same Preview widget used by Edit and Fusion is
-moved from its dock into the middle column while Render is active; the dock is
-temporarily hidden and its prior visibility is remembered. The same widget
-continues to display the current project frame and follows playback. When
-leaving Render, the Preview returns to its dock contents before the previous
-dock visibility is restored, preserving custom, tabified, floating, or hidden
-layout state. At central-page widths below
-1100 px, the three panels switch to a vertically scrollable Settings, Preview,
-and queue layout. Settings controls shrink to the available width; long codec
+The Render central page keeps Preview and Queue in resizable columns. The same
+Preview widget used by Edit and Fusion moves from its dock into the central page
+while Render is active; the dock is temporarily hidden and its prior visibility
+is remembered. The widget continues to display the current project frame and
+follows playback. When leaving Render, the Preview returns to its dock contents
+before the previous dock visibility is restored, preserving custom, tabified,
+floating, or hidden layout state. At central-page widths below 1100 px, Preview
+and Queue switch to a vertically scrollable layout while Settings remains in
+its left dock. Settings controls shrink to the available width; long codec
 names remain available in the selector and its tooltip instead of forcing
 horizontal scrolling. The **Add to Queue** action stays in a fixed footer below
 the Settings scroll area. Scrolling over a closed selector or numeric field

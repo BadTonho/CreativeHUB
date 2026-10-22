@@ -113,7 +113,8 @@ WorkspaceHost::WorkspaceHost(
     inspector_panel_->setCurrentWidget(edit_inspector_);
 }
 
-void WorkspaceHost::setPage(WorkspacePageId page) {
+void WorkspaceHost::setPage(
+    WorkspacePageId page, bool refresh_central_workspace) {
     if (current_page_ == page) {
         if (preview_canvas_area_ != nullptr) {
             preview_canvas_area_->setProperty(
@@ -129,7 +130,7 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
         if (viewer_title_ != nullptr) {
             viewer_title_->setVisible(page == WorkspacePageId::Fusion);
         }
-        refreshCentralWorkspaceVisibility();
+        if (refresh_central_workspace) refreshCentralWorkspaceVisibility();
         return;
     }
 
@@ -178,7 +179,7 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
         if (timeline_panel_ != nullptr) {
             lower_workspace_panel_->setCurrentWidget(timeline_panel_);
         }
-        refreshCentralWorkspaceVisibility();
+        if (refresh_central_workspace) refreshCentralWorkspaceVisibility();
         return;
     }
 
@@ -212,7 +213,7 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
         inspector_panel_->setCurrentWidget(edit_inspector_);
     }
     current_page_ = page;
-    refreshCentralWorkspaceVisibility();
+    if (refresh_central_workspace) refreshCentralWorkspaceVisibility();
 }
 
 void WorkspaceHost::refreshCentralWorkspaceVisibility() {

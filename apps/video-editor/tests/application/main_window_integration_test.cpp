@@ -575,10 +575,8 @@ public:
     static void setWorkspacePageImmediately(
         MainWindow& window,
         ui::WorkspacePageId page) {
-        const bool was_visible = window.isVisible();
-        if (was_visible) window.hide();
         window.setWorkspacePage(page);
-        if (was_visible) window.show();
+        QApplication::processEvents();
     }
 
     static void runProjectSettingsOnly(
@@ -600,9 +598,10 @@ public:
         QApplication::processEvents();
         setWorkspacePageImmediately(window, ui::WorkspacePageId::Render);
 
+        auto* render_settings = window.render_workspace_->settingsPanel();
         auto* render_page = window.render_workspace_->centralPage();
-        auto* container = render_page->findChild<QComboBox*>("renderContainerCombo");
-        auto* video_encoder = render_page->findChild<QComboBox*>("renderVideoEncoderCombo");
+        auto* container = render_settings->findChild<QComboBox*>("renderContainerCombo");
+        auto* video_encoder = render_settings->findChild<QComboBox*>("renderVideoEncoderCombo");
         auto* start_button = render_page->findChild<QPushButton*>("renderStartQueueButton");
         auto* controller = window.render_workspace_->findChild<ui::RenderQueueController*>();
         require(container != nullptr && video_encoder != nullptr &&
@@ -720,7 +719,7 @@ public:
 
         verifyRecoveryDurability(directory);
 
-        std::array<bool, 8> dock_visibility_before_close{};
+        std::array<bool, 9> dock_visibility_before_close{};
         {
             MainWindow render_window;
             render_window.show();
@@ -1164,11 +1163,12 @@ public:
                 render_window.preview_dock_, render_window.inspector_dock_);
             render_window.preview_dock_->raise();
             QApplication::processEvents();
-            const std::array<QDockWidget*, 8> docks{
+            const std::array<QDockWidget*, 9> docks{
                 render_window.bins_dock_, render_window.media_dock_,
                 render_window.toolbox_dock_, render_window.favorites_dock_,
                 render_window.effects_dock_, render_window.inspector_dock_,
-                render_window.preview_dock_, render_window.timeline_dock_};
+                render_window.preview_dock_, render_window.timeline_dock_,
+                render_window.render_settings_dock_};
             for (std::size_t index = 0; index < docks.size(); ++index) {
                 if (index == docks.size() - 1) {
                     docks[index]->hide();
@@ -1177,8 +1177,8 @@ public:
             }
             setWorkspacePageImmediately(render_window, ui::WorkspacePageId::Render);
             for (std::size_t index = 0; index < docks.size(); ++index) {
-                require(docks[index]->isVisible() == (index == docks.size() - 1),
-                        "Render must keep only the Timeline dock visible before the close-persistence check.");
+                require(docks[index]->isVisible() == (index == 7 || index == 8),
+                        "Render must show Timeline and Settings before the close-persistence check.");
             }
             require(render_window.close(),
                     "Closing the editor from Render must be accepted.");
@@ -1192,11 +1192,12 @@ public:
             MainWindow reopened_window;
             reopened_window.show();
             QApplication::processEvents();
-            const std::array<QDockWidget*, 8> docks{
+            const std::array<QDockWidget*, 9> docks{
                 reopened_window.bins_dock_, reopened_window.media_dock_,
                 reopened_window.toolbox_dock_, reopened_window.favorites_dock_,
                 reopened_window.effects_dock_, reopened_window.inspector_dock_,
-                reopened_window.preview_dock_, reopened_window.timeline_dock_};
+                reopened_window.preview_dock_, reopened_window.timeline_dock_,
+                reopened_window.render_settings_dock_};
             require(reopened_window.preview_dock_->isVisible() &&
                         reopened_window.preview_dock_->height() > 100,
                     "The Preview dock must remain available after reopening the editor.");
@@ -2187,27 +2188,31 @@ public:
                         window.render_workspace_->previewWidget() ==
                             window.preview_widget_,
                     "Render must show its settings, shared Preview, and queue page.");
-            auto* render_output_path = window.render_workspace_->centralPage()
+            auto* render_settings_panel = window.render_workspace_->settingsPanel();
+            auto* render_output_path = render_settings_panel
                 ->findChild<QLineEdit*>("renderOutputPath");
-            auto* add_render_job = window.render_workspace_->centralPage()
+            auto* add_render_job = render_settings_panel
                 ->findChild<QPushButton*>("renderAddToQueueButton");
             auto* start_render_queue = window.render_workspace_->centralPage()
                 ->findChild<QPushButton*>("renderStartQueueButton");
             auto* cancel_render_queue = window.render_workspace_->centralPage()
                 ->findChild<QPushButton*>("renderCancelQueueButton");
-            auto* gpu_export = window.render_workspace_->centralPage()->findChild<QCheckBox*>("renderGpuCompositionCheck");
+            auto* gpu_export = render_settings_panel->findChild<QCheckBox*>("renderGpuCompositionCheck");
             require(gpu_export && !gpu_export->isChecked() && !gpu_export->accessibleDescription().isEmpty(),
                 "Render GPU option must default off and describe fallback accessibly.");
             gpu_export->setChecked(true);
-            require(window.workspace_host_->renderPage()->findChild<QWidget*>(
-                        "renderSettingsPanel") != nullptr &&
+            require(render_settings_panel != nullptr &&
+                        window.render_settings_dock_->widget() == render_settings_panel &&
+                        window.dockWidgetArea(window.render_settings_dock_) ==
+                            Qt::LeftDockWidgetArea &&
+                        window.render_settings_dock_->isVisible() &&
                         window.workspace_host_->renderPage()->findChild<QWidget*>(
                             "renderPreviewPanel") != nullptr &&
                         window.workspace_host_->renderPage()->findChild<QWidget*>(
                             "renderQueuePanel") != nullptr &&
                         render_output_path != nullptr && add_render_job != nullptr &&
                         start_render_queue != nullptr && cancel_render_queue != nullptr,
-                    "Render must expose settings, the shared Preview, and queue from left to right.");
+                    "Render must expose Settings in the left dock and Preview and Queue in the center.");
             render_output_path->setText(QString::fromStdString(
                 (directory / "queued-render.mp4").string()));
             const auto project_before_queue_add = window.currentProjectDocument();
@@ -2226,7 +2231,7 @@ public:
                 window.currentProjectDocument() == project_before_queue_add,
                 "Changing the GPU export option mutated the prepared job or project.");
             auto* export_controller = window.render_workspace_->findChild<ui::RenderQueueController*>();
-            auto* gpu_warning = window.render_workspace_->centralPage()->findChild<QLabel*>("renderGpuWarning");
+            auto* gpu_warning = render_settings_panel->findChild<QLabel*>("renderGpuWarning");
             require(export_controller && gpu_warning && gpu_warning->isHidden(), "GPU warning must start hidden.");
             export_controller->jobWarning(queued_render_job->id, "Export is continuing with CPU fallback.", "-37");
             require(!gpu_warning->isHidden() && gpu_warning->text().contains("CPU fallback") &&

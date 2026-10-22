@@ -29,7 +29,8 @@ public:
         RenderWorkspace* render_workspace,
         QWidget* parent = nullptr);
 
-    void setPage(WorkspacePageId page);
+    void setPage(WorkspacePageId page,
+                 bool refresh_central_workspace = true);
     void refreshCentralWorkspaceVisibility();
     [[nodiscard]] WorkspacePageId currentPage() const noexcept;
 

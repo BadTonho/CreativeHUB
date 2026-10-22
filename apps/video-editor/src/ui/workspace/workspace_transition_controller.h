@@ -3,6 +3,7 @@
 #include "ui/workspace/workspace_page_id.h"
 
 #include <QObject>
+#include <QMainWindow>
 
 #include <array>
 #include <functional>
@@ -11,6 +12,7 @@
 #include <QByteArray>
 
 class QDockWidget;
+class QEvent;
 class QPushButton;
 
 namespace ui {
@@ -30,6 +32,7 @@ public:
         QDockWidget* inspector = nullptr;
         QDockWidget* preview = nullptr;
         QDockWidget* timeline = nullptr;
+        QDockWidget* render_settings = nullptr;
     };
 
     struct Selectors {
@@ -48,19 +51,33 @@ public:
     void prepareForClose();
     void setPageChangedHandler(std::function<void(WorkspacePageId)> handler);
 
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
-    [[nodiscard]] std::array<QDockWidget*, 8> dockWidgets() const noexcept;
+    [[nodiscard]] std::array<QDockWidget*, 9> dockWidgets() const noexcept;
     void updateSelectors(WorkspacePageId page);
     void applyPage(WorkspacePageId page);
     void applyQueuedPage();
+    void scheduleRenderSettingsDockResize();
+    void resizeRenderSettingsDock();
 
     WorkspaceHost* workspace_host_ = nullptr;
+    QMainWindow* render_main_window_ = nullptr;
     WorkspacePageTransition* page_transition_ = nullptr;
     DockWidgets docks_;
     Selectors selectors_;
     QByteArray dock_layout_before_render_;
-    std::array<bool, 8> dock_visibility_before_render_{};
+    std::array<bool, 9> dock_visibility_before_render_{};
     bool has_render_dock_visibility_snapshot_ = false;
+    bool render_settings_resize_pending_ = false;
+    bool preparing_for_close_ = false;
+    bool deferred_page_change_pending_ = false;
+    unsigned int deferred_page_change_generation_ = 0;
+    Qt::DockWidgetArea render_bottom_left_corner_before_render_ =
+        Qt::BottomDockWidgetArea;
+    Qt::DockWidgetArea render_bottom_right_corner_before_render_ =
+        Qt::BottomDockWidgetArea;
     std::optional<WorkspacePageId> queued_page_;
     std::function<void(WorkspacePageId)> page_changed_handler_;
 };

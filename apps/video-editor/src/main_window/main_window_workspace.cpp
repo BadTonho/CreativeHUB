@@ -635,6 +635,16 @@ void MainWindow::createWorkspace() {
         workspace_host_->lowerWorkspacePanel());
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 
+    render_settings_dock_ = new QDockWidget(
+        QCoreApplication::translate("RenderWorkspace", "Render Settings"),
+        this);
+    render_settings_dock_->setObjectName("renderSettingsDock");
+    render_settings_dock_->setAllowedAreas(Qt::LeftDockWidgetArea);
+    render_settings_dock_->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    render_settings_dock_->setMinimumWidth(0);
+    render_settings_dock_->setWidget(render_workspace_->settingsPanel());
+    render_settings_dock_->hide();
+
     workspace_transition_controller_ =
         new ui::WorkspaceTransitionController(
             workspace_host_,
@@ -646,7 +656,8 @@ void MainWindow::createWorkspace() {
                 effects_dock_,
                 inspector_dock_,
                 preview_dock_,
-                timeline_dock_},
+                timeline_dock_,
+                render_settings_dock_},
             {
                 edit_workspace_button_,
                 fusion_workspace_button_,
@@ -1443,7 +1454,9 @@ void MainWindow::schedulePreviewDockLayoutUpdate() {
 
 void MainWindow::updatePreviewDockLayout() {
     if (restoring_default_dock_layout_ || preview_dock_ == nullptr ||
-        !isVisible() || preview_side_layout_restore_pending_) {
+        !isVisible() || preview_side_layout_restore_pending_ ||
+        (workspace_host_ != nullptr &&
+         workspace_host_->currentPage() == ui::WorkspacePageId::Render)) {
         return;
     }
 

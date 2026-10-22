@@ -128,8 +128,8 @@ private:
     std::vector<rendering::RenderContainerOption> containers_;
     int project_width_ = 1920;
     int project_height_ = 1080;
-    std::array<int, 3> horizontal_splitter_sizes_{480, 860, 570};
-    std::array<int, 3> vertical_splitter_sizes_{360, 620, 360};
+    std::array<int, 2> horizontal_splitter_sizes_{860, 570};
+    std::array<int, 2> vertical_splitter_sizes_{620, 360};
     bool active_ = false;
     bool compact_layout_ = false;
     bool frame_rate_user_modified_ = false;

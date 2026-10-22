@@ -23,6 +23,7 @@
 #include <QScrollBar>
 #include <QSettings>
 #include <QStackedWidget>
+#include <QStatusBar>
 #include <QSplitter>
 #include <QSpinBox>
 #include <QToolBar>
@@ -190,6 +191,14 @@ int main(int argc, char* argv[]) {
         lower_dock->setWidget(workspace_host->lowerWorkspacePanel());
         window.addDockWidget(Qt::BottomDockWidgetArea, lower_dock);
 
+        auto* render_settings_dock = new QDockWidget("Render Settings", &window);
+        render_settings_dock->setObjectName("renderSettingsDock");
+        render_settings_dock->setAllowedAreas(Qt::LeftDockWidgetArea);
+        render_settings_dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+        render_settings_dock->setMinimumWidth(0);
+        render_settings_dock->setWidget(render_workspace->settingsPanel());
+        render_settings_dock->hide();
+
         const auto create_dock = [&window](const QString& title) {
             auto* dock = new QDockWidget(title, &window);
             dock->setObjectName(title + "Dock");
@@ -217,7 +226,8 @@ int main(int argc, char* argv[]) {
                 effects_dock,
                 inspector_dock,
                 preview_dock,
-                lower_dock},
+                lower_dock,
+                render_settings_dock},
             {buttons.edit, buttons.fusion, buttons.render},
             &window);
         std::vector<ui::WorkspacePageId> page_changes;
@@ -227,7 +237,8 @@ int main(int argc, char* argv[]) {
             });
         transition_controller.setPage(ui::WorkspacePageId::Edit);
 
-        window.resize(1400, 720);
+        window.resize(1920, 720);
+        window.statusBar()->show();
         window.show();
         application.processEvents();
 
@@ -286,7 +297,7 @@ int main(int argc, char* argv[]) {
                     activated_local_frame == 0 && preview_target_clears == 0,
                 "Entering Fusion must request its Output preview and activate the clip at frame zero.");
 
-        const std::array<QDockWidget*, 8> workspace_docks{
+        const std::array<QDockWidget*, 9> workspace_docks{
             bins_dock,
             media_dock,
             toolbox_dock,
@@ -294,15 +305,32 @@ int main(int argc, char* argv[]) {
             effects_dock,
             inspector_dock,
             preview_dock,
-            lower_dock};
-        const std::array<bool, 8> visibility_before_render{
-            false, true, false, true, false, true, true, false};
+            lower_dock,
+            render_settings_dock};
+        const std::array<bool, 9> visibility_before_render{
+            false, true, false, true, false, true, true, false, false};
+        const auto timeline_area_before_render =
+            window.dockWidgetArea(lower_dock);
+        const auto settings_area_before_render =
+            window.dockWidgetArea(render_settings_dock);
+        const auto bottom_left_corner_before_render =
+            window.corner(Qt::BottomLeftCorner);
+        const auto bottom_right_corner_before_render =
+            window.corner(Qt::BottomRightCorner);
+        require(timeline_area_before_render == Qt::BottomDockWidgetArea,
+                "The test must begin Render with the Timeline in its normal bottom dock.");
         for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
             workspace_docks[index]->setVisible(visibility_before_render[index]);
         }
+        settleEventLoop(30);
+        const auto dock_layout_before_render = window.saveState(9);
 
         buttons.render->click();
-        application.processEvents();
+        require(waitUntil([&] {
+                    return render_settings_dock->width() >= 460 &&
+                        render_settings_dock->width() <= 500;
+                }, 500),
+                "The Render Settings dock did not settle at its initial width.");
         require(!buttons.edit->isChecked() && !buttons.fusion->isChecked() &&
                     buttons.render->isChecked(),
                 "Selecting Render must select only the Render button.");
@@ -321,47 +349,80 @@ int main(int argc, char* argv[]) {
         require(!fusion_workspace->isActive() && preview_target_clears == 1,
                 "Leaving Fusion for Render must clear its temporary preview target.");
         require(workspace_host->lowerWorkspacePanel()->currentWidget() == timeline,
-                "Render must keep the shared Timeline page in the lower workspace dock.");
+                "Render must keep the shared Timeline page in its bottom dock.");
+        require(window.dockWidgetArea(lower_dock) == Qt::BottomDockWidgetArea &&
+                    lower_dock->isVisible() &&
+                    window.dockWidgetArea(render_settings_dock) ==
+                        Qt::LeftDockWidgetArea &&
+                    render_settings_dock->isVisible() &&
+                    render_settings_dock->width() >= 460 &&
+                    render_settings_dock->width() <= 500 &&
+                    window.corner(Qt::BottomLeftCorner) ==
+                        Qt::LeftDockWidgetArea,
+                "Render must show full-height Settings on the left and keep Timeline below the center and right columns.");
+        auto* status_bar = window.statusBar();
+        const auto settings_origin = render_settings_dock->mapTo(
+            &window, QPoint(0, 0));
+        const auto settings_bottom = settings_origin.y() +
+            render_settings_dock->height();
+        const auto render_page_origin = workspace_host->renderPage()->mapTo(
+            &window, QPoint(0, 0));
+        const auto render_page_bottom = render_page_origin.y() +
+            workspace_host->renderPage()->height();
+        const auto timeline_origin = lower_dock->mapTo(&window, QPoint(0, 0));
+        const auto status_origin = status_bar->mapTo(&window, QPoint(0, 0));
+        require(status_bar->isVisible() &&
+                    std::abs(settings_origin.y() - render_page_origin.y()) <= 3 &&
+                    std::abs(settings_bottom - status_origin.y()) <= 3 &&
+                    timeline_origin.x() >=
+                        settings_origin.x() + render_settings_dock->width() - 3 &&
+                    std::abs(render_page_bottom - timeline_origin.y()) <= 8,
+                "Settings must reach the application footer while Timeline remains below Preview and Queue.");
+        const auto initial_settings_width = render_settings_dock->width();
+        window.resizeDocks({render_settings_dock}, {560}, Qt::Horizontal);
+        application.processEvents();
+        require(render_settings_dock->width() >= initial_settings_width + 40,
+                "The Render Settings dock must remain resizable.");
         auto* render_splitter = render_workspace->splitter();
         auto* render_page_scroll = workspace_host->renderPage()->findChild<QScrollArea*>(
             "renderWorkspaceScrollArea");
-        auto* settings_scroll = workspace_host->renderPage()->findChild<QScrollArea*>(
+        auto* settings_scroll = render_workspace->settingsPanel()->findChild<QScrollArea*>(
             "renderSettingsScrollArea");
-        auto* output_path = workspace_host->renderPage()->findChild<QLineEdit*>(
+        auto* output_path = render_workspace->settingsPanel()->findChild<QLineEdit*>(
             "renderOutputPath");
-        auto* browse_output = workspace_host->renderPage()->findChild<QPushButton*>(
+        auto* browse_output = render_workspace->settingsPanel()->findChild<QPushButton*>(
             "renderBrowseOutputButton");
-        auto* container_combo = workspace_host->renderPage()->findChild<QComboBox*>(
+        auto* container_combo = render_workspace->settingsPanel()->findChild<QComboBox*>(
             "renderContainerCombo");
-        auto* video_encoder_combo = workspace_host->renderPage()->findChild<QComboBox*>(
+        auto* video_encoder_combo = render_workspace->settingsPanel()->findChild<QComboBox*>(
             "renderVideoEncoderCombo");
-        auto* frame_rate_spin = workspace_host->renderPage()->findChild<QDoubleSpinBox*>(
+        auto* frame_rate_spin = render_workspace->settingsPanel()->findChild<QDoubleSpinBox*>(
             "renderFrameRate");
-        auto* resolution_combo = workspace_host->renderPage()->findChild<QComboBox*>(
+        auto* resolution_combo = render_workspace->settingsPanel()->findChild<QComboBox*>(
             "renderResolutionCombo");
-        auto* custom_width = workspace_host->renderPage()->findChild<QSpinBox*>(
+        auto* custom_width = render_workspace->settingsPanel()->findChild<QSpinBox*>(
             "renderCustomWidth");
-        auto* custom_height = workspace_host->renderPage()->findChild<QSpinBox*>(
+        auto* custom_height = render_workspace->settingsPanel()->findChild<QSpinBox*>(
             "renderCustomHeight");
-        auto* quality_preset = workspace_host->renderPage()->findChild<QComboBox*>(
+        auto* quality_preset = render_workspace->settingsPanel()->findChild<QComboBox*>(
             "renderQualityPresetCombo");
-        auto* video_bitrate = workspace_host->renderPage()->findChild<QDoubleSpinBox*>(
+        auto* video_bitrate = render_workspace->settingsPanel()->findChild<QDoubleSpinBox*>(
             "renderVideoBitrate");
-        auto* audio_bitrate = workspace_host->renderPage()->findChild<QSpinBox*>(
+        auto* audio_bitrate = render_workspace->settingsPanel()->findChild<QSpinBox*>(
             "renderAudioBitrate");
-        auto* add_to_queue = workspace_host->renderPage()->findChild<QPushButton*>(
+        auto* add_to_queue = render_workspace->settingsPanel()->findChild<QPushButton*>(
             "renderAddToQueueButton");
         auto* start_queue = workspace_host->renderPage()->findChild<QPushButton*>(
             "renderStartQueueButton");
         auto* cancel_queue = workspace_host->renderPage()->findChild<QPushButton*>(
             "renderCancelQueueButton");
-        require(render_splitter != nullptr && render_splitter->count() == 3 &&
+        require(render_splitter != nullptr && render_splitter->count() == 2 &&
                     render_workspace->settingsPanel() != nullptr &&
                     render_workspace->previewPanel() != nullptr &&
                     render_workspace->queuePanel() != nullptr &&
-                    render_splitter->widget(0) == render_workspace->settingsPanel() &&
-                    render_splitter->widget(1) == render_workspace->previewPanel() &&
-                    render_splitter->widget(2) == render_workspace->queuePanel() &&
+                    render_settings_dock->widget() == render_workspace->settingsPanel() &&
+                    render_splitter->widget(0) == render_workspace->previewPanel() &&
+                    render_splitter->widget(1) == render_workspace->queuePanel() &&
                     render_workspace->previewPanel()->findChild<QWidget*>(
                         "sharedPreview") == preview && output_path != nullptr &&
                     render_page_scroll != nullptr && settings_scroll != nullptr &&
@@ -376,16 +437,16 @@ int main(int argc, char* argv[]) {
                     cancel_queue->accessibleName() ==
                         QStringLiteral("Cancel current render queue") &&
                     !start_queue->isEnabled() && !cancel_queue->isEnabled(),
-                "Render must show settings, Preview, and queue columns in order.");
+                "Render must show Settings in its left dock with Preview and Queue in the central columns.");
         const auto initial_column_sizes = render_splitter->sizes();
-        require(initial_column_sizes.size() == 3 &&
-                    initial_column_sizes[1] > initial_column_sizes[0] &&
-                    initial_column_sizes[1] > initial_column_sizes[2] &&
+        require(initial_column_sizes.size() == 2 &&
+                    initial_column_sizes[0] > initial_column_sizes[1] &&
                     render_splitter->orientation() == Qt::Horizontal,
-                "Render must initially give the Preview the widest column.");
+                "Render must initially keep Preview wider than Queue.");
 
         window.resize(520, 420);
         application.processEvents();
+        waitUntil([&] { return render_settings_dock->width() <= 220; }, 100);
         const auto browse_position = browse_output->mapTo(
             settings_scroll->viewport(), QPoint(0, 0));
         const QRect browse_rect(browse_position, browse_output->size());
@@ -393,16 +454,21 @@ int main(int argc, char* argv[]) {
             settings_scroll->viewport(), QPoint(0, 0));
         const QRect encoder_rect(encoder_position, video_encoder_combo->size());
         require(render_splitter->orientation() == Qt::Vertical &&
-                    render_splitter->widget(0) == render_workspace->settingsPanel() &&
-                    render_splitter->widget(1) == render_workspace->previewPanel() &&
-                    render_splitter->widget(2) == render_workspace->queuePanel(),
-                "A narrow Render page must stack Settings, Preview, and Queue.");
-        require(render_page_scroll->horizontalScrollBar()->maximum() == 0 &&
-                    settings_scroll->horizontalScrollBar()->maximum() == 0 &&
-                    render_page_scroll->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded &&
-                    render_page_scroll->verticalScrollBar()->maximum() > 0 &&
-                    render_workspace->previewWidget() == preview &&
-                    render_workspace->queueModel()->jobCount() == 0,
+                    render_splitter->widget(0) == render_workspace->previewPanel() &&
+                    render_splitter->widget(1) == render_workspace->queuePanel() &&
+                    render_settings_dock->width() <= 220 &&
+                    render_settings_dock->width() >= 180,
+                "A narrow Render window must keep Settings accessible and stack only Preview and Queue.");
+        const auto page_hmax = render_page_scroll->horizontalScrollBar()->maximum();
+        const auto settings_hmax = settings_scroll->horizontalScrollBar()->maximum();
+        const auto page_vpolicy = render_page_scroll->verticalScrollBarPolicy();
+        const auto page_vmax = render_page_scroll->verticalScrollBar()->maximum();
+        const auto settings_visible = render_settings_dock->isVisible();
+        const auto preview_shared = render_workspace->previewWidget() == preview;
+        const auto queued_count = render_workspace->queueModel()->jobCount();
+        require(page_hmax == 0 && settings_hmax == 0 &&
+                    page_vpolicy == Qt::ScrollBarAsNeeded && page_vmax > 0 &&
+                    settings_visible && preview_shared && queued_count == 0,
                 "A compact Render page must retain vertical access and its existing state.");
         require(browse_output->isVisible() &&
                     settings_scroll->viewport()->rect().contains(browse_rect),
@@ -410,7 +476,7 @@ int main(int argc, char* argv[]) {
         require(add_to_queue->parentWidget() == render_workspace->settingsPanel() &&
                     add_to_queue->isVisible() &&
                     add_to_queue->geometry().top() > settings_scroll->geometry().bottom() &&
-                    render_workspace->centralPage()->findChildren<QPushButton*>(
+                    render_workspace->settingsPanel()->findChildren<QPushButton*>(
                         "renderAddToQueueButton").size() == 1,
                 "Add to Queue must be the single fixed footer button in Render Settings.");
         require(encoder_rect.left() >= 0 &&
@@ -441,16 +507,15 @@ int main(int argc, char* argv[]) {
                 "The Add to Queue footer must stay visible while Settings are scrolled.");
         settings_scrollbar->setValue(0);
 
-        window.resize(1400, 720);
+        window.resize(1920, 720);
         application.processEvents();
         const auto restored_column_sizes = render_splitter->sizes();
         require(render_splitter->orientation() == Qt::Horizontal &&
-                    restored_column_sizes.size() == 3 &&
-                    restored_column_sizes[1] > restored_column_sizes[0] &&
-                    restored_column_sizes[1] > restored_column_sizes[2] &&
+                    restored_column_sizes.size() == 2 &&
+                    restored_column_sizes[0] > restored_column_sizes[1] &&
                     render_workspace->previewWidget() == preview && preview->isVisible() &&
                     render_workspace->queueModel()->jobCount() == 0,
-                "Widening Render must restore the three columns without losing state.");
+                "Widening Render must restore the two central columns without losing state.");
         require(frame_rate_spin->value() == 23.976 && container_combo->count() > 0 &&
                     video_encoder_combo->count() > 0 &&
                     resolution_combo->currentData().toSize() == QSize(1920, 1080) &&
@@ -460,7 +525,7 @@ int main(int argc, char* argv[]) {
                 "Render must initialize project-derived FPS and discover encoders at runtime.");
         require(!add_to_queue->isEnabled(),
                 "Render must require an output path before adding a job.");
-        auto* hardware_decode = render_workspace->centralPage()->findChild<QCheckBox*>("renderHardwareDecodingCheck");
+        auto* hardware_decode = render_workspace->settingsPanel()->findChild<QCheckBox*>("renderHardwareDecodingCheck");
         require(hardware_decode && !hardware_decode->isChecked() &&
             !video_encoder_combo->currentData(Qt::UserRole + 1).toBool(),
             "Experimental decoding and encoders must remain off by default.");
@@ -514,13 +579,12 @@ int main(int argc, char* argv[]) {
                     prepared_job->project_snapshot.timeline_tracks.front().name ==
                         "Video 1",
                 "Narrowing Render must preserve edited settings and the queued snapshot.");
-        window.resize(1400, 720);
+        window.resize(1920, 720);
         application.processEvents();
         const auto job_restored_column_sizes = render_splitter->sizes();
         require(render_splitter->orientation() == Qt::Horizontal &&
-                    job_restored_column_sizes.size() == 3 &&
-                    job_restored_column_sizes[1] > job_restored_column_sizes[0] &&
-                    job_restored_column_sizes[1] > job_restored_column_sizes[2] &&
+                    job_restored_column_sizes.size() == 2 &&
+                    job_restored_column_sizes[0] > job_restored_column_sizes[1] &&
                     frame_rate_spin->value() == 48.0 &&
                     render_workspace->queueModel()->jobCount() == 1 &&
                     prepared_job->settings.frame_rate == 23.976 &&
@@ -528,8 +592,9 @@ int main(int argc, char* argv[]) {
                         "Video 1",
                 "Widening Render must restore its columns and retain settings and jobs.");
         for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
-            require(workspace_docks[index]->isVisible() == (index == 7),
-                    "Render must show only the Timeline dock.");
+            require(workspace_docks[index]->isVisible() ==
+                        (index == 7 || index == 8),
+                    "Render must leave only Timeline and Render Settings visible.");
         }
 
         buttons.render->click();
@@ -554,6 +619,16 @@ int main(int argc, char* argv[]) {
                 "Leaving Render must return the Preview to its dock contents.");
         require(!render_workspace->isActive() && !timeline_read_only,
                 "Leaving Render for Fusion must restore Timeline interaction.");
+        require(window.dockWidgetArea(lower_dock) == timeline_area_before_render &&
+                    lower_dock->isHidden() &&
+                    window.dockWidgetArea(render_settings_dock) ==
+                        settings_area_before_render &&
+                    render_settings_dock->isHidden() &&
+                    window.corner(Qt::BottomLeftCorner) ==
+                        bottom_left_corner_before_render &&
+                    window.corner(Qt::BottomRightCorner) ==
+                        bottom_right_corner_before_render,
+                "Leaving Render must restore the Timeline's previous dock area and hidden state.");
         require(workspace_host->lowerWorkspacePanel()->currentWidget() ==
                     workspace_host->nodeEditorPanel() &&
                     workspace_host->inspectorPanel()->currentWidget() ==
@@ -564,6 +639,9 @@ int main(int argc, char* argv[]) {
                         visibility_before_render[index],
                     "Returning from Render must restore each dock's prior visibility.");
         }
+        settleEventLoop(130);
+        require(window.saveState(9) == dock_layout_before_render,
+                "Leaving Render must restore the complete dock layout, including positions and sizes.");
 
         buttons.edit->click();
         application.processEvents();
@@ -593,14 +671,20 @@ int main(int argc, char* argv[]) {
         buttons.render->click();
         application.processEvents();
         require(preview_dock->isHidden() && preview->isVisible() &&
+                    window.dockWidgetArea(lower_dock) == Qt::BottomDockWidgetArea &&
+                    lower_dock->isVisible() &&
+                    render_settings_dock->isVisible() &&
                     render_workspace->previewWidget() == preview,
-                "Render must use the shared Preview without changing its prior hidden dock state.");
+                "Render must keep its Settings dock and show the previously hidden Timeline at the bottom.");
         buttons.edit->click();
         application.processEvents();
         require(preview_dock->isHidden() &&
+                    window.dockWidgetArea(lower_dock) == Qt::BottomDockWidgetArea &&
+                    lower_dock->isHidden() &&
+                    render_settings_dock->isHidden() &&
                     preview->parentWidget() == preview_canvas_area &&
                     render_workspace->previewWidget() == nullptr,
-                "Leaving Render must restore a previously hidden Preview to its dock.");
+                "Leaving Render must restore the previously hidden Timeline, Preview, and Settings docks.");
         preview_dock->show();
 
         preview_dock->setFloating(true);
@@ -618,8 +702,8 @@ int main(int argc, char* argv[]) {
         window.splitDockWidget(preview_dock, inspector_dock, Qt::Horizontal);
         application.processEvents();
 
-        const std::array<bool, 8> visibility_before_close{
-            true, false, true, false, true, false, true, true};
+        const std::array<bool, 9> visibility_before_close{
+            true, false, true, false, true, false, true, true, false};
         for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
             workspace_docks[index]->setVisible(visibility_before_close[index]);
         }

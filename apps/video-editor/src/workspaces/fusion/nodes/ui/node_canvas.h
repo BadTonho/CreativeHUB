@@ -44,6 +44,7 @@ class NodeCanvas final : public QGraphicsView {
     Q_OBJECT
 public:
     explicit NodeCanvas(QWidget* parent = nullptr);
+    ~NodeCanvas() override;
     [[nodiscard]] BackgroundGridSettings backgroundGridSettings() const noexcept {
         return grid_settings_;
     }
