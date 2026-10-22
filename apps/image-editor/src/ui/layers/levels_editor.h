@@ -21,7 +21,7 @@
 
 namespace image_editor {
 
-class LevelsHistogram final : public QWidget {
+class LevelsHistogram : public QWidget {
 public:
     using Bins = std::array<std::uint64_t, 256>;
     explicit LevelsHistogram(QWidget* parent) : QWidget(parent) {

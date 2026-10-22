@@ -455,7 +455,7 @@ See [Image execution evidence](../../image-editor/features/BLEND_MODES.md#window
 
 ## Image v20 adjustment backup coverage
 
-Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future unsupported Image versions are refused; current v24 coverage is below. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
+Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future unsupported Image versions are refused; current v25 coverage is below. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
 
 ## Image v21 adjustment backup coverage
 
@@ -496,7 +496,17 @@ UI/platform acceptance remains pending.
 `hub-backup-format-test` preserves all five Levels fields alongside earlier
 adjustments, masks and relocated media, then reopens the vault and restored
 documents with the Image Editor reader. `hub-backup-manager-test` accepts v24
-and rejects v25. Both tests passed in Windows Release on 2026-10-22; the
+and rejects v25 in the recorded v24 gate. Both tests passed in Windows Release on 2026-10-22; the
 manager test required access to its user data directory outside the workspace
 sandbox. Native backup UI/platform acceptance remains pending. See the
 [Levels contract](../../image-editor/features/LEVELS.md).
+
+## Image v25 Curves backup coverage
+
+The format gate preserves Curves points, older adjustments, masks and rebased
+media, reopening v25 vault and relocated restores with the Image reader. The
+manager gate accepts v25 and rejects future v26. Both gates passed in Windows
+Release on 2026-10-22; the manager gate required access to its user data
+directory outside the workspace sandbox. Native Hub UI/platform acceptance
+remains pending. See the
+[Curves contract](../../image-editor/features/CURVES.md).

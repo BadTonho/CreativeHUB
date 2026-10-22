@@ -13,6 +13,8 @@ namespace image_editor::ui {
     QT_TRANSLATE_NOOP("ImageEditorUI", "A Hue/Saturation adjustment is invalid."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "A Levels adjustment is invalid."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "An adjustment has incompatible Levels fields."),
+    QT_TRANSLATE_NOOP("ImageEditorUI", "A Curves adjustment is invalid."),
+    QT_TRANSLATE_NOOP("ImageEditorUI", "An adjustment has incompatible Curves fields."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "An Exposure / Offset / Gamma adjustment is invalid."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "A Brightness/Contrast adjustment is invalid."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "A layer outline has invalid properties."),

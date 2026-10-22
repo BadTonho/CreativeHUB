@@ -4,7 +4,7 @@
 
 Layers > New Adjustment Layer > Levels creates the fifth adjustment kind. It
 applies the same encoded-sRGB mapping to red, green and blue. Individual channel
-controls and Curves remain planned separately. A single selected layer,
+controls remain planned; [Curves](CURVES.md) is a separate adjustment kind. A single selected layer,
 Background or group is required. The layer is inserted above the selected
 sibling or clipping chain, retains group ownership, and captures an active area
 selection as its independent initial mask; otherwise its mask starts white.
@@ -55,7 +55,7 @@ Video/Motion adjustment registries and document formats do not change.
 
 ## Format and compatibility
 
-The `.cimg` v24 writer reads v1–23. A Levels layer stores
+Levels was introduced in `.cimg` v24; the current v25 writer reads v1–24. A Levels layer stores
 `{"kind":"adjustment","adjustment":{"type":"levels","input_black":20,"input_white":230,"gamma":1.4,"output_black":10,"output_white":240}}`.
 All five values are required. Reject the type before v24, fractional or
 out-of-range integer controls, nonfinite/out-of-range gamma, crossed points,
@@ -63,7 +63,7 @@ extra adjustment fields, incompatible Background/content/outline fields and
 future versions. A failed Open leaves the active document unchanged. Recovery
 envelope v1, application version and linked PNG protocol remain unchanged.
 Earlier binaries cannot open v24 and there is no downgrade writer. Hub accepts
-Image v1–24, rejects v25, and retains adjustment masks and media paths across
+Image v1–25, rejects v26, and retains adjustment masks and media paths across
 backup and relocation.
 
 ## Regression and acceptance

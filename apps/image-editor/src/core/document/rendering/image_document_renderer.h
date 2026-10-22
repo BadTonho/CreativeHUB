@@ -39,7 +39,12 @@ public:
         const std::atomic_bool* cancellation_requested = nullptr,
         ImageLayerRasterCache* layer_raster_cache = nullptr);
     using Histogram = std::array<std::uint64_t, 256>;
-    // Combined straight RGB distribution at the selected Levels layer's input.
+    // Combined straight RGB distribution before a Levels or Curves layer.
+    [[nodiscard]] static std::optional<Histogram> adjustmentInputHistogram(
+        const ImageDocumentData& document, const QImage& source_image,
+        const QHash<QString, QImage>& raster_images, const QString& layer_id,
+        const std::atomic_bool* cancellation_requested = nullptr);
+    // Compatibility entry point for the existing Levels model contract.
     [[nodiscard]] static std::optional<Histogram> levelsHistogram(
         const ImageDocumentData& document, const QImage& source_image,
         const QHash<QString, QImage>& raster_images, const QString& layer_id,

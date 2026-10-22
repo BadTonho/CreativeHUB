@@ -100,6 +100,7 @@ bool testBrightnessContrastUi(const QString& root);
 bool testExposureOffsetGammaUi(const QString& root);
 bool testHueSaturationUi(const QString& root);
 bool testLevelsUi(const QString& root);
+bool testCurvesUi(const QString& root);
 bool testLayerBlendUi(const QString& root);
 
 namespace {
@@ -3955,6 +3956,9 @@ int main(int argc, char* argv[]) {
     if (application.arguments().contains(QStringLiteral("--levels-only"))) {
         return testLevelsUi(temporary.path()) ? 0 : 1;
     }
+    if (application.arguments().contains(QStringLiteral("--curves-only"))) {
+        return testCurvesUi(temporary.path()) ? 0 : 1;
+    }
     if (application.arguments().contains(QStringLiteral("--exposure-offset-gamma-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testExposureOffsetGammaUi(temporary.path()) ? 0 : 1;
@@ -4166,6 +4170,7 @@ int main(int argc, char* argv[]) {
     if (!testExposureOffsetGammaUi(temporary.path())) return 1;
     if (!testHueSaturationUi(temporary.path())) return 1;
     if (!testLevelsUi(temporary.path())) return 1;
+    if (!testCurvesUi(temporary.path())) return 1;
     if (!testEyedropperTool()) return 1;
     if (!testBucketFillTool()) return 1;
     if (!testMagicWandTool()) return 1;

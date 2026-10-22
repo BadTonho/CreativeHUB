@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 24; host links live in the Video Editor's
+  The `.cimg` schema is version 25; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -719,7 +719,7 @@ See [parameters, scope, errors and verification](../features/GRADIENT_MAP.md).
 
 ## Typed adjustments
 
-Shared `AdjustmentParameters` is a variant of Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, Hue/Saturation and Levels.
+Shared `AdjustmentParameters` is a variant of Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, Hue/Saturation, Levels and Curves.
 The Image session owns typed editing/history and stack scope; effects owns RGB
 math and validation. CPU adapter and native raster shader dispatch by type, reusing
 mask/content caches and preserving alpha. [Contract](../features/BRIGHTNESS_CONTRAST.md).
@@ -755,8 +755,21 @@ CPU and OpenGL render at the selected layer's backdrop with unchanged alpha,
 preserving the neutral Normal byte path and cached source textures. The
 asynchronous histogram captures this backdrop before Levels and samples at
 most one million nontransparent pixels; it does not affect rendering or the
-persisted document. The codec writes v24; Hub accepts v1–24. See the
+persisted document. The codec writes v25; Hub accepts v1–25. See the
 [Levels contract](../features/LEVELS.md).
+
+## Global Curves processing
+
+The sixth adjustment adds a validated, shape-preserving cubic Hermite curve to
+the shared Qt-free effects variant. The CPU builds one 256-byte table per
+adjustment operation; the OpenGL raster pass packs the same table into 64
+`vec4` uniforms. Encoded-sRGB channels index the table independently while the
+existing mask/blend path preserves alpha. No content texture is reuploaded for
+point edits. The Image Editor owns points, gestures, history, stack scope and
+errors. Levels and Curves share the asynchronous pre-adjustment histogram
+capture; it is neither part of the document nor recalculated for parameter
+edits. The codec writes v25 and Hub accepts v1–25. See the
+[Curves contract](../features/CURVES.md).
 
 Raster cache synchronization consumes QHash's erase-returned iterator because
 bucket compaction can relocate a successor. Byte accounting remains centralized

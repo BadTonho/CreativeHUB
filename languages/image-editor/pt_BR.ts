@@ -3,6 +3,12 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>ImageEditorUI</name>
+    <message><source>Curves</source><translation>Curvas</translation></message>
+    <message><source>Curves graph</source><translation>Gráfico de curvas</translation></message>
+    <message><source>Input</source><translation>Entrada</translation></message>
+    <message><source>Output</source><translation>Saída</translation></message>
+    <message><source>A Curves adjustment is invalid.</source><translation>Um ajuste de Curvas é inválido.</translation></message>
+    <message><source>An adjustment has incompatible Curves fields.</source><translation>Um ajuste contém campos de Curvas incompatíveis.</translation></message>
     <message><source>Levels</source><translation>Níveis</translation></message>
     <message><source>Input histogram</source><translation>Histograma de entrada</translation></message>
     <message><source>Input Black</source><translation>Preto de entrada</translation></message>

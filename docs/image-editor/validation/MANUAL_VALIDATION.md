@@ -1132,3 +1132,28 @@ GPU/driver, canvas dimensions and outcome; use copies of original images.
    recovery. Keep native results separate from offscreen checks.
 
 Automated mapping: [Levels contract](../features/LEVELS.md).
+
+## Global Curves adjustments
+
+Status: owner visual/native acceptance pending. Record OS, Qt, build,
+GPU/driver, canvas dimensions and outcome; use copies of original images.
+
+1. In English and pt-BR, create Curves above Background, a raster layer and a
+   group. Verify the default diagonal and overlaid input histogram. Change
+   lower content and confirm the histogram updates without blocking the UI;
+   editing only Curves points must leave it fixed.
+2. Add, drag and remove interior points; move both endpoint outputs; use the
+   numeric Input/Output fields. Verify clamped neighbors, smooth bounded
+   segments, reversals and Reset.
+3. Seed a selection mask, paint/erase it, vary opacity and all six blend modes,
+   then test clipping and a transformed group with mixed adjustment types.
+4. Check one Undo per drag or field edit, atomic button actions, no-op Redo and
+   correct values when switching layer or tab.
+5. Compare CPU/Automatic preview, thumbnails and PNG/JPEG/group exports. Save
+   and reopen v25, recover an autosave and restore a relocated Hub backup.
+6. Publish a linked PNG consumed by Video Editor and Motion Studio; confirm
+   refreshed RGB/alpha and unchanged source bytes.
+7. On the Windows reference PC, record 1080p cold/warm rendering, point-edit
+   latency, content uploads, cancellation and constrained GPU recovery.
+
+Automated mapping: [Curves contract](../features/CURVES.md).

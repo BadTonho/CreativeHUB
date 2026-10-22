@@ -138,6 +138,9 @@ public:
     [[nodiscard]] QString addLevelsAdjustment(std::optional<QPainterPath> selection = {});
     [[nodiscard]] bool setLevels(const QString& id,
         const creative_suite::effects::LevelsParameters& parameters);
+    [[nodiscard]] QString addCurvesAdjustment(std::optional<QPainterPath> selection = {});
+    [[nodiscard]] bool setCurves(const QString& id,
+        const creative_suite::effects::CurvesParameters& parameters);
     [[nodiscard]] QString addExposureOffsetGammaAdjustment(std::optional<QPainterPath> selection = {});
     [[nodiscard]] bool setExposureOffsetGamma(const QString& id,
         const creative_suite::effects::ExposureOffsetGammaParameters& parameters);

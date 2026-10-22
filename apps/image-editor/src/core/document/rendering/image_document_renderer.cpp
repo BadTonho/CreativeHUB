@@ -859,13 +859,14 @@ QImage ImageDocumentRenderer::composite(const ImageDocumentData& document,
                            layer_raster_cache);
 }
 
-std::optional<ImageDocumentRenderer::Histogram> ImageDocumentRenderer::levelsHistogram(
+std::optional<ImageDocumentRenderer::Histogram> ImageDocumentRenderer::adjustmentInputHistogram(
     const ImageDocumentData& document, const QImage& source_image,
     const QHash<QString, QImage>& raster_images, const QString& layer_id,
     const std::atomic_bool* cancellation_requested) {
     const auto* layer = findLayer(document, layer_id);
     if (!layer || !layer->adjustment ||
-        !std::holds_alternative<creative_suite::effects::LevelsParameters>(*layer->adjustment)) return {};
+        (!std::holds_alternative<creative_suite::effects::LevelsParameters>(*layer->adjustment) &&
+         !std::holds_alternative<creative_suite::effects::CurvesParameters>(*layer->adjustment))) return {};
     AdjustmentInputCapture capture{layer_id, {}};
     (void)renderComposite(raster_images, source_image, document,
         cancellation_requested, {}, nullptr, &capture);
@@ -882,6 +883,17 @@ std::optional<ImageDocumentRenderer::Histogram> ImageDocumentRenderer::levelsHis
         ++bins[qRed(pixel)]; ++bins[qGreen(pixel)]; ++bins[qBlue(pixel)];
     }
     return bins;
+}
+
+std::optional<ImageDocumentRenderer::Histogram> ImageDocumentRenderer::levelsHistogram(
+    const ImageDocumentData& document, const QImage& source_image,
+    const QHash<QString, QImage>& raster_images, const QString& layer_id,
+    const std::atomic_bool* cancellation_requested) {
+    const auto* layer = findLayer(document, layer_id);
+    if (!layer || !layer->adjustment ||
+        !std::holds_alternative<creative_suite::effects::LevelsParameters>(*layer->adjustment)) return {};
+    return adjustmentInputHistogram(document,source_image,raster_images,layer_id,
+        cancellation_requested);
 }
 
 QImage ImageDocumentRenderer::selectedLayer(const ImageDocumentData& document,

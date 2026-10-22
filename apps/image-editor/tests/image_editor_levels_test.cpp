@@ -153,7 +153,7 @@ private slots:
         QVERIFY(s.saveDocument(path));
         QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
         const auto json=QJsonDocument::fromJson(file.readAll()).object(); file.close();
-        QCOMPARE(json.value("version").toInt(),24);
+        QCOMPARE(json.value("version").toInt(),25);
         ImageDocumentSession restored;
         QVERIFY(restored.openDocument(path)); QCOMPARE(restored.data(),s.data());
         RecoveryDocumentData recovery{s.data(),path,"levels"}, read;
@@ -172,7 +172,7 @@ private slots:
             auto fields=layer.value("adjustment").toObject();
             switch(bad) {
             case 0: root.insert("version",23); break;
-            case 1: root.insert("version",25); break;
+            case 1: root.insert("version",26); break;
             case 2: fields.remove("input_black"); break;
             case 3: fields.insert("input_black",255); break;
             case 4: fields.insert("input_white",20); break;
@@ -191,6 +191,11 @@ private slots:
             QVERIFY2(!restored.openDocument(path),qPrintable(QString::number(bad)));
             QCOMPARE(restored.data(),original);
         }
+        auto prior=json; prior.insert("version",24);
+        QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));
+        QVERIFY(file.write(QJsonDocument(prior).toJson())>0); file.close();
+        QVERIFY(restored.openDocument(path));
+        QCOMPARE(restored.data(),original);
         auto old=json;
         auto layers=old.value("layers").toArray();
         auto layer=layers.last().toObject();
@@ -203,7 +208,7 @@ private slots:
         QVERIFY(restored.openDocument(path));
         QVERIFY(restored.saveDocument(path));
         QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),24);
+        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),25);
         file.close();
     }
 };

@@ -1096,6 +1096,11 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
                     {"input_black", levels->input_black}, {"input_white", levels->input_white},
                     {"gamma", levels->gamma}, {"output_black", levels->output_black},
                     {"output_white", levels->output_white}});
+            } else if (const auto* curves = std::get_if<creative_suite::effects::CurvesParameters>(&*layer.adjustment)) {
+                QJsonArray points;
+                for (const auto& point : curves->points)
+                    points.append(QJsonObject{{"input", point.input}, {"output", point.output}});
+                encoded.insert("adjustment", QJsonObject{{"type", "curves"}, {"points", points}});
             } else {
                 const auto& hue = std::get<creative_suite::effects::HueSaturationParameters>(*layer.adjustment);
                 encoded.insert("adjustment", QJsonObject{{"type", "hue_saturation"},
@@ -1299,7 +1304,35 @@ bool decodeDocumentJson(const QJsonObject& root,
                     assignError(error, QStringLiteral("An adjustment has incompatible Levels fields."));
                     return false;
                 }
-                if (a.value("type") == "levels") {
+                if (a.value("type") != "curves" && a.contains("points")) {
+                    assignError(error, QStringLiteral("An adjustment has incompatible Curves fields."));
+                    return false;
+                }
+                if (a.value("type") == "curves") {
+                    const auto points = a.value("points").toArray();
+                    creative_suite::effects::CurvesParameters value;
+                    value.points.clear();
+                    bool valid = version >= 25 && kind == "adjustment" &&
+                        a.size() == 2 && a.value("points").isArray() &&
+                        points.size() >= 2 && points.size() <= 16;
+                    for (const auto& item : points) {
+                        const auto point = item.toObject();
+                        const auto integer = [](const QJsonValue& v) {
+                            return v.isDouble() && std::isfinite(v.toDouble()) &&
+                                v.toDouble() >= 0 && v.toDouble() <= 255 &&
+                                std::floor(v.toDouble()) == v.toDouble();
+                        };
+                        valid &= item.isObject() && point.size() == 2 &&
+                            integer(point.value("input")) && integer(point.value("output"));
+                        value.points.push_back({point.value("input").toInt(),
+                            point.value("output").toInt()});
+                    }
+                    if (!valid || !creative_suite::effects::validCurves(value)) {
+                        assignError(error, QStringLiteral("A Curves adjustment is invalid."));
+                        return false;
+                    }
+                    layer->adjustment = std::move(value);
+                } else if (a.value("type") == "levels") {
                     const auto integer = [](const QJsonValue& v) {
                         return v.isDouble() && std::isfinite(v.toDouble()) &&
                             std::floor(v.toDouble()) == v.toDouble() && v.toDouble() >= 0 && v.toDouble() <= 255;

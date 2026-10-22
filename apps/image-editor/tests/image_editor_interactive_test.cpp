@@ -568,6 +568,86 @@ private slots:
             OpenGlCompositionStatus::Unsupported);
         QCOMPARE(ImageInteractiveRasterCache::composite(comp),baseline(s));
     }
+    void gpuCurves() {
+        if (QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
+        auto surface=OpenGlFrameCompositor::createSurface();QVERIFY(surface);
+        OpenGlFrameCompositor gpu(surface.get(),OpenGlPrecisionPolicy::Automatic,
+            QOpenGLContext::globalShareContext(),
+            std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,3));
+        ImageDocumentSession s;QVERIFY(s.createCanvas({160,100},QColor(40,80,150,170)));
+        const auto base=s.selectedLayerId();
+        QVERIFY(s.applyPaintStroke({{5,40},{145,40}},QColor(200,70,130,190),50));
+        const auto id=s.addCurvesAdjustment();
+        QVERIFY(s.setCurves(id,{{{0,10},{64,200},{128,40},{255,245}}}));
+        ImageInteractiveRasterCache cache;
+        const auto verify=[&](bool no_upload=false)->bool{
+            const auto comp=cache.prepare(s.exportSnapshot(),"curves-gpu");
+            OpenGlCompositionTimings timing;
+            const auto result=gpu.composeRasterTexture(makeGpuRasterRequest(comp),{},&timing);
+            if(result.status!=OpenGlCompositionStatus::Complete){
+                qWarning() << "Curves GPU composition failed:" << result.cause.c_str();return false;
+            }
+            if(no_upload && timing.uploaded_bytes!=0){
+                qWarning() << "Curves GPU uploaded content:" << timing.uploaded_bytes;return false;
+            }
+            const auto read=gpu.readback(result.frame);if(!read.frame){
+                qWarning() << "Curves GPU readback failed";return false;
+            }
+            const auto actual=QImage(read.frame->rgba_pixels.data(),read.frame->width,
+                read.frame->height,read.frame->stride,QImage::Format_RGBA8888_Premultiplied)
+                .convertToFormat(QImage::Format_ARGB32_Premultiplied);
+            const auto expected=baseline(s);
+            for(int y=0;y<actual.height();++y)for(int x=0;x<actual.width();++x){
+                const auto a=actual.pixel(x,y),b=expected.pixel(x,y);
+                if(!(std::abs(qRed(a)-qRed(b))<=2 &&
+                    std::abs(qGreen(a)-qGreen(b))<=2 &&
+                    std::abs(qBlue(a)-qBlue(b))<=2 && qAlpha(a)==qAlpha(b))){
+                    qWarning() << "Curves pixel" << x << y << QString::number(a,16)
+                        << QString::number(b,16);return false;
+                }
+            }
+            return true;
+        };
+        QVERIFY(verify());
+        for(const auto& value:{creative_suite::effects::CurvesParameters{},
+                creative_suite::effects::CurvesParameters{{{0,255},{255,0}}},
+                creative_suite::effects::CurvesParameters{{{0,10},{64,200},{128,40},{255,245}}}}){
+            QVERIFY(s.setCurves(id,value));QVERIFY(verify(true));
+        }
+        const auto work=cache.reconstructedPixels();
+        for(int mode=1;mode<6;++mode){
+            QVERIFY(s.setStackBlendMode(id,false,static_cast<BlendMode>(mode)));
+            QVERIFY(verify(true));QCOMPARE(cache.reconstructedPixels(),work);
+        }
+        auto invalid=makeGpuRasterRequest(cache.prepare(s.exportSnapshot(),"curves-gpu"));
+        bool corrupted=false;
+        for(auto& node:invalid.nodes)for(auto& layer:node.layers){
+            if(layer.adjustment && std::holds_alternative<creative_suite::effects::CurvesParameters>(*layer.adjustment)){
+                std::get<creative_suite::effects::CurvesParameters>(*layer.adjustment).points[1].input=0;
+                corrupted=true;
+            }
+        }
+        QVERIFY(corrupted);
+        QCOMPARE(gpu.composeRasterTexture(invalid).status,OpenGlCompositionStatus::Unsupported);
+        QCOMPARE(gpu.composeRasterTexture(makeGpuRasterRequest(
+            cache.prepare(s.exportSnapshot(),"curves-gpu")),[]{return true;}).status,
+            OpenGlCompositionStatus::Cancelled);
+        QVERIFY(s.setLayerClipping(id,true));QVERIFY(verify());
+        const auto group=s.groupLayers({base,id});QVERIFY(!group.isEmpty());QVERIFY(verify());
+        const auto another=s.addLevelsAdjustment();QVERIFY(!another.isEmpty());
+        QVERIFY(s.setLevels(another,{20,230,1.4,10,240}));QVERIFY(verify());
+        QVERIFY(s.createCanvas({1920,1080},QColor(50,100,150)));
+        const auto large=s.addCurvesAdjustment();
+        QVERIFY(s.setCurves(large,{{{0,10},{128,180},{255,245}}}));
+        cache.clear();QVERIFY(verify());
+        OpenGlFrameCompositor limited(surface.get(),OpenGlPrecisionPolicy::Automatic,
+            QOpenGLContext::globalShareContext(),
+            std::make_shared<OpenGlTexturePoolBudget>(16ULL*1024*1024,3));
+        const auto comp=cache.prepare(s.exportSnapshot(),"curves-gpu");
+        QCOMPARE(limited.composeRasterTexture(makeGpuRasterRequest(comp)).status,
+            OpenGlCompositionStatus::Unsupported);
+        QCOMPARE(ImageInteractiveRasterCache::composite(comp),baseline(s));
+    }
     void gpuHueSaturationColorGrid() {
         if(QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
         auto surface=OpenGlFrameCompositor::createSurface();QVERIFY(surface);

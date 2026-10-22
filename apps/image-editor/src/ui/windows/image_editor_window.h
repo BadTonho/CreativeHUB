@@ -108,7 +108,7 @@ private:
     void updateToolOptions();
     void updateSelectionContext();
     void updateLayerPanel();
-    void requestLevelsHistogram();
+    void requestAdjustmentHistogram();
     [[nodiscard]] bool editingMask() const;
     void updateView(bool preserveCanvasView = false);
     void deactivateCanvasTools();
@@ -192,9 +192,9 @@ private:
     ImageRenderController* render_controller_ = nullptr;
     InteractiveFrame latest_render_frame_;
     std::uint64_t magic_wand_sequence_ = 0;
-    std::uint64_t levels_histogram_sequence_ = 0;
-    std::shared_ptr<std::atomic_bool> levels_histogram_cancel_;
-    bool suppress_levels_histogram_ = false;
+    std::uint64_t adjustment_histogram_sequence_ = 0;
+    std::shared_ptr<std::atomic_bool> adjustment_histogram_cancel_;
+    bool suppress_adjustment_histogram_ = false;
 
     QMetaObject::Connection focus_changed_connection_;
     QAction* relink_action_ = nullptr;

@@ -1,6 +1,6 @@
 # Image Editor Document Format
 
-Status: **provisional version 24**. The `.cimg` extension is temporary until a
+Status: **provisional version 25**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
 version 7 adds stable IDs to paint and eraser strokes; version 8 adds
@@ -10,7 +10,7 @@ version 12 adds independently resizable canvas bounds; version 13 adds optional
 area-selection clipping to paint and eraser strokes; version 14 adds editable
 bucket-fill operations; version 15 adds editable linear-gradient operations;
 version 16 adds editable blur strokes; version 17 adds editable layer outlines.
-Version 18 adds editable clipping masks. Version 19 adds layer/group blend modes. Version 20 adds Gradient Map adjustment layers and selection-seeded masks. Version 21 adds Brightness/Contrast adjustments. Version 22 adds Exposure / Offset / Gamma adjustments. Version 23 adds global Hue/Saturation adjustments. Version 24 adds global Levels adjustments. Versions 1 through 23 remain readable and save as v24.
+Version 18 adds editable clipping masks. Version 19 adds layer/group blend modes. Version 20 adds Gradient Map adjustment layers and selection-seeded masks. Version 21 adds Brightness/Contrast adjustments. Version 22 adds Exposure / Offset / Gamma adjustments. Version 23 adds global Hue/Saturation adjustments. Version 24 adds global Levels adjustments. Version 25 adds global Curves adjustments. Versions 1 through 24 remain readable and save as v25.
 
 Hub snapshots preserve versions 1–24 and rebase relative source/import paths
 to their original absolute locations. The native save contract remains the
@@ -228,7 +228,7 @@ crop, quarter-turn, and flip commands continue to transform rendered content
 and layer masks. Image pixels render at their position in the operation list,
 then the layer mask, layer opacity, and group composition apply.
 
-Recovery retains envelope version 1 and accepts document payloads through v24.
+Recovery retains envelope version 1 and accepts document payloads through v25.
 The Video Editor consumes flattened published PNG files; its .csp schema does
 not change.
 
@@ -269,7 +269,7 @@ to an existing mask's operation sequence. Mask strokes in transformed groups
 are mapped back into the child's coordinates. Creating, removing, toggling,
 and painting a mask are undoable document edits. Mask editing target selection
 is temporary UI state and is not persisted. Versions 1–9 load without masks;
-saving upgrades the document payload to v24. A mask in an older envelope is rejected.
+saving upgrades the document payload to v25. A mask in an older envelope is rejected.
 Recovery, full export, Quick Export, and linked PNG publication include masks.
 
 ## Layer stack
@@ -523,7 +523,7 @@ The optional `blend_mode` string on raster layers and groups uses `normal`,
 writers omit Normal. Background never carries the field. v1-18 load as Normal;
 reject fields in older schemas and unknown/non-string values. Recovery wrapper
 v1 accepts v19, and Hub preserves modes during path rebasing. Older editor
-binaries reject v19; the current Hub accepts through v24 and rejects v25. See [pixel/export contract](../features/BLEND_MODES.md).
+binaries reject v19; the current Hub accepts through v25 and rejects v26. See [pixel/export contract](../features/BLEND_MODES.md).
 
 
 ## Adjustment layers and selection masks (version 20)
@@ -539,7 +539,7 @@ The path uses the existing element encoding and fill-rule identifiers 0/1.
 It seeds black outside and white inside, before existing mask operations;
 absence retains the legacy white mask. Geometry follows canvas offsets/group
 transforms. Both new payloads are rejected before v20. Recovery retains envelope
-v1. Hub supports v1-24 and rejects v25; linked publication remains PNG. See
+v1. Hub supports v1-25 and rejects v26; linked publication remains PNG. See
 [the full contract](../features/GRADIENT_MAP.md).
 
 ## Version 21: Brightness/Contrast adjustments
@@ -548,8 +548,8 @@ Write `adjustment: {"type":"brightness_contrast","brightness":0,"contrast":0}`
 on `kind:"adjustment"`. Both parameters are required integers in [-100,100].
 Reject this type before v21, invalid/non-numeric/fractional values and incompatible
 Background/content/outline fields. Gradient Map keeps its v20 encoding; older
-versions remain readable. Recovery envelope v1 is unchanged. Hub accepts v1-24
-and rejects v25. See [processing contract](../features/BRIGHTNESS_CONTRAST.md).
+versions remain readable. Recovery envelope v1 is unchanged. Hub accepts v1-25
+and rejects v26. See [processing contract](../features/BRIGHTNESS_CONTRAST.md).
 
 ## Exposure / Offset / Gamma (version 22)
 
@@ -558,8 +558,8 @@ exposure: 1.25, offset: -0.0123, gamma: 1.4}`. All three fields are required JSO
 numbers: exposure [-20,20], offset [-.5,.5], gamma [.01,9.99], finite. Defaults
 are 0/0/1. Reject the payload in earlier versions, mismatched type fields and
 incompatible Background/raster content/outlines; failed Open retains the session.
-The current writer saves supported v1-23 as v24. Recovery retains envelope v1; Hub accepts
-v1-24 and rejects v25. See [processing and editing contract](../features/EXPOSURE_OFFSET_GAMMA.md).
+The current writer saves supported v1-24 as v25. Recovery retains envelope v1; Hub accepts
+v1-25 and rejects v26. See [processing and editing contract](../features/EXPOSURE_OFFSET_GAMMA.md).
 
 ## Global Hue/Saturation (version 23)
 
@@ -568,8 +568,8 @@ saturation: -25, lightness: 10}`. All three controls are required JSON integers:
 hue [-180,180], saturation/lightness [-100,100], neutral 0/0/0. Reject this kind
 before v23, fractional/non-numeric/out-of-range values, incompatible raster/
 Background/outline content and mismatched type fields. Failed Open retains the
-session. The current writer saves supported v1-23 as v24, with recovery envelope v1 and
-PNG handoff unchanged. Hub accepts v1-24 and rejects v25. See
+session. The current writer saves supported v1-24 as v25, with recovery envelope v1 and
+PNG handoff unchanged. Hub accepts v1-25 and rejects v26. See
 [HSL and editing contract](../features/HUE_SATURATION.md).
 
 ## Global Levels (version 24)
@@ -581,6 +581,19 @@ with input black strictly below input white and output black no higher than
 output white. Gamma is a finite number in [0.10,9.99]. Reject this kind before
 v24, missing or extra fields, invalid bounds and incompatible raster,
 Background or outline data. Failed Open retains the current session.
-The v24 writer reads v1–23 and migrates on save. Recovery envelope v1 and PNG
-handoff are unchanged. Hub accepts v1–24 and rejects v25. See the
+The current v25 writer reads v1–24 and migrates on save. Recovery envelope v1 and PNG
+handoff are unchanged. Hub accepts v1–25 and rejects v26. See the
 [Levels contract](../features/LEVELS.md).
+
+## Global Curves (version 25)
+
+An adjustment layer stores `adjustment: {"type":"curves","points":[
+{"input":0,"output":10},{"input":128,"output":180},
+{"input":255,"output":245}]}`. Each point has exactly two required integer
+fields in [0,255]. There must be 2–16 points with strictly increasing input,
+first input 0 and last input 255. Output may reverse. Reject this kind before
+v25, extra adjustment/point fields, invalid points and incompatible raster,
+Background or outline data; failed Open preserves the active session. The v25
+writer reads v1–24 and upgrades on save. Recovery envelope v1 and linked PNG
+handoff are unchanged. Hub accepts v1–25 and rejects v26. See the
+[Curves contract](../features/CURVES.md).

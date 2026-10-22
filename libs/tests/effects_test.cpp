@@ -188,6 +188,34 @@ int main() {
         require(adjustmentRgb(LevelsParameters{0,255,2.,0,255}, {64. / 255.,0.,1.}) ==
             std::array<unsigned char,3>{128,0,255}, "Levels gamma uses reciprocal exponent in encoded sRGB");
     }
+    {
+        using namespace creative_suite::effects;
+        require(validAdjustment(CurvesParameters{}) && identityAdjustment(CurvesParameters{}),
+            "Neutral Curves validation and identity");
+        const CurvesParameters shape{{{0,10},{64,200},{128,40},{255,245}}};
+        require(validCurves(shape) && !identityCurves(shape), "Curves accept reversals");
+        const auto table=curvesLut(shape);
+        require(table[0]==10 && table[64]==200 && table[128]==40 && table[255]==245,
+            "Curves interpolate exact control points");
+        for(int x=1;x<64;++x)require(table[x]>=10 && table[x]<=200,"Curves first segment overshot");
+        for(int x=65;x<128;++x)require(table[x]>=40 && table[x]<=200,"Curves reversal overshot");
+        require(adjustmentRgb(shape,{0.,64./255.,1.})==
+            std::array<unsigned char,3>{10,200,245},"Curves map global encoded channels");
+        require(curvesLut(CurvesParameters{{{0,0},{255,255}}})[128]==128,
+            "Two-point Curves are linear");
+        CurvesParameters sixteen;
+        sixteen.points.clear();
+        for(int i=0;i<15;++i)sixteen.points.push_back({i*17,i*17});
+        sixteen.points.push_back({255,255});
+        require(validCurves(sixteen),"Curves permit sixteen points");
+        sixteen.points.insert(sixteen.points.begin()+1,{1,1});
+        require(!validCurves(sixteen) && !identityCurves(sixteen),
+            "Curves reject more than sixteen points");
+        require(!validCurves(CurvesParameters{{{0,0},{0,10},{255,255}}}) &&
+            !validCurves(CurvesParameters{{{0,0},{255,256}}}) &&
+            !validCurves(CurvesParameters{{{1,0},{255,255}}}),
+            "Curves reject invalid points");
+    }
     verifySharedBlur();
     using namespace creative_suite::effects;
     require(builtInEffects().size() == 4, "The built-in visual effect catalog is incomplete.");
