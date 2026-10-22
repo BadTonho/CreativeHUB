@@ -100,7 +100,7 @@ public:
     OpenGlCompositionResult prepareAsyncReadback(int, int, std::uint64_t, unsigned = 2,
         unsigned* = nullptr, bool = false) override;
     OpenGlReadbackResult submitAsyncReadback(int, int, const std::vector<CompositionLayer>&,
-        const CancellationPredicate& = {}) override;
+        const CancellationPredicate& = {}, CompositionOutputAlpha = CompositionOutputAlpha::Opaque) override;
     OpenGlReadbackResult submitAsyncReadback(const OpenGlTextureFramePtr&,
         const CancellationPredicate& = {}) override;
     OpenGlReadbackResult collectAsyncReadback(OpenGlReadbackTicket,
@@ -108,7 +108,8 @@ public:
     void discardAsyncReadbacks() noexcept override;
     unsigned asyncReadbackSlotCount() const noexcept override;
     OpenGlCompositionResult compose(int,int,const std::vector<CompositionLayer>&,
-        const CancellationPredicate& = {}, OpenGlCompositionTimings* = nullptr) override;
+        const CancellationPredicate& = {}, OpenGlCompositionTimings* = nullptr,
+        CompositionOutputAlpha = CompositionOutputAlpha::Opaque) override;
     OpenGlTextureCompositionResult composeTexture(int,int,const std::vector<CompositionLayer>&,
         const CancellationPredicate& = {}, OpenGlCompositionTimings* = nullptr) override;
     OpenGlTextureCompositionResult processImage(const OpenGlImageOperation&,

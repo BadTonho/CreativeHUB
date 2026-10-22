@@ -138,6 +138,10 @@ struct CompositionLayer {
     BlendMode blend_mode = BlendMode::Normal;
 };
 
+// Public raster output can retain the composed straight alpha for transparent
+// video export. Interactive preview and existing callers remain opaque.
+enum class CompositionOutputAlpha : std::uint8_t { Opaque, Preserve };
+
 // Transparent nearest-neighbor Transform-stage raster, without an extra fit.
 // Invalid geometry throws; cancellation returns nullopt and publishes no pixels.
 [[nodiscard]] std::optional<media::RgbaFrame> transformAffineFrame(const media::RgbaFrame&,
@@ -185,8 +189,9 @@ public:
     // Source frames are aspect-fit to the canvas, then scaled and rotated about
     // their centers. Sampling is nearest-neighbor. Layers blend source-over,
     // back-to-front in vector order. Non-Normal modes blend over transparent
-    // premultiplied accumulation before flattening over black. Normal-only
-    // scenes retain the legacy path. Returned RGBA8 is always opaque. Invalid
+    // premultiplied accumulation before flattening over black. Opaque output
+    // keeps the established Normal-only path. Returned RGBA8 is opaque by
+    // default; Preserve returns straight RGBA alpha. Invalid
     // blend-mode values return nullopt, never silently substitute Normal.
     // Non-positive or unrepresentable canvas dimensions return nullopt.
     // Layers with a null frame, non-positive source dimensions, invalid
@@ -196,7 +201,8 @@ public:
         int width,
         int height,
         const std::vector<CompositionLayer>& layers,
-        FrameCompositionTimings* timings = nullptr);
+        FrameCompositionTimings* timings = nullptr,
+        CompositionOutputAlpha output_alpha = CompositionOutputAlpha::Opaque);
 };
 
 } // namespace creative_suite::composition

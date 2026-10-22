@@ -43,7 +43,8 @@ Preserve straight RGB and multiply target alpha once by coverage:
 All channels are normalized straight RGBA in the current working space, without
 new color conversion. RGBA8 alpha uses exact decimal weights and half-up rounding
 on CPU/OpenGL, including ties, without requiring GPU FP64 or int64 for the matte
-calculation. Final composition remains opaque over black. Source visibility does not gate evaluation,
+calculation. Final composition remains opaque over black by default; the
+transparent video export profile preserves the resulting alpha. Source visibility does not gate evaluation,
 but its interval does. Inactive source pixels are transparent, yielding zero
 coverage for direct modes and full coverage for inverted modes. Each active
 source uses its own local clock and source-range mapping. Inactive sources need

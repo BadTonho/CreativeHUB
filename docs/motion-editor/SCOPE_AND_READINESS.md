@@ -60,9 +60,10 @@ the Media Pool. The writer emits schema v18 and reads versions 1–18; migration
 and compatibility behavior are specified in [FORMAT.md](architecture/FORMAT.md). The
 separate recovery wrapper remains at version 1 and contains a nested native
 document. Undo/Redo and configurable autosave and recovery cover the
-composition and Media Pool. A first-pass video export uses a shared FFmpeg
-encoder, with opaque video-only output and per-job settings; audio and alpha
-remain outside the implemented export path. The composition workspace keeps
+composition and Media Pool. Video export uses the shared FFmpeg encoder and
+keeps Opaque as the default; its per-job Transparent (alpha) profile uses only
+runtime-discovered software adapters. Audio remains outside the export path.
+The composition workspace keeps
 the Preview central and presents the Media Pool, Inspector, Timeline, and Graph
 Editor as rearrangeable Qt dock panels. Timeline and Graph Editor share a
 bottom tab group by default, with Timeline selected; the Graph Editor button
@@ -137,9 +138,10 @@ benchmarks remain pending.
 
 [Static layer blend modes](features/BLEND_MODES.md) add Normal, Multiply, Screen,
 Overlay, Add and Difference in the Inspector. New modes blend against transparent
-accumulation before opaque black presentation/export; Normal-only projects keep
-their previous exact path. Native v13/recovery/Hub preserve the mode; `.cscomp`
-v3 refuses non-Normal layers. Mode animation, alpha export,
+accumulation before opaque black presentation/export by default; the optional
+transparent export profile preserves the resulting alpha. Normal-only projects
+keep their previous exact path. Native v13/recovery/Hub preserve the mode;
+`.cscomp` v3 refuses non-Normal layers. Mode animation,
 manual/platform/native GPU acceptance and benchmarks remain pending.
 
 [Track Mattes](features/TRACK_MATTES.md) add fixed Alpha/Luma and inverted
@@ -185,9 +187,9 @@ The first Motion Studio MVP is a 2D composition workflow with:
 
 The original MVP does not include audio editing or mixing, animated masks, advanced
 effect graphs, nested compositions, 3D, node-based workflows, or particles.
-Video sources are visual layers; the approved MVP output is opaque video without
-audio. Alpha-channel export is outside this MVP. Codec and output-profile
-validation remain open technical work.
+Video sources are visual layers; the baseline output remains opaque video without
+audio. Transparent-background video export is an additive per-job option and is
+documented below. Runtime codec and output-profile validation remain provisional.
 
 ## Approved Validation Profile
 
@@ -301,7 +303,7 @@ every target GPU or that the path has met performance targets.
 | Timeline playback and CPU composition | `apps/video-editor/src/playback/playback_worker.cpp` selects and decodes timeline layers, rasterizes text, and calls the CPU `FrameCompositor`. The compositor returns the completed raster frame before preview presentation. | The shared raster compositor and animation evaluator are reusable candidates. Timeline scheduling, project data, and playback controls remain application-specific. |
 | Still images and text | `libs/media/src/still_image_decoder.cpp` uses Qt `QImageReader` for static raster images and returns the shared RGBA frame type. `apps/video-editor/src/rendering/text_renderer.cpp` rasterizes Video Editor text through Qt `QPainter`. | Motion Studio uses the shared still-image decoder for import previews and its own Qt rasterizer for multiline text, rectangles, and ellipses. It does not depend on the Video Editor text renderer or timeline types. |
 | Preview presentation | `OpenGLPreviewSurface` requests an OpenGL 3.2 Core context, uploads the already-composed RGBA frame as a texture, and draws it with a shader. GPU work presents the final frame; layer composition is CPU-side. `PreviewWidget` can use a CPU `QImage`/`QPixmap` path when GPU preview is disabled or fails. | Treat this Qt/OpenGL widget as Video Editor UI. It does not provide GPU layer composition or establish a Motion Studio renderer. |
-| Video encoding and output capabilities | The Video Editor previously owned FFmpeg container/codec discovery and its FFmpeg encoder wrapper alongside timeline assembly and audio rendering. The shared `libs/media/` encoder now handles RGBA frame encoding, optional stereo audio, container/codec discovery, and atomic publication support. | Motion Studio uses the shared encoder and capability list while its own worker schedules frames from an immutable composition snapshot. It currently exports opaque video without audio; project scheduling, settings UI, progress, cancellation, and output verification remain Motion-owned. |
+| Video encoding and output capabilities | The Video Editor previously owned FFmpeg container/codec discovery and its FFmpeg encoder wrapper alongside timeline assembly and audio rendering. The shared `libs/media/` encoder handles RGBA frame encoding, optional stereo audio, container/codec discovery, alpha-adapter discovery, and atomic publication support. | Motion Studio uses the shared encoder and capability list while its own worker schedules frames from an immutable composition snapshot. Opaque video remains the default; an optional transparent profile uses available software FFV1/Matroska, ProRes 4444/MOV, or VP9/WebM adapters. Audio, project scheduling, settings UI, progress, cancellation, and output verification remain Motion-owned. |
 
 Existing regression tests cover the shared animation and composition
 libraries, Video Editor transform and text composition, playback-worker
@@ -327,14 +329,19 @@ and applies Linear, Ease In, Ease Out, or Ease In/Out presets. Graph selection
 and panel visibility are not saved. Text and shape content is static;
 fonts are resolved by family name on the current system and are not embedded.
 **File > Export Video...** renders from frame 0 through the furthest layer end,
-including hidden layers for duration, converts between exact rational frame
-rates, and writes blank frames as opaque black. The settings dialog discovers
-available containers and compatible video encoders and offers composition,
-common, or custom dimensions, output frame rate, and quality/bitrate controls.
-Settings apply to the current job and are not persisted. Export jobs show
-progress, support cancellation, verify the staged file, and publish it only
-after successful completion; cancellation and failure preserve an existing
-destination. Audio and alpha are not exported. Gaussian Blur, Color Adjustment,
+including hidden layers for duration, and converts between exact rational frame
+rates. Opaque output remains the default and writes blank frames as opaque black.
+The optional **Transparent (alpha)** profile composes over alpha zero and keeps
+blank frames transparent. The settings dialog discovers containers and
+compatible encoders, offering composition, common, or custom dimensions, output
+frame rate, and codec-specific quality controls. Supported software alpha
+adapters are Matroska/FFV1 lossless, MOV/ProRes 4444 or 4444 XQ with 16-bit alpha,
+and WebM/VP9 with CRF 0-63 (default 32), subject to the installed FFmpeg
+capabilities. Hardware codecs are excluded. Settings apply to the current job
+and are not persisted. Export jobs show progress, support cancellation, verify
+the staged file, and publish it only after successful completion; cancellation
+and failure preserve an existing destination. Audio is not exported. Linked
+Motion-to-Video Editor publication remains opaque. Gaussian Blur, Color Adjustment,
 Drop Shadow and Glow stacks run before each layer's transforms in the shared
 Motion frame renderer, so preview, playback, and export evaluate the same effects. Blur
 uses a bounded three-pass box approximation to a Gaussian with premultiplied

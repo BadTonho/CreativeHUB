@@ -246,6 +246,30 @@ void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
         collected_second.frame && collected_second.frame->rgba_pixels ==
             second_reference.frame->rgba_pixels,
         "second asynchronous frame differs from synchronous GPU output or order");
+    const auto alpha_cpu = FrameCompositor::compose(73, 51, second_layers, nullptr,
+        CompositionOutputAlpha::Preserve);
+    const auto alpha_sync = gpu.compose(73, 51, second_layers, {}, nullptr,
+        CompositionOutputAlpha::Preserve);
+    require(alpha_cpu && alpha_sync.frame &&
+        alpha_sync.frame->rgba_pixels.size() == alpha_cpu->rgba_pixels.size(),
+        "transparent GPU composition did not produce an alpha frame");
+    for (std::size_t index = 0; index < alpha_cpu->rgba_pixels.size(); ++index)
+        require(std::abs(int(alpha_cpu->rgba_pixels[index]) -
+                    int(alpha_sync.frame->rgba_pixels[index])) <= (index % 4 == 3 ? 0 : 2),
+            "transparent CPU/OpenGL composition differs");
+    const auto alpha_empty = gpu.compose(13, 9, {}, {}, nullptr,
+        CompositionOutputAlpha::Preserve);
+    require(alpha_empty.frame && std::all_of(alpha_empty.frame->rgba_pixels.begin(),
+            alpha_empty.frame->rgba_pixels.end(), [](std::uint8_t value) { return value == 0; }),
+        "empty OpenGL alpha output must be transparent");
+    const auto alpha_submitted = gpu.submitAsyncReadback(73, 51, second_layers, {},
+        CompositionOutputAlpha::Preserve);
+    require(alpha_submitted.status == OpenGlCompositionStatus::Complete,
+        "transparent PBO readback submission failed");
+    const auto alpha_collected = gpu.collectAsyncReadback(alpha_submitted.ticket);
+    require(alpha_collected.status == OpenGlCompositionStatus::Complete && alpha_collected.frame &&
+        alpha_collected.frame->rgba_pixels == alpha_sync.frame->rgba_pixels,
+        "asynchronous OpenGL readback changed transparent straight-alpha pixels");
     const auto reused = gpu.submitAsyncReadback(73, 51, second_layers);
     require(reused.status == OpenGlCompositionStatus::Complete,
         "a collected PBO slot could not be reused");
@@ -288,6 +312,10 @@ void trackMatteParity(OpenGlFrameCompositor& gpu) {
         auto composed=gpu.compose(16,12,{{&matte},layer});
         require(cpu&&composed.frame,"Matted composition delivery");
         for(std::size_t x=0;x<cpu->rgba_pixels.size();++x)require(std::abs(int(cpu->rgba_pixels[x])-int(composed.frame->rgba_pixels[x]))<=(x%4==3?0:2),"Matted blend RGBA tolerance");
+        const auto cpu_alpha=FrameCompositor::compose(16,12,{{&matte},reference},nullptr,CompositionOutputAlpha::Preserve);
+        const auto gpu_alpha=gpu.compose(16,12,{{&matte},layer}, {}, nullptr,CompositionOutputAlpha::Preserve);
+        require(cpu_alpha&&gpu_alpha.frame,"Transparent matted composition delivery");
+        for(std::size_t x=0;x<cpu_alpha->rgba_pixels.size();++x)require(std::abs(int(cpu_alpha->rgba_pixels[x])-int(gpu_alpha.frame->rgba_pixels[x]))<=(x%4==3?0:2),"Transparent matted CPU/OpenGL alpha parity");
         {
             auto direct=gpu.composeTexture(16,12,{{&matte},layer});
             require(direct.frame!=nullptr,"Matted texture delivery");

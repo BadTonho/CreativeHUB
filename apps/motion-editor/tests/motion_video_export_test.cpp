@@ -13,12 +13,15 @@
 #include <QDialogButtonBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFileInfo>
 #include <QElapsedTimer>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QOffscreenSurface>
 #include <QProgressDialog>
 #include <QPushButton>
+#include <QStandardItemModel>
+#include <QSpinBox>
 #include <QSize>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -142,6 +145,34 @@ MotionExportSettings settingsFor(
 {
     return MotionExportSettings{
         path, container.name, encoder.name, 64, 48, output_rate, 1.0};
+}
+
+struct AlphaOutputChoice {
+    creative_suite::media::VideoContainerOption container;
+    creative_suite::media::VideoEncoderOption encoder;
+    creative_suite::media::VideoAlphaProfileOption profile;
+};
+
+std::optional<AlphaOutputChoice> chooseAlphaOutput()
+{
+    auto containers = creative_suite::media::availableVideoContainers();
+    for (const auto profile : {
+            creative_suite::media::VideoOutputProfile::Ffv1LosslessAlpha,
+            creative_suite::media::VideoOutputProfile::ProRes4444Alpha,
+            creative_suite::media::VideoOutputProfile::ProRes4444XqAlpha,
+            creative_suite::media::VideoOutputProfile::Vp9Alpha}) {
+        for (const auto& container : containers) {
+            for (const auto& encoder : container.video_encoders) {
+                const auto option = std::find_if(encoder.alpha_profiles.begin(),
+                    encoder.alpha_profiles.end(), [&](const auto& value) {
+                        return value.profile == profile;
+                    });
+                if (option != encoder.alpha_profiles.end())
+                    return AlphaOutputChoice{container, encoder, *option};
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 CompositionLayer imageLayer(std::int64_t start, std::int64_t duration)
@@ -412,6 +443,9 @@ void testSettingsDialog()
     auto* resolution = findWidget<QComboBox>(&dialog, "motion-export-resolution");
     auto* rate = findWidget<QDoubleSpinBox>(&dialog, "motion-export-frame-rate");
     auto* quality = findWidget<QComboBox>(&dialog, "motion-export-quality");
+    auto* output_profile = findWidget<QComboBox>(&dialog, "motion-export-output-profile");
+    auto* bitrate = findWidget<QDoubleSpinBox>(&dialog, "motion-export-video-bitrate");
+    auto* vp9_crf = findWidget<QSpinBox>(&dialog, "motion-export-vp9-crf");
     require(!container->currentData().toString().isEmpty(),
             "the export settings choose an available container");
     require(!encoder->currentData(Qt::UserRole + 1).toBool(),
@@ -422,6 +456,9 @@ void testSettingsDialog()
             "the output frame-rate field starts at the exact composition rate");
     require(quality->currentIndex() == 1,
             "the export dialog starts with Standard quality");
+    require(output_profile->currentData().toInt() ==
+                static_cast<int>(creative_suite::media::VideoOutputProfile::Bitrate),
+            "the export dialog defaults to opaque output");
     const auto available = creative_suite::media::availableVideoContainers();
     const auto mp4 = std::find_if(available.begin(), available.end(), [](const auto& option) {
         return option.name == "mp4";
@@ -442,6 +479,117 @@ void testSettingsDialog()
     require(settings.has_value() && settings->frame_rate == FrameRate{30000, 1001} &&
                 settings->width == 640 && settings->height == 360,
             "untouched export fields preserve exact composition settings");
+    const auto alpha = chooseAlphaOutput();
+    if (alpha) {
+        output->setText(QStringLiteral("alpha-profile-test.mp4"));
+        output_profile->setCurrentIndex(1);
+        const auto transparent_settings = dialog.exportSettings();
+        require(transparent_settings && transparent_settings->profile !=
+                    creative_suite::media::VideoOutputProfile::Bitrate &&
+                    transparent_settings->container_name ==
+                        container->currentData().toString().toStdString() &&
+                    transparent_settings->alpha_pixel_format_name.size() > 0,
+                "the transparent selector chooses a discovered alpha adapter");
+        require(QFileInfo(output->text()).suffix() != QStringLiteral("mp4"),
+                "switching profiles updates the incompatible MP4 extension");
+        require(bitrate->isHidden(),
+                "transparent profiles hide the opaque bitrate control");
+
+        const auto selectAlphaEncoder = [&](const char* container_name,
+                                            const char* encoder_name) {
+            const auto container_index = container->findData(QString::fromLatin1(container_name));
+            if (container_index < 0) return false;
+            container->setCurrentIndex(container_index);
+            const auto encoder_index = encoder->findData(QString::fromLatin1(encoder_name));
+            if (encoder_index < 0) return false;
+            encoder->setCurrentIndex(encoder_index);
+            return true;
+        };
+        const auto mov_alpha = std::find_if(available.begin(), available.end(), [](const auto& option) {
+            if (option.name != "mov") return false;
+            return std::any_of(option.video_encoders.begin(), option.video_encoders.end(),
+                [](const auto& value) {
+                    return value.name == "prores_ks" && std::any_of(
+                        value.alpha_profiles.begin(), value.alpha_profiles.end(),
+                        [](const auto& alpha_profile) {
+                            return alpha_profile.profile ==
+                                    creative_suite::media::VideoOutputProfile::ProRes4444Alpha ||
+                                alpha_profile.profile ==
+                                    creative_suite::media::VideoOutputProfile::ProRes4444XqAlpha;
+                        });
+                });
+        });
+        if (mov_alpha != available.end() && selectAlphaEncoder("mov", "prores_ks")) {
+            const auto prores_encoder = std::find_if(mov_alpha->video_encoders.begin(),
+                mov_alpha->video_encoders.end(), [](const auto& value) {
+                    return value.name == "prores_ks";
+                });
+            require(prores_encoder != mov_alpha->video_encoders.end() &&
+                    quality->count() == static_cast<int>(prores_encoder->alpha_profiles.size()) &&
+                    quality->count() > 0 &&
+                    quality->isEnabled() == (quality->count() > 1),
+                    "ProRes exposes every runtime-supported alpha quality profile");
+            for (int index = 0; index < quality->count(); ++index)
+                require(quality->itemText(index).contains(QStringLiteral("16-bit alpha")),
+                    "ProRes quality controls identify 16-bit alpha");
+            const auto preferred_prores = quality->findData(static_cast<int>(
+                creative_suite::media::VideoOutputProfile::ProRes4444XqAlpha));
+            const auto selected_prores = preferred_prores >= 0 ? preferred_prores
+                : quality->findData(static_cast<int>(
+                    creative_suite::media::VideoOutputProfile::ProRes4444Alpha));
+            require(selected_prores >= 0, "a discovered ProRes profile is selectable");
+            quality->setCurrentIndex(selected_prores);
+            const auto prores_settings = dialog.exportSettings();
+            require(prores_settings && prores_settings->profile == static_cast<
+                        creative_suite::media::VideoOutputProfile>(
+                            quality->currentData().toInt()),
+                    "the selected ProRes quality profile reaches the export settings");
+        }
+        const auto webm_alpha = std::find_if(available.begin(), available.end(), [](const auto& option) {
+            if (option.name != "webm") return false;
+            return std::any_of(option.video_encoders.begin(), option.video_encoders.end(),
+                [](const auto& value) {
+                    return value.name == "libvpx-vp9" && std::any_of(
+                        value.alpha_profiles.begin(), value.alpha_profiles.end(),
+                        [](const auto& alpha_profile) {
+                            return alpha_profile.profile ==
+                                creative_suite::media::VideoOutputProfile::Vp9Alpha;
+                        });
+                });
+        });
+        if (webm_alpha != available.end() && selectAlphaEncoder("webm", "libvpx-vp9")) {
+            require(vp9_crf->minimum() == 0 && vp9_crf->maximum() == 63 &&
+                    vp9_crf->value() == 32 && !vp9_crf->isHidden() && quality->isHidden(),
+                    "VP9 exposes CRF 0-63 at its default value of 32");
+            vp9_crf->setValue(19);
+            const auto vp9_settings = dialog.exportSettings();
+            require(vp9_settings && vp9_settings->profile ==
+                        creative_suite::media::VideoOutputProfile::Vp9Alpha &&
+                    vp9_settings->quality_value == 19,
+                    "the VP9 CRF value reaches the export settings");
+        }
+
+        output_profile->setCurrentIndex(0);
+        require(dialog.exportSettings() && dialog.exportSettings()->profile ==
+                    creative_suite::media::VideoOutputProfile::Bitrate,
+                "returning to Opaque restores the standard export profile");
+        if (mov_alpha != available.end()) {
+            require(selectAlphaEncoder("mov", "prores_ks"),
+                    "the existing ProRes alpha adapter can be selected for opaque output");
+            output_profile->setCurrentIndex(1);
+            require(container->currentData().toString() == QStringLiteral("mov") &&
+                    encoder->currentData().toString() == QStringLiteral("prores_ks"),
+                    "enabling transparency preserves a compatible container and encoder");
+            output_profile->setCurrentIndex(0);
+        }
+    } else {
+        auto* profile_model = qobject_cast<QStandardItemModel*>(output_profile->model());
+        auto* transparent_item = profile_model != nullptr
+            ? profile_model->item(1) : nullptr;
+        require(transparent_item != nullptr && !transparent_item->isEnabled() &&
+                    !transparent_item->toolTip().isEmpty(),
+                "the unsupported transparent profile is disabled with a reason");
+    }
     require(dialog.findChild<QWidget*>(QStringLiteral("motion-export-audio")) == nullptr,
             "Motion export settings do not expose audio controls");
 }
@@ -537,6 +685,29 @@ int main(int argc, char* argv[])
                 "CPU preview and video export include the colored Outer Glow halo");
         require(!has_non_black(*decoded.back()),
                 "hidden layers extend the export duration without rendering pixels");
+
+        if (const auto alpha = chooseAlphaOutput()) {
+            const auto alpha_target = outputPath(temporary_directory, alpha->container,
+                "motion-transparent-export");
+            auto alpha_settings = settingsFor(alpha_target, alpha->container, alpha->encoder);
+            alpha_settings.profile = alpha->profile.profile;
+            alpha_settings.alpha_pixel_format_name = alpha->profile.pixel_format_name;
+            alpha_settings.quality_value = 32;
+            auto surface = creative_suite::composition::OpenGlFrameCompositor::createSurface();
+            motion::ui::MotionExportRenderOptions alpha_render_options;
+            alpha_render_options.gpu_composition_enabled = surface != nullptr;
+            alpha_render_options.gpu_surface = surface.get();
+            std::atomic_bool alpha_not_canceled{false};
+            motion::ui::MotionVideoExporter::exportVideo(snapshot, alpha_settings,
+                alpha_not_canceled, {}, nullptr, alpha_render_options);
+            const auto alpha_decoded = decodeVideo(alpha_target);
+            require(alpha_decoded.size() == 9 && alpha_decoded.front() && alpha_decoded[3],
+                "transparent Motion export decodes the full frame range");
+            require(alpha_decoded.front()->rgba_pixels[3] <= 2,
+                "blank lead-in remains transparent in the alpha export profile");
+            require(alpha_decoded[3]->rgba_pixels[3] >= 250,
+                "visible image content remains opaque in the alpha export profile");
+        }
 
         auto baseline_video_snapshot = snapshot;
         auto source_in_video_snapshot = snapshot;

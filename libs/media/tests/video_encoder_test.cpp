@@ -236,6 +236,77 @@ int main(int argc, char** argv)
                     "Padded conversion changed pixel order or color beyond YUV round-trip tolerance.");
         }
 
+        bool exercised_alpha_adapter = false;
+        for (const auto& alpha_container : containers) {
+            for (const auto& alpha_encoder : alpha_container.video_encoders) {
+                for (const auto& alpha_profile : alpha_encoder.alpha_profiles) {
+                    exercised_alpha_adapter = true;
+                    auto extension = alpha_container.extensions.substr(
+                        0, alpha_container.extensions.find(','));
+                    if (extension.empty()) extension = "video";
+                    creative_suite::media::VideoEncodingSettings alpha_settings;
+                    alpha_settings.output_path = temporary_directory.path() /
+                        ("alpha-" + alpha_encoder.name + "-" + alpha_profile.display_name + "." + extension);
+                    alpha_settings.container_name = alpha_container.name;
+                    alpha_settings.video_encoder_name = alpha_encoder.name;
+                    alpha_settings.profile = alpha_profile.profile;
+                    alpha_settings.alpha_pixel_format_name = alpha_profile.pixel_format_name;
+                    alpha_settings.quality_value = 32;
+                    alpha_settings.width = 32;
+                    alpha_settings.height = 32;
+                    alpha_settings.frame_rate_numerator = 24;
+                    creative_suite::media::RgbaFrame alpha_source{32, 32, 128,
+                        std::vector<std::uint8_t>(32 * 32 * 4)};
+                    for (int y = 0; y < alpha_source.height; ++y) {
+                        for (int x = 0; x < alpha_source.width; ++x) {
+                            const auto offset = static_cast<std::size_t>(y) * alpha_source.stride +
+                                static_cast<std::size_t>(x) * 4U;
+                            alpha_source.rgba_pixels[offset] = 210;
+                            alpha_source.rgba_pixels[offset + 1] = 80;
+                            alpha_source.rgba_pixels[offset + 2] = 35;
+                            alpha_source.rgba_pixels[offset + 3] = x < 10 ? 0 : x < 21 ? 128 : 255;
+                        }
+                    }
+                    const auto alpha_path = alpha_settings.output_path;
+                    {
+                        creative_suite::media::VideoEncoder writer(alpha_settings);
+                        writer.writeVideo(alpha_source, 0);
+                        writer.finish();
+                    }
+                    auto alpha_reader = creative_suite::media::VideoPlaybackSession::open(alpha_path);
+                    const auto alpha_decoded = alpha_reader->decode_next_frame();
+                    require(alpha_decoded && *alpha_decoded && (*alpha_decoded)->width == 32 &&
+                        (*alpha_decoded)->height == 32,
+                        "An advertised alpha adapter did not decode its output frame.");
+                    const auto* pixels = (*alpha_decoded)->rgba_pixels.data();
+                    const auto transparent_alpha = pixels[3];
+                    const auto partial_alpha = pixels[11 * 4 + 3];
+                    const auto opaque_alpha = pixels[25 * 4 + 3];
+                    require(transparent_alpha <= 2 && std::abs(int(partial_alpha) - 128) <= 4 &&
+                        opaque_alpha >= 250,
+                        "An alpha adapter changed transparent, partial, or opaque pixel coverage.");
+                }
+            }
+        }
+        (void)exercised_alpha_adapter; // The runtime may expose no supported alpha adapter.
+
+        bool rejected_invalid_alpha_adapter = false;
+        try {
+            creative_suite::media::VideoEncodingSettings invalid_alpha;
+            invalid_alpha.output_path = temporary_directory.path() / "invalid-alpha.mp4";
+            invalid_alpha.container_name = "mp4";
+            invalid_alpha.video_encoder_name = "libx264";
+            invalid_alpha.profile = creative_suite::media::VideoOutputProfile::Ffv1LosslessAlpha;
+            invalid_alpha.alpha_pixel_format_name = "gbrap";
+            invalid_alpha.width = 32; invalid_alpha.height = 32;
+            invalid_alpha.frame_rate_numerator = 24;
+            creative_suite::media::VideoEncoder rejected(std::move(invalid_alpha));
+        } catch (const std::invalid_argument&) {
+            rejected_invalid_alpha_adapter = true;
+        }
+        require(rejected_invalid_alpha_adapter,
+            "The encoder accepted an alpha profile paired with an unsupported codec/container.");
+
         std::cout << "Shared video encoder tests passed.\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

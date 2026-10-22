@@ -242,7 +242,8 @@ public:
         return {OpenGlCompositionStatus::Unsupported};
     }
     virtual OpenGlReadbackResult submitAsyncReadback(int, int, const std::vector<CompositionLayer>&,
-        const CancellationPredicate& = {}) { return {OpenGlCompositionStatus::Unsupported}; }
+        const CancellationPredicate& = {}, CompositionOutputAlpha = CompositionOutputAlpha::Opaque) {
+        return {OpenGlCompositionStatus::Unsupported}; }
     virtual OpenGlReadbackResult submitAsyncReadback(const OpenGlTextureFramePtr&,
         const CancellationPredicate& = {}) { return {OpenGlCompositionStatus::Unsupported}; }
     virtual OpenGlReadbackResult collectAsyncReadback(OpenGlReadbackTicket,
@@ -250,7 +251,8 @@ public:
     virtual void discardAsyncReadbacks() noexcept {}
     virtual unsigned asyncReadbackSlotCount() const noexcept { return 0; }
     virtual OpenGlCompositionResult compose(int, int, const std::vector<CompositionLayer>&,
-        const CancellationPredicate& = {}, OpenGlCompositionTimings* = nullptr) = 0;
+        const CancellationPredicate& = {}, OpenGlCompositionTimings* = nullptr,
+        CompositionOutputAlpha = CompositionOutputAlpha::Opaque) = 0;
     virtual OpenGlTextureCompositionResult composeTexture(int, int, const std::vector<CompositionLayer>&,
         const CancellationPredicate& = {}, OpenGlCompositionTimings* = nullptr) = 0;
     virtual OpenGlTextureCompositionResult processImage(const OpenGlImageOperation&,

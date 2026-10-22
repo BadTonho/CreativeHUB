@@ -117,9 +117,95 @@ std::string firstName(std::string_view names) {
     return std::string(names.substr(0, comma));
 }
 
+bool encoderSupportsPixelFormat(const AVCodec* codec, AVPixelFormat pixel_format) {
+    if (codec == nullptr || pixel_format == AV_PIX_FMT_NONE) return false;
+    CodecPtr context(avcodec_alloc_context3(codec));
+    if (!context) return false;
+    const void* config = nullptr;
+    int count = 0;
+    if (avcodec_get_supported_config(context.get(), codec, AV_CODEC_CONFIG_PIX_FORMAT,
+            0, &config, &count) < 0 || config == nullptr || count <= 0) return false;
+    const auto* formats = static_cast<const AVPixelFormat*>(config);
+    return std::find(formats, formats + count, pixel_format) != formats + count;
+}
+
+struct AlphaAdapterCandidate {
+    VideoOutputProfile profile;
+    const char* pixel_format;
+    const char* display_name;
+};
+
+bool probeAlphaAdapter(const AVCodec* codec, VideoOutputProfile profile,
+                       AVPixelFormat pixel_format) {
+    CodecPtr context(avcodec_alloc_context3(codec));
+    if (!context) return false;
+    context->width = 16;
+    context->height = 16;
+    context->time_base = AVRational{1, 30};
+    context->framerate = AVRational{30, 1};
+    context->pix_fmt = pixel_format;
+    if (profile == VideoOutputProfile::Vp9Alpha) context->bit_rate = 0;
+    AVDictionary* options = nullptr;
+    if (profile == VideoOutputProfile::ProRes4444Alpha) {
+        av_dict_set(&options, "profile", "4", 0);
+        av_dict_set(&options, "alpha_bits", "16", 0);
+    } else if (profile == VideoOutputProfile::ProRes4444XqAlpha) {
+        av_dict_set(&options, "profile", "5", 0);
+        av_dict_set(&options, "alpha_bits", "16", 0);
+    } else if (profile == VideoOutputProfile::Vp9Alpha) {
+        av_dict_set(&options, "crf", "32", 0);
+    }
+    const int opened = avcodec_open2(context.get(), codec, &options);
+    const bool accepted = opened >= 0 && av_dict_count(options) == 0;
+    av_dict_free(&options);
+    return accepted;
+}
+
+std::vector<VideoAlphaProfileOption> alphaProfiles(
+    const AVOutputFormat* format, const AVCodec* codec, bool hardware,
+    std::string_view container_name) {
+    if (format == nullptr || codec == nullptr || hardware || codec->name == nullptr ||
+        format->name == nullptr || avformat_query_codec(format, codec->id,
+            FF_COMPLIANCE_NORMAL) <= 0) return {};
+    const std::string container = container_name.empty()
+        ? firstName(format->name) : std::string(container_name);
+    const std::string encoder(codec->name);
+    std::vector<AlphaAdapterCandidate> candidates;
+    if (container == "matroska" && encoder == "ffv1") {
+        candidates = {
+            {VideoOutputProfile::Ffv1LosslessAlpha, "gbrap", "Lossless"},
+            {VideoOutputProfile::Ffv1LosslessAlpha, "yuva444p", "Lossless"}};
+    } else if (container == "mov" && encoder == "prores_ks") {
+        candidates = {
+            {VideoOutputProfile::ProRes4444Alpha, "yuva444p10le", "4444"},
+            {VideoOutputProfile::ProRes4444XqAlpha, "yuva444p10le", "4444 XQ"}};
+    } else if (container == "webm" && encoder == "libvpx-vp9") {
+        candidates = {
+            {VideoOutputProfile::Vp9Alpha, "yuva420p", "VP9 alpha"}};
+    }
+    std::vector<VideoAlphaProfileOption> result;
+    for (const auto& candidate : candidates) {
+        const auto pixel_format = av_get_pix_fmt(candidate.pixel_format);
+        const auto* description = av_pix_fmt_desc_get(pixel_format);
+        if (description == nullptr || (description->flags & AV_PIX_FMT_FLAG_ALPHA) == 0 ||
+            !encoderSupportsPixelFormat(codec, pixel_format) ||
+            !probeAlphaAdapter(codec, candidate.profile, pixel_format)) continue;
+        if (candidate.profile == VideoOutputProfile::Ffv1LosslessAlpha &&
+            !result.empty()) continue;
+        result.push_back({candidate.profile, candidate.pixel_format,
+            candidate.display_name});
+    }
+    return result;
+}
+
+bool isAlphaProfile(VideoOutputProfile profile) {
+    return profile != VideoOutputProfile::Bitrate;
+}
+
 std::vector<VideoEncoderOption> compatibleEncoders(
     const AVOutputFormat* format,
-    AVMediaType media_type) {
+    AVMediaType media_type,
+    std::string_view container_name = {}) {
     std::vector<VideoEncoderOption> result;
     if (format == nullptr) return result;
     void* iterator = nullptr;
@@ -135,7 +221,9 @@ std::vector<VideoEncoderOption> compatibleEncoders(
             name.ends_with("_qsv") || name.ends_with("_vaapi") || name.ends_with("_videotoolbox");
         const auto label = std::string(codec->long_name != nullptr ? codec->long_name : codec->name) +
             (hardware ? " (Hardware, Experimental)" : "");
-        result.push_back({name, label, static_cast<int>(codec->id), hardware, hardware});
+        auto alpha_profiles = alphaProfiles(format, codec, hardware, container_name);
+        result.push_back({name, label, static_cast<int>(codec->id), hardware, hardware,
+            std::move(alpha_profiles)});
     }
     std::sort(result.begin(), result.end(), [](const auto& left, const auto& right) {
         if (left.display_name != right.display_name) {
@@ -159,12 +247,35 @@ std::vector<VideoContainerOption> availableVideoContainers() {
         if (name.empty() || seen_names.contains(name)) continue;
         auto video_encoders = compatibleEncoders(format, AVMEDIA_TYPE_VIDEO);
         if (video_encoders.empty()) continue;
+        const bool is_matroska_muxer = name == "matroska";
         seen_names.insert(name);
         result.push_back({std::move(name),
             format->long_name != nullptr ? format->long_name : firstName(format->name),
             format->extensions != nullptr ? format->extensions : "",
             std::move(video_encoders),
             compatibleEncoders(format, AVMEDIA_TYPE_AUDIO)});
+        if (is_matroska_muxer && format->name != nullptr) {
+            std::string_view aliases(format->name);
+            bool has_webm_alias = false;
+            while (!aliases.empty()) {
+                const auto comma = aliases.find(',');
+                if (aliases.substr(0, comma) == "webm") has_webm_alias = true;
+                if (comma == std::string_view::npos) break;
+                aliases.remove_prefix(comma + 1);
+            }
+            if (has_webm_alias && !seen_names.contains("webm")) {
+                auto webm_video_encoders = compatibleEncoders(
+                    format, AVMEDIA_TYPE_VIDEO, "webm");
+                if (std::any_of(webm_video_encoders.begin(), webm_video_encoders.end(),
+                        [](const auto& encoder) { return !encoder.alpha_profiles.empty(); })) {
+                    seen_names.insert("webm");
+                    result.push_back({"webm",
+                        format->long_name != nullptr ? format->long_name : "WebM",
+                        "webm", std::move(webm_video_encoders),
+                        compatibleEncoders(format, AVMEDIA_TYPE_AUDIO, "webm")});
+                }
+            }
+        }
     }
     std::sort(result.begin(), result.end(), [](const auto& left, const auto& right) {
         if (left.display_name != right.display_name) {
@@ -210,8 +321,11 @@ struct VideoEncoder::Impl {
     explicit Impl(VideoEncodingSettings input) : settings(std::move(input)) {
         if (settings.width <= 0 || settings.height <= 0 ||
             settings.frame_rate_numerator <= 0 || settings.frame_rate_denominator <= 0 ||
-            !std::isfinite(settings.video_bitrate_mbps) || settings.video_bitrate_mbps <= 0.0 ||
-            settings.video_bitrate_mbps > 500.0 ||
+            (settings.profile == VideoOutputProfile::Bitrate &&
+                (!std::isfinite(settings.video_bitrate_mbps) || settings.video_bitrate_mbps <= 0.0 ||
+                 settings.video_bitrate_mbps > 500.0)) ||
+            (settings.profile == VideoOutputProfile::Vp9Alpha &&
+                (settings.quality_value < 0 || settings.quality_value > 63)) ||
             settings.output_path.empty() || settings.container_name.empty() ||
             settings.video_encoder_name.empty()) {
             throw std::invalid_argument("The video encoding settings are invalid.");
@@ -275,8 +389,10 @@ struct VideoEncoder::Impl {
         video_codec->height = settings.height;
         video_codec->time_base = av_inv_q(frame_rate);
         video_codec->framerate = frame_rate;
-        video_codec->bit_rate = static_cast<std::int64_t>(
-            std::llround(settings.video_bitrate_mbps * 1000000.0));
+        if (settings.profile == VideoOutputProfile::Bitrate) {
+            video_codec->bit_rate = static_cast<std::int64_t>(
+                std::llround(settings.video_bitrate_mbps * 1000000.0));
+        }
         video_codec->gop_size = std::max(1, static_cast<int>(std::lround(
             av_q2d(frame_rate) * 2.0)));
         video_codec->max_b_frames = 0;
@@ -311,6 +427,31 @@ struct VideoEncoder::Impl {
                 }
             }
             if (!selected) video_codec->pix_fmt = formats[0];
+        }
+        if (isAlphaProfile(settings.profile)) {
+            const bool expected_pair =
+                (settings.profile == VideoOutputProfile::Ffv1LosslessAlpha &&
+                    settings.container_name == "matroska" && settings.video_encoder_name == "ffv1") ||
+                ((settings.profile == VideoOutputProfile::ProRes4444Alpha ||
+                  settings.profile == VideoOutputProfile::ProRes4444XqAlpha) &&
+                    settings.container_name == "mov" && settings.video_encoder_name == "prores_ks") ||
+                (settings.profile == VideoOutputProfile::Vp9Alpha &&
+                    settings.container_name == "webm" && settings.video_encoder_name == "libvpx-vp9");
+            const auto alpha_format = av_get_pix_fmt(settings.alpha_pixel_format_name.c_str());
+            const auto* alpha_description = av_pix_fmt_desc_get(alpha_format);
+            if (!expected_pair || codec->name == nullptr ||
+                alpha_description == nullptr ||
+                (alpha_description->flags & AV_PIX_FMT_FLAG_ALPHA) == 0 ||
+                !encoderSupportsPixelFormat(codec, alpha_format) ||
+                avformat_query_codec(output->oformat, codec->id,
+                    FF_COMPLIANCE_NORMAL) <= 0) {
+                throw std::invalid_argument(
+                    "The selected encoder, container, and alpha profile are not a supported adapter.");
+            }
+            video_codec->pix_fmt = alpha_format;
+            if (settings.profile == VideoOutputProfile::Vp9Alpha) video_codec->bit_rate = 0;
+        } else if (settings.profile != VideoOutputProfile::Bitrate) {
+            throw std::invalid_argument("The selected video output profile is invalid.");
         }
         AVDictionary* options = nullptr;
         if (settings.video_encoder_name.ends_with("_vaapi")) {
@@ -354,6 +495,15 @@ struct VideoEncoder::Impl {
         }
         if (settings.video_encoder_name == "libx264") {
             av_dict_set(&options, "preset", "medium", 0);
+        }
+        if (settings.profile == VideoOutputProfile::ProRes4444Alpha) {
+            av_dict_set(&options, "profile", "4", 0);
+            av_dict_set(&options, "alpha_bits", "16", 0);
+        } else if (settings.profile == VideoOutputProfile::ProRes4444XqAlpha) {
+            av_dict_set(&options, "profile", "5", 0);
+            av_dict_set(&options, "alpha_bits", "16", 0);
+        } else if (settings.profile == VideoOutputProfile::Vp9Alpha) {
+            av_dict_set(&options, "crf", std::to_string(settings.quality_value).c_str(), 0);
         }
         const int open_result = avcodec_open2(video_codec.get(), codec, &options);
         av_dict_free(&options);

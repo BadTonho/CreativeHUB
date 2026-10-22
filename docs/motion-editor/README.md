@@ -17,6 +17,7 @@ This directory groups approved scope and open work with the native format, featu
 | Rotating layers directly in the Viewer | [Rotation drag](features/ROTATION_DRAG.md) |
 | Scaling layers directly in the Viewer | [Scale X/Y drag](features/SCALE_DRAG.md) |
 | Layer blending and transparent backdrop semantics | [Blend modes](features/BLEND_MODES.md) |
+| Opaque and transparent video export | [Video export](features/VIDEO_EXPORT.md) |
 | Keyboard shortcuts | [Shortcuts](SHORTCUTS.md) |
 | Native document schema and migrations | [Document format](architecture/FORMAT.md) |
 | Shared-library ownership and reuse boundaries | [Reuse plan](architecture/REUSE_PLAN.md) |
@@ -24,6 +25,7 @@ This directory groups approved scope and open work with the native format, featu
 ## Feature guides
 
 - [Editable shape masks](features/MASKS.md)
+- [Video export profiles](features/VIDEO_EXPORT.md)
 - [Composition interchange contract](../COMPOSITION_INTERCHANGE.md)
 
 ## GPU delivery and performance

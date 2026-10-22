@@ -6,6 +6,7 @@
 #include "preview_frame.h"
 #include "../diagnostics/performance_metrics.h"
 
+#include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/media/video_frame.h>
 
 #include <QThread>
@@ -75,6 +76,9 @@ struct PreviewRequest {
     std::optional<model::LayerRotationOverride> rotation_override;
     std::optional<model::LayerScaleOverride> scale_override;
     std::uint64_t gesture_session = 0;
+    // Set only for offline transparent video export; preview remains opaque.
+    creative_suite::composition::CompositionOutputAlpha output_alpha =
+        creative_suite::composition::CompositionOutputAlpha::Opaque;
     [[nodiscard]] bool validSceneStorage() const noexcept {
         return !scene || (layers.empty() && !masks && !hierarchy && !track_mattes);
     }

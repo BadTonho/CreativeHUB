@@ -49,6 +49,20 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
     OpenGlImageOperation glow;glow.kind=OpenGlImageOperationKind::Glow;glow.background={&b};
     require(gpu.processImage(glow).status==OpenGlCompositionStatus::Unsupported,
         "Vulkan must report Glow as unsupported so callers can fall back to CPU.");
+    CompositionLayer alpha_layer{&b};
+    const auto alpha_refusal = gpu.compose(19, 13, {alpha_layer}, {}, nullptr,
+        CompositionOutputAlpha::Preserve);
+    require(alpha_refusal.status == OpenGlCompositionStatus::Unsupported &&
+        !alpha_refusal.frame,
+        "Vulkan must refuse transparent output so callers can fall back to CPU.");
+    const auto alpha_readback_refusal = gpu.submitAsyncReadback(19, 13, {alpha_layer}, {},
+        CompositionOutputAlpha::Preserve);
+    require(alpha_readback_refusal.status == OpenGlCompositionStatus::Unsupported,
+        "Vulkan must refuse asynchronous transparent output before composition.");
+    const auto alpha_cpu = FrameCompositor::compose(19, 13, {alpha_layer}, nullptr,
+        CompositionOutputAlpha::Preserve);
+    require(alpha_cpu && alpha_cpu->rgba_pixels[3] == 0,
+        "CPU fallback must retain empty-area alpha after Vulkan refusal.");
     for(unsigned m=1;m<6;++m) {CompositionLayer blend{&a};blend.blend_mode=static_cast<BlendMode>(m);
         const auto refused=gpu.composeTexture(37,23,{blend});
         require(refused.status==OpenGlCompositionStatus::Unsupported&&!refused.frame,"Vulkan must explicitly refuse blend modes before rendering");}

@@ -862,7 +862,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                     if (!use_synchronous_gpu) {
                         const auto submitted = gpu_compositor_->submitAsyncReadback(
                             request.canvas_size.width, request.canvas_size.height,
-                            composition_layers, should_cancel);
+                            composition_layers, should_cancel, request.output_alpha);
                         gpu_timings = submitted.composition_timings;
                         if (submitted.status == OpenGlCompositionStatus::Complete) {
                             if (gpu_metrics_ != nullptr) {
@@ -878,7 +878,9 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                         }
                         if (submitted.status == OpenGlCompositionStatus::Cancelled ||
                             (should_cancel && should_cancel())) return {};
-                        if (async_failure) *async_failure = true;
+                        if (async_failure)
+                            *async_failure = submitted.status ==
+                                OpenGlCompositionStatus::Failed;
                         gpu_result.status = submitted.status;
                         gpu_result.operation = submitted.operation;
                         gpu_result.cause = submitted.cause;
@@ -892,7 +894,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                         request.canvas_size.height,
                         composition_layers,
                         should_cancel,
-                        &gpu_timings);
+                        &gpu_timings,
+                        request.output_alpha);
                 }
             } catch (const std::exception& error) {
                 gpu_result.status = OpenGlCompositionStatus::Failed;
@@ -1049,7 +1052,7 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     auto composed = creative_suite::composition::FrameCompositor::compose(
         request.canvas_size.width,
         request.canvas_size.height,
-        composition_layers);
+        composition_layers, nullptr, request.output_alpha);
     if (!composed.has_value()) {
         if (fail_on_media_error) {
             throw std::runtime_error("The shared compositor rejected the Motion Studio canvas.");

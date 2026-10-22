@@ -28,6 +28,10 @@ struct MotionExportSettings {
     int height = 0;
     model::FrameRate frame_rate;
     double video_bitrate_mbps = 10.0;
+    creative_suite::media::VideoOutputProfile profile =
+        creative_suite::media::VideoOutputProfile::Bitrate;
+    std::string alpha_pixel_format_name;
+    int quality_value = 32;
 };
 
 struct MotionExportSnapshot {

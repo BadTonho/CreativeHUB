@@ -384,7 +384,9 @@ Nulls are invalid. Versions 1–12 retain Normal without adding animation data.
 The recovery wrapper remains v1 with the same native payload; Hub accepts v18
 and rejects v19. `.cscomp` v3 refuses non-Normal layers by name/ID. See
 [Blend modes](../features/BLEND_MODES.md) for the transparent accumulation and
-opaque output contract. No application version changes are implied.
+default opaque output contract. Video export can explicitly request a transient
+straight-alpha result; this job setting is not persisted in `.motion`. No
+application version changes are implied.
 
 ## Track Mattes (v14)
 

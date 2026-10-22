@@ -15,12 +15,29 @@
 
 namespace creative_suite::media {
 
+// Opaque bitrate-based encoding is the compatibility default. The remaining
+// profiles are software-only alpha adapters with explicit quality semantics.
+enum class VideoOutputProfile : std::uint8_t {
+    Bitrate,
+    Ffv1LosslessAlpha,
+    ProRes4444Alpha,
+    ProRes4444XqAlpha,
+    Vp9Alpha,
+};
+
+struct VideoAlphaProfileOption {
+    VideoOutputProfile profile = VideoOutputProfile::Ffv1LosslessAlpha;
+    std::string pixel_format_name;
+    std::string display_name;
+};
+
 struct VideoEncoderOption {
     std::string name;
     std::string display_name;
     int codec_id = 0;
     bool hardware = false;
     bool experimental = false;
+    std::vector<VideoAlphaProfileOption> alpha_profiles;
 };
 
 struct VideoContainerOption {
@@ -52,6 +69,10 @@ struct VideoEncodingSettings {
     NativeVideoFramePtr native_frame_template;
     // Optional device path for VAAPI; empty uses FFmpeg device discovery.
     std::string hardware_device_name;
+    // Appended to retain the positional order of the existing opaque settings.
+    VideoOutputProfile profile = VideoOutputProfile::Bitrate;
+    std::string alpha_pixel_format_name;
+    int quality_value = 32; // VP9 CRF, 0-63. Other profiles ignore it.
 };
 
 class VideoEncodingError final : public std::runtime_error {

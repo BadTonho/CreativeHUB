@@ -30,7 +30,8 @@ public:
     [[nodiscard]] OpenGlCompositionResult compose(
         int width, int height, const std::vector<CompositionLayer>& layers,
         const CancellationPredicate& cancel = {},
-        OpenGlCompositionTimings* timings = nullptr);
+        OpenGlCompositionTimings* timings = nullptr,
+        CompositionOutputAlpha output_alpha = CompositionOutputAlpha::Opaque) override;
 
     using GpuFrameCompositor::submitAsyncReadback;
 
@@ -43,7 +44,8 @@ public:
         bool fail_allocation_for_testing = false);
     [[nodiscard]] OpenGlReadbackResult submitAsyncReadback(
         int width, int height, const std::vector<CompositionLayer>& layers,
-        const CancellationPredicate& cancel = {});
+        const CancellationPredicate& cancel = {},
+        CompositionOutputAlpha output_alpha = CompositionOutputAlpha::Opaque) override;
     [[nodiscard]] OpenGlReadbackResult collectAsyncReadback(
         OpenGlReadbackTicket ticket, const CancellationPredicate& cancel = {},
         bool fail_collection_for_testing = false);
@@ -91,7 +93,8 @@ private:
     std::unique_ptr<Impl> impl_;
     [[nodiscard]] OpenGlCompositionResult render(int, int,
         const std::vector<CompositionLayer>&, const CancellationPredicate&,
-        OpenGlCompositionTimings*, bool read_output);
+        OpenGlCompositionTimings*, bool read_output,
+        CompositionOutputAlpha = CompositionOutputAlpha::Opaque);
 };
 
 } // namespace creative_suite::composition

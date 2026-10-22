@@ -34,8 +34,9 @@ Edits finish previous edits and cancel transient Viewer/Pen/timeline gestures
 before applying the captured choice. A completed field edit has one history
 entry, as do color, activation, add/remove and reorder. No-ops and collisions
 preserve Redo. Export/audio jobs block editing. There are no new shortcuts.
-Glow, inner shadows, spread, shadow-only output, animated color and alpha export
-are outside this delivery.
+Glow, inner shadows, spread, shadow-only output and animated color are outside
+this delivery. Transparent video export is documented separately in the
+[Video export guide](VIDEO_EXPORT.md).
 
 ## Pixels, geometry and lifetime
 

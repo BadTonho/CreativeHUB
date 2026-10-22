@@ -241,9 +241,9 @@ loads another editor's executable or installation.
 - Legacy sources are aspect-fit to the output canvas, then uniformly scaled and
   rotated about its center. Position is normalized to canvas width and height;
   nearest-neighbor sampling is used.
-- Layers are composited source-over in vector order, back-to-front. The output
-  is RGBA8 with an opaque black background, including when the layer list is
-  empty.
+- Layers are composited source-over in vector order, back-to-front. The default
+  output is RGBA8 with an opaque black background, including when the layer
+  list is empty; an explicit output mode preserves straight alpha over zero.
 - A non-positive canvas size, a width whose four-byte stride cannot fit in
   `int`, or an output byte count that cannot be represented returns
   `std::nullopt`. A layer with a null frame, non-positive source dimensions,
@@ -276,9 +276,10 @@ validation.
   Graph Editor and easing presets are Motion Studio-owned; shared Linear and
   bounded cubic Bezier segment evaluation is available to all consumers. More
   interpolation modes and overshoot-capable curves remain open.
-- The current compositor always returns an opaque black canvas. Transparent
-  composition/export and color management are not established by the current
-  Motion Studio MVP scope; revisit them only if that scope changes.
+- The shared compositor returns an opaque black canvas by default and offers an
+  explicit straight-alpha output mode for transparent video export. Motion
+  preview and linked publication keep the opaque default; color management is
+  still outside the current scope.
 - Composition documents, timelines, editing history, autosave, recovery, and
   frame scheduling remain Motion Studio responsibilities. Manual save/reopen
   uses its own versioned JSON `.motion` format. Version 2 stores typed text and shape
@@ -299,11 +300,14 @@ validation.
   including hidden layers for duration. Its reusable frame renderer evaluates
   visible image/video/text/shape content and transform keys, preserves blank
   lead-in frames, and uses rational frame mapping when output FPS differs.
-  `creative-suite::video-encoding` handles FFmpeg capability discovery and
-  encoding; Motion owns its settings dialog, job snapshot, worker, progress,
-  cancellation, output verification, and publication lifecycle. The output is
-  currently opaque and has no audio; settings apply to one job and are not
-  saved. Codec/profile choices and cross-platform behavior remain provisional.
+  `creative-suite::video-encoding` handles FFmpeg capability discovery,
+  software alpha-adapter probing, and encoding; Motion owns its settings dialog,
+  job snapshot, worker, progress, cancellation, output verification, and
+  publication lifecycle. Opaque video remains the default. Optional FFV1,
+  ProRes 4444, and VP9 alpha profiles are discovered from the installed FFmpeg
+  runtime; settings apply to one job and are not saved. Audio and linked
+  publication remain opaque. Codec/profile choices and cross-platform behavior
+  remain provisional.
 - Configurable keyboard shortcuts use the shared shortcut manager and the
   `Creative Suite` / `Motion Studio` QSettings identity, with the
   `MotionStudio/KeyboardShortcuts` group and stable command IDs. The Motion
@@ -432,7 +436,7 @@ See [Scale axes](../features/SCALE_AXES.md) and [format v12](FORMAT.md).
 Motion owns Inspector/history/native v13 and immutable scene propagation.
 The Qt-free shared `BlendMode` is a trailing layer field defaulting to Normal.
 CPU/OpenGL own final pixel blending with transparent premultiplied accumulation
-and opaque black output; Normal-only paths remain exact. OpenGL's reusable
+and opaque black output by default; Normal-only paths remain exact. OpenGL's reusable
 backdrop shares the existing texture budget and never aliases the draw target.
 Vulkan explicitly refuses non-Normal modes. Existing image operations, effects,
 mask coordinates and Video/Image formats/UI retain their contracts. See

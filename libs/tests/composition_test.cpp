@@ -148,6 +148,14 @@ void trackMattes() {
     require(!composition::applyTrackMatte(out,&invalid,composition::TrackMatteMode::Alpha)&&out.rgba_pixels==target.rgba_pixels,"invalid matte geometry cannot alter output");
     require(!composition::applyTrackMatte(out,&matte,static_cast<composition::TrackMatteMode>(255))&&out.rgba_pixels==target.rgba_pixels,"invalid matte mode cannot alter output");
     require(!composition::applyTrackMatte(out,&matte,composition::TrackMatteMode::Alpha,[]{return true;}),"matte cancellation");
+    auto partial=frame(1,1,{220,30,60,255});
+    auto alpha_source=frame(1,1,{0,0,0,128});
+    require(composition::applyTrackMatte(partial,&alpha_source,composition::TrackMatteMode::Alpha),
+        "partial-alpha track matte fixture");
+    const auto exported=composition::FrameCompositor::compose(1,1,{{&partial,{}}},nullptr,
+        composition::CompositionOutputAlpha::Preserve);
+    require(exported&&pixelEquals(*exported,0,0,220,30,60,128),
+        "Transparent composition preserves track-matte coverage.");
 }
 
 void logicalMaskRasterContract(){
@@ -214,6 +222,10 @@ int main() {
         require(pixelEquals(processed,1,0,100,20,40,128) && pixelEquals(processed,2,0,99,88,77,0),"Mask blend endpoints changed RGBA bytes.");
         processed=processed_source; require(composition::applyMask(processed,mask),"CPU ApplyMask failed.");
         require(pixelEquals(processed,0,0,0,0,255,128) && pixelEquals(processed,1,0,30,40,50,0),"ApplyMask changed straight RGB or alpha coverage.");
+        const auto masked_output=composition::FrameCompositor::compose(3,1,{{&processed,{}}},nullptr,
+            composition::CompositionOutputAlpha::Preserve);
+        require(masked_output&&masked_output->rgba_pixels[3]==128&&masked_output->rgba_pixels[7]==0&&
+            masked_output->rgba_pixels[11]==255,"Transparent composition preserves source-mask coverage.");
         auto colored_mask = frame(1, 1, {255, 0, 0, 255});
         auto colored_target = frame(1, 1, {1, 2, 3, 255});
         require(composition::applyMask(colored_target, colored_mask) &&
@@ -237,6 +249,15 @@ int main() {
                         "An empty composition did not return opaque black.");
             }
         }
+        const auto transparent_empty = composition::FrameCompositor::compose(
+            3, 2, {}, nullptr, composition::CompositionOutputAlpha::Preserve);
+        require(transparent_empty.has_value(), "Transparent output rejected an empty canvas.");
+        for (std::size_t offset = 0; offset < transparent_empty->rgba_pixels.size(); offset += 4)
+            require(transparent_empty->rgba_pixels[offset] == 0 &&
+                    transparent_empty->rgba_pixels[offset + 1] == 0 &&
+                    transparent_empty->rgba_pixels[offset + 2] == 0 &&
+                    transparent_empty->rgba_pixels[offset + 3] == 0,
+                "An empty transparent output must have zero RGBA pixels.");
 
         const auto source = frame(2, 2, {
             255, 0, 0, 255, 0, 255, 0, 255,
@@ -311,6 +332,35 @@ int main() {
         require(blue_then_red.has_value() &&
                     pixelEquals(*blue_then_red, 0, 0, 255, 0, 0, 255),
                 "Later layers were not composed above earlier layers.");
+
+        const auto transparent_half = composition::FrameCompositor::compose(
+            1, 1, {composition::CompositionLayer{&half_alpha_blue, {}}}, nullptr,
+            composition::CompositionOutputAlpha::Preserve);
+        require(transparent_half && pixelEquals(*transparent_half, 0, 0, 0, 0, 255, 128),
+            "Transparent output did not preserve straight partial alpha.");
+        composition::CompositionLayer covered_half{&half_alpha_blue, {}};
+        covered_half.alpha_coverage = composition::FrameCompositor::buildAlphaCoverage(
+            half_alpha_blue);
+        const auto covered_transparent = composition::FrameCompositor::compose(
+            1, 1, {covered_half}, nullptr,
+            composition::CompositionOutputAlpha::Preserve);
+        require(covered_transparent && pixelEquals(*covered_transparent, 0, 0, 0, 0, 255, 128),
+            "Transparent alpha-coverage composition lost partial source alpha.");
+        const auto half_alpha_red = frame(1, 1, {255, 0, 0, 128});
+        const auto overlapping_alpha = composition::FrameCompositor::compose(
+            1, 1, {composition::CompositionLayer{&half_alpha_red, {}},
+                   composition::CompositionLayer{&half_alpha_blue, {}}}, nullptr,
+            composition::CompositionOutputAlpha::Preserve);
+        require(overlapping_alpha && pixelEquals(*overlapping_alpha, 0, 0, 85, 0, 170, 192),
+            "Transparent layer order or straight-alpha source-over rounding changed.");
+        composition::CompositionLayer translucent_blend{&half_alpha_blue, {}};
+        translucent_blend.blend_mode = composition::BlendMode::Overlay;
+        const auto transparent_blended = composition::FrameCompositor::compose(
+            1, 1, {translucent_blend}, nullptr,
+            composition::CompositionOutputAlpha::Preserve);
+        require(transparent_blended && transparent_blended->rgba_pixels[3] == 128 &&
+                    transparent_blended->rgba_pixels[2] >= 253,
+            "Transparent blend-mode output lost alpha or failed to restore straight RGB.");
 
         auto invalid_transform = animation::Transform2D{};
         invalid_transform.opacity = 1.5;

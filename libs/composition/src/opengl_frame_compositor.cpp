@@ -42,6 +42,29 @@ OpenGlCompositionResult result(OpenGlCompositionStatus status,
     int layer_index = -1) {
     return {status, {}, operation, std::move(cause), code, layer_index};
 }
+bool unpremultiplyRgba(media::RgbaFrame& frame,
+                      const GpuFrameCompositor::CancellationPredicate& cancel) {
+    for (int y = 0; y < frame.height; ++y) {
+        if (cancel && cancel()) return false;
+        for (int x = 0; x < frame.width; ++x) {
+            const auto offset = static_cast<std::size_t>(y) * frame.stride +
+                static_cast<std::size_t>(x) * 4U;
+            const auto alpha = frame.rgba_pixels[offset + 3];
+            if (alpha == 0) {
+                frame.rgba_pixels[offset] = 0;
+                frame.rgba_pixels[offset + 1] = 0;
+                frame.rgba_pixels[offset + 2] = 0;
+                continue;
+            }
+            for (std::size_t channel = 0; channel < 3; ++channel) {
+                const auto premultiplied = frame.rgba_pixels[offset + channel];
+                frame.rgba_pixels[offset + channel] = static_cast<std::uint8_t>(
+                    std::min(255U, (unsigned(premultiplied) * 255U + alpha / 2U) / alpha));
+            }
+        }
+    }
+    return true;
+}
 bool usable(const CompositionLayer& layer) {
     if (!layer.frame || !animation::validTransform(layer.transform) || (layer.source_to_canvas && !validAffine(*layer.source_to_canvas))) return false;
     const auto& f = *layer.frame;
@@ -523,6 +546,7 @@ struct OpenGlFrameCompositor::Impl {
         int width = 0;
         int height = 0;
         bool busy = false;
+        bool preserve_alpha = false;
     };
     std::vector<ReadbackSlot> readback_slots;
     std::uint64_t next_readback_ticket = 0;
@@ -1549,8 +1573,8 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
 
 OpenGlCompositionResult OpenGlFrameCompositor::compose(int width, int height,
     const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
-    OpenGlCompositionTimings* timings) {
-    return render(width, height, layers, cancel, timings, true);
+    OpenGlCompositionTimings* timings, CompositionOutputAlpha output_alpha) {
+    return render(width, height, layers, cancel, timings, true, output_alpha);
 }
 
 OpenGlCompositionResult OpenGlFrameCompositor::prepareAsyncReadback(
@@ -1632,7 +1656,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::prepareAsyncReadback(
 
 OpenGlReadbackResult OpenGlFrameCompositor::submitAsyncReadback(
     int width, int height, const std::vector<CompositionLayer>& layers,
-    const CancellationPredicate& cancel) {
+    const CancellationPredicate& cancel, CompositionOutputAlpha output_alpha) {
     auto& p = *impl_;
     struct Guard { Impl& p; ~Guard() { if (p.context) p.context->doneCurrent(); } } guard{p};
     const auto cancelled = [&] { return cancel && cancel(); };
@@ -1652,7 +1676,8 @@ OpenGlReadbackResult OpenGlFrameCompositor::submitAsyncReadback(
                 "The asynchronous readback pool was not prepared for this canvas."};
         p.selected_output = p.output.get();
         OpenGlCompositionTimings composition_timings;
-        auto rendered = render(width, height, layers, cancel, &composition_timings, false);
+        auto rendered = render(width, height, layers, cancel, &composition_timings, false,
+            output_alpha);
         p.selected_output = nullptr;
         if (rendered.status != OpenGlCompositionStatus::Complete) {
             OpenGlReadbackResult failed{rendered.status, {}, {}, std::move(rendered.operation),
@@ -1680,6 +1705,7 @@ OpenGlReadbackResult OpenGlFrameCompositor::submitAsyncReadback(
                 "The driver could not submit the asynchronous framebuffer readback.", code};
         }
         free_slot->ticket = ++p.next_readback_ticket;
+        free_slot->preserve_alpha = output_alpha == CompositionOutputAlpha::Preserve;
         free_slot->busy = true;
         OpenGlReadbackResult submitted{OpenGlCompositionStatus::Complete, {free_slot->ticket}};
         submitted.composition_timings = composition_timings;
@@ -1754,11 +1780,14 @@ OpenGlReadbackResult OpenGlFrameCompositor::collectAsyncReadback(
             auto last = frame.rgba_pixels.begin() + static_cast<std::size_t>(frame.height - 1 - y) * frame.stride;
             std::swap_ranges(first, first + frame.stride, last);
         }
+        if (slot->preserve_alpha && !unpremultiplyRgba(frame, cancel))
+            return {OpenGlCompositionStatus::Cancelled};
         const auto copy_nanoseconds = elapsed(copy_started);
         p.gl->glDeleteSync(slot->fence);
         slot->fence = nullptr;
         slot->busy = false;
         slot->ticket = 0;
+        slot->preserve_alpha = false;
         OpenGlReadbackResult completed{OpenGlCompositionStatus::Complete, {}, std::move(frame)};
         completed.fence_wait_nanoseconds = wait_nanoseconds;
         completed.copy_nanoseconds = copy_nanoseconds;
@@ -1979,7 +2008,12 @@ OpenGlResourceUsage OpenGlFrameCompositor::resourceUsage() const noexcept { retu
 
 OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
     const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
-    OpenGlCompositionTimings* timings, bool read_output) {
+    OpenGlCompositionTimings* timings, bool read_output,
+    CompositionOutputAlpha output_alpha) {
+    if (output_alpha != CompositionOutputAlpha::Opaque &&
+        output_alpha != CompositionOutputAlpha::Preserve)
+        return result(OpenGlCompositionStatus::Unsupported, "validate-output-alpha",
+            "The requested composition output alpha mode is invalid.");
     for(std::size_t i=0;i<layers.size();++i)if(!validBlendMode(layers[i].blend_mode))
         return result(OpenGlCompositionStatus::Unsupported,"check-blend-mode","Invalid layer blend mode.",0,static_cast<int>(i));
     const bool blending=std::any_of(layers.begin(),layers.end(),[](const auto& l){return l.blend_mode!=BlendMode::Normal;});
@@ -2000,7 +2034,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             layer.gpu_color_adjustments = std::move(*passes);
             layer.effect_stack = {};
         }
-        return render(width, height, prepared_layers, cancel, timings, read_output);
+        return render(width, height, prepared_layers, cancel, timings, read_output, output_alpha);
     }
     OpenGlCompositionTimings measured;
     struct TimingsGuard {
@@ -2153,7 +2187,8 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         gl->glBlendEquation(GL_FUNC_ADD);
         gl->glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         gl->glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
-        gl->glClearColor(0, 0, 0, blending?0:1);
+        const bool preserve_alpha = output_alpha == CompositionOutputAlpha::Preserve;
+        gl->glClearColor(0, 0, 0, blending || preserve_alpha ? 0 : 1);
         gl->glClear(GL_COLOR_BUFFER_BIT);
         gl->glBindVertexArray(p.vao);
         gl->glActiveTexture(GL_TEXTURE0);
@@ -2481,7 +2516,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     "OpenGL reported an upload or drawing error.", code);
         }
         if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
-        if(blending) {
+        if(blending && !preserve_alpha) {
             // Accumulated RGB is already premultiplied over black; publish opaque RGBA.
             gl->glColorMask(GL_FALSE,GL_FALSE,GL_FALSE,GL_TRUE);
             gl->glClearColor(0,0,0,1);gl->glClear(GL_COLOR_BUFFER_BIT);
@@ -2507,6 +2542,8 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             auto last = frame.rgba_pixels.begin() + static_cast<std::size_t>(height - 1 - y) * frame.stride;
             std::swap_ranges(first, first + frame.stride, last);
         }
+        if (preserve_alpha && !unpremultiplyRgba(frame, cancel))
+            return result(OpenGlCompositionStatus::Cancelled);
         measured.readback_nanoseconds = elapsed(read_started);
         measured.readback_bytes = frame.rgba_pixels.size();
         if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);

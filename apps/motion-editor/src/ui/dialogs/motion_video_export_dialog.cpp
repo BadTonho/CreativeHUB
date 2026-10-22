@@ -11,6 +11,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QStandardItemModel>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStringList>
@@ -58,6 +59,37 @@ std::int64_t rateNumerator(const QDoubleSpinBox* field)
     return static_cast<std::int64_t>(std::llround(field->value() * 1000.0));
 }
 
+using VideoOutputProfile = creative_suite::media::VideoOutputProfile;
+
+bool isAlphaProfile(VideoOutputProfile profile)
+{
+    return profile != VideoOutputProfile::Bitrate;
+}
+
+int alphaProfileRank(VideoOutputProfile profile)
+{
+    switch (profile) {
+    case VideoOutputProfile::Ffv1LosslessAlpha: return 0;
+    case VideoOutputProfile::ProRes4444Alpha: return 1;
+    case VideoOutputProfile::ProRes4444XqAlpha: return 2;
+    case VideoOutputProfile::Vp9Alpha: return 3;
+    case VideoOutputProfile::Bitrate: return 100;
+    }
+    return 100;
+}
+
+bool hasAlphaProfile(const creative_suite::media::VideoEncoderOption& encoder)
+{
+    return !encoder.alpha_profiles.empty();
+}
+
+std::optional<VideoOutputProfile> selectedAlphaProfile(const QComboBox* quality)
+{
+    if (quality == nullptr || !quality->currentData(Qt::UserRole + 1).toBool()) return {};
+    const auto value = static_cast<VideoOutputProfile>(quality->currentData().toInt());
+    return isAlphaProfile(value) ? std::optional<VideoOutputProfile>(value) : std::nullopt;
+}
+
 } // namespace
 
 MotionVideoExportDialog::MotionVideoExportDialog(
@@ -83,6 +115,14 @@ MotionVideoExportDialog::MotionVideoExportDialog(
     output_layout->addWidget(output_path_, 1);
     output_layout->addWidget(browse);
     form->addRow(MotionUiTranslation::tr("Output file"), output_row);
+
+    output_profile_combo_ = new QComboBox(this);
+    output_profile_combo_->setObjectName(QStringLiteral("motion-export-output-profile"));
+    output_profile_combo_->addItem(MotionUiTranslation::tr("Opaque"),
+        static_cast<int>(VideoOutputProfile::Bitrate));
+    output_profile_combo_->addItem(MotionUiTranslation::tr("Transparent (alpha)"),
+        static_cast<int>(VideoOutputProfile::Ffv1LosslessAlpha));
+    form->addRow(MotionUiTranslation::tr("Output profile"), output_profile_combo_);
 
     container_combo_ = new QComboBox(this);
     container_combo_->setObjectName(QStringLiteral("motion-export-container"));
@@ -137,7 +177,8 @@ MotionVideoExportDialog::MotionVideoExportDialog(
     quality_combo_->addItem(MotionUiTranslation::tr("High"), 2);
     quality_combo_->addItem(MotionUiTranslation::tr("Custom"), 3);
     quality_combo_->setCurrentIndex(1);
-    form->addRow(MotionUiTranslation::tr("Quality profile"), quality_combo_);
+    quality_label_ = new QLabel(MotionUiTranslation::tr("Quality profile"), this);
+    form->addRow(quality_label_, quality_combo_);
 
     bitrate_ = new QDoubleSpinBox(this);
     bitrate_->setObjectName(QStringLiteral("motion-export-video-bitrate"));
@@ -145,13 +186,19 @@ MotionVideoExportDialog::MotionVideoExportDialog(
     bitrate_->setDecimals(1);
     bitrate_->setSingleStep(0.5);
     bitrate_->setSuffix(QStringLiteral(" Mbps"));
-    form->addRow(MotionUiTranslation::tr("Video bitrate"), bitrate_);
+    bitrate_label_ = new QLabel(MotionUiTranslation::tr("Video bitrate"), this);
+    form->addRow(bitrate_label_, bitrate_);
+    vp9_crf_ = new QSpinBox(this);
+    vp9_crf_->setObjectName(QStringLiteral("motion-export-vp9-crf"));
+    vp9_crf_->setRange(0, 63);
+    vp9_crf_->setValue(32);
+    vp9_crf_label_ = new QLabel(MotionUiTranslation::tr("VP9 constant quality (CRF)"), this);
+    form->addRow(vp9_crf_label_, vp9_crf_);
     layout->addLayout(form);
 
-    auto* note = new QLabel(
-        MotionUiTranslation::tr("Exports the full layer range as opaque video. Audio is not included."), this);
-    note->setWordWrap(true);
-    layout->addWidget(note);
+    note_ = new QLabel(this);
+    note_->setWordWrap(true);
+    layout->addWidget(note_);
     buttons_ = new QDialogButtonBox(
         QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
     buttons_->setObjectName(QStringLiteral("motion-export-buttons"));
@@ -168,7 +215,21 @@ MotionVideoExportDialog::MotionVideoExportDialog(
     connect(buttons_, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(output_path_, &QLineEdit::textChanged, this, [this] { updateAcceptState(); });
     connect(container_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, [this] { updateEncoders(); updateDefaultExtension(); });
+            this, [this] {
+                updateEncoders({}, selectedAlphaProfile(quality_combo_));
+                updateDefaultExtension();
+            });
+    connect(encoder_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this] { updateQualityControls(selectedAlphaProfile(quality_combo_)); });
+    connect(output_profile_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this] {
+                const auto previous_container = container_combo_->currentData().toString();
+                const auto previous_encoder = encoder_combo_->currentData().toString();
+                const auto previous_profile = selectedAlphaProfile(quality_combo_);
+                rebuildContainerChoices(previous_container, previous_encoder, previous_profile);
+                updateDefaultExtension();
+                updateAcceptState();
+            });
     connect(resolution_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
             this, [this] { updateResolutionFields(); updateQualitySuggestion(); });
     connect(custom_width_, qOverload<int>(&QSpinBox::valueChanged),
@@ -187,6 +248,9 @@ MotionVideoExportDialog::MotionVideoExportDialog(
             quality_combo_->setCurrentIndex(3);
         }
     });
+    connect(vp9_crf_, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
+        updateAcceptState();
+    });
 
     populateContainers();
     updateResolutionFields();
@@ -200,6 +264,9 @@ std::optional<MotionExportSettings> MotionVideoExportDialog::exportSettings() co
     const auto path = output_path_->text().trimmed();
     if (path.isEmpty() || container_combo_->currentIndex() < 0 ||
         encoder_combo_->currentIndex() < 0) return std::nullopt;
+    const int visible_container = container_combo_->currentIndex();
+    if (visible_container >= static_cast<int>(container_indices_.size())) return std::nullopt;
+    const auto& selected_container = containers_[container_indices_[static_cast<std::size_t>(visible_container)]];
     const QSize selected_size = resolution_combo_->currentData().toSize();
     model::FrameRate output_rate = composition_rate_;
     if (frame_rate_overridden_) {
@@ -209,21 +276,40 @@ std::optional<MotionExportSettings> MotionVideoExportDialog::exportSettings() co
         numerator /= divisor;
         output_rate = {numerator, denominator / divisor};
     }
-    return MotionExportSettings{
+    MotionExportSettings settings{
         pathFromQString(path),
-        container_combo_->currentData().toString().toStdString(),
+        selected_container.name,
         encoder_combo_->currentData().toString().toStdString(),
         selected_size.isValid() ? selected_size.width() : custom_width_->value(),
         selected_size.isValid() ? selected_size.height() : custom_height_->value(),
         output_rate,
         bitrate_->value()};
+    if (output_profile_combo_->currentData().toInt() !=
+        static_cast<int>(VideoOutputProfile::Bitrate)) {
+        const auto profile = selectedAlphaProfile(quality_combo_);
+        if (!profile) return std::nullopt;
+        settings.profile = *profile;
+        settings.quality_value = vp9_crf_->value();
+        const auto encoder = std::find_if(selected_container.video_encoders.begin(),
+            selected_container.video_encoders.end(), [&](const auto& option) {
+                return option.name == settings.video_encoder_name;
+            });
+        if (encoder == selected_container.video_encoders.end()) return std::nullopt;
+        const auto alpha = std::find_if(encoder->alpha_profiles.begin(),
+            encoder->alpha_profiles.end(), [&](const auto& option) {
+                return option.profile == *profile;
+            });
+        if (alpha == encoder->alpha_profiles.end()) return std::nullopt;
+        settings.alpha_pixel_format_name = alpha->pixel_format_name;
+    }
+    return settings;
 }
 
 void MotionVideoExportDialog::browseOutput()
 {
     const int index = container_combo_->currentIndex();
-    if (index < 0 || index >= static_cast<int>(containers_.size())) return;
-    const auto& container = containers_[static_cast<std::size_t>(index)];
+    if (index < 0 || index >= static_cast<int>(container_indices_.size())) return;
+    const auto& container = containers_[container_indices_[static_cast<std::size_t>(index)]];
     const auto selected = QFileDialog::getSaveFileName(
         this, MotionUiTranslation::tr("Choose Video Output"), output_path_->text(),
         extensionFilter(container));
@@ -233,54 +319,158 @@ void MotionVideoExportDialog::browseOutput()
 void MotionVideoExportDialog::populateContainers()
 {
     containers_ = creative_suite::media::availableVideoContainers();
-    container_combo_->clear();
-    for (const auto& container : containers_) {
-        QString label = QString::fromStdString(container.display_name);
-        if (!container.extensions.empty()) {
-            label += QStringLiteral(" (%1)").arg(
-                QString::fromStdString(container.extensions).section(QLatin1Char(','), 0, 0));
+    transparent_available_ = std::any_of(containers_.begin(), containers_.end(), [](const auto& container) {
+        return std::any_of(container.video_encoders.begin(), container.video_encoders.end(),
+            [](const auto& encoder) { return hasAlphaProfile(encoder); });
+    });
+    if (auto* model = qobject_cast<QStandardItemModel*>(output_profile_combo_->model())) {
+        if (auto* item = model->item(1)) {
+            item->setEnabled(transparent_available_);
+            if (!transparent_available_) {
+            output_profile_combo_->setItemData(1, MotionUiTranslation::tr(
+                "No supported software alpha encoder is available in this FFmpeg installation."),
+                Qt::ToolTipRole);
+            }
         }
-        container_combo_->addItem(label, QString::fromStdString(container.name));
     }
+    note_->setText(transparent_available_
+        ? MotionUiTranslation::tr("Exports the full layer range as video. Transparent alpha is available with supported software profiles. Audio is not included.")
+        : MotionUiTranslation::tr("Exports the full layer range as opaque video. No supported software alpha encoder is available. Audio is not included."));
     if (containers_.empty()) {
         container_combo_->setEnabled(false);
         encoder_combo_->setEnabled(false);
         buttons_->button(QDialogButtonBox::Save)->setEnabled(false);
         return;
     }
-    int preferred = 0;
-    for (int index = 0; index < static_cast<int>(containers_.size()); ++index) {
-        const auto& container = containers_[static_cast<std::size_t>(index)];
-        const auto extensions = QString::fromStdString(container.extensions).split(
-            QLatin1Char(','), Qt::SkipEmptyParts);
-        if (container.name == "mp4" || extensions.contains(QStringLiteral("mp4"), Qt::CaseInsensitive)) {
-            preferred = index;
-            break;
-        }
-    }
-    container_combo_->setCurrentIndex(preferred);
-    updateEncoders();
-    updateDefaultExtension();
+    rebuildContainerChoices();
 }
 
-void MotionVideoExportDialog::updateEncoders()
+void MotionVideoExportDialog::rebuildContainerChoices(
+    const QString& preferred_container,
+    const QString& preferred_encoder,
+    std::optional<VideoOutputProfile> preferred_profile)
 {
-    encoder_combo_->clear();
-    const int index = container_combo_->currentIndex();
-    if (index < 0 || index >= static_cast<int>(containers_.size())) {
+    const bool transparent = output_profile_combo_->currentData().toInt() !=
+        static_cast<int>(VideoOutputProfile::Bitrate);
+    const QSignalBlocker container_signals(container_combo_);
+    container_indices_.clear();
+    container_combo_->clear();
+    for (std::size_t index = 0; index < containers_.size(); ++index) {
+        const auto& container = containers_[index];
+        const bool has_alpha = std::any_of(container.video_encoders.begin(), container.video_encoders.end(),
+            [](const auto& encoder) { return hasAlphaProfile(encoder); });
+        if (transparent && !has_alpha) continue;
+        QString label = QString::fromStdString(container.display_name);
+        if (!container.extensions.empty()) {
+            label += QStringLiteral(" (%1)").arg(
+                QString::fromStdString(container.extensions).section(QLatin1Char(','), 0, 0));
+        }
+        container_indices_.push_back(index);
+        container_combo_->addItem(label, QString::fromStdString(container.name));
+    }
+    if (container_indices_.empty()) {
+        encoder_combo_->clear();
         encoder_combo_->setEnabled(false);
+        updateQualityControls();
         updateAcceptState();
         return;
     }
-    const auto& encoders = containers_[static_cast<std::size_t>(index)].video_encoders;
+
+    int selected = -1;
+    if (!preferred_container.isEmpty() && !preferred_encoder.isEmpty()) {
+        for (int index = 0; index < static_cast<int>(container_indices_.size()); ++index) {
+            const auto& container = containers_[container_indices_[static_cast<std::size_t>(index)]];
+            if (container.name != preferred_container.toStdString()) continue;
+            const auto encoder = std::find_if(container.video_encoders.begin(), container.video_encoders.end(),
+                [&](const auto& option) { return option.name == preferred_encoder.toStdString(); });
+            if (encoder != container.video_encoders.end() &&
+                (!transparent || hasAlphaProfile(*encoder))) {
+                selected = index;
+                break;
+            }
+        }
+    }
+    if (selected < 0 && transparent) {
+        int best_rank = 100;
+        for (int index = 0; index < static_cast<int>(container_indices_.size()); ++index) {
+            const auto& container = containers_[container_indices_[static_cast<std::size_t>(index)]];
+            for (const auto& encoder : container.video_encoders) {
+                for (const auto& alpha : encoder.alpha_profiles) {
+                    const auto rank = alphaProfileRank(alpha.profile);
+                    if (rank < best_rank) { best_rank = rank; selected = index; }
+                }
+            }
+        }
+    }
+    if (selected < 0 && !preferred_container.isEmpty())
+        selected = container_combo_->findData(preferred_container);
+    if (selected < 0 && !transparent) {
+        for (int index = 0; index < static_cast<int>(container_indices_.size()); ++index) {
+            const auto& container = containers_[container_indices_[static_cast<std::size_t>(index)]];
+            const auto extensions = QString::fromStdString(container.extensions).split(
+                QLatin1Char(','), Qt::SkipEmptyParts);
+            if (container.name == "mp4" || extensions.contains(QStringLiteral("mp4"), Qt::CaseInsensitive)) {
+                selected = index;
+                break;
+            }
+        }
+    }
+    if (selected < 0) selected = 0;
+    container_combo_->setCurrentIndex(selected);
+    updateEncoders(preferred_encoder, preferred_profile);
+    updateDefaultExtension();
+}
+
+void MotionVideoExportDialog::updateEncoders(
+    const QString& preferred_encoder,
+    std::optional<VideoOutputProfile> preferred_profile)
+{
+    const QSignalBlocker encoder_signals(encoder_combo_);
+    encoder_combo_->clear();
+    const int index = container_combo_->currentIndex();
+    if (index < 0 || index >= static_cast<int>(container_indices_.size())) {
+        encoder_combo_->setEnabled(false);
+        updateQualityControls();
+        updateAcceptState();
+        return;
+    }
+    const auto& container = containers_[container_indices_[static_cast<std::size_t>(index)]];
+    const bool transparent = output_profile_combo_->currentData().toInt() !=
+        static_cast<int>(VideoOutputProfile::Bitrate);
+    const auto& encoders = container.video_encoders;
     for (const auto& encoder : encoders) {
+        if (transparent && !hasAlphaProfile(encoder)) continue;
         encoder_combo_->addItem(
             QStringLiteral("%1 (%2)").arg(QString::fromStdString(encoder.display_name),
                                             QString::fromStdString(encoder.name)),
             QString::fromStdString(encoder.name));
         encoder_combo_->setItemData(encoder_combo_->count() - 1, encoder.experimental, Qt::UserRole + 1);
     }
-    int preferred = encoder_combo_->findData(QStringLiteral("libx264"));
+    int preferred = encoder_combo_->findData(preferred_encoder);
+    if (preferred >= 0 && transparent) {
+        const auto encoder = std::find_if(encoders.begin(), encoders.end(), [&](const auto& option) {
+            return option.name == preferred_encoder.toStdString();
+        });
+        const bool profile_matches = encoder != encoders.end() &&
+            (!preferred_profile || std::any_of(encoder->alpha_profiles.begin(), encoder->alpha_profiles.end(),
+                [&](const auto& option) { return option.profile == *preferred_profile; }));
+        if (!profile_matches) preferred = -1;
+    }
+    if (preferred < 0 && !transparent) preferred = encoder_combo_->findData(QStringLiteral("libx264"));
+    if (preferred < 0 && transparent) {
+        int best_rank = 100;
+        for (int option = 0; option < encoder_combo_->count(); ++option) {
+            const auto name = encoder_combo_->itemData(option).toString().toStdString();
+            const auto encoder = std::find_if(encoders.begin(), encoders.end(), [&](const auto& value) {
+                return value.name == name;
+            });
+            if (encoder == encoders.end()) continue;
+            for (const auto& alpha : encoder->alpha_profiles) {
+                const auto rank = alphaProfileRank(alpha.profile);
+                if (rank < best_rank) { best_rank = rank; preferred = option; }
+            }
+        }
+    }
     if (preferred < 0) {
         for (int option = 0; option < encoder_combo_->count(); ++option) {
             if (encoder_combo_->itemData(option, Qt::UserRole + 1).toBool()) continue;
@@ -298,7 +488,79 @@ void MotionVideoExportDialog::updateEncoders()
     }
     if (preferred >= 0) encoder_combo_->setCurrentIndex(preferred);
     encoder_combo_->setEnabled(encoder_combo_->count() > 0);
+    updateQualityControls(preferred_profile);
     updateAcceptState();
+}
+
+void MotionVideoExportDialog::updateQualityControls(
+    std::optional<VideoOutputProfile> preferred_profile)
+{
+    const QSignalBlocker quality_signals(quality_combo_);
+    const bool transparent = output_profile_combo_->currentData().toInt() !=
+        static_cast<int>(VideoOutputProfile::Bitrate);
+    const bool vp9 = transparent && encoder_combo_->currentData().toString() == QStringLiteral("libvpx-vp9");
+    quality_combo_->clear();
+    if (!transparent) {
+        quality_combo_->addItem(MotionUiTranslation::tr("Low"), 0);
+        quality_combo_->addItem(MotionUiTranslation::tr("Standard"), 1);
+        quality_combo_->addItem(MotionUiTranslation::tr("High"), 2);
+        quality_combo_->addItem(MotionUiTranslation::tr("Custom"), 3);
+        quality_combo_->setCurrentIndex(1);
+        quality_combo_->setEnabled(true);
+    } else {
+        const int container_index = container_combo_->currentIndex();
+        if (container_index >= 0 && container_index < static_cast<int>(container_indices_.size())) {
+            const auto& container = containers_[container_indices_[static_cast<std::size_t>(container_index)]];
+            const auto encoder_name = encoder_combo_->currentData().toString().toStdString();
+            const auto encoder = std::find_if(container.video_encoders.begin(), container.video_encoders.end(),
+                [&](const auto& option) { return option.name == encoder_name; });
+            if (encoder != container.video_encoders.end()) {
+                for (const auto& alpha : encoder->alpha_profiles) {
+                    QString label = QString::fromStdString(alpha.display_name);
+                    if (alpha.profile == VideoOutputProfile::ProRes4444Alpha ||
+                        alpha.profile == VideoOutputProfile::ProRes4444XqAlpha)
+                        label = MotionUiTranslation::tr("%1 (16-bit alpha)").arg(label);
+                    else if (alpha.profile == VideoOutputProfile::Ffv1LosslessAlpha)
+                        label = MotionUiTranslation::tr("Lossless");
+                    quality_combo_->addItem(label, static_cast<int>(alpha.profile));
+                    quality_combo_->setItemData(
+                        quality_combo_->count() - 1, true, Qt::UserRole + 1);
+                }
+            }
+        }
+        int selected = -1;
+        if (preferred_profile) {
+            for (int index = 0; index < quality_combo_->count(); ++index)
+                if (quality_combo_->itemData(index).toInt() == static_cast<int>(*preferred_profile)) {
+                    selected = index; break;
+                }
+        }
+        if (selected < 0 && quality_combo_->count() > 0) {
+            int best_rank = 100;
+            for (int index = 0; index < quality_combo_->count(); ++index) {
+                const auto profile = static_cast<VideoOutputProfile>(quality_combo_->itemData(index).toInt());
+                const auto rank = alphaProfileRank(profile);
+                if (rank < best_rank) { best_rank = rank; selected = index; }
+            }
+        }
+        if (selected >= 0) quality_combo_->setCurrentIndex(selected);
+        quality_combo_->setEnabled(quality_combo_->count() > 1 && !vp9);
+    }
+    quality_label_->setVisible(!vp9);
+    quality_combo_->setVisible(!vp9);
+    bitrate_label_->setVisible(!transparent);
+    bitrate_->setVisible(!transparent);
+    vp9_crf_label_->setVisible(vp9);
+    vp9_crf_->setVisible(vp9);
+    if (transparent) {
+        note_->setText(MotionUiTranslation::tr(
+            "Exports transparent alpha with the selected software codec profile. Empty areas remain transparent; audio is not included."));
+    } else {
+        note_->setText(transparent_available_
+            ? MotionUiTranslation::tr("Exports the full layer range as opaque video. Transparent alpha is available with supported software profiles. Audio is not included.")
+            : MotionUiTranslation::tr("Exports the full layer range as opaque video. No supported software alpha encoder is available. Audio is not included."));
+    }
+    updateQualitySuggestion();
 }
 
 void MotionVideoExportDialog::updateResolutionFields()
@@ -312,7 +574,9 @@ void MotionVideoExportDialog::updateResolutionFields()
 
 void MotionVideoExportDialog::updateQualitySuggestion()
 {
-    if (quality_combo_->currentIndex() >= 3) return;
+    if (output_profile_combo_->currentData().toInt() !=
+            static_cast<int>(VideoOutputProfile::Bitrate) ||
+        quality_combo_->currentIndex() >= 3) return;
     int width = canvas_size_.width;
     int height = canvas_size_.height;
     const QSize preset = resolution_combo_->currentData().toSize();
@@ -347,8 +611,8 @@ void MotionVideoExportDialog::updateAcceptState()
 void MotionVideoExportDialog::updateDefaultExtension()
 {
     const int index = container_combo_->currentIndex();
-    if (index < 0 || index >= static_cast<int>(containers_.size())) return;
-    const auto& container = containers_[static_cast<std::size_t>(index)];
+    if (index < 0 || index >= static_cast<int>(container_indices_.size())) return;
+    const auto& container = containers_[container_indices_[static_cast<std::size_t>(index)]];
     const QStringList extensions = QString::fromStdString(container.extensions).split(
         QLatin1Char(','), Qt::SkipEmptyParts);
     if (extensions.isEmpty()) return;

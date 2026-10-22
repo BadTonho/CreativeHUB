@@ -44,15 +44,18 @@ source `Cs`, effective source alpha `As`, and `Cb = clamp(Pb/Ab)` when `Ab > 0`:
 
 For `Ab=0`, use the source contribution `As*Cs`; hidden RGB under zero alpha
 cannot influence the result. Quantize the accumulator to RGBA8 per layer. The
-final RGB already represents composition over black, so flatten by publishing
-alpha 255. Public composition CPU frames, GPU leases and export output retain their opaque
-RGBA contract. Multiply on an otherwise empty composition stays visible.
+default output RGB represents composition over black and publishes alpha 255.
+The shared compositor also has an explicit output mode that unpremultiplies the
+accumulated color and preserves alpha for transparent video export; the Viewer
+and linked publication retain the opaque default. Multiply on an otherwise
+empty composition stays visible.
 
-CPU composition reuses existing nearest sampling and full affine geometry,
-but bypasses Normal-only copy/opaque/lookup optimizations during transparent
-accumulation. Normal scenes keep their existing fast paths. OpenGL uses the same
-equation and a reusable RGBA8 backdrop copied solely on GPU before non-Normal
-draws, without reading a draw attachment as a texture. Its reservation shares
+CPU composition reuses existing nearest sampling and full affine geometry.
+Transparent Normal layers use straight-alpha source-over and skip only the
+opaque-background blend lookup; opaque output retains its established fast
+paths. OpenGL uses the same equation and a reusable RGBA8 backdrop copied
+solely on GPU before non-Normal draws, without reading a draw attachment as a
+texture. Its reservation shares
 the existing `OpenGlTexturePoolBudget` (64 MiB by default), is reported in resource
 usage and is released when no longer needed, on retirement or by worker cleanup.
 If backdrop reservation prevents replacing a displayed lease, return Unsupported
@@ -134,8 +137,9 @@ commits or publication were produced.
 Record executable path/date, OS, graphics backend and display scale later:
 
 1. Test all six modes on opaque/semitransparent image, video, text and shapes,
-   including empty canvas and partial overlaps. Verify the Viewer/export stay
-   black/opaque, and compare Multiply on empty areas with overlapping content.
+   including empty canvas and partial overlaps. Verify the Viewer and default
+   export stay black/opaque, and compare Multiply on empty areas with overlapping
+   content. Verify the optional alpha export retains coverage.
 2. Reorder layers and combine opacity animation, Anchor, unequal scale, shear,
    parenting and Nulls with effects and every mask stage/View. Check that only
    final blending changes and the mode is not inherited.

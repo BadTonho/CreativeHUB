@@ -1029,7 +1029,15 @@ unsigned VulkanFrameCompositor::asyncReadbackSlotCount() const noexcept {
 #endif
 }
 OpenGlReadbackResult VulkanFrameCompositor::submitAsyncReadback(int width,int height,
-    const std::vector<CompositionLayer>& layers,const CancellationPredicate& cancel) {
+    const std::vector<CompositionLayer>& layers,const CancellationPredicate& cancel,
+    CompositionOutputAlpha output_alpha) {
+    if (output_alpha != CompositionOutputAlpha::Opaque &&
+        output_alpha != CompositionOutputAlpha::Preserve)
+        return {Status::Unsupported, {}, {}, "validate-output-alpha",
+            "The requested composition output alpha mode is invalid."};
+    if (output_alpha == CompositionOutputAlpha::Preserve)
+        return {Status::Unsupported, {}, {}, "vulkan-alpha-output",
+            "Vulkan composition does not yet preserve output alpha; use CPU composition."};
 #ifdef CS_HAS_VULKAN
     if(!readbacks_ || std::none_of(readbacks_->readback_slots.begin(),readbacks_->readback_slots.end(),[](const auto& slot){return !slot.ticket;}))
         return {readbacks_?Status::Busy:Status::Unsupported};
@@ -1289,7 +1297,15 @@ OpenGlCompositionResult VulkanFrameCompositor::readback(const OpenGlTextureFrame
     return {result.status,std::move(result.frame),result.operation,result.cause,result.error_code};
 }
 OpenGlCompositionResult VulkanFrameCompositor::compose(int width,int height,const std::vector<CompositionLayer>& layers,
-    const CancellationPredicate& cancel,OpenGlCompositionTimings* timings) {
+    const CancellationPredicate& cancel,OpenGlCompositionTimings* timings,
+    CompositionOutputAlpha output_alpha) {
+    if (output_alpha != CompositionOutputAlpha::Opaque &&
+        output_alpha != CompositionOutputAlpha::Preserve)
+        return {Status::Unsupported, {}, "validate-output-alpha",
+            "The requested composition output alpha mode is invalid."};
+    if (output_alpha == CompositionOutputAlpha::Preserve)
+        return {Status::Unsupported, {}, "vulkan-alpha-output",
+            "Vulkan composition does not yet preserve output alpha; use CPU composition."};
     auto result=composeTexture(width,height,layers,cancel,timings);
     if(result.status!=Status::Complete)return {result.status,{},result.operation,result.cause,result.error_code};
     return readback(result.frame,cancel,timings);

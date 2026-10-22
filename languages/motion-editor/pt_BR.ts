@@ -477,6 +477,46 @@
         <translation>Ativar métricas de desempenho da prévia</translation>
     </message>
     <message>
+        <source>Output profile</source>
+        <translation>Perfil de saída</translation>
+    </message>
+    <message>
+        <source>Opaque</source>
+        <translation>Opaco</translation>
+    </message>
+    <message>
+        <source>Transparent (alpha)</source>
+        <translation>Transparente (alfa)</translation>
+    </message>
+    <message>
+        <source>VP9 constant quality (CRF)</source>
+        <translation>Qualidade constante VP9 (CRF)</translation>
+    </message>
+    <message>
+        <source>Lossless</source>
+        <translation>Sem perdas</translation>
+    </message>
+    <message>
+        <source>%1 (16-bit alpha)</source>
+        <translation>%1 (alfa de 16 bits)</translation>
+    </message>
+    <message>
+        <source>No supported software alpha encoder is available in this FFmpeg installation.</source>
+        <translation>Nenhum codificador de software compatível com alfa está disponível nesta instalação do FFmpeg.</translation>
+    </message>
+    <message>
+        <source>Exports the full layer range as video. Transparent alpha is available with supported software profiles. Audio is not included.</source>
+        <translation>Exporta todo o intervalo das camadas como vídeo. A transparência está disponível nos perfis de software compatíveis. O áudio não está incluído.</translation>
+    </message>
+    <message>
+        <source>Exports the full layer range as opaque video. No supported software alpha encoder is available. Audio is not included.</source>
+        <translation>Exporta todo o intervalo das camadas como vídeo opaco. Nenhum codificador de software compatível com alfa está disponível. O áudio não está incluído.</translation>
+    </message>
+    <message>
+        <source>Exports transparent alpha with the selected software codec profile. Empty areas remain transparent; audio is not included.</source>
+        <translation>Exporta com transparência usando o perfil de software selecionado. As áreas vazias permanecem transparentes; o áudio não está incluído.</translation>
+    </message>
+    <message>
         <location filename="../../apps/motion-editor/src/ui/dialogs/motion_video_export_dialog.cpp" line="70"/>
         <location filename="../../apps/motion-editor/src/ui/main_window/main_window_jobs.cpp" line="91"/>
         <source>Export Video</source>

@@ -373,8 +373,11 @@ void MotionVideoExporter::exportVideo(
     if (settings.output_path.empty() || settings.container_name.empty() ||
         settings.video_encoder_name.empty() || settings.width <= 0 || settings.height <= 0 ||
         settings.width > 16384 || settings.height > 16384 ||
-        !std::isfinite(settings.video_bitrate_mbps) ||
-        settings.video_bitrate_mbps < 0.1 || settings.video_bitrate_mbps > 500.0) {
+        (settings.profile == creative_suite::media::VideoOutputProfile::Bitrate &&
+            (!std::isfinite(settings.video_bitrate_mbps) ||
+             settings.video_bitrate_mbps < 0.1 || settings.video_bitrate_mbps > 500.0)) ||
+        (settings.profile == creative_suite::media::VideoOutputProfile::Vp9Alpha &&
+            (settings.quality_value < 0 || settings.quality_value > 63))) {
         throw std::runtime_error("The video export settings are invalid.");
     }
     const auto target = std::filesystem::absolute(settings.output_path);
@@ -413,6 +416,9 @@ void MotionVideoExporter::exportVideo(
         encoding.output_path = temporary;
         encoding.container_name = settings.container_name;
         encoding.video_encoder_name = settings.video_encoder_name;
+        encoding.profile = settings.profile;
+        encoding.alpha_pixel_format_name = settings.alpha_pixel_format_name;
+        encoding.quality_value = settings.quality_value;
         encoding.width = settings.width;
         encoding.height = settings.height;
         encoding.frame_rate_numerator = output_rate.num;
@@ -448,6 +454,10 @@ void MotionVideoExporter::exportVideo(
             request.canvas_size = snapshot.canvas_size;
             request.frame_rate = snapshot.frame_rate;
             request.black_canvas_when_empty = true;
+            request.output_alpha = settings.profile ==
+                    creative_suite::media::VideoOutputProfile::Bitrate
+                ? creative_suite::composition::CompositionOutputAlpha::Opaque
+                : creative_suite::composition::CompositionOutputAlpha::Preserve;
             request.masks=mask_snapshot;request.composition_frame=composition_frame;
             request.hierarchy = hierarchy;
             preparePreviewLayers(request,snapshot.layers,[&](const model::CompositionLayer& layer) {
