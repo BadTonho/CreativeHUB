@@ -47,7 +47,7 @@ technical failures. Raw content tools and isolated raster exports keep targets.
 
 ## Format and compatibility
 
-Introduced in v21; the current v23 writer reads versions 1-22, including v20
+Introduced in v21; the current v24 writer reads versions 1-23, including v20
 Gradient Map layers. Write
 `kind: "adjustment"`, with `adjustment: {type: "brightness_contrast", brightness,
 contrast}`; both values are required integers in [-100,100]. The optional typed
@@ -56,7 +56,7 @@ unknown types, invalid values, Background adjustments and incompatible raster
 content/outline. Invalid Open preserves the current document. Selection mask
 encoding and recovery envelope v1 are unchanged.
 
-Hub accepts Image v1-23, refuses v24 and retains all four adjustment payloads/masks
+Hub accepts Image v1-24, refuses v25 and retains all five adjustment payloads/masks
 through backup, relocation and restoration, verified by the actual Image reader.
 Application versions and linked PNG protocol are unchanged.
 
@@ -93,4 +93,4 @@ builds/native runtime acceptance remain **pending**; follow the
 [manual checklist](../validation/MANUAL_VALIDATION.md#brightnesscontrast-adjustments).
 Exposure / Offset / Gamma is implemented; see [contract](EXPOSURE_OFFSET_GAMMA.md).
 Global Hue/Saturation is implemented; see [contract](HUE_SATURATION.md).
-Next feature: Levels adjustments.
+Levels is implemented; see [contract](LEVELS.md).

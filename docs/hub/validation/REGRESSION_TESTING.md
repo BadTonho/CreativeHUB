@@ -455,7 +455,7 @@ See [Image execution evidence](../../image-editor/features/BLEND_MODES.md#window
 
 ## Image v20 adjustment backup coverage
 
-Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future unsupported Image versions are refused; current v23 coverage is below. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
+Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future unsupported Image versions are refused; current v24 coverage is below. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
 
 ## Image v21 adjustment backup coverage
 
@@ -490,3 +490,13 @@ Native backup UI/platform acceptance remains pending.
 Linux Release evidence (2026-10-21): both v23 backup gates passed with the real
 Image reader, all four kinds, selection masks and relocated media. Native backup
 UI/platform acceptance remains pending.
+
+## Image v24 Levels backup coverage
+
+`hub-backup-format-test` preserves all five Levels fields alongside earlier
+adjustments, masks and relocated media, then reopens the vault and restored
+documents with the Image Editor reader. `hub-backup-manager-test` accepts v24
+and rejects v25. Both tests passed in Windows Release on 2026-10-22; the
+manager test required access to its user data directory outside the workspace
+sandbox. Native backup UI/platform acceptance remains pending. See the
+[Levels contract](../../image-editor/features/LEVELS.md).

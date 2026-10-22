@@ -1091,6 +1091,11 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
             } else if (const auto* value = std::get_if<creative_suite::effects::ExposureOffsetGammaParameters>(&*layer.adjustment)) {
                 encoded.insert("adjustment", QJsonObject{{"type", "exposure_offset_gamma"},
                     {"exposure", value->exposure}, {"offset", value->offset}, {"gamma", value->gamma}});
+            } else if (const auto* levels = std::get_if<creative_suite::effects::LevelsParameters>(&*layer.adjustment)) {
+                encoded.insert("adjustment", QJsonObject{{"type", "levels"},
+                    {"input_black", levels->input_black}, {"input_white", levels->input_white},
+                    {"gamma", levels->gamma}, {"output_black", levels->output_black},
+                    {"output_white", levels->output_white}});
             } else {
                 const auto& hue = std::get<creative_suite::effects::HueSaturationParameters>(*layer.adjustment);
                 encoded.insert("adjustment", QJsonObject{{"type", "hue_saturation"},
@@ -1288,7 +1293,30 @@ bool decodeDocumentJson(const QJsonObject& root,
             if (!decodeBlendMode(encoded,version,&layer->blend_mode,error,layer->background)) return false;
             if(kind=="adjustment" || encoded.contains("adjustment")) {
                 const auto a=encoded.value("adjustment").toObject();
-                if (a.value("type") == "hue_saturation") {
+                const bool has_levels_fields = a.contains("input_black") || a.contains("input_white") ||
+                    a.contains("output_black") || a.contains("output_white");
+                if (a.value("type") != "levels" && has_levels_fields) {
+                    assignError(error, QStringLiteral("An adjustment has incompatible Levels fields."));
+                    return false;
+                }
+                if (a.value("type") == "levels") {
+                    const auto integer = [](const QJsonValue& v) {
+                        return v.isDouble() && std::isfinite(v.toDouble()) &&
+                            std::floor(v.toDouble()) == v.toDouble() && v.toDouble() >= 0 && v.toDouble() <= 255;
+                    };
+                    const creative_suite::effects::LevelsParameters value{
+                        a.value("input_black").toInt(), a.value("input_white").toInt(),
+                        a.value("gamma").toDouble(), a.value("output_black").toInt(),
+                        a.value("output_white").toInt()};
+                    if (version < 24 || kind != "adjustment" || a.size() != 6 ||
+                        !integer(a.value("input_black")) || !integer(a.value("input_white")) ||
+                        !a.value("gamma").isDouble() || !integer(a.value("output_black")) ||
+                        !integer(a.value("output_white")) || !creative_suite::effects::validLevels(value)) {
+                        assignError(error, QStringLiteral("A Levels adjustment is invalid."));
+                        return false;
+                    }
+                    layer->adjustment = value;
+                } else if (a.value("type") == "hue_saturation") {
                     const auto integer = [](const QJsonValue& v, int bound) {
                         return v.isDouble() && std::isfinite(v.toDouble()) &&
                             v.toDouble() >= -bound && v.toDouble() <= bound && std::floor(v.toDouble()) == v.toDouble();

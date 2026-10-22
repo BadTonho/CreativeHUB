@@ -9,6 +9,9 @@
 
 #include <atomic>
 #include <functional>
+#include <array>
+#include <optional>
+#include <cstdint>
 
 namespace image_editor {
 
@@ -35,6 +38,12 @@ public:
         const QStringList& excluded_object_ids = {},
         const std::atomic_bool* cancellation_requested = nullptr,
         ImageLayerRasterCache* layer_raster_cache = nullptr);
+    using Histogram = std::array<std::uint64_t, 256>;
+    // Combined straight RGB distribution at the selected Levels layer's input.
+    [[nodiscard]] static std::optional<Histogram> levelsHistogram(
+        const ImageDocumentData& document, const QImage& source_image,
+        const QHash<QString, QImage>& raster_images, const QString& layer_id,
+        const std::atomic_bool* cancellation_requested = nullptr);
     // Process a base and its clipping chain before base/group opacity or group transforms.
     // Optional borrowed input supplies masked/styled member pixels on the same worker;
     // it must honor cancellation and return null on failure. No callback is retained.

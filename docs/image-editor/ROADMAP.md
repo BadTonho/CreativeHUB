@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma and global Hue/Saturation adjustments, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, global Hue/Saturation and global Levels adjustments, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,7 +41,9 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Add Levels as the fifth adjustment type** in section 4.3.
+**Add global Curves as a separate bounded adjustment** after Levels; its control
+points and processing contract require definition before implementation.
+Global Levels is implemented; see its [contract](features/LEVELS.md).
 Global Hue/Saturation is implemented; see its [contract](features/HUE_SATURATION.md).
 Exposure / Offset / Gamma is implemented; see its [contract](features/EXPOSURE_OFFSET_GAMMA.md).
 The adjustment-layer contract and Gradient Map are implemented; see
@@ -286,7 +288,9 @@ Native visual and macOS/Linux acceptance remains pending.
 - [x] Add editable brightness/contrast; see [contract](features/BRIGHTNESS_CONTRAST.md).
 - [x] Add Exposure / Offset / Gamma; see [contract](features/EXPOSURE_OFFSET_GAMMA.md).
 - [x] Add global Hue/Saturation; see [contract](features/HUE_SATURATION.md).
-- [ ] Add levels and per-channel/global curves in bounded increments.
+- [x] Add global RGB Levels; see [contract](features/LEVELS.md).
+- [ ] Add global and per-channel Curves in bounded increments; individual Levels
+  channels are also deferred.
 - [ ] Extend Hue/Saturation with Colorize and per-color-range controls in separate bounded increments.
 - [ ] Add color balance, Black & White channel controls, LUT loading, selective
   color, invert, posterize, and threshold.
@@ -674,6 +678,28 @@ These results do not complete the existing release/manual acceptance gates.
 | HSL reference/gray/bounds/alpha, four-kind stacks, history, v23/recovery/export/cache and chromatic thumbnails | `creative-suite-image-editor-hue-saturation`, shared effects | [Contract and execution evidence](features/HUE_SATURATION.md); visual/platform acceptance remains separate. |
 | Menu, integer fields, gestures/Reset, masks, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI, translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-huesaturation-adjustments) pending. |
 | CPU/OpenGL parity, zero-upload edits, budgets/cancellation, handoff and restore | Interactive `gpuHueSaturation`, native shared OpenGL, Video linked-image, Hub backup gates and Motion consumers | Record native versus offscreen execution separately; compare known baseline failures. |
+
+## Levels regression coverage
+
+| Behavior | Automated coverage | Acceptance |
+| --- | --- | --- |
+| RGB mapping, bounds, neutral bytes, alpha, modes, input histogram, history, v24/recovery/export/cache | `creative-suite-image-editor-levels`, shared effects | [Levels contract](features/LEVELS.md); owner visual acceptance pending. |
+| Creation, five controls, paired bounds, gestures/Reset, selection mask and histogram | `creative-suite-image-editor-levels-ui`, full UI and translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-levels-adjustments) pending. |
+| CPU/OpenGL parity, unchanged uploads, groups/clipping, cancellation/capacity, backup and linked consumers | Interactive `gpuLevels`, Hub backup format/manager and affected Video/Motion gates | Native and platform acceptance tracked separately. |
+
+**Windows Release execution (2026-10-22):** all 17 focused CTest cases passed:
+shared effects; Image Editor core, image formats, full UI, translation catalog,
+Gradient Map, blend, clipping, masks, Exposure, Hue/Saturation and Levels
+(model/UI); Video Editor linked-image; and Motion Studio persistence, GPU
+composition and export. The existing clipping test needs
+`QT_QPA_FONTDIR=C:/Windows/Fonts` in this test tree to render its text fixture.
+Hub backup manager and format tests both passed; the manager test needs access
+to its user data directory outside the workspace sandbox. Native Windows
+`gpuLevels` passed (3 QtTest cases, including setup and cleanup) with CPU/GL
+pixel parity, zero content uploads for parameter edits, and resource budget
+checks. The Release executable was built at the canonical Image Editor path.
+The [owner's manual checklist](validation/MANUAL_VALIDATION.md#global-levels-adjustments)
+and release/platform acceptance remain pending.
 
 Raster cache collision invalidation is covered by
 `creative-suite-image-editor-performance`

@@ -1,3 +1,7 @@
+add_executable(creative-suite-image-editor-levels-tests image_editor_levels_test.cpp)
+target_link_libraries(creative-suite-image-editor-levels-tests PRIVATE creative-suite-image-editor-core Qt6::Test)
+target_compile_features(creative-suite-image-editor-levels-tests PRIVATE cxx_std_20)
+
 add_executable(creative-suite-image-editor-hue-saturation-tests image_editor_hue_saturation_test.cpp)
 target_link_libraries(creative-suite-image-editor-hue-saturation-tests PRIVATE creative-suite-image-editor-core Qt6::Test)
 target_compile_features(creative-suite-image-editor-hue-saturation-tests PRIVATE cxx_std_20)
@@ -153,6 +157,7 @@ add_executable(creative-suite-image-editor-ui-tests
     image_editor_gradient_map_ui_test.cpp
     image_editor_exposure_ui_test.cpp
     image_editor_hue_saturation_ui_test.cpp
+    image_editor_levels_ui_test.cpp
     ../src/ui/windows/image_editor_window.cpp
     ../src/ui/windows/image_editor_window.h
     ../src/ui/diagnostics/performance_metrics_panel.cpp
@@ -443,6 +448,7 @@ if(WIN32)
     find_program(QT_TEST_DEPLOY_TOOL windeployqt HINTS "${QT_TEST_BIN_DIR}" REQUIRED)
 
     foreach(TEST_TARGET IN ITEMS
+            creative-suite-image-editor-levels-tests
             creative-suite-image-editor-hue-saturation-tests
             creative-suite-image-editor-exposure-tests
             creative-suite-image-editor-gradient-map-tests
@@ -524,3 +530,8 @@ add_creative_suite_test(NAME creative-suite-image-editor-hue-saturation COMMAND 
 set_tests_properties(creative-suite-image-editor-hue-saturation PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 add_creative_suite_test(NAME creative-suite-image-editor-hue-saturation-ui COMMAND creative-suite-image-editor-ui-tests --hue-saturation-only)
 set_tests_properties(creative-suite-image-editor-hue-saturation-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_creative_suite_test(NAME creative-suite-image-editor-levels COMMAND creative-suite-image-editor-levels-tests -o -,txt)
+set_tests_properties(creative-suite-image-editor-levels PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+add_creative_suite_test(NAME creative-suite-image-editor-levels-ui COMMAND creative-suite-image-editor-ui-tests --levels-only)
+set_tests_properties(creative-suite-image-editor-levels-ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

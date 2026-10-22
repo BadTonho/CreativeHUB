@@ -2,6 +2,7 @@
 #include "gradient_map.h"
 #include "effects.h"
 #include "hue_saturation.h"
+#include "levels.h"
 #include <cmath>
 #include <variant>
 #include <type_traits>
@@ -19,7 +20,7 @@ struct ExposureOffsetGammaParameters {
     bool operator==(const ExposureOffsetGammaParameters&) const = default;
 };
 using AdjustmentParameters = std::variant<GradientMapParameters,
-    BrightnessContrastParameters, ExposureOffsetGammaParameters, HueSaturationParameters>;
+    BrightnessContrastParameters, ExposureOffsetGammaParameters, HueSaturationParameters, LevelsParameters>;
 [[nodiscard]] inline bool identityAdjustment(const AdjustmentParameters& p) noexcept {
     if (const auto* value = std::get_if<BrightnessContrastParameters>(&p))
         return *value == BrightnessContrastParameters{};
@@ -27,6 +28,8 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         return *value == ExposureOffsetGammaParameters{};
     if (const auto* value = std::get_if<HueSaturationParameters>(&p))
         return *value == HueSaturationParameters{};
+    if (const auto* value = std::get_if<LevelsParameters>(&p))
+        return *value == LevelsParameters{};
     return false;
 }
 [[nodiscard]] inline bool validBrightnessContrast(const BrightnessContrastParameters& p) noexcept {
@@ -43,7 +46,8 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         if constexpr (std::is_same_v<T, GradientMapParameters>) return validGradientMap(value);
         else if constexpr (std::is_same_v<T, BrightnessContrastParameters>) return validBrightnessContrast(value);
         else if constexpr (std::is_same_v<T, ExposureOffsetGammaParameters>) return validExposureOffsetGamma(value);
-        else return validHueSaturation(value);
+        else if constexpr (std::is_same_v<T, HueSaturationParameters>) return validHueSaturation(value);
+        else return validLevels(value);
     }, p);
 }
 // Callers validate parameters and pass finite channels in [0,1]. Alpha is untouched.
@@ -70,7 +74,8 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         else if constexpr (std::is_same_v<T, BrightnessContrastParameters>)
             return colorAdjustmentRgb(rgb,{double(value.brightness),double(100+value.contrast),100.});
         else if constexpr (std::is_same_v<T, ExposureOffsetGammaParameters>) return exposureOffsetGammaRgb(value, rgb);
-        else return hueSaturationRgb(value, rgb);
+        else if constexpr (std::is_same_v<T, HueSaturationParameters>) return hueSaturationRgb(value, rgb);
+        else return levelsRgb(value, rgb);
     }, p);
 }
 } // namespace creative_suite::effects

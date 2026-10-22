@@ -456,12 +456,12 @@ Image, Video and Motion consumer gates protect the additive boundary. See
 
 ## Shared Gradient Map adjustment processing
 
-Image native v20 introduces app-owned adjustment scope and selection-seeded masks. Hub preserves these in backups and rejects Image v24. Shared effects provide validated RGB stop interpolation; optional trailing OpenGL raster fields preserve Image alpha without changing general Video/Motion opaque output, registries or formats. PNG publication remains unchanged. See [Image contract](image-editor/features/GRADIENT_MAP.md).
+Image native v20 introduces app-owned adjustment scope and selection-seeded masks. Hub preserves these in backups and accepts Image through v24, rejecting v25. Shared effects provide validated RGB stop interpolation; optional trailing OpenGL raster fields preserve Image alpha without changing general Video/Motion opaque output, registries or formats. PNG publication remains unchanged. See [Image contract](image-editor/features/GRADIENT_MAP.md).
 
 ## Brightness/Contrast shared boundary
 
 Image v21 adds a typed adjustment without changing PNG publication. Hub preserves
-all current adjustment types and masks and accepts v1-23, rejecting v24. The shared RGB
+all current adjustment types and masks and accepts v1-24, rejecting v25. The shared RGB
 evaluator preserves existing Video/Motion effects; no new registry entries are
 added. [Contract](image-editor/features/BRIGHTNESS_CONTRAST.md).
 
@@ -471,7 +471,7 @@ Image native v22 adds the third typed adjustment. Shared effects provide the
 validated linear-sRGB evaluator and the OpenGL raster compositor evaluates it
 on its own backdrop without readback; Image owns workflow and stack order.
 Video/Motion effects, native formats and PNG handoff remain unchanged. Hub
-accepts Image v1-23, rejects v24 and preserves all four adjustment payloads and
+accepts Image v1-24, rejects v25 and preserves all five adjustment payloads and
 masks through real-reader restoration. Existing consumers and shared regressions
 protect the additive API; native workflow acceptance remains separate. See
 [Image contract](image-editor/features/EXPOSURE_OFFSET_GAMMA.md).
@@ -482,6 +482,15 @@ Image v23 introduces the fourth adjustment kind. Shared effects provides an
 encoded-sRGB HSL evaluator and OpenGL raster evaluates it on the retained
 backdrop. Image owns scope/history; Video's Rec.709 saturation, Video/Motion
 registries/formats and PNG publication retain their contracts. Hub accepts Image
-v1-23, rejects v24 and preserves all four kinds/masks through real-reader restore.
+v1-24, rejects v25 and preserves all five kinds/masks through real-reader restore.
 The Video focused linked-image gate uses a real exposure+HSL producer and verifies
 rotated RGB, alpha and variant isolation. See [contract](image-editor/features/HUE_SATURATION.md).
+
+## Global Levels shared boundary
+
+Image v24 introduces the fifth adjustment kind. Shared effects provides the
+encoded-sRGB RGB mapping; OpenGL raster evaluates it on its retained backdrop.
+Image owns layer scope, histogram, masks, history and persistence. Video/Motion
+effects and document formats and the linked PNG protocol remain unchanged.
+Hub accepts Image v1–24 and rejects v25, retaining Levels parameters and masks
+through backup and relocation. See [contract](image-editor/features/LEVELS.md).

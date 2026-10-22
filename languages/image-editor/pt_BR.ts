@@ -3,6 +3,15 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>ImageEditorUI</name>
+    <message><source>Levels</source><translation>Níveis</translation></message>
+    <message><source>Input histogram</source><translation>Histograma de entrada</translation></message>
+    <message><source>Input Black</source><translation>Preto de entrada</translation></message>
+    <message><source>Input White</source><translation>Branco de entrada</translation></message>
+    <message><source>Midtone Gamma</source><translation>Gama dos médios</translation></message>
+    <message><source>Output Black</source><translation>Preto de saída</translation></message>
+    <message><source>Output White</source><translation>Branco de saída</translation></message>
+    <message><source>A Levels adjustment is invalid.</source><translation>Um ajuste de Níveis é inválido.</translation></message>
+    <message><source>An adjustment has incompatible Levels fields.</source><translation>Um ajuste contém campos de Níveis incompatíveis.</translation></message>
     <message><source>Hue/Saturation</source><translation>Matiz/Saturação</translation></message>
     <message><source>Hue</source><translation>Matiz</translation></message>
     <message><source>Saturation</source><translation>Saturação</translation></message>

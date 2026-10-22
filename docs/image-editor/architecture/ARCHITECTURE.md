@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 23; host links live in the Video Editor's
+  The `.cimg` schema is version 24; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -719,7 +719,7 @@ See [parameters, scope, errors and verification](../features/GRADIENT_MAP.md).
 
 ## Typed adjustments
 
-Shared `AdjustmentParameters` is a variant of Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma and Hue/Saturation.
+Shared `AdjustmentParameters` is a variant of Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, Hue/Saturation and Levels.
 The Image session owns typed editing/history and stack scope; effects owns RGB
 math and validation. CPU adapter and native raster shader dispatch by type, reusing
 mask/content caches and preserving alpha. [Contract](../features/BRIGHTNESS_CONTRAST.md).
@@ -745,6 +745,18 @@ and content/mask caches. The neutral Normal path remains byte-exact. A chromatic
 thumbnail strip uses the same evaluator; older grayscale thumbnails retain their
 sampling. The codec writes v23 and Hub preserves all four kinds. See
 [contract](../features/HUE_SATURATION.md).
+
+## Global Levels processing
+
+The fifth typed alternative applies the same input/output point and midtone
+gamma mapping to all three encoded-sRGB channels. The shared Qt-free evaluator
+validates parameters; the Image session owns editing, masks and stack scope.
+CPU and OpenGL render at the selected layer's backdrop with unchanged alpha,
+preserving the neutral Normal byte path and cached source textures. The
+asynchronous histogram captures this backdrop before Levels and samples at
+most one million nontransparent pixels; it does not affect rendering or the
+persisted document. The codec writes v24; Hub accepts v1–24. See the
+[Levels contract](../features/LEVELS.md).
 
 Raster cache synchronization consumes QHash's erase-returned iterator because
 bucket compaction can relocate a successor. Byte accounting remains centralized

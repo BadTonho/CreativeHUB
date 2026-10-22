@@ -733,6 +733,8 @@ uniform int adjustment_kind;
 uniform vec2 brightness_contrast;
 uniform vec3 exposure_offset_gamma;
 uniform vec3 hue_saturation;
+uniform vec3 levels_input;
+uniform vec2 levels_output;
 uniform bool has_mask;
 uniform bool bottom_left;
 uniform int canvas_height;
@@ -764,14 +766,20 @@ vec3 exposeSrgb(vec3 rgb) {
     vec3 corrected = pow(clamp(linear * exp2(exposure_offset_gamma.x) + exposure_offset_gamma.y, 0.0, 1.0), vec3(1.0 / exposure_offset_gamma.z));
     return clamp(mix(1.055 * pow(corrected, vec3(1.0 / 2.4)) - .055, corrected * 12.92, lessThanEqual(corrected, vec3(.0031308))), 0.0, 1.0);
 }
+vec3 adjustLevels(vec3 rgb) {
+    vec3 normalized = clamp((rgb * 255.0 - levels_input.x) /
+        (levels_input.y - levels_input.x), 0.0, 1.0);
+    return (levels_output.x + (levels_output.y - levels_output.x) *
+        pow(normalized, vec3(1.0 / levels_input.z))) / 255.0;
+}
 void main() {
     vec2 point = vec2(gl_FragCoord.x, float(canvas_height) - gl_FragCoord.y);
     if(adjustment_kind>0) {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
         vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
         float t=dot(cb,vec3(0.2126,0.7152,0.0722));
-        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0))) && blend_mode==0){color=b;return;}
-        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : gradient_stops[gradient_count-1].rgb;
+        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0)) || (adjustment_kind==5 && levels_input==vec3(0,255,1) && levels_output==vec2(0,255))) && blend_mode==0){color=b;return;}
+        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : adjustment_kind==5 ? adjustLevels(cb) : gradient_stops[gradient_count-1].rgb;
         for(int i=1;adjustment_kind==1 && i<gradient_count;++i) {
             if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
         }
@@ -913,7 +921,12 @@ void main() {
             const auto* bc=adjustment?std::get_if<effects::BrightnessContrastParameters>(adjustment):nullptr;
             const auto* exposure = adjustment ? std::get_if<effects::ExposureOffsetGammaParameters>(adjustment) : nullptr;
             const auto* hue = adjustment ? std::get_if<effects::HueSaturationParameters>(adjustment) : nullptr;
-            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:hue?4:0);
+            const auto* levels = adjustment ? std::get_if<effects::LevelsParameters>(adjustment) : nullptr;
+            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:hue?4:levels?5:0);
+            raster_program->setUniformValue("levels_input", levels ?
+                QVector3D(float(levels->input_black), float(levels->input_white), float(levels->gamma)) : QVector3D(0,255,1));
+            raster_program->setUniformValue("levels_output", levels ?
+                QVector2D(float(levels->output_black), float(levels->output_white)) : QVector2D(0,255));
             raster_program->setUniformValue("hue_saturation", hue ?
                 QVector3D(hue->hue / 60.f, hue->saturation / 100.f, hue->lightness / 100.f) : QVector3D{});
             raster_program->setUniformValue("exposure_offset_gamma", exposure ?

@@ -135,6 +135,9 @@ public:
     [[nodiscard]] QString addHueSaturationAdjustment(std::optional<QPainterPath> selection = {});
     [[nodiscard]] bool setHueSaturation(const QString& id,
         const creative_suite::effects::HueSaturationParameters& parameters);
+    [[nodiscard]] QString addLevelsAdjustment(std::optional<QPainterPath> selection = {});
+    [[nodiscard]] bool setLevels(const QString& id,
+        const creative_suite::effects::LevelsParameters& parameters);
     [[nodiscard]] QString addExposureOffsetGammaAdjustment(std::optional<QPainterPath> selection = {});
     [[nodiscard]] bool setExposureOffsetGamma(const QString& id,
         const creative_suite::effects::ExposureOffsetGammaParameters& parameters);

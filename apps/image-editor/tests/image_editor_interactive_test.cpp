@@ -492,6 +492,82 @@ private slots:
         auto limited_budget=std::make_shared<OpenGlTexturePoolBudget>(64ULL*1024*1024,3);OpenGlFrameCompositor limited(surface.get(),OpenGlPrecisionPolicy::Automatic,QOpenGLContext::globalShareContext(),limited_budget);
         const auto comp=cache.prepare(s.exportSnapshot(),"hue_saturation-1080p");timer.restart();const auto refused=limited.composeRasterTexture(makeGpuRasterRequest(comp));QCOMPARE(refused.status,OpenGlCompositionStatus::Unsupported);const auto refusal=timer.elapsed();timer.restart();const auto recovered=ImageInteractiveRasterCache::composite(comp);QVERIFY(!recovered.isNull());qInfo()<<"hue_saturation_capacity refusal_ms"<<refusal<<"cpu_ms"<<timer.elapsed()<<"gpu_bytes"<<limited.resourceUsage().texture_bytes;QCOMPARE(recovered,baseline(s));
     }
+    void gpuLevels() {
+        if (QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
+        auto surface=OpenGlFrameCompositor::createSurface(); QVERIFY(surface);
+        OpenGlFrameCompositor gpu(surface.get(),OpenGlPrecisionPolicy::Automatic,
+            QOpenGLContext::globalShareContext(),
+            std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,3));
+        ImageDocumentSession s; QVERIFY(s.createCanvas({160,100},QColor(40,80,150,170)));
+        const auto base=s.selectedLayerId();
+        QVERIFY(s.applyPaintStroke({{5,40},{145,40}},QColor(200,70,130,190),50));
+        const auto id=s.addLevelsAdjustment();
+        QVERIFY(s.setLevels(id,{20,230,1.4,10,240}));
+        ImageInteractiveRasterCache cache;
+        QString stage = "initial";
+        const auto verify=[&](bool no_upload=false) {
+            const auto comp=cache.prepare(s.exportSnapshot(),"levels-gpu");
+            OpenGlCompositionTimings timing;
+            auto result=gpu.composeRasterTexture(makeGpuRasterRequest(comp),{},&timing);
+            QVERIFY2(result.status==OpenGlCompositionStatus::Complete,result.cause.c_str());
+            if(no_upload) QCOMPARE(timing.uploaded_bytes,std::uint64_t(0));
+            const auto read=gpu.readback(result.frame);QVERIFY(read.frame);
+            const auto actual=QImage(read.frame->rgba_pixels.data(),read.frame->width,
+                read.frame->height,read.frame->stride,QImage::Format_RGBA8888_Premultiplied)
+                .convertToFormat(QImage::Format_ARGB32_Premultiplied);
+            const auto expected=baseline(s);
+            for(int y=0;y<actual.height();++y)for(int x=0;x<actual.width();++x) {
+                const auto a=actual.pixel(x,y),b=expected.pixel(x,y);
+                QVERIFY2(std::abs(qRed(a)-qRed(b))<=2 &&
+                    std::abs(qGreen(a)-qGreen(b))<=2 &&
+                    std::abs(qBlue(a)-qBlue(b))<=2 && qAlpha(a)==qAlpha(b),
+                    qPrintable(QString("Levels %1 pixel %2,%3: %4/%5")
+                        .arg(stage).arg(x).arg(y).arg(a,0,16).arg(b,0,16)));
+            }
+        };
+        verify();
+        for (const auto& controls : {creative_suite::effects::LevelsParameters{},
+                {32,224,.8,0,255}, {20,230,1.4,10,240}, {100,101,2,20,230}}) {
+            stage = "parameters";
+            QVERIFY(s.setLevels(id,controls)); verify(true);
+        }
+        const auto work=cache.reconstructedPixels();
+        for(int mode=1;mode<6;++mode) {
+            stage = "mode";
+            QVERIFY(s.setStackBlendMode(id,false,static_cast<BlendMode>(mode)));
+            verify(true); QCOMPARE(cache.reconstructedPixels(),work);
+        }
+        auto invalid=makeGpuRasterRequest(cache.prepare(s.exportSnapshot(),"levels-gpu"));
+        std::get<creative_suite::effects::LevelsParameters>(
+            *invalid.nodes.back().layers.back().adjustment).input_white=0;
+        QCOMPARE(gpu.composeRasterTexture(invalid).status,OpenGlCompositionStatus::Unsupported);
+        QCOMPARE(gpu.composeRasterTexture(makeGpuRasterRequest(
+            cache.prepare(s.exportSnapshot(),"levels-gpu")),[]{return true;}).status,
+            OpenGlCompositionStatus::Cancelled);
+        stage = "clipping";
+        QVERIFY(s.setLayerClipping(id,true));verify();
+        ImageLayerOutlineData outline;outline.color=Qt::green;
+        stage = "outline";
+        QVERIFY(s.setLayerOutline(base,outline));verify();
+        stage = "group";
+        const auto group=s.groupLayers({base,id});QVERIFY(!group.isEmpty());
+        verify();
+        stage = "mixed";
+        const auto another=s.addHueSaturationAdjustment();
+        QVERIFY(s.setHueSaturation(another,{45,-20,10}));verify();
+        QVERIFY(s.createCanvas({1920,1080},QColor(50,100,150)));
+        stage = "1080p";
+        const auto large=s.addLevelsAdjustment();
+        QVERIFY(s.setLevels(large,{20,230,1.4,10,240}));
+        cache.clear();verify();
+        auto limited=OpenGlFrameCompositor(surface.get(),OpenGlPrecisionPolicy::Automatic,
+            QOpenGLContext::globalShareContext(),
+            std::make_shared<OpenGlTexturePoolBudget>(16ULL*1024*1024,3));
+        const auto comp=cache.prepare(s.exportSnapshot(),"levels-gpu");
+        QCOMPARE(limited.composeRasterTexture(makeGpuRasterRequest(comp)).status,
+            OpenGlCompositionStatus::Unsupported);
+        QCOMPARE(ImageInteractiveRasterCache::composite(comp),baseline(s));
+    }
     void gpuHueSaturationColorGrid() {
         if(QGuiApplication::platformName()=="offscreen") QSKIP("Native GPU validation is registered separately.");
         auto surface=OpenGlFrameCompositor::createSurface();QVERIFY(surface);

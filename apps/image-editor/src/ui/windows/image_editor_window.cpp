@@ -508,8 +508,33 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
         [this](const QString& id, const creative_suite::effects::HueSaturationParameters& value) {
             if (hasActiveDocumentTab() && activeSession().setHueSaturation(id, value)) updateView(true);
         });
+    connect(layer_panel_, &LayerPanel::addLevelsRequested, this, [this] {
+        if (!hasActiveDocumentTab()) return;
+        auto* canvas = activeCanvas();
+        canvas->commitTextEditing(); canvas->cancelTransientGestures(); clearInteractivePreview(canvas);
+        const auto id = activeSession().addLevelsAdjustment(canvas->areaSelectionClipPath());
+        if (!id.isEmpty()) {
+            selectedMaskLayerId().clear(); selectedObjectIds().clear();
+            deactivateCanvasTools(); updateView(true);
+        }
+    });
+    connect(layer_panel_, &LayerPanel::levelsChanged, this,
+        [this](const QString& id, const creative_suite::effects::LevelsParameters& value) {
+            if (hasActiveDocumentTab() && activeSession().setLevels(id, value)) {
+                suppress_levels_histogram_ = true;
+                updateView(true);
+                suppress_levels_histogram_ = false;
+            }
+        });
     connect(layer_panel_,&LayerPanel::adjustmentEditStarted,this,[this]{if(!hasActiveDocumentTab())return;activeCanvas()->commitTextEditing();activeCanvas()->cancelTransientGestures();clearInteractivePreview(activeCanvas());activeSession().beginLayerAdjustmentEdit();});
-    connect(layer_panel_,&LayerPanel::adjustmentEditFinished,this,[this]{if(hasActiveDocumentTab()){activeSession().endLayerAdjustmentEdit();updateView(true);}});
+    connect(layer_panel_,&LayerPanel::adjustmentEditFinished,this,[this]{if(hasActiveDocumentTab()){
+        activeSession().endLayerAdjustmentEdit();
+        const auto* selected = findLayer(activeSession().data(), activeSession().selectedLayerId());
+        suppress_levels_histogram_ = selected && selected->adjustment &&
+            std::holds_alternative<creative_suite::effects::LevelsParameters>(*selected->adjustment);
+        updateView(true);
+        suppress_levels_histogram_ = false;
+    }});
     connect(layer_panel_,&LayerPanel::brightnessContrastChanged,this,[this](const QString& id,const creative_suite::effects::BrightnessContrastParameters& value){if(hasActiveDocumentTab() && activeSession().setBrightnessContrast(id,value))updateView(true);});
     connect(layer_panel_,&LayerPanel::gradientMapChanged,this,[this](const QString& id,const creative_suite::effects::GradientMapParameters& value){if(hasActiveDocumentTab() && activeSession().setGradientMap(id,value))updateView(true);});
     connect(layer_panel_, &LayerPanel::stackBlendModeChanged, this,
@@ -578,6 +603,7 @@ ImageEditorWindow::~ImageEditorWindow() {
     }
     for (auto* tab : document_tabs_) if (tab->canvas) tab->canvas->releaseGpuFrames();
     delete render_controller_; render_controller_ = nullptr;
+    if (levels_histogram_cancel_) levels_histogram_cancel_->store(true);
     background_task_pool_.waitForDone();
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
     if (performance_metrics_timer_ != nullptr) performance_metrics_timer_->stop();
@@ -2336,6 +2362,38 @@ void ImageEditorWindow::updateLayerPanel() {
         activeSession().selectedGroupId(), document_tabs_.at(active_document_tab_)->thumbnails,
         document_tabs_.at(active_document_tab_)->mask_thumbnails, selectedMaskLayerId(), problems,
         selectedStackItems());
+    if (!suppress_levels_histogram_) requestLevelsHistogram();
+}
+
+void ImageEditorWindow::requestLevelsHistogram() {
+    const auto* layer = findLayer(activeSession().data(), activeSession().selectedLayerId());
+    if (levels_histogram_cancel_) levels_histogram_cancel_->store(true);
+    ++levels_histogram_sequence_;
+    if (!layer || !layer->adjustment ||
+        !std::holds_alternative<creative_suite::effects::LevelsParameters>(*layer->adjustment)) return;
+    const auto sequence = levels_histogram_sequence_;
+    const auto layer_id = layer->id;
+    const int tab_index = active_document_tab_;
+    const auto snapshot = activeSession().interactiveSnapshot();
+    const auto cancellation = std::make_shared<std::atomic_bool>(false);
+    levels_histogram_cancel_ = cancellation;
+    layer_panel_->setLevelsHistogram({});
+    const QPointer<ImageEditorWindow> guard(this);
+    background_task_pool_.start(QRunnable::create(
+        [guard, snapshot, layer_id, tab_index, sequence, cancellation] {
+            const auto bins = ImageDocumentRenderer::levelsHistogram(
+                snapshot.document, snapshot.source_image, snapshot.raster_images,
+                layer_id, cancellation.get());
+            if (!guard) return;
+            QMetaObject::invokeMethod(guard.data(), [guard, bins, layer_id, tab_index, sequence] {
+                if (!guard || guard->levels_histogram_sequence_ != sequence ||
+                    guard->active_document_tab_ != tab_index || !guard->hasActiveDocumentTab() ||
+                    guard->activeSession().selectedLayerId() != layer_id) return;
+                if (bins) guard->layer_panel_->setLevelsHistogram(*bins);
+                else guard->logger_.logError(QStringLiteral("levels_histogram"),
+                    QStringLiteral("The selected Levels input could not be rendered."));
+            }, Qt::QueuedConnection);
+        }));
 }
 
 void ImageEditorWindow::updateView(bool preserveCanvasView) {

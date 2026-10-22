@@ -327,13 +327,16 @@ bool multiplyLayerMask(QImage* pixels, const QImage& mask,
     return true;
 }
 
+struct AdjustmentInputCapture { QString id; QImage pixels; };
+
 QImage renderGroup(const QHash<QString, QImage>& resources,
                    const ImageDocumentData& document,
                    const ImageGroupData& group,
                    const QSize& size,
                    const std::atomic_bool* cancellation_requested,
                    const QStringList& excluded_object_ids,
-                   ImageLayerRasterCache* layer_raster_cache = nullptr);
+                   ImageLayerRasterCache* layer_raster_cache = nullptr,
+                   AdjustmentInputCapture* capture = nullptr);
 
 QImage renderRasterLayer(const QHash<QString, QImage>& resources,
                          const ImageLayerData& layer,
@@ -406,7 +409,8 @@ QImage renderChain(const QHash<QString, QImage>& resources, const ImageDocumentD
                    const QImage& source, const ImageLayerData& base, const QSize& size,
                    const std::atomic_bool* cancel, const QStringList& excluded,
                    ImageLayerRasterCache* cache = nullptr,
-                   const std::function<QImage(const ImageLayerData&)>& input = {}) {
+                   const std::function<QImage(const ImageLayerData&)>& input = {},
+                   AdjustmentInputCapture* capture = nullptr) {
     const auto ids = clippingChain(document, base.id);
     auto raw = base;
     if (ids.size() > 1) raw.outline.reset();
@@ -419,6 +423,10 @@ QImage renderChain(const QHash<QString, QImage>& resources, const ImageDocumentD
         const auto* child = findLayer(document, ids[i]);
         if (!child || !child->visible || child->opacity == 0) continue;
         if(child->adjustment) {
+            if (capture && child->id == capture->id) {
+                capture->pixels = pixels;
+                return pixels;
+            }
             const auto mask=child->mask && child->mask->enabled && (!child->mask->operations.isEmpty() || child->mask->initial_selection) ? (input?input(*child):ImageDocumentRenderer::maskPixels(size,*child->mask,cancel)) : QImage{};
             if(child->mask && child->mask->enabled && (!child->mask->operations.isEmpty() || child->mask->initial_selection) && mask.isNull())return {};
             if(!applyLayerAdjustment(&pixels,*child->adjustment,mask,child->blend_mode,child->opacity,cancel))return {};
@@ -438,7 +446,8 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
                    const QSize& size,
                    const std::atomic_bool* cancellation_requested,
                    const QStringList& excluded_object_ids,
-                   ImageLayerRasterCache* layer_raster_cache) {
+                   ImageLayerRasterCache* layer_raster_cache,
+                   AdjustmentInputCapture* capture) {
     ImageEditorPerformanceScope group_scope(
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::GroupComposition);
@@ -455,13 +464,18 @@ QImage renderGroup(const QHash<QString, QImage>& resources,
         const auto* layer = findLayer(document, layer_id);
         if (layer == nullptr || layer->clip_to_base || !layer->visible || layer->opacity == 0) continue;
         if(layer->adjustment) {
+            if (capture && layer->id == capture->id) {
+                capture->pixels = composite;
+                return composite;
+            }
             const auto mask=layer->mask && layer->mask->enabled && (!layer->mask->operations.isEmpty() || layer->mask->initial_selection) ? ImageDocumentRenderer::maskPixels(size,*layer->mask,cancellation_requested) : QImage{};
             if(layer->mask && layer->mask->enabled && (!layer->mask->operations.isEmpty() || layer->mask->initial_selection) && mask.isNull())return {};
             if(!applyLayerAdjustment(&composite,*layer->adjustment,mask,layer->blend_mode,layer->opacity,cancellation_requested))return {};
             continue;
         }
         QImage pixels = renderChain(resources, document, {}, *layer, size,
-            cancellation_requested, excluded_object_ids, layer_raster_cache);
+            cancellation_requested, excluded_object_ids, layer_raster_cache, {}, capture);
+        if (capture && !capture->pixels.isNull()) return capture->pixels;
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
             return {};
         }
@@ -486,7 +500,8 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
                        const ImageDocumentData& document,
                        const std::atomic_bool* cancellation_requested = nullptr,
                        const QStringList& excluded_object_ids = {},
-                       ImageLayerRasterCache* layer_raster_cache = nullptr) {
+                       ImageLayerRasterCache* layer_raster_cache = nullptr,
+                       AdjustmentInputCapture* capture = nullptr) {
     ImageEditorPerformanceScope composite_scope(
         ImageEditorPerformanceMetrics::instance(),
         ImageEditorPerformanceStage::Composite);
@@ -520,19 +535,25 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
             mode = group->blend_mode;
             pixels = renderGroup(resources, document, *group, size,
                                  cancellation_requested, excluded_object_ids,
-                                 layer_raster_cache);
+                                 layer_raster_cache, capture);
+            if (capture && !capture->pixels.isNull()) return capture->pixels;
         } else {
             const auto* layer = findLayer(document, item.id);
             if (layer == nullptr || layer->clip_to_base || !layer->visible || layer->opacity == 0) continue;
             opacity = layer->opacity; mode = layer->blend_mode;
             if(layer->adjustment) {
+                if (capture && layer->id == capture->id) {
+                    capture->pixels = composite;
+                    return composite;
+                }
                 const auto mask=layer->mask && layer->mask->enabled && (!layer->mask->operations.isEmpty() || layer->mask->initial_selection) ? ImageDocumentRenderer::maskPixels(size,*layer->mask,cancellation_requested) : QImage{};
                 if(layer->mask && layer->mask->enabled && (!layer->mask->operations.isEmpty() || layer->mask->initial_selection) && mask.isNull())return {};
                 if(!applyLayerAdjustment(&composite,*layer->adjustment,mask,mode,opacity,cancellation_requested))return {};
                 continue;
             }
             pixels = renderChain(resources, document, source_image, *layer, size,
-                cancellation_requested, excluded_object_ids, layer_raster_cache);
+                cancellation_requested, excluded_object_ids, layer_raster_cache, {}, capture);
+            if (capture && !capture->pixels.isNull()) return capture->pixels;
         }
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
             return {};
@@ -836,6 +857,31 @@ QImage ImageDocumentRenderer::composite(const ImageDocumentData& document,
     return renderComposite(raster_images, source_image, document,
                            cancellation_requested, excluded_object_ids,
                            layer_raster_cache);
+}
+
+std::optional<ImageDocumentRenderer::Histogram> ImageDocumentRenderer::levelsHistogram(
+    const ImageDocumentData& document, const QImage& source_image,
+    const QHash<QString, QImage>& raster_images, const QString& layer_id,
+    const std::atomic_bool* cancellation_requested) {
+    const auto* layer = findLayer(document, layer_id);
+    if (!layer || !layer->adjustment ||
+        !std::holds_alternative<creative_suite::effects::LevelsParameters>(*layer->adjustment)) return {};
+    AdjustmentInputCapture capture{layer_id, {}};
+    (void)renderComposite(raster_images, source_image, document,
+        cancellation_requested, {}, nullptr, &capture);
+    if (capture.pixels.isNull() || exportWasCancelled(cancellation_requested)) return {};
+    const QImage pixels = capture.pixels.convertToFormat(QImage::Format_ARGB32);
+    if (pixels.isNull()) return {};
+    Histogram bins{};
+    const auto total = static_cast<std::uint64_t>(pixels.width()) * pixels.height();
+    const auto stride = std::max<std::uint64_t>(1, (total + 999999) / 1000000);
+    for (std::uint64_t index = 0; index < total; index += stride) {
+        if (exportWasCancelled(cancellation_requested)) return {};
+        const auto pixel = pixels.pixel(int(index % pixels.width()), int(index / pixels.width()));
+        if (!qAlpha(pixel)) continue;
+        ++bins[qRed(pixel)]; ++bins[qGreen(pixel)]; ++bins[qBlue(pixel)];
+    }
+    return bins;
 }
 
 QImage ImageDocumentRenderer::selectedLayer(const ImageDocumentData& document,

@@ -217,33 +217,33 @@ platform acceptance remain pending.
 
 ## Image Editor v17 outlines
 
-Backup/restore accepts Image documents through v23 and preserves optional layer
+Backup/restore accepts Image documents through v24 and preserves optional layer
 outline parameters, including disabled styles, while rebasing existing source
 and imported-image paths. `hub-backup-format-test` reopens vault and relocated
 restores with the actual Image reader, including an outlined grouped image.
-`hub-backup-manager-test` rejects future Image v24. Native Hub UI/platform
+`hub-backup-manager-test` rejects future Image v25. Native Hub UI/platform
 acceptance remains pending.
 
 ## Image Editor v18 clipping masks
 
-Clipping was introduced in Image v18. The current reader accepts v1-23 and
+Clipping was introduced in Image v18. The current reader accepts v1-24 and
 preserves `clip_to_base`, masks and outlines while
 rebasing source/import paths in root layers and group children. The actual
-Image reader verifies vault and restored v18 chains. Future Image v24 is
+Image reader verifies vault and restored v18 chains. Future Image v25 is
 rejected. The recovery envelope and published PNG protocol are unchanged.
 Native Hub UI/platform acceptance remains pending.
 
 ## Image Editor v19 blend modes
 
-Accept Image schemas 1-23 and preserve layer/group `blend_mode` strings with
+Accept Image schemas 1-24 and preserve layer/group `blend_mode` strings with
 clipping, masks and outlines while rebasing existing paths. Actual Image reader
 round trips cover group/base/clipped-child modes in vault and relocated files.
-Reject future Image v24. Native backup UI/platform acceptance remains pending.
+Reject future Image v25. Native backup UI/platform acceptance remains pending.
 
 
 ## Image Editor v20 adjustments
 
-The reader accepts v1-23 and rejects v24. Preserve Gradient Map adjustment
+The reader accepts v1-24 and rejects v25. Preserve Gradient Map adjustment
 payloads and mask `initial_selection` paths during media rebasing, backup and
 restoration. Actual Image producer/reader tests verify points, masks and media;
 recovery envelopes and published PNG protocols remain unchanged. Native backup
@@ -252,12 +252,12 @@ UI and macOS/Linux acceptance remain pending.
 ## Image Editor v21 adjustments
 
 Preserve Brightness/Contrast integer parameters and Gradient Map points, including
-selection-seeded masks and media rebasing. Accept v1-23, reject v24, and verify
+selection-seeded masks and media rebasing. Accept v1-24, reject v25, and verify
 vault/restored documents with the real Image reader. Native UI acceptance is pending.
 
 ## Image Editor v22 adjustments
 
-Accept Image v1-23 and reject v24. Preserve Exposure / Offset / Gamma floating
+Accept Image v1-24 and reject v25. Preserve Exposure / Offset / Gamma floating
 parameters and selection-seeded masks alongside Gradient Map and Brightness/
 Contrast during media rebasing. `hub-backup-format-test` opens vault and relocated
 restores with the actual Image reader. Application versions and snapshot envelope
@@ -265,8 +265,15 @@ remain unchanged. Native backup UI/platform acceptance remains pending.
 
 ## Image Editor v23 HSL adjustments
 
-Accept Image v1-23 and reject v24. Preserve integer Hue/Saturation/Lightness
+Accept Image v1-24 and reject v25. Preserve integer Hue/Saturation/Lightness
 controls, all older adjustment payloads and selection-seeded masks during media
 rebasing, backup and relocated restoration. Actual Image readers verify vault
 and restored data; snapshot envelope and application versions remain unchanged.
 Native backup UI/platform acceptance is separate and pending.
+
+## Image Editor v24 Levels adjustments
+
+Accept Image v1–24 and reject v25. Preserve all five Levels controls, the other
+adjustment kinds and selection-seeded masks during media rebasing, backup and
+relocated restoration. `hub-backup-format-test` opens the resulting documents
+with the actual Image reader. Native backup UI/platform acceptance is pending.

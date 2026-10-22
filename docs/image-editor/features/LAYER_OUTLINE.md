@@ -95,5 +95,5 @@ its own color. See [clipping semantics](CLIPPING_MASKS.md).
 Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
 see [adjustment scope and alpha contract](GRADIENT_MAP.md).
 
-Current writer: v23. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
+Current writer: v24. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
 adjustment stack contract; historical execution evidence above is unchanged.

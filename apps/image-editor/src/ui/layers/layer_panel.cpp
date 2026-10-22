@@ -4,6 +4,7 @@
 #include "brightness_contrast_editor.h"
 #include "exposure_offset_gamma_editor.h"
 #include "hue_saturation_editor.h"
+#include "levels_editor.h"
 #include "../translation_helpers.h"
 
 #include "../transparency_checkerboard.h"
@@ -352,6 +353,16 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     hue_editor_->started = [this] { emit adjustmentEditStarted(); };
     hue_editor_->finished = [this] { emit adjustmentEditFinished(); };
     hue_editor_->changed = [this](const auto& value) { emit hueSaturationChanged(selectedItemId(), value); };
+    add_levels_action_ = adjustments->addAction(QCoreApplication::translate("ImageEditorUI", "Levels"));
+    add_levels_action_->setObjectName("addLevelsAction");
+    connect(add_levels_action_, &QAction::triggered, this,
+        [this] { finishOutlineEdit(); emit addLevelsRequested(); });
+    levels_editor_ = new LevelsEditor(this);
+    layout->addWidget(levels_editor_);
+    levels_editor_->hide();
+    levels_editor_->started = [this] { emit adjustmentEditStarted(); };
+    levels_editor_->finished = [this] { emit adjustmentEditFinished(); };
+    levels_editor_->changed = [this](const auto& value) { emit levelsChanged(selectedItemId(), value); };
     brightness_editor_=new BrightnessContrastEditor(this);layout->addWidget(brightness_editor_);brightness_editor_->hide();
     brightness_editor_->started=[this]{emit adjustmentEditStarted();};brightness_editor_->finished=[this]{emit adjustmentEditFinished();};
     brightness_editor_->changed=[this](const auto& value){emit brightnessContrastChanged(selectedItemId(),value);};
@@ -814,6 +825,10 @@ void LayerPanel::setSelectedMask(const QString& layer_id) {
     layer_tree_->viewport()->update();
 }
 
+void LayerPanel::setLevelsHistogram(const std::array<std::uint64_t, 256>& bins) {
+    levels_editor_->setHistogram(bins);
+}
+
 void LayerPanel::setQuickExportEnabled(bool enabled) {
     quick_export_button_->setEnabled(enabled);
 }
@@ -841,6 +856,7 @@ void LayerPanel::finishOutlineEdit() {
     if(brightness_editor_)brightness_editor_->finish();
     if(exposure_editor_)exposure_editor_->finish();
     if(hue_editor_)hue_editor_->finish();
+    if(levels_editor_)levels_editor_->finish();
     if (!outline_editing_) return;
     outline_editing_ = false; emit outlineEditFinished();
 }
@@ -1006,6 +1022,7 @@ void LayerPanel::updateControls() {
     add_brightness_action_->setEnabled(add_gradient_action_->isEnabled());
     add_exposure_action_->setEnabled(add_gradient_action_->isEnabled());
     add_hue_action_->setEnabled(add_gradient_action_->isEnabled());
+    add_levels_action_->setEnabled(add_gradient_action_->isEnabled());
     const bool adjustment=has_layer && layer->adjustment.has_value();
     quick_export_button_->setToolTip(adjustment?QCoreApplication::translate("ImageEditorUI","Adjustment layers have no pixels to export. Export the document or its group."):QString{});
     const auto* gradient=adjustment?std::get_if<creative_suite::effects::GradientMapParameters>(&*layer->adjustment):nullptr;
@@ -1020,6 +1037,9 @@ void LayerPanel::updateControls() {
     const auto* hue = adjustment ? std::get_if<creative_suite::effects::HueSaturationParameters>(&*layer->adjustment) : nullptr;
     hue_editor_->setVisible(hue && layer_tree_->selectedItems().size() == 1);
     if (hue) hue_editor_->setValue(id, *hue);
+    const auto* levels = adjustment ? std::get_if<creative_suite::effects::LevelsParameters>(&*layer->adjustment) : nullptr;
+    levels_editor_->setVisible(levels && layer_tree_->selectedItems().size() == 1);
+    if (levels) levels_editor_->setValue(id, *levels);
     const bool outline_editable = has_layer && !adjustment && !layer->background && layer_tree_->selectedItems().size() == 1;
     clipping_action_->setEnabled(has_layer && !layer->background && layer_tree_->selectedItems().size()==1 && (layer->clip_to_base || clippingBases(document_).contains(id)));
     clipping_action_->setText(has_layer && layer->clip_to_base

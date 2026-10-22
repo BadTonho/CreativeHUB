@@ -168,6 +168,26 @@ int main() {
         require(adjustmentRgb(HueSaturationParameters{80,100,0},{.5,.5,.5})==std::array<unsigned char,3>{128,128,128}, "HSL does not colorize gray");
         require(adjustmentRgb(HueSaturationParameters{0,0,100},{.2,.4,.8})==std::array<unsigned char,3>{255,255,255}, "HSL lightness ceiling");
     }
+    {
+        using namespace creative_suite::effects;
+        const LevelsParameters neutral{};
+        require(validAdjustment(neutral) && identityAdjustment(neutral), "Neutral Levels validation and identity");
+        require(adjustmentRgb(neutral, {0., 128. / 255., 1.}) ==
+            std::array<unsigned char,3>{0,128,255}, "Neutral Levels preserves encoded RGB bytes");
+        require(validAdjustment(LevelsParameters{64,192,1.,32,224}) &&
+            validAdjustment(LevelsParameters{0,255,.1,255,255}) &&
+            validAdjustment(LevelsParameters{0,255,9.99,0,255}), "Levels inclusive bounds");
+        require(!validAdjustment(LevelsParameters{255,255,1.,0,255}) &&
+            !validAdjustment(LevelsParameters{0,256,1.,0,255}) &&
+            !validAdjustment(LevelsParameters{0,255,1.,200,199}) &&
+            !validAdjustment(LevelsParameters{0,255,0.,0,255}) &&
+            !validAdjustment(LevelsParameters{0,255,std::numeric_limits<double>::quiet_NaN(),0,255}),
+            "Levels invalid bounds and nonfinite gamma");
+        require(adjustmentRgb(LevelsParameters{64,192,1.,32,224}, {0.,128. / 255.,1.}) ==
+            std::array<unsigned char,3>{32,128,224}, "Levels clips, normalizes and maps RGB channels");
+        require(adjustmentRgb(LevelsParameters{0,255,2.,0,255}, {64. / 255.,0.,1.}) ==
+            std::array<unsigned char,3>{128,0,255}, "Levels gamma uses reciprocal exponent in encoded sRGB");
+    }
     verifySharedBlur();
     using namespace creative_suite::effects;
     require(builtInEffects().size() == 4, "The built-in visual effect catalog is incomplete.");

@@ -5,6 +5,8 @@
 #include <QHash>
 #include <QImage>
 #include <QWidget>
+#include <array>
+#include <cstdint>
 
 class QAction;
 class QCheckBox;
@@ -26,6 +28,7 @@ class GradientMapEditor;
 class BrightnessContrastEditor;
 class ExposureOffsetGammaEditor;
 class HueSaturationEditor;
+class LevelsEditor;
 class LayerPanel final : public QWidget {
     Q_OBJECT
 
@@ -48,6 +51,7 @@ public:
     void setThumbnails(const QHash<QString, QImage>& thumbnails,
                        const QHash<QString, QImage>& mask_thumbnails);
     void setQuickExportEnabled(bool enabled);
+    void setLevelsHistogram(const std::array<std::uint64_t, 256>& bins);
     [[nodiscard]] QVector<ImageStackItemData> selectedStackItems() const;
     void requestDeleteSelection();
     void finishOutlineEdit();
@@ -58,6 +62,8 @@ signals:
     void addGradientMapRequested();
     void addHueSaturationRequested();
     void hueSaturationChanged(const QString&, const creative_suite::effects::HueSaturationParameters&);
+    void addLevelsRequested();
+    void levelsChanged(const QString&, const creative_suite::effects::LevelsParameters&);
     void addExposureOffsetGammaRequested();
     void exposureOffsetGammaChanged(const QString&, const creative_suite::effects::ExposureOffsetGammaParameters&);
     void addBrightnessContrastRequested();
@@ -107,6 +113,8 @@ private:
     QMenu* layer_context_menu_ = nullptr;
     HueSaturationEditor* hue_editor_ = nullptr;
     QAction* add_hue_action_ = nullptr;
+    LevelsEditor* levels_editor_ = nullptr;
+    QAction* add_levels_action_ = nullptr;
     ExposureOffsetGammaEditor* exposure_editor_ = nullptr;
     QAction* add_exposure_action_ = nullptr;
     BrightnessContrastEditor* brightness_editor_ = nullptr;

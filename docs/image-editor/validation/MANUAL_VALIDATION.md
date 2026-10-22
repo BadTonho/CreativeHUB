@@ -1105,3 +1105,30 @@ canvas dimensions and outcome; use copies of original images.
    reference PC. Keep native results separate from offscreen checks.
 
 Automated coverage and scoped results: [feature contract](../features/HUE_SATURATION.md).
+
+## Global Levels adjustments
+
+Status: owner visual/native acceptance pending. Record OS, Qt, build,
+GPU/driver, canvas dimensions and outcome; use copies of original images.
+
+1. In English and pt-BR, create Levels above Background, a raster layer and a
+   group. Check the five default controls, paired slider limits and input
+   histogram. Select an image with distinct dark and bright regions; verify
+   that changing Levels parameters leaves the input histogram fixed, while
+   changing lower content updates it without blocking the interface.
+2. Move input black/white and gamma, then output black/white. Check dark, mid
+   and bright colors, transparent holes and partially transparent edges.
+3. Seed an area selection, paint/erase the mask, vary opacity and all six blend
+   modes, then use a clipping chain and transformed group with mixed adjustment
+   types. Reorder layers and verify the operation order.
+4. Drag, type, use arrow keys and wheel; check one Undo per gesture, atomic
+   Reset, no-op Redo and correct values after layer/tab changes.
+5. Compare CPU/Automatic preview, thumbnail and PNG/JPEG/group exports. Save
+   and reopen v24, recover an autosave and restore a relocated Hub backup.
+6. Publish a linked PNG consumed by Video Editor and Motion Studio. Confirm
+   refreshed RGB/alpha, repeated uses and unchanged source bytes.
+7. On the reference Windows PC, record cold/warm 1080p rendering, parameter
+   edits, histogram latency, uploads/cache bytes, cancellation and capacity
+   recovery. Keep native results separate from offscreen checks.
+
+Automated mapping: [Levels contract](../features/LEVELS.md).
