@@ -195,7 +195,7 @@ performance measurements, and Video Editor stability as the decision criteria.
 
 - [ ] Improve media organization, synchronization, relinking, and asset
   management.
-  - [-] Add serial Primary Grade and RGB waveform; expand into broader grading workflows as described in the Color roadmap.
+  - [x] Add the Color correction graph, serial and parallel grading, and RGB waveform. Broader grading tools remain in the Color roadmap.
 - [ ] Expand audio editing with recording, audio-only file export, track
   automation, and advanced mixing as user workflows require.
 - [-] Rectangle/Ellipse masks implemented; advanced mask authoring and compositing remain pending.

@@ -139,7 +139,7 @@ const QVector<Definition>& definitions() {
                                                 static_cast<qsizetype>(effect.name.size()))),
                               QString::fromUtf8(effect.category_id.data(),
                                                 static_cast<qsizetype>(effect.category_id.size())),
-                              Action::VisualEffect,
+                              Action::Unavailable,
                               effect.id == "video.primary_grade" ? Action::Unavailable : Action::VisualEffect});
         }
         result.push_back({"video.gaussian_blur", translateCatalogLabel(QStringLiteral("Gaussian Blur")), "video", Action::Unavailable, Action::GaussianBlurNode});

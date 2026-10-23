@@ -11,6 +11,7 @@
 #include "media/video_playback.h"
 #include "media/video_probe.h"
 #include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
+#include "workspaces/color/evaluation/color_graph_evaluator.h"
 #include "rendering/frame_compositor.h"
 #include "rendering/text_renderer.h"
 #include "timeline/timeline_transform.h"
@@ -297,8 +298,13 @@ std::optional<media::VideoFrame> composeFrame(
     const bool adjustment_cpu = std::any_of(requests.begin(), requests.end(), [&](const auto& request) {
         const auto& clip = *clips[request.clip_index].clip;
         const auto local_frame = request.local_frame >= 0 ? request.local_frame : timeline_frame - clip.timeline_start_frame;
+        const auto graph = clip.color_graph.value_or(
+            color::fromEffectStack(clip.effects));
+        const auto linear_effects = color::linearEffectStack(graph);
         return clip.kind == timeline::ClipKind::Adjustment && rendering::adjustmentRequiresProcessing(
-            timeline::evaluateTransform(clip.transform, clip.keyframes, local_frame), clip.effects);
+            timeline::evaluateTransform(clip.transform, clip.keyframes, local_frame),
+            linear_effects.value_or(std::vector<creative_suite::effects::EffectInstance>{}),
+            &graph);
     });
     std::vector<rendering::TimelineCompositionStep> steps;
     std::vector<rendering::CompositionLayer> layers;
@@ -320,13 +326,20 @@ std::optional<media::VideoFrame> composeFrame(
                 clip.transform, clip.keyframes, local_frame);
             auto transform = local_transform;
             setFrameOpacity(transform, request.opacity);
+            const auto color_graph = clip.color_graph.value_or(
+                color::fromEffectStack(clip.effects));
+            const auto linear_effects = color::linearEffectStack(color_graph);
+            const bool color_cpu_graph = !linear_effects.has_value();
+            const auto effect_stack = linear_effects.value_or(
+                std::vector<creative_suite::effects::EffectInstance>{});
 
             if (clip.kind == timeline::ClipKind::Adjustment) {
-                if (rendering::adjustmentRequiresProcessing(transform, clip.effects)) {
+                if (rendering::adjustmentRequiresProcessing(
+                        transform, effect_stack, &color_graph)) {
                     rendering::CompositionLayer operation;
                     operation.transform = transform;
-                    operation.effect_stack = clip.effects;
-                    steps.push_back({operation, true});
+                    operation.effect_stack = effect_stack;
+                    steps.push_back({operation, true, color_graph});
                 }
                 continue;
             }
@@ -370,7 +383,7 @@ std::optional<media::VideoFrame> composeFrame(
                 } else {
                     source_frame_index = clip.source_start_frame + *source_offset;
                 }
-                if (compositor.nativeDelivery()) {
+                if (compositor.nativeDelivery() && !color_cpu_graph) {
                     const auto decoded = render_clip.video->decodeFrameAtNative(source_frame_index,
                         [&canceled] { return canceled.load(std::memory_order_acquire); });
                     if (decoded) {
@@ -420,7 +433,8 @@ std::optional<media::VideoFrame> composeFrame(
                             (node.source_frame_count <= 0 ||
                              frame_value < static_cast<long double>(node.source_frame_count)) &&
                             frame_value < std::ldexp(1.0L, 63)) {
-                            if (compositor.nativeDelivery() && clip.kind != timeline::ClipKind::FusionComposition) {
+                            if (compositor.nativeDelivery() && !color_cpu_graph &&
+                                clip.kind != timeline::ClipKind::FusionComposition) {
                                 const auto decoded = source->video->decodeFrameAtNative(
                                     static_cast<std::int64_t>(frame_value), [&canceled] { return canceled.load(); });
                                 if (decoded && decoded->native) {
@@ -447,7 +461,8 @@ std::optional<media::VideoFrame> composeFrame(
                     detail::ExportTimedScope graph_scope(metrics.graph_nanoseconds);
                     return fusion::nodes::evaluateFrame(
                     *clip.node_graph, inputs,
-                    fusion::nodes::EvaluationContext{local_frame, compositor.graphBackend(), nullptr,
+                    fusion::nodes::EvaluationContext{local_frame,
+                        color_cpu_graph ? nullptr : compositor.graphBackend(), nullptr,
                         [&canceled] { return canceled.load(std::memory_order_acquire); }, &native_inputs, &graph_timings,
                         [&](fusion::nodes::NodeId id) -> media::VideoFramePtr {
                             const auto found = recovery_inputs.find(id);
@@ -474,11 +489,22 @@ std::optional<media::VideoFrame> composeFrame(
                     media::VideoFrame{graph_texture->width(), graph_texture->height(), graph_texture->width() * 4});
                 else if (evaluated->rgba) source_frame = std::make_shared<const media::VideoFrame>(std::move(*evaluated->rgba));
             }
+            if (color_cpu_graph) {
+                if (!source_frame || source_frame->rgba_pixels.empty())
+                    throw std::runtime_error("The Color graph requires an RGBA source frame.");
+                auto graded = color::evaluate(color_graph, *source_frame,
+                    [&canceled] { return canceled.load(std::memory_order_acquire); });
+                if (!graded)
+                    throw std::runtime_error("The Color correction graph could not produce a frame.");
+                source_frame = std::make_shared<const media::VideoFrame>(std::move(*graded));
+                native_frame.reset();
+                graph_texture.reset();
+            }
             // CompositionLayer stores a raw frame pointer. Keep the shared frame alive
             // until after the compositor consumes all layers for this output frame.
             decoded_frames.push_back(source_frame);
             layers.push_back({source_frame.get(), transform, {}});
-            layers.back().effect_stack = clip.effects;
+            layers.back().effect_stack = effect_stack;
             layers.back().native_frame = std::move(native_frame);
             layers.back().texture_frame = std::move(graph_texture);
             steps.push_back({layers.back(), false});

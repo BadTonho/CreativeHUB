@@ -6,6 +6,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -14,7 +15,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 33;
+inline constexpr int current_format_version = 34;
+inline constexpr int color_graph_format_version = 34;
 inline constexpr int color_gallery_format_version = 33;
 inline constexpr int primary_grade_format_version = 32;
 inline constexpr int composition_name_format_version = 29;
@@ -64,6 +66,7 @@ struct ProjectClip {
     bool audio_muted = false;
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
     std::vector<creative_suite::effects::EffectInstance> effects;
+    std::optional<color::Graph> color_graph;
     std::optional<fusion::nodes::NodeGraph> node_graph;
     timeline::Transform2D transform;
     timeline::TransformKeyframes keyframes;
@@ -83,7 +86,34 @@ struct ProjectClip {
     // Empty keeps the historical Fusion Composition display name.
     std::string display_name;
 
-    friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
+    friend bool operator==(const ProjectClip& left, const ProjectClip& right) {
+        const auto left_graph = left.color_graph.value_or(
+            color::fromEffectStack(left.effects));
+        const auto right_graph = right.color_graph.value_or(
+            color::fromEffectStack(right.effects));
+        return std::tie(left.source_path, left.timeline_start_frame,
+                        left.source_start_frame, left.duration_frames,
+                        left.audio_gain, left.audio_muted,
+                        left.audio_gain_keyframes, left.node_graph,
+                        left.transform, left.keyframes, left.kind, left.text,
+                        left.clip_id, left.image_editor_variant, left.motion_link,
+                        left.source_duration_frames, left.source_duration_migration_pending,
+                        left.source_start_time_us, left.source_duration_time_us,
+                        left.linked_clip_id, left.audio_extracted,
+                        left.audio_companion_pending, left.composition_input_offset_frames,
+                        left.display_name) ==
+            std::tie(right.source_path, right.timeline_start_frame,
+                     right.source_start_frame, right.duration_frames,
+                     right.audio_gain, right.audio_muted,
+                     right.audio_gain_keyframes, right.node_graph,
+                     right.transform, right.keyframes, right.kind, right.text,
+                     right.clip_id, right.image_editor_variant, right.motion_link,
+                     right.source_duration_frames, right.source_duration_migration_pending,
+                     right.source_start_time_us, right.source_duration_time_us,
+                     right.linked_clip_id, right.audio_extracted,
+                     right.audio_companion_pending, right.composition_input_offset_frames,
+                     right.display_name) && left_graph == right_graph;
+    }
 };
 
 struct ProjectTransition {

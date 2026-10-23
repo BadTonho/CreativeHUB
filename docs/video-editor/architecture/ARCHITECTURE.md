@@ -1,6 +1,13 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is now v33 for Color Gallery still metadata and PNG sidecars; Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v34: v33 added Color Gallery metadata and PNG sidecars, and v34 stores the Color correction graph. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
+
+Color owns a graph model and evaluator separate from Fusion. The render order
+is Fusion graph evaluation, Color graph evaluation, then clip transform and
+Timeline composition. Serial Color graphs retain the existing GPU effect path;
+branched graphs use the CPU RGBA evaluator and normalized Parallel Mixer.
+Color graph edits and Edit Inspector parameter/state edits are Timeline
+commands, so they share Undo/Redo and project dirty-state handling.
 
 ## Workspace Effects catalog
 
@@ -52,10 +59,12 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 
 ## Current product direction
 
-The Color workspace is an application-owned serial view of the existing
-ordered clip-effect stack. It has no independent graph or grade document:
-Fusion runs first, then clip effects, then the existing Timeline composition.
-The shared Primary Grade evaluator feeds CPU, OpenGL and Vulkan composition.
+The Color workspace owns a per-clip correction graph with Input, effect,
+Parallel Mixer and Output nodes. Its connections define processing, and the
+graph is saved in CSP v34. Serial graphs use the existing GPU effect pipeline
+when available; branched graphs use Color's CPU RGBA evaluator after Fusion.
+Edit Inspector edits the same effect nodes' parameters and enabled state, while
+Color owns topology and layout. Both workspaces use shared Timeline history.
 Color's viewer and clip selection are shared with Edit; its panels are created
 on first entry and the prior native dock layout is restored on exit. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).

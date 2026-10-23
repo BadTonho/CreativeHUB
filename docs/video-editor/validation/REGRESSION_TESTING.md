@@ -1,28 +1,28 @@
 # Regression Testing
 
-## Color workspace and CSP v33 Color Gallery
+## Color correction graph and CSP v34
 
 | Behavior | Verification |
 | --- | --- |
-| Lazy Color page, shared Viewer, clip strip, node panel, waveform, Edit dock restoration | `creative-suite-main-editor-color-workspace-integration`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-workspace-page-switch` |
-| Serial effect insertion, parameters, order, enable state and removal | `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-timeline-command-service` and MainWindow integration |
-| Grade duplication, split, Undo/Redo and project reopen | `creative-suite-main-editor-adjustment`, `creative-suite-main-editor-project` |
-| Primary Grade math, alpha and combined effect ordering | `creative-suite-effects-primary-grade`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-gpu-color` and `creative-suite-main-editor-vulkan-color` CPU/GPU PlaybackWorker Preview, adjustment composition and lossless export, plus the broader composition and GPU Timeline suites |
+| Lazy Color page, shared Viewer, clip strip, graph canvas, waveform, Edit dock restoration | `creative-suite-main-editor-color-workspace-integration`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-workspace-page-switch` |
+| Graph connection validity, cycle rejection, branch weights/mixing, layout, node add/remove and effect state/parameter edits | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-timeline-command-service` and MainWindow integration |
+| Graph edits in shared Undo/Redo, clip duplication/split and project reopen | `creative-suite-main-editor-adjustment`, `creative-suite-main-editor-project`, Edit controller and MainWindow integration |
+| Primary Grade math, alpha, serial GPU path and branched CPU evaluation | `creative-suite-effects-primary-grade`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-gpu-color` and `creative-suite-main-editor-vulkan-color` CPU/GPU PlaybackWorker Preview, adjustment composition and lossless export, plus the broader composition and GPU Timeline suites |
 | CPU/GPU full-canvas still capture, stale revision/no-frame handling, source clip/frame provenance, Gallery rename/remove | `creative-suite-main-editor-playback-worker-errors`, `creative-suite-main-editor-color-workspace`, MainWindow integration |
-| CSP v33 Gallery sidecar save/reopen, pre-v33 empty Gallery, missing image placeholder, autosave/recovery and Hub backup/restoration | `creative-suite-main-editor-project`, `creative-suite-main-editor-autosave`, `hub-backup-format-test`, `hub-backup-manager-test` |
+| CSP v34 graph save/reopen, v33 serial-graph migration, earlier versions, autosave/recovery and Hub backup/restoration with Gallery sidecars | `creative-suite-main-editor-project`, `creative-suite-main-editor-autosave`, `hub-backup-format-test`, `hub-backup-manager-test` |
 
-Color Gallery regression code was added with this implementation. Its build and
-test execution were intentionally not run at the maintainer's request.
+Color graph and Gallery regression code was added with this implementation.
+Build and test execution were intentionally not run at the maintainer's request.
 
 Manual Release check: open a project with overlapping visual clips and an existing
-Edit effect. Select each clip in Color, add two Primary Grade nodes, adjust RGB
-gains, reorder and disable one, then compare the Edit Inspector values and Viewer
-image. Undo/Redo, duplicate and split the graded clip; save/reopen and restore a
-Hub backup. During playback, verify waveform changes with the displayed frame,
-switch between Color, Edit, Fusion, Audio and Render, and confirm the former dock
-layout returns. Compare an exported lossless frame with the Viewer and repeat
-after a GPU failure fallback. Record the platform, graphics backend and any
-pixel discrepancy. **Manual visual check pending.**
+Edit effect. In Color, connect the effect nodes in series, add a parallel branch,
+change its weight, move and reconnect nodes, then compare the Viewer with the Edit
+Inspector's parameter and enabled-state controls. Undo/Redo graph and parameter
+edits, duplicate and split the graded clip, save/reopen, and restore a Hub backup.
+During playback, verify waveform changes with the displayed frame and switch
+between Color, Edit, Fusion, Audio and Render. Compare an exported lossless frame
+with the Viewer and repeat after a GPU failure fallback. Record the platform,
+graphics backend and any pixel discrepancy. **Manual visual check pending.**
 
 Windows Release verification on 2026-10-23: the focused Primary Grade CPU,
 OpenGL, Vulkan and both GPU adjustment Preview/export tests passed, as did the Color widget and MainWindow
@@ -157,7 +157,7 @@ interop acceptance remain pending. This prototype does not expose a UI control.
 | Effects/Favorites/Functions availability, search/Add/Enter/MIME, selection and typed cable insertion/refusal | `creative-suite-main-editor-effects-panel`, `creative-suite-main-editor-shortcut-manager`, `creative-suite-main-editor-fusion-workspace`, `creative-suite-blur-interchange` |
 | Ordered Color/Blur stages, masks, text/media profiles, source windows, GPU/CPU recovery, history, duplication, cuts/trims/FPS, v1–v3/v31/v8 and recovery | `creative-suite-blur-interchange`, `creative-suite-composition-interchange`, `creative-suite-mask-interchange` |
 | Complete Preview/export frames before encoding, existing graphs and direct/GPU export | `creative-suite-main-editor-fusion-composition`, `creative-suite-main-editor-gpu-timeline`, `creative-suite-main-editor-render-export`, `creative-suite-main-editor-gpu-export` |
-| Real-reader CSP v33 backup/restoration with Gallery sidecar, Blur, Primary Grade and external Inputs; future34/9 | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Real-reader CSP v34 backup/restoration with Color graph, Gallery sidecar, Blur, Primary Grade and external Inputs; future35/9 | `hub-backup-format-test`, `hub-backup-manager-test` |
 
 See [Gaussian Blur](../features/GAUSSIAN_BLUR.md) for reproducible pending manual
 checks. Windows automation does not establish macOS/Linux or driver acceptance.
@@ -301,7 +301,7 @@ pending separately from automated offscreen checks.
 | Edit/Fusion RGBA synchronization, multiple-node selection, node removal, ordinary video/image graphs, canceled dialogs and real video/audio/collision drops | `creative-suite-main-editor-background-generator` |
 | Dirty state, color Undo to saved baseline and cancellation in the real application | `creative-suite-main-editor-main-window` |
 | Pre-encoding Preview/export parity for the white preset and colored/transparent backgrounds over lower tracks | `creative-suite-main-editor-fusion-composition` |
-| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future v34 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future v35 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
 
 The generator drag test sends actual Qt drag/drop events directly, without
 showing the standalone TimelineWidget. In this Windows/offscreen fixture,
@@ -386,7 +386,7 @@ Background/Text/Merge parity through the native graph backend and requires that
 GPU work actually occurred. The main-window test checks insertion/effects dirty
 state, save and undo to the saved baseline. `hub-backup-format-test` preserves
 generator data, graph input paths and signed offsets through relocated restore;
-`hub-backup-manager-test` rejects future v34. Existing graph, timeline, playback,
+`hub-backup-manager-test` rejects future v35. Existing graph, timeline, playback,
 project, autosave, Inspector, adjustment and export gates remain relevant.
 
 CSP v27 also round-trips optional cubic Bezier easing for clip/node curves;
@@ -749,7 +749,7 @@ hardware and drivers. No percentage target is set from this measurement.
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
-| Effects UI | Four draggable visual filters, retained Text and transition entries, category filtering and stable IDs; Functions search and Add/Cancel/Enter behavior with Shift + Space; Timeline drop target compatibility; dedicated Effects Inspector tab with compatible-selection guidance, per-effect checkbox and dimmed disabled rows, editable parameters while disabled, stack order/removal; one-command enable-state Undo/Redo; Preview and offline export both skip disabled filters through the shared CPU library |
+| Effects UI and Color graph | Edit catalog does not create correction nodes; Color can add, connect, branch, rewire, move and remove correction nodes; Edit exposes shared parameter/enabled-state controls; mixer weights, shared Undo/Redo, Preview and export are covered by `color_graph_test.cpp`, Color workspace, Edit controller, playback, export and MainWindow tests |
 | Clip attribute copy/paste | `tests/ui/edit_workspace_controller_test.cpp` covers complete in-memory attribute snapshots, effects including clearing with an empty source stack, transform/keyframes, clip audio gain/mute, text content/style, compatibility rejection, no dirty/history change on copy, and a single undoable paste; `tests/timeline/timeline_command_service_test.cpp` covers atomic group application, linked audio pairs, standalone audio destinations, local keyframe offsets, endpoint clipping for shorter clips, unchanged frame positions and held values for longer clips, rejection without partial mutation; `tests/application/main_window_integration_test.cpp` covers Ctrl+C/Ctrl+Shift+V registration, shortcut customization, text-field copy behavior, modal category defaults/disabled groups, no-target guidance, Apply, and Undo/Redo |
 | Multi-clip Paste Attributes | `tests/timeline/timeline_widget_test.cpp` covers Ctrl+click toggling, selection order/primary behavior, normal-click collapse and gap clearing; `tests/timeline/timeline_command_service_test.cpp` covers atomic multi-destination paste, per-target compatibility skipping, linked video/audio routing, stale-target rejection without partial changes, and one-step Undo/Redo; `tests/application/main_window_integration_test.cpp` checks category compatible counts and mixed-selection defaults |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
@@ -1160,11 +1160,11 @@ in the running Video Editor after UI or integration changes:
 - Functions window: press Shift + Space with focus in the Timeline, Media
   Browser, and Preview, in both Edit and Fusion, and confirm the non-modal
   `Functions` workspace catalog opens centered over the editor and receives focus.
-  Search for each visual filter and confirm the list updates. With no compatible
-  selected clip, confirm search stays available and Add is disabled. Select a
-  video or image clip, reopen Functions, and confirm Add becomes available;
-  in Edit apply one filter with Add and another with Enter; in Fusion verify
-  Add/Enter/double click create graph nodes. Verify Edit generators/Text/transitions
+  Search for visual filters and confirm the list updates. In Edit, verify the
+  catalog does not create correction nodes and that searching remains available
+  without a selected clip. Select a video or image clip, open Color, and create
+  corrections and a parallel branch there. In Fusion verify Add/Enter/double
+  click create graph nodes. Verify Edit generators/Text/transitions
   show their drag-only hint and remain available for dragging without selection.
   Confirm Cancel closes the
   picker without editing, while outside clicks still reach their target and
@@ -1851,7 +1851,7 @@ Inspector diamonds, clip-local values, key insertion/removal, playback pause,
 and cycle rejection. `creative-suite-main-editor-render-export` compares
 Preview and offline Render pixels at the first and last frames of an animated
 Brightness graph within the encoder's loss tolerance. Both paths use the same
-node evaluator before the existing clip effect stack and clip transform.
+Fusion node evaluator before the Color correction graph and clip transform.
 
 Effect-node verification (2026-10-07): the five focused CTest entries for the
 node graph, project persistence, Fusion workspace, Timeline command history,

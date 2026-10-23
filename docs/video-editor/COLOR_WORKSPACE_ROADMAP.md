@@ -1,54 +1,61 @@
 # Color Workspace Roadmap
 
-Status: **Color editing and Gallery capture/organization are implemented; execution of the new regression coverage and native visual/platform acceptance are pending**.
+Status: **Color correction graphs and Gallery capture/organization are implemented in code; automated regression coverage is added but has not been run. Native visual and platform acceptance remain pending.**
 
-The Color workspace grades the selected visual Timeline clip using its existing
-ordered clip-effect stack. Its serial node display is independent of Fusion's
-composition graph. The same effects and values are editable in Edit, participate
-in the shared Timeline history, and feed Preview and export after Fusion graph
-evaluation. The page has a shared viewer, visual-clip strip, serial node list,
-Primary Grade controls, an RGB waveform of the displayed image, and a Gallery
-of project stills. Panels are created on first entry. Capture records the
-composed Viewer frame after effects at canvas resolution, with clip and
-timeline-frame provenance. Names are editable and items can be removed;
-albums, tags, and comparison views are not included.
+The Color workspace owns a directed acyclic graph for each supported visual
+clip. Its nodes are Input, effect, Parallel Mixer, and Output. Connections
+determine processing; saved positions only arrange the canvas. Effects use the
+existing `creative_suite::effects` implementations. Parallel Mixer combines
+its inputs by normalized weighted RGBA average, with equal weights by default.
 
-Primary Grade stores brightness [-100, 100], contrast and saturation [0, 200]%,
-and individual red, green and blue gains [0, 200]%, with neutral values 0/100%.
-The existing clip effect order determines processing order. Encoded RGB is
-adjusted without changing alpha. The waveform samples at most 320 by 180
-displayed pixels ten times per second; analysis runs off the UI thread. A GPU
-viewer capture can briefly require readback on the UI thread, so native
-performance acceptance is pending. Gallery capture uses the CPU RGBA frame when
-available and queues GPU readback on the playback worker. Obsolete results are
-discarded after project or frame changes. The waveform is a display aid, not a
-calibrated broadcast instrument.
+The Color canvas supports node selection and movement, adding serial effects or
+parallel branches, removing effects or mixers, and reconnecting node ports.
+Removing a mixer retains its first input as the output path. The Edit Inspector
+can select the same effect nodes and change parameters or enabled state; graph
+structure is changed in Color. Node creation, removal, ordering, reconnection,
+layout and parameter edits use the shared Timeline history. Fusion retains its
+existing implementation and behavior; its evaluated output feeds the Color
+graph.
 
-## First-stage acceptance
+Preview and export follow the graph. A serial graph uses the existing GPU
+effect path when available. Graphs with branches use the CPU RGBA evaluator,
+which calculates each required upstream node once and mixes the branch outputs.
+The evaluator also handles adjustment clips after lower-track composition.
 
-- Add, reorder, enable, disable, edit and remove serial color nodes on video,
-  image, adjustment and Fusion Composition clips. Preserve the same order and
-  values in Edit, Undo/Redo, duplication, split, save/reopen and recovery.
-- Preserve Edit, Fusion, Audio and Render layouts and shortcuts when entering
-  and leaving Color. Keep Edit as the startup workspace.
-- Keep CPU and OpenGL/Vulkan Preview and export pixels consistent within their
-  documented RGB tolerance, including mixed effects, alpha and recovery.
-- Store Primary Grade in CSP v32 and Gallery metadata in CSP v33. Read older
-  supported versions with an empty Gallery. Keep PNG stills in the adjacent
-  `<project>.csp.gallery/` sidecar and retain them through Save As, autosave,
-  recovery, and Hub backup/restore. A missing image remains an unavailable
-  Gallery item and does not block project opening.
+The page keeps the shared Viewer, visual-clip strip, RGB waveform and project
+Gallery. Still capture records the composed Viewer frame after corrections at
+canvas resolution, with clip and timeline-frame provenance. Stills are named,
+renamed, and removed in capture order; their PNGs remain in the
+`<project>.csp.gallery/` sidecar. Gallery selection does not change the Viewer
+or Timeline. Albums, tags and comparison views are not included.
 
-## Candidate expansion, no committed dates
+## Persistence and compatibility
+
+CSP v34 stores the Color graph on supported visual clips, including node IDs,
+types, effect values and enabled state, connections, mixer input weights, and
+canvas positions. CSP versions 1 through 33 migrate their existing ordered
+effect stacks into serial graphs; clips without effects receive Input → Output.
+Gallery metadata remains the v33 `color_gallery` array and its lossless PNGs
+remain in the project sidecar. Save As, autosave, recovery and Hub backup keep
+the graph and Gallery sidecar together. A missing still image remains an
+unavailable Gallery entry and does not block project opening.
+
+## Regression coverage
+
+Regression code covers graph validation and cycles, connection changes,
+normalized mixing, CPU evaluation, serial GPU-path eligibility, Color canvas
+operations, Edit parameter and enabled-state editing, shared Undo/Redo,
+Preview and offline export, CSP v34 persistence, v33 migration, autosave and
+recovery, and Hub backup/restoration with Gallery PNG sidecars. These checks
+have not been executed for this change, as requested. No build or manual
+validation was run.
+
+## Later work
 
 1. Gallery comparison views, including split-screen and before/after.
-2. RGB and hue/saturation curves, secondary selection, qualifier tools, power
-   windows and tracked masks.
-3. Vectorscope, histogram and calibrated waveform modes, plus shot matching.
-4. Color transforms, LUT import and management, input/output profiles, managed
-   wide-gamut and HDR workflows with explicit pipeline contracts.
-5. More flexible grading node topologies only after a documented data and
-   rendering model; the first stage keeps a serial effect chain.
+2. Curves, secondary selection, qualifier tools, power windows and tracking.
+3. Vectorscope, histogram, calibrated waveform modes and shot matching.
+4. Color transforms, LUT management, profiles, wide-gamut and HDR workflows.
 
 Each expansion needs preview/export parity, persistence and compatibility
-coverage, native performance measurements and platform acceptance.
+coverage, performance measurements and native platform acceptance.

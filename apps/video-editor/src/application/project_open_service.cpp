@@ -685,6 +685,8 @@ ProjectOpenResult ProjectOpenService::prepare(
                     adjustment.transform = project_clip.transform;
                     adjustment.keyframes = project_clip.keyframes;
                     adjustment.effects = project_clip.effects;
+                    adjustment.color_graph = project_clip.color_graph.value_or(
+                        color::fromEffectStack(project_clip.effects));
                     adjustment.node_graph = project_clip.node_graph;
                     adjustment.composition_input_offset_frames = project_clip.composition_input_offset_frames;
                     next_clip_id = std::max(next_clip_id, project_clip.clip_id + 1);
@@ -835,6 +837,8 @@ ProjectOpenResult ProjectOpenService::prepare(
                 clip.audio_muted = project_clip.audio_muted;
                 clip.audio_gain_keyframes = project_clip.audio_gain_keyframes;
                 clip.effects = project_clip.effects;
+                clip.color_graph = project_clip.color_graph.value_or(
+                    color::fromEffectStack(project_clip.effects));
                 clip.node_graph = project_clip.node_graph;
                 clip.clip_id = project_clip.clip_id;
                 clip.track_id = track_id;

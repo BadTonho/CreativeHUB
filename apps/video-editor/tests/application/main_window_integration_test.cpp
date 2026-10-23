@@ -11,6 +11,7 @@
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/audio/ui/audio_workspace.h"
 #include "workspaces/color/ui/color_workspace.h"
+#include "workspaces/color/ui/color_node_canvas.h"
 #include "workspaces/fusion/nodes/ui/node_canvas.h"
 #include "workspaces/render/queue/render_queue_model.h"
 #include "workspaces/render/queue/render_queue_controller.h"
@@ -296,17 +297,19 @@ public:
                 window.preview_widget_->parentWidget()->objectName() == "colorViewerContainer",
                 "Color must mount the shared Viewer on first entry.");
         auto* clips = window.color_workspace_->findChild<QListWidget*>("colorClipStrip");
-        auto* nodes = window.color_workspace_->findChild<QListWidget*>("colorNodesList");
+        auto* nodes = window.color_workspace_->findChild<ui::ColorNodeCanvas*>("colorNodeCanvas");
         auto* add = window.color_workspace_->findChild<QPushButton*>("colorAddNodeButton");
-        require(clips && clips->count() == 1 && nodes && nodes->count() == 2 && add,
-                "Color must show the selected visual clip and serial Input/Output.");
+        require(clips && clips->count() == 1 && nodes && nodes->selectedNode() && add,
+                "Color must show the selected visual clip and its graph canvas.");
         add->click();
         auto location = window.timeline_model_.locateClip(clip_id);
         require(location && window.timeline_model_.tracks()[location->track_index]
+                    .clips[location->clip_index].color_graph.has_value() &&
+                window.timeline_model_.tracks()[location->track_index]
                     .clips[location->clip_index].effects.size() == 1 &&
                 window.timeline_model_.tracks()[location->track_index]
                     .clips[location->clip_index].effects.front().id == "video.primary_grade",
-                "Color Add must commit to the shared clip effect stack.");
+                "Color Add must commit a correction node to the clip graph.");
         auto* red = window.color_workspace_->findChild<QDoubleSpinBox*>("colorParameter_red_gain");
         require(red, "Color must expose Primary Grade red gain.");
         red->setValue(145);
@@ -318,6 +321,15 @@ public:
                     .clips[location->clip_index].effects.front(), "red_gain") == 145 &&
                 controller->undo().changed() && controller->redo().changed(),
                 "Color gains must use the Timeline history.");
+        auto* add_branch = window.color_workspace_->findChild<QPushButton*>(
+            "colorAddParallelBranchButton");
+        require(add_branch, "Color must offer parallel correction branches.");
+        add_branch->click();
+        location = window.timeline_model_.locateClip(clip_id);
+        require(location && window.timeline_model_.tracks()[location->track_index]
+                    .clips[location->clip_index].color_graph->nodes.size() == 5 &&
+                controller->undo().changed() && controller->redo().changed(),
+                "Color graph topology must use the shared Timeline Undo/Redo history.");
         const auto screenshot_path = qEnvironmentVariable("CS_COLOR_SCREENSHOT");
         if (!screenshot_path.isEmpty()) {
             QApplication::processEvents();
@@ -2183,7 +2195,17 @@ public:
             require(window.workspace_host_->currentPage() == ui::WorkspacePageId::Edit &&
                         !window.fusion_workspace_->isActive(),
                     "The integration test could not restore Edit or deactivate Fusion after routing.");
-            edit_controller->addEffectToSelectedClip(QStringLiteral("video.grayscale"));
+            require(!edit_controller->addEffectToSelectedClip(QStringLiteral("video.grayscale")),
+                    "Edit must leave correction-node creation in Color.");
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Color);
+            auto* color_type = window.color_workspace_->findChild<QComboBox*>("colorNewNodeType");
+            auto* color_add = window.color_workspace_->findChild<QPushButton*>("colorAddNodeButton");
+            require(color_type && color_add,
+                    "Color did not expose correction-node creation controls.");
+            color_type->setCurrentIndex(color_type->findData(QStringLiteral("video.grayscale")));
+            color_add->click();
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
+            QApplication::processEvents();
             auto* effect_item = inspector_ui.clip_effects_list->item(0);
             require(effect_item != nullptr &&
                         effect_item->flags().testFlag(Qt::ItemIsUserCheckable) &&
@@ -2233,15 +2255,28 @@ public:
                     "An Edit effect parameter reset must be one undoable edit.");
             require(edit_controller->undo().changed() && edit_controller->undo().changed() &&
                         edit_controller->undo().changed(),
-                    "Effect parameter, checkbox, and insertion actions must each be undoable.");
+                    "Effect parameter, checkbox, and Color graph edits must each be undoable.");
             selected_clip_location = window.timeline_model_.locateClip(selected_clip_id);
             require(selected_clip_location.has_value() &&
                         window.timeline_model_.tracks()[selected_clip_location->track_index]
                             .clips[selected_clip_location->clip_index].effects.empty() &&
                         !window.project_dirty_,
                     "Undoing the Effects UI test must restore the clean project state.");
-            require(edit_controller->addEffectToSelectedClip(QStringLiteral("video.primary_grade")),
-                    "Edit must allow adding the Primary Grade shared with Color.");
+            require(!edit_controller->addEffectToSelectedClip(QStringLiteral("video.primary_grade")),
+                    "Edit must leave correction-node creation in Color.");
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Color);
+            auto* color_primary_type = window.color_workspace_->findChild<QComboBox*>("colorNewNodeType");
+            require(color_primary_type, "Color correction type selector is missing.");
+            color_primary_type->setCurrentIndex(
+                color_primary_type->findData(QStringLiteral("video.primary_grade")));
+            window.color_workspace_->findChild<QPushButton*>("colorAddNodeButton")->click();
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
+            QApplication::processEvents();
+            selected_clip_location = window.timeline_model_.locateClip(selected_clip_id);
+            require(selected_clip_location &&
+                        window.timeline_model_.tracks()[selected_clip_location->track_index]
+                            .clips[selected_clip_location->clip_index].effects.size() == 1,
+                    "The Color workspace did not create the node shared with Edit.");
             auto* parameter_selector = inspector_ui.clip_effect_parameter_selector;
             require(parameter_selector && parameter_selector->isVisible() &&
                     parameter_selector->count() == 6,
@@ -3678,7 +3713,12 @@ public:
                     "Adjustment insertion must dirty the real document and enable its Inspector.");
             require(adjustment_window.saveProjectTo(directory / "adjustment-ui.csp", "save") &&
                     !adjustment_window.project_dirty_, "Adjustment save did not establish a clean document.");
-            controller->addEffectToSelectedClip("video.grayscale");
+            const auto adjustment_clip_id = adjustment_window.timeline_model_.tracks()[0].clips[0].clip_id;
+            const auto adjustment_graph = color::fromEffectStack(std::vector{
+                creative_suite::effects::makeDefaultInstance("video.grayscale")});
+            require(controller->execute(application::SetClipColorGraphCommand{
+                        adjustment_clip_id, adjustment_graph}).changed(),
+                    "Color could not create a correction graph for the Adjustment Clip.");
             require(adjustment_window.project_dirty_, "Adjustment effects must dirty the real document.");
             auto* duplicate = editAction(adjustment_window, "edit.duplicate_adjustment_clip");
             require(duplicate && duplicate->isEnabled(), "Adjustment duplication is unavailable in Edit.");
@@ -3700,7 +3740,12 @@ public:
                     "Fusion Composition insertion must dirty the real document and enable its Inspector.");
             require(composition_window.saveProjectTo(directory / "fusion-ui.csp", "save") &&
                     !composition_window.project_dirty_, "Fusion Composition save did not establish a clean document.");
-            controller->addEffectToSelectedClip("video.grayscale");
+            const auto composition_clip_id = composition_window.timeline_model_.tracks()[0].clips[0].clip_id;
+            const auto composition_graph = color::fromEffectStack(std::vector{
+                creative_suite::effects::makeDefaultInstance("video.grayscale")});
+            require(controller->execute(application::SetClipColorGraphCommand{
+                        composition_clip_id, composition_graph}).changed(),
+                    "Color could not create a correction graph for the Fusion Composition clip.");
             require(composition_window.project_dirty_, "Fusion Composition effects must dirty the real document.");
             auto* duplicate = editAction(composition_window, "edit.duplicate_fusion_composition");
             require(duplicate && duplicate->isEnabled(), "Fusion Composition duplication is unavailable in Edit.");

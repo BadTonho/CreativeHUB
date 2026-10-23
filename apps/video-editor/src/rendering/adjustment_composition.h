@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rendering/frame_compositor.h"
+#include "workspaces/color/model/color_graph.h"
 #include <creative_suite/composition/gpu_frame_compositor.h>
 #include <functional>
 #include <span>
@@ -12,11 +13,13 @@ namespace rendering {
 struct TimelineCompositionStep {
     CompositionLayer layer;
     bool adjustment = false;
+    std::optional<color::Graph> color_graph;
 };
 
 [[nodiscard]] bool adjustmentRequiresProcessing(
     const creative_suite::animation::Transform2D& transform,
-    std::span<const creative_suite::effects::EffectInstance> effects) noexcept;
+    std::span<const creative_suite::effects::EffectInstance> effects,
+    const color::Graph* color_graph = nullptr) noexcept;
 
 // CPU orchestration reuses the shared effects/compositor. Opacity mixes the
 // original lower-track canvas with the fully transformed adjusted canvas.

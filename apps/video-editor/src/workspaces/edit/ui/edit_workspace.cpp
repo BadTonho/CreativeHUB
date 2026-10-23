@@ -375,7 +375,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         &EditWorkspaceController::chooseBackgroundColor);
 
 
-    ui_.clip_effects_controls = new QGroupBox(QCoreApplication::translate("EditWorkspace", "Clip Effects"), effects_page);
+    ui_.clip_effects_controls = new QGroupBox(QCoreApplication::translate("EditWorkspace", "Color Nodes"), effects_page);
     auto* effects_layout = new QVBoxLayout(ui_.clip_effects_controls);
     effects_layout->setContentsMargins(8, 8, 8, 8);
     effects_layout->setSpacing(5);
@@ -384,14 +384,13 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     ui_.clip_effects_list->setSelectionMode(QAbstractItemView::SingleSelection);
     ui_.clip_effects_list->setMaximumHeight(100);
     effects_layout->addWidget(ui_.clip_effects_list);
-    auto* effect_actions = new QHBoxLayout;
-    ui_.clip_effect_up = new QPushButton(QCoreApplication::translate("EditWorkspace", "Up"), ui_.clip_effects_controls);
-    ui_.clip_effect_down = new QPushButton(QCoreApplication::translate("EditWorkspace", "Down"), ui_.clip_effects_controls);
-    ui_.clip_effect_remove = new QPushButton(QCoreApplication::translate("EditWorkspace", "Remove"), ui_.clip_effects_controls);
-    effect_actions->addWidget(ui_.clip_effect_up);
-    effect_actions->addWidget(ui_.clip_effect_down);
-    effect_actions->addWidget(ui_.clip_effect_remove);
-    effects_layout->addLayout(effect_actions);
+    auto* effect_hint = new QLabel(
+        QCoreApplication::translate("EditWorkspace",
+            "Select a correction to edit it. Change graph structure in Color."),
+        ui_.clip_effects_controls);
+    effect_hint->setWordWrap(true);
+    effect_hint->setObjectName(QStringLiteral("editColorGraphHint"));
+    effects_layout->addWidget(effect_hint);
     auto* effect_parameter_row = new QWidget(ui_.clip_effects_controls);
     auto* effect_parameter_layout = new QHBoxLayout(effect_parameter_row);
     effect_parameter_layout->setContentsMargins(0, 0, 0, 0);
@@ -554,16 +553,6 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
                 edit_controller->setSelectedClipEffectEnabled(
                     list->row(item), item->checkState() == Qt::Checked);
             });
-    connect(ui_.clip_effect_up, &QPushButton::clicked,
-            edit_controller, [edit_controller]() {
-                edit_controller->moveSelectedClipEffect(-1);
-            });
-    connect(ui_.clip_effect_down, &QPushButton::clicked,
-            edit_controller, [edit_controller]() {
-                edit_controller->moveSelectedClipEffect(1);
-            });
-    connect(ui_.clip_effect_remove, &QPushButton::clicked,
-            edit_controller, &ui::EditWorkspaceController::removeSelectedClipEffect);
     connect(ui_.clip_effect_parameter_slider, &QSlider::sliderPressed,
             edit_controller, &ui::EditWorkspaceController::beginEffectEdit);
     connect(ui_.clip_effect_parameter_slider, &QSlider::valueChanged,

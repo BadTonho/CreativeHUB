@@ -404,16 +404,28 @@ void testVideoDocuments(const QString& root) {
     auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
     CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "red_gain", 145.0));
     color_document.timeline_tracks.front().clips.front().effects.push_back(grade);
+    auto color_graph = color::fromEffectStack(
+        color_document.timeline_tracks.front().clips.front().effects);
+    const auto effect_nodes = color::effectNodesInOrder(color_graph);
+    auto branch_effect = creative_suite::effects::makeDefaultInstance("video.saturation");
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(
+        branch_effect, "amount", 125.0));
+    CS_TEST_CHECK(color::addParallelBranch(color_graph, effect_nodes.back(), branch_effect));
+    color_document.timeline_tracks.front().clips.front().color_graph = color_graph;
+    color_document.timeline_tracks.front().clips.front().effects =
+        color::effectInstancesInOrder(color_graph);
     color_document.color_gallery_stills.push_back({"hub-still", "Still 1",
         color_document.timeline_tracks.front().clips.front().clip_id, 10,
         "hub-still.png",
         std::make_shared<const std::vector<std::uint8_t>>(
             std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
-    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v33.csp");
+    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v34.csp");
     project::save(fsPath(color_path), color_document);
-    const auto color_snapshot = backup(QDir(root).filePath("video-color-v33"), color_path);
+    const auto color_snapshot = backup(QDir(root).filePath("video-color-v34"), color_path);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)) == color_document);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.restored)) == color_document);
+    CS_TEST_CHECK(QFileInfo::exists(color_snapshot.vault + QStringLiteral(".gallery/hub-still.png")));
+    CS_TEST_CHECK(QFileInfo::exists(color_snapshot.restored + QStringLiteral(".gallery/hub-still.png")));
     project::ProjectClip adjustment;
     adjustment.clip_id = 3;
     adjustment.kind = timeline::ClipKind::Adjustment;

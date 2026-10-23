@@ -1,4 +1,5 @@
 #include "adjustment_composition.h"
+#include "workspaces/color/evaluation/color_graph_evaluator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,11 +8,16 @@ namespace rendering {
 
 bool adjustmentRequiresProcessing(
     const creative_suite::animation::Transform2D& transform,
-    std::span<const creative_suite::effects::EffectInstance> effects) noexcept {
+    std::span<const creative_suite::effects::EffectInstance> effects,
+    const color::Graph* color_graph) noexcept {
     if (transform.opacity == 0.0) return false;
     return transform.position_x != 0.5 || transform.position_y != 0.5 ||
         transform.scale != 1.0 || transform.rotation_degrees != 0.0 ||
-        std::any_of(effects.begin(), effects.end(), [](const auto& effect) { return effect.enabled; });
+        std::any_of(effects.begin(), effects.end(), [](const auto& effect) { return effect.enabled; }) ||
+        (color_graph && std::any_of(color_graph->nodes.begin(), color_graph->nodes.end(),
+            [](const color::Node& node) {
+                return node.type == color::NodeType::Effect && node.effect && node.effect->enabled;
+            }));
 }
 
 std::optional<creative_suite::media::RgbaFrame> composeAdjustmentLayers(
@@ -27,7 +33,9 @@ std::optional<creative_suite::media::RgbaFrame> composeAdjustmentLayers(
             pending.push_back(step.layer);
             continue;
         }
-        if (pending.empty() || !adjustmentRequiresProcessing(step.layer.transform, step.layer.effect_stack))
+        if (pending.empty() || !adjustmentRequiresProcessing(
+                step.layer.transform, step.layer.effect_stack,
+                step.color_graph ? &*step.color_graph : nullptr))
             continue;
         auto original = FrameCompositor::compose(width, height, pending);
         if (!original || should_cancel()) return {};
@@ -35,6 +43,13 @@ std::optional<creative_suite::media::RgbaFrame> composeAdjustmentLayers(
         accumulated.reset();
         auto adjustment = step.layer;
         adjustment.frame = &*original;
+        std::optional<creative_suite::media::RgbaFrame> color_adjusted;
+        if (step.color_graph) {
+            color_adjusted = color::evaluate(*step.color_graph, *original, canceled);
+            if (!color_adjusted || should_cancel()) return {};
+            adjustment.frame = &*color_adjusted;
+            adjustment.effect_stack = {};
+        }
         const auto strength = adjustment.transform.opacity;
         adjustment.transform.opacity = 1.0;
         auto adjusted = FrameCompositor::compose(width, height, {adjustment});
@@ -85,8 +100,14 @@ creative_suite::composition::GpuTextureCompositionResult composeAdjustmentLayers
             pending.push_back(step.layer);
             continue;
         }
-        if (pending.empty() || !adjustmentRequiresProcessing(step.layer.transform, step.layer.effect_stack))
+        if (pending.empty() || !adjustmentRequiresProcessing(
+                step.layer.transform, step.layer.effect_stack,
+                step.color_graph ? &*step.color_graph : nullptr))
             continue;
+
+        if (step.color_graph && !color::linearEffectStack(*step.color_graph))
+            return fail(OpenGlCompositionStatus::Unsupported, "adjustment-color-graph",
+                "A branched Color graph uses the CPU adjustment path.");
 
         auto original = backend.composeTexture(width, height, pending, canceled, timings);
         if (original.status != OpenGlCompositionStatus::Complete || !original.frame)

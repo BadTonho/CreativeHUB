@@ -69,11 +69,11 @@ void nativeAndEditing(x::Document d,const std::filesystem::path& dir) {
     const auto& scaled=session.timeline().tracks()[0].clips[0];
     check(std::find_if(scaled.node_graph->nodes.begin(),scaled.node_graph->nodes.end(),[](const auto& n){return n.type==fusion::nodes::NodeType::GaussianBlur;})->gaussian_blur.radius_pixels==std::get<x::BlurEffect>(d.layers[0].effects[1]).radius_pixels,"FPS preserves pixel radius");
     const auto document=application::ProjectDocumentMapper::toDocument(session,{});const auto path=dir/"blur.csp";project::save(path,document);
-    check(project::load(path)==document,"CSP v33 roundtrip");
+    check(project::load(path)==document,"CSP v34 roundtrip");
     std::atomic_bool cancel{false};check(application::ProjectOpenService{}.prepare(path,path,{},cancel).prepared.has_value(),"prepare Blur recovery/open");
     project::AutosaveManager autosave(dir/"autosave","blur");autosave.saveSnapshot(document,5);
     check(project::load(autosave.unsavedSnapshots()[0].path)==document,"Blur autosave");
-    QFile file(QString::fromStdU16String(path.u16string()));check(file.open(QIODevice::ReadOnly),"open native fixture");auto root=QJsonDocument::fromJson(file.readAll()).object();file.close();check(root["version"]==33,"native version");
+    QFile file(QString::fromStdU16String(path.u16string()));check(file.open(QIODevice::ReadOnly),"open native fixture");auto root=QJsonDocument::fromJson(file.readAll()).object();file.close();check(root["version"]==34,"native version");
     for(int version:{30,34}) {root["version"]=version;check(file.open(QIODevice::WriteOnly|QIODevice::Truncate),"write old/future fixture");file.write(QJsonDocument(root).toJson());file.close();rejected([&]{(void)project::load(path);},"CSP legacy/future Blur refusal");}
     ui::FusionWorkspace workspace;QWidget host;workspace.createPanels(&host);
     timeline::TimelineClip clip;clip.clip_id=101;clip.kind=timeline::ClipKind::FusionComposition;clip.timeline_duration_frames=30;clip.node_graph=fusion::nodes::makeCompositionGraph();

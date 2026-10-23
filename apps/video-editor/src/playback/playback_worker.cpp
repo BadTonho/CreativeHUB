@@ -13,6 +13,7 @@
 #include "../timeline/timeline_time.h"
 #include "../media/still_image_decoder.h"
 #include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
+#include "workspaces/color/evaluation/color_graph_evaluator.h"
 
 #include <QFileInfo>
 #include <QByteArray>
@@ -34,6 +35,11 @@ namespace {
 
 constexpr double default_frame_rate = 30.0;
 constexpr qint64 no_pending_seek = std::numeric_limits<qint64>::min();
+
+bool usableRgbaFrame(const media::VideoFrame& frame) {
+    return frame.width > 0 && frame.height > 0 && frame.stride >= frame.width * 4 &&
+        frame.rgba_pixels.size() >= static_cast<std::size_t>(frame.stride) * frame.height;
+}
 
 bool hasAnimatedTextGeometry(
     const timeline::TransformKeyframes& keyframes) noexcept {
@@ -2901,18 +2907,23 @@ PlaybackWorker::decodeCompositionLayers(
         const auto& spec = composition_sessions_[request.session_index].spec;
         return spec.kind == timeline::ClipKind::Adjustment &&
             rendering::adjustmentRequiresProcessing(
-                timeline::evaluateTransform(spec.transform, spec.keyframes, request.local_frame), spec.effects);
+                timeline::evaluateTransform(spec.transform, spec.keyframes, request.local_frame),
+                spec.effects, spec.color_graph ? &*spec.color_graph : nullptr);
     });
     for (const auto& request : requests) {
         auto& composition = composition_sessions_[request.session_index];
         const auto& spec = composition.spec;
+        const bool color_cpu_graph = spec.color_graph.has_value() &&
+            !color::linearEffectStack(*spec.color_graph).has_value();
         if (request.local_frame < 0 ||
             request.local_frame >= spec.segment_frame_count) {
             continue;
         }
         if (spec.kind == timeline::ClipKind::Adjustment) {
             const auto transform = timeline::evaluateTransform(spec.transform, spec.keyframes, request.local_frame);
-            if (!rendering::adjustmentRequiresProcessing(transform, spec.effects)) continue;
+            if (!rendering::adjustmentRequiresProcessing(
+                    transform, spec.effects,
+                    spec.color_graph ? &*spec.color_graph : nullptr)) continue;
             DecodedCompositionLayer adjustment;
             adjustment.kind = timeline::ClipKind::Adjustment;
             adjustment.transform = transform;
@@ -2980,7 +2991,9 @@ PlaybackWorker::decodeCompositionLayers(
             decode_path = rendering::SlowFrameDecodePath::StaticFrame;
         } else if (composition.session != nullptr) {
             std::optional<media::VideoFramePtr> decoded;
-            const bool native_delivery = creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Vulkan && hardware_decoding_enabled_ && gpu_composition_enabled_ && !gpu_composition_failed_;
+            const bool native_delivery = !color_cpu_graph &&
+                creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Vulkan &&
+                hardware_decoding_enabled_ && gpu_composition_enabled_ && !gpu_composition_failed_;
             const auto acceptNative = [&](const std::optional<creative_suite::media::DecodedVideoFrame>& result) {
                 if (!result) return;
                 native_frame = result->native;
@@ -3074,15 +3087,23 @@ PlaybackWorker::decodeCompositionLayers(
             const int graph_height = independent ? composition_canvas_height_ : frame->height;
             rendering::prepareGraphFrames(*spec.node_graph, inputs, graph_width, graph_height, independent, should_cancel, rendering::graphFrameClock(request.local_frame, spec.composition_input_offset_frames));
             creative_suite::composition::OpenGlCompositionTimings graph_timings;
+            fusion::nodes::EvaluationContext evaluation_context;
+            evaluation_context.local_frame = request.local_frame;
+            evaluation_context.gpu = color_cpu_graph ? nullptr : graphGpuBackend();
+            evaluation_context.should_cancel = should_cancel;
+            evaluation_context.native_inputs = &native_inputs;
+            evaluation_context.gpu_timings = &graph_timings;
+            evaluation_context.recover_native_input =
+                [&](fusion::nodes::NodeId id) -> media::VideoFramePtr {
+                    const auto found = recovery_inputs.find(id);
+                    if (found == recovery_inputs.end() || !found->second.first) return {};
+                    const auto recovered = found->second.first->decode_frame_at(found->second.second, should_cancel);
+                    return recovered ? *recovered : media::VideoFramePtr{};
+                };
+            evaluation_context.canvas_width = independent ? graph_width : 0;
+            evaluation_context.canvas_height = independent ? graph_height : 0;
             const auto evaluated = fusion::nodes::evaluateFrame(
-                *spec.node_graph, inputs,
-                fusion::nodes::EvaluationContext{request.local_frame, graphGpuBackend(), nullptr, should_cancel, &native_inputs, &graph_timings,
-                    [&](fusion::nodes::NodeId id) -> media::VideoFramePtr {
-                        const auto found = recovery_inputs.find(id);
-                        if (found == recovery_inputs.end() || !found->second.first) return {};
-                        const auto recovered = found->second.first->decode_frame_at(found->second.second, should_cancel);
-                        return recovered ? *recovered : media::VideoFramePtr{};
-                    }, independent ? graph_width : 0, independent ? graph_height : 0});
+                *spec.node_graph, inputs, std::move(evaluation_context));
             rendering::PreviewPerformanceMetrics::instance().recordGpuCompositionWork(graph_timings);
             if (should_cancel && should_cancel()) return std::nullopt;
             if (!evaluated.has_value())
@@ -3096,6 +3117,17 @@ PlaybackWorker::decodeCompositionLayers(
                     graph_texture->width(), graph_texture->height(), graph_texture->width() * 4, {}});
             }
             native_frame.reset();
+        }
+        if (spec.color_graph.has_value() &&
+            !color::linearEffectStack(*spec.color_graph).has_value()) {
+            if (!frame || !usableRgbaFrame(*frame))
+                throw media::MediaError("The Color graph requires an RGBA source frame.");
+            auto graded = color::evaluate(*spec.color_graph, *frame, should_cancel);
+            if (!graded)
+                throw media::MediaError("The Color correction graph could not produce a frame.");
+            frame = std::make_shared<const media::VideoFrame>(std::move(*graded));
+            native_frame.reset();
+            graph_texture.reset();
         }
         auto transform = timeline::evaluateTransform(
             spec.transform,
@@ -3172,7 +3204,14 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
         std::vector<rendering::TimelineCompositionStep> steps;
         steps.reserve(layers.size());
         for (std::size_t index = 0; index < layers.size(); ++index)
-            steps.push_back({layers[index], decoded_layers[index].kind == timeline::ClipKind::Adjustment});
+        {
+            const auto& spec = composition_sessions_[decoded_layers[index].composition_session_index].spec;
+            rendering::TimelineCompositionStep step{
+                layers[index],
+                decoded_layers[index].kind == timeline::ClipKind::Adjustment};
+            if (step.adjustment) step.color_graph = spec.color_graph;
+            steps.push_back(std::move(step));
+        }
         const auto compose_on_cpu = [&]() {
             auto composed = rendering::composeAdjustmentLayers(width, height, steps, should_cancel);
             if (composed) metrics.recordCompositionBackend(false, {}, gpu_composition_enabled_);

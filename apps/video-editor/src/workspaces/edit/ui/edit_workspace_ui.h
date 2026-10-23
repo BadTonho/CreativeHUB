@@ -65,9 +65,6 @@ struct EditWorkspaceUi final {
     QLabel* effect_selection_hint = nullptr;
     QWidget* clip_effects_controls = nullptr;
     QListWidget* clip_effects_list = nullptr;
-    QPushButton* clip_effect_up = nullptr;
-    QPushButton* clip_effect_down = nullptr;
-    QPushButton* clip_effect_remove = nullptr;
     QLabel* clip_effect_parameter_label = nullptr;
     QComboBox* clip_effect_parameter_selector = nullptr;
     QDoubleSpinBox* clip_effect_parameter_value = nullptr;

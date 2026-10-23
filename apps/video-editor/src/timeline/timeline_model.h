@@ -4,6 +4,7 @@
 #include "timeline_frame_rate.h"
 #include "timeline_transform.h"
 #include "text_style.h"
+#include "../workspaces/color/model/color_graph.h"
 #include "workspaces/fusion/nodes/model/node_graph.h"
 #include <creative_suite/effects/effects.h>
 
@@ -116,6 +117,9 @@ struct TimelineClip {
     bool audio_muted = false;
     std::vector<AudioGainKeyframe> audio_gain_keyframes;
     std::vector<creative_suite::effects::EffectInstance> effects;
+    // Canonical Color correction graph. `effects` is a compatibility projection
+    // used by existing Edit controls and linear GPU effect paths.
+    std::optional<color::Graph> color_graph;
     std::optional<fusion::nodes::NodeGraph> node_graph;
     ClipId clip_id = 0;
     TrackId track_id = 0;
@@ -138,6 +142,10 @@ struct TimelineClip {
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
 
+[[nodiscard]] inline color::Graph colorGraphForClip(const TimelineClip& clip) {
+    return clip.color_graph.value_or(color::fromEffectStack(clip.effects));
+}
+
 // A clipboard snapshot of editable clip attributes. Timeline identity, timing,
 // media source, track membership, transitions, and linkage are deliberately
 // excluded so attribute paste cannot duplicate or reposition a clip.
@@ -146,6 +154,7 @@ struct TimelineClipAttributes {
     Transform2D transform;
     TransformKeyframes transform_keyframes;
     std::vector<creative_suite::effects::EffectInstance> effects;
+    std::optional<color::Graph> color_graph;
     double audio_gain = 1.0;
     bool audio_muted = false;
     std::optional<std::vector<AudioGainKeyframe>> audio_volume_envelope;
@@ -274,6 +283,7 @@ enum class TransformParameterResult { Changed, InvalidIndex, InvalidValue, NoCha
 enum class TextParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class EffectMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
 enum class NodeGraphMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
+enum class ColorGraphMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
 enum class TransitionMutationResult {
     Added,
     Updated,
@@ -422,6 +432,10 @@ public:
         std::size_t track_index,
         std::size_t clip_index,
         std::vector<creative_suite::effects::EffectInstance> effects);
+    ColorGraphMutationResult setClipColorGraph(
+        std::size_t track_index,
+        std::size_t clip_index,
+        color::Graph graph);
     NodeGraphMutationResult setClipNodeGraph(
         std::size_t track_index,
         std::size_t clip_index,

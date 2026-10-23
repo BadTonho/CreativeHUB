@@ -270,6 +270,8 @@ void PlaybackController::refreshComposition() {
                 }
             }
 
+            const auto color_graph = timeline::colorGraphForClip(clip);
+            const auto linear_effects = color::linearEffectStack(color_graph);
             layers.push_back(CompositionLayerSpec{
                 timeline::isMediaClipKind(clip.kind)
                     ? pathToQString(clip.source_path)
@@ -301,7 +303,7 @@ void PlaybackController::refreshComposition() {
                 clip.source_duration_time_us,
                 clip.audio_extracted,
                 clip.audio_gain_keyframes,
-                clip.effects,
+                linear_effects.value_or(std::vector<creative_suite::effects::EffectInstance>{}),
                 std::move(node_graph),
                 fusion_preview_node_id,
                 clip.motion_link.has_value()
@@ -309,6 +311,7 @@ void PlaybackController::refreshComposition() {
                     : QString(),
                 clip.motion_link.has_value() ? clip.motion_link->render_start_time_us : 0,
                 clip.composition_input_offset_frames});
+            layers.back().color_graph = color_graph;
         }
 
         for (const auto& transition : track.transitions) {

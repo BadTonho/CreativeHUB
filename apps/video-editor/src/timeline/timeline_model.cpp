@@ -3242,9 +3242,28 @@ EffectMutationResult TimelineModel::setClipEffects(
     if (!creative_suite::effects::isValidStack(effects)) {
         return EffectMutationResult::InvalidValue;
     }
-    if (clip.effects == effects) return EffectMutationResult::NoChange;
+    auto graph = color::fromEffectStack(effects);
+    if (!color::validate(graph)) return EffectMutationResult::InvalidValue;
+    if (clip.effects == effects && clip.color_graph == graph)
+        return EffectMutationResult::NoChange;
     clip.effects = std::move(effects);
+    clip.color_graph = std::move(graph);
     return EffectMutationResult::Changed;
+}
+
+ColorGraphMutationResult TimelineModel::setClipColorGraph(
+    std::size_t track_index, std::size_t clip_index, color::Graph graph) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size())
+        return ColorGraphMutationResult::InvalidIndex;
+    auto& clip = track->clips[clip_index];
+    if (!supportsClipEffects(clip.kind))
+        return ColorGraphMutationResult::IncompatibleClip;
+    if (!color::validate(graph)) return ColorGraphMutationResult::InvalidValue;
+    if (clip.color_graph == graph) return ColorGraphMutationResult::NoChange;
+    clip.effects = color::effectInstancesInOrder(graph);
+    clip.color_graph = std::move(graph);
+    return ColorGraphMutationResult::Changed;
 }
 
 NodeGraphMutationResult TimelineModel::setClipNodeGraph(

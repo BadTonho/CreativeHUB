@@ -125,6 +125,8 @@ void editing(const QString& directory) {
     auto duplicate = commands.execute(DuplicateFusionCompositionCommand{id}); CS_TEST_CHECK(duplicate.changed());
     const auto duplicate_id = *duplicate.selection.active_clip_id;
     CS_TEST_CHECK(session.timeline().tracks()[0].clips[1].node_graph == original.node_graph);
+    CS_TEST_CHECK(timeline::colorGraphForClip(session.timeline().tracks()[0].clips[1]) ==
+        timeline::colorGraphForClip(original));
     auto changed = graph; changed.nodes[0].background_color[0] = 200;
     CS_TEST_CHECK(commands.execute(SetClipNodeGraphCommand{duplicate_id, changed}).changed());
     CS_TEST_CHECK(session.timeline().tracks()[0].clips[0].node_graph == original.node_graph);
@@ -193,7 +195,10 @@ void uiWorkflow() {
     controller->refreshInspectorPresentation(); edit.refreshCommandAvailability();
     for (auto* control : edit.ui().transform_spins) CS_TEST_CHECK(control->isEnabled());
     for (auto* control : edit.ui().transform_keys) CS_TEST_CHECK(control->isEnabled());
-    controller->addEffectToSelectedClip("video.grayscale");
+    const auto composition_id = *session.selection().active_clip_id;
+    auto correction = color::fromEffectStack(std::vector{
+        creative_suite::effects::makeDefaultInstance("video.grayscale")});
+    CS_TEST_CHECK(commands.execute(SetClipColorGraphCommand{composition_id, correction}).changed());
     CS_TEST_CHECK(session.timeline().tracks()[0].clips[0].effects.size() == 1);
     controller->copySelectedClipAttributes(); controller->handleTimelineEffectDrop("video.fusion_composition", track, 200);
     timeline::ClipAttributeOptions paste; paste.effects = paste.transform = true;

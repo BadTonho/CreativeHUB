@@ -185,6 +185,10 @@ struct SetClipEffectsCommand {
     timeline::ClipId clip_id = 0;
     std::vector<creative_suite::effects::EffectInstance> effects;
 };
+struct SetClipColorGraphCommand {
+    timeline::ClipId clip_id = 0;
+    color::Graph graph;
+};
 struct SetClipNodeGraphCommand {
     timeline::ClipId clip_id = 0;
     std::optional<fusion::nodes::NodeGraph> graph;
@@ -255,6 +259,7 @@ public:
     [[nodiscard]] TimelineEditResult execute(
         const SetClipAudioGainKeyframesCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipEffectsCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const SetClipColorGraphCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipNodeGraphCommand& command);
     [[nodiscard]] TimelineEditResult execute(const ApplyClipAttributesCommand& command);
     [[nodiscard]] TimelineEditResult execute(

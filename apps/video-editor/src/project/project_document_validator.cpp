@@ -228,6 +228,12 @@ void validateDocument(const ProjectDocument& document,
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid effect stack for this clip.");
         }
+        if (clip.color_graph.has_value() &&
+            (!timeline::supportsClipEffects(clip.kind) ||
+             !color::validate(*clip.color_graph))) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Color correction graph for this clip.");
+        }
         if (clip.node_graph.has_value() &&
             (!timeline::supportsNodeGraph(clip.kind) ||
              !fusion::nodes::validate(*clip.node_graph) ||

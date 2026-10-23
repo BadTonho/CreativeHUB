@@ -1,6 +1,7 @@
 #include "workspaces/color/ui/color_workspace.h"
 
 #include "ui/preview/preview_widget.h"
+#include "workspaces/color/evaluation/color_graph_evaluator.h"
 
 #include <QCoreApplication>
 #include <QComboBox>
@@ -93,7 +94,6 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
             background: #202630; color: #d7e0ea; border: 1px solid #39424e;
             padding: 3px; outline: 0;
         }
-        QWidget#colorWorkspacePage QListWidget::item:selected { background: #236997; color: white; }
         QWidget#colorWorkspacePage QPushButton,
         QWidget#colorWorkspacePage QComboBox,
         QWidget#colorWorkspacePage QDoubleSpinBox {
@@ -115,15 +115,17 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     node_panel->setObjectName("colorNodesPanel");
     auto* node_layout = new QVBoxLayout(node_panel);
     node_layout->addWidget(new QLabel(QCoreApplication::translate("ColorWorkspace", "Color nodes"), node_panel));
-    nodes_ = new QListWidget(node_panel);
-    nodes_->setObjectName("colorNodesList");
+    nodes_ = new ColorNodeCanvas(node_panel);
     node_layout->addWidget(nodes_, 1);
-    auto* node_kind = new QComboBox(node_panel);
-    node_kind->setObjectName("colorNewNodeType");
-    for (const auto& id : {"video.primary_grade", "video.brightness", "video.contrast",
-                           "video.saturation", "video.grayscale"})
-        node_kind->addItem(labelFor(id), QString::fromLatin1(id));
-    node_layout->addWidget(node_kind);
+    node_kind_ = new QComboBox(node_panel);
+    node_kind_->setObjectName("colorNewNodeType");
+    for (const auto& effect : creative_suite::effects::builtInEffects()) {
+        node_kind_->addItem(labelFor(effect.id), QString::fromUtf8(
+            effect.id.data(), static_cast<qsizetype>(effect.id.size())));
+    }
+    const auto primary_grade = node_kind_->findData(QStringLiteral("video.primary_grade"));
+    if (primary_grade >= 0) node_kind_->setCurrentIndex(primary_grade);
+    node_layout->addWidget(node_kind_);
     auto* node_buttons = new QHBoxLayout;
     auto make_button = [node_panel, node_buttons](const QString& label, const char* object_name) {
         auto* button = new QPushButton(label, node_panel);
@@ -131,9 +133,8 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         node_buttons->addWidget(button);
         return button;
     };
-    auto* add = make_button(QCoreApplication::translate("ColorWorkspace", "Add"), "colorAddNodeButton");
-    auto* up = make_button(QCoreApplication::translate("ColorWorkspace", "Up"), "colorMoveNodeUpButton");
-    auto* down = make_button(QCoreApplication::translate("ColorWorkspace", "Down"), "colorMoveNodeDownButton");
+    auto* add = make_button(QCoreApplication::translate("ColorWorkspace", "Add Effect"), "colorAddNodeButton");
+    add_branch_button_ = make_button(QCoreApplication::translate("ColorWorkspace", "Add Branch"), "colorAddParallelBranchButton");
     auto* toggle = make_button(QCoreApplication::translate("ColorWorkspace", "On/Off"), "colorToggleNodeButton");
     auto* remove = make_button(QCoreApplication::translate("ColorWorkspace", "Remove"), "colorRemoveNodeButton");
     node_layout->addLayout(node_buttons);
@@ -228,41 +229,56 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         if (row < 0 || !clip_selected_handler_) return;
         clip_selected_handler_(clips_->item(row)->data(Qt::UserRole).toULongLong());
     });
-    connect(nodes_, &QListWidget::currentRowChanged, this, [this](int) { refreshControls(); });
-    connect(add, &QPushButton::clicked, this, [this, node_kind] {
-        if (!selected_clip_) return;
-        auto effects = effects_;
-        effects.push_back(creative_suite::effects::makeDefaultInstance(
-            node_kind->currentData().toString().toStdString()));
-        submit(std::move(effects), static_cast<int>(effects_.size()) + 1);
+    nodes_->setGraphChangedHandler([this](color::Graph graph) {
+        submit(std::move(graph), nodes_->selectedNode());
     });
-    connect(up, &QPushButton::clicked, this, [this] {
-        const int index = nodes_->currentRow() - 1;
-        if (index < 1 || index >= static_cast<int>(effects_.size())) return;
-        auto effects = effects_;
-        std::swap(effects[index], effects[index - 1]);
-        submit(std::move(effects), index);
+    nodes_->setSelectionChangedHandler([this](color::NodeId id) {
+        selected_node_ = id;
+        refreshControls();
     });
-    connect(down, &QPushButton::clicked, this, [this] {
-        const int index = nodes_->currentRow() - 1;
-        if (index < 0 || index + 1 >= static_cast<int>(effects_.size())) return;
-        auto effects = effects_;
-        std::swap(effects[index], effects[index + 1]);
-        submit(std::move(effects), index + 2);
+    connect(add, &QPushButton::clicked, this, [this] {
+        if (!selected_clip_ || !selected_node_) return;
+        auto graph = graph_;
+        const auto node_id = graph.next_id;
+        const auto effect = creative_suite::effects::makeDefaultInstance(
+            node_kind_->currentData().toString().toStdString());
+        if (color::insertEffectAfter(graph, *selected_node_, effect))
+            submit(std::move(graph), node_id);
+    });
+    connect(add_branch_button_, &QPushButton::clicked, this, [this] {
+        if (!selected_clip_ || !selected_node_) return;
+        auto graph = graph_;
+        const auto node_id = graph.next_id;
+        const auto effect = creative_suite::effects::makeDefaultInstance(
+            node_kind_->currentData().toString().toStdString());
+        if (color::addParallelBranch(graph, *selected_node_, effect))
+            submit(std::move(graph), node_id);
     });
     connect(toggle, &QPushButton::clicked, this, [this] {
-        const int index = nodes_->currentRow() - 1;
-        if (index < 0 || index >= static_cast<int>(effects_.size())) return;
-        auto effects = effects_;
-        effects[index].enabled = !effects[index].enabled;
-        submit(std::move(effects), index + 1);
+        if (!selected_node_) return;
+        auto graph = graph_;
+        const auto* node = color::findNode(graph, *selected_node_);
+        if (!node || !node->effect) return;
+        const auto node_id = node->id;
+        if (color::setEffectEnabled(graph, node_id, !node->effect->enabled))
+            submit(std::move(graph), node_id);
     });
     connect(remove, &QPushButton::clicked, this, [this] {
-        const int index = nodes_->currentRow() - 1;
-        if (index < 0 || index >= static_cast<int>(effects_.size())) return;
-        auto effects = effects_;
-        effects.erase(effects.begin() + index);
-        submit(std::move(effects), std::max(0, index));
+        if (!selected_node_) return;
+        auto graph = graph_;
+        const auto removed = *selected_node_;
+        const auto* node = color::findNode(graph, removed);
+        const bool removed_node = node && (node->type == color::NodeType::Effect
+            ? color::removeEffect(graph, removed)
+            : node->type == color::NodeType::ParallelMixer &&
+                color::removeParallelMixer(graph, removed));
+        if (!removed_node) return;
+        const auto input = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+            [](const color::Node& node) { return node.type == color::NodeType::Input; });
+        const auto next_selection = input == graph.nodes.end()
+            ? std::optional<color::NodeId>{}
+            : std::optional<color::NodeId>{input->id};
+        submit(std::move(graph), next_selection);
     });
     waveform_timer_ = new QTimer(this);
     waveform_timer_->setInterval(100);
@@ -291,10 +307,10 @@ void ColorWorkspace::setActive(bool active) {
 }
 
 void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
-    std::vector<creative_suite::effects::EffectInstance> effects) {
-    const int old_row = nodes_->currentRow();
+    color::Graph graph) {
+    const auto old_selected = selected_node_;
     selected_clip_ = selected;
-    effects_ = std::move(effects);
+    graph_ = color::validate(graph) ? std::move(graph) : color::makePassthroughGraph();
     {
         const QSignalBlocker blocker(clips_);
         clips_->clear();
@@ -308,7 +324,7 @@ void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId sele
         }
         clips_->setCurrentRow(selected_row);
     }
-    refreshNodes(old_row);
+    refreshNodes(old_selected);
 }
 
 void ColorWorkspace::setClipSelectedHandler(std::function<void(timeline::ClipId)> handler) {
@@ -316,7 +332,7 @@ void ColorWorkspace::setClipSelectedHandler(std::function<void(timeline::ClipId)
 }
 
 void ColorWorkspace::setEffectsChangedHandler(std::function<void(timeline::ClipId,
-    std::vector<creative_suite::effects::EffectInstance>)> handler) {
+    color::Graph)> handler) {
     effects_changed_handler_ = std::move(handler);
 }
 
@@ -376,16 +392,16 @@ void ColorWorkspace::renameSelectedStill() {
         rename_still_handler_(item->data(Qt::UserRole).toString(), name);
 }
 
-void ColorWorkspace::refreshNodes(int requested_row) {
-    const QSignalBlocker blocker(nodes_);
-    nodes_->clear();
-    nodes_->addItem(QCoreApplication::translate("ColorWorkspace", "Input"));
-    for (const auto& effect : effects_) {
-        auto* item = new QListWidgetItem(labelFor(effect.id), nodes_);
-        if (!effect.enabled) item->setForeground(palette().brush(QPalette::Disabled, QPalette::Text));
+void ColorWorkspace::refreshNodes(std::optional<color::NodeId> selected) {
+    if (selected && color::findNode(graph_, *selected)) selected_node_ = selected;
+    else if (!selected_node_ || !color::findNode(graph_, *selected_node_)) {
+        const auto input = std::find_if(graph_.nodes.begin(), graph_.nodes.end(),
+            [](const color::Node& node) { return node.type == color::NodeType::Input; });
+        selected_node_ = input == graph_.nodes.end()
+            ? std::optional<color::NodeId>{}
+            : std::optional<color::NodeId>{input->id};
     }
-    nodes_->addItem(QCoreApplication::translate("ColorWorkspace", "Output"));
-    nodes_->setCurrentRow(std::clamp(requested_row, 0, nodes_->count() - 1));
+    nodes_->setGraph(graph_, selected_node_);
     refreshControls();
 }
 
@@ -397,34 +413,72 @@ void ColorWorkspace::refreshControls() {
         }
         delete item;
     }
-    const int index = nodes_->currentRow() - 1;
-    if (index < 0 || index >= static_cast<int>(effects_.size())) return;
-    const auto* definition = creative_suite::effects::findDefinition(effects_[index].id);
-    if (!definition) return;
-    for (const auto& parameter : definition->parameters) {
-        auto* spin = new QDoubleSpinBox(controls_);
-        spin->setObjectName(QStringLiteral("colorParameter_%1").arg(QString::fromLatin1(parameter.id.data(), parameter.id.size())));
-        spin->setRange(parameter.minimum, parameter.maximum);
-        spin->setSingleStep(parameter.step);
-        spin->setDecimals(0);
-        spin->setFixedWidth(110);
-        spin->setValue(creative_suite::effects::parameterValue(effects_[index], parameter.id));
-        controls_layout_->addRow(parameterLabel(parameter.id), spin);
-        const auto parameter_id = std::string(parameter.id);
-        connect(spin, &QDoubleSpinBox::editingFinished, this, [this, spin, index, parameter_id] {
-            if (index >= static_cast<int>(effects_.size())) return;
-            auto effects = effects_;
-            if (!creative_suite::effects::setParameterValue(effects[index], parameter_id, spin->value())) return;
-            submit(std::move(effects), index + 1);
-        });
+    const auto* node = selected_node_ ? color::findNode(graph_, *selected_node_) : nullptr;
+    const bool effect_selected = node && node->type == color::NodeType::Effect && node->effect;
+    auto* toggle = findChild<QPushButton*>(QStringLiteral("colorToggleNodeButton"));
+    auto* remove = findChild<QPushButton*>(QStringLiteral("colorRemoveNodeButton"));
+    auto* add = findChild<QPushButton*>(QStringLiteral("colorAddNodeButton"));
+    if (toggle) toggle->setEnabled(effect_selected);
+    if (remove) remove->setEnabled(effect_selected ||
+        (node && node->type == color::NodeType::ParallelMixer));
+    if (add) add->setEnabled(node && node->type != color::NodeType::Output);
+    if (add_branch_button_) add_branch_button_->setEnabled(node &&
+        (node->type == color::NodeType::Input || node->type == color::NodeType::Effect));
+
+    if (effect_selected) {
+        const auto* definition = creative_suite::effects::findDefinition(node->effect->id);
+        if (definition) for (const auto& parameter : definition->parameters) {
+            auto* spin = new QDoubleSpinBox(controls_);
+            spin->setObjectName(QStringLiteral("colorParameter_%1").arg(
+                QString::fromLatin1(parameter.id.data(), parameter.id.size())));
+            spin->setRange(parameter.minimum, parameter.maximum);
+            spin->setSingleStep(parameter.step);
+            spin->setDecimals(0);
+            spin->setFixedWidth(110);
+            spin->setValue(creative_suite::effects::parameterValue(*node->effect, parameter.id));
+            controls_layout_->addRow(parameterLabel(parameter.id), spin);
+            const auto parameter_id = std::string(parameter.id);
+            const auto node_id = node->id;
+            connect(spin, &QDoubleSpinBox::editingFinished, this,
+                [this, spin, node_id, parameter_id] {
+                    auto graph = graph_;
+                    if (!color::setEffectParameter(graph, node_id, parameter_id, spin->value())) return;
+                    submit(std::move(graph), node_id);
+                });
+        }
+    } else if (node && node->type == color::NodeType::ParallelMixer) {
+        for (const auto& edge : graph_.connections) {
+            if (edge.to != node->id) continue;
+            auto* spin = new QDoubleSpinBox(controls_);
+            spin->setObjectName(QStringLiteral("colorMixerWeight_%1").arg(edge.input));
+            spin->setRange(0.0, 1.0);
+            spin->setSingleStep(0.05);
+            spin->setDecimals(2);
+            spin->setFixedWidth(110);
+            spin->setValue(edge.weight);
+            controls_layout_->addRow(
+                QCoreApplication::translate("ColorWorkspace", "Branch %1 weight")
+                    .arg(edge.input + 1), spin);
+            const auto node_id = node->id;
+            const auto input = edge.input;
+            connect(spin, &QDoubleSpinBox::editingFinished, this,
+                [this, spin, node_id, input] {
+                    auto graph = graph_;
+                    if (color::setMixerInputWeight(graph, node_id, input, spin->value()))
+                        submit(std::move(graph), node_id);
+                });
+        }
     }
 }
 
-void ColorWorkspace::submit(std::vector<creative_suite::effects::EffectInstance> effects,
-                            int requested_row) {
-    if (!selected_clip_ || !effects_changed_handler_ || effects == effects_) return;
-    effects_changed_handler_(selected_clip_, std::move(effects));
-    nodes_->setCurrentRow(std::clamp(requested_row, 0, nodes_->count() - 1));
+void ColorWorkspace::submit(color::Graph graph, std::optional<color::NodeId> selected) {
+    if (graph == graph_) return;
+    graph_ = std::move(graph);
+    selected_node_ = selected && color::findNode(graph_, *selected)
+        ? selected : std::optional<color::NodeId>{};
+    refreshNodes(selected_node_);
+    if (selected_clip_ && effects_changed_handler_)
+        effects_changed_handler_(selected_clip_, graph_);
 }
 
 void ColorWorkspace::scheduleWaveform() {

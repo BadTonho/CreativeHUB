@@ -151,21 +151,32 @@ void run() {
         media_drop_track, visual_clip_id);
     require(media_drop_controller.selectedClipSupportsEffects() &&
                 effects_target_available,
-            "Selecting a video clip did not enable visual filters.");
+            "Selecting a video clip did not enable correction-node inspection.");
+    auto effect_stack = std::vector<creative_suite::effects::EffectInstance>{
+        creative_suite::effects::makeDefaultInstance("video.grayscale"),
+        creative_suite::effects::makeDefaultInstance("video.brightness")};
+    const auto initial_graph = color::fromEffectStack(effect_stack);
+    require(media_drop_controller.execute(application::SetClipColorGraphCommand{
+                visual_clip_id, initial_graph}).changed(),
+            "The Color graph fixture could not create its initial correction nodes.");
+    const auto color_graph_topology = timeline::colorGraphForClip(
+        media_drop_session.timeline().tracks().front().clips.front());
+    const auto history_before_edit_creation = media_drop_commands.undoCount();
     media_drop_controller.handleTimelineEffectDrop(
         QStringLiteral("video.grayscale"), media_drop_track, 12);
-    require(media_drop_controller.addEffectToSelectedClip(QStringLiteral("video.brightness")),
-            "Functions filter insertion must report a successful edit.");
+    require(!media_drop_controller.addEffectToSelectedClip(QStringLiteral("video.brightness")) &&
+                media_drop_commands.undoCount() == history_before_edit_creation,
+            "Edit must leave correction-node creation to the Color workspace.");
     const auto history_before_invalid_effect = media_drop_commands.undoCount();
     require(!media_drop_controller.addEffectToSelectedClip(QStringLiteral("unknown")) &&
                 media_drop_commands.undoCount() == history_before_invalid_effect,
-            "Rejected Functions filter insertion must report failure without changing history.");
-    auto effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
+            "Rejected Edit correction insertion must report failure without changing history.");
+    effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
     require(effect_stack.size() == 2 &&
                 effect_stack[0].id == "video.grayscale" &&
                 effect_stack[1].id == "video.brightness" &&
                 effect_stack[0].enabled && effect_stack[1].enabled,
-            "Effects-panel drop and Functions application did not append filters to the selected clip.");
+            "Edit correction inspection did not read the selected Color graph.");
 
     media_drop_controller.selectClipEffect(0);
     const auto history_before_effect_toggle = media_drop_commands.undoCount();
@@ -190,18 +201,20 @@ void run() {
                 media_drop_commands.undoCount() == history_before_effect_parameter + 1,
             "Inspector parameter edits did not remain available while disabled or use one grouped history entry.");
 
-    media_drop_controller.moveSelectedClipEffect(1);
-    effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
-    require(effect_stack[0].id == "video.brightness" &&
-                effect_stack[1].id == "video.grayscale",
-            "Inspector reordering did not preserve the requested effect order.");
-    media_drop_controller.removeSelectedClipEffect();
-    require(media_drop_session.timeline().tracks().front().clips.front().effects.size() == 1 &&
-                media_drop_commands.undo().changed() &&
-                media_drop_session.timeline().tracks().front().clips.front().effects.size() == 2 &&
-                media_drop_commands.redo().changed() &&
-                media_drop_session.timeline().tracks().front().clips.front().effects.size() == 1,
-            "Inspector effect removal did not participate in Undo/Redo.");
+    const auto graph_after_edit_changes = timeline::colorGraphForClip(
+        media_drop_session.timeline().tracks().front().clips.front());
+    require(graph_after_edit_changes.nodes.size() == color_graph_topology.nodes.size() &&
+                graph_after_edit_changes.connections == color_graph_topology.connections,
+            "Edit parameter and enabled-state changes must preserve Color graph topology.");
+    require(media_drop_controller.undo().changed() &&
+                media_drop_session.timeline().tracks().front().clips.front().effects[0]
+                    .parameters.front().value == 100.0 &&
+                media_drop_controller.undo().changed() &&
+                media_drop_session.timeline().tracks().front().clips.front().effects[0].enabled &&
+                media_drop_controller.undo().changed() &&
+                media_drop_session.timeline().tracks().front().clips.front().effects.empty() &&
+                !media_drop_session.projectDirty(),
+            "Edit parameter/state changes and Color graph creation must share Timeline Undo/Redo.");
 
     auto copied_stack = std::vector<creative_suite::effects::EffectInstance>{
         creative_suite::effects::makeDefaultInstance("video.grayscale"),

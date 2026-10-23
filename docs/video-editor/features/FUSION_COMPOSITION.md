@@ -66,7 +66,7 @@ evaluation. Explicit optional evaluation dimensions preserve legacy inference
 when absent. CPU RGBA inputs for independent graphs can upload into the existing
 GPU graph path; existing device recovery and cancellation remain in force.
 
-Graph output passes through the clip effect stack and Timeline transform.
+Graph output passes through the Color correction graph and Timeline transform.
 Clip opacity is normal layer alpha. An Adjustment Clip above it affects the
 composited output. Generators retain straight alpha until final Timeline
 composition, whose empty background remains black. Technical failures reach

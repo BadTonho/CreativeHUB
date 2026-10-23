@@ -1,11 +1,12 @@
 # Current Scope and Non-goals
 
-The Color workspace provides serial nodes for existing clip effects and the
-new Primary Grade on supported visual clips, with an RGB waveform and a
-project-owned Gallery for full-canvas still capture, naming, provenance and
-removal. It shares Edit's effect stack and history, not Fusion's node graph.
-Gallery albums, tags, comparison views, branching grade nodes, calibrated
-scopes and advanced color management remain outside the current stage. See the
+The Color workspace provides a project-persisted correction graph with Input,
+effect, Parallel Mixer and Output nodes. Its preview/export evaluation follows
+the graph connections. Edit can select its effect nodes and edit parameters or
+enabled state; graph structure and layout are edited in Color. A project-owned
+Gallery stores full-canvas stills with provenance. Fusion remains a separate,
+unchanged workspace. Gallery albums, tags, comparison views, calibrated scopes
+and advanced color management remain outside the current stage. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
 [Gaussian Blur](../features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
@@ -69,7 +70,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 31, with versions 1 through 30
+- versioned `.csp` persistence through version 34, with versions 1 through 33
   readable, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio/adjustment clip kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
@@ -85,9 +86,9 @@ The Video Editor currently includes:
   Merge, Output, and existing video-effect nodes, per-clip persistence, shared
   Preview/export evaluation, project Media Pool image/video inputs, animated
   Transform/Brightness parameters, and Undo/Redo;
-- CPU visual filters for video and image clips (Grayscale, Brightness, Contrast,
-  and Saturation), with ordered per-clip stacks, Functions quick access,
-  individual enable/bypass controls, and version 18 persistence;
+- per-clip Color correction graphs for supported visual clips, with effect and
+  Parallel Mixer nodes, shared Edit parameter/enabled-state controls, Preview
+  and export evaluation, and version 34 persistence;
 - manual text clips and basic captions, including worker-side QImage/QPainter
   rasterization, essential text styling, transforms/keyframes, and version 4
   project persistence with version 3 migration;
@@ -136,12 +137,13 @@ state. Dropping onto a cable inserts the effect into the connection, while
 dropping onto empty canvas adds a disconnected node. The Functions picker stays
 open during a drag, closes after an accepted node drop, and remains open after
 a canceled or rejected drop. Its workspace-aware Add/Enter/double-click actions
-create graph nodes in Fusion and apply clip filters in Edit. Edit generators,
+create graph nodes in Fusion; Edit does not create Color correction nodes.
+Edit generators,
 Text and transitions are drag-only, and Gain remains unavailable. Merge combines its background and foreground with
-straight-alpha source-over. The graph output replaces the clip image before
-its existing Inspector effect stack and Timeline transform/keyframes.
+straight-alpha source-over. The graph output passes through the Color
+correction graph before Timeline transform/keyframes.
 
-Graph animation was introduced in `.csp` version 22 and is retained in version 31.
+Graph animation was introduced in `.csp` version 22 and is retained in version 34.
 Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its

@@ -90,6 +90,7 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-playback-worker-tests)
 
 target_include_directories(creative-suite-main-editor-playback-worker-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
@@ -303,6 +304,7 @@ add_executable(creative-suite-main-editor-frame-step-navigation-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-frame-step-navigation-tests)
 
 target_include_directories(creative-suite-main-editor-frame-step-navigation-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}

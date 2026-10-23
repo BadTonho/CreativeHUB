@@ -10,7 +10,7 @@ or persisted graph types. Render offers no catalog creation actions.
 
 | Category | Edit | Fusion |
 | --- | --- | --- |
-| Video | Visual effects, Fusion Composition, Adjustment Clip | Visual effect nodes and Fusion-only Gaussian Blur |
+| Video | Fusion Composition, Adjustment Clip | Visual effect nodes and Fusion-only Gaussian Blur |
 | Video > Generators | Opaque-white Background clip | Transparent Background node |
 | Text | Text clip | Text node |
 | Audio / Transitions | Existing Edit tools | Hidden |
@@ -57,23 +57,23 @@ when context changes while the window is open. Render closes/disables Functions.
 
 | Workspace / item | Add, Enter or double click | Drag |
 | --- | --- | --- |
-| Edit visual filter | Apply to the compatible selected clip | Existing compatible Timeline target |
+| Edit visual filter | Unavailable; create corrections in Color | Unavailable |
 | Edit Background, Text, Adjustment Clip, Fusion Composition | Disabled; show `Drag this item to the timeline.` | Create at the chosen Timeline position |
 | Edit transition | Disabled; same drag hint | Existing compatible cut |
 | Edit Gain | Unavailable | Unavailable |
 | Fusion available catalog entry | Create a disconnected node at a free visible position and select it | Create at the chosen graph position; visual filters retain image-cable insertion |
 
-Fusion requires a compatible selected clip for both activation and drag. Edit
-filters require a compatible selected clip for activation, while dragging can
-choose another existing target; generators remain draggable without selection.
+Fusion requires a compatible selected clip for both activation and drag.
+Color corrections are created in Color; generators remain draggable in Edit
+without a selected clip.
 Hidden, unavailable and query-filtered entries cannot produce drag MIME.
 Background retains opaque-white clip defaults in Edit and transparent node
 defaults in Fusion. Input/Text/mask defaults and typed-port rules are unchanged.
 
 `FunctionPalette::setContext` synchronizes workspace/target availability;
 `setAddHandler` installs a synchronous bool-returning edit callback. MainWindow
-routes Fusion to `addCatalogNode` and Edit visual filters to
-`addEffectToSelectedClip`, whose bool reports the existing command result.
+routes Fusion to `addCatalogNode`; Color creates correction nodes through its
+graph command, while Edit only edits existing node parameters and enabled state.
 The palette closes only on successful activation or accepted drop. Refused
 activation and canceled/rejected drops keep it open; nested activation is
 blocked. Cancel, Escape, outside clicks, title close, shortcut toggling and drag
@@ -92,7 +92,7 @@ Optional typed Mask input 2 limits Effect/Color/Transform processing through pre
 ## Fusion generators
 
 Effects > Video includes the `video.fusion_composition` generator. Its clip
-supports the existing effect stack and Functions. Fusion also offers Background
+supports the Color correction graph and Functions. Fusion also offers Background
 and Text generator nodes, distinct from the Color correction node. See
 [Fusion Composition](../features/FUSION_COMPOSITION.md) for static generator controls
 and the existing node animation boundary.
@@ -109,13 +109,13 @@ document format, and user interface.
 ## Video Editor adjustment layer
 
 The Effects > Video catalog also contains `video.adjustment_clip`, an
-application-owned generator rather than a new shared filter. Existing
-Grayscale, Brightness, Contrast and Saturation stacks can target an adjustment
-through drag/drop, Functions or the Inspector, with enabled state and order
-retained. The Inspector's position, scale, rotation and opacity curves work on
+application-owned generator rather than a new shared filter. Color correction
+graphs can target an adjustment clip; Edit exposes their parameters and enabled
+state while Color owns graph structure. The Inspector's position, scale,
+rotation and opacity curves work on
 the lower-track composition. Opacity controls the strength of the complete
 adjustment: 0% preserves the original; 100% uses the fully adjusted canvas.
-Copy/Paste Attributes exchanges effects and transforms with ordinary visual
+Copy/Paste Attributes exchanges Color graphs and transforms with ordinary visual
 clips; audio, text and Fusion attributes remain incompatible with adjustments.
 See [TIMELINE.md](TIMELINE.md) and [RENDERING.md](RENDERING.md).
 
@@ -146,17 +146,16 @@ values; contrast scales them around 127.5; grayscale and saturation use
 Rec. 709 luma coefficients. Each stage clamps to the 8-bit range before the
 next filter runs.
 
-The Video Editor submits each clip's original stack to the shared compositor.
-Preview and offline export use `colorAdjustmentPasses()` to prepare the same
-ordered GPU operations when experimental composition is selected. That helper
-validates every instance, including disabled instances, and preserves rounding
-after each enabled pass. CPU composition applies the original stack exactly once,
-including GPU recovery. Disabled instances do not modify the frame;
-active instances retain their relative order. Filter parameters and enabled
-states are Timeline project data; caches and temporary preview state are not
-added by this library. The Video Editor persists stacks under the `.csp`
-version 18 clip schema described in [PROJECT.md](PROJECT.md). Version 17
-stacks migrate with every instance enabled.
+The Video Editor's Color graph evaluates effect nodes through this shared API.
+Serial graphs project to the ordered stack interface used by the existing CPU,
+OpenGL, and Vulkan paths, preserving rounding after each enabled pass. Branched
+graphs evaluate connected nodes on RGBA frames and mix their outputs in the
+Color evaluator. Disabled instances pass their input through; active instances
+retain graph-defined order. Filter parameters, enabled states, connections,
+mixer weights and positions are Timeline project data; caches and temporary
+preview state are not added by this library. The Video Editor persists graphs
+in CSP v34 as described in [PROJECT.md](PROJECT.md). Versions 1–33 migrate
+ordered effect stacks into serial graphs.
 
 `applyColorAdjustment()` is a fused processing entry point for applications
 whose Color Adjustment combines brightness (-100 to 100), contrast (0–200%),

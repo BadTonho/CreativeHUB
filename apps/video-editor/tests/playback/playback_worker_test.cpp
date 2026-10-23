@@ -6,6 +6,7 @@
 #include "media/video_playback.h"
 #include "rendering/frame_compositor.h"
 #include "rendering/preview_performance_metrics.h"
+#include "workspaces/color/evaluation/color_graph_evaluator.h"
 
 #include <creative_suite/effects/effects.h>
 
@@ -1793,6 +1794,33 @@ void validateVisualEffectPreview() {
     require(frames.size() == 3 && frames.back() != nullptr &&
                 frames.back()->rgba_pixels == baseline->rgba_pixels,
             "Preview changed the composed frame for a disabled visual effect.");
+
+    playback::PlaybackWorker graph_worker;
+    std::vector<playback::VideoFramePtr> graph_frames;
+    QObject::connect(&graph_worker, &playback::PlaybackWorker::frameReady,
+        [&graph_frames](playback::VideoFramePtr frame, qint64, quint64, quint64) {
+            graph_frames.push_back(std::move(frame));
+        });
+    graph_worker.setCompositionCanvasSize(2, 1);
+    graph_worker.setPreviewQuality(playback::PreviewQuality::Full);
+    auto brightness = creative_suite::effects::makeDefaultInstance("video.brightness");
+    require(creative_suite::effects::setParameterValue(brightness, "amount", 20.0),
+            "Could not prepare the Color preview branch.");
+    auto parallel_graph = color::makePassthroughGraph();
+    require(color::addParallelBranch(parallel_graph, 1, brightness),
+            "Could not create the Color preview branch.");
+    auto graph_layer = image_layer;
+    graph_layer.effects.clear();
+    graph_layer.color_graph = parallel_graph;
+    graph_worker.setActiveCompositionClip(0, 0);
+    graph_worker.setComposition({graph_layer}, {}, 604);
+    graph_worker.renderCompositionFrame(0, 0, 604);
+    const auto expected = color::evaluate(parallel_graph, *still);
+    require(graph_frames.size() == 1 && graph_frames.back() && expected &&
+                graph_frames.back()->width == expected->width &&
+                graph_frames.back()->height == expected->height &&
+                graph_frames.back()->rgba_pixels == expected->rgba_pixels,
+            "Preview must evaluate the Color graph before composing its frame.");
 }
 
 void validatePlaybackFrameMailbox() {

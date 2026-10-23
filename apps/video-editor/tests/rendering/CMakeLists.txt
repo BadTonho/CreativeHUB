@@ -88,6 +88,7 @@ add_executable(creative-suite-main-editor-transform-compositor-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-transform-compositor-tests)
 
 target_include_directories(creative-suite-main-editor-transform-compositor-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
@@ -119,6 +120,7 @@ add_executable(creative-suite-main-editor-text-compositor-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-text-compositor-tests)
 
 target_include_directories(creative-suite-main-editor-text-compositor-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}

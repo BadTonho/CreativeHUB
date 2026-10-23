@@ -3,6 +3,7 @@
 #include "timeline/timeline_model.h"
 #include "rendering/preview_frame_payload.h"
 #include "playback/playback_controller.h"
+#include "workspaces/color/ui/color_node_canvas.h"
 
 #include <QWidget>
 #include <QImage>
@@ -14,6 +15,7 @@ class QDoubleSpinBox;
 class QFormLayout;
 class QLabel;
 class QListWidget;
+class QComboBox;
 class QPushButton;
 class QTimer;
 
@@ -40,10 +42,10 @@ public:
     QWidget* takePreviewWidget();
     void setActive(bool active);
     void setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
-                  std::vector<creative_suite::effects::EffectInstance> effects);
+                  color::Graph graph);
     void setClipSelectedHandler(std::function<void(timeline::ClipId)> handler);
     void setEffectsChangedHandler(std::function<void(timeline::ClipId,
-        std::vector<creative_suite::effects::EffectInstance>)> handler);
+        color::Graph)> handler);
     void setPlaybackHandler(std::function<void(playback::PlaybackCommand)> handler);
     void setGalleryStills(std::vector<StillItem> stills);
     void setCapturePending(bool pending);
@@ -52,10 +54,9 @@ public:
     void setRemoveStillHandler(std::function<void(const QString&)> handler);
 
 private:
-    void refreshNodes(int requested_row = -1);
+    void refreshNodes(std::optional<color::NodeId> selected = {});
     void refreshControls();
-    void submit(std::vector<creative_suite::effects::EffectInstance> effects,
-                int requested_row);
+    void submit(color::Graph graph, std::optional<color::NodeId> selected = {});
     void scheduleWaveform();
     void renameSelectedStill();
 
@@ -64,16 +65,19 @@ private:
     QListWidget* clips_ = nullptr;
     QListWidget* stills_ = nullptr;
     QPushButton* capture_still_button_ = nullptr;
-    QListWidget* nodes_ = nullptr;
+    ColorNodeCanvas* nodes_ = nullptr;
+    QComboBox* node_kind_ = nullptr;
+    QPushButton* add_branch_button_ = nullptr;
     QWidget* controls_ = nullptr;
     QFormLayout* controls_layout_ = nullptr;
     QLabel* waveform_ = nullptr;
     QTimer* waveform_timer_ = nullptr;
     timeline::ClipId selected_clip_ = 0;
-    std::vector<creative_suite::effects::EffectInstance> effects_;
+    color::Graph graph_ = color::makePassthroughGraph();
+    std::optional<color::NodeId> selected_node_;
     std::function<void(timeline::ClipId)> clip_selected_handler_;
     std::function<void(timeline::ClipId,
-        std::vector<creative_suite::effects::EffectInstance>)> effects_changed_handler_;
+        color::Graph)> effects_changed_handler_;
     std::function<void(playback::PlaybackCommand)> playback_handler_;
     std::function<void()> capture_still_handler_;
     std::function<void(const QString&, const QString&)> rename_still_handler_;

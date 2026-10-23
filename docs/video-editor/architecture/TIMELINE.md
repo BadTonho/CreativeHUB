@@ -41,9 +41,12 @@ Effects > Video includes a draggable **Adjustment Clip** generator. Dropping it
 on an unoccupied video track creates five seconds in project frames (rounded up,
 minimum one frame). The violet block has no thumbnail or waveform. Selection
 routes Preview to the timeline composition and enables the existing transform
-and effects Inspector. Functions can add visual filters in Edit and provides drag-only generator/Text/transition entries. In Fusion, its activation creates graph nodes instead of editing the clip effect stack.
+and correction Inspector. Color owns the clip correction graph; Edit can change
+its selected nodes' parameters and enabled state. Functions provides drag-only
+generator/Text/transition entries in Edit and creates Fusion nodes while Fusion
+is active.
 
-`ClipKind::Adjustment` owns identity, duration, effects and transform curves,
+`ClipKind::Adjustment` owns identity, duration, its Color correction graph and transform curves,
 without source media, audio, text, external links or Fusion graphs. It affects
 strictly lower video tracks; moving a track changes that scope. Multiple
 adjustments apply from the bottom of the stack upward. Audio tracks, any

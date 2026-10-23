@@ -726,17 +726,17 @@ void MainWindow::createWorkspace() {
             }
         });
         color_workspace_->setEffectsChangedHandler([this](timeline::ClipId id,
-            std::vector<creative_suite::effects::EffectInstance> effects) {
+            color::Graph graph) {
             try {
                 const auto result = timeline_command_service_.execute(
-                    application::SetClipEffectsCommand{id, std::move(effects)});
+                    application::SetClipColorGraphCommand{id, std::move(graph)});
                 if (!result.changed()) return;
                 applyTimelineEditResult(result, false);
                 updateTimelineState();
                 refreshPlaybackComposition();
             } catch (const std::exception& error) {
                 logging::Logger::instance().log(logging::Level::Error,
-                    "color", "set_clip_effects", error.what(),
+                    "color", "set_color_graph", error.what(),
                     {{"clip_id", std::to_string(id)}});
                 statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not update the color grade."));
             }
@@ -831,17 +831,17 @@ void MainWindow::refreshColorSelection() {
     clips.reserve(ordered.size());
     for (auto& item : ordered) clips.push_back(std::move(item.item));
     timeline::ClipId selected_id = 0;
-    std::vector<creative_suite::effects::EffectInstance> effects;
+    color::Graph graph = color::makePassthroughGraph();
     if (active_timeline_clip_id_) {
         if (const auto location = timeline_model_.locateClip(*active_timeline_clip_id_)) {
             const auto& clip = tracks[location->track_index].clips[location->clip_index];
             if (timeline::supportsClipEffects(clip.kind)) {
                 selected_id = clip.clip_id;
-                effects = clip.effects;
+                graph = timeline::colorGraphForClip(clip);
             }
         }
     }
-    color_workspace_->setClips(std::move(clips), selected_id, std::move(effects));
+    color_workspace_->setClips(std::move(clips), selected_id, std::move(graph));
 
     std::vector<ui::ColorWorkspace::StillItem> stills;
     stills.reserve(editor_session_.colorGalleryStills().size());

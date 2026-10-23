@@ -50,6 +50,43 @@ void setLegacyTimelineRowHeight(QJsonObject& root, double height = 123.5) {
     root.insert("timeline", timeline);
 }
 
+QJsonArray legacyEffectStackJson(
+    const std::vector<creative_suite::effects::EffectInstance>& effects) {
+    QJsonArray result;
+    for (const auto& effect : effects) {
+        QJsonObject item;
+        item.insert("id", QString::fromStdString(effect.id));
+        item.insert("enabled", effect.enabled);
+        QJsonArray parameters;
+        for (const auto& parameter : effect.parameters) {
+            QJsonObject value;
+            value.insert("id", QString::fromStdString(parameter.id));
+            value.insert("value", parameter.value);
+            parameters.append(value);
+        }
+        item.insert("parameters", parameters);
+        result.append(item);
+    }
+    return result;
+}
+
+void writeLegacyFirstClipEffects(
+    QJsonObject& root,
+    const std::vector<creative_suite::effects::EffectInstance>& effects) {
+    auto timeline = root.value("timeline").toObject();
+    auto tracks = timeline.value("tracks").toArray();
+    auto track = tracks.first().toObject();
+    auto clips = track.value("clips").toArray();
+    auto clip = clips.first().toObject();
+    clip.remove("color_graph");
+    clip.insert("effects", legacyEffectStackJson(effects));
+    clips[0] = clip;
+    track.insert("clips", clips);
+    tracks[0] = track;
+    timeline.insert("tracks", tracks);
+    root.insert("timeline", timeline);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -288,11 +325,23 @@ int main(int argc, char** argv) {
             require(creative_suite::effects::setParameterValue(grade, "red_gain", 135),
                     "Primary Grade test setup must be valid.");
             graded.timeline_tracks.front().clips.front().effects.push_back(grade);
-            const auto grade_path = directory / "primary-grade-v33.csp";
+            auto& graded_clip = graded.timeline_tracks.front().clips.front();
+            auto branch_graph = color::fromEffectStack(graded_clip.effects);
+            const auto effect_nodes = color::effectNodesInOrder(branch_graph);
+            auto branch_effect = creative_suite::effects::makeDefaultInstance("video.saturation");
+            require(creative_suite::effects::setParameterValue(branch_effect, "amount", 125.0) &&
+                        color::addParallelBranch(branch_graph, effect_nodes.back(), branch_effect),
+                    "Could not prepare the v34 parallel Color graph fixture.");
+            graded_clip.color_graph = branch_graph;
+            graded_clip.effects = color::effectInstancesInOrder(branch_graph);
+            const auto grade_path = directory / "primary-grade-v34.csp";
             project::save(grade_path, graded);
             const auto restored = project::load(grade_path);
-            require(restored.timeline_tracks.front().clips.front().effects.back() == grade,
-                    "Primary Grade must survive CSP v33 save and reopen.");
+            require(restored.timeline_tracks.front().clips.front().color_graph == branch_graph &&
+                        std::any_of(restored.timeline_tracks.front().clips.front().effects.begin(),
+                            restored.timeline_tracks.front().clips.front().effects.end(),
+                            [&](const auto& effect) { return effect == grade; }),
+                    "CSP v34 must preserve the correction graph, connections and effect values.");
             std::ifstream grade_file(grade_path, std::ios::binary);
             const std::string grade_text{
                 std::istreambuf_iterator<char>(grade_file),
@@ -300,6 +349,8 @@ int main(int argc, char** argv) {
             auto legacy_grade = QJsonDocument::fromJson(
                 QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
             legacy_grade.insert("version", 31);
+            writeLegacyFirstClipEffects(
+                legacy_grade, restored.timeline_tracks.front().clips.front().effects);
             writeText(grade_path, QJsonDocument(legacy_grade).toJson().toStdString());
             try {
                 static_cast<void>(project::load(grade_path));
@@ -310,10 +361,28 @@ int main(int argc, char** argv) {
             }
         }
         {
+            auto legacy_graph = QJsonDocument::fromJson(
+                QByteArray(saved_json.data(), static_cast<qsizetype>(saved_json.size()))).object();
+            legacy_graph.insert("version", 33);
+            writeLegacyFirstClipEffects(
+                legacy_graph, loaded.timeline_tracks.front().clips.front().effects);
+            const auto legacy_graph_path = directory / "legacy-color-graph-v33.csp";
+            writeText(legacy_graph_path,
+                      QJsonDocument(legacy_graph).toJson().toStdString());
+            const auto migrated_graph = project::load(legacy_graph_path);
+            require(migrated_graph.timeline_tracks.front().clips.front().color_graph &&
+                        color::linearEffectStack(
+                            *migrated_graph.timeline_tracks.front().clips.front().color_graph) ==
+                            std::optional<std::vector<creative_suite::effects::EffectInstance>>{
+                                loaded.timeline_tracks.front().clips.front().effects},
+                    "CSP v33 effect stacks must migrate to a serial CSP v34 Color graph.");
+
             auto legacy_gallery = QJsonDocument::fromJson(
                 QByteArray(saved_json.data(), static_cast<qsizetype>(saved_json.size()))).object();
             legacy_gallery.insert("version", 32);
             legacy_gallery.remove("color_gallery");
+            writeLegacyFirstClipEffects(
+                legacy_gallery, loaded.timeline_tracks.front().clips.front().effects);
             const auto legacy_gallery_path = directory / "legacy-gallery-v32.csp";
             writeText(legacy_gallery_path,
                       QJsonDocument(legacy_gallery).toJson().toStdString());
@@ -342,7 +411,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 33") != std::string::npos &&
+        require(saved_json.find("\"version\": 34") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -353,7 +422,7 @@ int main(int argc, char** argv) {
                     saved_json.find("\"audio_row_height\": 87.25") != std::string::npos &&
                     saved_json.find("\"transitions\"") != std::string::npos &&
                     saved_json.find("cross_dissolve") != std::string::npos &&
-                    saved_json.find("\"effects\"") != std::string::npos &&
+                    saved_json.find("\"color_graph\"") != std::string::npos &&
                     saved_json.find("video.grayscale") != std::string::npos &&
                     saved_json.find("\"node_graph\"") != std::string::npos &&
                     saved_json.find("\"type\": \"merge\"") != std::string::npos &&

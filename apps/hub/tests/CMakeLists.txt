@@ -123,8 +123,10 @@ if(BUILD_IMAGE_EDITOR OR BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
             ${HUB_VIDEO_SOURCE_DIR}/project/project_file_reader.cpp
             ${HUB_VIDEO_SOURCE_DIR}/project/project_file_writer.cpp
             ${HUB_VIDEO_SOURCE_DIR}/project/project_document_validator.cpp
+            ${HUB_VIDEO_SOURCE_DIR}/workspaces/color/model/color_graph.cpp
             ${HUB_VIDEO_SOURCE_DIR}/workspaces/fusion/nodes/model/node_graph.cpp
             ${HUB_VIDEO_SOURCE_DIR}/timeline/timeline_transform.cpp)
+        target_link_libraries(hub-backup-format-test PRIVATE creative-suite::effects)
     endif()
     creative_suite_deploy_media_runtime(hub-backup-format-test)
     add_creative_suite_test(NAME hub-backup-format-test COMMAND hub-backup-format-test)

@@ -11,6 +11,7 @@ add_executable(creative-suite-main-editor-timeline-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-timeline-tests)
 
 target_include_directories(creative-suite-main-editor-timeline-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
@@ -48,6 +49,7 @@ add_executable(creative-suite-main-editor-timeline-command-service-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-timeline-command-service-tests)
 
 target_include_directories(creative-suite-main-editor-timeline-command-service-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
@@ -100,6 +102,7 @@ add_executable(creative-suite-main-editor-timeline-trim-gesture-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_trim_gesture.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_trim_gesture.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-timeline-trim-gesture-tests)
 
 target_include_directories(creative-suite-main-editor-timeline-trim-gesture-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
@@ -145,6 +148,7 @@ add_executable(creative-suite-main-editor-timeline-widget-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-timeline-widget-tests)
 
 target_include_directories(creative-suite-main-editor-timeline-widget-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
@@ -219,6 +223,7 @@ add_executable(creative-suite-main-editor-timeline-geometry-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-timeline-geometry-tests)
 
 target_include_directories(creative-suite-main-editor-timeline-geometry-tests PRIVATE ${VIDEO_EDITOR_SOURCE_DIR})
 target_link_libraries(creative-suite-main-editor-timeline-geometry-tests PRIVATE Qt6::Gui)
@@ -245,6 +250,7 @@ add_executable(creative-suite-main-editor-timeline-interaction-controller-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-timeline-interaction-controller-tests)
 
 target_include_directories(creative-suite-main-editor-timeline-interaction-controller-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
@@ -299,3 +305,18 @@ set_tests_properties(creative-suite-main-editor-timeline-end-buttons PROPERTIES
 )
 
 preserve_video_editor_test_working_directory()
+
+add_executable(creative-suite-main-editor-color-graph-tests
+    color_graph_test.cpp
+)
+link_video_editor_color_graph_test_support(creative-suite-main-editor-color-graph-tests)
+target_compile_features(creative-suite-main-editor-color-graph-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-color-graph-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-color-graph-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_creative_suite_test(
+    NAME creative-suite-main-editor-color-graph
+    COMMAND creative-suite-main-editor-color-graph-tests
+)

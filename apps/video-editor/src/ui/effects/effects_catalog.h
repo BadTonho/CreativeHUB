@@ -8,7 +8,7 @@ namespace effects {
 
 enum class Workspace { Edit, Fusion, None };
 
-// UI actions only; rendering and graph node types remain owned by Fusion.
+// UI actions route creation to the workspace that owns the corresponding model.
 enum class Action {
     Unavailable, VisualEffect, AudioEffect, BackgroundClip, CompositionClip,
     AdjustmentClip, TextClip, Transition,

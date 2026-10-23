@@ -189,7 +189,11 @@ void workspaceUi() {
     CS_TEST_CHECK(compositions > 0 && session.timeline().clipCount(0) == 1);
     for (auto* spin : workspace.ui().transform_spins) CS_TEST_CHECK(spin && spin->isEnabled());
     for (auto* key : workspace.ui().transform_keys) CS_TEST_CHECK(key && key->isEnabled());
-    controller->addEffectToSelectedClip("video.grayscale");
+    const auto adjustment_id = *session.selection().active_clip_id;
+    auto correction = color::fromEffectStack(std::vector{
+        creative_suite::effects::makeDefaultInstance("video.grayscale")});
+    CS_TEST_CHECK(commands.execute(SetClipColorGraphCommand{adjustment_id, correction}).changed());
+    controller->refreshInspectorPresentation();
     CS_TEST_CHECK(session.timeline().tracks()[0].clips[0].effects.size() == 1);
     controller->refreshInspectorPresentation();
     CS_TEST_CHECK(workspace.ui().clip_effects_controls->isEnabled());
@@ -226,7 +230,10 @@ void editingAndPersistence(const QString& directory) {
     auto effect = creative_suite::effects::makeDefaultInstance("video.grayscale");
     auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
     CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "red_gain", 136));
-    CS_TEST_CHECK(commands.execute(SetClipEffectsCommand{id, {effect, grade}}).changed());
+    auto graph = color::fromEffectStack(std::vector{effect, grade});
+    CS_TEST_CHECK(color::addParallelBranch(graph, 1,
+        creative_suite::effects::makeDefaultInstance("video.contrast")));
+    CS_TEST_CHECK(commands.execute(SetClipColorGraphCommand{id, graph}).changed());
     CS_TEST_CHECK(!commands.execute(SetClipNodeGraphCommand{id, fusion::nodes::makePassthroughGraph()}).changed());
     CS_TEST_CHECK(!commands.execute(SetClipAudioCommand{id, 0.5, true}).changed());
     const auto original = session.timeline().tracks()[0].clips[0];
@@ -243,6 +250,7 @@ void editingAndPersistence(const QString& directory) {
     CS_TEST_CHECK(duplicate.changed());
     const auto duplicate_id = *duplicate.selection.active_clip_id;
     CS_TEST_CHECK(session.timeline().tracks()[0].clips[1].effects == original.effects);
+    CS_TEST_CHECK(session.timeline().tracks()[0].clips[1].color_graph == original.color_graph);
     CS_TEST_CHECK(session.timeline().tracks()[0].clips[1].keyframes == original.keyframes);
     CS_TEST_CHECK(!commands.execute(AddTransitionCommand{track, id, duplicate_id,
         timeline::TransitionKind::FadeToBlack, 5}).changed());

@@ -55,8 +55,8 @@ int main(int argc, char* argv[]) {
                 "Effects list must contain all visual filters and existing tools.");
         require(effects_list.categoryId() == "all",
                 "Effects list must initially show All.");
-        require(effects_list.visibleEffectCount() == 12,
-                "All category must show every effect.");
+        require(effects_list.visibleEffectCount() == 7,
+                "Edit must show timeline tools while correction creation stays in Color.");
         require(effects_list.item(0)->data(Qt::UserRole).toString() ==
                     "video.grayscale",
                 "Effect IDs must be stable.");
@@ -71,14 +71,13 @@ int main(int argc, char* argv[]) {
             const auto effect_id = effects_list.item(index)
                 ->data(Qt::UserRole).toString();
             const bool expected_draggable =
-                (effect_id.startsWith(QStringLiteral("video.")) && effect_id != QStringLiteral("video.gaussian_blur")) ||
                 effect_id == QStringLiteral("text.text") ||
                 effect_id == QStringLiteral("transitions.cross_dissolve") ||
                 effect_id == QStringLiteral("transitions.fade_to_black");
             require(
                 effects_list.item(index)->flags().testFlag(Qt::ItemIsDragEnabled) ==
                     expected_draggable,
-                "Visual filters, Text, and transitions must be draggable.");
+                "Only timeline-editable items must be draggable from Edit.");
         }
         const auto verifyDragMime = [&effects_list](
             const QString& name,
@@ -97,11 +96,9 @@ int main(int argc, char* argv[]) {
         verifyDragMime("Fusion Composition", QByteArrayLiteral("video.fusion_composition"));
         verifyDragMime("Adjustment Clip", QByteArrayLiteral("video.adjustment_clip"));
         verifyDragMime("Text", QByteArrayLiteral("text.text"));
-        verifyDragMime("Grayscale", QByteArrayLiteral("video.grayscale"));
-        verifyDragMime("Brightness", QByteArrayLiteral("video.brightness"));
-        verifyDragMime("Contrast", QByteArrayLiteral("video.contrast"));
-        verifyDragMime("Saturation", QByteArrayLiteral("video.saturation"));
-        verifyDragMime("Primary Grade", QByteArrayLiteral("video.primary_grade"));
+        require(!effects::isDraggable(QStringLiteral("video.grayscale"), effects::Workspace::Edit) &&
+                    !effects::isAvailable(QStringLiteral("video.primary_grade"), effects::Workspace::Edit),
+                "Edit must not expose correction-node creation actions.");
         verifyDragMime(
             "Cross Dissolve",
             QByteArrayLiteral("transitions.cross_dissolve"));
@@ -220,7 +217,7 @@ int main(int argc, char* argv[]) {
         favorites.setWorkspace(effects::Workspace::Edit);
         toolbox.setCurrentRow(toolbox.count() - 1); // Masks disappears on returning to Edit.
         toolbox.setWorkspace(effects::Workspace::Edit);
-        require(toolbox.currentCategoryId() == "all" && effects_list.visibleEffectCount() == 12 &&
+        require(toolbox.currentCategoryId() == "all" && effects_list.visibleEffectCount() == 7 &&
                 favorites.count() == 2 && effects::favoriteIds().size() == 3,
                 "Returning to Edit must restore its catalog without losing favorites.");
         effects_list.itemDoubleClicked(ellipse);

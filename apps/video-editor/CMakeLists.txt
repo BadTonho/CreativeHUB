@@ -38,6 +38,12 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/fusion/nodes/evaluation/node_graph_evaluator.h
     src/workspaces/fusion/nodes/ui/node_canvas.cpp
     src/workspaces/fusion/nodes/ui/node_canvas.h
+    src/workspaces/color/model/color_graph.cpp
+    src/workspaces/color/model/color_graph.h
+    src/workspaces/color/evaluation/color_graph_evaluator.cpp
+    src/workspaces/color/evaluation/color_graph_evaluator.h
+    src/workspaces/color/ui/color_node_canvas.cpp
+    src/workspaces/color/ui/color_node_canvas.h
     src/main_window/main_window_support.cpp
     src/main_window/main_window_support.h
     src/main_window/main_window_interchange.cpp

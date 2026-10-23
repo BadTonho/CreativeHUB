@@ -1,4 +1,5 @@
 #include "workspaces/color/ui/color_workspace.h"
+#include "workspaces/color/ui/color_node_canvas.h"
 #include "ui/preview/preview_widget.h"
 
 #include <QApplication>
@@ -15,6 +16,7 @@
 
 #include <creative_suite/effects/effects.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <stdexcept>
 
@@ -28,60 +30,70 @@ int main(int argc, char** argv) {
     QApplication application(argc, argv);
     try {
         ui::ColorWorkspace workspace;
-        std::vector<creative_suite::effects::EffectInstance> effects;
+        auto graph = color::makePassthroughGraph();
         int edits = 0;
-        workspace.setEffectsChangedHandler([&](timeline::ClipId id,
-            std::vector<creative_suite::effects::EffectInstance> updated) {
+        workspace.setEffectsChangedHandler([&](timeline::ClipId id, color::Graph updated) {
             require(id == 7, "Color must edit the selected clip identity.");
-            effects = std::move(updated);
+            graph = std::move(updated);
             ++edits;
-            workspace.setClips({{7, QStringLiteral("Shot A")}}, 7, effects);
+            workspace.setClips({{7, QStringLiteral("Shot A")}}, 7, graph);
         });
-        workspace.setClips({{7, QStringLiteral("Shot A")}}, 7, effects);
+        workspace.setClips({{7, QStringLiteral("Shot A")}}, 7, graph);
         auto* add = workspace.findChild<QPushButton*>("colorAddNodeButton");
-        auto* up = workspace.findChild<QPushButton*>("colorMoveNodeUpButton");
+        auto* add_branch = workspace.findChild<QPushButton*>("colorAddParallelBranchButton");
         auto* toggle = workspace.findChild<QPushButton*>("colorToggleNodeButton");
         auto* remove = workspace.findChild<QPushButton*>("colorRemoveNodeButton");
-        auto* nodes = workspace.findChild<QListWidget*>("colorNodesList");
-        require(add && up && toggle && remove && nodes, "Color node controls must exist.");
+        auto* nodes = workspace.findChild<ui::ColorNodeCanvas*>("colorNodeCanvas");
+        require(add && add_branch && toggle && remove && nodes,
+                "Color graph controls must exist.");
         add->click();
-        require(effects.size() == 1 && effects[0].id == "video.primary_grade" &&
-                nodes->count() == 3 && edits == 1,
-                "Adding a node must use the clip effect stack.");
-        nodes->setCurrentRow(1);
+        const auto selected_after_add = nodes->selectedNode();
+        const auto* added_node = selected_after_add
+            ? color::findNode(graph, *selected_after_add) : nullptr;
+        require(color::validate(graph) && graph.nodes.size() == 3 && added_node &&
+                added_node->effect && added_node->effect->id == "video.primary_grade" && edits == 1,
+                "Adding a correction must create a Color effect node.");
         auto* red = workspace.findChild<QDoubleSpinBox*>("colorParameter_red_gain");
         require(red != nullptr, "Primary Grade must expose red gain.");
         red->setValue(145);
         require(QMetaObject::invokeMethod(red, "editingFinished"),
                 "Red gain edit must be committed.");
-        require(creative_suite::effects::parameterValue(effects[0], "red_gain") == 145,
-                "Primary Grade parameters must share the clip effect stack.");
+        const auto selected_after_parameter = nodes->selectedNode();
+        const auto* edited_node = selected_after_parameter
+            ? color::findNode(graph, *selected_after_parameter) : nullptr;
+        require(edited_node && edited_node->effect &&
+                    creative_suite::effects::parameterValue(*edited_node->effect, "red_gain") == 145,
+                "Primary Grade parameters must update the selected graph node.");
         require(red->isHidden(),
                 "Rebuilt controls must hide the old spin box before deferred deletion.");
+        add_branch->click();
+        require(color::validate(graph) &&
+                    std::count_if(graph.nodes.begin(), graph.nodes.end(), [](const auto& node) {
+                        return node.type == color::NodeType::ParallelMixer;
+                    }) == 1 && graph.nodes.size() == 5,
+                "Adding a parallel correction must create and connect a mixer graph.");
         add->click();
-        require(effects.size() == 2, "A second serial node must be added.");
-        nodes->setCurrentRow(2);
-        up->click();
-        require(effects.size() == 2 &&
-                creative_suite::effects::parameterValue(effects[0], "red_gain") == 100 &&
-                creative_suite::effects::parameterValue(effects[1], "red_gain") == 145,
-                "Moving nodes must change processing order.");
-        nodes->setCurrentRow(1);
+        require(graph.nodes.size() == 6,
+                "A correction inserted into a selected branch must add a graph node.");
         toggle->click();
-        require(!effects[0].enabled, "Node enable state must be editable.");
-        nodes->setCurrentRow(1);
+        const auto selected_after_insert = nodes->selectedNode();
+        const auto* toggled_node = selected_after_insert
+            ? color::findNode(graph, *selected_after_insert) : nullptr;
+        require(toggled_node && toggled_node->effect && !toggled_node->effect->enabled,
+                "Node enable state must be editable.");
         remove->click();
-        require(effects.size() == 1 && effects[0].enabled,
-                "Removing a node must retain the other effect.");
+        require(color::validate(graph) && graph.nodes.size() == 5,
+                "Removing a correction must preserve a valid connected graph.");
         auto* new_type = workspace.findChild<QComboBox*>("colorNewNodeType");
-        require(new_type != nullptr, "Color must offer the available serial color effects.");
+        require(new_type != nullptr, "Color must offer correction node types.");
         new_type->setCurrentIndex(new_type->findData(QStringLiteral("video.saturation")));
         add->click();
-        require(effects.size() == 2 && effects.back().id == "video.saturation",
-                "Color must add the chosen effect to the same ordered clip stack.");
+        require(std::any_of(graph.nodes.begin(), graph.nodes.end(), [](const auto& node) {
+                    return node.effect && node.effect->id == "video.saturation";
+                }), "Color must add the chosen effect type to its graph.");
         QImage thumbnail(4, 3, QImage::Format_RGBA8888);
         thumbnail.fill(Qt::red);
-        workspace.setClips({{7, QStringLiteral("Shot A"), thumbnail}}, 7, effects);
+        workspace.setClips({{7, QStringLiteral("Shot A"), thumbnail}}, 7, graph);
         auto* clip_strip = workspace.findChild<QListWidget*>("colorClipStrip");
         require(clip_strip && !clip_strip->item(0)->icon().isNull(),
                 "Color clip strip must display available media thumbnails.");

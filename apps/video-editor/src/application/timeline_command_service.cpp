@@ -1176,7 +1176,8 @@ TimelineEditResult TimelineCommandService::execute(const DuplicateAdjustmentClip
     if (!copied) return result(EditStatus::Rejected, EditReason::InvalidTarget);
     auto snapshot = staged_timeline.snapshot();
     auto& duplicate = snapshot.tracks[copied->track_index].clips[copied->clip_index];
-    duplicate.effects = original.effects;
+    duplicate.color_graph = timeline::colorGraphForClip(original);
+    duplicate.effects = color::effectInstancesInOrder(*duplicate.color_graph);
     duplicate.transform = original.transform;
     duplicate.keyframes = original.keyframes;
     staged_timeline.restore(std::move(snapshot));
@@ -1289,7 +1290,8 @@ TimelineEditResult TimelineCommandService::execute(const DuplicateFusionComposit
     auto snapshot = staged_timeline.snapshot();
     auto& duplicate = snapshot.tracks[copied->track_index].clips[copied->clip_index];
     duplicate.display_name = original.display_name;
-    duplicate.effects = original.effects;
+    duplicate.color_graph = timeline::colorGraphForClip(original);
+    duplicate.effects = color::effectInstancesInOrder(*duplicate.color_graph);
     duplicate.transform = original.transform;
     duplicate.keyframes = original.keyframes;
     duplicate.node_graph = original.node_graph;
@@ -1577,6 +1579,28 @@ TimelineEditResult TimelineCommandService::execute(
 }
 
 TimelineEditResult TimelineCommandService::execute(
+    const SetClipColorGraphCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setClipColorGraph(
+        location->track_index, location->clip_index, command.graph);
+    if (mutation == timeline::ColorGraphMutationResult::NoChange)
+        return result(EditStatus::NoChange);
+    if (mutation != timeline::ColorGraphMutationResult::Changed)
+        return result(EditStatus::Rejected,
+            mutation == timeline::ColorGraphMutationResult::InvalidValue
+                ? EditReason::InvalidValue : EditReason::InvalidTarget);
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {
+        session_.timeline_.tracks()[location->track_index].track_id};
+    output.affected_clip_ids = {command.clip_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
     const SetClipNodeGraphCommand& command) {
     const auto location = session_.timeline_.locateClip(command.clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
@@ -1630,12 +1654,16 @@ TimelineEditResult TimelineCommandService::execute(
     const auto before = session_.captureEditState();
     auto candidate = session_.timeline_;
     if (command.options.effects) {
-        const auto mutation = candidate.setClipEffects(
+        const auto source_graph = command.attributes.color_graph.value_or(
+            color::fromEffectStack(command.attributes.effects));
+        const auto mutation = candidate.setClipColorGraph(
             target_location->track_index, target_location->clip_index,
-            command.attributes.effects);
-        if (mutation != timeline::EffectMutationResult::Changed &&
-            mutation != timeline::EffectMutationResult::NoChange) {
-            return result(EditStatus::Rejected, reasonForEffects(mutation));
+            source_graph);
+        if (mutation != timeline::ColorGraphMutationResult::Changed &&
+            mutation != timeline::ColorGraphMutationResult::NoChange) {
+            return result(EditStatus::Rejected,
+                mutation == timeline::ColorGraphMutationResult::InvalidValue
+                    ? EditReason::InvalidValue : EditReason::InvalidTarget);
         }
     }
     if (command.options.transform) {
@@ -1786,14 +1814,18 @@ TimelineEditResult TimelineCommandService::execute(
         bool linked_clip_changed = false;
 
         if (command.options.effects && compatibility.effects) {
-            const auto mutation = candidate.setClipEffects(
+            const auto source_graph = command.attributes.color_graph.value_or(
+                color::fromEffectStack(command.attributes.effects));
+            const auto mutation = candidate.setClipColorGraph(
                 target_location->track_index, target_location->clip_index,
-                command.attributes.effects);
-            if (mutation != timeline::EffectMutationResult::Changed &&
-                mutation != timeline::EffectMutationResult::NoChange) {
-                return result(EditStatus::Rejected, reasonForEffects(mutation));
+                source_graph);
+            if (mutation != timeline::ColorGraphMutationResult::Changed &&
+                mutation != timeline::ColorGraphMutationResult::NoChange) {
+                return result(EditStatus::Rejected,
+                    mutation == timeline::ColorGraphMutationResult::InvalidValue
+                        ? EditReason::InvalidValue : EditReason::InvalidTarget);
             }
-            target_changed |= mutation == timeline::EffectMutationResult::Changed;
+            target_changed |= mutation == timeline::ColorGraphMutationResult::Changed;
         }
         if (command.options.transform && compatibility.transform) {
             const auto adjusted_keyframes = keyframesForDuration(

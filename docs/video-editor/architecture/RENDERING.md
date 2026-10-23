@@ -1,11 +1,13 @@
 # Rendering Boundary
 
-Primary Grade extends the ordered clip-effect pass with per-channel RGB gains
-after brightness, contrast and saturation. CPU, OpenGL and Vulkan apply the
-same six-parameter pass after Fusion output; each pass preserves alpha and
-rounds RGB at its boundary. Existing passes default to unit gains, retaining
-their prior pixels. Color's waveform samples the displayed Preview image at a
-bounded rate and does not enter exported pixels.
+Color correction runs after Fusion output and before Timeline composition.
+Each effect node uses the existing `creative_suite::effects` implementation.
+Serial graphs use the CPU/OpenGL/Vulkan ordered-effect path and preserve the
+existing Primary Grade alpha and rounding behavior. Branched graphs evaluate
+their connected nodes once on RGBA frames and combine mixer inputs with a
+normalized weighted average; this currently uses the CPU evaluator. Color's
+waveform samples the displayed Preview image at a bounded rate and does not
+enter exported pixels.
 
 [Gaussian Blur](../features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
 catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with
@@ -666,16 +668,14 @@ configurable. It renders through the end of the last clip; uncovered frames
 are black. The current
 composition path evaluates clip transforms and keyframes and supports video,
 still-image, and text layers plus Cross Dissolve and Fade to Black transitions.
-Persisted per-clip visual filters are included in both Preview and export.
-Each video or image clip may carry an ordered stack of Grayscale, Brightness,
-Contrast, and Saturation filters. The playback worker and
-`OfflineExportRenderer` evaluate the stack on a private RGBA frame copy before
-compositing, by calling the same CPU `creative-suite::effects` library. Filter
-order, parameter values, and alpha are preserved. The experimental GPU
-compositor receives the already-filtered layer pixels; effect processing
-remains CPU-based. The separate `View > Grayscale Preview` viewing mode remains
-a preview-only display option and does not modify the clip or its export. See
-[the shared effects contract](EFFECTS.md).
+Persisted per-clip Color graphs are included in both Preview and export.
+Serial graphs use the existing CPU/OpenGL/Vulkan ordered-effect path; branched
+graphs evaluate connected effect nodes on RGBA frames before compositing and
+use normalized weighted mixing at Parallel Mixer nodes. Both routes call the
+shared `creative_suite::effects` implementations and preserve effect order,
+parameters, enabled state and alpha. The separate `View > Grayscale Preview`
+mode remains a preview-only display option and does not modify the clip or its
+export. See [the shared effects contract](EFFECTS.md).
 
 When audio export is enabled, the renderer decodes embedded audio from video
 clips that have not been externalized and mixes it with Audio track clips at

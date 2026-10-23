@@ -64,6 +64,109 @@ std::int64_t requiredInteger(
 std::filesystem::path resolvedPath(const std::filesystem::path& project_path,
                                    const QString& stored_path);
 
+color::Graph parseColorGraph(const QJsonValue& value,
+                             const std::filesystem::path& project_path) {
+    if (!value.isObject())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid Color correction graph.");
+    const auto object = value.toObject();
+    const auto next_id = object.value("next_id");
+    const auto nodes_value = object.value("nodes");
+    const auto connections_value = object.value("connections");
+    if (!next_id.isDouble() || next_id.toInteger() <= 0 ||
+        !nodes_value.isArray() || !connections_value.isArray())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an incomplete Color correction graph.");
+    color::Graph graph;
+    graph.next_id = static_cast<color::NodeId>(next_id.toInteger());
+    for (const auto& node_value : nodes_value.toArray()) {
+        if (!node_value.isObject())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Color graph node.");
+        const auto node_object = node_value.toObject();
+        const auto id = node_object.value("id");
+        const auto type = node_object.value("type");
+        const auto x = node_object.value("x");
+        const auto y = node_object.value("y");
+        if (!id.isDouble() || id.toInteger() <= 0 || !type.isString() ||
+            !x.isDouble() || !y.isDouble())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an incomplete Color graph node.");
+        color::Node node;
+        node.id = static_cast<color::NodeId>(id.toInteger());
+        const auto type_name = type.toString();
+        if (type_name == QLatin1String("input")) node.type = color::NodeType::Input;
+        else if (type_name == QLatin1String("effect")) node.type = color::NodeType::Effect;
+        else if (type_name == QLatin1String("parallel_mixer"))
+            node.type = color::NodeType::ParallelMixer;
+        else if (type_name == QLatin1String("output")) node.type = color::NodeType::Output;
+        else throwJson(ProjectErrorCode::InvalidValue, project_path,
+                       "Project JSON contains an unknown Color graph node type.");
+        node.x = x.toDouble();
+        node.y = y.toDouble();
+        if (node.type == color::NodeType::Effect) {
+            const auto effect_value = node_object.value("effect");
+            if (!effect_value.isObject())
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A Color effect node is missing its settings.");
+            const auto effect_object = effect_value.toObject();
+            const auto effect_id = effect_object.value("id");
+            const auto enabled = effect_object.value("enabled");
+            const auto parameters = effect_object.value("parameters");
+            if (!effect_id.isString() || !enabled.isBool() || !parameters.isArray())
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A Color effect node contains incomplete settings.");
+            creative_suite::effects::EffectInstance effect;
+            const auto effect_id_bytes = effect_id.toString().toUtf8();
+            effect.id.assign(effect_id_bytes.constData(),
+                             static_cast<std::size_t>(effect_id_bytes.size()));
+            effect.enabled = enabled.toBool();
+            for (const auto& parameter_value : parameters.toArray()) {
+                if (!parameter_value.isObject() ||
+                    !parameter_value.toObject().value("id").isString() ||
+                    !parameter_value.toObject().value("value").isDouble())
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Color effect node contains an invalid parameter.");
+                const auto parameter = parameter_value.toObject();
+                const auto parameter_id = parameter.value("id").toString().toUtf8();
+                effect.parameters.push_back({
+                    std::string(parameter_id.constData(),
+                                static_cast<std::size_t>(parameter_id.size())),
+                    parameter.value("value").toDouble()});
+            }
+            node.effect = std::move(effect);
+        } else if (node_object.contains("effect")) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Only Color effect nodes may contain effect settings.");
+        }
+        graph.nodes.push_back(std::move(node));
+    }
+    for (const auto& edge_value : connections_value.toArray()) {
+        if (!edge_value.isObject())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Color graph connection.");
+        const auto edge_object = edge_value.toObject();
+        const auto from = edge_object.value("from");
+        const auto to = edge_object.value("to");
+        const auto input = edge_object.value("input");
+        const auto weight = edge_object.value("weight");
+        if (!from.isDouble() || from.toInteger() <= 0 || !to.isDouble() ||
+            to.toInteger() <= 0 || !input.isDouble() || input.toInteger() < 0 ||
+            input.toInteger() > static_cast<qint64>(std::numeric_limits<std::uint32_t>::max()) ||
+            !weight.isDouble())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an incomplete Color graph connection.");
+        graph.connections.push_back({
+            static_cast<color::NodeId>(from.toInteger()),
+            static_cast<color::NodeId>(to.toInteger()),
+            static_cast<std::uint32_t>(input.toInteger()), weight.toDouble()});
+    }
+    if (!color::validate(graph))
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid or cyclic Color correction graph.");
+    return graph;
+}
+
 
 
 media::MediaKind parseMediaKind(
@@ -1055,6 +1158,7 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     }
                 }
                 if (version >= clip_effects_format_version &&
+                    version < color_graph_format_version &&
                     clip_object.contains("effects")) {
                     const auto stack = clip_object.value("effects");
                     if (!stack.isArray()) {
@@ -1106,6 +1210,22 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         }
                         clip.effects.push_back(std::move(effect));
                     }
+                }
+                if (timeline::supportsClipEffects(clip.kind)) {
+                    if (version >= color_graph_format_version) {
+                        if (!clip_object.contains("color_graph"))
+                            throwJson(ProjectErrorCode::MissingField, project_path,
+                                      "A version 34 visual clip is missing its Color graph.");
+                        clip.color_graph = parseColorGraph(
+                            clip_object.value("color_graph"), project_path);
+                        clip.effects = color::effectInstancesInOrder(*clip.color_graph);
+                    } else {
+                        clip.color_graph = color::fromEffectStack(clip.effects);
+                    }
+                } else if (version >= color_graph_format_version &&
+                           clip_object.contains("color_graph")) {
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Color correction graph is not valid on this clip kind.");
                 }
                 if (version >= node_graph_format_version &&
                     clip_object.contains("node_graph")) {

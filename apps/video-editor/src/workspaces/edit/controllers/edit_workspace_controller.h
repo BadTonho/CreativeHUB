@@ -124,8 +124,6 @@ public:
     void selectClipEffect(int index);
     void selectClipEffectParameter(const QString& id);
     void setSelectedClipEffectEnabled(int index, bool enabled);
-    void moveSelectedClipEffect(int direction);
-    void removeSelectedClipEffect();
     void beginEffectEdit();
     void finishEffectEdit();
     void applySelectedClipEffectParameter(double value);
@@ -290,6 +288,7 @@ private:
     std::optional<timeline::TimelineClipAttributes> copied_clip_attributes_;
     timeline::ClipId inspector_effect_clip_id_ = 0;
     int selected_effect_index_ = -1;
+    std::optional<color::NodeId> selected_effect_node_id_;
     std::string selected_effect_parameter_id_ = "amount";
     std::optional<bool> last_effect_target_available_;
 };

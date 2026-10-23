@@ -621,6 +621,27 @@ void validateVisualEffectExport(
     require(baseline_frame.has_value() && *baseline_frame != nullptr &&
                 (*disabled_frame)->rgba_pixels == (*baseline_frame)->rgba_pixels,
             "Offline export changed the frame for a disabled visual effect.");
+
+    const auto parallel_target = root / ("visual-effects-parallel." + extension);
+    auto parallel_job = makeImageJob(output, image_path, parallel_target, 114, 2);
+    auto branch_effect = creative_suite::effects::makeDefaultInstance("video.brightness");
+    require(creative_suite::effects::setParameterValue(branch_effect, "amount", 20.0),
+            "Could not prepare the parallel Color export fixture.");
+    auto parallel_graph = color::makePassthroughGraph();
+    require(color::addParallelBranch(parallel_graph, 1, branch_effect),
+            "Could not create the parallel Color export graph.");
+    auto& parallel_clip = parallel_job.project_snapshot.timeline_tracks.front().clips.front();
+    parallel_clip.effects.clear();
+    parallel_clip.color_graph = parallel_graph;
+    renderJob(parallel_job, canceled);
+    auto parallel_decoder = media::VideoPlaybackSession::open(parallel_target);
+    const auto parallel_frame = parallel_decoder->decode_next_frame();
+    require(parallel_frame.has_value() && *parallel_frame != nullptr,
+            "The parallel Color export did not contain a decodable video frame.");
+    const auto baseline_red = (*baseline_frame)->rgba_pixels[offset];
+    const auto parallel_red = (*parallel_frame)->rgba_pixels[offset];
+    require(parallel_red > baseline_red + 3 && parallel_red < baseline_red + 20,
+            "Offline export did not evaluate and mix the branched Color graph.");
 }
 
 void validateFusionPreviewExportParity(

@@ -94,6 +94,7 @@ struct CompositionLayerSpec {
     QString linked_render_path;
     qint64 linked_render_start_time_us = 0;
     qint64 composition_input_offset_frames = 0;
+    std::optional<color::Graph> color_graph;
 };
 
 struct CompositionTransitionSpec {

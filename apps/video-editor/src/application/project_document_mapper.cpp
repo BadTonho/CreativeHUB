@@ -55,6 +55,8 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.audio_muted = clip.audio_muted;
             project_clip.audio_gain_keyframes = clip.audio_gain_keyframes;
             project_clip.effects = clip.effects;
+            project_clip.color_graph = clip.color_graph.value_or(
+                color::fromEffectStack(clip.effects));
             project_clip.node_graph = clip.node_graph;
             project_clip.composition_input_offset_frames = clip.composition_input_offset_frames;
             project_clip.transform = clip.transform;

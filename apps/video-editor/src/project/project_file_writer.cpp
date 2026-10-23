@@ -61,6 +61,60 @@ const char* trackKindName(timeline::TrackKind kind) {
     return kind == timeline::TrackKind::Audio ? "audio" : "video";
 }
 
+const char* colorNodeTypeName(color::NodeType type) {
+    switch (type) {
+    case color::NodeType::Input: return "input";
+    case color::NodeType::Effect: return "effect";
+    case color::NodeType::ParallelMixer: return "parallel_mixer";
+    case color::NodeType::Output: return "output";
+    }
+    return "input";
+}
+
+QJsonObject colorEffectJson(const creative_suite::effects::EffectInstance& effect) {
+    QJsonObject object;
+    object.insert("id", QString::fromUtf8(effect.id.data(),
+        static_cast<qsizetype>(effect.id.size())));
+    object.insert("enabled", effect.enabled);
+    QJsonArray parameters;
+    for (const auto& parameter : effect.parameters) {
+        QJsonObject value;
+        value.insert("id", QString::fromUtf8(parameter.id.data(),
+            static_cast<qsizetype>(parameter.id.size())));
+        value.insert("value", parameter.value);
+        parameters.append(value);
+    }
+    object.insert("parameters", parameters);
+    return object;
+}
+
+QJsonObject colorGraphJson(const color::Graph& graph) {
+    QJsonObject object;
+    object.insert("next_id", static_cast<qint64>(graph.next_id));
+    QJsonArray nodes;
+    for (const auto& node : graph.nodes) {
+        QJsonObject value;
+        value.insert("id", static_cast<qint64>(node.id));
+        value.insert("type", colorNodeTypeName(node.type));
+        value.insert("x", node.x);
+        value.insert("y", node.y);
+        if (node.effect) value.insert("effect", colorEffectJson(*node.effect));
+        nodes.append(value);
+    }
+    object.insert("nodes", nodes);
+    QJsonArray connections;
+    for (const auto& edge : graph.connections) {
+        QJsonObject value;
+        value.insert("from", static_cast<qint64>(edge.from));
+        value.insert("to", static_cast<qint64>(edge.to));
+        value.insert("input", static_cast<qint64>(edge.input));
+        value.insert("weight", edge.weight);
+        connections.append(value);
+    }
+    object.insert("connections", connections);
+    return object;
+}
+
 const char* nodeTypeName(fusion::nodes::NodeType type) {
     switch (type) {
     case fusion::nodes::NodeType::Input: return "input";
@@ -339,26 +393,10 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 }
                 item.insert("audio_gain_keyframes", audio_gain_keyframes);
             }
-            if (!clip.effects.empty()) {
-                QJsonArray effect_stack;
-                for (const auto& effect : clip.effects) {
-                    QJsonObject effect_object;
-                    effect_object.insert("id", QString::fromUtf8(
-                        effect.id.data(), static_cast<qsizetype>(effect.id.size())));
-                    effect_object.insert("enabled", effect.enabled);
-                    QJsonArray parameters;
-                    for (const auto& parameter : effect.parameters) {
-                        QJsonObject parameter_object;
-                        parameter_object.insert("id", QString::fromUtf8(
-                            parameter.id.data(),
-                            static_cast<qsizetype>(parameter.id.size())));
-                        parameter_object.insert("value", parameter.value);
-                        parameters.append(parameter_object);
-                    }
-                    effect_object.insert("parameters", parameters);
-                    effect_stack.append(effect_object);
-                }
-                item.insert("effects", effect_stack);
+            if (timeline::supportsClipEffects(clip.kind)) {
+                const auto graph = clip.color_graph.value_or(
+                    color::fromEffectStack(clip.effects));
+                item.insert("color_graph", colorGraphJson(graph));
             }
             if (clip.node_graph.has_value())
                 item.insert("node_graph", nodeGraphJson(project_path, *clip.node_graph));

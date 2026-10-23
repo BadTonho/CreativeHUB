@@ -13,6 +13,7 @@ add_executable(creative-suite-main-editor-project-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-project-tests)
 
 target_include_directories(creative-suite-main-editor-project-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
@@ -58,6 +59,7 @@ add_executable(creative-suite-main-editor-autosave-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_transform.h
 )
+link_video_editor_color_graph_test_support(creative-suite-main-editor-autosave-tests)
 
 target_include_directories(creative-suite-main-editor-autosave-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}

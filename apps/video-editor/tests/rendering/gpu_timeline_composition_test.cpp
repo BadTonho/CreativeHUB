@@ -420,6 +420,7 @@ void adjustmentExport(QOffscreenSurface* surface, const QString& directory,
     require(creative_suite::effects::setParameterValue(adjustment_clip.effects[1], "red_gain", 139) &&
         creative_suite::effects::setParameterValue(adjustment_clip.effects[2], "amount", 9),
         "Export Adjustment effect could not be configured.");
+    adjustment_clip.color_graph = color::fromEffectStack(adjustment_clip.effects);
     project::ProjectTrack adjustment_track;
     adjustment_track.name = "Adjustment"; adjustment_track.track_id = 2;
     adjustment_track.clips = {adjustment_clip};
@@ -428,7 +429,8 @@ void adjustmentExport(QOffscreenSurface* surface, const QString& directory,
     CompositionLayer source_layer; source_layer.frame = source_frame.get();
     CompositionLayer operation; operation.transform = adjustment_clip.transform;
     operation.effect_stack = adjustment_clip.effects;
-    const std::vector<rendering::TimelineCompositionStep> steps{{source_layer, false}, {operation, true}};
+    const std::vector<rendering::TimelineCompositionStep> steps{
+        {source_layer, false}, {operation, true, adjustment_clip.color_graph}};
     const auto expected = rendering::composeAdjustmentLayers(source_frame->width, source_frame->height, steps);
     require(bool(expected), "GPU Adjustment export CPU reference failed.");
 
@@ -459,6 +461,7 @@ void gradedPreviewParity(QOffscreenSurface* surface, playback::CompositionLayerS
             creative_suite::effects::setParameterValue(brightness, "amount", 9),
         "Graded Preview effects could not be configured.");
     image.effects = {grade, brightness};
+    image.color_graph = color::fromEffectStack(image.effects);
     image.keyframes = {};
     playback::PlaybackWorker cpu, gpu;
     playback::VideoFramePtr cpu_frame, gpu_frame;

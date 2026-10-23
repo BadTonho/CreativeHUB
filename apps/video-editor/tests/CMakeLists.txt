@@ -12,6 +12,23 @@ link_libraries(
     creative-suite::media-frame
 )
 
+add_library(creative-suite-video-editor-color-graph-test-support STATIC
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/color/model/color_graph.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/color/evaluation/color_graph_evaluator.cpp
+)
+target_include_directories(creative-suite-video-editor-color-graph-test-support PUBLIC
+    ${VIDEO_EDITOR_SOURCE_DIR}
+)
+target_link_libraries(creative-suite-video-editor-color-graph-test-support PUBLIC
+    creative-suite::effects
+)
+
+function(link_video_editor_color_graph_test_support target_name)
+    target_link_libraries(${target_name} PRIVATE
+        creative-suite-video-editor-color-graph-test-support
+    )
+endfunction()
+
 macro(preserve_video_editor_test_working_directory)
     get_property(VIDEO_EDITOR_GROUP_TESTS DIRECTORY PROPERTY TESTS)
     if(VIDEO_EDITOR_GROUP_TESTS)

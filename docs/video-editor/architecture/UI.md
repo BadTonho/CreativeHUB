@@ -3,13 +3,15 @@
 ## Color workspace
 
 The Color selector opens a central page on demand and moves the shared Viewer
-there. Its clip strip selects visual Timeline clips; the right-hand list shows
-Input, each ordered clip effect, and Output. Add, Up, Down, On/Off and Remove
-commit through the existing clip-effects Timeline command and Undo/Redo stack.
-The lower panel edits the selected effect's parameters. Edit Inspector and Color
-read and write the same effect array. An RGB waveform samples the displayed
-frame on a worker at a bounded rate. Leaving Color restores the previous dock
-arrangement. See the [Color roadmap](../COLOR_WORKSPACE_ROADMAP.md).
+there. Its clip strip selects visual Timeline clips; the node canvas shows the
+per-clip correction graph. Drag nodes to arrange them, connect ports to change
+processing, middle-drag to pan, add effects or parallel branches, remove effects
+or mixers, and edit mixer weights. Removing a mixer retains its first input as
+the output path. These changes and Edit Inspector parameter/enabled-state edits
+use shared Timeline Undo/Redo. An RGB waveform samples the displayed frame on
+a worker at a bounded rate. Leaving Color restores the previous dock
+arrangement. See the
+[Color roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
 The Color Gallery captures the current composed Viewer frame into an ordered
 list with its source clip and Timeline frame. Rename and Remove affect the
@@ -19,7 +21,7 @@ worker. Missing sidecar PNGs display as unavailable items.
 
 ## Workspace Effects catalog
 
-Effects Toolbox, list and Favorites follow the active workspace. Fusion-only nodes appear under Fusion and Fusion > Masks; Background stays under Video > Generators and Text under Text. Drag chooses the position; double click creates and selects a disconnected node near the visible center. Creation is disabled without a compatible clip. Grid remains in the Node Editor toolbar. See [the catalog contract](EFFECTS.md#workspace-catalog).
+Effects Toolbox, list and Favorites follow the active workspace. Fusion-only nodes appear under Fusion and Fusion > Masks; Background stays under Video > Generators and Text under Text. Fusion node creation remains owned by Fusion. Color corrections are created and connected in the Color canvas; the Edit catalog does not create correction nodes. Grid remains in the Fusion Node Editor toolbar. See [the catalog contract](EFFECTS.md#workspace-catalog).
 
 
 Session clip/track IDs are authoritative for selection. When the controller
@@ -180,10 +182,10 @@ favoriting behavior yet. The Toolbox contains
 the categories `All`, `Video`, `Audio`, `Transitions`, and `Text`. Selecting a
 category filters the visual filters `Grayscale`, `Brightness`, `Contrast`,
 `Saturation`, and `Primary Grade`, plus the existing `Gain`, `Cross Dissolve`,
-`Fade to Black`, `Text`, and `Adjustment Clip` entries. The visual filters can be dragged
-onto a video, image or adjustment clip in the Timeline. They are added in order and may be
-repeated. Selecting a visual clip exposes its effect stack, parameters, and
-reorder/remove controls in the Inspector. `Gain` remains an audio UI prototype.
+`Fade to Black`, `Text`, and `Adjustment Clip` entries. Color corrections are
+selected and connected in the Color workspace. Edit exposes the selected clip's
+correction nodes and allows parameter and enabled-state edits, while structural
+changes remain in Color. `Gain` remains an audio UI prototype.
 Adjustment Clip can be dragged to a free video-track range to create five
 seconds of generated adjustment content. Its violet block has no thumbnail or
 waveform. Selection presents the composed Timeline in Preview and the existing
@@ -345,9 +347,9 @@ only compatible media: video or image in Video, and audio in Audio. Operating
 system file drops capture the empty group as their destination while importing;
 the created track and placed clips commit together as one Undo/Redo action.
 
-Visual-filter drops are accepted only over a video or image clip. The filter is
-appended to that clip's effect stack; it is not applied to audio, text, gaps,
-track headers, or empty Timeline space.
+Color correction nodes are not created by Timeline drops. Add and connect them
+in the Color workspace; the Timeline remains the owner of clip placement and
+selection.
 
 During a media drop, the Timeline paints a semitransparent ghost at the
 calculated track, frame, and duration. A valid target uses the track color; an
@@ -443,8 +445,8 @@ batches only after acceptance; cancelling preserves the active bindings.
 `Shift + Space` opens and closes the non-modal floating `Functions` window.
 The resizable 420x480 palette is centered over the Video Editor and searches the
 same workspace-aware catalog as Effects. Add, Enter (search or list), and double
-click create a graph node in Fusion; in Edit they apply visual filters to the
-compatible selected clip. Edit generators, Text and transitions are drag-only,
+click create a graph node in Fusion; Edit does not create Color correction
+nodes. Edit generators, Text and transitions are drag-only,
 with Add disabled and `Drag this item to the timeline.` displayed. Gain remains
 unavailable. Search remains enabled without a selection; Fusion activation and
 drag require a compatible clip. Workspace updates refilter the current query.
@@ -765,12 +767,14 @@ The Inspector provides `Inspector`, `Audio`, and `Effects` tabs. The `Audio`
 tab exposes independent Clip and Track gain sliders and mute checkboxes for
 the active clip and its track, grouped vertically. Gains are shown as 0% to
 200%; dragging a slider creates one coalesced Timeline history entry. The
-`Effects` tab contains the selected video or image clip's ordered filter stack,
-including per-effect enable checkboxes, parameter editing, reordering, and
-removal. Disabled rows are dimmed and their parameters remain editable. Its controls remain
-disabled with guidance when the selection is not a video or image clip. The
-active tab is restored from global user settings and does not affect project
-dirty state or `.csp` data. Selecting a clip does not change the active tab.
+`Effects` tab lists the selected clip's Color effect nodes for selection,
+enabled-state toggles, and parameter editing. It does not change graph
+structure; add, remove, connect, and layout operations belong to the Color
+workspace. Disabled rows are dimmed and their parameters remain editable. Its
+controls remain disabled with guidance when the selection does not support
+Color corrections. The active tab is restored from global user settings and
+does not affect project dirty state or `.csp` data. Selecting a clip does not
+change the active tab.
 Each Edit tab and the Fusion Inspector content use a vertical scroll area. The
 scrollbar appears only when controls exceed the available panel height; the
 mouse wheel and scrollbar move the panel content without changing dock size or
@@ -841,7 +845,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 31 format. Linked video-audio clips can be
+the current `.csp` version 34 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Right-clicking a video or image clip offers
 **Open in Fusion** and opens the selected clip's node graph. A video with linked
@@ -857,24 +861,21 @@ Text rasterization is performed with `QImage/QPainter` by the playback worker;
 the UI only edits the values and receives the composed RGBA frame. No new
 keyboard shortcut is introduced for text creation or editing.
 
-## Visual filter editing
+## Color correction editing
 
-Video and image clips may carry an ordered stack of `Grayscale`, `Brightness`,
-`Contrast`, and `Saturation` filters. Both the Effects dock's drag gesture and
-Functions' `Add`/Enter action in Edit target compatible visual clips. Filters may be
-repeated, and their stack order is editable in the Inspector. Each instance can
-be disabled without losing its position or parameters; Preview and export skip
-disabled instances in the same shared processor. Toggling, parameter edits,
-removal, and reordering participate in Timeline Undo/Redo. The filter
-definitions and CPU RGBA processing live in the shared
-`creative-suite::effects` library without a Qt Widgets dependency. See
-[the effects contract](EFFECTS.md). `Edit > Copy Attributes` stores the
+Video, image, text and adjustment clips use a per-clip Color graph containing
+effect nodes and optional Parallel Mixers. Color creates and connects nodes;
+the graph topology determines processing, and each effect uses the shared
+`creative_suite::effects` implementation. Edit selects the same effect nodes
+and changes their parameters or enabled state. Graph changes and Inspector
+edits share Timeline Undo/Redo. Preview and export evaluate this graph before
+clip transforms and composition. `Edit > Copy Attributes` stores the
 primary Timeline clip's editable properties in an in-memory clipboard;
 `Edit > Paste Attributes` opens a modal chooser for the selected clip or
 temporary multi-selection. Each category reports how many selected clips are
 compatible. A category starts checked when at least one target supports it;
-applying it skips incompatible targets. Categories cover ordered visual
-effects, transform and animation, audio gain and mute, audio volume envelope,
+applying it skips incompatible targets. Categories cover Color corrections,
+transform and animation, audio gain and mute, audio volume envelope,
 and text content/style. For linked video/audio clips, audio attributes are read
 from and applied to the audio companion while the reciprocal link is preserved.
 Keyframes keep their local frame offsets; when a destination is shorter, the
@@ -991,8 +992,8 @@ value, or removes a key at that frame. Editing an animated property updates or
 creates a key at the current frame, pauses playback, and clamps the key to the
 clip duration. Inspector values and diamond states follow the playhead. These
 curves are saved in `.csp` v22 and evaluated by the shared Preview and Render
-graph path. The existing clip effect stack and Timeline transform/keyframes run
-after the graph output.
+graph path. The Color correction graph and Timeline transform/keyframes run
+after the Fusion graph output.
 Each node also has a `VIEW` control. Output is the initial Viewer target;
 clicking another node previews its intermediate image without changing the
 Inspector selection, project dirty state, or Undo/Redo history. While Fusion is

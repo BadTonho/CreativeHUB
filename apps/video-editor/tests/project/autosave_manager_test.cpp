@@ -2,6 +2,7 @@
 #include "project/project_file.h"
 #include "logging/logger.h"
 
+#include <creative_suite/effects/effects.h>
 #include <QCoreApplication>
 
 #include <cstdio>
@@ -12,6 +13,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -29,6 +31,19 @@ project::ProjectDocument document() {
     result.bins = {"Unsorted"};
     result.timeline_tracks.push_back({"Video 1"});
     result.timeline_tracks.back().track_id = 1;
+    project::ProjectClip adjustment;
+    adjustment.clip_id = 1;
+    adjustment.kind = timeline::ClipKind::Adjustment;
+    adjustment.duration_frames = 60;
+    adjustment.effects = {creative_suite::effects::makeDefaultInstance("video.brightness")};
+    auto graph = color::fromEffectStack(adjustment.effects);
+    const auto nodes = color::effectNodesInOrder(graph);
+    auto branch = creative_suite::effects::makeDefaultInstance("video.saturation");
+    static_cast<void>(creative_suite::effects::setParameterValue(branch, "amount", 140.0));
+    static_cast<void>(color::addParallelBranch(graph, nodes.front(), branch));
+    adjustment.color_graph = graph;
+    adjustment.effects = color::effectInstancesInOrder(graph);
+    result.timeline_tracks.back().clips.push_back(std::move(adjustment));
     result.color_gallery_stills.push_back({"recovery-still", "Still 1", 1, 12,
         "recovery-still.png",
         std::make_shared<const std::vector<std::uint8_t>>(
@@ -64,6 +79,9 @@ int main(int argc, char* argv[]) {
                 "A saved-project autosave snapshot was not created.");
         require(project::load(snapshots.front().path) == original,
                 "An autosave snapshot did not round-trip through the project format.");
+        require(project::load(snapshots.front().path).timeline_tracks.front().clips.front()
+                    .color_graph == original.timeline_tracks.front().clips.front().color_graph,
+                "An autosave recovery snapshot did not retain Color graph topology.");
         auto snapshot_gallery = snapshots.front().path;
         snapshot_gallery += ".gallery";
         require(std::filesystem::exists(snapshot_gallery / "recovery-still.png"),

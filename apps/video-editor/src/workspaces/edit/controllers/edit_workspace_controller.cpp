@@ -654,6 +654,7 @@ void EditWorkspaceController::copySelectedClipAttributes() {
         attributes.transform = clip.transform;
         attributes.transform_keyframes = clip.keyframes;
         attributes.effects = clip.effects;
+        attributes.color_graph = timeline::colorGraphForClip(clip);
         attributes.audio_gain = clip.audio_gain;
         attributes.audio_muted = clip.audio_muted;
         attributes.text = clip.text;
@@ -863,47 +864,10 @@ void EditWorkspaceController::publishEffectTargetAvailability(bool available) {
 bool EditWorkspaceController::addEffectToClip(
     timeline::ClipId clip_id,
     const QString& effect_id) {
-    const auto effect_bytes = effect_id.toUtf8();
-    const auto effect_id_view = std::string_view(
-        effect_bytes.constData(), static_cast<std::size_t>(effect_bytes.size()));
-    auto instance = creative_suite::effects::makeDefaultInstance(effect_id_view);
-    if (instance.id.empty()) return false;
-    auto location = timeline_model_.locateClip(clip_id);
-    if (!location.has_value()) return false;
-    const auto target_track_id = timeline_model_.tracks()[location->track_index].track_id;
-    if (active_timeline_clip_id_ != clip_id ||
-        active_timeline_track_id_ != target_track_id) {
-        handleTimelineClipSelectionChanged(target_track_id, clip_id);
-        location = timeline_model_.locateClip(clip_id);
-        if (!location.has_value()) return false;
-    }
-    const auto clip = timeline_model_.tracks()[location->track_index]
-        .clips[location->clip_index];
-    if (!timeline::supportsClipEffects(clip.kind)) {
-        return false;
-    }
-    auto effects = clip.effects;
-    effects.push_back(std::move(instance));
-    const auto previous_selection = selected_effect_index_;
-    selected_effect_index_ = static_cast<int>(effects.size() - 1);
-    try {
-        const auto result = execute(application::SetClipEffectsCommand{
-            clip_id, std::move(effects)});
-        if (!result.changed()) {
-            selected_effect_index_ = previous_selection;
-            return false;
-        }
-        publishCommittedEdit(result, false, true, QStringLiteral("Effect added."));
-        return true;
-    } catch (const std::exception& error) {
-        selected_effect_index_ = previous_selection;
-        logging::Logger::instance().log(
-            logging::Level::Error, "timeline", "add_clip_effect", error.what(),
-            {{"clip_id", std::to_string(clip_id)},
-             {"effect_id", std::string(effect_id_view)}});
-        emit statusMessageRequested(QStringLiteral("Could not add the effect."));
-        return false;
-    }
+    static_cast<void>(clip_id);
+    static_cast<void>(effect_id);
+    emit statusMessageRequested(QStringLiteral("Add correction nodes in the Color workspace."));
+    return false;
 }
 
 bool EditWorkspaceController::addEffectToSelectedClip(const QString& effect_id) {
@@ -922,6 +886,16 @@ bool EditWorkspaceController::addEffectToSelectedClip(const QString& effect_id) 
 
 void EditWorkspaceController::selectClipEffect(int index) {
     selected_effect_index_ = index;
+    selected_effect_node_id_.reset();
+    const auto location = selectedTimelineClipLocation();
+    if (location && location->track_index < timeline_model_.trackCount() &&
+        location->clip_index < timeline_model_.clipCount(location->track_index)) {
+        const auto& clip = timeline_model_.tracks()[location->track_index]
+            .clips[location->clip_index];
+        const auto nodes = color::effectNodesInOrder(timeline::colorGraphForClip(clip));
+        if (index >= 0 && static_cast<std::size_t>(index) < nodes.size())
+            selected_effect_node_id_ = nodes[static_cast<std::size_t>(index)];
+    }
     selected_effect_parameter_id_ = "amount";
     updateInspector();
 }
@@ -944,16 +918,16 @@ void EditWorkspaceController::setSelectedClipEffectEnabled(int index, bool enabl
         index < 0 || static_cast<std::size_t>(index) >= clip.effects.size()) {
         return;
     }
-    const auto& current_effect = clip.effects[static_cast<std::size_t>(index)];
-    if (current_effect.enabled == enabled) return;
-
+    auto graph = timeline::colorGraphForClip(clip);
+    const auto effect_nodes = color::effectNodesInOrder(graph);
+    if (static_cast<std::size_t>(index) >= effect_nodes.size()) return;
     const auto clip_id = clip.clip_id;
-    auto effects = clip.effects;
-    effects[static_cast<std::size_t>(index)].enabled = enabled;
+    if (!color::setEffectEnabled(graph, effect_nodes[static_cast<std::size_t>(index)], enabled)) return;
     selected_effect_index_ = index;
+    selected_effect_node_id_ = effect_nodes[static_cast<std::size_t>(index)];
     try {
-        const auto result = execute(application::SetClipEffectsCommand{
-            clip_id, std::move(effects)});
+        const auto result = execute(application::SetClipColorGraphCommand{
+            clip_id, std::move(graph)});
         if (result.changed()) {
             publishCommittedEdit(
                 result, false, true,
@@ -966,59 +940,6 @@ void EditWorkspaceController::setSelectedClipEffectEnabled(int index, bool enabl
             {{"clip_id", std::to_string(clip_id)},
              {"effect_index", std::to_string(index)}});
         emit statusMessageRequested(QStringLiteral("Could not change the effect state."));
-    }
-}
-
-void EditWorkspaceController::moveSelectedClipEffect(int direction) {
-    const auto location = selectedTimelineClipLocation();
-    if (!location.has_value() || (direction != -1 && direction != 1)) return;
-    const auto& clip = timeline_model_.tracks()[location->track_index]
-        .clips[location->clip_index];
-    const auto target = selected_effect_index_ + direction;
-    if (selected_effect_index_ < 0 ||
-        static_cast<std::size_t>(selected_effect_index_) >= clip.effects.size() ||
-        target < 0 || static_cast<std::size_t>(target) >= clip.effects.size()) return;
-    auto effects = clip.effects;
-    std::swap(effects[static_cast<std::size_t>(selected_effect_index_)],
-              effects[static_cast<std::size_t>(target)]);
-    selected_effect_index_ = target;
-    try {
-        const auto result = execute(application::SetClipEffectsCommand{
-            clip.clip_id, std::move(effects)});
-        if (result.changed()) {
-            publishCommittedEdit(result, false, true, QStringLiteral("Effect order updated."));
-        }
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error, "timeline", "reorder_clip_effect", error.what(),
-            {{"clip_id", std::to_string(clip.clip_id)}});
-        emit statusMessageRequested(QStringLiteral("Could not reorder the effect."));
-    }
-}
-
-void EditWorkspaceController::removeSelectedClipEffect() {
-    const auto location = selectedTimelineClipLocation();
-    if (!location.has_value()) return;
-    const auto& clip = timeline_model_.tracks()[location->track_index]
-        .clips[location->clip_index];
-    if (selected_effect_index_ < 0 ||
-        static_cast<std::size_t>(selected_effect_index_) >= clip.effects.size()) return;
-    auto effects = clip.effects;
-    effects.erase(effects.begin() + selected_effect_index_);
-    selected_effect_index_ = effects.empty()
-        ? -1
-        : std::min(selected_effect_index_, static_cast<int>(effects.size() - 1));
-    try {
-        const auto result = execute(application::SetClipEffectsCommand{
-            clip.clip_id, std::move(effects)});
-        if (result.changed()) {
-            publishCommittedEdit(result, false, true, QStringLiteral("Effect removed."));
-        }
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error, "timeline", "remove_clip_effect", error.what(),
-            {{"clip_id", std::to_string(clip.clip_id)}});
-        emit statusMessageRequested(QStringLiteral("Could not remove the effect."));
     }
 }
 
@@ -1043,16 +964,13 @@ void EditWorkspaceController::applySelectedClipEffectParameter(double value) {
     if (!location.has_value() || !std::isfinite(value)) return;
     const auto& clip = timeline_model_.tracks()[location->track_index]
         .clips[location->clip_index];
-    if (selected_effect_index_ < 0 ||
-        static_cast<std::size_t>(selected_effect_index_) >= clip.effects.size()) return;
-    auto effects = clip.effects;
-    if (!creative_suite::effects::setParameterValue(
-            effects[static_cast<std::size_t>(selected_effect_index_)], selected_effect_parameter_id_, value)) {
-        return;
-    }
+    auto graph = timeline::colorGraphForClip(clip);
+    if (!selected_effect_node_id_ ||
+        !color::setEffectParameter(graph, *selected_effect_node_id_,
+            selected_effect_parameter_id_, value)) return;
     try {
-        const auto result = execute(application::SetClipEffectsCommand{
-            clip.clip_id, std::move(effects)});
+        const auto result = execute(application::SetClipColorGraphCommand{
+            clip.clip_id, std::move(graph)});
         if (result.changed()) {
             publishCommittedEdit(result, false, true, QStringLiteral("Effect updated."));
         }
@@ -1823,20 +1741,43 @@ void EditWorkspaceController::updateInspector() {
     refreshBackgroundInspector(transition_enabled ? nullptr : selected_clip);
     const bool effects_enabled = selected_clip != nullptr && !transition_enabled &&
         timeline::supportsClipEffects(selected_clip->kind);
+    const auto selected_graph = selected_clip != nullptr
+        ? timeline::colorGraphForClip(*selected_clip)
+        : color::makePassthroughGraph();
+    const auto effect_node_ids = effects_enabled
+        ? color::effectNodesInOrder(selected_graph)
+        : std::vector<color::NodeId>{};
     publishEffectTargetAvailability(effects_enabled);
     if (selected_clip != nullptr && selected_clip->clip_id != inspector_effect_clip_id_) {
         inspector_effect_clip_id_ = selected_clip->clip_id;
-        selected_effect_index_ = selected_clip->effects.empty() ? -1 : 0;
+        selected_effect_index_ = effect_node_ids.empty() ? -1 : 0;
+        selected_effect_node_id_ = effect_node_ids.empty()
+            ? std::optional<color::NodeId>{}
+            : std::optional<color::NodeId>{effect_node_ids.front()};
     }
     if (selected_clip == nullptr) {
         inspector_effect_clip_id_ = 0;
         selected_effect_index_ = -1;
+        selected_effect_node_id_.reset();
     }
-    if (selected_clip != nullptr && selected_effect_index_ >=
-        static_cast<int>(selected_clip->effects.size())) {
-        selected_effect_index_ = selected_clip->effects.empty()
-            ? -1
-            : static_cast<int>(selected_clip->effects.size() - 1);
+    if (selected_clip != nullptr && effects_enabled) {
+        const auto selected_node = selected_effect_node_id_
+            ? std::find(effect_node_ids.begin(), effect_node_ids.end(),
+                        *selected_effect_node_id_)
+            : effect_node_ids.end();
+        if (selected_node != effect_node_ids.end()) {
+            selected_effect_index_ = static_cast<int>(
+                std::distance(effect_node_ids.begin(), selected_node));
+        } else if (!effect_node_ids.empty()) {
+            selected_effect_index_ = std::clamp(
+                selected_effect_index_, 0,
+                static_cast<int>(effect_node_ids.size() - 1));
+            selected_effect_node_id_ =
+                effect_node_ids[static_cast<std::size_t>(selected_effect_index_)];
+        } else {
+            selected_effect_index_ = -1;
+            selected_effect_node_id_.reset();
+        }
     }
     if (ui_.effect_selection_hint != nullptr) {
         ui_.effect_selection_hint->setVisible(!effects_enabled);
@@ -1846,17 +1787,24 @@ void EditWorkspaceController::updateInspector() {
     }
     if (ui_.clip_effects_list != nullptr) {
         auto* list = ui_.clip_effects_list;
-        const auto effect_count = effects_enabled ? selected_clip->effects.size() : 0U;
+        const auto effect_count = effect_node_ids.size();
         bool rebuild = static_cast<std::size_t>(list->count()) != effect_count;
         if (!rebuild && effects_enabled) {
             for (std::size_t index = 0; index < effect_count; ++index) {
+                const auto* node = color::findNode(selected_graph, effect_node_ids[index]);
+                if (!node || !node->effect) {
+                    rebuild = true;
+                    break;
+                }
                 const auto* definition = creative_suite::effects::findDefinition(
-                    selected_clip->effects[index].id);
-                const auto expected = definition != nullptr
+                    node->effect->id);
+                const auto label = definition != nullptr
                     ? ::effects::translateCatalogLabel(QString::fromUtf8(
                           definition->name.data(),
                           static_cast<qsizetype>(definition->name.size())))
-                    : QString::fromStdString(selected_clip->effects[index].id);
+                    : QString::fromStdString(node->effect->id);
+                const auto expected = QStringLiteral("%1 [%2]").arg(label)
+                    .arg(static_cast<qulonglong>(node->id));
                 if (list->item(static_cast<int>(index))->text() != expected) {
                     rebuild = true;
                     break;
@@ -1867,7 +1815,10 @@ void EditWorkspaceController::updateInspector() {
         if (rebuild) {
             list->clear();
             if (effects_enabled) {
-                for (const auto& effect : selected_clip->effects) {
+                for (const auto node_id : effect_node_ids) {
+                    const auto* node = color::findNode(selected_graph, node_id);
+                    if (!node || !node->effect) continue;
+                    const auto& effect = *node->effect;
                     const auto* definition =
                         creative_suite::effects::findDefinition(effect.id);
                     auto* item = new QListWidgetItem(definition != nullptr
@@ -1875,6 +1826,10 @@ void EditWorkspaceController::updateInspector() {
                               definition->name.data(),
                               static_cast<qsizetype>(definition->name.size())))
                         : QString::fromStdString(effect.id), list);
+                    item->setText(QStringLiteral("%1 [%2]").arg(item->text())
+                        .arg(static_cast<qulonglong>(node_id)));
+                    item->setData(Qt::UserRole,
+                        QVariant::fromValue<qulonglong>(node_id));
                     item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
                     item->setCheckState(effect.enabled ? Qt::Checked : Qt::Unchecked);
                 }
@@ -1883,7 +1838,9 @@ void EditWorkspaceController::updateInspector() {
         if (effects_enabled) {
             for (std::size_t index = 0; index < effect_count; ++index) {
                 auto* item = list->item(static_cast<int>(index));
-                const auto& effect = selected_clip->effects[index];
+                const auto* node = color::findNode(selected_graph, effect_node_ids[index]);
+                if (!node || !node->effect) continue;
+                const auto& effect = *node->effect;
                 item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
                 item->setCheckState(effect.enabled ? Qt::Checked : Qt::Unchecked);
                 item->setForeground(effect.enabled
@@ -1893,13 +1850,14 @@ void EditWorkspaceController::updateInspector() {
         }
         list->setCurrentRow(effects_enabled ? selected_effect_index_ : -1);
     }
-    const bool has_selected_effect = effects_enabled && selected_effect_index_ >= 0 &&
-        static_cast<std::size_t>(selected_effect_index_) < selected_clip->effects.size();
+    const auto* selected_effect_node = selected_effect_node_id_
+        ? color::findNode(selected_graph, *selected_effect_node_id_) : nullptr;
+    const bool has_selected_effect = effects_enabled && selected_effect_node &&
+        selected_effect_node->type == color::NodeType::Effect && selected_effect_node->effect;
     const creative_suite::effects::ParameterDefinition* selected_parameter = nullptr;
     double selected_parameter_value = 0.0;
     if (has_selected_effect) {
-        const auto& instance = selected_clip->effects[
-            static_cast<std::size_t>(selected_effect_index_)];
+        const auto& instance = *selected_effect_node->effect;
         const auto* definition = creative_suite::effects::findDefinition(instance.id);
         if (definition != nullptr && !definition->parameters.empty()) {
             const auto found = std::find_if(definition->parameters.begin(), definition->parameters.end(),
@@ -1917,7 +1875,7 @@ void EditWorkspaceController::updateInspector() {
         selector->clear();
         if (has_selected_effect) {
             const auto* definition = creative_suite::effects::findDefinition(
-                selected_clip->effects[static_cast<std::size_t>(selected_effect_index_)].id);
+                selected_effect_node->effect->id);
             if (definition != nullptr) {
                 for (const auto& parameter : definition->parameters) {
                     const auto id = QString::fromUtf8(parameter.id.data(),
@@ -1930,18 +1888,6 @@ void EditWorkspaceController::updateInspector() {
                 selector->setVisible(definition->parameters.size() > 1);
             }
         } else selector->setVisible(false);
-    }
-    if (ui_.clip_effect_up != nullptr) {
-        ui_.clip_effect_up->setEnabled(has_selected_effect && selected_effect_index_ > 0);
-    }
-    if (ui_.clip_effect_down != nullptr) {
-        ui_.clip_effect_down->setEnabled(has_selected_effect &&
-            selected_clip != nullptr &&
-            static_cast<std::size_t>(selected_effect_index_ + 1) <
-                selected_clip->effects.size());
-    }
-    if (ui_.clip_effect_remove != nullptr) {
-        ui_.clip_effect_remove->setEnabled(has_selected_effect);
     }
     if (ui_.clip_effect_parameter_label != nullptr &&
         ui_.clip_effect_parameter_slider != nullptr &&
