@@ -431,6 +431,7 @@ private:
     QAction* effects_action_ = nullptr;
     std::array<std::vector<QAction*>, 5> workspace_menu_actions_;
     std::optional<application::TimelineCommandService::EditBatchId> audio_gain_batch_id_;
+    std::optional<application::TimelineCommandService::EditBatchId> color_grade_edit_batch_id_;
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
     application::EditorSession editor_session_;
     std::unique_ptr<playback::PlaybackController> playback_controller_;

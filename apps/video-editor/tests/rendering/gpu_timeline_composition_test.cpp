@@ -16,6 +16,7 @@
 #include <QThread>
 #include <QTemporaryDir>
 #include <QFileInfo>
+#include <QFile>
 #include <QEventLoop>
 #include <QTimer>
 #include <QOpenGLContext>
@@ -377,6 +378,8 @@ void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec ima
 
 void adjustmentExport(QOffscreenSurface* surface, const QString& directory,
     const media::VideoFramePtr& source_frame) {
+    logging::Logger::instance().initialize(
+        QFileInfo(directory).filesystemFilePath() / "gpu-adjustment-logs");
     const auto source_path = directory + "/gpu-adjustment-source.png";
     QImage source_image(source_frame->rgba_pixels.data(), source_frame->width, source_frame->height,
         source_frame->stride, QImage::Format_RGBA8888);
@@ -449,8 +452,18 @@ void adjustmentExport(QOffscreenSurface* surface, const QString& directory,
     rendering::OfflineExportMetrics metrics;
     options.metrics_callback = [&](const auto& completed) { metrics = completed; };
     rendering::OfflineExportRenderer::render(job, canceled, {}, options);
+    std::string log_details;
+    if (metrics.cpu_frames != 0) {
+        QFile log_file(QString::fromStdString(logging::Logger::instance().log_path().string()));
+        if (log_file.open(QIODevice::ReadOnly))
+            log_details = log_file.readAll().toStdString();
+    }
     require(prepared == 4 && metrics.gpu_frames == 4 && metrics.cpu_frames == 0,
-        "Offline export did not keep Adjustment processing on the selected GPU backend.");
+        "Offline export did not keep Adjustment processing on the selected GPU backend "
+        "(prepared=" + std::to_string(prepared) + ", gpu=" +
+        std::to_string(metrics.gpu_frames) + ", cpu=" + std::to_string(metrics.cpu_frames) +
+        ", fallback=" + std::to_string(metrics.fallback_frames) + ", gpu_failures=" +
+        std::to_string(metrics.gpu_failures) + ", log=" + log_details + ").");
 }
 
 void gradedPreviewParity(QOffscreenSurface* surface, playback::CompositionLayerSpec image) {

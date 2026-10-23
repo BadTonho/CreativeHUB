@@ -11,6 +11,7 @@
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/audio/ui/audio_workspace.h"
+#include "workspaces/color/ui/color_workspace.h"
 #include "ui/workspace/workspace_host.h"
 
 #include <QAction>
@@ -1261,6 +1262,11 @@ void MainWindow::handlePlaybackEvent(
             }
         } else if constexpr (std::is_same_v<Event, playback::PlaybackStillCaptureEvent>) {
             handleColorStillCapture(value);
+        } else if constexpr (std::is_same_v<Event, playback::PlaybackScopeFrameEvent>) {
+            if (color_workspace_ != nullptr)
+                color_workspace_->acceptScopeFrame(value.request_id, value.frame,
+                    value.timeline_frame, value.composition_revision,
+                    value.playback_generation);
         }
     }, event);
 }

@@ -9,8 +9,14 @@ processing, middle-drag to pan, and edit mixer weights. The effect-type selector
 and Add Effect, Add Branch, On/Off, and Remove controls are temporarily hidden
 pending relocation; their existing actions remain wired. Removing a mixer
 retains its first input as the output path. Visible graph edits and Edit
-Inspector parameter/enabled-state edits use shared Timeline Undo/Redo. An RGB
-waveform samples the displayed frame on a worker at a bounded rate. Leaving
+Inspector parameter/enabled-state edits use shared Timeline Undo/Redo. Lift,
+Gamma, Gain and Offset each have an RGB wheel and editable R/G/B values; a drag
+is one shared history edit. Contrast, pivot, saturation, temperature and tint
+remain scalar controls. The combined RGB Waveform and RGB Parade use the
+composed frame, a normalized 0–100% scale, channel labels and a grid. CPU RGBA
+is sampled directly; GPU RGBA readback is asynchronous, limited to one request
+and performed on the playback worker. Results for stale frames or projects are
+discarded, and the scope shows an empty state when there is no frame. Leaving
 Color restores the previous dock arrangement. See the
 [Color roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
@@ -846,7 +852,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 34 format. Linked video-audio clips can be
+the current `.csp` version 35 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Right-clicking a video or image clip offers
 **Open in Fusion** and opens the selected clip's node graph. A video with linked

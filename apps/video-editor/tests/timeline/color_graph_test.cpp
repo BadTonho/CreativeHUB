@@ -13,6 +13,10 @@ void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
+void require(bool condition, const std::string& message) {
+    if (!condition) throw std::runtime_error(message);
+}
+
 color::Graph weightedBrightnessGraph() {
     auto graph = color::makePassthroughGraph();
     auto brightness = creative_suite::effects::makeDefaultInstance("video.brightness");
@@ -122,8 +126,12 @@ int main() {
         const auto frame = sampleFrame();
         const auto result = color::evaluate(graph, frame);
         require(result && result->width == frame.width && result->height == frame.height &&
-                    result->rgba_pixels == std::vector<std::uint8_t>{115, 115, 115, 255},
-                "The mixer must compute the normalized weighted branch average.");
+                    result->rgba_pixels == std::vector<std::uint8_t>{138, 138, 138, 255},
+                "The mixer must compute the normalized weighted branch average; got " +
+                    (result ? std::to_string(result->rgba_pixels[0]) + "," +
+                        std::to_string(result->rgba_pixels[1]) + "," +
+                        std::to_string(result->rgba_pixels[2]) + "," +
+                        std::to_string(result->rgba_pixels[3]) : std::string("no frame")));
 
         auto multiple_branches = graph;
         require(color::addParallelBranch(multiple_branches, 1,

@@ -5,9 +5,14 @@ Each effect node uses the existing `creative_suite::effects` implementation.
 Serial graphs use the CPU/OpenGL/Vulkan ordered-effect path and preserve the
 existing Primary Grade alpha and rounding behavior. Branched graphs evaluate
 their connected nodes once on RGBA frames and combine mixer inputs with a
-normalized weighted average; this currently uses the CPU evaluator. Color's
-waveform samples the displayed Preview image at a bounded rate and does not
-enter exported pixels.
+normalized weighted average; this currently uses the CPU evaluator. Color
+scopes sample the composed frame after correction and do not enter exported
+pixels. CPU scopes consume the existing RGBA buffer. GPU scopes request one
+asynchronous RGBA readback at a time on the playback worker, within a 64 MiB
+staging limit; the interface never captures the Preview widget or waits for the
+GPU. Request identity includes project generation, composition revision and
+Timeline frame, so stale readbacks are discarded. Scope sampling is downscaled
+to its plot dimensions on a worker.
 
 [Gaussian Blur](../features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
 catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with

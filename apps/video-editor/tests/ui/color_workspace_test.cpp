@@ -9,6 +9,7 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QListWidget>
+#include <QMouseEvent>
 #include <QMetaObject>
 #include <QPushButton>
 #include <QThread>
@@ -32,12 +33,15 @@ int main(int argc, char** argv) {
         ui::ColorWorkspace workspace;
         auto graph = color::makePassthroughGraph();
         int edits = 0;
+        int grade_batches_started = 0;
+        int grade_batches_finished = 0;
         workspace.setEffectsChangedHandler([&](timeline::ClipId id, color::Graph updated) {
             require(id == 7, "Color must edit the selected clip identity.");
             graph = std::move(updated);
             ++edits;
-            workspace.setClips({{7, QStringLiteral("Shot A")}}, 7, graph);
         });
+        workspace.setGradeEditBatchHandlers([&] { ++grade_batches_started; },
+            [&] { ++grade_batches_finished; });
         workspace.setClips({{7, QStringLiteral("Shot A")}}, 7, graph);
         auto* add = workspace.findChild<QPushButton*>("colorAddNodeButton");
         auto* add_branch = workspace.findChild<QPushButton*>("colorAddParallelBranchButton");
@@ -45,7 +49,8 @@ int main(int argc, char** argv) {
         auto* remove = workspace.findChild<QPushButton*>("colorRemoveNodeButton");
         auto* new_type = workspace.findChild<QComboBox*>("colorNewNodeType");
         auto* action_controls = workspace.findChild<QWidget*>("colorNodeActionControls");
-        auto* nodes = workspace.findChild<ui::ColorNodeCanvas*>("colorNodeCanvas");
+        auto* nodes = static_cast<ui::ColorNodeCanvas*>(
+            workspace.findChild<QWidget*>("colorNodeCanvas"));
         require(add && add_branch && toggle && remove && new_type && action_controls && nodes,
                 "Color graph controls must exist.");
         require(action_controls->isHidden(),
@@ -57,8 +62,8 @@ int main(int argc, char** argv) {
         require(color::validate(graph) && graph.nodes.size() == 3 && added_node &&
                 added_node->effect && added_node->effect->id == "video.primary_grade" && edits == 1,
                 "Adding a correction must create a Color effect node.");
-        auto* red = workspace.findChild<QDoubleSpinBox*>("colorParameter_red_gain");
-        require(red != nullptr, "Primary Grade must expose red gain.");
+        auto* red = workspace.findChild<QDoubleSpinBox*>("colorWheel_gain_r_value");
+        require(red != nullptr, "Primary Grade must expose editable red gain in its wheel.");
         red->setValue(145);
         require(QMetaObject::invokeMethod(red, "editingFinished"),
                 "Red gain edit must be committed.");
@@ -68,8 +73,25 @@ int main(int argc, char** argv) {
         require(edited_node && edited_node->effect &&
                     creative_suite::effects::parameterValue(*edited_node->effect, "red_gain") == 145,
                 "Primary Grade parameters must update the selected graph node.");
-        require(red->isHidden(),
-                "Rebuilt controls must hide the old spin box before deferred deletion.");
+        require(grade_batches_started == 1 && grade_batches_finished == 1,
+                "An RGB channel edit must finish one shared edit batch.");
+        require(!red->isHidden() && red->value() == 145,
+                "Editing an RGB channel must keep the active wheel control visible.");
+        auto* gain_disk = workspace.findChild<QWidget*>("colorWheel_gain_disk");
+        require(gain_disk != nullptr, "The Primary Grade balance wheel must exist.");
+        const QPointF wheel_start(78, 54);
+        const QPointF wheel_end(74, 30);
+        QMouseEvent press(QEvent::MouseButtonPress, wheel_start, Qt::LeftButton,
+            Qt::LeftButton, Qt::NoModifier);
+        QMouseEvent move(QEvent::MouseMove, wheel_end, Qt::NoButton,
+            Qt::LeftButton, Qt::NoModifier);
+        QMouseEvent release(QEvent::MouseButtonRelease, wheel_end, Qt::LeftButton,
+            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(gain_disk, &press);
+        QApplication::sendEvent(gain_disk, &move);
+        QApplication::sendEvent(gain_disk, &release);
+        require(grade_batches_started == 2 && grade_batches_finished == 2 && edits >= 3,
+                "Dragging a color wheel must send continuous edits inside one batch.");
         add_branch->click();
         require(color::validate(graph) &&
                     std::count_if(graph.nodes.begin(), graph.nodes.end(), [](const auto& node) {
@@ -152,8 +174,27 @@ int main(int argc, char** argv) {
             application.processEvents();
             QThread::msleep(10);
         }
-        require(!waveform->pixmap().isNull() && waveform->pixmap().size() == QSize(320, 256),
-                "Waveform must process the displayed frame asynchronously at bounded resolution.");
+        require(!waveform->pixmap().isNull() && waveform->pixmap().size() == QSize(480, 256),
+                "Waveform must process the composed RGBA frame asynchronously at bounded resolution.");
+        auto* scope_mode = workspace.findChild<QComboBox*>("colorScopeMode");
+        require(scope_mode && scope_mode->count() == 2 &&
+                    scope_mode->itemData(1).toString() == QStringLiteral("parade"),
+                "Scopes must offer RGB waveform and RGB Parade modes.");
+        scope_mode->setCurrentIndex(1);
+        timeout.restart();
+        while (waveform->pixmap().isNull() && timeout.elapsed() < 2000) {
+            application.processEvents();
+            QThread::msleep(10);
+        }
+        require(!waveform->pixmap().isNull(), "RGB Parade must render the current frame.");
+        viewer->setFrame(rendering::PreviewFramePayload{});
+        timeout.restart();
+        while (waveform->text() != QStringLiteral("No frame") && timeout.elapsed() < 500) {
+            application.processEvents();
+            QThread::msleep(10);
+        }
+        require(waveform->text() == QStringLiteral("No frame"),
+                "Scopes must show their empty state when no composed frame is available.");
         workspace.setActive(false);
         return 0;
     } catch (const std::exception& error) {

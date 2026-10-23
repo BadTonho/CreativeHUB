@@ -16,13 +16,24 @@ constexpr std::array<ParameterDefinition, 1> contrast_parameters{{
     {"amount", "Contrast", 0.0, 200.0, 100.0, 1.0}}};
 constexpr std::array<ParameterDefinition, 1> saturation_parameters{{
     {"amount", "Saturation", 0.0, 200.0, 100.0, 1.0}}};
-constexpr std::array<ParameterDefinition, 6> primary_grade_parameters{{
-    {"brightness", "Brightness", -100.0, 100.0, 0.0, 1.0},
-    {"contrast", "Contrast", 0.0, 200.0, 100.0, 1.0},
-    {"saturation", "Saturation", 0.0, 200.0, 100.0, 1.0},
+constexpr std::array<ParameterDefinition, 17> primary_grade_parameters{{
+    {"lift_red", "Lift red", -100.0, 100.0, 0.0, 1.0},
+    {"lift_green", "Lift green", -100.0, 100.0, 0.0, 1.0},
+    {"lift_blue", "Lift blue", -100.0, 100.0, 0.0, 1.0},
+    {"gamma_red", "Gamma red", 25.0, 400.0, 100.0, 1.0},
+    {"gamma_green", "Gamma green", 25.0, 400.0, 100.0, 1.0},
+    {"gamma_blue", "Gamma blue", 25.0, 400.0, 100.0, 1.0},
     {"red_gain", "Red gain", 0.0, 200.0, 100.0, 1.0},
     {"green_gain", "Green gain", 0.0, 200.0, 100.0, 1.0},
-    {"blue_gain", "Blue gain", 0.0, 200.0, 100.0, 1.0}}};
+    {"blue_gain", "Blue gain", 0.0, 200.0, 100.0, 1.0},
+    {"offset_red", "Offset red", -100.0, 100.0, 0.0, 1.0},
+    {"offset_green", "Offset green", -100.0, 100.0, 0.0, 1.0},
+    {"offset_blue", "Offset blue", -100.0, 100.0, 0.0, 1.0},
+    {"contrast", "Contrast", 0.0, 200.0, 100.0, 1.0},
+    {"saturation", "Saturation", 0.0, 200.0, 100.0, 1.0},
+    {"pivot", "Pivot", 0.0, 100.0, 50.0, 1.0},
+    {"temperature", "Temperature", -100.0, 100.0, 0.0, 1.0},
+    {"tint", "Tint", -100.0, 100.0, 0.0, 1.0}}};
 
 constexpr std::array<Definition, 5> definitions{{
     {"video.grayscale", "Grayscale", "video", grayscale_parameters},
@@ -70,10 +81,48 @@ bool validColorAdjustment(const ColorAdjustmentParameters& parameters) noexcept 
         parameters.saturation_percent >= 0.0 && parameters.saturation_percent <= 200.0 &&
         std::isfinite(parameters.red_gain_percent) && parameters.red_gain_percent >= 0.0 && parameters.red_gain_percent <= 200.0 &&
         std::isfinite(parameters.green_gain_percent) && parameters.green_gain_percent >= 0.0 && parameters.green_gain_percent <= 200.0 &&
-        std::isfinite(parameters.blue_gain_percent) && parameters.blue_gain_percent >= 0.0 && parameters.blue_gain_percent <= 200.0;
+        std::isfinite(parameters.blue_gain_percent) && parameters.blue_gain_percent >= 0.0 && parameters.blue_gain_percent <= 200.0 &&
+        std::isfinite(parameters.lift_red) && parameters.lift_red >= -100.0 && parameters.lift_red <= 100.0 &&
+        std::isfinite(parameters.lift_green) && parameters.lift_green >= -100.0 && parameters.lift_green <= 100.0 &&
+        std::isfinite(parameters.lift_blue) && parameters.lift_blue >= -100.0 && parameters.lift_blue <= 100.0 &&
+        std::isfinite(parameters.gamma_red) && parameters.gamma_red >= 25.0 && parameters.gamma_red <= 400.0 &&
+        std::isfinite(parameters.gamma_green) && parameters.gamma_green >= 25.0 && parameters.gamma_green <= 400.0 &&
+        std::isfinite(parameters.gamma_blue) && parameters.gamma_blue >= 25.0 && parameters.gamma_blue <= 400.0 &&
+        std::isfinite(parameters.offset_red) && parameters.offset_red >= -100.0 && parameters.offset_red <= 100.0 &&
+        std::isfinite(parameters.offset_green) && parameters.offset_green >= -100.0 && parameters.offset_green <= 100.0 &&
+        std::isfinite(parameters.offset_blue) && parameters.offset_blue >= -100.0 && parameters.offset_blue <= 100.0 &&
+        std::isfinite(parameters.pivot_percent) && parameters.pivot_percent >= 0.0 && parameters.pivot_percent <= 100.0 &&
+        std::isfinite(parameters.temperature) && parameters.temperature >= -100.0 && parameters.temperature <= 100.0 &&
+        std::isfinite(parameters.tint) && parameters.tint >= -100.0 && parameters.tint <= 100.0;
+}
+
+ColorAdjustmentParameters primaryGradeParameters(const EffectInstance& effect) noexcept {
+    ColorAdjustmentParameters parameters;
+    parameters.contrast_percent = parameterValue(effect, "contrast");
+    parameters.saturation_percent = parameterValue(effect, "saturation");
+    parameters.red_gain_percent = parameterValue(effect, "red_gain");
+    parameters.green_gain_percent = parameterValue(effect, "green_gain");
+    parameters.blue_gain_percent = parameterValue(effect, "blue_gain");
+    parameters.lift_red = parameterValue(effect, "lift_red");
+    parameters.lift_green = parameterValue(effect, "lift_green");
+    parameters.lift_blue = parameterValue(effect, "lift_blue");
+    parameters.gamma_red = parameterValue(effect, "gamma_red");
+    parameters.gamma_green = parameterValue(effect, "gamma_green");
+    parameters.gamma_blue = parameterValue(effect, "gamma_blue");
+    parameters.offset_red = parameterValue(effect, "offset_red");
+    parameters.offset_green = parameterValue(effect, "offset_green");
+    parameters.offset_blue = parameterValue(effect, "offset_blue");
+    parameters.pivot_percent = parameterValue(effect, "pivot");
+    parameters.temperature = parameterValue(effect, "temperature");
+    parameters.tint = parameterValue(effect, "tint");
+    return parameters;
 }
 
 }  // namespace
+
+bool isValidColorAdjustment(const ColorAdjustmentParameters& parameters) noexcept {
+    return validColorAdjustment(parameters);
+}
 
 std::span<const Definition> builtInEffects() noexcept {
     return definitions;
@@ -155,14 +204,7 @@ std::optional<std::vector<ColorAdjustmentParameters>> colorAdjustmentPasses(
         else if (effect.id == "video.contrast") pass.contrast_percent = amount;
         else if (effect.id == "video.saturation") pass.saturation_percent = amount;
         else if (effect.id == "video.grayscale") pass.saturation_percent = 100.0 - amount;
-        else if (effect.id == "video.primary_grade") {
-            pass.brightness = parameterValue(effect, "brightness");
-            pass.contrast_percent = parameterValue(effect, "contrast");
-            pass.saturation_percent = parameterValue(effect, "saturation");
-            pass.red_gain_percent = parameterValue(effect, "red_gain");
-            pass.green_gain_percent = parameterValue(effect, "green_gain");
-            pass.blue_gain_percent = parameterValue(effect, "blue_gain");
-        }
+        else if (effect.id == "video.primary_grade") pass = primaryGradeParameters(effect);
         else return std::nullopt;
         result.push_back(pass);
     }
@@ -179,6 +221,8 @@ bool applyStack(
         if (!effect.enabled) continue;
         const auto amount = parameterValue(effect, "amount");
         const auto id = std::string_view(effect.id);
+        const auto primary_grade = id == "video.primary_grade"
+            ? primaryGradeParameters(effect) : ColorAdjustmentParameters{};
         for (int y = 0; y < frame.height; ++y) {
             auto* pixel = frame.rgba_pixels.data() +
                 static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
@@ -187,15 +231,8 @@ bool applyStack(
                 const double green = pixel[1];
                 const double blue = pixel[2];
                 if (id == "video.primary_grade") {
-                    const ColorAdjustmentParameters parameters{
-                        parameterValue(effect, "brightness"),
-                        parameterValue(effect, "contrast"),
-                        parameterValue(effect, "saturation"),
-                        parameterValue(effect, "red_gain"),
-                        parameterValue(effect, "green_gain"),
-                        parameterValue(effect, "blue_gain")};
                     const auto adjusted = colorAdjustmentRgb(
-                        {red / 255.0, green / 255.0, blue / 255.0}, parameters);
+                        {red / 255.0, green / 255.0, blue / 255.0}, primary_grade);
                     pixel[0] = adjusted[0]; pixel[1] = adjusted[1]; pixel[2] = adjusted[2];
                 } else if (id == "video.grayscale") {
                     const double luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
@@ -236,7 +273,13 @@ ProcessingResult applyColorAdjustment(
         parameters.saturation_percent == 100.0 &&
         parameters.red_gain_percent == 100.0 &&
         parameters.green_gain_percent == 100.0 &&
-        parameters.blue_gain_percent == 100.0) {
+        parameters.blue_gain_percent == 100.0 &&
+        parameters.lift_red == 0.0 && parameters.lift_green == 0.0 &&
+        parameters.lift_blue == 0.0 && parameters.gamma_red == 100.0 &&
+        parameters.gamma_green == 100.0 && parameters.gamma_blue == 100.0 &&
+        parameters.offset_red == 0.0 && parameters.offset_green == 0.0 &&
+        parameters.offset_blue == 0.0 && parameters.pivot_percent == 50.0 &&
+        parameters.temperature == 0.0 && parameters.tint == 0.0) {
         return ProcessingResult::Completed;
     }
 

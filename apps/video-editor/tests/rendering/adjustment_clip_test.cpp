@@ -157,7 +157,7 @@ void timelineUi() {
     const QPointF point(widget.contentXForFrame(30), widget.trackBounds(0).center().y());
     CS_TEST_CHECK(send("video.adjustment_clip", point) && drops == 1);
     widget.setTracks(model.tracks());
-    CS_TEST_CHECK(send("video.grayscale", widget.clipBounds({0, 0}).center()) && effect_drops == 1);
+    CS_TEST_CHECK(!send("video.grayscale", widget.clipBounds({0, 0}).center()) && effect_drops == 0);
     CS_TEST_CHECK(!send("video.adjustment_clip", point) && drops == 1);
     CS_TEST_CHECK(!send("video.adjustment_clip", {point.x(), widget.trackBounds(1).center().y()}));
     const auto center = widget.clipBounds({0, 0}).center();

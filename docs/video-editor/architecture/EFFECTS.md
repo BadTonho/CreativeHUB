@@ -154,14 +154,17 @@ Color evaluator. Disabled instances pass their input through; active instances
 retain graph-defined order. Filter parameters, enabled states, connections,
 mixer weights and positions are Timeline project data; caches and temporary
 preview state are not added by this library. The Video Editor persists graphs
-in CSP v34 as described in [PROJECT.md](PROJECT.md). Versions 1–33 migrate
+in CSP v35 as described in [PROJECT.md](PROJECT.md). Versions 1–34 migrate
 ordered effect stacks into serial graphs.
 
-`applyColorAdjustment()` is a fused processing entry point for applications
-whose Color Adjustment combines brightness (-100 to 100), contrast (0–200%),
-and saturation (0–200%). It applies brightness, contrast around 0.5, and
-Rec. 709 saturation in one pixel pass and rounds RGB only at the end. This
-preserves Motion Studio's existing pixel result; it is separate from the
+`applyColorAdjustment()` is a fused processing entry point for Color
+Adjustment. It applies normalized RGB offset, contrast around the configured
+pivot, relative temperature/tint, shadow-weighted per-channel Lift,
+per-channel Gamma, Rec. 709 saturation and per-channel Gain in one pixel pass.
+Color values are normalized encoded RGB; temperature and tint do not represent
+Kelvin or physical color science. The expanded `video.primary_grade` defaults
+are neutral and preserve the existing RGB output. This preserves Motion
+Studio's previous fused correction result; it is separate from the
 Video Editor's independently ordered brightness, contrast, and saturation
 filters in `applyStack()`, which quantize after each filter. The fused call
 preserves alpha and row padding, validates its frame and parameters before
@@ -172,7 +175,7 @@ callback propagate to the caller.
 
 ## Verification
 
-`libs/tests/effects_test.cpp` covers neutral values, parameter bounds,
+`libs/tests/effects_test.cpp` covers neutral values, all Primary Grade bounds,
 grayscale, alpha and stride preservation, stack order, enabled-state defaults,
 disabled-instance skipping, repeated instances, invalid IDs, malformed RGBA
 frames, fused Color Adjustment compatibility, and cancellation. Motion Studio consumer coverage lives in

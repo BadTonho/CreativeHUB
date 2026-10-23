@@ -69,6 +69,15 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "Dynamic Effects catalog labels were not translated.\n");
         return 1;
     }
+    if (QCoreApplication::translate("ColorWorkspace", "RGB Parade") !=
+            QStringLiteral("Parada RGB") ||
+        QCoreApplication::translate("ColorWorkspace", "Offset") !=
+            QStringLiteral("Deslocamento") ||
+        ::effects::translateCatalogLabel(QStringLiteral("Lift red")) !=
+            QStringLiteral("Eleva\u00e7\u00e3o vermelha")) {
+        std::fprintf(stderr, "Primary Grade and scope labels were not translated.\n");
+        return 1;
+    }
     if (QCoreApplication::translate("RenderWorkspace", "A future source string") !=
             QStringLiteral("A future source string")) {
         std::fprintf(stderr, "Missing catalog entries must fall back to English source text.\n");

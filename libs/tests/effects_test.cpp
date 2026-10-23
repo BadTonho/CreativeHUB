@@ -74,6 +74,9 @@ void applyPreviousMotionColorAdjustment(
             red = luma + (red - luma) * saturation;
             green = luma + (green - luma) * saturation;
             blue = luma + (blue - luma) * saturation;
+            red *= parameters.red_gain_percent / 100.0;
+            green *= parameters.green_gain_percent / 100.0;
+            blue *= parameters.blue_gain_percent / 100.0;
             pixel[0] = static_cast<std::uint8_t>(
                 std::lround(std::clamp(red, 0.0, 1.0) * 255.0));
             pixel[1] = static_cast<std::uint8_t>(
@@ -198,11 +201,30 @@ int main(int argc, char** argv) {
     if (argc > 1 && std::string_view(argv[1]) == "--primary-grade-only") {
         using namespace creative_suite::effects;
         auto grade = makeDefaultInstance("video.primary_grade");
-        require(isValid(grade) && grade.parameters.size() == 6 &&
+        const auto* definition = findDefinition("video.primary_grade");
+        require(definition != nullptr, "Primary Grade definition is missing");
+        for (const auto& parameter : definition->parameters) {
+            auto at_minimum = grade;
+            auto at_maximum = grade;
+            auto below_minimum = grade;
+            auto above_maximum = grade;
+            require(setParameterValue(at_minimum, parameter.id, parameter.minimum) &&
+                    setParameterValue(at_maximum, parameter.id, parameter.maximum) &&
+                    !setParameterValue(below_minimum, parameter.id, parameter.minimum - 1.0) &&
+                    !setParameterValue(above_maximum, parameter.id, parameter.maximum + 1.0),
+                "Primary Grade control bounds changed");
+        }
+        require(isValid(grade) && grade.parameters.size() == 17 &&
                 setParameterValue(grade, "red_gain", 150.0) &&
                 setParameterValue(grade, "green_gain", 50.0) &&
                 setParameterValue(grade, "blue_gain", 0.0) &&
-                !setParameterValue(grade, "blue_gain", 201.0),
+                !setParameterValue(grade, "blue_gain", 201.0) &&
+                setParameterValue(grade, "lift_red", -100.0) &&
+                setParameterValue(grade, "gamma_green", 400.0) &&
+                setParameterValue(grade, "offset_blue", 100.0) &&
+                setParameterValue(grade, "pivot", 0.0) &&
+                setParameterValue(grade, "temperature", -100.0) &&
+                setParameterValue(grade, "tint", 100.0),
                 "Primary Grade parameter contract failed");
         auto direct = colorFrame();
         auto prepared = direct;
@@ -218,6 +240,49 @@ int main(int argc, char** argv) {
                 require(direct.rgba_pixels[std::size_t(y) * direct.stride + x * 4 + 3] ==
                     original.rgba_pixels[std::size_t(y) * original.stride + x * 4 + 3],
                     "Primary Grade changed alpha");
+        auto neutral = makeDefaultInstance("video.primary_grade");
+        auto neutral_frame = original;
+        require(applyStack(neutral_frame, std::span<const EffectInstance>(&neutral, 1)) &&
+                    neutral_frame.rgba_pixels == original.rgba_pixels,
+                "Neutral Primary Grade changed RGB, alpha, or row padding.");
+        ColorAdjustmentParameters legacy{18.0, 132.0, 74.0, 145.0, 82.0, 112.0};
+        auto previous_motion_result = original;
+        auto current_motion_result = original;
+        applyPreviousMotionColorAdjustment(previous_motion_result, legacy);
+        require(applyColorAdjustment(current_motion_result, legacy) == ProcessingResult::Completed &&
+                    current_motion_result.rgba_pixels == previous_motion_result.rgba_pixels,
+                "Expanded neutral controls changed Motion's previous fused correction result.");
+        auto migrated_legacy_grade = ColorAdjustmentParameters{};
+        migrated_legacy_grade.offset_red = legacy.brightness;
+        migrated_legacy_grade.offset_green = legacy.brightness;
+        migrated_legacy_grade.offset_blue = legacy.brightness;
+        migrated_legacy_grade.contrast_percent = legacy.contrast_percent;
+        migrated_legacy_grade.saturation_percent = legacy.saturation_percent;
+        migrated_legacy_grade.red_gain_percent = legacy.red_gain_percent;
+        migrated_legacy_grade.green_gain_percent = legacy.green_gain_percent;
+        migrated_legacy_grade.blue_gain_percent = legacy.blue_gain_percent;
+        auto old_grade_result = original;
+        auto migrated_grade_result = original;
+        applyPreviousMotionColorAdjustment(old_grade_result, legacy);
+        require(applyColorAdjustment(migrated_grade_result, migrated_legacy_grade) ==
+                    ProcessingResult::Completed &&
+                    migrated_grade_result.rgba_pixels == old_grade_result.rgba_pixels,
+                "Migrated Primary Grade offsets changed the six-parameter output.");
+        auto affine_only = neutral;
+        require(setParameterValue(affine_only, "contrast", 0.0) &&
+                    setParameterValue(affine_only, "pivot", 25.0) &&
+                    setParameterValue(affine_only, "offset_red", 25.0) &&
+                    setParameterValue(affine_only, "temperature", 50.0),
+                "Primary Grade affine parameters were rejected.");
+        auto affine_passes = colorAdjustmentPasses(std::span<const EffectInstance>(&affine_only, 1));
+        auto affine_stack_frame = original;
+        auto affine_fused_frame = original;
+        require(affine_passes && applyStack(affine_stack_frame,
+                    std::span<const EffectInstance>(&affine_only, 1)) &&
+                    applyColorAdjustment(affine_fused_frame, affine_passes->front()) ==
+                        ProcessingResult::Completed &&
+                    affine_stack_frame.rgba_pixels == affine_fused_frame.rgba_pixels,
+                "CPU Primary Grade and GPU prepared parameters diverged.");
         auto invalid = passes->front();
         invalid.red_gain_percent = std::numeric_limits<double>::quiet_NaN();
         require(applyColorAdjustment(prepared, invalid) == ProcessingResult::InvalidInput,

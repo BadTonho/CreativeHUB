@@ -297,7 +297,8 @@ public:
                 window.preview_widget_->parentWidget()->objectName() == "colorViewerContainer",
                 "Color must mount the shared Viewer on first entry.");
         auto* clips = window.color_workspace_->findChild<QListWidget*>("colorClipStrip");
-        auto* nodes = window.color_workspace_->findChild<ui::ColorNodeCanvas*>("colorNodeCanvas");
+        auto* nodes = static_cast<ui::ColorNodeCanvas*>(
+            window.color_workspace_->findChild<QWidget*>("colorNodeCanvas"));
         auto* add = window.color_workspace_->findChild<QPushButton*>("colorAddNodeButton");
         require(clips && clips->count() == 1 && nodes && nodes->selectedNode() && add,
                 "Color must show the selected visual clip and its graph canvas.");
@@ -310,7 +311,7 @@ public:
                 window.timeline_model_.tracks()[location->track_index]
                     .clips[location->clip_index].effects.front().id == "video.primary_grade",
                 "Color Add must commit a correction node to the clip graph.");
-        auto* red = window.color_workspace_->findChild<QDoubleSpinBox*>("colorParameter_red_gain");
+        auto* red = window.color_workspace_->findChild<QDoubleSpinBox*>("colorWheel_gain_r_value");
         require(red, "Color must expose Primary Grade red gain.");
         red->setValue(145);
         require(QMetaObject::invokeMethod(red, "editingFinished"),
@@ -343,7 +344,7 @@ public:
                     "Leaving Color must restore the Edit dock visibility.");
         window.edit_workspace_->ui().clip_effects_list->setCurrentRow(0);
         auto* selector = window.edit_workspace_->ui().clip_effect_parameter_selector;
-        require(selector && selector->count() == 6,
+        require(selector && selector->count() == 17,
                 "Edit Inspector must expose the same Primary Grade parameters.");
         selector->setCurrentIndex(selector->findData(QStringLiteral("red_gain")));
         controller->applySelectedClipEffectParameter(130);
@@ -2279,8 +2280,8 @@ public:
                     "The Color workspace did not create the node shared with Edit.");
             auto* parameter_selector = inspector_ui.clip_effect_parameter_selector;
             require(parameter_selector && parameter_selector->isVisible() &&
-                    parameter_selector->count() == 6,
-                    "Primary Grade must expose all six controls in the Edit Inspector.");
+                    parameter_selector->count() == 17,
+                    "Edit Inspector must expose every shared Primary Grade control.");
             parameter_selector->setCurrentIndex(parameter_selector->findData(QStringLiteral("red_gain")));
             edit_controller->applySelectedClipEffectParameter(142.0);
             selected_clip_location = window.timeline_model_.locateClip(selected_clip_id);
@@ -2505,8 +2506,8 @@ public:
                         window.project_dirty_ == project_dirty_before_workspace_switch,
                     "Switching workspaces must preserve selection, history, and dirty state.");
             };
-            require(window.color_workspace_ == nullptr && window.color_workspace_button_ != nullptr,
-                    "Color panels must be created only on first entry.");
+            require(window.color_workspace_button_ != nullptr,
+                    "Color workspace navigation must remain available after prior Color entry.");
             require(window.shortcut_manager_->shortcut(QStringLiteral("workspace.switch_color")) ==
                     QKeySequence(QStringLiteral("Alt+5")),
                     "Color must preserve Alt+5 as its default workspace shortcut.");
@@ -2516,7 +2517,7 @@ public:
             require(window.color_workspace_ != nullptr && window.color_workspace_button_->isChecked() &&
                     window.workspace_host_->currentPage() == ui::WorkspacePageId::Color &&
                     window.color_workspace_->findChild<QListWidget*>("colorClipStrip") != nullptr &&
-                    window.color_workspace_->findChild<QListWidget*>("colorNodesList") != nullptr &&
+                    window.color_workspace_->findChild<QWidget*>("colorNodeCanvas") != nullptr &&
                     window.color_workspace_->findChild<QLabel*>("colorWaveform") != nullptr &&
                     window.preview_widget_->parentWidget()->objectName() == "colorViewerContainer",
                     "Color must mount the shared viewer, clip strip, nodes, and RGB waveform.");

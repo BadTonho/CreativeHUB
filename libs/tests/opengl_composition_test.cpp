@@ -228,6 +228,12 @@ void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
         second.status == OpenGlCompositionStatus::Complete &&
         first.ticket.value != second.ticket.value,
         "two asynchronous readbacks did not receive distinct tickets");
+    const auto polled_first = gpu.pollAsyncReadback(first.ticket);
+    require(polled_first.status == OpenGlCompositionStatus::Busy ||
+            polled_first.status == OpenGlCompositionStatus::Complete,
+        "nonblocking PBO poll returned an invalid readback state");
+    require(gpu.pollAsyncReadback(second.ticket).status == OpenGlCompositionStatus::Busy,
+        "PBO polling accepted an out-of-order ticket");
     require(gpu.submitAsyncReadback(73, 51, first_layers).status ==
         OpenGlCompositionStatus::Busy,
         "PBO backpressure did not stop submission beyond the bounded pool");
@@ -389,13 +395,24 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
     const std::vector<effects::ColorAdjustmentParameters> adjustments{
         {18.0, 132.0, 74.0, 145.0, 82.0, 112.0},
         {-7.0, 83.0, 145.0}, {2.0, 105.0, 91.0}};
-    for (const auto& parameters : adjustments) {
+    effects::ColorAdjustmentParameters expanded;
+    expanded.lift_red = -23.0; expanded.lift_green = 11.0; expanded.lift_blue = 7.0;
+    expanded.gamma_red = 72.0; expanded.gamma_green = 138.0; expanded.gamma_blue = 221.0;
+    expanded.offset_red = 6.0; expanded.offset_green = -9.0; expanded.offset_blue = 13.0;
+    expanded.contrast_percent = 127.0; expanded.pivot_percent = 43.0;
+    expanded.temperature = 34.0; expanded.tint = -19.0;
+    expanded.saturation_percent = 126.0;
+    expanded.red_gain_percent = 116.0; expanded.green_gain_percent = 91.0;
+    expanded.blue_gain_percent = 137.0;
+    auto all_controls = adjustments;
+    all_controls.push_back(expanded);
+    for (const auto& parameters : all_controls) {
         require(effects::applyColorAdjustment(adjusted, parameters) ==
                     effects::ProcessingResult::Completed,
                 "CPU reference adjustment failed");
     }
     CompositionLayer layer{&source};
-    layer.gpu_color_adjustments = adjustments;
+    layer.gpu_color_adjustments = all_controls;
     const auto cpu = FrameCompositor::compose(source.width, source.height, {{&adjusted}});
     OpenGlCompositionTimings timings;
     const auto output = gpu.compose(source.width, source.height, {layer}, {}, &timings);
@@ -407,7 +424,7 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
         require(delta <= (i % 4 == 3 ? 0 : 1),
             "GPU color adjustment exceeded the one-channel RGB tolerance or changed alpha");
     }
-    require(timings.color_adjustment_count == adjustments.size() &&
+    require(timings.color_adjustment_count == all_controls.size() &&
                 timings.color_adjustment_submission_nanoseconds > 0,
             "GPU color adjustment work is measured");
 

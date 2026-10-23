@@ -87,6 +87,47 @@ void writeLegacyFirstClipEffects(
     root.insert("timeline", timeline);
 }
 
+creative_suite::effects::EffectInstance legacyPrimaryGrade() {
+    using creative_suite::effects::EffectInstance;
+    using creative_suite::effects::ParameterValue;
+    return EffectInstance{"video.primary_grade", {
+        ParameterValue{"brightness", 12.0}, ParameterValue{"contrast", 130.0},
+        ParameterValue{"saturation", 85.0}, ParameterValue{"red_gain", 145.0},
+        ParameterValue{"green_gain", 82.0}, ParameterValue{"blue_gain", 112.0}}, true};
+}
+
+bool writeLegacyPrimaryGradeToFirstGraph(QJsonObject& root) {
+    auto timeline = root.value("timeline").toObject();
+    auto tracks = timeline.value("tracks").toArray();
+    if (tracks.isEmpty()) return false;
+    auto track = tracks.first().toObject();
+    auto clips = track.value("clips").toArray();
+    if (clips.isEmpty()) return false;
+    auto clip = clips.first().toObject();
+    auto graph = clip.value("color_graph").toObject();
+    auto nodes = graph.value("nodes").toArray();
+    bool replaced = false;
+    for (qsizetype index = 0; index < nodes.size(); ++index) {
+        auto node = nodes[index].toObject();
+        auto effect = node.value("effect").toObject();
+        if (effect.value("id").toString() != QStringLiteral("video.primary_grade")) continue;
+        const auto encoded = legacyEffectStackJson({legacyPrimaryGrade()}).first().toObject();
+        node.insert("effect", encoded);
+        nodes[index] = node;
+        replaced = true;
+        break;
+    }
+    if (!replaced) return false;
+    graph.insert("nodes", nodes);
+    clip.insert("color_graph", graph);
+    clips[0] = clip;
+    track.insert("clips", clips);
+    tracks[0] = track;
+    timeline.insert("tracks", tracks);
+    root.insert("timeline", timeline);
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -324,6 +365,13 @@ int main(int argc, char** argv) {
             auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
             require(creative_suite::effects::setParameterValue(grade, "red_gain", 135),
                     "Primary Grade test setup must be valid.");
+            require(creative_suite::effects::setParameterValue(grade, "lift_green", 14) &&
+                        creative_suite::effects::setParameterValue(grade, "gamma_blue", 125) &&
+                        creative_suite::effects::setParameterValue(grade, "offset_red", -8) &&
+                        creative_suite::effects::setParameterValue(grade, "pivot", 43) &&
+                        creative_suite::effects::setParameterValue(grade, "temperature", 21) &&
+                        creative_suite::effects::setParameterValue(grade, "tint", -12),
+                    "Expanded Primary Grade test setup must be valid.");
             graded.timeline_tracks.front().clips.front().effects.push_back(grade);
             auto& graded_clip = graded.timeline_tracks.front().clips.front();
             auto branch_graph = color::fromEffectStack(graded_clip.effects);
@@ -331,17 +379,17 @@ int main(int argc, char** argv) {
             auto branch_effect = creative_suite::effects::makeDefaultInstance("video.saturation");
             require(creative_suite::effects::setParameterValue(branch_effect, "amount", 125.0) &&
                         color::addParallelBranch(branch_graph, effect_nodes.back(), branch_effect),
-                    "Could not prepare the v34 parallel Color graph fixture.");
+                    "Could not prepare the v35 parallel Color graph fixture.");
             graded_clip.color_graph = branch_graph;
             graded_clip.effects = color::effectInstancesInOrder(branch_graph);
-            const auto grade_path = directory / "primary-grade-v34.csp";
+            const auto grade_path = directory / "primary-grade-v35.csp";
             project::save(grade_path, graded);
             const auto restored = project::load(grade_path);
             require(restored.timeline_tracks.front().clips.front().color_graph == branch_graph &&
                         std::any_of(restored.timeline_tracks.front().clips.front().effects.begin(),
                             restored.timeline_tracks.front().clips.front().effects.end(),
                             [&](const auto& effect) { return effect == grade; }),
-                    "CSP v34 must preserve the correction graph, connections and effect values.");
+                    "CSP v35 must preserve the correction graph, connections and expanded effect values.");
             std::ifstream grade_file(grade_path, std::ios::binary);
             const std::string grade_text{
                 std::istreambuf_iterator<char>(grade_file),
@@ -359,6 +407,30 @@ int main(int argc, char** argv) {
                 require(error.code() == project::ProjectErrorCode::InvalidValue,
                         "Primary Grade in CSP v31 returned the wrong error category.");
             }
+
+            legacy_grade = QJsonDocument::fromJson(
+                QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
+            legacy_grade.insert("version", 34);
+            require(writeLegacyPrimaryGradeToFirstGraph(legacy_grade),
+                    "Could not create a CSP v34 Primary Grade migration fixture.");
+            const auto legacy_v34_path = directory / "primary-grade-v34-legacy.csp";
+            writeText(legacy_v34_path, QJsonDocument(legacy_grade).toJson().toStdString());
+            const auto migrated_v34 = project::load(legacy_v34_path);
+            const auto& migrated_graph = *migrated_v34.timeline_tracks.front().clips.front().color_graph;
+            const auto migrated_node = std::find_if(migrated_graph.nodes.begin(), migrated_graph.nodes.end(),
+                [](const color::Node& node) {
+                    return node.effect && node.effect->id == "video.primary_grade";
+                });
+            require(migrated_node != migrated_graph.nodes.end() &&
+                        creative_suite::effects::parameterValue(*migrated_node->effect, "offset_red") == 12.0 &&
+                        creative_suite::effects::parameterValue(*migrated_node->effect, "offset_green") == 12.0 &&
+                        creative_suite::effects::parameterValue(*migrated_node->effect, "offset_blue") == 12.0 &&
+                        creative_suite::effects::parameterValue(*migrated_node->effect, "contrast") == 130.0 &&
+                        creative_suite::effects::parameterValue(*migrated_node->effect, "saturation") == 85.0 &&
+                        creative_suite::effects::parameterValue(*migrated_node->effect, "red_gain") == 145.0 &&
+                        creative_suite::effects::parameterValue(*migrated_node->effect, "green_gain") == 82.0 &&
+                        creative_suite::effects::parameterValue(*migrated_node->effect, "blue_gain") == 112.0,
+                    "CSP v34 Primary Grade values did not migrate to RGB Offset and expanded controls.");
         }
         {
             auto legacy_graph = QJsonDocument::fromJson(
@@ -376,6 +448,24 @@ int main(int argc, char** argv) {
                             std::optional<std::vector<creative_suite::effects::EffectInstance>>{
                                 loaded.timeline_tracks.front().clips.front().effects},
                     "CSP v33 effect stacks must migrate to a serial CSP v34 Color graph.");
+
+            auto legacy_grade_project = QJsonDocument::fromJson(
+                QByteArray(saved_json.data(), static_cast<qsizetype>(saved_json.size()))).object();
+            legacy_grade_project.insert("version", 33);
+            writeLegacyFirstClipEffects(legacy_grade_project, {legacyPrimaryGrade()});
+            const auto legacy_grade_path = directory / "legacy-primary-grade-v33.csp";
+            writeText(legacy_grade_path,
+                      QJsonDocument(legacy_grade_project).toJson().toStdString());
+            const auto migrated_legacy_grade = project::load(legacy_grade_path);
+            const auto migrated_legacy_stack = color::linearEffectStack(
+                *migrated_legacy_grade.timeline_tracks.front().clips.front().color_graph);
+            require(migrated_legacy_stack && migrated_legacy_stack->size() == 1 &&
+                        creative_suite::effects::parameterValue(migrated_legacy_stack->front(), "offset_red") == 12.0 &&
+                        creative_suite::effects::parameterValue(migrated_legacy_stack->front(), "offset_green") == 12.0 &&
+                        creative_suite::effects::parameterValue(migrated_legacy_stack->front(), "offset_blue") == 12.0 &&
+                        creative_suite::effects::parameterValue(migrated_legacy_stack->front(), "gamma_red") == 100.0 &&
+                        creative_suite::effects::parameterValue(migrated_legacy_stack->front(), "red_gain") == 145.0,
+                    "CSP v33 Primary Grade did not preserve its old values during graph migration.");
 
             auto legacy_gallery = QJsonDocument::fromJson(
                 QByteArray(saved_json.data(), static_cast<qsizetype>(saved_json.size()))).object();
@@ -411,7 +501,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 34") != std::string::npos &&
+        require(saved_json.find("\"version\": 35") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -692,6 +782,10 @@ int main(int argc, char** argv) {
         setLegacyTimelineRowHeight(version_17_effects_json);
         auto version_17_timeline = version_17_effects_json.value("timeline").toObject();
         auto version_17_tracks = version_17_timeline.value("tracks").toArray();
+        writeLegacyFirstClipEffects(version_17_effects_json,
+            original.timeline_tracks.front().clips.front().effects);
+        version_17_timeline = version_17_effects_json.value("timeline").toObject();
+        version_17_tracks = version_17_timeline.value("tracks").toArray();
         for (qsizetype track_index = 0; track_index < version_17_tracks.size(); ++track_index) {
             auto track = version_17_tracks[track_index].toObject();
             auto clips = track.value("clips").toArray();
@@ -730,6 +824,9 @@ int main(int argc, char** argv) {
                  QJsonValue(QJsonValue::Undefined)}) {
             auto invalid_effect_state_json = QJsonDocument::fromJson(
                 QByteArray::fromStdString(saved_json)).object();
+            invalid_effect_state_json.insert("version", 33);
+            writeLegacyFirstClipEffects(invalid_effect_state_json,
+                original.timeline_tracks.front().clips.front().effects);
             auto invalid_timeline = invalid_effect_state_json.value("timeline").toObject();
             auto invalid_tracks = invalid_timeline.value("tracks").toArray();
             auto invalid_track = invalid_tracks.at(0).toObject();
@@ -753,7 +850,9 @@ int main(int argc, char** argv) {
                 throw std::runtime_error("An invalid effect enabled state was accepted.");
             } catch (const project::ProjectError& error) {
                 require(error.code() == project::ProjectErrorCode::InvalidValue,
-                        "An invalid effect enabled state returned the wrong error category.");
+                        "An invalid effect enabled state returned error category " +
+                            std::to_string(static_cast<int>(error.code())) + ": " +
+                            error.what());
             }
         }
         auto version_16_effects_json = QJsonDocument::fromJson(

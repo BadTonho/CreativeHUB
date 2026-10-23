@@ -25,6 +25,18 @@ QString translateCatalogLabel(const QString& source_text) {
     if (source_text == QStringLiteral("Red gain")) return QCoreApplication::translate("EffectsCatalog", "Red gain");
     if (source_text == QStringLiteral("Green gain")) return QCoreApplication::translate("EffectsCatalog", "Green gain");
     if (source_text == QStringLiteral("Blue gain")) return QCoreApplication::translate("EffectsCatalog", "Blue gain");
+    if (source_text == QStringLiteral("Lift red")) return QCoreApplication::translate("EffectsCatalog", "Lift red");
+    if (source_text == QStringLiteral("Lift green")) return QCoreApplication::translate("EffectsCatalog", "Lift green");
+    if (source_text == QStringLiteral("Lift blue")) return QCoreApplication::translate("EffectsCatalog", "Lift blue");
+    if (source_text == QStringLiteral("Gamma red")) return QCoreApplication::translate("EffectsCatalog", "Gamma red");
+    if (source_text == QStringLiteral("Gamma green")) return QCoreApplication::translate("EffectsCatalog", "Gamma green");
+    if (source_text == QStringLiteral("Gamma blue")) return QCoreApplication::translate("EffectsCatalog", "Gamma blue");
+    if (source_text == QStringLiteral("Offset red")) return QCoreApplication::translate("EffectsCatalog", "Offset red");
+    if (source_text == QStringLiteral("Offset green")) return QCoreApplication::translate("EffectsCatalog", "Offset green");
+    if (source_text == QStringLiteral("Offset blue")) return QCoreApplication::translate("EffectsCatalog", "Offset blue");
+    if (source_text == QStringLiteral("Pivot")) return QCoreApplication::translate("EffectsCatalog", "Pivot");
+    if (source_text == QStringLiteral("Temperature")) return QCoreApplication::translate("EffectsCatalog", "Temperature");
+    if (source_text == QStringLiteral("Tint")) return QCoreApplication::translate("EffectsCatalog", "Tint");
     if (source_text == QStringLiteral("Amount")) return QCoreApplication::translate("EffectsCatalog", "Amount");
     if (source_text == QStringLiteral("Gaussian Blur")) return QCoreApplication::translate("EffectsCatalog", "Gaussian Blur");
     if (source_text == QStringLiteral("Background")) return QCoreApplication::translate("EffectsCatalog", "Background");

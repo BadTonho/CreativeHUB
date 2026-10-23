@@ -70,7 +70,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 34, with versions 1 through 33
+- versioned `.csp` persistence through version 35, with versions 1 through 34
   readable, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio/adjustment clip kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
@@ -88,7 +88,10 @@ The Video Editor currently includes:
   Transform/Brightness parameters, and Undo/Redo;
 - per-clip Color correction graphs for supported visual clips, with effect and
   Parallel Mixer nodes, shared Edit parameter/enabled-state controls, Preview
-  and export evaluation, and version 34 persistence;
+  and export evaluation, and version 35 persistence;
+- Primary Grade RGB wheels and editable Lift, Gamma, Gain, Offset, Contrast,
+  Pivot, Saturation, Temperature and Tint values, plus combined RGB Waveform
+  and RGB Parade scopes;
 - manual text clips and basic captions, including worker-side QImage/QPainter
   rasterization, essential text styling, transforms/keyframes, and version 4
   project persistence with version 3 migration;
@@ -143,7 +146,7 @@ Text and transitions are drag-only, and Gain remains unavailable. Merge combines
 straight-alpha source-over. The graph output passes through the Color
 correction graph before Timeline transform/keyframes.
 
-Graph animation was introduced in `.csp` version 22 and is retained in version 34.
+Graph animation was introduced in `.csp` version 22 and is retained in version 35.
 Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its

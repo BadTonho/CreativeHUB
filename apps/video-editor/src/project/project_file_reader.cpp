@@ -12,8 +12,10 @@
 
 #include <cmath>
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <unordered_set>
 #include <utility>
@@ -64,8 +66,56 @@ std::int64_t requiredInteger(
 std::filesystem::path resolvedPath(const std::filesystem::path& project_path,
                                    const QString& stored_path);
 
+creative_suite::effects::EffectInstance migratePrimaryGrade(
+    creative_suite::effects::EffectInstance effect,
+    int version,
+    const std::filesystem::path& project_path) {
+    using namespace creative_suite::effects;
+    if (version >= primary_grade_controls_format_version ||
+        effect.id != "video.primary_grade") return effect;
+
+    constexpr std::array<std::string_view, 6> legacy_ids{
+        "brightness", "contrast", "saturation", "red_gain", "green_gain", "blue_gain"};
+    if (effect.parameters.size() != legacy_ids.size())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "A legacy Primary Grade contains an invalid parameter set.");
+    std::unordered_set<std::string_view> seen;
+    for (const auto& parameter : effect.parameters) {
+        if (std::find(legacy_ids.begin(), legacy_ids.end(), parameter.id) == legacy_ids.end() ||
+            !seen.insert(parameter.id).second || !std::isfinite(parameter.value))
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "A legacy Primary Grade contains an invalid parameter.");
+    }
+    for (const auto id : legacy_ids)
+        if (!seen.contains(id))
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "A legacy Primary Grade is missing a parameter.");
+
+    const auto old_value = [&effect](std::string_view id) {
+        const auto found = std::find_if(effect.parameters.begin(), effect.parameters.end(),
+            [id](const ParameterValue& value) { return value.id == id; });
+        return found->value;
+    };
+    auto migrated = makeDefaultInstance("video.primary_grade");
+    migrated.enabled = effect.enabled;
+    const double brightness = old_value("brightness");
+    const bool accepted = setParameterValue(migrated, "offset_red", brightness) &&
+        setParameterValue(migrated, "offset_green", brightness) &&
+        setParameterValue(migrated, "offset_blue", brightness) &&
+        setParameterValue(migrated, "contrast", old_value("contrast")) &&
+        setParameterValue(migrated, "saturation", old_value("saturation")) &&
+        setParameterValue(migrated, "red_gain", old_value("red_gain")) &&
+        setParameterValue(migrated, "green_gain", old_value("green_gain")) &&
+        setParameterValue(migrated, "blue_gain", old_value("blue_gain"));
+    if (!accepted)
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "A legacy Primary Grade value is outside its supported range.");
+    return migrated;
+}
+
 color::Graph parseColorGraph(const QJsonValue& value,
-                             const std::filesystem::path& project_path) {
+                             const std::filesystem::path& project_path,
+                             int version) {
     if (!value.isObject())
         throwJson(ProjectErrorCode::InvalidValue, project_path,
                   "Project JSON contains an invalid Color correction graph.");
@@ -134,7 +184,7 @@ color::Graph parseColorGraph(const QJsonValue& value,
                                 static_cast<std::size_t>(parameter_id.size())),
                     parameter.value("value").toDouble()});
             }
-            node.effect = std::move(effect);
+            node.effect = migratePrimaryGrade(std::move(effect), version, project_path);
         } else if (node_object.contains("effect")) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Only Color effect nodes may contain effect settings.");
@@ -1208,16 +1258,17 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                                             static_cast<std::size_t>(parameter_id.size())),
                                 parameter_object.value("value").toDouble()});
                         }
-                        clip.effects.push_back(std::move(effect));
+                        clip.effects.push_back(migratePrimaryGrade(
+                            std::move(effect), version, project_path));
                     }
                 }
                 if (timeline::supportsClipEffects(clip.kind)) {
                     if (version >= color_graph_format_version) {
                         if (!clip_object.contains("color_graph"))
                             throwJson(ProjectErrorCode::MissingField, project_path,
-                                      "A version 34 visual clip is missing its Color graph.");
+                                      "A version 34 or later visual clip is missing its Color graph.");
                         clip.color_graph = parseColorGraph(
-                            clip_object.value("color_graph"), project_path);
+                            clip_object.value("color_graph"), project_path, version);
                         clip.effects = color::effectInstancesInOrder(*clip.color_graph);
                     } else {
                         clip.color_graph = color::fromEffectStack(clip.effects);

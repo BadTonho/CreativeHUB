@@ -134,6 +134,10 @@ PlaybackWorker::~PlaybackWorker() {
     last_composition_texture_.reset();
     if (gpu_busy_timer_) gpu_busy_timer_->stop();
     if (gpu_maintenance_timer_) gpu_maintenance_timer_->stop();
+    if (scope_readback_timer_) scope_readback_timer_->stop();
+    if (pending_scope_readback_ && pending_scope_readback_->compositor)
+        pending_scope_readback_->compositor->discardAsyncReadbacks();
+    pending_scope_readback_.reset();
     gpu_compositor_.reset();
     retiring_gpu_compositors_.clear();
     if (timer_ != nullptr) timer_->stop();
@@ -571,6 +575,10 @@ void PlaybackWorker::publishPreviewFrame(rendering::PreviewFramePayload frame,
 void PlaybackWorker::retireGpuCompositor() {
     last_composition_texture_.reset();
     if (!gpu_compositor_) return;
+    if (prepared_scope_compositor_ == gpu_compositor_.get()) {
+        prepared_scope_compositor_ = nullptr;
+        prepared_scope_width_ = prepared_scope_height_ = 0;
+    }
     gpu_compositor_->retireTextureFrames();
     // Return completed slots immediately; a remaining displayed lease keeps
     // only its own target reserved while the next activation starts.
@@ -1473,6 +1481,126 @@ void PlaybackWorker::captureCompositionFrame(
     }
     emit stillCaptureReady(request_id, project_generation, std::move(captured),
         global_frame, revision, generation);
+}
+
+void PlaybackWorker::requestScopeFrame(quint64 request_id, qint64 timeline_frame,
+    quint64 requested_revision, quint64 generation) {
+    using creative_suite::composition::OpenGlCompositionStatus;
+    if (pending_scope_readback_) {
+        // Let the workspace retry on its next bounded timer tick. Returning
+        // without a response could leave a request pending after its frame
+        // identity changed while the previous GPU readback was in flight.
+        emit scopeFrameReady(request_id, {}, timeline_frame, requested_revision, generation);
+        return;
+    }
+    const bool matches_cached_frame = generation == generation_ &&
+        requested_revision == composition_revision_ &&
+        timeline_frame == cached_composition_global_frame_ &&
+        cached_composition_generation_ == generation &&
+        cached_composition_frame_.gpu &&
+        cached_composition_frame_.composition_revision == requested_revision &&
+        cached_composition_frame_.timeline_frame == timeline_frame &&
+        cached_composition_frame_.delivery_epoch == delivery_epoch_;
+    if (!matches_cached_frame || !gpu_compositor_) {
+        emit scopeFrameReady(request_id, {}, timeline_frame, requested_revision, generation);
+        return;
+    }
+
+    const auto texture = cached_composition_frame_.gpu;
+    auto report_failure = [&](const auto& result) {
+        const auto level = result.status == OpenGlCompositionStatus::Unsupported
+            ? logging::Level::Warning : logging::Level::Error;
+        logging::Logger::instance().log(level, "color-scopes", result.operation,
+            result.cause, {{"error_code", std::to_string(result.error_code)},
+                {"timeline_frame", std::to_string(timeline_frame)},
+                {"composition_revision", std::to_string(requested_revision)},
+                {"generation", std::to_string(generation)}});
+        emit scopeFrameReady(request_id, {}, timeline_frame, requested_revision, generation);
+    };
+    if (prepared_scope_compositor_ != gpu_compositor_.get() ||
+        prepared_scope_width_ != texture->width() || prepared_scope_height_ != texture->height()) {
+        unsigned prepared_slots = 0;
+        const auto prepared = gpu_compositor_->prepareAsyncReadback(texture->width(),
+            texture->height(), 64ULL * 1024 * 1024, 1, &prepared_slots);
+        if (prepared.status != OpenGlCompositionStatus::Complete || prepared_slots == 0) {
+            report_failure(prepared);
+            return;
+        }
+        prepared_scope_compositor_ = gpu_compositor_.get();
+        prepared_scope_width_ = texture->width();
+        prepared_scope_height_ = texture->height();
+    }
+    const auto submitted = gpu_compositor_->submitAsyncReadback(texture);
+    if (submitted.status != OpenGlCompositionStatus::Complete || submitted.ticket.value == 0) {
+        if (submitted.status != OpenGlCompositionStatus::Busy)
+            report_failure(submitted);
+        else
+            emit scopeFrameReady(request_id, {}, timeline_frame, requested_revision, generation);
+        return;
+    }
+    if (!scope_readback_timer_) {
+        scope_readback_timer_ = new QTimer(this);
+        scope_readback_timer_->setTimerType(Qt::PreciseTimer);
+        scope_readback_timer_->setInterval(8);
+        connect(scope_readback_timer_, &QTimer::timeout, this,
+            &PlaybackWorker::pollScopeReadback);
+    }
+    pending_scope_readback_ = PendingScopeReadback{gpu_compositor_.get(),
+        submitted.ticket, texture, request_id, generation, requested_revision, timeline_frame};
+    scope_readback_timer_->start();
+}
+
+void PlaybackWorker::pollScopeReadback() {
+    using creative_suite::composition::OpenGlCompositionStatus;
+    if (!pending_scope_readback_) {
+        if (scope_readback_timer_) scope_readback_timer_->stop();
+        return;
+    }
+    const auto pending = *pending_scope_readback_;
+    const auto ready = pending.compositor->pollAsyncReadback(pending.ticket);
+    if (ready.status == OpenGlCompositionStatus::Busy) return;
+
+    VideoFramePtr frame;
+    if (ready.status == OpenGlCompositionStatus::Complete) {
+        auto collected = pending.compositor->collectAsyncReadback(pending.ticket);
+        if (collected.status == OpenGlCompositionStatus::Complete && collected.frame) {
+            frame = std::make_shared<const media::VideoFrame>(std::move(*collected.frame));
+        } else if (collected.status != OpenGlCompositionStatus::Cancelled) {
+            logging::Logger::instance().log(logging::Level::Error, "color-scopes",
+                collected.operation, collected.cause,
+                {{"error_code", std::to_string(collected.error_code)},
+                 {"timeline_frame", std::to_string(pending.timeline_frame)},
+                 {"composition_revision", std::to_string(pending.composition_revision)},
+                 {"generation", std::to_string(pending.generation)}});
+            pending.compositor->discardAsyncReadbacks();
+            if (prepared_scope_compositor_ == pending.compositor) {
+                prepared_scope_compositor_ = nullptr;
+                prepared_scope_width_ = prepared_scope_height_ = 0;
+            }
+        }
+    } else {
+        logging::Logger::instance().log(ready.status == OpenGlCompositionStatus::Unsupported
+                ? logging::Level::Warning : logging::Level::Error,
+            "color-scopes", ready.operation, ready.cause,
+            {{"error_code", std::to_string(ready.error_code)},
+             {"timeline_frame", std::to_string(pending.timeline_frame)},
+             {"composition_revision", std::to_string(pending.composition_revision)},
+             {"generation", std::to_string(pending.generation)}});
+        pending.compositor->discardAsyncReadbacks();
+        if (prepared_scope_compositor_ == pending.compositor) {
+            prepared_scope_compositor_ = nullptr;
+            prepared_scope_width_ = prepared_scope_height_ = 0;
+        }
+    }
+    pending_scope_readback_.reset();
+    if (scope_readback_timer_) scope_readback_timer_->stop();
+    const bool still_current = pending.generation == generation_ &&
+        pending.composition_revision == composition_revision_ &&
+        pending.timeline_frame == cached_composition_global_frame_ &&
+        cached_composition_generation_ == pending.generation;
+    if (!still_current) frame.reset();
+    emit scopeFrameReady(pending.request_id, std::move(frame), pending.timeline_frame,
+        pending.composition_revision, pending.generation);
 }
 
 void PlaybackWorker::stepForward() {

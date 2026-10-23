@@ -44,7 +44,7 @@ Names are independent of graph content and are not inferred from its topology.
 Versions 1–28 remain readable. Mask/generator data and composition input offsets
 retain their existing representation. Hub accepts schemas 1–34, preserves names
 and graph data, copies Color Gallery sidecars, relocates external Input paths,
-and rejects future v35.
+and rejects future v36.
 
 The Video Editor owns the preset, commands, Inspector and document metadata.
 Effects categories optionally declare a parent so filtering Video includes

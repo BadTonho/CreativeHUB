@@ -117,6 +117,46 @@
         <translation>Forma de onda RGB</translation>
     </message>
     <message>
+        <source>Lift</source>
+        <translation>Elevação</translation>
+    </message>
+    <message>
+        <source>Gamma</source>
+        <translation>Gama</translation>
+    </message>
+    <message>
+        <source>Gain</source>
+        <translation>Ganho</translation>
+    </message>
+    <message>
+        <source>Offset</source>
+        <translation>Deslocamento</translation>
+    </message>
+    <message>
+        <source>Pivot</source>
+        <translation>Pivô</translation>
+    </message>
+    <message>
+        <source>Temperature</source>
+        <translation>Temperatura</translation>
+    </message>
+    <message>
+        <source>Tint</source>
+        <translation>Tonalidade</translation>
+    </message>
+    <message>
+        <source>RGB Parade</source>
+        <translation>Parada RGB</translation>
+    </message>
+    <message>
+        <source>No frame</source>
+        <translation>Sem quadro</translation>
+    </message>
+    <message>
+        <source>Master value</source>
+        <translation>Valor mestre</translation>
+    </message>
+    <message>
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="182"/>
         <source>Gallery</source>
         <translation>Galeria</translation>
@@ -705,6 +745,54 @@
         <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="28"/>
         <source>Amount</source>
         <translation>Intensidade</translation>
+    </message>
+    <message>
+        <source>Lift red</source>
+        <translation>Elevação vermelha</translation>
+    </message>
+    <message>
+        <source>Lift green</source>
+        <translation>Elevação verde</translation>
+    </message>
+    <message>
+        <source>Lift blue</source>
+        <translation>Elevação azul</translation>
+    </message>
+    <message>
+        <source>Gamma red</source>
+        <translation>Gama vermelha</translation>
+    </message>
+    <message>
+        <source>Gamma green</source>
+        <translation>Gama verde</translation>
+    </message>
+    <message>
+        <source>Gamma blue</source>
+        <translation>Gama azul</translation>
+    </message>
+    <message>
+        <source>Offset red</source>
+        <translation>Deslocamento vermelho</translation>
+    </message>
+    <message>
+        <source>Offset green</source>
+        <translation>Deslocamento verde</translation>
+    </message>
+    <message>
+        <source>Offset blue</source>
+        <translation>Deslocamento azul</translation>
+    </message>
+    <message>
+        <source>Pivot</source>
+        <translation>Pivô</translation>
+    </message>
+    <message>
+        <source>Temperature</source>
+        <translation>Temperatura</translation>
+    </message>
+    <message>
+        <source>Tint</source>
+        <translation>Tonalidade</translation>
     </message>
     <message>
         <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="29"/>

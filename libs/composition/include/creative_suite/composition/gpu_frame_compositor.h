@@ -254,6 +254,10 @@ public:
         return {OpenGlCompositionStatus::Unsupported}; }
     virtual OpenGlReadbackResult submitAsyncReadback(const OpenGlTextureFramePtr&,
         const CancellationPredicate& = {}) { return {OpenGlCompositionStatus::Unsupported}; }
+    // Status-only fence polling. Busy means the transfer is still in flight and
+    // must be collected later; this call never waits for GPU completion.
+    virtual OpenGlCompositionResult pollAsyncReadback(OpenGlReadbackTicket) {
+        return {OpenGlCompositionStatus::Unsupported}; }
     virtual OpenGlReadbackResult collectAsyncReadback(OpenGlReadbackTicket,
         const CancellationPredicate& = {}, bool = false) { return {OpenGlCompositionStatus::Unsupported}; }
     virtual void discardAsyncReadbacks() noexcept {}

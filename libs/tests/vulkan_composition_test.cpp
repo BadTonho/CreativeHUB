@@ -134,6 +134,12 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
         auto first=asynchronous.submitAsyncReadback(61,47,{{&a}});
         auto last=asynchronous.submitAsyncReadback(61,47,{{&b}});
         require(first.status==OpenGlCompositionStatus::Complete && last.status==OpenGlCompositionStatus::Complete,"Asynchronous submission failed.");
+        const auto polled_first=asynchronous.pollAsyncReadback(first.ticket);
+        require(polled_first.status==OpenGlCompositionStatus::Busy ||
+                polled_first.status==OpenGlCompositionStatus::Complete,
+            "Nonblocking Vulkan poll returned an invalid readback state.");
+        require(asynchronous.pollAsyncReadback(last.ticket).status==OpenGlCompositionStatus::Busy,
+            "Vulkan polling accepted an out-of-order ticket.");
         require(first.composition_timings.uploaded_bytes>0 && first.composition_timings.readback_bytes==0,"Asynchronous composition lost transfer diagnostics.");
         require(asynchronous.submitAsyncReadback(61,47,{{&a}}).status==OpenGlCompositionStatus::Busy,"Readback capacity was not bounded.");
         require(asynchronous.collectAsyncReadback(last.ticket).status==OpenGlCompositionStatus::Busy,"Out-of-order collection was accepted.");
@@ -253,7 +259,14 @@ void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
     auto grade = effects::makeDefaultInstance("video.primary_grade");
     require(effects::setParameterValue(grade, "red_gain", 145) &&
         effects::setParameterValue(grade, "green_gain", 82) &&
-        effects::setParameterValue(grade, "blue_gain", 115), "Vulkan grade fixture failed.");
+        effects::setParameterValue(grade, "blue_gain", 115) &&
+        effects::setParameterValue(grade, "lift_red", -23) &&
+        effects::setParameterValue(grade, "gamma_green", 138) &&
+        effects::setParameterValue(grade, "offset_blue", 13) &&
+        effects::setParameterValue(grade, "contrast", 127) &&
+        effects::setParameterValue(grade, "pivot", 43) &&
+        effects::setParameterValue(grade, "temperature", 34) &&
+        effects::setParameterValue(grade, "tint", -19), "Vulkan grade fixture failed.");
     const std::array<effects::EffectInstance, 1> stack{grade};
     CompositionLayer layer{&source}; layer.effect_stack = stack;
     const auto cpu = FrameCompositor::compose(source.width, source.height, {layer});
@@ -262,7 +275,12 @@ void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
     parity(*cpu, *gpu_frame.frame);
     OpenGlImageOperation operation; operation.kind = OpenGlImageOperationKind::Color;
     operation.background.rgba = &source;
-    operation.colors = {{15, 125, 85, 145, 82, 115}};
+    effects::ColorAdjustmentParameters expanded{15, 125, 85, 145, 82, 115};
+    expanded.lift_red = -23; expanded.lift_green = 11; expanded.lift_blue = 7;
+    expanded.gamma_red = 72; expanded.gamma_green = 138; expanded.gamma_blue = 221;
+    expanded.offset_red = 6; expanded.offset_green = -9; expanded.offset_blue = 13;
+    expanded.pivot_percent = 43; expanded.temperature = 34; expanded.tint = -19;
+    operation.colors = {expanded};
     auto expected = source;
     require(effects::applyColorAdjustment(expected, operation.colors.front()) ==
         effects::ProcessingResult::Completed, "Vulkan image grade CPU reference failed.");

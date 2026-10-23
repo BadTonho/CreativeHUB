@@ -103,6 +103,7 @@ public:
         const CancellationPredicate& = {}, CompositionOutputAlpha = CompositionOutputAlpha::Opaque) override;
     OpenGlReadbackResult submitAsyncReadback(const OpenGlTextureFramePtr&,
         const CancellationPredicate& = {}) override;
+    OpenGlCompositionResult pollAsyncReadback(OpenGlReadbackTicket) override;
     OpenGlReadbackResult collectAsyncReadback(OpenGlReadbackTicket,
         const CancellationPredicate& = {}, bool = false) override;
     void discardAsyncReadbacks() noexcept override;

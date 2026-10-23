@@ -403,6 +403,12 @@ void testVideoDocuments(const QString& root) {
     auto color_document = document;
     auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
     CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "red_gain", 145.0));
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "lift_green", 14.0));
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "gamma_blue", 125.0));
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "offset_red", -8.0));
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "pivot", 43.0));
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "temperature", 21.0));
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "tint", -12.0));
     color_document.timeline_tracks.front().clips.front().effects.push_back(grade);
     auto color_graph = color::fromEffectStack(
         color_document.timeline_tracks.front().clips.front().effects);
@@ -419,9 +425,9 @@ void testVideoDocuments(const QString& root) {
         "hub-still.png",
         std::make_shared<const std::vector<std::uint8_t>>(
             std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
-    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v34.csp");
+    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v35.csp");
     project::save(fsPath(color_path), color_document);
-    const auto color_snapshot = backup(QDir(root).filePath("video-color-v34"), color_path);
+    const auto color_snapshot = backup(QDir(root).filePath("video-color-v35"), color_path);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)) == color_document);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.restored)) == color_document);
     CS_TEST_CHECK(QFileInfo::exists(color_snapshot.vault + QStringLiteral(".gallery/hub-still.png")));

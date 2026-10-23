@@ -6,18 +6,24 @@
 #include <QCoreApplication>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFrame>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
 #include <QListWidget>
 #include <QMetaObject>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QPixmap>
 #include <QPointer>
 #include <QPushButton>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QScrollArea>
 #include <QSignalBlocker>
+#include <QSlider>
 #include <QThreadPool>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -25,6 +31,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <numbers>
 
 namespace ui {
 namespace {
@@ -39,43 +46,269 @@ QString labelFor(std::string_view id) {
 }
 
 QString parameterLabel(std::string_view id) {
-    if (id == "brightness") return QCoreApplication::translate("ColorWorkspace", "Brightness");
     if (id == "contrast") return QCoreApplication::translate("ColorWorkspace", "Contrast");
     if (id == "saturation") return QCoreApplication::translate("ColorWorkspace", "Saturation");
-    if (id == "red_gain") return QCoreApplication::translate("ColorWorkspace", "Red gain");
-    if (id == "green_gain") return QCoreApplication::translate("ColorWorkspace", "Green gain");
-    if (id == "blue_gain") return QCoreApplication::translate("ColorWorkspace", "Blue gain");
+    if (id == "pivot") return QCoreApplication::translate("ColorWorkspace", "Pivot");
+    if (id == "temperature") return QCoreApplication::translate("ColorWorkspace", "Temperature");
+    if (id == "tint") return QCoreApplication::translate("ColorWorkspace", "Tint");
     return QCoreApplication::translate("ColorWorkspace", "Amount");
 }
 
-QImage calculateWaveform(const QImage& source) {
-    constexpr int width = 320;
+QImage calculateScope(const QImage& source, bool parade) {
+    constexpr int width = 480;
     constexpr int height = 256;
+    constexpr int left = 38;
+    constexpr int right = 8;
+    constexpr int top = 20;
+    constexpr int bottom = 26;
+    constexpr int plot_width = width - left - right;
+    constexpr int plot_height = height - top - bottom;
     std::array<std::vector<unsigned short>, 3> bins;
-    for (auto& channel : bins) channel.resize(width * height);
-    const auto sampled = source.scaled(width, 180, Qt::IgnoreAspectRatio,
+    for (auto& channel : bins) channel.resize(plot_width * plot_height);
+    const int sample_width = parade ? plot_width / 3 : plot_width;
+    const auto sampled = source.scaled(sample_width, plot_height, Qt::IgnoreAspectRatio,
                                        Qt::FastTransformation).convertToFormat(QImage::Format_RGB32);
     for (int y = 0; y < sampled.height(); ++y) {
         const auto* row = reinterpret_cast<const QRgb*>(sampled.constScanLine(y));
-        for (int x = 0; x < width; ++x) {
+        for (int x = 0; x < sampled.width(); ++x) {
             const std::array<int, 3> values{qRed(row[x]), qGreen(row[x]), qBlue(row[x])};
-            for (int channel = 0; channel < 3; ++channel)
-                ++bins[channel][(height - 1 - values[channel]) * width + x];
+            for (int channel = 0; channel < 3; ++channel) {
+                const int channel_x = parade ? channel * sample_width + x : x;
+                const int scope_y = plot_height - 1 - values[channel] * (plot_height - 1) / 255;
+                ++bins[channel][scope_y * plot_width + channel_x];
+            }
         }
     }
     QImage plot(width, height, QImage::Format_RGB32);
     plot.fill(QColor(18, 21, 27));
-    for (int y = 0; y < height; ++y) {
-        auto* row = reinterpret_cast<QRgb*>(plot.scanLine(y));
-        for (int x = 0; x < width; ++x) {
-            const auto index = y * width + x;
-            row[x] = qRgb(std::min(255, 18 + int(bins[0][index]) * 38),
-                            std::min(255, 21 + int(bins[1][index]) * 38),
-                            std::min(255, 27 + int(bins[2][index]) * 38));
+    QPainter painter(&plot);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.setPen(QColor(46, 54, 65));
+    for (int tick = 0; tick <= 4; ++tick) {
+        const int y = top + plot_height - 1 - tick * (plot_height - 1) / 4;
+        painter.drawLine(left, y, width - right - 1, y);
+        painter.setPen(QColor(151, 164, 180));
+        painter.drawText(2, y + 4, QStringLiteral("%1%").arg(tick * 25));
+        painter.setPen(QColor(46, 54, 65));
+    }
+    if (parade) {
+        for (int divider = 1; divider < 3; ++divider) {
+            const int x = left + divider * (plot_width / 3);
+            painter.drawLine(x, top, x, top + plot_height - 1);
         }
+    }
+    for (int y = 0; y < plot_height; ++y) {
+        auto* row = reinterpret_cast<QRgb*>(plot.scanLine(top + y));
+        for (int x = 0; x < plot_width; ++x) {
+            const auto index = y * plot_width + x;
+            row[left + x] = qRgb(std::min(255, 18 + int(bins[0][index]) * 38),
+                std::min(255, 21 + int(bins[1][index]) * 38),
+                std::min(255, 27 + int(bins[2][index]) * 38));
+        }
+    }
+    painter.setPen(QColor(210, 218, 228));
+    if (parade) {
+        const std::array<QString, 3> labels{QStringLiteral("R"), QStringLiteral("G"), QStringLiteral("B")};
+        for (int channel = 0; channel < 3; ++channel)
+            painter.drawText(left + channel * (plot_width / 3), height - 5,
+                plot_width / 3, 18, Qt::AlignCenter, labels[channel]);
+    } else {
+        painter.drawText(left, height - 5, plot_width, 18, Qt::AlignCenter,
+            QCoreApplication::translate("ColorWorkspace", "RGB waveform"));
     }
     return plot;
 }
+
+class RgbWheelDisk final : public QWidget {
+public:
+    explicit RgbWheelDisk(QWidget* parent = nullptr) : QWidget(parent) {
+        setMinimumSize(96, 96);
+        setFixedSize(108, 108);
+        setFocusPolicy(Qt::StrongFocus);
+    }
+    void configure(double minimum, double maximum) { minimum_ = minimum; maximum_ = maximum; update(); }
+    void setValues(std::array<double, 3> values) { values_ = values; update(); }
+    void setHandlers(std::function<void()> started, std::function<void()> finished,
+        std::function<void(std::array<double, 3>)> changed) {
+        started_ = std::move(started); finished_ = std::move(finished); changed_ = std::move(changed);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const double diameter = std::min(width(), height()) - 8.0;
+        const QRectF bounds((width() - diameter) / 2, (height() - diameter) / 2,
+            diameter, diameter);
+        static const QImage wheel = [] {
+            QImage image(160, 160, QImage::Format_ARGB32_Premultiplied);
+            for (int y = 0; y < image.height(); ++y) {
+                auto* row = reinterpret_cast<QRgb*>(image.scanLine(y));
+                for (int x = 0; x < image.width(); ++x) {
+                    const double dx = (x + .5 - image.width() / 2.0) / (image.width() / 2.0);
+                    const double dy = (y + .5 - image.height() / 2.0) / (image.height() / 2.0);
+                    const double radius = std::sqrt(dx * dx + dy * dy);
+                    if (radius > 1.0) { row[x] = qRgba(0, 0, 0, 0); continue; }
+                    const double hue = std::atan2(dy, dx) / (2.0 * std::numbers::pi) + 1.0;
+                    const QColor color = QColor::fromHsvF(std::fmod(hue, 1.0), radius, 1.0);
+                    row[x] = color.rgba();
+                }
+            }
+            return image;
+        }();
+        painter.drawImage(bounds, wheel);
+        painter.setPen(QPen(QColor(191, 204, 219), 1.4));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(bounds);
+        const double mean = (values_[0] + values_[1] + values_[2]) / 3.0;
+        const double amplitude = std::max(.001, (maximum_ - minimum_) / 2.0);
+        const double dx = values_[0] - mean;
+        const double dy = (values_[1] - values_[2]) / std::sqrt(3.0);
+        const double nx = std::clamp(dx / amplitude, -1.0, 1.0);
+        const double ny = std::clamp(dy / amplitude, -1.0, 1.0);
+        const double length = std::hypot(nx, ny);
+        const double scale = length > 1.0 ? 1.0 / length : 1.0;
+        const QPointF marker(bounds.center().x() + nx * scale * diameter * .46,
+            bounds.center().y() - ny * scale * diameter * .46);
+        painter.setPen(QPen(QColor(12, 16, 22), 3));
+        painter.setBrush(QColor(242, 246, 250));
+        painter.drawEllipse(marker, 5, 5);
+    }
+    void mousePressEvent(QMouseEvent* event) override {
+        if (event->button() != Qt::LeftButton) return;
+        dragging_ = true;
+        if (started_) started_();
+        updateFromPoint(event->position());
+    }
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if (dragging_) updateFromPoint(event->position());
+    }
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        if (!dragging_ || event->button() != Qt::LeftButton) return;
+        updateFromPoint(event->position());
+        dragging_ = false;
+        if (finished_) finished_();
+    }
+
+private:
+    void updateFromPoint(QPointF point) {
+        const double diameter = std::min(width(), height()) - 8.0;
+        const double radius = diameter * .46;
+        double x = (point.x() - width() / 2.0) / radius;
+        double y = (height() / 2.0 - point.y()) / radius;
+        const double magnitude = std::hypot(x, y);
+        if (magnitude > 1.0) { x /= magnitude; y /= magnitude; }
+        const double angle = std::atan2(y, x);
+        const double mean = (values_[0] + values_[1] + values_[2]) / 3.0;
+        const double amplitude = (maximum_ - minimum_) / 2.0 * std::hypot(x, y);
+        constexpr double two_pi_over_three = 2.0 * std::numbers::pi / 3.0;
+        std::array<double, 3> values{
+            mean + amplitude * std::cos(angle),
+            mean + amplitude * std::cos(angle - two_pi_over_three),
+            mean + amplitude * std::cos(angle + two_pi_over_three)};
+        for (auto& value : values) value = std::clamp(value, minimum_, maximum_);
+        if (values != values_ && changed_) changed_(values);
+    }
+    std::array<double, 3> values_{};
+    double minimum_ = -100.0;
+    double maximum_ = 100.0;
+    bool dragging_ = false;
+    std::function<void()> started_;
+    std::function<void()> finished_;
+    std::function<void(std::array<double, 3>)> changed_;
+};
+
+class PrimaryGradeWheel final : public QWidget {
+public:
+    PrimaryGradeWheel(QString key, double minimum, double maximum, double neutral,
+        QWidget* parent = nullptr) : QWidget(parent), minimum_(minimum), maximum_(maximum) {
+        setObjectName(QStringLiteral("colorWheel_%1").arg(key));
+        auto* layout = new QHBoxLayout(this);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(5);
+        disk_ = new RgbWheelDisk(this);
+        disk_->setObjectName(QStringLiteral("colorWheel_%1_disk").arg(key));
+        disk_->configure(minimum, maximum);
+        layout->addWidget(disk_);
+        master_ = new QSlider(Qt::Vertical, this);
+        master_->setObjectName(QStringLiteral("colorWheel_%1_master").arg(key));
+        master_->setRange(0, 1000);
+        master_->setFixedHeight(100);
+        master_->setAccessibleName(QCoreApplication::translate("ColorWorkspace", "Master value"));
+        layout->addWidget(master_);
+        auto* channels = new QGridLayout;
+        channels->setContentsMargins(0, 0, 0, 0);
+        channels->setHorizontalSpacing(4);
+        channels->setVerticalSpacing(3);
+        const std::array<QString, 3> channel_names{QStringLiteral("R"), QStringLiteral("G"), QStringLiteral("B")};
+        for (int channel = 0; channel < 3; ++channel) {
+            channels->addWidget(new QLabel(channel_names[channel], this), channel, 0);
+            fields_[channel] = new QDoubleSpinBox(this);
+            fields_[channel]->setObjectName(QStringLiteral("colorWheel_%1_%2_value").arg(key, channel_names[channel].toLower()));
+            fields_[channel]->setRange(minimum_, maximum_);
+            fields_[channel]->setDecimals(0);
+            fields_[channel]->setFixedWidth(76);
+            fields_[channel]->setValue(neutral);
+            channels->addWidget(fields_[channel], channel, 1);
+            connect(fields_[channel], &QDoubleSpinBox::editingFinished, this,
+                [this] { editValuesFromFields(); });
+        }
+        layout->addLayout(channels, 1);
+        setMinimumHeight(112);
+        setMaximumHeight(120);
+        disk_->setHandlers([this] { if (started_) started_(); },
+            [this] { if (finished_) finished_(); },
+            [this](std::array<double, 3> values) { setValues(values); if (changed_) changed_(rgb_values_); });
+        connect(master_, &QSlider::sliderPressed, this, [this] { if (started_) started_(); });
+        connect(master_, &QSlider::sliderReleased, this, [this] { if (finished_) finished_(); });
+        connect(master_, &QSlider::valueChanged, this, [this](int value) {
+            const double target = minimum_ + (maximum_ - minimum_) * value / 1000.0;
+            const double mean = (rgb_values_[0] + rgb_values_[1] + rgb_values_[2]) / 3.0;
+            const double delta = target - mean;
+            auto updated = rgb_values_;
+            for (auto& channel : updated) channel = std::clamp(channel + delta, minimum_, maximum_);
+            setValues(updated);
+            if (changed_) changed_(rgb_values_);
+        });
+        setValues({neutral, neutral, neutral});
+    }
+    void setHandlers(std::function<void()> started, std::function<void()> finished,
+        std::function<void(std::array<double, 3>)> changed) {
+        started_ = std::move(started); finished_ = std::move(finished); changed_ = std::move(changed);
+    }
+    void setValues(std::array<double, 3> values) {
+        rgb_values_ = values;
+        for (int channel = 0; channel < 3; ++channel) {
+            const QSignalBlocker blocker(fields_[channel]);
+            fields_[channel]->setValue(values[channel]);
+        }
+        const double mean = (values[0] + values[1] + values[2]) / 3.0;
+        const QSignalBlocker blocker(master_);
+        master_->setValue(static_cast<int>(std::lround((mean - minimum_) * 1000.0 /
+            (maximum_ - minimum_))));
+        disk_->setValues(rgb_values_);
+    }
+
+private:
+    void editValuesFromFields() {
+        std::array<double, 3> updated{};
+        for (int channel = 0; channel < 3; ++channel) updated[channel] = fields_[channel]->value();
+        if (updated == rgb_values_) return;
+        if (started_) started_();
+        setValues(updated);
+        if (changed_) changed_(rgb_values_);
+        if (finished_) finished_();
+    }
+    double minimum_ = 0.0;
+    double maximum_ = 100.0;
+    std::array<QDoubleSpinBox*, 3> fields_{};
+    std::array<double, 3> rgb_values_{};
+    RgbWheelDisk* disk_ = nullptr;
+    QSlider* master_ = nullptr;
+    std::function<void()> started_;
+    std::function<void()> finished_;
+    std::function<void(std::array<double, 3>)> changed_;
+};
 
 }  // namespace
 
@@ -223,12 +456,27 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     controls_->setMaximumWidth(480);
     controls_layout_ = new QFormLayout(controls_);
     controls_layout_->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
-    lower->addWidget(controls_, 2);
-    waveform_ = new QLabel(QCoreApplication::translate("ColorWorkspace", "RGB waveform"), this);
+    auto* controls_scroll = new QScrollArea(this);
+    controls_scroll->setObjectName("colorPrimaryControlsScroll");
+    controls_scroll->setFrameShape(QFrame::NoFrame);
+    controls_scroll->setWidgetResizable(true);
+    controls_scroll->setWidget(controls_);
+    lower->addWidget(controls_scroll, 2);
+    auto* scope_panel = new QWidget(this);
+    auto* scope_layout = new QVBoxLayout(scope_panel);
+    scope_layout->setContentsMargins(0, 0, 0, 0);
+    scope_mode_ = new QComboBox(scope_panel);
+    scope_mode_->setObjectName("colorScopeMode");
+    scope_mode_->addItem(QCoreApplication::translate("ColorWorkspace", "RGB waveform"), QStringLiteral("waveform"));
+    scope_mode_->addItem(QCoreApplication::translate("ColorWorkspace", "RGB Parade"), QStringLiteral("parade"));
+    scope_layout->addWidget(scope_mode_);
+    waveform_ = new QLabel(QCoreApplication::translate("ColorWorkspace", "No frame"), scope_panel);
     waveform_->setObjectName("colorWaveform");
     waveform_->setMinimumSize(320, 180);
     waveform_->setAlignment(Qt::AlignCenter);
-    lower->addWidget(waveform_, 1);
+    waveform_->setScaledContents(true);
+    scope_layout->addWidget(waveform_, 1);
+    lower->addWidget(scope_panel, 1);
     root->addLayout(lower, 2);
 
     connect(clips_, &QListWidget::currentRowChanged, this, [this](int row) {
@@ -289,6 +537,14 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     waveform_timer_ = new QTimer(this);
     waveform_timer_->setInterval(100);
     connect(waveform_timer_, &QTimer::timeout, this, [this] { scheduleWaveform(); });
+    connect(scope_mode_, &QComboBox::currentTextChanged, this, [this] {
+        ++waveform_generation_;
+        waveform_pending_ = false;
+        active_scope_request_id_ = 0;
+        waveform_->setPixmap({});
+        waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        if (active_) scheduleWaveform();
+    });
     refreshNodes();
 }
 
@@ -309,7 +565,13 @@ void ColorWorkspace::setActive(bool active) {
     active_ = active;
     ++waveform_generation_;
     if (active) waveform_timer_->start();
-    else { waveform_timer_->stop(); waveform_pending_ = false; }
+    else {
+        waveform_timer_->stop();
+        waveform_pending_ = false;
+        active_scope_request_id_ = 0;
+        waveform_->setPixmap({});
+        waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+    }
 }
 
 void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
@@ -342,8 +604,37 @@ void ColorWorkspace::setEffectsChangedHandler(std::function<void(timeline::ClipI
     effects_changed_handler_ = std::move(handler);
 }
 
+void ColorWorkspace::setGradeEditBatchHandlers(std::function<void()> started,
+    std::function<void()> finished) {
+    grade_edit_started_handler_ = std::move(started);
+    grade_edit_finished_handler_ = std::move(finished);
+}
+
 void ColorWorkspace::setPlaybackHandler(std::function<void(playback::PlaybackCommand)> handler) {
     playback_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setScopeFrameRequestHandler(
+    std::function<void(quint64, qint64, quint64, quint64)> handler) {
+    scope_frame_request_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::acceptScopeFrame(quint64 request_id, playback::VideoFramePtr frame,
+    qint64 timeline_frame, quint64 composition_revision, quint64 playback_generation) {
+    if (!active_ || !waveform_pending_ || request_id != active_scope_request_id_) return;
+    if (timeline_frame != active_scope_identity_.timeline_frame ||
+        composition_revision != active_scope_identity_.composition_revision ||
+        playback_generation != active_scope_identity_.playback_generation) {
+        waveform_pending_ = false;
+        return;
+    }
+    if (!frame) {
+        waveform_pending_ = false;
+        waveform_->setPixmap({});
+        waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        return;
+    }
+    renderScopeFrame(active_scope_identity_, std::move(frame), request_id);
 }
 
 void ColorWorkspace::setGalleryStills(std::vector<StillItem> stills) {
@@ -433,7 +724,48 @@ void ColorWorkspace::refreshControls() {
 
     if (effect_selected) {
         const auto* definition = creative_suite::effects::findDefinition(node->effect->id);
+        if (node->effect->id == "video.primary_grade") {
+            const auto add_wheel = [this, node](const QString& label, const QString& key,
+                std::array<std::string, 3> parameter_ids, double minimum, double maximum,
+                double neutral) {
+                auto* wheel = new PrimaryGradeWheel(key, minimum, maximum, neutral, controls_);
+                const std::array<double, 3> values{
+                    creative_suite::effects::parameterValue(*node->effect, parameter_ids[0]),
+                    creative_suite::effects::parameterValue(*node->effect, parameter_ids[1]),
+                    creative_suite::effects::parameterValue(*node->effect, parameter_ids[2])};
+                wheel->setValues(values);
+                const auto node_id = node->id;
+                wheel->setHandlers(
+                    [this] { if (grade_edit_started_handler_) grade_edit_started_handler_(); },
+                    [this] { if (grade_edit_finished_handler_) grade_edit_finished_handler_(); },
+                    [this, node_id, parameter_ids](std::array<double, 3> adjusted) {
+                        auto graph = graph_;
+                        bool changed = false;
+                        for (int channel = 0; channel < 3; ++channel)
+                            changed = color::setEffectParameter(graph, node_id,
+                                parameter_ids[channel], adjusted[channel]) || changed;
+                        if (changed) submit(std::move(graph), node_id, false);
+                    });
+                controls_layout_->addRow(label, wheel);
+            };
+            add_wheel(QCoreApplication::translate("ColorWorkspace", "Lift"), QStringLiteral("lift"),
+                {"lift_red", "lift_green", "lift_blue"}, -100.0, 100.0, 0.0);
+            add_wheel(QCoreApplication::translate("ColorWorkspace", "Gamma"), QStringLiteral("gamma"),
+                {"gamma_red", "gamma_green", "gamma_blue"}, 25.0, 400.0, 100.0);
+            add_wheel(QCoreApplication::translate("ColorWorkspace", "Gain"), QStringLiteral("gain"),
+                {"red_gain", "green_gain", "blue_gain"}, 0.0, 200.0, 100.0);
+            add_wheel(QCoreApplication::translate("ColorWorkspace", "Offset"), QStringLiteral("offset"),
+                {"offset_red", "offset_green", "offset_blue"}, -100.0, 100.0, 0.0);
+        }
+        const auto channel_wheel_parameter = [](std::string_view id) {
+            return id == "lift_red" || id == "lift_green" || id == "lift_blue" ||
+                id == "gamma_red" || id == "gamma_green" || id == "gamma_blue" ||
+                id == "red_gain" || id == "green_gain" || id == "blue_gain" ||
+                id == "offset_red" || id == "offset_green" || id == "offset_blue";
+        };
         if (definition) for (const auto& parameter : definition->parameters) {
+            if (node->effect->id == "video.primary_grade" &&
+                channel_wheel_parameter(parameter.id)) continue;
             auto* spin = new QDoubleSpinBox(controls_);
             spin->setObjectName(QStringLiteral("colorParameter_%1").arg(
                 QString::fromLatin1(parameter.id.data(), parameter.id.size())));
@@ -477,12 +809,14 @@ void ColorWorkspace::refreshControls() {
     }
 }
 
-void ColorWorkspace::submit(color::Graph graph, std::optional<color::NodeId> selected) {
+void ColorWorkspace::submit(color::Graph graph, std::optional<color::NodeId> selected,
+    bool rebuild_controls) {
     if (graph == graph_) return;
     graph_ = std::move(graph);
     selected_node_ = selected && color::findNode(graph_, *selected)
         ? selected : std::optional<color::NodeId>{};
-    refreshNodes(selected_node_);
+    if (rebuild_controls) refreshNodes(selected_node_);
+    else nodes_->setGraph(graph_, selected_node_);
     if (selected_clip_ && effects_changed_handler_)
         effects_changed_handler_(selected_clip_, graph_);
 }
@@ -492,31 +826,85 @@ void ColorWorkspace::scheduleWaveform() {
     auto* viewer = qobject_cast<PreviewWidget*>(preview_);
     if (!viewer) return;
     const auto payload = viewer->currentPayload();
-    if (!payload.valid()) { waveform_->setText(QCoreApplication::translate("ColorWorkspace", "RGB waveform")); return; }
-    QImage source;
+    if (!payload.valid()) {
+        waveform_->setPixmap({});
+        waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        return;
+    }
+    if (next_scope_request_id_ == 0) ++next_scope_request_id_;
+    const auto request_id = next_scope_request_id_++;
+    waveform_pending_ = true;
+    active_scope_request_id_ = request_id;
+    active_scope_identity_ = payload;
     if (payload.rgba) {
         const auto& frame = *payload.rgba;
         if (frame.width <= 0 || frame.height <= 0 || frame.stride < frame.width * 4 ||
-            frame.rgba_pixels.size() < static_cast<std::size_t>(frame.stride) * frame.height) return;
-        source = QImage(frame.rgba_pixels.data(), frame.width, frame.height,
-                        frame.stride, QImage::Format_RGBA8888);
-    } else {
-        source = viewer->grab().toImage();
+            frame.rgba_pixels.size() < static_cast<std::size_t>(frame.stride) * frame.height) {
+            waveform_pending_ = false;
+            waveform_->setPixmap({});
+            waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+            return;
+        }
+        renderScopeFrame(payload, payload.rgba, request_id);
+        return;
     }
-    if (source.isNull()) return;
-    waveform_pending_ = true;
+    if (!scope_frame_request_handler_) {
+        waveform_pending_ = false;
+        waveform_->setPixmap({});
+        waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        return;
+    }
+    scope_frame_request_handler_(request_id, payload.timeline_frame,
+        payload.composition_revision, payload.playback_generation);
+}
+
+void ColorWorkspace::renderScopeFrame(rendering::PreviewFramePayload identity,
+    playback::VideoFramePtr frame, quint64 request_id) {
+    if (!frame || frame->width <= 0 || frame->height <= 0 || frame->stride < frame->width * 4 ||
+        frame->rgba_pixels.size() < static_cast<std::size_t>(frame->stride) * frame->height) {
+        if (request_id == active_scope_request_id_) {
+            waveform_pending_ = false;
+            waveform_->setPixmap({});
+            waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        }
+        return;
+    }
+    QImage source(frame->rgba_pixels.data(), frame->width, frame->height,
+        frame->stride, QImage::Format_RGBA8888);
+    if (source.isNull()) {
+        waveform_pending_ = false;
+        waveform_->setPixmap({});
+        waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        return;
+    }
     const auto generation = waveform_generation_;
+    const bool parade = scope_mode_->currentData().toString() == QLatin1String("parade");
     const QPointer<ColorWorkspace> target(this);
-    const auto frame_owner = payload.rgba;
-    // Keep the immutable CPU frame alive while QImage references its pixels.
-    QThreadPool::globalInstance()->start([target, generation, source = std::move(source), frame_owner] {
-        auto image = calculateWaveform(source);
-        (void)frame_owner;
+    const auto frame_owner = frame;
+    QThreadPool::globalInstance()->start([target, generation, identity = std::move(identity),
+        request_id, source = std::move(source), frame_owner, parade] {
+        auto image = calculateScope(source, parade);
         if (!target) return;
-        QMetaObject::invokeMethod(target, [target, generation, image = std::move(image)] {
-            if (!target || generation != target->waveform_generation_) return;
+        QMetaObject::invokeMethod(target, [target, generation, identity, request_id,
+            image = std::move(image), frame_owner] {
+            if (!target || generation != target->waveform_generation_ ||
+                request_id != target->active_scope_request_id_) return;
             target->waveform_pending_ = false;
-            if (target->active_) target->waveform_->setPixmap(QPixmap::fromImage(image));
+            if (!target->active_) return;
+            auto* viewer = qobject_cast<PreviewWidget*>(target->preview_);
+            if (!viewer) return;
+            const auto current = viewer->currentPayload();
+            const bool same_frame = current.valid() &&
+                current.delivery_epoch == identity.delivery_epoch &&
+                current.composition_revision == identity.composition_revision &&
+                current.playback_generation == identity.playback_generation &&
+                current.timeline_frame == identity.timeline_frame &&
+                current.rgba == identity.rgba && current.gpu == identity.gpu;
+            if (same_frame) {
+                target->waveform_->setText({});
+                target->waveform_->setPixmap(QPixmap::fromImage(image));
+            }
+            (void)frame_owner;
         }, Qt::QueuedConnection);
     });
 }

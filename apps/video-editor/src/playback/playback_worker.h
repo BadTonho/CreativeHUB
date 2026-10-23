@@ -177,6 +177,8 @@ public slots:
         qint64 global_frame,
         quint64 composition_revision,
         quint64 generation);
+    virtual void requestScopeFrame(quint64 request_id, qint64 timeline_frame,
+        quint64 composition_revision, quint64 generation);
     virtual void stepForward();
     virtual void stepBackward();
     virtual void seekToFrame(qint64 frame_index, quint64 generation);
@@ -205,6 +207,8 @@ signals:
         qint64 timeline_frame,
         quint64 composition_revision,
         quint64 generation);
+    void scopeFrameReady(quint64 request_id, VideoFramePtr frame,
+        qint64 timeline_frame, quint64 composition_revision, quint64 generation);
 
 private slots:
     void decodeTick();
@@ -240,6 +244,7 @@ private:
     creative_suite::composition::GpuFrameCompositor* graphGpuBackend();
     void ensureGpuMaintenance();
     void collectGpuResources();
+    void pollScopeReadback();
     void emitComposedFrame();
     [[nodiscard]] std::optional<std::vector<DecodedCompositionLayer>>
         decodeCompositionLayers(
@@ -353,6 +358,20 @@ private:
     std::unordered_set<const void*> failed_gpu_collectors_;
     QTimer* gpu_maintenance_timer_ = nullptr;
     QTimer* gpu_busy_timer_ = nullptr;
+    QTimer* scope_readback_timer_ = nullptr;
+    struct PendingScopeReadback {
+        creative_suite::composition::GpuFrameCompositor* compositor = nullptr;
+        creative_suite::composition::OpenGlReadbackTicket ticket;
+        creative_suite::composition::OpenGlTextureFramePtr texture;
+        quint64 request_id = 0;
+        quint64 generation = 0;
+        quint64 composition_revision = 0;
+        qint64 timeline_frame = 0;
+    };
+    std::optional<PendingScopeReadback> pending_scope_readback_;
+    creative_suite::composition::GpuFrameCompositor* prepared_scope_compositor_ = nullptr;
+    int prepared_scope_width_ = 0;
+    int prepared_scope_height_ = 0;
     struct PendingGpuFrame {
         qint64 global_frame, local_frame;
         quint64 generation, epoch, revision, seek_sequence;

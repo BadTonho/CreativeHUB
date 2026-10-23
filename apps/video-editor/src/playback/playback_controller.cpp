@@ -141,6 +141,12 @@ PlaybackController::PlaybackController(
                 std::move(frame), timeline_frame, composition_revision,
                 playback_generation});
         }, Qt::QueuedConnection);
+    QObject::connect(worker_, &PlaybackWorker::scopeFrameReady, this,
+        [this](quint64 request_id, VideoFramePtr frame, qint64 timeline_frame,
+               quint64 composition_revision, quint64 generation) {
+            emitEvent(PlaybackScopeFrameEvent{request_id, std::move(frame),
+                timeline_frame, composition_revision, generation});
+        }, Qt::QueuedConnection);
     worker_thread_.start();
 }
 
@@ -488,6 +494,16 @@ void PlaybackController::captureStill(
         worker.captureCompositionFrame(request_id, project_generation,
             timeline_frame, composition_revision, generation);
     }, generation);
+}
+
+void PlaybackController::requestScopeFrame(quint64 request_id, qint64 timeline_frame,
+    quint64 composition_revision, quint64 playback_generation) {
+    if (!available() || request_id == 0) return;
+    queueWorker([request_id, timeline_frame, composition_revision,
+                 playback_generation](PlaybackWorker& worker) {
+        worker.requestScopeFrame(request_id, timeline_frame,
+            composition_revision, playback_generation);
+    });
 }
 
 void PlaybackController::setPreviewQuality(PreviewQuality quality) {

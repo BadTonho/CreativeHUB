@@ -115,7 +115,12 @@ creative_suite::composition::GpuTextureCompositionResult composeAdjustmentLayers
                 original.operation.empty() ? "adjustment-lower-composition" : original.operation,
                 original.cause.empty() ? "The lower-track GPU composition returned no texture." : original.cause,
                 original.error_code);
-        const auto passes = creative_suite::effects::colorAdjustmentPasses(step.layer.effect_stack);
+        const auto graph_effect_stack = step.color_graph
+            ? color::linearEffectStack(*step.color_graph)
+            : std::optional<std::vector<creative_suite::effects::EffectInstance>>{};
+        const auto& effect_stack = graph_effect_stack
+            ? *graph_effect_stack : step.layer.effect_stack;
+        const auto passes = creative_suite::effects::colorAdjustmentPasses(effect_stack);
         if (!passes)
             return fail(OpenGlCompositionStatus::Unsupported, "adjustment-effects",
                 "The GPU adjustment operation does not support one of the effect-stack entries.");

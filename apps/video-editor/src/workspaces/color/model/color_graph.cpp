@@ -394,19 +394,40 @@ bool removeParallelMixer(Graph& graph, NodeId id) {
     std::vector<Connection> next;
     for (const auto* edge : incoming(candidate, id)) previous.push_back(*edge);
     for (const auto* edge : outgoing(candidate, id)) next.push_back(*edge);
+    if (previous.empty()) return false;
+    const auto retained = std::min_element(previous.begin(), previous.end(),
+        [](const Connection& left, const Connection& right) {
+            return left.input < right.input;
+        });
+    const auto retained_source = retained->from;
     candidate.nodes.erase(std::remove_if(candidate.nodes.begin(), candidate.nodes.end(),
         [id](const Node& item) { return item.id == id; }), candidate.nodes.end());
     std::erase_if(candidate.connections, [id](const Connection& edge) {
         return edge.from == id || edge.to == id;
     });
-    if (!previous.empty()) {
-        const auto retained_branch = std::min_element(previous.begin(), previous.end(),
-            [](const Connection& left, const Connection& right) {
-                return left.input < right.input;
-            });
-        for (const auto& edge : next)
-            candidate.connections.push_back({retained_branch->from, edge.to,
-                                              edge.input, edge.weight});
+    for (const auto& edge : next)
+        candidate.connections.push_back({retained_source, edge.to,
+                                          edge.input, edge.weight});
+
+    std::vector<NodeId> prune;
+    for (const auto& edge : previous)
+        if (edge.from != retained_source) prune.push_back(edge.from);
+    while (!prune.empty()) {
+        const auto branch_id = prune.back();
+        prune.pop_back();
+        if (branch_id == retained_source) continue;
+        const auto* branch_node = findNode(candidate, branch_id);
+        if (!branch_node || branch_node->type == NodeType::Input ||
+            branch_node->type == NodeType::Output || !outgoing(candidate, branch_id).empty())
+            continue;
+        std::vector<NodeId> parents;
+        for (const auto* edge : incoming(candidate, branch_id)) parents.push_back(edge->from);
+        candidate.nodes.erase(std::remove_if(candidate.nodes.begin(), candidate.nodes.end(),
+            [branch_id](const Node& item) { return item.id == branch_id; }), candidate.nodes.end());
+        std::erase_if(candidate.connections, [branch_id](const Connection& edge) {
+            return edge.from == branch_id || edge.to == branch_id;
+        });
+        prune.insert(prune.end(), parents.begin(), parents.end());
     }
     if (!validate(candidate)) return false;
     graph = std::move(candidate);

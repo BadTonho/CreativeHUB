@@ -46,19 +46,71 @@ struct Definition {
 };
 
 struct ColorAdjustmentParameters {
-    // Brightness is [-100, 100]; contrast and saturation are [0, 200] percent.
+    // Legacy brightness remains for fused callers and maps to equal RGB offsets.
+    // The expanded controls use normalized encoded RGB values, not a physical
+    // temperature or color-management model.
     double brightness = 0.0;
     double contrast_percent = 100.0;
     double saturation_percent = 100.0;
     double red_gain_percent = 100.0;
     double green_gain_percent = 100.0;
     double blue_gain_percent = 100.0;
+    double lift_red = 0.0;
+    double lift_green = 0.0;
+    double lift_blue = 0.0;
+    double gamma_red = 100.0;
+    double gamma_green = 100.0;
+    double gamma_blue = 100.0;
+    double offset_red = 0.0;
+    double offset_green = 0.0;
+    double offset_blue = 0.0;
+    double pivot_percent = 50.0;
+    double temperature = 0.0;
+    double tint = 0.0;
 };
 
-// Encoded straight RGB evaluation; callers validate parameters. Alpha is untouched.
+[[nodiscard]] bool isValidColorAdjustment(
+    const ColorAdjustmentParameters& parameters) noexcept;
+
+[[nodiscard]] inline std::array<double, 4> colorAdjustmentAffine(
+    const ColorAdjustmentParameters& parameters) noexcept {
+    const double scale = parameters.contrast_percent / 100.0;
+    const double pivot = parameters.pivot_percent / 100.0;
+    const double temperature = parameters.temperature / 400.0;
+    const double tint = parameters.tint / 400.0;
+    const std::array<double, 3> offsets{
+        parameters.brightness + parameters.offset_red,
+        parameters.brightness + parameters.offset_green,
+        parameters.brightness + parameters.offset_blue};
+    const std::array<double, 3> relative_color{
+        temperature + tint, -2.0 * tint, -temperature + tint};
+    return {scale,
+        (offsets[0] / 100.0 - pivot) * scale + pivot + relative_color[0],
+        (offsets[1] / 100.0 - pivot) * scale + pivot + relative_color[1],
+        (offsets[2] / 100.0 - pivot) * scale + pivot + relative_color[2]};
+}
+
+// Encoded straight RGB evaluation; callers validate parameters. The order is
+// offset/contrast/relative temperature and tint, shadow-weighted lift, gamma,
+// Rec. 709 saturation, and per-channel gain. Alpha is untouched by callers.
 [[nodiscard]] inline std::array<unsigned char,3> colorAdjustmentRgb(
     std::array<double,3> rgb,const ColorAdjustmentParameters& parameters) noexcept {
-    for(auto& value:rgb)value=(value+parameters.brightness/100.-.5)*(parameters.contrast_percent/100.)+.5;
+    const auto affine = colorAdjustmentAffine(parameters);
+    const std::array<double, 3> lifts{parameters.lift_red, parameters.lift_green,
+                                      parameters.lift_blue};
+    const std::array<double, 3> gammas{parameters.gamma_red, parameters.gamma_green,
+                                       parameters.gamma_blue};
+    for (int channel = 0; channel < 3; ++channel) {
+        rgb[channel] = rgb[channel] * affine[0] + affine[channel + 1];
+    }
+    const double shadow_luma = .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+    const double shadow_amount = std::clamp(1.0 - shadow_luma, 0.0, 1.0);
+    const double shadow_weight = shadow_amount * shadow_amount;
+    for (int channel = 0; channel < 3; ++channel) {
+        rgb[channel] += lifts[channel] / 100.0 * shadow_weight;
+        if (gammas[channel] != 100.0)
+            rgb[channel] = std::pow(std::max(rgb[channel], 0.0), 100.0 / gammas[channel]);
+    }
     const double luma=.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];
     const std::array<double, 3> gains{parameters.red_gain_percent,
                                       parameters.green_gain_percent,
@@ -98,10 +150,12 @@ enum class ProcessingResult {
 [[nodiscard]] std::optional<std::vector<ColorAdjustmentParameters>> colorAdjustmentPasses(
     std::span<const EffectInstance> effects);
 
-// Applies brightness, contrast around 0.5, and Rec. 709 saturation in one
-// pixel pass, rounding RGB only after all three operations. Cancellation is
-// checked before each row. A cancelled call may have changed earlier rows, so
-// the caller must discard that frame. Invalid input leaves the frame unchanged.
+// Applies normalized RGB offset, contrast about pivot, relative temperature / tint,
+// shadow-weighted Lift, per-channel Gamma, Rec. 709 saturation and per-channel
+// Gain in one pixel pass. Alpha and row padding are preserved; RGB rounds once
+// after the full correction. Cancellation is checked before each row. A cancelled
+// call may have changed earlier rows, so the caller must discard that frame.
+// Invalid input leaves the frame unchanged.
 // Callback exceptions propagate.
 [[nodiscard]] ProcessingResult applyColorAdjustment(
     media::RgbaFrame& frame,

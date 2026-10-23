@@ -711,6 +711,29 @@ void MainWindow::createWorkspace() {
                 playback_controller_->isPlaying()) command = playback::PlaybackCommand::Pause;
             sendPlaybackCommand(command);
         });
+        color_workspace_->setGradeEditBatchHandlers(
+            [this] {
+                if (!color_grade_edit_batch_id_.has_value())
+                    color_grade_edit_batch_id_ = timeline_command_service_.beginEditBatch();
+            },
+            [this] {
+                if (!color_grade_edit_batch_id_.has_value()) return;
+                const auto result = timeline_command_service_.finishEditBatch(
+                    *color_grade_edit_batch_id_);
+                color_grade_edit_batch_id_.reset();
+                if (result.changed()) {
+                    updateHistoryActions();
+                    updateProjectDirtyState();
+                    updateTimelineState();
+                }
+            });
+        color_workspace_->setScopeFrameRequestHandler(
+            [this](quint64 request_id, qint64 frame, quint64 revision,
+                   quint64 generation) {
+                if (playback_controller_)
+                    playback_controller_->requestScopeFrame(request_id, frame,
+                        revision, generation);
+            });
         color_workspace_->setCaptureStillHandler([this] { captureColorStill(); });
         color_workspace_->setRenameStillHandler([this](const QString& id, const QString& name) {
             renameColorStill(id, name);
@@ -732,7 +755,8 @@ void MainWindow::createWorkspace() {
                     application::SetClipColorGraphCommand{id, std::move(graph)});
                 if (!result.changed()) return;
                 applyTimelineEditResult(result, false);
-                updateTimelineState();
+                const bool edit_batch_active = color_grade_edit_batch_id_.has_value();
+                if (!edit_batch_active) updateTimelineState();
                 refreshPlaybackComposition();
             } catch (const std::exception& error) {
                 logging::Logger::instance().log(logging::Level::Error,
@@ -740,7 +764,6 @@ void MainWindow::createWorkspace() {
                     {{"clip_id", std::to_string(id)}});
                 statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not update the color grade."));
             }
-            refreshColorSelection();
         });
         workspace_host_->setColorWorkspace(color_workspace_);
         refreshColorSelection();

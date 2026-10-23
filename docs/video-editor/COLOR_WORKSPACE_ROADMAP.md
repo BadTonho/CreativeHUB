@@ -1,6 +1,6 @@
 # Color Workspace Roadmap
 
-Status: **The project-owned Color graph, Gallery capture and organization, and a basic RGB waveform are implemented in code. The graph action controls are currently hidden in the interface. The Video Editor Release target was compiled on 2026-10-23; automated regression tests and native visual/platform acceptance remain pending.**
+Status: **The project-owned Color graph, Gallery capture and organization, expanded Primary Grade, RGB Waveform/RGB Parade scopes, and shared Edit controls are implemented. Focused regressions pass and the Video Editor, Hub, and Motion Release builds complete. Native visual interaction and platform acceptance remain pending; the broader MainWindow integration test currently fails at its Timeline OS-drop assertion. Graph action controls remain hidden.**
 
 This document records the current implementation, the functional areas expected
 from a complete color workspace, and a staged order for developing them. The
@@ -31,8 +31,8 @@ which calculates each required upstream node once and mixes the branch
 outputs. The evaluator also handles adjustment clips after lower-track
 composition.
 
-The page keeps the shared Viewer, visual-clip strip, basic RGB waveform, and
-project Gallery. Still capture records the composed Viewer frame after
+The page keeps the shared Viewer, visual-clip strip, RGB Waveform/RGB Parade,
+and project Gallery. Still capture records the composed Viewer frame after
 corrections at canvas resolution, with clip and timeline-frame provenance.
 Stills are named, renamed, and removed in capture order; their PNGs remain in
 the <project>.csp.gallery/ sidecar. Gallery selection does not change the
@@ -40,10 +40,16 @@ Viewer or Timeline. Albums, tags, saved grades, and comparison views are not
 included.
 
 The currently available built-in effect set is Grayscale, Brightness,
-Contrast, Saturation, and Primary Grade. Primary Grade exposes brightness,
-contrast, saturation, and RGB gain controls. The current monitoring and
-animation tools are limited to the basic RGB waveform and the existing
-keyframe panel.
+Contrast, Saturation, and Primary Grade. Primary Grade exposes interactive
+Lift, Gamma, Gain, and Offset RGB wheels with editable channel values, plus
+contrast, pivot, saturation, temperature, and tint. Neutral values preserve the
+previous correction result. Temperature and tint are relative adjustments in
+the current normalized RGB space, not Kelvin or physical color-management
+controls. The Color page offers a combined RGB Waveform and RGB Parade at a
+0–100% scale. CPU frames are sampled directly; GPU frames use one bounded,
+asynchronous worker readback. Scope data comes from the composed frame rather
+than the Preview widget, so UI borders and letterboxing are excluded. The
+existing keyframe panel remains the only animation editor.
 
 ## Functional capability inventory
 
@@ -158,10 +164,14 @@ design.
 
 ## Persistence and compatibility
 
-CSP v34 stores the Color graph on supported visual clips, including node IDs,
+CSP v35 stores the Color graph on supported visual clips, including node IDs,
 types, effect values and enabled state, connections, mixer input weights, and
-canvas positions. CSP versions 1 through 33 migrate their existing ordered
+canvas positions. CSP versions 1 through 34 migrate their existing ordered
 effect stacks into serial graphs; clips without effects receive Input → Output.
+The v35 Primary Grade schema stores per-channel Lift, Gamma, Gain and Offset,
+plus contrast, pivot, saturation, temperature and tint. A legacy six-parameter
+Primary Grade maps its brightness value to equal RGB Offsets and preserves its
+other values.
 Gallery metadata remains the v33 color_gallery array and its lossless PNGs
 remain in the project sidecar. Save As, autosave, recovery, and Hub backup keep
 the graph and Gallery sidecar together. A missing still image remains an
@@ -176,10 +186,9 @@ and restoration. Keep large image assets outside the main CSP document.
 1. **Make graph editing reachable.** Restore visible access to effect type,
    add effect, add branch, enable/disable, and remove actions. Choose an
    appropriate canvas or panel interaction without changing graph semantics.
-2. **Complete primary grading and monitoring.** Extend the basic Primary
-   Grade controls into the core wheels/bars/log workflow, then add calibrated
-   Waveform and RGB Parade views. Add Vectorscope and Histogram for dependable
-   monitoring.
+2. **Broaden primary grading and monitoring.** Add bars and log controls,
+   Vectorscope and Histogram, and calibrated scope modes after defining color
+   management and display behavior.
 3. **Improve reference and grade reuse.** Add copy/apply and saved versions,
    then Gallery reference display and practical wipe/split-screen comparisons.
    Add group corrections only with a clear grade ordering model.
@@ -199,10 +208,9 @@ include regression coverage for its observable behavior and persistence.
 ## Regression coverage and acceptance status
 
 Regression code covers graph validation and cycles, connection changes,
-normalized mixing, CPU evaluation, serial GPU-path eligibility, Color canvas
-operations, Edit parameter and enabled-state editing, shared Undo/Redo,
-Preview and offline export, CSP v34 persistence, v33 migration, autosave and
-recovery, and Hub backup/restoration with Gallery PNG sidecars. The Video
-Editor Release target was compiled on 2026-10-23. These regression checks have
-not been executed, and native visual and platform acceptance remain pending.
+normalized mixing, CPU/OpenGL/Vulkan evaluation, Color canvas and wheel
+interaction, Edit parameter and enabled-state editing, shared Undo/Redo,
+Preview and offline export, CSP v35 persistence and v1–v34 migration, autosave
+and recovery, scopes and GPU readback, and Hub backup/restoration with Gallery
+PNG sidecars. Native visual and platform acceptance remain pending.
 

@@ -49,6 +49,8 @@ public:
     [[nodiscard]] OpenGlReadbackResult collectAsyncReadback(
         OpenGlReadbackTicket ticket, const CancellationPredicate& cancel = {},
         bool fail_collection_for_testing = false);
+    [[nodiscard]] OpenGlCompositionResult pollAsyncReadback(
+        OpenGlReadbackTicket ticket) override;
     // Worker-only. Completes outstanding transfers before making their PBOs
     // reusable. Used during cancellation and GPU-to-CPU recovery.
     void discardAsyncReadbacks() noexcept;

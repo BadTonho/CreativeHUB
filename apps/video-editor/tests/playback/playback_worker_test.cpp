@@ -1815,7 +1815,13 @@ void validateVisualEffectPreview() {
     graph_worker.setActiveCompositionClip(0, 0);
     graph_worker.setComposition({graph_layer}, {}, 604);
     graph_worker.renderCompositionFrame(0, 0, 604);
-    const auto expected = color::evaluate(parallel_graph, *still);
+    const auto graded_frame = color::evaluate(parallel_graph, *still);
+    std::optional<media::VideoFrame> expected;
+    if (graded_frame) {
+        const std::vector<rendering::CompositionLayer> expected_layers{{
+            &*graded_frame, timeline::Transform2D{}, {}}};
+        expected = rendering::FrameCompositor::compose(1920, 1080, expected_layers);
+    }
     require(graph_frames.size() == 1 && graph_frames.back() && expected &&
                 graph_frames.back()->width == expected->width &&
                 graph_frames.back()->height == expected->height &&
