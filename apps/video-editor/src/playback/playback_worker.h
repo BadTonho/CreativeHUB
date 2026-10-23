@@ -149,6 +149,7 @@ public slots:
         double clip_audio_gain,
         bool clip_audio_muted);
     virtual void setMonitorVolume(double gain);
+    virtual void setAudioMeteringEnabled(bool enabled);
     virtual void setPreviewQuality(PreviewQuality quality);
     virtual void setCompositionCanvasSize(int width, int height);
     virtual void setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface);
@@ -187,6 +188,9 @@ signals:
     void playbackError(QString message, qint64 error_code, quint64 generation);
     void audioWarning(QString message, qint64 error_code, quint64 generation);
     void compositionWarning(QString message, qint64 error_code, quint64 generation);
+    void audioLevelsReady(QVector<quint64> track_ids,
+                          QVector<float> track_peaks, float master_peak,
+                          quint64 generation);
 
 private slots:
     void decodeTick();
@@ -304,6 +308,8 @@ private:
     qint64 audio_clock_origin_usecs_ = 0;
     std::int64_t audio_clock_origin_frame_ = 0;
     quint64 generation_ = 0;
+    bool audio_metering_enabled_ = false;
+    std::chrono::steady_clock::time_point last_audio_meter_emit_{};
     bool playing_ = false;
     bool diagnostics_logged_ = false;
     PreviewQuality preview_quality_ = PreviewQuality::Full;

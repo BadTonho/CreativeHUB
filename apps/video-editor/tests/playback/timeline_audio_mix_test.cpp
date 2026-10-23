@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -49,6 +50,22 @@ void testMixesEveryActiveTrack() {
         require(std::abs(sample - (45000.0F / 32768.0F)) < 1.0e-6F && sample > 1.0F,
                 "Overlapping audio sources were not summed before output clipping.");
     }
+    std::vector<float> first_track(20, 0.0F);
+    std::vector<float> second_track(20, 0.0F);
+    media::accumulateTimelineAudioChunk(
+        spans[0], constantChunk(50, 30000), first_track, 2);
+    media::accumulateTimelineAudioChunk(
+        spans[1], constantChunk(0, 30000), second_track, 2);
+    require(std::abs(media::timelineAudioPeak(first_track) -
+                     15000.0F / 32768.0F) < 1.0e-6F &&
+            std::abs(media::timelineAudioPeak(second_track) -
+                     30000.0F / 32768.0F) < 1.0e-6F &&
+            media::timelineAudioPeak(mixed) > 1.0F,
+            "Track and output meters must use post-gain, pre-clipping mix peaks.");
+    require(media::timelineAudioPeak(std::vector<float>(20, 0.0F)) == 0.0F &&
+            media::timelineAudioPeak(std::vector<float>{
+                std::numeric_limits<float>::quiet_NaN(), -0.75F}) == 0.75F,
+            "Meter peaks must remain stable for silence and invalid samples.");
 }
 
 void testMuteGainAndGaps() {

@@ -201,6 +201,22 @@ void TimelineWidget::setStereoWaveformDisplayEnabled(bool enabled) noexcept {
     update();
 }
 
+void TimelineWidget::setAudioOnlyDisplayEnabled(bool enabled) noexcept {
+    if (audio_only_display_enabled_ == enabled) return;
+    audio_only_display_enabled_ = enabled;
+    interaction_controller_.cancelAll();
+    if (QWidget::mouseGrabber() == this) releaseMouse();
+    split_drag_active_ = false;
+    splitter_hover_active_ = false;
+    updateVerticalExtent();
+    update();
+    emit trackHeaderVisualsChanged();
+}
+
+bool TimelineWidget::audioOnlyDisplayEnabled() const noexcept {
+    return audio_only_display_enabled_;
+}
+
 bool TimelineWidget::stereoWaveformDisplayEnabled() const noexcept {
     return stereo_waveform_display_enabled_;
 }
@@ -984,6 +1000,17 @@ TimelineGeometry TimelineWidget::geometry() const noexcept {
 
 TimelineTrackViewLayout TimelineWidget::trackViewLayout() const noexcept {
     constexpr double bottom_margin = 12.0;
+    if (audio_only_display_enabled_) {
+        const auto width = std::max(0.0, static_cast<double>(this->width()) -
+            TimelineGeometry::left_margin - TimelineGeometry::right_margin);
+        TimelineTrackViewLayout layout;
+        layout.audio_viewport = QRectF(
+            TimelineGeometry::left_margin, TimelineGeometry::top_margin,
+            width, std::max(0.0, static_cast<double>(height()) -
+                TimelineGeometry::top_margin - bottom_margin));
+        layout.audio_scroll_offset = audio_scroll_offset_;
+        return layout;
+    }
     const auto available_height = std::max(
         0.0,
         static_cast<double>(height()) - TimelineGeometry::top_margin -
@@ -1140,8 +1167,9 @@ QRectF TimelineWidget::rulerRect() const noexcept {
 void TimelineWidget::updateVerticalExtent() {
     constexpr double bottom_margin = 12.0;
     const auto minimum_height = static_cast<int>(std::ceil(
-        TimelineGeometry::top_margin + 2.0 * kMinimumTrackRowHeight +
-        track_group_splitter_height + bottom_margin));
+        TimelineGeometry::top_margin +
+        (audio_only_display_enabled_ ? 1.0 : 2.0) * kMinimumTrackRowHeight +
+        (audio_only_display_enabled_ ? 0.0 : track_group_splitter_height) + bottom_margin));
     // Keep the dock resizable independently from the preferred row heights.
     // Larger rows remain available through each group's vertical scrolling.
     setMinimumHeight(std::max(100, minimum_height));
@@ -1568,6 +1596,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     const auto splitter_grip = split_drag_active_
         ? QColor("#b8e2ff")
         : splitter_hover_active_ ? QColor("#9bd5ff") : QColor("#aab6c5");
+    if (!audio_only_display_enabled_) {
     painter.fillRect(track_view.splitter_rect, splitter_background);
     painter.setPen(QPen(splitter_border, 1.0));
     painter.drawLine(track_view.splitter_rect.topLeft(),
@@ -1593,6 +1622,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         painter.drawLine(
             QPointF(grip_center.x() - 6.0, grip_center.y() + offset),
             QPointF(grip_center.x() + 6.0, grip_center.y() + offset));
+    }
     }
     const auto paint_empty_group = [&painter](
         const QRectF& viewport, const QString& message) {

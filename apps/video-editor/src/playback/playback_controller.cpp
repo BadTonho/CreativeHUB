@@ -120,6 +120,19 @@ PlaybackController::PlaybackController(
             if (generation == generation_)
                 emitEvent(PlaybackCompositionWarningEvent{message, code});
         }, Qt::QueuedConnection);
+    QObject::connect(worker_, &PlaybackWorker::audioLevelsReady, this,
+        [this](const QVector<quint64>& ids, const QVector<float>& levels,
+               float master_peak,
+               quint64 generation) {
+            if (generation != generation_ || !playing_) return;
+            PlaybackAudioLevelsEvent event;
+            event.master_peak = master_peak;
+            for (qsizetype index = 0; index < ids.size() &&
+                 index < levels.size(); ++index) {
+                event.track_peaks.emplace_back(ids[index], levels[index]);
+            }
+            emitEvent(std::move(event));
+        }, Qt::QueuedConnection);
     worker_thread_.start();
 }
 
@@ -481,6 +494,12 @@ void PlaybackController::setMonitorVolume(double gain) {
     queueWorker([gain](PlaybackWorker& worker) { worker.setMonitorVolume(gain); });
 }
 
+void PlaybackController::setAudioMeteringEnabled(bool enabled) {
+    queueWorker([enabled](PlaybackWorker& worker) {
+        worker.setAudioMeteringEnabled(enabled);
+    });
+}
+
 void PlaybackController::setAudioParametersForActiveClip() {
     const auto location = activeClipLocation();
     if (!location.has_value()) return;
@@ -499,9 +518,10 @@ void PlaybackController::setAudioParametersForActiveClip() {
     });
 }
 
-void PlaybackController::setGeneration(quint64 generation) noexcept {
+void PlaybackController::setGeneration(quint64 generation) {
     generation_ = generation;
     published_generation_.store(generation, std::memory_order_release);
+    emitEvent(PlaybackAudioLevelsEvent{});
 }
 
 void PlaybackController::discardPendingActivation(bool clear_selection) {

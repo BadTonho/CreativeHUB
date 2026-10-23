@@ -9,6 +9,7 @@
 #include "ui/effects/effects_favorites_widget.h"
 #include "ui/workspace/workspace_host.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
+#include "workspaces/audio/ui/audio_workspace.h"
 #include "workspaces/fusion/nodes/ui/node_canvas.h"
 #include "workspaces/render/queue/render_queue_model.h"
 #include "workspaces/render/queue/render_queue_controller.h"
@@ -50,6 +51,7 @@
 #include <QMenuBar>
 #include <QSaveFile>
 #include <QProgressDialog>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSettings>
@@ -250,6 +252,172 @@ bool writePngAtomically(const std::filesystem::path& path, const QImage& image) 
 
 class MainWindowIntegrationTest final {
 public:
+    static void runAudioWorkspaceOnly() {
+        QStandardPaths::setTestModeEnabled(true);
+        const auto directory = uniqueTestDirectory();
+        std::filesystem::create_directories(directory);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                           QString::fromStdString((directory / "settings").string()));
+        QCoreApplication::setOrganizationName("CreativeSuiteTests");
+        QCoreApplication::setApplicationName("AudioWorkspaceIntegration");
+        QSettings().clear();
+        settings::setProjectAutosaveEnabled(false);
+        settings::setWorkspacePageTransitionsEnabled(false);
+        const auto audio_source = directory / "audio-workspace.wav";
+        createWaveformWav(audio_source);
+        {
+            MainWindow window;
+            window.show();
+            QApplication::processEvents();
+            auto* timeline = window.editUi().timeline;
+            const auto track = std::find_if(
+                window.timeline_model_.tracks().begin(),
+                window.timeline_model_.tracks().end(),
+                [](const timeline::TimelineTrack& value) {
+                    return value.kind == timeline::TrackKind::Audio;
+                });
+            require(track != window.timeline_model_.tracks().end(),
+                    "The Audio workspace needs an Audio track.");
+            const auto track_id = track->track_id;
+            media::VideoMetadata metadata;
+            metadata.kind = media::MediaKind::Audio;
+            metadata.source_path = audio_source;
+            metadata.display_name = "Audio workspace";
+            metadata.duration_seconds = 1.0;
+            metadata.audio = media::AudioMetadata{"pcm_s16le", 8000, 2, 1.0};
+            require(window.media_controller_.commitImported({
+                        metadata, {}, metadata.display_name, "Unsorted", false}).changed() &&
+                        window.timeline_command_service_.execute(
+                            application::AddMediaClipCommand{
+                                audio_source, track_id, 0}).changed(),
+                    "The Audio workspace fixture could not add its source clip.");
+            window.updateTimelineState();
+            const auto clip_id = window.timeline_model_.tracks()
+                [*window.timeline_model_.locateTrack(track_id)].clips.front().clip_id;
+            window.edit_workspace_->controller()->handleTimelineClipSelectionChanged(
+                track_id, clip_id);
+            const auto clip_count = window.timeline_model_.tracks()
+                [*window.timeline_model_.locateTrack(track_id)].clips.size();
+            const auto playhead = timeline->playheadFrame();
+            const std::array<QDockWidget*, 8> docks{
+                window.bins_dock_, window.media_dock_, window.toolbox_dock_,
+                window.favorites_dock_, window.effects_dock_,
+                window.inspector_dock_, window.preview_dock_, window.timeline_dock_};
+            std::array<bool, 8> dock_visible{};
+            std::array<Qt::DockWidgetArea, 8> dock_area{};
+            for (std::size_t index = 0; index < docks.size(); ++index) {
+                dock_visible[index] = !docks[index]->isHidden();
+                dock_area[index] = window.dockWidgetArea(docks[index]);
+            }
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Audio);
+            require(window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Audio &&
+                        timeline->audioOnlyDisplayEnabled() &&
+                        !timeline->isReadOnly() &&
+                        timeline->trackGroupViewportRect(
+                            timeline::TrackKind::Video).isEmpty() &&
+                        timeline->trackGroupViewportRect(
+                            timeline::TrackKind::Audio).height() > 0 &&
+                        timeline->playheadFrame() == playhead &&
+                        window.editor_session_.selection().active_clip_id == clip_id &&
+                        window.timeline_model_.tracks()
+                            [*window.timeline_model_.locateTrack(track_id)]
+                            .clips.size() == clip_count,
+                    "Audio must share the editable Timeline and preserve its state.");
+            auto* gain = window.audio_workspace_->mixerPanel()
+                ->findChild<QSlider*>("audioTrackGain");
+            auto* mute = window.audio_workspace_->mixerPanel()
+                ->findChild<QCheckBox*>("audioTrackMute");
+            require(gain != nullptr && mute != nullptr && gain->value() == 100 &&
+                        !mute->isChecked(),
+                    "The Audio mixer must reflect the persisted track settings.");
+            auto* track_meter = window.audio_workspace_->meterPage()
+                ->findChild<QProgressBar*>("audioTrackMeter");
+            auto* output_meter = window.audio_workspace_->meterPage()
+                ->findChild<QProgressBar*>("audioOutputMeter");
+            auto* mixer_output_meter = window.audio_workspace_->mixerPanel()
+                ->findChild<QProgressBar*>("audioOutputMixerMeter");
+            window.audio_workspace_->setPeaks({{track_id, 0.4F}}, 0.7F);
+            require(track_meter != nullptr && output_meter != nullptr &&
+                        mixer_output_meter != nullptr &&
+                        track_meter->value() == 40 &&
+                        output_meter->value() == 70 &&
+                        mixer_output_meter->value() == 70,
+                    "Audio meters must show the matching track and summed output.");
+            window.audio_workspace_->clearPeaks();
+            require(track_meter->value() == 0 && output_meter->value() == 0 &&
+                        mixer_output_meter->value() == 0,
+                    "Audio meters must clear after playback stops.");
+            gain->setValue(65);
+            require(std::abs(window.timeline_model_.tracks()
+                        [*window.timeline_model_.locateTrack(track_id)]
+                        .audio_gain - 0.65) < 1.0e-6,
+                    "The mixer must edit track gain by stable ID.");
+            require(window.edit_workspace_->controller()->undo().changed() &&
+                        std::abs(window.timeline_model_.tracks()
+                            [*window.timeline_model_.locateTrack(track_id)]
+                            .audio_gain - 1.0) < 1.0e-6,
+                    "Audio gain Undo must use the shared history.");
+            require(window.edit_workspace_->controller()->redo().changed(),
+                    "Audio gain Redo must use the shared history.");
+            mute->setChecked(true);
+            const auto project_path = directory / "audio-workspace.csp";
+            require(window.saveProjectTo(project_path, "save"),
+                    "Audio track mix settings could not be saved.");
+            const auto saved = project::load(project_path);
+            const auto saved_track = std::find_if(
+                saved.timeline_tracks.begin(), saved.timeline_tracks.end(),
+                [track_id](const auto& value) {
+                    return value.track_id == track_id;
+                });
+            require(saved_track != saved.timeline_tracks.end() &&
+                        std::abs(saved_track->audio_gain - 0.65) < 1.0e-6 &&
+                        saved_track->audio_muted,
+                    "Audio mixer settings must survive a project round trip.");
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
+            bool restored_docks = true;
+            for (std::size_t index = 0; index < docks.size(); ++index) {
+                restored_docks &= !docks[index]->isHidden() == dock_visible[index] &&
+                    window.dockWidgetArea(docks[index]) == dock_area[index];
+            }
+            require(!timeline->audioOnlyDisplayEnabled() && restored_docks,
+                    "Leaving Audio must restore the Edit dock layout.");
+            require(window.editor_session_.selection().active_clip_id == clip_id,
+                    "Changing workspaces must preserve the selected clip.");
+            QEventLoop reopen_loop;
+            QTimer reopen_timeout;
+            reopen_timeout.setSingleShot(true);
+            QObject::connect(&reopen_timeout, &QTimer::timeout,
+                             &reopen_loop, &QEventLoop::quit);
+            bool reopened = false;
+            require(window.openProjectPath(
+                        project_path, std::nullopt, std::nullopt,
+                        [&reopen_loop, &reopened](bool succeeded) {
+                            reopened = succeeded;
+                            reopen_loop.quit();
+                        }),
+                    "The saved Audio project could not begin reopening.");
+            reopen_timeout.start(5000);
+            reopen_loop.exec();
+            require(reopened, "The saved Audio project did not reopen.");
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Audio);
+            const auto reopened_track = window.timeline_model_.locateTrack(track_id);
+            auto* reopened_gain = window.audio_workspace_->mixerPanel()
+                ->findChild<QSlider*>("audioTrackGain");
+            auto* reopened_mute = window.audio_workspace_->mixerPanel()
+                ->findChild<QCheckBox*>("audioTrackMute");
+            require(reopened_track.has_value() &&
+                        std::abs(window.timeline_model_.tracks()[*reopened_track]
+                            .audio_gain - 0.65) < 1.0e-6 &&
+                        window.timeline_model_.tracks()[*reopened_track].audio_muted &&
+                        reopened_gain != nullptr && reopened_mute != nullptr &&
+                        reopened_gain->value() == 65 && reopened_mute->isChecked(),
+                    "Reopening must synchronize the Audio mixer with the saved project.");
+        }
+        std::filesystem::remove_all(directory);
+    }
+
     static void runLinkedImageOnly() {
         QStandardPaths::setTestModeEnabled(true);
         const auto directory = uniqueTestDirectory();
@@ -1350,15 +1518,20 @@ public:
                 "workspaceSwitchEditAction");
             auto* fusion_workspace_shortcut = window.findChild<QAction*>(
                 "workspaceSwitchFusionAction");
+            auto* audio_workspace_shortcut = window.findChild<QAction*>(
+                "workspaceSwitchAudioAction");
             auto* render_workspace_shortcut = window.findChild<QAction*>(
                 "workspaceSwitchRenderAction");
             require(edit_workspace_shortcut != nullptr &&
                         fusion_workspace_shortcut != nullptr &&
+                        audio_workspace_shortcut != nullptr &&
                         render_workspace_shortcut != nullptr &&
                         edit_workspace_shortcut->shortcut() ==
                             QKeySequence("Alt+1") &&
                         fusion_workspace_shortcut->shortcut() ==
                             QKeySequence("Alt+2") &&
+                        audio_workspace_shortcut->shortcut() ==
+                            QKeySequence("Alt+4") &&
                         render_workspace_shortcut->shortcut() ==
                             QKeySequence("Alt+3") &&
                         edit_workspace_shortcut->shortcutContext() ==
@@ -1370,6 +1543,8 @@ public:
                             QStringLiteral("Alt+1")) &&
                         window.fusion_workspace_button_->toolTip().contains(
                             QStringLiteral("Alt+2")) &&
+                        window.audio_workspace_button_->toolTip().contains(
+                            QStringLiteral("Alt+4")) &&
                         window.render_workspace_button_->toolTip().contains(
                             QStringLiteral("Alt+3")),
                     "Workspace navigation shortcuts must be global, customizable, and shown in each selector tooltip.");
@@ -1380,6 +1555,17 @@ public:
                             ui::WorkspacePageId::Fusion &&
                         window.fusion_workspace_button_->isChecked(),
                     "Alt+2 must switch to Fusion and select its footer button.");
+            sendShortcutKey(
+                window.workspace_host_, Qt::Key_4, Qt::AltModifier);
+            QApplication::processEvents();
+            require(window.workspace_host_->currentPage() ==
+                            ui::WorkspacePageId::Audio &&
+                        window.audio_workspace_button_->isChecked() &&
+                        window.edit_workspace_->ui().timeline->audioOnlyDisplayEnabled() &&
+                        window.workspace_host_->inspectorPanel()->currentWidget() ==
+                            window.audio_workspace_->mixerPanel() &&
+                        window.audio_workspace_->meterPage()->isVisible(),
+                    "Alt+4 must show the Audio workspace and audio-only Timeline.");
             sendShortcutKey(
                 window.workspace_host_, Qt::Key_3, Qt::AltModifier);
             QApplication::processEvents();
@@ -1395,7 +1581,8 @@ public:
             require(window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Edit &&
                         window.edit_workspace_button_->isChecked() &&
-                        !window.edit_workspace_->ui().timeline->isReadOnly(),
+                        !window.edit_workspace_->ui().timeline->isReadOnly() &&
+                        !window.edit_workspace_->ui().timeline->audioOnlyDisplayEnabled(),
                     "Alt+1 must return from Render to editable Edit.");
 
             QString shortcut_conflict;
@@ -2951,9 +3138,10 @@ public:
                 });
             require(audio_track != waveform_window.timeline_model_.tracks().end(),
                     "A new project did not provide an Audio track for the waveform test.");
+            const auto audio_track_id = audio_track->track_id;
             require(waveform_window.timeline_command_service_.execute(
                         application::AddMediaClipCommand{
-                            waveform_source, audio_track->track_id, 0}).changed(),
+                            waveform_source, audio_track_id, 0}).changed(),
                     "The waveform integration test could not add its clip.");
 
             const auto canonical_waveform_source = media::MediaLibrary::canonicalPath(
@@ -3594,6 +3782,15 @@ public:
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
     application.setQuitOnLastWindowClosed(false);
+    if (argc == 2 && std::string(argv[1]) == "--audio-workspace-only") {
+        try {
+            MainWindowIntegrationTest::runAudioWorkspaceOnly();
+            return 0;
+        } catch (const std::exception& error) {
+            std::cerr << error.what() << '\n';
+            return 1;
+        }
+    }
     if (argc == 2 && std::string(argv[1]) == "--linked-image-only") {
         try {
             MainWindowIntegrationTest::runLinkedImageOnly();

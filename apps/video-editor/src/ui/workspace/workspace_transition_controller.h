@@ -38,6 +38,7 @@ public:
     struct Selectors {
         QPushButton* edit = nullptr;
         QPushButton* fusion = nullptr;
+        QPushButton* audio = nullptr;
         QPushButton* render = nullptr;
     };
 
@@ -50,6 +51,7 @@ public:
     void setPage(WorkspacePageId page);
     void prepareForClose();
     void setPageChangedHandler(std::function<void(WorkspacePageId)> handler);
+    void setAudioPagePreparationHandler(std::function<void()> handler);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -61,6 +63,8 @@ private:
     void applyQueuedPage();
     void scheduleRenderSettingsDockResize();
     void resizeRenderSettingsDock();
+    void enterAudioLayout();
+    void leaveAudioLayout();
 
     WorkspaceHost* workspace_host_ = nullptr;
     QMainWindow* render_main_window_ = nullptr;
@@ -68,6 +72,7 @@ private:
     DockWidgets docks_;
     Selectors selectors_;
     QByteArray dock_layout_before_render_;
+    QByteArray dock_layout_before_audio_;
     std::array<bool, 9> dock_visibility_before_render_{};
     bool has_render_dock_visibility_snapshot_ = false;
     bool render_settings_resize_pending_ = false;
@@ -80,6 +85,7 @@ private:
         Qt::BottomDockWidgetArea;
     std::optional<WorkspacePageId> queued_page_;
     std::function<void(WorkspacePageId)> page_changed_handler_;
+    std::function<void()> audio_page_preparation_handler_;
 };
 
 }  // namespace ui

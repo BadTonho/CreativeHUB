@@ -52,6 +52,17 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 
 ## Current product direction
 
+The Audio workspace is an application-owned view of the same timeline and
+command history as Edit. The Timeline widget switches to an audio-only
+presentation while Audio is active; it does not filter the project model or
+change persisted track indexes. The mixer writes existing track gain/mute
+through `TimelineCommandService`. Optional per-track meter buffers are derived
+from the live playback mix before monitor gain and clipping; generation-gated
+level messages reach the UI, and the buffer path is disabled outside Audio.
+The Audio panels are created on first entry so startup does not load their UI.
+The Video Editor project schema is unchanged. See the
+[Audio Workspace Roadmap](../AUDIO_WORKSPACE_ROADMAP.md).
+
 The Video Editor is the suite's audiovisual application under
 `apps/video-editor/`. Motion Studio and Image Editor are also implemented as
 separate application targets under `apps/`, each with its own product scope and

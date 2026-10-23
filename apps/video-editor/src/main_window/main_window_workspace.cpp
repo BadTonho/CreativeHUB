@@ -13,6 +13,7 @@
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/workspace_transition_controller.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
+#include "workspaces/audio/ui/audio_workspace.h"
 #include "workspaces/render/ui/render_workspace.h"
 
 #include <QAction>
@@ -560,6 +561,26 @@ void MainWindow::createWorkspace() {
         },
         this);
     render_workspace_->createPanels(this);
+    audio_workspace_ = new ui::AudioWorkspace(this);
+    connect(audio_workspace_, &ui::AudioWorkspace::gainEditStarted,
+            this, [this] {
+                audio_gain_batch_id_ = timeline_command_service_.beginEditBatch();
+            });
+    connect(audio_workspace_, &ui::AudioWorkspace::gainChanged,
+            this, &MainWindow::applyAudioTrackMix);
+    connect(audio_workspace_, &ui::AudioWorkspace::gainEditFinished,
+            this, [this] {
+                if (!audio_gain_batch_id_.has_value()) return;
+                const auto result = timeline_command_service_.finishEditBatch(
+                    *audio_gain_batch_id_);
+                audio_gain_batch_id_.reset();
+                if (result.changed()) {
+                    updateHistoryActions();
+                    updateProjectDirtyState();
+                }
+            });
+    connect(audio_workspace_, &ui::AudioWorkspace::muteChanged,
+            this, &MainWindow::applyAudioTrackMix);
     applyMonitorVolumePercent(edit_workspace_->ui().monitor_volume->value());
 
     auto* preview_dock_contents = new QWidget(this);
@@ -591,6 +612,7 @@ void MainWindow::createWorkspace() {
     workspace_buttons_container_ = workspace_buttons.container;
     edit_workspace_button_ = workspace_buttons.edit;
     fusion_workspace_button_ = workspace_buttons.fusion;
+    audio_workspace_button_ = workspace_buttons.audio;
     render_workspace_button_ = workspace_buttons.render;
     if (auto* navigation_layout = qobject_cast<QHBoxLayout*>(
             edit_workspace_->ui().workspace_navigation_slot->layout())) {
@@ -661,10 +683,19 @@ void MainWindow::createWorkspace() {
             {
                 edit_workspace_button_,
                 fusion_workspace_button_,
+                audio_workspace_button_,
                 render_workspace_button_},
             this);
     workspace_transition_controller_->setPageChangedHandler(
         [this](ui::WorkspacePageId page) { handleWorkspacePageChanged(page); });
+    workspace_transition_controller_->setAudioPagePreparationHandler([this] {
+        if (audio_workspace_ == nullptr || workspace_host_ == nullptr ||
+            audio_workspace_->meterPage() != nullptr) return;
+        audio_workspace_->createPanels(this);
+        audio_workspace_->refreshTracks(timeline_model_.tracks());
+        workspace_host_->setAudioPanels(
+            audio_workspace_->meterPage(), audio_workspace_->mixerPanel());
+    });
 
     function_palette_ = new ui::FunctionPalette(this, *shortcut_manager_);
     function_palette_->setAddHandler([this](const QString& id) {
@@ -717,6 +748,18 @@ void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
 }
 
 void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
+    if (playback_controller_ != nullptr) {
+        playback_controller_->setAudioMeteringEnabled(
+            page == ui::WorkspacePageId::Audio);
+    }
+    if (editUi().timeline != nullptr) {
+        editUi().timeline->setAudioOnlyDisplayEnabled(
+            page == ui::WorkspacePageId::Audio);
+    }
+    if (audio_workspace_ != nullptr) {
+        audio_workspace_->refreshTracks(timeline_model_.tracks());
+        if (page != ui::WorkspacePageId::Audio) audio_workspace_->clearPeaks();
+    }
     refreshEffectsContext();
     if (shortcut_manager_ != nullptr) {
         shortcut_manager_->setWorkspace(page);
@@ -1281,6 +1324,14 @@ void MainWindow::createMenus() {
         QStringLiteral("Switch to the Fusion workspace"),
         fusion_workspace_button_,
         ui::WorkspacePageId::Fusion);
+    register_workspace_shortcut(
+        QStringLiteral("workspace.switch_audio"),
+        QStringLiteral("Switch to Audio workspace"),
+        QStringLiteral("workspaceSwitchAudioAction"),
+        QStringLiteral("Alt+4"),
+        QStringLiteral("Switch to the Audio workspace"),
+        audio_workspace_button_,
+        ui::WorkspacePageId::Audio);
     register_workspace_shortcut(
         QStringLiteral("workspace.switch_render"),
         QStringLiteral("Switch to Render workspace"),

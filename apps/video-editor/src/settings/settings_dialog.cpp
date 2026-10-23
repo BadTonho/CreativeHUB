@@ -711,9 +711,9 @@ QWidget* SettingsDialog::createShortcutsPage() {
     add_scope(ShortcutScope::Application,
               QCoreApplication::translate("SettingsDialog", "Available in every workspace."));
     add_scope(ShortcutScope::Shared,
-              QCoreApplication::translate("SettingsDialog", "Available in the Edit and Fusion workspaces."));
+              QCoreApplication::translate("SettingsDialog", "Available in the Edit, Fusion and Audio workspaces."));
     add_scope(ShortcutScope::Edit,
-              QCoreApplication::translate("SettingsDialog", "Available only in the Edit workspace."));
+              QCoreApplication::translate("SettingsDialog", "Available in the Edit and Audio workspaces."));
     add_scope(ShortcutScope::Fusion,
               QCoreApplication::translate("SettingsDialog", "Available only in the Fusion workspace."));
     add_scope(ShortcutScope::Render,

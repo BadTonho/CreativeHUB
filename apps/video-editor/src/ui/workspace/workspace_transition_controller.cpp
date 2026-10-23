@@ -52,6 +52,11 @@ WorkspaceTransitionController::WorkspaceTransitionController(
             setPage(WorkspacePageId::Render);
         });
     }
+    if (selectors_.audio != nullptr) {
+        connect(selectors_.audio, &QPushButton::clicked, this, [this]() {
+            setPage(WorkspacePageId::Audio);
+        });
+    }
     for (auto* dock : dockWidgets()) {
         if (dock == nullptr || dock == docks_.render_settings) continue;
         connect(dock, &QDockWidget::visibilityChanged, this, [this](bool) {
@@ -71,6 +76,8 @@ WorkspaceTransitionController::WorkspaceTransitionController(
 
 void WorkspaceTransitionController::setPage(WorkspacePageId page) {
     if (workspace_host_ == nullptr) return;
+    if (page == WorkspacePageId::Audio && audio_page_preparation_handler_)
+        audio_page_preparation_handler_();
     if (deferred_page_change_pending_) {
         if (workspace_host_->currentPage() == page) {
             queued_page_.reset();
@@ -126,6 +133,11 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
         return;
     }
 
+    const bool entering_audio = page == WorkspacePageId::Audio &&
+        workspace_host_->currentPage() != WorkspacePageId::Audio;
+    const bool leaving_audio = page != WorkspacePageId::Audio &&
+        workspace_host_->currentPage() == WorkspacePageId::Audio;
+    if (leaving_audio) leaveAudioLayout();
     const bool entering_render =
         page == WorkspacePageId::Render &&
         workspace_host_->currentPage() != WorkspacePageId::Render;
@@ -234,6 +246,7 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
     if (leaving_render) {
         const auto complete_page_change = [this, page] {
             if (workspace_host_ == nullptr) return;
+            if (page == WorkspacePageId::Audio) enterAudioLayout();
             // Let QMainWindow finish restoring dock visibility and geometry
             // before moving Preview and changing the central page.
             workspace_host_->setPage(page, false);
@@ -269,6 +282,7 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
     }
 
     if (!entering_render) {
+        if (entering_audio && !leaving_render) enterAudioLayout();
         workspace_host_->setPage(page);
     }
     if (entering_render && main_window != nullptr &&
@@ -287,6 +301,11 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
 void WorkspaceTransitionController::setPageChangedHandler(
     std::function<void(WorkspacePageId)> handler) {
     page_changed_handler_ = std::move(handler);
+}
+
+void WorkspaceTransitionController::setAudioPagePreparationHandler(
+    std::function<void()> handler) {
+    audio_page_preparation_handler_ = std::move(handler);
 }
 
 bool WorkspaceTransitionController::eventFilter(
@@ -340,7 +359,8 @@ void WorkspaceTransitionController::prepareForClose() {
     }
     queued_page_.reset();
     if (workspace_host_ != nullptr &&
-        workspace_host_->currentPage() == WorkspacePageId::Render) {
+        (workspace_host_->currentPage() == WorkspacePageId::Render ||
+         workspace_host_->currentPage() == WorkspacePageId::Audio)) {
         preparing_for_close_ = true;
         applyPage(WorkspacePageId::Edit);
         preparing_for_close_ = false;
@@ -380,10 +400,38 @@ void WorkspaceTransitionController::updateSelectors(WorkspacePageId page) {
         const QSignalBlocker blocker(selectors_.fusion);
         selectors_.fusion->setChecked(page == WorkspacePageId::Fusion);
     }
+    if (selectors_.audio != nullptr) {
+        const QSignalBlocker blocker(selectors_.audio);
+        selectors_.audio->setChecked(page == WorkspacePageId::Audio);
+    }
     if (selectors_.render != nullptr) {
         const QSignalBlocker blocker(selectors_.render);
         selectors_.render->setChecked(page == WorkspacePageId::Render);
     }
+}
+
+void WorkspaceTransitionController::enterAudioLayout() {
+    auto* main_window = workspace_host_ != nullptr
+        ? qobject_cast<QMainWindow*>(workspace_host_->window()) : nullptr;
+    if (main_window == nullptr || !dock_layout_before_audio_.isEmpty()) return;
+    dock_layout_before_audio_ = main_window->saveState(9);
+    for (auto* dock : {docks_.bins, docks_.media, docks_.toolbox,
+                       docks_.favorites, docks_.effects}) {
+        if (dock != nullptr) dock->hide();
+    }
+    for (auto* dock : {docks_.preview, docks_.inspector, docks_.timeline}) {
+        if (dock != nullptr) dock->show();
+    }
+    if (docks_.render_settings != nullptr) docks_.render_settings->hide();
+}
+
+void WorkspaceTransitionController::leaveAudioLayout() {
+    auto* main_window = workspace_host_ != nullptr
+        ? qobject_cast<QMainWindow*>(workspace_host_->window()) : nullptr;
+    if (main_window != nullptr && !dock_layout_before_audio_.isEmpty()) {
+        main_window->restoreState(dock_layout_before_audio_, 9);
+    }
+    dock_layout_before_audio_.clear();
 }
 
 }  // namespace ui

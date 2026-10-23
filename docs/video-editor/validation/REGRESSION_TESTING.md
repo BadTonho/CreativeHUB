@@ -155,6 +155,24 @@ in dark/light themes; native macOS/Linux acceptance remains pending. No project
 format, application version or rendering-engine change is involved.
 
 
+## Audio workspace
+
+| Behavior | Verification |
+| --- | --- |
+| Audio navigation, audio-only editable Timeline, shared playhead, mixer routing by track ID, mixer Undo/Redo, saved mix fields and Edit layout restoration | `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-audio-workspace` and `creative-suite-main-editor-main-window`) |
+| Post-gain per-track and summed output peaks before output clipping, muted tracks and overlaps; matching UI meter routing and clearing | `tests/playback/timeline_audio_mix_test.cpp` (`creative-suite-main-editor-timeline-audio-mix`) and `creative-suite-main-editor-audio-workspace` |
+| Live Windows device playback, meter movement and Preview/audio synchronization | Manual check below; pending device validation |
+| Bundled pt-BR labels and shortcut descriptions | `creative-suite-video-editor-translation-catalog` build target and `creative-suite-main-editor-translation-catalog` test; native visual review remains pending |
+
+Manual check: open a project with two overlapping Audio tracks and a video,
+switch Edit → Audio → Render → Audio → Edit, and confirm the earlier Edit dock
+arrangement returns. Play the overlap: both track meters and the output meter
+should respond, while a muted track reads zero. Move, trim and split an Audio
+clip, adjust its volume envelope and a track gain, then Undo/Redo and save/reopen;
+confirm Edit shows the same edits and playback/export follow the same mix.
+Pause, seek and change projects; stale meter readings must disappear. Repeat on
+macOS and Linux when native runtime environments are available.
+
 ## Functions workspace catalog
 
 | Behavior | Automated coverage |

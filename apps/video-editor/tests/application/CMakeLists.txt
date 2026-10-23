@@ -24,6 +24,14 @@ copy_ffmpeg_test_runtime(creative-suite-main-editor-main-window-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-main-window-tests)
 
 add_creative_suite_test(
+    NAME creative-suite-main-editor-audio-workspace
+    COMMAND creative-suite-main-editor-main-window-tests --audio-workspace-only
+)
+set_tests_properties(creative-suite-main-editor-audio-workspace PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1"
+)
+
+add_creative_suite_test(
     NAME creative-suite-main-editor-main-window
     COMMAND creative-suite-main-editor-main-window-tests
         "${PROJECT_SOURCE_DIR}/prototypes/testdata/reference.mkv"

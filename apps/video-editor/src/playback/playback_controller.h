@@ -18,6 +18,8 @@
 #include <memory>
 #include <optional>
 #include <variant>
+#include <utility>
+#include <vector>
 
 namespace playback {
 
@@ -83,6 +85,11 @@ struct PlaybackAudioWarningEvent {
     qint64 error_code = -1;
 };
 
+struct PlaybackAudioLevelsEvent {
+    std::vector<std::pair<timeline::TrackId, float>> track_peaks;
+    float master_peak = 0.0F;
+};
+
 struct PlaybackCompositionWarningEvent {
     QString message;
     qint64 error_code = -1;
@@ -105,6 +112,7 @@ using PlaybackControllerEvent = std::variant<
     PlaybackFinishedEvent,
     PlaybackErrorEvent,
     PlaybackAudioWarningEvent,
+    PlaybackAudioLevelsEvent,
     PlaybackCompositionWarningEvent,
     PlaybackDeliveryEpochEvent>;
 
@@ -139,6 +147,7 @@ public:
     void setHardwareDecodingEnabled(bool enabled);
     [[nodiscard]] bool hardwareDecodingEnabled() const noexcept { return hardware_decoding_enabled_; }
     void setMonitorVolume(double gain);
+    void setAudioMeteringEnabled(bool enabled);
     void setAudioParametersForActiveClip();
     void invalidate(bool stop_worker);
     void pause();
@@ -201,7 +210,7 @@ private:
     [[nodiscard]] std::int64_t timelineClockFrame() const noexcept;
     void emitEvent(PlaybackControllerEvent event);
     void advanceDeliveryEpoch(bool retry_texture_delivery = false);
-    void setGeneration(quint64 generation) noexcept;
+    void setGeneration(quint64 generation);
     void discardPendingActivation(bool clear_selection);
     void cancelPendingActivation();
     [[nodiscard]] bool validatePendingActivation() const;

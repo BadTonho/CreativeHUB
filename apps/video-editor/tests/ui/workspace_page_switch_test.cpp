@@ -228,7 +228,7 @@ int main(int argc, char* argv[]) {
                 preview_dock,
                 lower_dock,
                 render_settings_dock},
-            {buttons.edit, buttons.fusion, buttons.render},
+            {buttons.edit, buttons.fusion, buttons.audio, buttons.render},
             &window);
         std::vector<ui::WorkspacePageId> page_changes;
         transition_controller.setPageChangedHandler(

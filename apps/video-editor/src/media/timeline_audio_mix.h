@@ -82,4 +82,7 @@ void accumulateTimelineAudioChunk(
     std::span<float> mixed,
     int output_channel_count);
 
+// Peak of the floating-point mix before monitor gain and output clipping.
+[[nodiscard]] float timelineAudioPeak(std::span<const float> samples) noexcept;
+
 } // namespace media

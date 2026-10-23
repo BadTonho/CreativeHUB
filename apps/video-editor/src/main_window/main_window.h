@@ -70,6 +70,7 @@ class QWidget;
 namespace ui {
 class FunctionPalette;
 class EditWorkspace;
+class AudioWorkspace;
 class FusionWorkspace;
 class RenderWorkspace;
 class WorkspaceHost;
@@ -118,6 +119,7 @@ private:
     void createWorkspace();
     void setWorkspacePage(ui::WorkspacePageId page);
     void handleWorkspacePageChanged(ui::WorkspacePageId page);
+    void applyAudioTrackMix(timeline::TrackId track_id, double gain, bool muted);
     void refreshEffectsContext();
     void registerWorkspaceMenuAction(
         QAction* action, settings::ShortcutScope scope);
@@ -379,6 +381,7 @@ private:
     PreviewWidget* preview_widget_ = nullptr;
     ui::FunctionPalette* function_palette_ = nullptr;
     ui::EditWorkspace* edit_workspace_ = nullptr;
+    ui::AudioWorkspace* audio_workspace_ = nullptr;
     ui::FusionWorkspace* fusion_workspace_ = nullptr;
     ui::RenderWorkspace* render_workspace_ = nullptr;
     ui::WorkspaceHost* workspace_host_ = nullptr;
@@ -387,6 +390,7 @@ private:
     QWidget* workspace_buttons_container_ = nullptr;
     QPushButton* edit_workspace_button_ = nullptr;
     QPushButton* fusion_workspace_button_ = nullptr;
+    QPushButton* audio_workspace_button_ = nullptr;
     QPushButton* render_workspace_button_ = nullptr;
     MediaBrowserListWidget* media_list_ = nullptr;
     MediaBrowserBinTreeWidget* bin_tree_ = nullptr;
@@ -409,6 +413,7 @@ private:
     QAction* media_pool_action_ = nullptr;
     QAction* effects_action_ = nullptr;
     std::array<std::vector<QAction*>, 5> workspace_menu_actions_;
+    std::optional<application::TimelineCommandService::EditBatchId> audio_gain_batch_id_;
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
     application::EditorSession editor_session_;
     std::unique_ptr<playback::PlaybackController> playback_controller_;

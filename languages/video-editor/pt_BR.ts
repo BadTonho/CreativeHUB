@@ -2,358 +2,382 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
+    <name>AudioWorkspace</name>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/audio/ui/audio_workspace.cpp" line="49"/>
+        <source>Audio levels</source>
+        <translation>Níveis de áudio</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/audio/ui/audio_workspace.cpp" line="59"/>
+        <location filename="../../apps/video-editor/src/workspaces/audio/ui/audio_workspace.cpp" line="75"/>
+        <source>Output</source>
+        <translation>Saída</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/audio/ui/audio_workspace.cpp" line="73"/>
+        <source>Mixer</source>
+        <translation>Mixer</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/audio/ui/audio_workspace.cpp" line="130"/>
+        <source>Mute</source>
+        <translation>Silenciar</translation>
+    </message>
+</context>
+<context>
     <name>EditWorkspace</name>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="230"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="233"/>
         <source>Select a video, image, or adjustment clip to view and edit its effects.</source>
         <translation>Selecione um clipe de vídeo, imagem ou ajuste para ver e editar seus efeitos.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="238"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="241"/>
         <source>Transform</source>
         <translation>Transformação</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="243"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="246"/>
         <source>Values are normalized to the project canvas.</source>
         <translation>Os valores são normalizados em relação à tela do projeto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="276"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="281"/>
         <source>Adjust %1</source>
         <translation>Ajustar %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="292"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="295"/>
         <source>Add keyframe at the current frame</source>
         <translation>Adicionar keyframe no quadro atual</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="319"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="358"/>
         <source>Background</source>
         <translation>Fundo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="326"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="365"/>
         <source>Choose RGBA Color</source>
         <translation>Escolher cor RGBA</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="339"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="378"/>
         <source>Clip Effects</source>
         <translation>Efeitos do clipe</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="349"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="388"/>
         <source>Up</source>
         <translation>Para cima</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="350"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="389"/>
         <source>Down</source>
         <translation>Para baixo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="351"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="390"/>
         <source>Remove</source>
         <translation>Remover</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="359"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="398"/>
         <source>Parameter</source>
         <translation>Parâmetro</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="377"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="422"/>
         <source>Text</source>
         <translation>Texto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="381"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="426"/>
         <source>Text content</source>
         <translation>Conteúdo do texto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="390"/>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="395"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="435"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="440"/>
         <source>Color</source>
         <translation>Cor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="392"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="437"/>
         <source>Left</source>
         <translation>Esquerda</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="392"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="437"/>
         <source>Center</source>
         <translation>Centro</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="392"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="437"/>
         <source>Right</source>
         <translation>Direita</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="393"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="438"/>
         <source>Font</source>
         <translation>Fonte</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="394"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="439"/>
         <source>Size</source>
         <translation>Tamanho</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="396"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="441"/>
         <source>Alignment</source>
         <translation>Alinhamento</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="398"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="443"/>
         <source>Apply Text</source>
         <translation>Aplicar texto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="406"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="451"/>
         <source>Transition</source>
         <translation>Transição</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="411"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="456"/>
         <source>Cross Dissolve</source>
         <translation>Dissolução cruzada</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="412"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="457"/>
         <source>Fade to Black</source>
         <translation>Esmaecer para preto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="413"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="458"/>
         <source>Audio Crossfade</source>
         <translation>Transição cruzada de áudio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="417"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="462"/>
         <source>Type</source>
         <translation>Tipo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="418"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="463"/>
         <source>Duration</source>
         <translation>Duração</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="421"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="466"/>
         <source>Apply Transition</source>
         <translation>Aplicar transição</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="423"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="468"/>
         <source>Remove Transition</source>
         <translation>Remover transição</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="434"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="479"/>
         <source>Clip</source>
         <translation>Clipe</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="439"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="484"/>
         <source>Active clip volume (0% to 200%)</source>
         <translation>Volume do clipe ativo (0% a 200%)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="441"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="486"/>
         <source>Mute clip</source>
         <translation>Silenciar clipe</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="443"/>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="456"/>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="606"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="488"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="501"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="667"/>
         <source>Volume</source>
         <translation>Volume</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="444"/>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="457"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="489"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="502"/>
         <source>Mute</source>
         <translation>Silenciar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="447"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="492"/>
         <source>Track</source>
         <translation>Faixa</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="452"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="497"/>
         <source>Active track volume (0% to 200%)</source>
         <translation>Volume da faixa ativa (0% a 200%)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="454"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="499"/>
         <source>Mute track</source>
         <translation>Silenciar faixa</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="465"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="510"/>
         <source>Inspector</source>
         <translation>Inspetor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="470"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="515"/>
         <source>Audio</source>
         <translation>Áudio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="475"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="520"/>
         <source>Effects</source>
         <translation>Efeitos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="558"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="619"/>
         <source>Playback</source>
         <translation>Reprodução</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="577"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="638"/>
         <source>Clear Timeline</source>
         <translation>Limpar linha do tempo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="619"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="680"/>
         <source>Editor monitoring volume (0% to 200%)</source>
         <translation>Volume de monitoração do editor (0% a 200%)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="620"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="681"/>
         <source>Monitor Volume</source>
         <translation>Volume de monitoração</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="633"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="694"/>
         <source>100%</source>
         <translation>100%</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="643"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="704"/>
         <source>Timeline zoom level</source>
         <translation>Nível de zoom da linha do tempo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="652"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="713"/>
         <source>Current timeline zoom</source>
         <translation>Zoom atual da linha do tempo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="664"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="725"/>
         <source>Step one frame backward</source>
         <translation>Voltar um quadro</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="665"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="726"/>
         <source>Play or pause the active clip</source>
         <translation>Reproduzir ou pausar o clipe ativo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="666"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="727"/>
         <source>Step one frame forward</source>
         <translation>Avançar um quadro</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="667"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="728"/>
         <source>Previous Frame</source>
         <translation>Quadro anterior</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="668"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="729"/>
         <source>Play or Pause</source>
         <translation>Reproduzir ou pausar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="669"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="730"/>
         <source>Next Frame</source>
         <translation>Próximo quadro</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="671"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="732"/>
         <source>Volume heard during editor playback; does not modify the project.</source>
         <translation>Volume ouvido durante a reprodução no editor; não altera o projeto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="672"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="733"/>
         <source>Remove all clips from every track</source>
         <translation>Remover todos os clipes de todas as faixas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="673"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="734"/>
         <source>Select and move timeline clips</source>
         <translation>Selecionar e mover clipes na linha do tempo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="674"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="735"/>
         <source>Selection Tool</source>
         <translation>Ferramenta de seleção</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="675"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="736"/>
         <source>Split a clip where you click</source>
         <translation>Dividir o clipe onde você clicar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="676"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="737"/>
         <source>Blade Tool</source>
         <translation>Ferramenta de corte</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="678"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="739"/>
         <source>Edit per-clip audio volume points (0% to 200%)</source>
         <translation>Editar os pontos de volume de áudio do clipe (0% a 200%)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="679"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="740"/>
         <source>Volume Tool</source>
         <translation>Ferramenta de volume</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="681"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="742"/>
         <source>Toggle magnetic snapping for clips and media drops</source>
         <translation>Ativar ou desativar o encaixe magnético de clipes e mídias</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="682"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="743"/>
         <source>Magnetic Snap</source>
         <translation>Encaixe magnético</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="737"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="798"/>
         <source>Add Video Track</source>
         <translation>Adicionar faixa de vídeo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="738"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="799"/>
         <source>Rename Track</source>
         <translation>Renomear faixa</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="739"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="800"/>
         <source>Track Up</source>
         <translation>Mover faixa para cima</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="740"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="801"/>
         <source>Track Down</source>
         <translation>Mover faixa para baixo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="741"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="802"/>
         <source>Remove Track</source>
         <translation>Remover faixa</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="781"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="842"/>
         <source>No media selected.</source>
         <translation>Nenhuma mídia selecionada.</translation>
     </message>
@@ -376,74 +400,74 @@
         <translation>Cor de fundo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="710"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="712"/>
         <source>Paste Attributes</source>
         <translation>Colar atributos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="715"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="717"/>
         <source>Choose which attributes to apply to compatible clips (%1 selected).</source>
         <translation>Escolha quais atributos aplicar aos clipes compatíveis (%1 selecionados).</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="717"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="719"/>
         <source>Select a Timeline clip to choose compatible attributes.</source>
         <translation>Selecione um clipe da linha do tempo para escolher atributos compatíveis.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="726"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="728"/>
         <source>%1 (%2/%3 compatible)</source>
         <translation>%1 (%2/%3 compatíveis)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="763"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="765"/>
         <source>Apply</source>
         <translation>Aplicar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="765"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="767"/>
         <source>Cancel</source>
         <translation>Cancelar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1063"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1065"/>
         <source>Add Video Track</source>
         <translation>Adicionar faixa de vídeo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1064"/>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1104"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1066"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1106"/>
         <source>Track name:</source>
         <translation>Nome da faixa:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1103"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1105"/>
         <source>Rename Track</source>
         <translation>Renomear faixa</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1932"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1942"/>
         <source>Parameter</source>
         <translation>Parâmetro</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1983"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="1992"/>
         <source>Select a clip to edit keyframes</source>
         <translation>Selecione um clipe para editar keyframes</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2092"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2100"/>
         <source>Remove keyframe at the current frame</source>
         <translation>Remover keyframe no quadro atual</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2093"/>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2102"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2101"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2109"/>
         <source>Add keyframe at the current frame</source>
         <translation>Adicionar keyframe no quadro atual</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2217"/>
+        <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2224"/>
         <source>Text color</source>
         <translation>Cor do texto</translation>
     </message>
@@ -663,275 +687,284 @@
 <context>
     <name>FusionWorkspace</name>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="128"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="131"/>
         <source>Viewer</source>
         <translation>Visualizador</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="145"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="148"/>
         <source>Grid</source>
         <translation>Grade</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="147"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="150"/>
         <source>Adjust the Node Editor background grid.</source>
         <translation>Ajustar a grade de fundo do Editor de nós.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="148"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="163"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="151"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="166"/>
         <source>Grid Settings</source>
         <translation>Configurações da grade</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="167"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="170"/>
         <source>Show grid</source>
         <translation>Exibir grade</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="171"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="174"/>
         <source>Lines</source>
         <translation>Linhas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="173"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="176"/>
         <source>Dots</source>
         <translation>Pontos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="202"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="225"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="205"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="228"/>
         <source>%1%</source>
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="205"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="208"/>
         <source>Style</source>
         <translation>Estilo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="206"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="209"/>
         <source>Spacing</source>
         <translation>Espaçamento</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="207"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="210"/>
         <source>Intensity</source>
         <translation>Intensidade</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="211"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="214"/>
         <source>Close</source>
         <translation>Fechar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="272"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="275"/>
         <source>Connection rejected: the ports are incompatible or the link creates a cycle.</source>
         <translation>Conexão recusada: as portas são incompatíveis ou o link cria um ciclo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="283"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="286"/>
         <source>This connection cannot be removed while keeping the graph valid.</source>
         <translation>Não é possível remover esta conexão sem invalidar o grafo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="312"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="315"/>
         <source>Fusion Inspector</source>
         <translation>Inspetor Fusion</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="316"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="496"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="319"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="508"/>
         <source>Select a video, image, or Fusion Composition clip in the Timeline.</source>
         <translation>Selecione um clipe de vídeo, imagem ou composição Fusion na linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="369"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="378"/>
         <source>Node creation rejected: the graph would be invalid.</source>
         <translation>Criação do nó recusada: o grafo ficaria inválido.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="462"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="621"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="474"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="649"/>
         <source>Transparent</source>
         <translation>Transparente</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="462"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="621"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="474"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="649"/>
         <source>Selected Timeline clip</source>
         <translation>Clipe selecionado na linha do tempo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="470"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="482"/>
         <source>Unavailable media source</source>
         <translation>Fonte de mídia indisponível</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="500"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="512"/>
         <source>Selected node #%1</source>
         <translation>Nó selecionado #%1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="501"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="513"/>
         <source>Select a node to edit its settings.</source>
         <translation>Selecione um nó para editar suas configurações.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="504"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="516"/>
         <source>Apply Settings</source>
         <translation>Aplicar configurações</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="506"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="518"/>
         <source>Remove Node</source>
         <translation>Remover nó</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="542"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="881"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="569"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="921"/>
         <source>Remove keyframe at the current frame</source>
         <translation>Remover keyframe no quadro atual</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="543"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="882"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="570"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="922"/>
         <source>Add keyframe at the current frame</source>
         <translation>Adicionar keyframe no quadro atual</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="559"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="586"/>
         <source>Visible</source>
         <translation>Visível</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="581"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="609"/>
         <source>Invert</source>
         <translation>Inverter</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="586"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="614"/>
         <source>Choose RGBA color</source>
         <translation>Escolher cor RGBA</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="588"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="616"/>
         <source>Color</source>
         <translation>Cor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="593"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="621"/>
         <source>Generator color</source>
         <translation>Cor do gerador</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="603"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="631"/>
         <source>Text</source>
         <translation>Texto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="605"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="633"/>
         <source>Apply Text</source>
         <translation>Aplicar texto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="606"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="634"/>
         <source>Font</source>
         <translation>Fonte</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="607"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="635"/>
         <source>Size</source>
         <translation>Tamanho</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="608"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="636"/>
         <source>Left</source>
         <translation>Esquerda</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="608"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="636"/>
         <source>Center</source>
         <translation>Centro</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="608"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="636"/>
         <source>Right</source>
         <translation>Direita</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="608"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="636"/>
         <source>Alignment</source>
         <translation>Alinhamento</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="628"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="656"/>
         <source>Media</source>
         <translation>Mídia</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="678"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="685"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="693"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="714"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="721"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="729"/>
         <source>Enabled</source>
         <translation>Ativado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="834"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="875"/>
         <source>The Output node is required and cannot be removed.</source>
         <translation>O nó Saída é obrigatório e não pode ser removido.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="855"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/ui/fusion_workspace.cpp" line="896"/>
         <source>The node cannot be removed because the remaining graph would be invalid. Reconnect its downstream nodes first.</source>
         <translation>Não é possível remover este nó porque o grafo restante ficaria inválido. Reconecte primeiro os nós seguintes.</translation>
     </message>
 </context>
 <context>
+    <name>InspectorDoubleSpinBox</name>
+    <message>
+        <location filename="../../apps/video-editor/src/ui/inspector/inspector_double_spin_box.cpp" line="26"/>
+        <source>Double-click the property name to reset its value.</source>
+        <translation>Clique duas vezes no nome da propriedade para restaurar seu valor.</translation>
+    </message>
+</context>
+<context>
     <name>MainWindow</name>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="47"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="51"/>
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="416"/>
         <source>Video Editor</source>
         <translation>Video Editor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="102"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="114"/>
         <source>Ready</source>
         <translation>Pronto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="185"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="301"/>
         <source>Project Recovery</source>
         <translation>Recuperação do projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="190"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="306"/>
         <source>Recovery snapshots were found for %1. Select one to restore, </source>
         <translation>Foram encontrados instantâneos de recuperação de %1. Selecione um para restaurar, </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="191"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="307"/>
         <source>or ignore them for now.</source>
         <translation>ou ignore-os por enquanto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="200"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="316"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="209"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="325"/>
         <source>Restore</source>
         <translation>Restaurar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="210"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="326"/>
         <source>Ignore</source>
         <translation>Ignorar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="211"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="327"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="490"/>
         <source>Delete</source>
         <translation>Excluir</translation>
     </message>
@@ -1318,137 +1351,137 @@
         <translation>Concluindo a operação de mídia atual...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="1878"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="1883"/>
         <source>Processing %1 of %2: %3</source>
         <translation>Processando %1 de %2: %3</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2075"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2088"/>
         <source>Media import cancelled; no files were added to the Timeline.</source>
         <translation>Importação de mídia cancelada; nenhum arquivo foi adicionado à linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2078"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2091"/>
         <source>Media import %1: %2 imported, %3 restored, %4 duplicate(s), %5 failed.</source>
         <translation>Importação de mídia %1: %2 importados, %3 restaurados, %4 duplicados, %5 falharam.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2079"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2092"/>
         <source>cancelled</source>
         <translation>cancelada</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2079"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2092"/>
         <source>complete</source>
         <translation>concluída</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2089"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2102"/>
         <source>Media import needs attention</source>
         <translation>A importação de mídia precisa de atenção</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2090"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2103"/>
         <source>Some media could not be imported</source>
         <translation>Não foi possível importar algumas mídias</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2093"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="2106"/>
         <source>Media imported with preview frame.</source>
         <translation>Mídia importada com quadro de pré-visualização.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1083"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1173"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1269"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1087"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1177"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1278"/>
         <source>Loading timeline clip...</source>
         <translation>Carregando clipe da linha do tempo...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1085"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1089"/>
         <source>Could not activate the timeline clip.</source>
         <translation>Não foi possível ativar o clipe da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1087"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1091"/>
         <source>Playback is unavailable.</source>
         <translation>A reprodução está indisponível.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1137"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1341"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1344"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1141"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1352"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1355"/>
         <source>Gap in timeline.</source>
         <translation>Intervalo vazio na linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1140"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1144"/>
         <source>No timeline clip at the playhead.</source>
         <translation>Não há clipe no indicador de reprodução.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1143"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1147"/>
         <source>Already at the beginning of the timeline.</source>
         <translation>O indicador já está no início da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1146"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1150"/>
         <source>Already at the end of the timeline.</source>
         <translation>O indicador já está no fim da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1149"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1153"/>
         <source>The selected timeline media is unavailable.</source>
         <translation>A mídia selecionada na linha do tempo está indisponível.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1189"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1220"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1193"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1224"/>
         <source>%1 - Frame %2 / %3</source>
         <translation>%1 - Quadro %2 / %3</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1195"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1199"/>
         <source>No media selected.</source>
         <translation>Nenhuma mídia selecionada.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1200"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1204"/>
         <source>Select the timeline media to play.</source>
         <translation>Selecione a mídia na linha do tempo para reproduzi-la.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1248"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1252"/>
         <source>Audio unavailable; continuing with video playback.</source>
         <translation>Áudio indisponível; continuando a reprodução do vídeo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1251"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1255"/>
         <source>Audio unavailable; video fallback is active.</source>
         <translation>Áudio indisponível; a reprodução de vídeo está em modo alternativo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1349"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1360"/>
         <source>End of timeline.</source>
         <translation>Fim da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1349"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1360"/>
         <source>End of media.</source>
         <translation>Fim da mídia.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1387"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1398"/>
         <source>Could not activate the next timeline clip.</source>
         <translation>Não foi possível ativar o próximo clipe da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1395"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1406"/>
         <source>Playback error.</source>
         <translation>Erro de reprodução.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1400"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1411"/>
         <source>Playback error</source>
         <translation>Erro de reprodução</translation>
     </message>
@@ -1705,230 +1738,256 @@
         <translation>Destacar painel</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="563"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="609"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="364"/>
+        <source>Could not change the audio track.</source>
+        <translation>Não foi possível alterar a faixa de áudio.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="584"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="630"/>
         <source>Import this media before adding it to the timeline.</source>
         <translation>Importe esta mídia antes de adicioná-la à linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="568"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="614"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="589"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="635"/>
         <source>Offline media cannot be added to the timeline.</source>
         <translation>Mídias indisponíveis não podem ser adicionadas à linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="587"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="608"/>
         <source>Could not add dropped media to the timeline.</source>
         <translation>Não foi possível adicionar a mídia solta à linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="590"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="611"/>
         <source>Could not add media</source>
         <translation>Não foi possível adicionar mídia</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="591"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="612"/>
         <source>The dropped media could not be added to the timeline.</source>
         <translation>Não foi possível adicionar a mídia solta à linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="629"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_timeline.cpp" line="650"/>
         <source>The media could not be added to the Timeline.</source>
         <translation>Não foi possível adicionar a mídia à linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="370"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="441"/>
         <source>Direct GPU preview unavailable; using RGBA delivery.</source>
         <translation>Pré-visualização direta pela GPU indisponível; usando transferência RGBA.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="371"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="442"/>
         <source>GPU preview unavailable; using CPU preview.</source>
         <translation>Pré-visualização pela GPU indisponível; usando a CPU.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="756"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="896"/>
         <source>Import Composition Interchange...</source>
         <translation>Importar intercâmbio de composição...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="759"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="899"/>
         <source>Export Composition Interchange...</source>
         <translation>Exportar intercâmbio de composição...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="767"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="907"/>
         <source>&amp;New Project</source>
         <translation>&amp;Novo projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="777"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="917"/>
         <source>Project Settings...</source>
         <translation>Configurações do &amp;projeto...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="783"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="923"/>
         <source>Open &amp;Media...</source>
         <translation>Abrir &amp;mídia...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="787"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="927"/>
         <source>&amp;Open Project...</source>
         <translation>&amp;Abrir projeto...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="797"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="937"/>
         <source>&amp;Save Project</source>
         <translation>&amp;Salvar projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="807"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="947"/>
         <source>Save Project &amp;As...</source>
         <translation>Salvar projeto &amp;como...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="819"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="959"/>
         <source>E&amp;xit</source>
         <translation>&amp;Sair</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="825"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="965"/>
         <source>&amp;Undo</source>
         <translation>&amp;Desfazer</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="838"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="978"/>
         <source>&amp;Redo</source>
         <translation>&amp;Refazer</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="895"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1035"/>
         <source>Grayscale Preview</source>
         <translation>Pré-visualização em escala de cinza</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="942"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1088"/>
         <source>Restore &amp;Default Layout</source>
         <translation>Restaurar layout &amp;padrão</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1083"/>
         <source>Layouts...</source>
         <translation>Layouts...</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1134"/>
         <source>Layouts</source>
         <translation>Layouts</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1137"/>
         <source>Open panel layouts</source>
         <translation>Abrir layouts dos painéis</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="386"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="409"/>
         <source>Panel Layouts</source>
         <translation>Layouts dos painéis</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="399"/>
         <source>Save Current Layout...</source>
         <translation>Salvar layout atual...</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="410"/>
         <source>The layout could not be saved or restored. Check the error log.</source>
         <translation>Não foi possível salvar ou restaurar o layout. Consulte o registro de erros.</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="416"/>
         <source>Layout name:</source>
         <translation>Nome do layout:</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="422"/>
         <source>Save Layout</source>
         <translation>Salvar layout</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="426"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="511"/>
         <source>Choose a unique name of 1 to 60 characters, or check the error log.</source>
         <translation>Escolha um nome exclusivo de 1 a 60 caracteres ou consulte o registro de erros.</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="437"/>
         <source>Ready layouts</source>
         <translation>Layouts prontos</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="440"/>
         <source>Default</source>
         <translation>Padrão</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="441"/>
         <source>Preview Focus</source>
         <translation>Foco na pré-visualização</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="442"/>
         <source>Timeline Focus</source>
         <translation>Foco na linha do tempo</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="458"/>
         <source>Your layouts</source>
         <translation>Seus layouts</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="486"/>
         <source>Update</source>
         <translation>Atualizar</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="488"/>
         <source>Rename</source>
         <translation>Renomear</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="495"/>
         <source>Replace this saved layout with the current panel arrangement?</source>
         <translation>Substituir este layout salvo pela disposição atual dos painéis?</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="507"/>
         <source>Rename Layout</source>
         <translation>Renomear layout</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_layouts.cpp" line="516"/>
         <source>Delete this saved layout?</source>
         <translation>Excluir este layout salvo?</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="973"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1119"/>
         <source>Media Pool</source>
         <translation>Media Pool</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="976"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1123"/>
         <source>Show the Media Pool docks</source>
         <translation>Exibir os painéis do Media Pool</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="977"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1124"/>
         <source>Effects</source>
         <translation>Efeitos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="980"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1128"/>
         <source>Show the Effects docks</source>
         <translation>Exibir os painéis de efeitos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1018"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1174"/>
         <source>&amp;Settings</source>
         <translation>&amp;Configurações</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1021"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1177"/>
         <source>Open editor settings</source>
         <translation>Abrir as configurações do editor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1027"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1183"/>
         <source>&amp;System</source>
         <translation>&amp;Sistema</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1034"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1190"/>
         <source>System</source>
         <translation>Sistema</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1035"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1191"/>
         <source>Video Editor
 
 Version: %1
@@ -1939,42 +1998,42 @@ Versão: %1
 Executável: %2</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1036"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1192"/>
         <source>Beta 0.1.0</source>
         <translation>Beta 0.1.0</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1038"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1194"/>
         <source>N/A</source>
         <translation>N/D</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1041"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1197"/>
         <source>Open &amp;Log Folder</source>
         <translation>Abrir pasta de &amp;logs</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1056"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1212"/>
         <source>Could not open the log folder.</source>
         <translation>Não foi possível abrir a pasta de logs.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1066"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1222"/>
         <source>Log folder opened.</source>
         <translation>Pasta de logs aberta.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1069"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1225"/>
         <source>&amp;About Video Editor</source>
         <translation>&amp;Sobre o Video Editor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1074"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1230"/>
         <source>About Video Editor</source>
         <translation>Sobre o Video Editor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1075"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1231"/>
         <source>Video Editor application shell
 
 </source>
@@ -1983,32 +2042,32 @@ Executável: %2</translation>
 </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1076"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1232"/>
         <source>This is an early open-source creative suite workspace.</source>
         <translation>Este é um espaço de trabalho inicial de uma suíte criativa de código aberto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1149"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1305"/>
         <source>%1 (%2)</source>
         <translation>%1 (%2)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1616"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2167"/>
         <source>Restore Inspector layout</source>
         <translation>Restaurar layout do Inspetor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1617"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2168"/>
         <source>Expand Inspector to full window height</source>
         <translation>Expandir o Inspetor até a altura total da janela</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1631"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2182"/>
         <source>Restore Media Pool layout</source>
         <translation>Restaurar layout do Media Pool</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1632"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2183"/>
         <source>Expand Media Pool to full window height</source>
         <translation>Expandir o Media Pool até a altura total da janela</translation>
     </message>
@@ -2016,58 +2075,58 @@ Executável: %2</translation>
 <context>
     <name>NodeCanvas</name>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="46"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="54"/>
         <source>Output</source>
         <translation>Saída</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="272"/>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="283"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="604"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="615"/>
         <source>Show this node in the Fusion Viewer.</source>
         <translation>Exibir este nó no visualizador do Fusion.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="294"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="626"/>
         <source>Mask coverage (Mask connections only)</source>
         <translation>Cobertura da máscara (somente conexões de máscara)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="295"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="627"/>
         <source>Drag from this output to a node input.</source>
         <translation>Arraste desta saída para a entrada de um nó.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="297"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="629"/>
         <source>Merge background input.</source>
         <translation>Entrada de fundo da mesclagem.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="299"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="631"/>
         <source>Merge foreground input.</source>
         <translation>Entrada de primeiro plano da mesclagem.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="300"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="632"/>
         <source>Node input.</source>
         <translation>Entrada do nó.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1065"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1074"/>
         <source>Wire style</source>
         <translation>Estilo do fio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1069"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1078"/>
         <source>Straight</source>
         <translation>Reto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1075"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1084"/>
         <source>Curved</source>
         <translation>Curvo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1088"/>
+        <location filename="../../apps/video-editor/src/workspaces/fusion/nodes/ui/node_canvas.cpp" line="1097"/>
         <source>Snap to grid</source>
         <translation>Encaixar à grade</translation>
     </message>
@@ -2075,7 +2134,7 @@ Executável: %2</translation>
 <context>
     <name>PreviewWidget</name>
     <message>
-        <location filename="../../apps/video-editor/src/ui/preview/preview_widget.cpp" line="77"/>
+        <location filename="../../apps/video-editor/src/ui/preview/preview_widget.cpp" line="84"/>
         <source>Preview area
 
 Import media to display its first frame.</source>
@@ -2084,13 +2143,13 @@ Import media to display its first frame.</source>
 Importe uma mídia para exibir o primeiro quadro.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/preview/preview_widget.cpp" line="109"/>
-        <location filename="../../apps/video-editor/src/ui/preview/preview_widget.cpp" line="118"/>
+        <location filename="../../apps/video-editor/src/ui/preview/preview_widget.cpp" line="122"/>
+        <location filename="../../apps/video-editor/src/ui/preview/preview_widget.cpp" line="131"/>
         <source>Preview frame is unavailable.</source>
         <translation>O quadro de pré-visualização está indisponível.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/preview/preview_widget.cpp" line="142"/>
+        <location filename="../../apps/video-editor/src/ui/preview/preview_widget.cpp" line="165"/>
         <source>The shared texture cannot be presented by the current viewer.</source>
         <translation>Não é possível exibir a textura compartilhada no visualizador atual.</translation>
     </message>
@@ -2098,7 +2157,7 @@ Importe uma mídia para exibir o primeiro quadro.</translation>
 <context>
     <name>RenderQueueController</name>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_controller.cpp" line="76"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/queue/render_queue_controller.cpp" line="77"/>
         <source>An unknown export error occurred.</source>
         <translation>Ocorreu um erro desconhecido durante a exportação.</translation>
     </message>
@@ -2179,279 +2238,279 @@ Erro: </translation>
 <context>
     <name>RenderWorkspace</name>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="332"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="661"/>
         <source>Render Settings</source>
         <translation>Configurações de renderização</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="353"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="360"/>
         <source>Output</source>
         <translation>Saída</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="369"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="376"/>
         <source>Choose an output file</source>
         <translation>Escolha um arquivo de saída</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="370"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="377"/>
         <source>Render output file</source>
         <translation>Arquivo de saída da renderização</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="371"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="378"/>
         <source>Browse…</source>
         <translation>Procurar…</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="373"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="380"/>
         <source>Choose render output file</source>
         <translation>Escolher arquivo de saída da renderização</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="376"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="383"/>
         <source>File</source>
         <translation>Arquivo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="380"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="387"/>
         <source>Output container</source>
         <translation>Contêiner de saída</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="382"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="389"/>
         <source>Container</source>
         <translation>Contêiner</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="386"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="393"/>
         <source>This FFmpeg build does not expose a compatible video output format.</source>
         <translation>Esta versão do FFmpeg não disponibiliza um formato de saída de vídeo compatível.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="391"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="398"/>
         <source>Video</source>
         <translation>Vídeo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="400"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="407"/>
         <source>Video encoder</source>
         <translation>Codificador de vídeo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="402"/>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="493"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="409"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="500"/>
         <source>Encoder</source>
         <translation>Codificador</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="406"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="413"/>
         <source>Output resolution</source>
         <translation>Resolução de saída</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="409"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="416"/>
         <source>Resolution</source>
         <translation>Resolução</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="416"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="423"/>
         <source>Custom width</source>
         <translation>Largura personalizada</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="422"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="429"/>
         <source>Custom height</source>
         <translation>Altura personalizada</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="426"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="433"/>
         <source>Output frame rate</source>
         <translation>Taxa de quadros de saída</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="431"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="438"/>
         <source>Frame rate</source>
         <translation>Taxa de quadros</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="436"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="443"/>
         <source>Low</source>
         <translation>Baixa</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="438"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="445"/>
         <source>Standard</source>
         <translation>Padrão</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="440"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="447"/>
         <source>High</source>
         <translation>Alta</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="442"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="449"/>
         <source>Custom</source>
         <translation>Personalizada</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="445"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="452"/>
         <source>Quality profile</source>
         <translation>Perfil de qualidade</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="453"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="460"/>
         <source>Video bitrate</source>
         <translation>Taxa de bits do vídeo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="454"/>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="456"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="461"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="463"/>
         <source>Use GPU for export (Experimental)</source>
         <translation>Usar GPU na exportação (experimental)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="463"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="470"/>
         <source>Use hardware video decoding (Experimental)</source>
         <translation>Usar decodificação de vídeo por hardware (experimental)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="465"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="472"/>
         <source>Accelerates supported video sources for this queued export. Uses CPU automatically when needed.</source>
         <translation>Acelera fontes de vídeo compatíveis nesta exportação enfileirada. Usa a CPU automaticamente quando necessário.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="477"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="484"/>
         <source>Audio</source>
         <translation>Áudio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="482"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="489"/>
         <source>Export audio</source>
         <translation>Exportar áudio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="491"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="498"/>
         <source>Audio encoder</source>
         <translation>Codificador de áudio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="499"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="506"/>
         <source>Audio bitrate</source>
         <translation>Taxa de bits do áudio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="506"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="513"/>
         <source>Add to Queue</source>
         <translation>Adicionar à fila</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="508"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="515"/>
         <source>Add render job to queue</source>
         <translation>Adicionar tarefa de renderização à fila</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="600"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="611"/>
         <source>Render Queue</source>
         <translation>Fila de renderização</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="608"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="619"/>
         <source>No jobs in the queue. Configure an output in Render Settings and add it to the queue.</source>
         <translation>Não há tarefas na fila. Configure uma saída em Configurações de renderização e adicione-a à fila.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="616"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="627"/>
         <source>Prepared render jobs</source>
         <translation>Tarefas de renderização preparadas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="625"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="636"/>
         <source>Start Queue</source>
         <translation>Iniciar fila</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="627"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="638"/>
         <source>Start render queue</source>
         <translation>Iniciar fila de renderização</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="628"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="639"/>
         <source>Cancel</source>
         <translation>Cancelar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="630"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="641"/>
         <source>Cancel current render queue</source>
         <translation>Cancelar a fila de renderização atual</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="639"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="650"/>
         <source>Remove</source>
         <translation>Remover</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="641"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="652"/>
         <source>Move Up</source>
         <translation>Mover para cima</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="643"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="654"/>
         <source>Move Down</source>
         <translation>Mover para baixo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="686"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="701"/>
         <source>Preview</source>
         <translation>Pré-visualização</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="789"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="804"/>
         <source>No compatible audio encoder is available for this container.</source>
         <translation>Não há um codificador de áudio compatível disponível para este contêiner.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="813"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="828"/>
         <source>Project (%1 × %2)</source>
         <translation>Projeto (%1 × %2)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="824"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="839"/>
         <source>%1 × %2</source>
         <translation>%1 × %2</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="828"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="843"/>
         <source>Custom dimensions</source>
         <translation>Dimensões personalizadas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="953"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="968"/>
         <source>Duplicate output paths</source>
         <translation>Caminhos de saída duplicados</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="954"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="969"/>
         <source>Two or more queue jobs use the same output file. Change the paths before starting the queue.</source>
         <translation>Duas ou mais tarefas da fila usam o mesmo arquivo de saída. Altere os caminhos antes de iniciar a fila.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="974"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="989"/>
         <source>Invalid output folder</source>
         <translation>Pasta de saída inválida</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="975"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="990"/>
         <source>The output folder is unavailable for: %1</source>
         <translation>A pasta de saída não está disponível para: %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="985"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="1000"/>
         <source>Replace existing files?</source>
         <translation>Substituir arquivos existentes?</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="986"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="1001"/>
         <source>The following output files already exist. Replace them after each job completes?
 
 %1</source>
@@ -2460,12 +2519,12 @@ Erro: </translation>
 %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="1031"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="1046"/>
         <source>Render queue finished with errors</source>
         <translation>A fila de renderização terminou com erros</translation>
     </message>
     <message numerus="yes">
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="1032"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="1047"/>
         <source>%n render job(s) failed. See the queue rows and application log for details.</source>
         <translation>
             <numerusform>Falhou %n tarefa de renderização. Consulte as linhas da fila e o log do aplicativo para ver os detalhes.</numerusform>
@@ -2473,427 +2532,482 @@ Erro: </translation>
         </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="1106"/>
+        <location filename="../../apps/video-editor/src/workspaces/render/ui/render_workspace.cpp" line="1121"/>
         <source>Choose Render Output</source>
         <translation>Escolher saída da renderização</translation>
     </message>
 </context>
 <context>
+    <name>RendererSelection</name>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/renderer_preferences.cpp" line="25"/>
+        <source>Automatic</source>
+        <translation>Automático</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/renderer_preferences.cpp" line="27"/>
+        <source>Vulkan (Experimental)</source>
+        <translation>Vulkan (Experimental)</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/renderer_startup.cpp" line="20"/>
+        <location filename="../../apps/video-editor/src/settings/renderer_startup.cpp" line="24"/>
+        <location filename="../../apps/video-editor/src/settings/renderer_startup.cpp" line="59"/>
+        <source>Graphics renderer</source>
+        <translation>Renderizador gráfico</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/renderer_startup.cpp" line="26"/>
+        <source>Choose the graphics API for preview and GPU export. GPU composition and hardware codecs keep their separate settings. Changes to this API require restarting the editor.</source>
+        <translation>Escolha a API gráfica para a prévia e a exportação por GPU. A composição por GPU e os codecs por hardware mantêm suas configurações separadas. Alterar esta API exige reiniciar o editor.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/renderer_startup.cpp" line="32"/>
+        <source>Remember my choice</source>
+        <translation>Lembrar minha escolha</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="163"/>
+        <source>Graphics renderer (next launch)</source>
+        <translation>Renderizador gráfico (próxima abertura)</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="165"/>
+        <source>Active renderer: %1</source>
+        <translation>Renderizador ativo: %1</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="171"/>
+        <source>Ask which renderer to use at startup</source>
+        <translation>Perguntar qual renderizador usar ao iniciar</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/renderer_preferences.cpp" line="42"/>
+        <source>Use --renderer=auto|opengl|vulkan|cpu once.</source>
+        <translation>Use --renderer=auto|opengl|vulkan|cpu apenas uma vez.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/settings/renderer_startup.cpp" line="59"/>
+        <source>Vulkan is unavailable. The editor will use OpenGL and recover with CPU when necessary.</source>
+        <translation>Vulkan está indisponível. O editor usará OpenGL e recorrerá à CPU quando necessário.</translation>
+    </message>
+</context>
+<context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="58"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="59"/>
         <source>Settings</source>
         <translation>Configurações</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="64"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="65"/>
         <source>General</source>
         <translation>Geral</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="65"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="66"/>
         <source>Autosave</source>
         <translation>Salvamento automático</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="66"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="67"/>
         <source>Timeline</source>
         <translation>Linha do tempo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="67"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="68"/>
         <source>Shortcuts</source>
         <translation>Atalhos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="72"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="73"/>
         <source>Close</source>
         <translation>Fechar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="90"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="91"/>
         <source>Language:</source>
         <translation>Idioma:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="94"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="95"/>
         <source>System language</source>
         <translation>Idioma do sistema</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="97"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="98"/>
         <source>English</source>
         <translation>Inglês</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="100"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="101"/>
         <source>Português (Brasil)</source>
         <translation>Português (Brasil)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="108"/>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="137"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="109"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="138"/>
         <source>Changes take effect the next time you open this app.</source>
         <translation>A alteração será aplicada na próxima vez que você abrir este aplicativo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="133"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="134"/>
         <source>The language preference could not be saved. See the application log.</source>
         <translation>Não foi possível salvar a preferência de idioma. Consulte o log do aplicativo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="142"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="143"/>
         <source>Enable preview performance metrics</source>
         <translation>Ativar métricas de desempenho da pré-visualização</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="145"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="146"/>
         <source>Collect one aggregated Preview performance sample per second in the application log.</source>
         <translation>Registrar uma amostra agregada de desempenho da pré-visualização por segundo no log do aplicativo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="149"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="150"/>
         <source>When enabled, the Video Editor records aggregated decoding, composition, UI, and GPU timing data. </source>
         <translation>Quando ativado, o Video Editor registra dados agregados de tempo de decodificação, composição, interface e GPU. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="150"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="151"/>
         <source>This preference is global and does not modify projects.</source>
         <translation>Esta preferência é global e não altera os projetos.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="157"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="176"/>
         <source>Use hardware video decoding for preview (Experimental)</source>
         <translation>Usar decodificação de vídeo por hardware na pré-visualização (experimental)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="159"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="178"/>
         <source>Accelerates supported H.264 and HEVC video. Uses CPU automatically when needed. Export has its own setting.</source>
         <translation>Acelera vídeos H.264 e HEVC compatíveis. Usa a CPU automaticamente quando necessário. A exportação tem uma configuração própria.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="168"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="187"/>
         <source>Use GPU for timeline preview (Experimental)</source>
         <translation>Usar GPU na pré-visualização da linha do tempo (experimental)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="170"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="189"/>
         <source>Accelerates supported effects, Fusion graphs, and timeline composition. Applies immediately and uses CPU when needed. Export has its own setting.</source>
         <translation>Acelera efeitos compatíveis, grafos Fusion e a composição da linha do tempo. Aplica-se imediatamente e usa a CPU quando necessário. A exportação tem uma configuração própria.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="180"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="199"/>
         <source>Workspace transitions</source>
         <translation>Transições entre áreas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="184"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="203"/>
         <source>Animate workspace switches</source>
         <translation>Animar a troca de áreas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="187"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="206"/>
         <source>Slide the workspace panels when switching among Edit, Fusion, and Render.</source>
         <translation>Deslizar os painéis ao alternar entre Edit, Fusion e Render.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="194"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="213"/>
         <source>Style:</source>
         <translation>Estilo:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="198"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="217"/>
         <source>Workspace content</source>
         <translation>Conteúdo da área</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="202"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="221"/>
         <source>Entire application window</source>
         <translation>Janela inteira do aplicativo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="205"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="224"/>
         <source>Workspace transition style</source>
         <translation>Estilo da transição entre áreas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="216"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="235"/>
         <source>Duration:</source>
         <translation>Duração:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="230"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="249"/>
         <source>Workspace transition duration</source>
         <translation>Duração da transição entre áreas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="232"/>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="275"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="251"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="294"/>
         <source>%1 ms</source>
         <translation>%1 ms</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="242"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="261"/>
         <source>Workspace content slides everything below the menu bar as one block. Entire application window also moves the native window frame. These preferences are saved on this device and do not modify projects.</source>
         <translation>O conteúdo da área desliza como um bloco, abaixo da barra de menus. A opção de janela inteira também move a moldura nativa da janela. Essas preferências são salvas neste dispositivo e não alteram os projetos.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="249"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="268"/>
         <source>Choose a duration from 100 to 600 milliseconds in 25 millisecond steps.</source>
         <translation>Escolha uma duração de 100 a 600 milissegundos, em intervalos de 25 milissegundos.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="280"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="299"/>
         <source>Enable project autosave</source>
         <translation>Ativar salvamento automático do projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="283"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="302"/>
         <source>Save recovery snapshots without overwriting the project file.</source>
         <translation>Salvar instantâneos de recuperação sem sobrescrever o arquivo do projeto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="289"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="308"/>
         <source>Interval (seconds):</source>
         <translation>Intervalo (segundos):</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="298"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="317"/>
         <source>Snapshots:</source>
         <translation>Instantâneos:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="314"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="333"/>
         <source>Autosave keeps recovery snapshots in a separate folder and never replaces the main .csp file. </source>
         <translation>O salvamento automático mantém os instantâneos de recuperação em uma pasta separada e nunca substitui o arquivo .csp principal. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="315"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="334"/>
         <source>The default is every 30 seconds with 5 snapshots retained.</source>
         <translation>O padrão é salvar a cada 30 segundos e manter 5 instantâneos.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="396"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="415"/>
         <source>Manage recovery snapshots for the current project and unsaved projects. </source>
         <translation>Gerencie os instantâneos de recuperação do projeto atual e de projetos não salvos. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="397"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="416"/>
         <source>Restoring never overwrites the main .csp file.</source>
         <translation>A restauração nunca sobrescreve o arquivo .csp principal.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="406"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="425"/>
         <source>Project</source>
         <translation>Projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="406"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="425"/>
         <source>Type</source>
         <translation>Tipo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="406"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="425"/>
         <source>Modified</source>
         <translation>Modificado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="406"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="425"/>
         <source>Snapshot</source>
         <translation>Instantâneo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="423"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="442"/>
         <source>No valid autosave snapshots found.</source>
         <translation>Nenhum instantâneo válido de salvamento automático foi encontrado.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="429"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="448"/>
         <source>Refresh</source>
         <translation>Atualizar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="431"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="450"/>
         <source>Reload the available recovery snapshots</source>
         <translation>Recarregar os instantâneos de recuperação disponíveis</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="432"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="451"/>
         <source>Restore Selected</source>
         <translation>Restaurar selecionado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="435"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="454"/>
         <source>Load the selected snapshot as the current dirty project</source>
         <translation>Carregar o instantâneo selecionado como projeto atual com alterações não salvas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="436"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="455"/>
         <source>Delete Selected</source>
         <translation>Excluir selecionado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="438"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="457"/>
         <source>Delete the selected recovery snapshot</source>
         <translation>Excluir o instantâneo de recuperação selecionado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="439"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="458"/>
         <source>Open Folder</source>
         <translation>Abrir pasta</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="442"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="461"/>
         <source>Open the folder containing the selected recovery snapshot</source>
         <translation>Abrir a pasta que contém o instantâneo de recuperação selecionado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="488"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="507"/>
         <source>Audio waveform display:</source>
         <translation>Exibição da forma de onda de áudio:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="491"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="510"/>
         <source>Mono</source>
         <translation>Mono</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="493"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="512"/>
         <source>Stereo</source>
         <translation>Estéreo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="498"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="517"/>
         <source>Choose a combined mono waveform or separate left and right channels.</source>
         <translation>Escolha uma forma de onda mono combinada ou canais esquerdo e direito separados.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="504"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="523"/>
         <source>This global preference applies immediately and does not modify projects. </source>
         <translation>Esta preferência global é aplicada imediatamente e não altera os projetos. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="505"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="524"/>
         <source>Stereo media shows left and right channels in separate halves; mono media </source>
         <translation>Mídias estéreo exibem os canais esquerdo e direito em metades separadas; mídias mono </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="506"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="525"/>
         <source>keeps one centered waveform.</source>
         <translation>mantêm uma forma de onda centralizada.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="515"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="534"/>
         <source>Track height adjustment:</source>
         <translation>Ajuste da altura das faixas:</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="520"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="539"/>
         <source>Together</source>
         <translation>Em conjunto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="523"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="542"/>
         <source>Independently by group</source>
         <translation>Separadamente por grupo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="528"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="547"/>
         <source>Choose whether Shift + mouse wheel changes both groups or only the Video or Audio group under the pointer.</source>
         <translation>Escolha se Shift + roda do mouse altera os dois grupos ou apenas o grupo de vídeo ou áudio sob o ponteiro.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="534"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="553"/>
         <source>This local preference applies immediately. In independent mode, </source>
         <translation>Esta preferência local é aplicada imediatamente. No modo independente, </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="535"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="554"/>
         <source>Shift + mouse wheel changes only the group beneath the pointer; </source>
         <translation>Shift + roda do mouse altera apenas o grupo sob o ponteiro; </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="536"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="555"/>
         <source>each project&apos;s Video and Audio row heights are saved separately. </source>
         <translation>a altura das linhas de vídeo e áudio é salva separadamente em cada projeto. </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="537"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="556"/>
         <source>Switching back to Together matches Audio to Video.</source>
         <translation>Ao voltar para Em conjunto, a altura do áudio é igualada à do vídeo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="565"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="584"/>
         <source>Changes apply immediately. Clear a field to disable that shortcut.</source>
         <translation>As alterações são aplicadas imediatamente. Apague o conteúdo de um campo para desativar o atalho.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="620"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="639"/>
         <source>Shortcut for %1</source>
         <translation>Atalho para %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="621"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="640"/>
         <source>Reset</source>
         <translation>Redefinir</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="625"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="644"/>
         <source>Restore the default shortcut for %1</source>
         <translation>Restaurar o atalho padrão de %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="626"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="645"/>
         <source>Clear</source>
         <translation>Limpar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="630"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="649"/>
         <source>Disable the shortcut for %1</source>
         <translation>Desativar o atalho de %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="693"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="712"/>
         <source>Available in every workspace.</source>
         <translation>Disponível em todas as áreas.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="695"/>
-        <source>Available in the Edit and Fusion workspaces.</source>
-        <translation>Disponível nas áreas Edit e Fusion.</translation>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="714"/>
+        <source>Available in the Edit, Fusion and Audio workspaces.</source>
+        <translation>Disponível nas áreas Edit, Fusion e Áudio.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="697"/>
-        <source>Available only in the Edit workspace.</source>
-        <translation>Disponível somente na área Edit.</translation>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="716"/>
+        <source>Available in the Edit and Audio workspaces.</source>
+        <translation>Disponível nas áreas Edit e Áudio.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="699"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="718"/>
         <source>Available only in the Fusion workspace.</source>
         <translation>Disponível somente na área Fusion.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="701"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="720"/>
         <source>Available only in the Render workspace.</source>
         <translation>Disponível somente na área Render.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="706"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="725"/>
         <source>Reset All</source>
         <translation>Redefinir tudo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="707"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="726"/>
         <source>Restore all default keyboard shortcuts</source>
         <translation>Restaurar todos os atalhos de teclado padrão</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="712"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="731"/>
         <source>Reset Shortcuts</source>
         <translation>Redefinir atalhos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="713"/>
+        <location filename="../../apps/video-editor/src/settings/settings_dialog.cpp" line="732"/>
         <source>Restore all default keyboard shortcuts?</source>
         <translation>Restaurar todos os atalhos de teclado padrão?</translation>
     </message>
@@ -3031,16 +3145,31 @@ Erro: </translation>
     </message>
     <message>
         <location filename="../../apps/video-editor/src/ui/timeline/timeline_end_buttons.cpp" line="33"/>
+        <source>Audio</source>
+        <translation>Áudio</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/ui/timeline/timeline_end_buttons.cpp" line="38"/>
+        <source>Switch to the Audio workspace</source>
+        <translation>Alternar para a área Áudio</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/ui/timeline/timeline_end_buttons.cpp" line="39"/>
+        <source>Audio workspace</source>
+        <translation>Área Áudio</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/ui/timeline/timeline_end_buttons.cpp" line="41"/>
         <source>Render</source>
         <translation>Render</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/timeline/timeline_end_buttons.cpp" line="38"/>
+        <location filename="../../apps/video-editor/src/ui/timeline/timeline_end_buttons.cpp" line="46"/>
         <source>Switch to the Render workspace</source>
         <translation>Alternar para a área Render</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/timeline/timeline_end_buttons.cpp" line="39"/>
+        <location filename="../../apps/video-editor/src/ui/timeline/timeline_end_buttons.cpp" line="47"/>
         <source>Render workspace</source>
         <translation>Área Render</translation>
     </message>
@@ -3081,58 +3210,58 @@ Erro: </translation>
 <context>
     <name>TimelineWidget</name>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2456"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2486"/>
         <source>Add Audio Crossfade</source>
         <translation>Adicionar transição cruzada de áudio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2460"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2490"/>
         <source>Add Cross Dissolve</source>
         <translation>Adicionar dissolução cruzada</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2461"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2491"/>
         <source>Add Fade to Black</source>
         <translation>Adicionar esmaecimento para preto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2466"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2496"/>
         <source>Remove Transition</source>
         <translation>Remover transição</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2493"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2523"/>
         <source>Open in Fusion</source>
         <translation>Abrir no Fusion</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2498"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2528"/>
         <source>Edit Clip Image in Image Editor</source>
         <translation>Editar imagem do clipe no Image Editor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2505"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2535"/>
         <source>Open Linked Composition in Motion Studio</source>
         <translation>Abrir composição vinculada no Motion Studio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2506"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2536"/>
         <source>Create Motion Composition...</source>
         <translation>Criar composição no Motion Studio...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2512"/>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2530"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2542"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2560"/>
         <source>Unlink Audio</source>
         <translation>Desvincular áudio</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2588"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2618"/>
         <source>Reset Edge Point to 100%</source>
         <translation>Redefinir o ponto de borda para 100%</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2589"/>
+        <location filename="../../apps/video-editor/src/timeline/timeline_widget.cpp" line="2619"/>
         <source>Remove Volume Point</source>
         <translation>Remover ponto de volume</translation>
     </message>
@@ -3140,27 +3269,16 @@ Erro: </translation>
 <context>
     <name>WorkspaceTransitionController</name>
     <message>
-        <location filename="../../apps/video-editor/src/ui/workspace/workspace_transition_controller.cpp" line="142"/>
+        <location filename="../../apps/video-editor/src/ui/workspace/workspace_transition_controller.cpp" line="257"/>
+        <location filename="../../apps/video-editor/src/ui/workspace/workspace_transition_controller.cpp" line="294"/>
         <source>Node Editor</source>
         <translation>Editor de nós</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/workspace/workspace_transition_controller.cpp" line="142"/>
+        <location filename="../../apps/video-editor/src/ui/workspace/workspace_transition_controller.cpp" line="259"/>
+        <location filename="../../apps/video-editor/src/ui/workspace/workspace_transition_controller.cpp" line="294"/>
         <source>Timeline</source>
         <translation>Linha do tempo</translation>
     </message>
-</context>
-<context>
-    <name>RendererSelection</name>
-    <message><source>Automatic</source><translation>Automático</translation></message>
-    <message><source>Vulkan (Experimental)</source><translation>Vulkan (Experimental)</translation></message>
-    <message><source>Graphics renderer</source><translation>Renderizador gráfico</translation></message>
-    <message><source>Choose the graphics API for preview and GPU export. GPU composition and hardware codecs keep their separate settings. Changes to this API require restarting the editor.</source><translation>Escolha a API gráfica para a prévia e a exportação por GPU. A composição por GPU e os codecs por hardware mantêm suas configurações separadas. Alterar esta API exige reiniciar o editor.</translation></message>
-    <message><source>Remember my choice</source><translation>Lembrar minha escolha</translation></message>
-    <message><source>Graphics renderer (next launch)</source><translation>Renderizador gráfico (próxima abertura)</translation></message>
-    <message><source>Active renderer: %1</source><translation>Renderizador ativo: %1</translation></message>
-    <message><source>Ask which renderer to use at startup</source><translation>Perguntar qual renderizador usar ao iniciar</translation></message>
-    <message><source>Use --renderer=auto|opengl|vulkan|cpu once.</source><translation>Use --renderer=auto|opengl|vulkan|cpu apenas uma vez.</translation></message>
-    <message><source>Vulkan is unavailable. The editor will use OpenGL and recover with CPU when necessary.</source><translation>Vulkan está indisponível. O editor usará OpenGL e recorrerá à CPU quando necessário.</translation></message>
 </context>
 </TS>

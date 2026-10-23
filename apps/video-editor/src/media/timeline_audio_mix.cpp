@@ -8,6 +8,14 @@
 #include <utility>
 
 namespace media {
+
+float timelineAudioPeak(std::span<const float> samples) noexcept {
+    float peak = 0.0F;
+    for (const float sample : samples) {
+        if (std::isfinite(sample)) peak = std::max(peak, std::abs(sample));
+    }
+    return peak;
+}
 namespace {
 
 std::optional<std::int64_t> sampleAtTimelineFrame(

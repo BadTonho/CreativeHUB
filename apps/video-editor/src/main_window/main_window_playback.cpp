@@ -10,6 +10,8 @@
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
+#include "workspaces/audio/ui/audio_workspace.h"
+#include "ui/workspace/workspace_host.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -1252,6 +1254,11 @@ void MainWindow::handlePlaybackEvent(
                 editUi().playback_status->setText(
                     QCoreApplication::translate("MainWindow", "Audio unavailable; video fallback is active."));
             }
+        } else if constexpr (std::is_same_v<Event, playback::PlaybackAudioLevelsEvent>) {
+            if (audio_workspace_ != nullptr && workspace_host_ != nullptr &&
+                workspace_host_->currentPage() == ui::WorkspacePageId::Audio) {
+                audio_workspace_->setPeaks(value.track_peaks, value.master_peak);
+            }
         }
     }, event);
 }
@@ -1331,12 +1338,14 @@ void MainWindow::handlePlaybackPosition(
 
 void MainWindow::handlePlaybackStateChanged(bool playing) {
     playback_is_playing_ = playing;
+    if (!playing && audio_workspace_ != nullptr) audio_workspace_->clearPeaks();
     updatePlaybackControls();
     updatePlaybackStatus();
 }
 
 void MainWindow::handlePlaybackFinished(bool during_playback, bool gap) {
     playback_is_playing_ = false;
+    if (audio_workspace_ != nullptr) audio_workspace_->clearPeaks();
     updatePlaybackControls();
     if (gap) {
         if (editUi().playback_status != nullptr) {

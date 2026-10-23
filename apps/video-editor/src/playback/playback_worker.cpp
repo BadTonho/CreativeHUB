@@ -491,6 +491,12 @@ void PlaybackWorker::setMonitorVolume(double gain) {
     }
 }
 
+void PlaybackWorker::setAudioMeteringEnabled(bool enabled) {
+    if (enabled && !audio_metering_enabled_)
+        last_audio_meter_emit_ = {};
+    audio_metering_enabled_ = enabled;
+}
+
 void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface) {
     if (enabled == gpu_composition_enabled_ && surface == gpu_surface_) return;
     clearCompositionCache();
@@ -2049,6 +2055,11 @@ void PlaybackWorker::fillCompositionAudioOutput() {
             static_cast<std::size_t>(block_samples) *
                 static_cast<std::size_t>(output.channel_count),
             0.0F);
+        const auto meter_now = std::chrono::steady_clock::now();
+        const bool meter_this_block = audio_metering_enabled_ &&
+            (last_audio_meter_emit_ == std::chrono::steady_clock::time_point{} ||
+             meter_now - last_audio_meter_emit_ >= std::chrono::milliseconds(50));
+        std::unordered_map<timeline::TrackId, std::vector<float>> track_mixes;
         const auto spans = media::planTimelineAudioMix(
             composition_audio_mix_clips_,
             composition_audio_mix_transitions_,
@@ -2100,6 +2111,12 @@ void PlaybackWorker::fillCompositionAudioOutput() {
                     if (!chunk.has_value() || chunk->sampleCount() == 0) break;
                     media::accumulateTimelineAudioChunk(
                         span, *chunk, mixed, output.channel_count);
+                    if (meter_this_block && source.spec.track_id != 0) {
+                        auto& track_mix = track_mixes[source.spec.track_id];
+                        if (track_mix.empty()) track_mix.resize(mixed.size(), 0.0F);
+                        media::accumulateTimelineAudioChunk(
+                            span, *chunk, track_mix, output.channel_count);
+                    }
                     const auto chunk_end = chunk->first_sample_index +
                         static_cast<std::int64_t>(chunk->sampleCount());
                     const auto consumed_end = std::min(source_end, chunk_end);
@@ -2118,6 +2135,21 @@ void PlaybackWorker::fillCompositionAudioOutput() {
                 reportCompositionAudioFailure(
                     source.spec, error, "composition_source_decode");
             }
+        }
+
+        if (meter_this_block) {
+            last_audio_meter_emit_ = meter_now;
+            QVector<quint64> track_ids;
+            QVector<float> levels;
+            track_ids.reserve(static_cast<qsizetype>(track_mixes.size()));
+            levels.reserve(static_cast<qsizetype>(track_mixes.size()));
+            for (const auto& [id, samples] : track_mixes) {
+                track_ids.push_back(id);
+                levels.push_back(media::timelineAudioPeak(samples));
+            }
+            emit audioLevelsReady(
+                std::move(track_ids), std::move(levels),
+                media::timelineAudioPeak(mixed), generation_);
         }
 
         std::vector<std::int16_t> pcm(

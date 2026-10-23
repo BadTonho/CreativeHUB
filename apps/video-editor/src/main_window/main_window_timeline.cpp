@@ -4,6 +4,7 @@
 #include "logging/logger.h"
 #include "ui/preview/preview_widget.h"
 #include "workspaces/render/ui/render_workspace.h"
+#include "workspaces/audio/ui/audio_workspace.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "timeline/timeline_clip_edge_command.h"
@@ -330,6 +331,8 @@ void MainWindow::updatePlaybackAudioParameters() {
 }
 
 void MainWindow::updateTimelineState() {
+    if (audio_workspace_ != nullptr)
+        audio_workspace_->refreshTracks(timeline_model_.tracks());
     if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
         edit_workspace_->controller()->updateTimelineState();
         synchronizeActiveTimelineSelection();
@@ -342,6 +345,24 @@ void MainWindow::updateTimelineState() {
         editUi().timeline->setTracks(timeline_model_.tracks());
     }
     requestTimelineAudioWaveforms();
+}
+
+void MainWindow::applyAudioTrackMix(
+    timeline::TrackId track_id, double gain, bool muted) {
+    try {
+        const auto result = timeline_command_service_.execute(
+            application::SetTrackAudioCommand{track_id, gain, muted});
+        if (!result.changed()) return;
+        applyTimelineEditResult(result, false);
+        updateTimelineState();
+        refreshPlaybackComposition();
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "audio_workspace", "set_track_mix",
+            error.what(), {{"track_id", std::to_string(track_id)}});
+        statusBar()->showMessage(
+            QCoreApplication::translate("MainWindow", "Could not change the audio track."));
+    }
 }
 
 void MainWindow::requestTimelineAudioWaveforms() {

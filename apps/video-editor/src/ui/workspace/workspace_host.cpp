@@ -113,6 +113,13 @@ WorkspaceHost::WorkspaceHost(
     inspector_panel_->setCurrentWidget(edit_inspector_);
 }
 
+void WorkspaceHost::setAudioPanels(QWidget* meter_page, QWidget* mixer_panel) {
+    audio_meter_page_ = meter_page;
+    audio_mixer_panel_ = mixer_panel;
+    if (meter_page != nullptr) central_workspace_pages_->addWidget(meter_page);
+    if (mixer_panel != nullptr) inspector_panel_->addWidget(mixer_panel);
+}
+
 void WorkspaceHost::setPage(
     WorkspacePageId page, bool refresh_central_workspace) {
     if (current_page_ == page) {
@@ -193,7 +200,9 @@ void WorkspaceHost::setPage(
         }
     }
 
-    central_workspace_pages_->setCurrentWidget(empty_central_page_);
+    central_workspace_pages_->setCurrentWidget(
+        page == WorkspacePageId::Audio && audio_meter_page_ != nullptr
+            ? audio_meter_page_ : empty_central_page_);
 
     if (viewer_title_ != nullptr) {
         viewer_title_->setVisible(page == WorkspacePageId::Fusion);
@@ -208,6 +217,10 @@ void WorkspaceHost::setPage(
         if (fusion_inspector_ != nullptr) {
             inspector_panel_->setCurrentWidget(fusion_inspector_);
         }
+    } else if (page == WorkspacePageId::Audio) {
+        lower_workspace_panel_->setCurrentWidget(timeline_panel_);
+        if (audio_mixer_panel_ != nullptr)
+            inspector_panel_->setCurrentWidget(audio_mixer_panel_);
     } else {
         lower_workspace_panel_->setCurrentWidget(timeline_panel_);
         inspector_panel_->setCurrentWidget(edit_inspector_);
@@ -219,7 +232,8 @@ void WorkspaceHost::setPage(
 void WorkspaceHost::refreshCentralWorkspaceVisibility() {
     auto* main_window = qobject_cast<QMainWindow*>(window());
     if (main_window == nullptr) return;
-    if (current_page_ == WorkspacePageId::Render) {
+    if (current_page_ == WorkspacePageId::Render ||
+        current_page_ == WorkspacePageId::Audio) {
         setMaximumWidth(QWIDGETSIZE_MAX);
         setCentralWorkspaceVisible(true);
         return;

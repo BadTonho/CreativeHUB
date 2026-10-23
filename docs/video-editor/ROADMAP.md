@@ -1,5 +1,9 @@
 # Video Editor Roadmap
 
+The dedicated [Audio Workspace Roadmap](AUDIO_WORKSPACE_ROADMAP.md) records the
+implemented first editing/mixing stage and later audio candidates without a
+release commitment.
+
 [Gaussian Blur](features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
 catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with
 Motion, persists in CSP v31 and is covered by `creative-suite-blur-interchange`.

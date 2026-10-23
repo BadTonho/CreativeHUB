@@ -250,9 +250,11 @@ bool ShortcutManager::isActive(ShortcutScope scope) const noexcept {
         return true;
     case ShortcutScope::Shared:
         return active_page_ == ui::WorkspacePageId::Edit ||
-            active_page_ == ui::WorkspacePageId::Fusion;
+            active_page_ == ui::WorkspacePageId::Fusion ||
+            active_page_ == ui::WorkspacePageId::Audio;
     case ShortcutScope::Edit:
-        return active_page_ == ui::WorkspacePageId::Edit;
+        return active_page_ == ui::WorkspacePageId::Edit ||
+            active_page_ == ui::WorkspacePageId::Audio;
     case ShortcutScope::Fusion:
         return active_page_ == ui::WorkspacePageId::Fusion;
     case ShortcutScope::Render:

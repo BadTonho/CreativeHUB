@@ -30,6 +30,14 @@ TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
     unnamed_button->setCheckable(true);
     unnamed_button->setAutoExclusive(true);
 
+    auto* audio_button = new QPushButton(QCoreApplication::translate("TimelineEndButtons", "Audio"), container);
+    audio_button->setObjectName("timelineAudioButton");
+    audio_button->setFixedSize(68, 22);
+    audio_button->setCheckable(true);
+    audio_button->setAutoExclusive(true);
+    audio_button->setToolTip(QCoreApplication::translate("TimelineEndButtons", "Switch to the Audio workspace"));
+    audio_button->setAccessibleName(QCoreApplication::translate("TimelineEndButtons", "Audio workspace"));
+
     auto* render_button = new QPushButton(QCoreApplication::translate("TimelineEndButtons", "Render"), container);
     render_button->setObjectName("timelineRenderButton");
     render_button->setFixedSize(68, 22);
@@ -47,8 +55,9 @@ TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
 
     layout->addWidget(edit_button);
     layout->addWidget(unnamed_button);
+    layout->addWidget(audio_button);
     layout->addWidget(render_button);
-    return {container, edit_button, unnamed_button, render_button};
+    return {container, edit_button, unnamed_button, audio_button, render_button};
 }
 
 }  // namespace ui

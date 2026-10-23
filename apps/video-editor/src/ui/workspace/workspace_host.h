@@ -32,6 +32,7 @@ public:
     void setPage(WorkspacePageId page,
                  bool refresh_central_workspace = true);
     void refreshCentralWorkspaceVisibility();
+    void setAudioPanels(QWidget* meter_page, QWidget* mixer_panel);
     [[nodiscard]] WorkspacePageId currentPage() const noexcept;
 
     [[nodiscard]] QWidget* previewWidget() const noexcept;
@@ -55,6 +56,8 @@ private:
     QWidget* viewer_title_ = nullptr;
     QWidget* empty_central_page_ = nullptr;
     QWidget* render_page_ = nullptr;
+    QWidget* audio_meter_page_ = nullptr;
+    QWidget* audio_mixer_panel_ = nullptr;
     QStackedWidget* central_workspace_pages_ = nullptr;
     QStackedWidget* lower_workspace_panel_ = nullptr;
     QStackedWidget* inspector_panel_ = nullptr;

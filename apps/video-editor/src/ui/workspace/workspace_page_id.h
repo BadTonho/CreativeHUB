@@ -5,6 +5,7 @@ namespace ui {
 enum class WorkspacePageId {
     Edit,
     Fusion,
+    Audio,
     Render
 };
 
