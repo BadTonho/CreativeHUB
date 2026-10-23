@@ -47,7 +47,7 @@ technical failures. Raw content tools and isolated raster exports keep targets.
 
 ## Format and compatibility
 
-Introduced in v21; the current v25 writer reads versions 1-24, including v20
+Introduced in v21; the current v26 writer reads versions 1-25, including v20
 Gradient Map layers. Write
 `kind: "adjustment"`, with `adjustment: {type: "brightness_contrast", brightness,
 contrast}`; both values are required integers in [-100,100]. The optional typed
@@ -56,7 +56,7 @@ unknown types, invalid values, Background adjustments and incompatible raster
 content/outline. Invalid Open preserves the current document. Selection mask
 encoding and recovery envelope v1 are unchanged.
 
-Hub accepts Image v1-25, refuses v26 and retains all six adjustment payloads/masks
+Hub accepts Image v1-26, refuses v27 and retains all six adjustment payloads/masks
 through backup, relocation and restoration, verified by the actual Image reader.
 Application versions and linked PNG protocol are unchanged.
 

@@ -1142,18 +1142,23 @@ GPU/driver, canvas dimensions and outcome; use copies of original images.
    group. Verify the default diagonal and overlaid input histogram. Change
    lower content and confirm the histogram updates without blocking the UI;
    editing only Curves points must leave it fixed.
-2. Add, drag and remove interior points; move both endpoint outputs; use the
+2. Switch among RGB, Red, Green and Blue. Edit each curve and confirm the
+   other three remain unchanged. Verify the master curve is applied before
+   each individual channel curve.
+3. Add, drag and remove interior points; move both endpoint outputs; use the
    numeric Input/Output fields. Verify clamped neighbors, smooth bounded
-   segments, reversals and Reset.
-3. Seed a selection mask, paint/erase it, vary opacity and all six blend modes,
+   segments, reversals, and that Reset restores only the selected curve.
+4. Seed a selection mask, paint/erase it, vary opacity and all six blend modes,
    then test clipping and a transformed group with mixed adjustment types.
-4. Check one Undo per drag or field edit, atomic button actions, no-op Redo and
+5. Check one Undo per drag or field edit, atomic button actions, no-op Redo and
    correct values when switching layer or tab.
-5. Compare CPU/Automatic preview, thumbnails and PNG/JPEG/group exports. Save
-   and reopen v25, recover an autosave and restore a relocated Hub backup.
-6. Publish a linked PNG consumed by Video Editor and Motion Studio; confirm
+6. Compare CPU/Automatic preview, thumbnails and PNG/JPEG/group exports. Save
+   and reopen v26, recover an autosave and restore a relocated Hub backup.
+   Open a v25 Curves document and confirm its old curve appears under RGB while
+   Red, Green and Blue begin at identity.
+7. Publish a linked PNG consumed by Video Editor and Motion Studio; confirm
    refreshed RGB/alpha and unchanged source bytes.
-7. On the Windows reference PC, record 1080p cold/warm rendering, point-edit
+8. On the Windows reference PC, record 1080p cold/warm rendering, point-edit
    latency, content uploads, cancellation and constrained GPU recovery.
 
 Automated mapping: [Curves contract](../features/CURVES.md).

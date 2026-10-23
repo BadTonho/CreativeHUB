@@ -3,6 +3,16 @@
 Current backup gates save Motion v18 and reject v19. Version-specific sections
 below retain the records and evidence from earlier deliveries.
 
+## Image Editor v26 per-channel Curves
+
+`hub-backup-format-test` passed on Windows Release with v26 documents containing
+the RGB master and independent channel curves; the actual Image Editor reader
+reopened both the vault snapshot and relocated restore. In
+`hub-backup-manager-test`, the v27 rejection checks completed before a later
+settings fixture failed to write under `QStandardPaths::AppLocalDataLocation`,
+which resolves outside the workspace sandbox. Record the Hub manager gate as
+pending a run with writable application data; the format/restore gate passed.
+
 Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
 `hub-backup-format-test`. `hub-backup-manager-test` rejects CSP32/Motion19.
@@ -464,7 +474,7 @@ See [Image execution evidence](../../image-editor/features/BLEND_MODES.md#window
 
 ## Image v20 adjustment backup coverage
 
-Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future unsupported Image versions are refused; current v25 coverage is below. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
+Hub format/manager tests use actual Image v1-20 readers and preserve Gradient Map stops, initial selection masks and relocated media. Future unsupported Image versions are refused; current v26 coverage is below. Native UI/platform acceptance remains pending. See [Image contract](../../image-editor/features/GRADIENT_MAP.md).
 
 ## Image v21 adjustment backup coverage
 

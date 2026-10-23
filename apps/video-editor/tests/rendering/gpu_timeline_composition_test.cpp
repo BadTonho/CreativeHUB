@@ -268,8 +268,16 @@ int main(int argc, char** argv) {
         image_editor::ImageDocumentSession producer;
         QString error;
         require(producer.createCanvas(QSize(16, 16), Qt::transparent, &error) &&
-            producer.importRasterImages(image_editor::prepareRasterImport({imported_path}).images, {}, &error) &&
-            producer.addLayerMask(producer.selectedLayerId()) &&
+            producer.importRasterImages(image_editor::prepareRasterImport({imported_path}).images, {}, &error),
+            "Image producer setup failed: " + error.toStdString());
+        const auto rasterLayerId = producer.selectedLayerId();
+        require(producer.addLayerMask(rasterLayerId), "Image producer mask setup failed.");
+        auto curvesId = producer.addCurvesAdjustment();
+        auto curves = creative_suite::effects::CurvesParameters{};
+        curves.channels[0] = {{0, 0}, {96, 220}, {255, 255}};
+        curves.channels[1] = {{0, 0}, {160, 60}, {255, 255}};
+        require(!curvesId.isEmpty() && producer.setCurves(curvesId, curves) &&
+            producer.selectLayer(rasterLayerId) &&
             producer.applyLayerMaskEraseStroke({QPointF(8, 8)}, 4, &error) &&
             producer.exportImage(published_path, &error), "Masked PNG producer failed: " + error.toStdString());
         const auto published = raster(QImage(published_path));

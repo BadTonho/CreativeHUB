@@ -218,10 +218,17 @@ void testImageDocuments(const QString& root) {
             auto children = group.value("children").toArray();
             auto adjustment = children.last().toObject();
             adjustment.insert("id", QUuid::createUuid().toString(QUuid::WithoutBraces));
-            adjustment.insert("adjustment", QJsonObject{{"type", "curves"},
+            QJsonObject curves{{"type", "curves"},
                 {"points", QJsonArray{QJsonObject{{"input",0},{"output",10}},
                     QJsonObject{{"input",128},{"output",180}},
-                    QJsonObject{{"input",255},{"output",245}}}}});
+                    QJsonObject{{"input",255},{"output",245}}}}};
+            if (version >= 26) {
+                const QJsonArray identityPoints{QJsonObject{{"input", 0}, {"output", 0}},
+                    QJsonObject{{"input", 255}, {"output", 255}}};
+                curves.insert("channels", QJsonObject{{"red", identityPoints},
+                    {"green", identityPoints}, {"blue", identityPoints}});
+            }
+            adjustment.insert("adjustment", curves);
             children.append(adjustment);
             group.insert("children", children);
             layers[layers.size()-1] = group;

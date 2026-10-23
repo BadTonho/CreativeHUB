@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, global Hue/Saturation, global Levels and global Curves adjustments, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, global Hue/Saturation, global Levels, global Curves and per-channel Curves adjustments, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,8 +41,9 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Extend Curves with individual RGB channel controls** in a separate bounded
-increment. Global Curves is implemented; see its [contract](features/CURVES.md).
+**Extend Levels with individual RGB channel controls** in a separate bounded
+increment. Per-channel Curves is implemented; see its [contract](features/CURVES.md).
+Global Curves is implemented; see its [contract](features/CURVES.md).
 Global Levels is implemented; see its [contract](features/LEVELS.md).
 Global Hue/Saturation is implemented; see its [contract](features/HUE_SATURATION.md).
 Exposure / Offset / Gamma is implemented; see its [contract](features/EXPOSURE_OFFSET_GAMMA.md).
@@ -290,7 +291,9 @@ Native visual and macOS/Linux acceptance remains pending.
 - [x] Add global Hue/Saturation; see [contract](features/HUE_SATURATION.md).
 - [x] Add global RGB Levels; see [contract](features/LEVELS.md).
 - [x] Add global RGB Curves; see [contract](features/CURVES.md).
-- [ ] Add per-channel Curves and individual Levels channels in bounded increments.
+- [x] Add individual Red, Green and Blue curves alongside the RGB master curve;
+  see the [Curves contract](features/CURVES.md).
+- [ ] Add individual Levels channels in a separate bounded increment.
 - [ ] Extend Hue/Saturation with Colorize and per-color-range controls in separate bounded increments.
 - [ ] Add color balance, Black & White channel controls, LUT loading, selective
   color, invert, posterize, and threshold.
@@ -705,23 +708,23 @@ and release/platform acceptance remain pending.
 
 | Behavior | Automated coverage | Acceptance |
 | --- | --- | --- |
-| PCHIP mapping, bounds, neutral bytes, alpha, masks, modes, histogram, history, v25/recovery/export/cache | `creative-suite-image-editor-curves`, shared effects | [Curves contract](features/CURVES.md); owner visual acceptance pending. |
-| Point graph, numeric fields, add/remove, gestures/Reset and selection mask | `creative-suite-image-editor-curves-ui`, full UI and translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-curves-adjustments) pending. |
-| CPU/OpenGL parity, unchanged content uploads, mixed stacks, clipping/groups, cancellation/capacity and handoff | Native `gpuCurves`, Hub backup gates, Video linked-image and affected Motion gates | Native and platform acceptance tracked separately. |
+| PCHIP mapping order, independent channels, bounds, neutral bytes, alpha, masks, modes, histogram, history, v25 migration, v26 recovery/export/cache | `creative-suite-image-editor-curves`, shared effects | [Curves contract](features/CURVES.md); owner visual acceptance pending. |
+| Channel selector, independent graph/numeric edits, add/remove, gestures/Reset-per-channel, history, selection mask and linked PNG publication | `creative-suite-image-editor-curves-ui`, full UI and translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-curves-adjustments) pending. |
+| CPU/OpenGL parity for distinct channels, unchanged content uploads, mixed stacks, clipping/groups, cancellation/capacity and handoff | Native `gpuCurves`, Hub backup gates, Video linked-image and affected Motion gates | Native and platform acceptance tracked separately. |
 
-**Windows Release execution (2026-10-22):** 20 focused CTest gates passed:
-shared effects/composition/OpenGL; Image Editor core, raster, masks, formats,
-full UI, translation catalog, interactive, export UI, Levels (model/UI) and
-Curves (model/UI), plus Gradient Map, Blend, Clipping, Exposure and
-Hue/Saturation. Native `gpuCurves` passed CPU/OpenGL pixel comparison,
-zero content uploads on point edits, groups/clipping, cancellation and the
-resource budget check. Video linked-image, Motion preview/GPU composition and
-Hub backup format/manager gates passed; the Hub manager gate needed access to
-its user data directory outside the workspace sandbox. The full native Image
-GPU raster suite failed in `gpuHueSaturation` and
-`gpuPixelsUploadsAndPresentation`; `gpuCurves` passed within that suite. The
-remaining GPU failures require separate investigation before a broad native
-GPU gate can be claimed. The [owner's manual checklist](validation/MANUAL_VALIDATION.md#global-curves-adjustments)
+**Windows Release execution (2026-10-22):** Image Editor Curves model, Curves
+UI, translation catalog, and native `gpuCurves` passed. The GPU case compared
+CPU/OpenGL pixels and exercised point-edit uploads, clipping/groups, cancel,
+and the resource budget. Video linked-image publication/refresh and GPU
+timeline composition passed, as did Motion Studio's UI linked-image consumer
+gate. Hub backup format and restore passed, including the v26 Curves data. The
+Hub backup-manager test reached and passed its future
+Image v27 rejection checks, then stopped at its later AppLocalData fixture
+write because that path is outside the workspace sandbox. The shared Effects
+test reached a failing Outer Glow assertion after the Curves checks. These two
+unrelated failures are not recorded as passing gates. The Image Editor Release
+app was built at `build/apps/image-editor/Release/creative-suite-image-editor.exe`
+(2,512,896 bytes; 2026-10-22 22:42:53 -03:00). The [owner's manual checklist](validation/MANUAL_VALIDATION.md#global-curves-adjustments)
 and macOS/Linux acceptance remain pending.
 
 Raster cache collision invalidation is covered by

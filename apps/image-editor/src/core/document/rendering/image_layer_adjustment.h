@@ -16,8 +16,8 @@ namespace image_editor {
     if(!opacity)return true;
     if(effects::identityAdjustment(parameters) && mode==composition::BlendMode::Normal)return true;
     const auto* curves = std::get_if<effects::CurvesParameters>(&parameters);
-    const auto curve_table = curves ? effects::curvesLut(*curves) :
-        std::array<std::uint8_t,256>{};
+    const auto curve_tables = curves ? effects::curvesLuts(*curves) :
+        effects::CurvesLookupTables{};
     *pixels=pixels->convertToFormat(QImage::Format_ARGB32_Premultiplied);
     if(pixels->isNull())return false;
     for(int y=0;y<pixels->height();++y){
@@ -27,9 +27,9 @@ namespace image_editor {
             const QRgb b=row[x];const int alpha=qAlpha(b);if(!alpha)continue;
             const std::array<double,3> rgb{double(qRed(b))/alpha,double(qGreen(b))/alpha,double(qBlue(b))/alpha};
             const auto mapped=curves ? std::array<unsigned char,3>{
-                curve_table[std::lround(std::clamp(rgb[0],0.,1.)*255)],
-                curve_table[std::lround(std::clamp(rgb[1],0.,1.)*255)],
-                curve_table[std::lround(std::clamp(rgb[2],0.,1.)*255)]} :
+                curve_tables[0][std::lround(std::clamp(rgb[0],0.,1.)*255)],
+                curve_tables[1][std::lround(std::clamp(rgb[1],0.,1.)*255)],
+                curve_tables[2][std::lround(std::clamp(rgb[2],0.,1.)*255)]} :
                 effects::adjustmentRgb(parameters,rgb);
             const int coverage=mask.isNull()?255:mask.format()==QImage::Format_Grayscale8?mask.constScanLine(y)[x]:qGray(mask.pixel(x,y));
             const double strength=opacity/100.*coverage/255.;

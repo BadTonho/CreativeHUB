@@ -3,6 +3,12 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>ImageEditorUI</name>
+    <message><source>Channel</source><translation>Canal</translation></message>
+    <message><source>Curves channel</source><translation>Canal de Curvas</translation></message>
+    <message><source>RGB</source><translation>RGB</translation></message>
+    <message><source>Red</source><translation>Vermelho</translation></message>
+    <message><source>Green</source><translation>Verde</translation></message>
+    <message><source>Blue</source><translation>Azul</translation></message>
     <message><source>Curves</source><translation>Curvas</translation></message>
     <message><source>Curves graph</source><translation>Gráfico de curvas</translation></message>
     <message><source>Input</source><translation>Entrada</translation></message>

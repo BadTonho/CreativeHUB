@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 25; host links live in the Video Editor's
+  The `.cimg` schema is version 26; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -755,20 +755,22 @@ CPU and OpenGL render at the selected layer's backdrop with unchanged alpha,
 preserving the neutral Normal byte path and cached source textures. The
 asynchronous histogram captures this backdrop before Levels and samples at
 most one million nontransparent pixels; it does not affect rendering or the
-persisted document. The codec writes v25; Hub accepts v1–25. See the
+persisted document. The codec writes v26; Hub accepts v1–26. See the
 [Levels contract](../features/LEVELS.md).
 
 ## Global Curves processing
 
-The sixth adjustment adds a validated, shape-preserving cubic Hermite curve to
-the shared Qt-free effects variant. The CPU builds one 256-byte table per
-adjustment operation; the OpenGL raster pass packs the same table into 64
-`vec4` uniforms. Encoded-sRGB channels index the table independently while the
-existing mask/blend path preserves alpha. No content texture is reuploaded for
-point edits. The Image Editor owns points, gestures, history, stack scope and
-errors. Levels and Curves share the asynchronous pre-adjustment histogram
-capture; it is neither part of the document nor recalculated for parameter
-edits. The codec writes v25 and Hub accepts v1–25. See the
+The sixth adjustment adds a validated, shape-preserving cubic Hermite RGB
+master curve and three individual channel curves to the shared Qt-free effects
+variant. The CPU builds one 256-byte effective lookup table for each output
+channel, applying the master before that channel's curve; the OpenGL raster
+pass packs those same tables into 192 `vec4` uniforms. Encoded-sRGB channels
+index their corresponding table while the existing mask/blend path preserves
+alpha. No content texture is reuploaded for point edits. The Image Editor owns
+points, gestures, history, stack scope and errors. Levels and Curves share the
+asynchronous pre-adjustment histogram capture; it is neither part of the
+document nor recalculated for parameter edits. The codec writes v26 and Hub
+accepts v1–26. See the
 [Curves contract](../features/CURVES.md).
 
 Raster cache synchronization consumes QHash's erase-returned iterator because

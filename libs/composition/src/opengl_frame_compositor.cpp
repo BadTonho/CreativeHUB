@@ -793,7 +793,7 @@ uniform vec3 exposure_offset_gamma;
 uniform vec3 hue_saturation;
 uniform vec3 levels_input;
 uniform vec2 levels_output;
-uniform vec4 curve_table[64];
+uniform vec4 curve_table[192];
 uniform bool curve_identity;
 uniform bool has_mask;
 uniform bool bottom_left;
@@ -832,9 +832,9 @@ vec3 adjustLevels(vec3 rgb) {
     return (levels_output.x + (levels_output.y - levels_output.x) *
         pow(normalized, vec3(1.0 / levels_input.z))) / 255.0;
 }
-float curveValue(float value) {
+float curveValue(float value, int channel) {
     int index = int(floor(clamp(value, 0.0, 1.0) * 255.0 + 0.5));
-    return curve_table[index / 4][index % 4];
+    return curve_table[channel * 64 + index / 4][index % 4];
 }
 void main() {
     vec2 point = vec2(gl_FragCoord.x, float(canvas_height) - gl_FragCoord.y);
@@ -843,7 +843,7 @@ void main() {
         vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
         float t=dot(cb,vec3(0.2126,0.7152,0.0722));
         if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0)) || (adjustment_kind==5 && levels_input==vec3(0,255,1) && levels_output==vec2(0,255)) || (adjustment_kind==6 && curve_identity)) && blend_mode==0){color=b;return;}
-        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : adjustment_kind==5 ? adjustLevels(cb) : adjustment_kind==6 ? vec3(curveValue(cb.r),curveValue(cb.g),curveValue(cb.b)) : gradient_stops[gradient_count-1].rgb;
+        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : adjustment_kind==5 ? adjustLevels(cb) : adjustment_kind==6 ? vec3(curveValue(cb.r,0),curveValue(cb.g,1),curveValue(cb.b,2)) : gradient_stops[gradient_count-1].rgb;
         for(int i=1;adjustment_kind==1 && i<gradient_count;++i) {
             if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
         }
@@ -990,12 +990,13 @@ void main() {
             raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:hue?4:levels?5:curves?6:0);
             raster_program->setUniformValue("curve_identity",curves && effects::identityCurves(*curves));
             if (curves) {
-                const auto table = effects::curvesLut(*curves);
-                std::array<QVector4D,64> packed;
-                for (int i=0;i<64;++i) packed[i] = QVector4D(
-                    table[i*4]/255.f,table[i*4+1]/255.f,
-                    table[i*4+2]/255.f,table[i*4+3]/255.f);
-                raster_program->setUniformValueArray("curve_table",packed.data(),64);
+                const auto tables = effects::curvesLuts(*curves);
+                std::array<QVector4D,192> packed;
+                for (int channel=0;channel<3;++channel)
+                    for (int i=0;i<64;++i) packed[channel*64+i] = QVector4D(
+                        tables[channel][i*4]/255.f,tables[channel][i*4+1]/255.f,
+                        tables[channel][i*4+2]/255.f,tables[channel][i*4+3]/255.f);
+                raster_program->setUniformValueArray("curve_table",packed.data(),192);
             }
             raster_program->setUniformValue("levels_input", levels ?
                 QVector3D(float(levels->input_black), float(levels->input_white), float(levels->gamma)) : QVector3D(0,255,1));

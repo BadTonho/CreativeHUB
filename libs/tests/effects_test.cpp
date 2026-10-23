@@ -284,6 +284,23 @@ int main() {
             !validCurves(CurvesParameters{{{0,0},{255,256}}}) &&
             !validCurves(CurvesParameters{{{1,0},{255,255}}}),
             "Curves reject invalid points");
+        CurvesParameters channels;
+        channels.points={{0,0},{255,128}};
+        channels.channels[0]={{0,0},{64,200},{255,255}};
+        const auto master=curvesLut(channels.points);
+        const auto red=curvesLut(channels.channels[0]);
+        const auto combined=curvesLuts(channels);
+        require(combined[0][255]==red[master[255]] &&
+            combined[0][255]!=master[red[255]],
+            "Curves apply master before the selected channel");
+        require(combined[1]==curvesLut(channels.points) &&
+            combined[2]==curvesLut(channels.points),
+            "Curves keep unselected channels on the master curve");
+        require(curvesRgb(channels,{1.,1.,1.})==
+            std::array<unsigned char,3>{combined[0][255],combined[1][255],combined[2][255]},
+            "Curves map RGB channels independently");
+        channels.channels[1].push_back({128,20});
+        require(!validCurves(channels),"Curves validate every channel");
     }
     verifySharedBlur();
     using namespace creative_suite::effects;

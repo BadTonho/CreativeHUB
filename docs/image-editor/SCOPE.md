@@ -29,9 +29,9 @@ alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 25 format. The application reads
-versions 1 through 24 and writes version 25, migrating older documents on save;
-version 1 recovery envelopes accept a version 25 document payload. Source images
+Documents use the provisional `.cimg` version 26 format. The application reads
+versions 1 through 25 and writes version 26, migrating older documents on save;
+version 1 recovery envelopes accept a version 26 document payload. Source images
 remain unchanged, and original source dimensions are retained for relinking.
 Area Selection is a separate tool from object Selection. Its Rectangle and
 Ellipse gestures can replace, add to, or subtract from the temporary per-tab
@@ -119,9 +119,9 @@ performance guarantee is approved yet.
 ## Compatibility and Release Order
 
 The current implementation preserves the ability to open existing `.cimg`
-versions 1 through 24 and writes the current version 25 format on save. Automated
+versions 1 through 25 and writes the current version 26 format on save. Automated
 regression tests cover migration, canvas-size persistence, clipped paint/erase,
-bucket-fill, linear-gradient, and blur operations, and version 25 recovery payload. This implementation does not mark manual text checks or
+bucket-fill, linear-gradient, and blur operations, and version 26 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
 
 Per project policy, complete and accept the standalone minimum before accepting
@@ -289,9 +289,9 @@ acceptance is separate.
 
 ## Global Curves adjustments
 
-The sixth adjustment maps all three encoded-sRGB channels through the same
-editable, shape-preserving curve. A combined input histogram is calculated
-asynchronously and shown behind the graph. Masks, history, CPU/OpenGL preview,
-document/group exports, linked PNG and v25/Hub backups retain editable points.
-See [contract](features/CURVES.md). Per-channel controls and native visual/
-platform acceptance remain pending.
+The sixth adjustment provides an RGB master curve and independent Red, Green,
+and Blue curves. The master maps first, followed by the matching channel curve.
+A combined input histogram is calculated asynchronously and shown behind the
+graph. Masks, history, CPU/OpenGL preview, document/group exports, linked PNG,
+and v26/Hub backups retain editable points. See [contract](features/CURVES.md).
+Native visual/platform acceptance remains pending.

@@ -47,8 +47,9 @@ existing mask/history/export contract; native visual/platform acceptance is pend
 
 [Global Levels](features/LEVELS.md): input/output black and white, midtone gamma,
 combined input histogram, CPU/OpenGL preview and v24 persistence/Hub compatibility.
-[Global Curves](features/CURVES.md): shape-preserving RGB curve, editable points,
-input histogram, CPU/OpenGL processing and v25 persistence/Hub compatibility.
+[Global and per-channel Curves](features/CURVES.md): shape-preserving RGB
+master and independent channel curves, editable points, input histogram,
+CPU/OpenGL processing and v26 persistence/Hub compatibility.
 
 [Hue/Saturation Linux profile](performance/hue-saturation-linux-2026-10-21.json):
 1080p CPU/OpenGL, zero-upload edits, capacity recovery and separate baseline failures.

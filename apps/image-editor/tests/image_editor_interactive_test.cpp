@@ -614,6 +614,10 @@ private slots:
                 creative_suite::effects::CurvesParameters{{{0,10},{64,200},{128,40},{255,245}}}}){
             QVERIFY(s.setCurves(id,value));QVERIFY(verify(true));
         }
+        auto perChannel=creative_suite::effects::CurvesParameters{};
+        perChannel.channels[0]={{0,0},{96,220},{255,255}};
+        perChannel.channels[1]={{0,0},{160,60},{255,255}};
+        QVERIFY(s.setCurves(id,perChannel));QVERIFY(verify(true));
         const auto work=cache.reconstructedPixels();
         for(int mode=1;mode<6;++mode){
             QVERIFY(s.setStackBlendMode(id,false,static_cast<BlendMode>(mode)));

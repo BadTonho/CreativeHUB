@@ -14,17 +14,34 @@ struct CurvesPoint {
     bool operator==(const CurvesPoint&) const = default;
 };
 
-// Global encoded-sRGB curve. Points are owned by the value; no Qt dependency.
+using CurvesPointList = std::vector<CurvesPoint>;
+
+enum class CurvesChannel : std::size_t { RGB = 0, Red = 1, Green = 2, Blue = 3 };
+
+[[nodiscard]] inline CurvesPointList identityCurvePoints() {
+    return {{0, 0}, {255, 255}};
+}
+
+// Encoded-sRGB master and per-channel curves. Points are owned by the value;
+// the shared evaluator has no Qt dependency. `points` remains the RGB master.
 struct CurvesParameters {
-    std::vector<CurvesPoint> points{{0, 0}, {255, 255}};
+    CurvesPointList points = identityCurvePoints();
+    std::array<CurvesPointList, 3> channels{
+        identityCurvePoints(), identityCurvePoints(), identityCurvePoints()};
     bool operator==(const CurvesParameters&) const = default;
 };
 
-[[nodiscard]] inline bool validCurves(const CurvesParameters& p) noexcept {
-    if (p.points.size() < 2 || p.points.size() > 16 ||
-        p.points.front().input != 0 || p.points.back().input != 255) return false;
+[[nodiscard]] inline const CurvesPointList& curvesPoints(
+    const CurvesParameters& p, CurvesChannel channel) noexcept {
+    if (channel == CurvesChannel::RGB) return p.points;
+    return p.channels[static_cast<std::size_t>(channel) - 1];
+}
+
+[[nodiscard]] inline bool validCurvePoints(const CurvesPointList& points) noexcept {
+    if (points.size() < 2 || points.size() > 16 ||
+        points.front().input != 0 || points.back().input != 255) return false;
     int previous = -1;
-    for (const auto& point : p.points) {
+    for (const auto& point : points) {
         if (point.input <= previous || point.input > 255 ||
             point.output < 0 || point.output > 255) return false;
         previous = point.input;
@@ -32,17 +49,22 @@ struct CurvesParameters {
     return true;
 }
 
+[[nodiscard]] inline bool validCurves(const CurvesParameters& p) noexcept {
+    return validCurvePoints(p.points) &&
+        std::all_of(p.channels.begin(), p.channels.end(), validCurvePoints);
+}
+
 // PCHIP tangents preserve each segment's output bounds, including reversals.
 // Call only with validated points. The 256-byte table is returned by value.
 [[nodiscard]] inline std::array<std::uint8_t, 256> curvesLut(
-    const CurvesParameters& p) noexcept {
+    const CurvesPointList& points) noexcept {
     std::array<std::uint8_t, 256> table{};
-    const auto n = p.points.size();
+    const auto n = points.size();
     std::array<double, 15> h{}, slope{};
     std::array<double, 16> tangent{};
     for (std::size_t i = 0; i + 1 < n; ++i) {
-        h[i] = p.points[i + 1].input - p.points[i].input;
-        slope[i] = (p.points[i + 1].output - p.points[i].output) / h[i];
+        h[i] = points[i + 1].input - points[i].input;
+        slope[i] = (points[i + 1].output - points[i].output) / h[i];
     }
     if (n == 2) {
         tangent[0] = tangent[1] = slope[0];
@@ -63,8 +85,8 @@ struct CurvesParameters {
         }
     }
     for (std::size_t segment = 0; segment + 1 < n; ++segment) {
-        const auto& left = p.points[segment];
-        const auto& right = p.points[segment + 1];
+        const auto& left = points[segment];
+        const auto& right = points[segment + 1];
         for (int x = left.input; x <= right.input; ++x) {
             const double t = (x - left.input) / h[segment];
             const double t2 = t * t, t3 = t2 * t;
@@ -80,20 +102,40 @@ struct CurvesParameters {
     return table;
 }
 
+[[nodiscard]] inline std::array<std::uint8_t, 256> curvesLut(
+    const CurvesParameters& p) noexcept {
+    return curvesLut(p.points);
+}
+
+using CurvesLookupTables = std::array<std::array<std::uint8_t, 256>, 3>;
+
+// Compose the master curve followed by each output channel's own curve.
+[[nodiscard]] inline CurvesLookupTables curvesLuts(const CurvesParameters& p) noexcept {
+    const auto master = curvesLut(p.points);
+    CurvesLookupTables tables{};
+    for (std::size_t channel = 0; channel < tables.size(); ++channel) {
+        const auto individual = curvesLut(p.channels[channel]);
+        for (std::size_t input = 0; input < master.size(); ++input)
+            tables[channel][input] = individual[master[input]];
+    }
+    return tables;
+}
+
 [[nodiscard]] inline bool identityCurves(const CurvesParameters& p) noexcept {
     if (!validCurves(p)) return false;
-    if (p.points == CurvesParameters{}.points) return true;
-    const auto table = curvesLut(p);
-    for (int i = 0; i < 256; ++i) if (table[i] != i) return false;
+    const auto tables = curvesLuts(p);
+    for (const auto& table : tables)
+        for (int i = 0; i < 256; ++i)
+            if (table[i] != i) return false;
     return true;
 }
 
 [[nodiscard]] inline std::array<unsigned char, 3> curvesRgb(
     const CurvesParameters& p, const std::array<double, 3>& rgb) noexcept {
-    const auto table = curvesLut(p);
-    return {table[std::lround(std::clamp(rgb[0], 0., 1.) * 255)],
-        table[std::lround(std::clamp(rgb[1], 0., 1.) * 255)],
-        table[std::lround(std::clamp(rgb[2], 0., 1.) * 255)]};
+    const auto tables = curvesLuts(p);
+    return {tables[0][std::lround(std::clamp(rgb[0], 0., 1.) * 255)],
+        tables[1][std::lround(std::clamp(rgb[1], 0., 1.) * 255)],
+        tables[2][std::lround(std::clamp(rgb[2], 0., 1.) * 255)]};
 }
 
 } // namespace creative_suite::effects

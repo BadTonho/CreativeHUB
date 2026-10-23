@@ -1097,10 +1097,18 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
                     {"gamma", levels->gamma}, {"output_black", levels->output_black},
                     {"output_white", levels->output_white}});
             } else if (const auto* curves = std::get_if<creative_suite::effects::CurvesParameters>(&*layer.adjustment)) {
-                QJsonArray points;
-                for (const auto& point : curves->points)
-                    points.append(QJsonObject{{"input", point.input}, {"output", point.output}});
-                encoded.insert("adjustment", QJsonObject{{"type", "curves"}, {"points", points}});
+                const auto encode_points = [](const creative_suite::effects::CurvesPointList& values) {
+                    QJsonArray points;
+                    for (const auto& point : values)
+                        points.append(QJsonObject{{"input", point.input}, {"output", point.output}});
+                    return points;
+                };
+                const QJsonObject channels{
+                    {"red", encode_points(curves->channels[0])},
+                    {"green", encode_points(curves->channels[1])},
+                    {"blue", encode_points(curves->channels[2])}};
+                encoded.insert("adjustment", QJsonObject{{"type", "curves"},
+                    {"points", encode_points(curves->points)}, {"channels", channels}});
             } else {
                 const auto& hue = std::get<creative_suite::effects::HueSaturationParameters>(*layer.adjustment);
                 encoded.insert("adjustment", QJsonObject{{"type", "hue_saturation"},
@@ -1304,28 +1312,47 @@ bool decodeDocumentJson(const QJsonObject& root,
                     assignError(error, QStringLiteral("An adjustment has incompatible Levels fields."));
                     return false;
                 }
-                if (a.value("type") != "curves" && a.contains("points")) {
+                if (a.value("type") != "curves" &&
+                    (a.contains("points") || a.contains("channels"))) {
                     assignError(error, QStringLiteral("An adjustment has incompatible Curves fields."));
                     return false;
                 }
                 if (a.value("type") == "curves") {
-                    const auto points = a.value("points").toArray();
-                    creative_suite::effects::CurvesParameters value;
-                    value.points.clear();
-                    bool valid = version >= 25 && kind == "adjustment" &&
-                        a.size() == 2 && a.value("points").isArray() &&
-                        points.size() >= 2 && points.size() <= 16;
-                    for (const auto& item : points) {
-                        const auto point = item.toObject();
+                    const auto decode_points = [](const QJsonValue& value,
+                                                  creative_suite::effects::CurvesPointList* output) {
+                        if (!output || !value.isArray()) return false;
+                        const auto points = value.toArray();
+                        if (points.size() < 2 || points.size() > 16) return false;
                         const auto integer = [](const QJsonValue& v) {
                             return v.isDouble() && std::isfinite(v.toDouble()) &&
                                 v.toDouble() >= 0 && v.toDouble() <= 255 &&
                                 std::floor(v.toDouble()) == v.toDouble();
                         };
-                        valid &= item.isObject() && point.size() == 2 &&
-                            integer(point.value("input")) && integer(point.value("output"));
-                        value.points.push_back({point.value("input").toInt(),
-                            point.value("output").toInt()});
+                        output->clear();
+                        bool valid = true;
+                        for (const auto& item : points) {
+                            const auto point = item.toObject();
+                            valid &= item.isObject() && point.size() == 2 &&
+                                integer(point.value("input")) && integer(point.value("output"));
+                            output->push_back({point.value("input").toInt(),
+                                point.value("output").toInt()});
+                        }
+                        return valid && creative_suite::effects::validCurvePoints(*output);
+                    };
+                    creative_suite::effects::CurvesParameters value;
+                    bool valid = kind == "adjustment" &&
+                        decode_points(a.value("points"), &value.points);
+                    if (version == 25) {
+                        valid &= a.size() == 2;
+                    } else if (version >= 26) {
+                        const auto channels = a.value("channels").toObject();
+                        valid &= a.size() == 3 && a.value("channels").isObject() &&
+                            channels.size() == 3 &&
+                            decode_points(channels.value("red"), &value.channels[0]) &&
+                            decode_points(channels.value("green"), &value.channels[1]) &&
+                            decode_points(channels.value("blue"), &value.channels[2]);
+                    } else {
+                        valid = false;
                     }
                     if (!valid || !creative_suite::effects::validCurves(value)) {
                         assignError(error, QStringLiteral("A Curves adjustment is invalid."));

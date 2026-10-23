@@ -99,12 +99,17 @@ private slots:
         ImageDocumentSession s;QVERIFY(s.createCanvas({24,16},QColor(50,100,150)));
         QPainterPath selection;selection.addRect(0,0,12,16);
         const auto id=s.addCurvesAdjustment(selection);
-        QVERIFY(s.setCurves(id,{{{0,10},{128,180},{255,245}}}));
+        CurvesParameters parameters{{{0,10},{128,180},{255,245}}};
+        parameters.channels[0]={{0,0},{128,220},{255,255}};
+        QVERIFY(s.setCurves(id,parameters));
         const auto path=directory.filePath("curves.cimg");QVERIFY(s.saveDocument(path));
         QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));
         const auto root=QJsonDocument::fromJson(file.readAll()).object();file.close();
-        QCOMPARE(root.value("version").toInt(),25);
+        QCOMPARE(root.value("version").toInt(),26);
+        const auto encoded_adjustment=root.value("layers").toArray().last().toObject().value("adjustment").toObject();
+        QVERIFY(encoded_adjustment.value("channels").isObject());
         ImageDocumentSession restored;QVERIFY(restored.openDocument(path));QCOMPARE(restored.data(),s.data());
+        QCOMPARE(restored.renderedImage().pixelColor(0,0).alpha(),s.renderedImage().pixelColor(0,0).alpha());
         RecoveryDocumentData recovery{s.data(),path,"curves"},read;
         QVERIFY(ImageDocumentStore::saveRecovery(directory.filePath("recovery.json"),recovery));
         QVERIFY(ImageDocumentStore::loadRecovery(directory.filePath("recovery.json"),&read));
@@ -113,14 +118,15 @@ private slots:
         QCOMPARE(QImage(directory.filePath("output.png")).convertToFormat(QImage::Format_ARGB32_Premultiplied),
             s.renderedImage().convertToFormat(QImage::Format_ARGB32_Premultiplied));
         const auto original=restored.data();
-        for(int bad=0;bad<10;++bad){
+        for(int bad=0;bad<13;++bad){
             auto modified=root;auto layers=modified.value("layers").toArray();
             auto layer=layers.last().toObject();auto adjustment=layer.value("adjustment").toObject();
             auto points=adjustment.value("points").toArray();
             auto first=points.first().toObject();
+            auto channels=adjustment.value("channels").toObject();
             switch(bad){
-            case 0:modified.insert("version",24);break;
-            case 1:modified.insert("version",26);break;
+            case 0:modified.insert("version",25);break;
+            case 1:modified.insert("version",27);break;
             case 2:adjustment.remove("points");break;
             case 3:first.insert("input",1);points[0]=first;break;
             case 4:first.insert("output",-1);points[0]=first;break;
@@ -128,7 +134,10 @@ private slots:
             case 6:first.insert("extra",1);points[0]=first;break;
             case 7:points[1]=points[0];break;
             case 8:adjustment.insert("gamma",1.4);break;
-            case 9:layer.insert("kind","raster");break;
+            case 9:{auto red=channels.value("red").toArray();auto point=red.first().toObject();point.insert("output",256);red[0]=point;channels.insert("red",red);adjustment.insert("channels",channels);break;}
+            case 10:channels.remove("blue");adjustment.insert("channels",channels);break;
+            case 11:channels.insert("alpha",channels.value("red"));adjustment.insert("channels",channels);break;
+            case 12:layer.insert("kind","raster");break;
             }
             if(bad>=3 && bad<=7)adjustment.insert("points",points);
             layer.insert("adjustment",adjustment);layers[layers.size()-1]=layer;
@@ -140,15 +149,22 @@ private slots:
         }
         auto legacy=root;auto layers=legacy.value("layers").toArray();
         auto layer=layers.last().toObject();
-        layer.insert("adjustment",QJsonObject{{"type","levels"},
-            {"input_black",0},{"input_white",255},{"gamma",1.},
-            {"output_black",0},{"output_white",255}});
-        layers[layers.size()-1]=layer;legacy.insert("layers",layers);legacy.insert("version",24);
+        auto legacy_curves=layer.value("adjustment").toObject();
+        legacy_curves.remove("channels");layer.insert("adjustment",legacy_curves);
+        layers[layers.size()-1]=layer;legacy.insert("layers",layers);legacy.insert("version",25);
         QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));
         QVERIFY(file.write(QJsonDocument(legacy).toJson())>0);file.close();
-        QVERIFY(restored.openDocument(path));QVERIFY(restored.saveDocument(path));
+        QVERIFY(restored.openDocument(path));
+        auto migrated_expected=parameters;
+        migrated_expected.channels=CurvesParameters{}.channels;
+        for(const auto& channel:migrated_expected.channels) QCOMPARE(channel,identityCurvePoints());
+        QCOMPARE(std::get<CurvesParameters>(*restored.data().layers.back().adjustment),migrated_expected);
+        QVERIFY(restored.saveDocument(path));
         QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),25);
+        const auto migrated=QJsonDocument::fromJson(file.readAll()).object();
+        QCOMPARE(migrated.value("version").toInt(),26);
+        QVERIFY(migrated.value("layers").toArray().last().toObject()
+            .value("adjustment").toObject().value("channels").isObject());
     }
 };
 QTEST_MAIN(CurvesTest)

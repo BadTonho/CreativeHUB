@@ -1,7 +1,8 @@
 # Layer and group blend modes
 
-Implementation: 2026-10-20. `.cimg` writes v25 and reads v1-24. Recovery retains
-envelope v1; application versions and linked PNG publication are unchanged.
+Implementation: 2026-10-20. Blend modes were introduced in v19. The current
+`.cimg` v26 writer reads v1-25. Recovery retains envelope v1; application
+versions and linked PNG publication are unchanged.
 Native visual acceptance and macOS/Linux validation remain pending.
 
 ## Editing and composition
@@ -169,5 +170,5 @@ build/runtime acceptance stay pending in the
 Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
 see [adjustment scope and alpha contract](GRADIENT_MAP.md).
 
-Current writer: v25. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
+Current writer: v26. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
 adjustment stack contract; historical execution evidence above is unchanged.
