@@ -1193,7 +1193,10 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         for(const auto& color:operation.colors)
             if(!std::isfinite(color.brightness) || !std::isfinite(color.contrast_percent) || !std::isfinite(color.saturation_percent) ||
                 color.brightness < -100 || color.brightness > 100 || color.contrast_percent < 0 || color.contrast_percent > 200 ||
-                color.saturation_percent < 0 || color.saturation_percent > 200)
+                color.saturation_percent < 0 || color.saturation_percent > 200 ||
+                !std::isfinite(color.red_gain_percent) || color.red_gain_percent < 0 || color.red_gain_percent > 200 ||
+                !std::isfinite(color.green_gain_percent) || color.green_gain_percent < 0 || color.green_gain_percent > 200 ||
+                !std::isfinite(color.blue_gain_percent) || color.blue_gain_percent < 0 || color.blue_gain_percent > 200)
                 throw Failure("Invalid Vulkan color parameters.",0,Status::Unsupported);
         auto bg=p.input(operation.background,device_,timings);
         auto fg=operation.foreground.width()>0?p.input(operation.foreground,device_,timings):std::shared_ptr<VulkanImage>{};
@@ -1218,7 +1221,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         params.rotation={std::cos(angle),std::sin(angle),t.scale,t.opacity};
         std::vector<std::array<float,4>> adjustment_values;
         if(operation.kind==OpenGlImageOperationKind::Adjustment){
-            adjustment_values.reserve(operation.colors.size());
+            adjustment_values.reserve(2 * operation.colors.size());
             for(const auto& color:operation.colors){
                 if(!std::isfinite(color.brightness) || color.brightness < -100 || color.brightness > 100 ||
                     !std::isfinite(color.contrast_percent) || color.contrast_percent < 0 || color.contrast_percent > 200 ||
@@ -1226,14 +1229,18 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
                     throw Failure("Invalid Vulkan adjustment parameters.",0,Status::Unsupported);
                 adjustment_values.push_back({float(color.brightness/100),float(color.contrast_percent/100),
                     float(color.saturation_percent/100),0});
+                adjustment_values.push_back({float(color.red_gain_percent/100),float(color.green_gain_percent/100),
+                    float(color.blue_gain_percent/100),0});
             }
-            params.control[1]=int(adjustment_values.size());
+            params.control[1]=int(operation.colors.size());
         }
         const auto started=Clock::now();
         const auto execute=[&](const std::vector<std::array<float,4>>* values=nullptr){cancelled(cancel);auto out=p.image(device_,width,height);p.dispatch(bg,fg,mask,out,params,{},values);bg=std::move(out);p.traceMemory("effects");};
         if(operation.kind==OpenGlImageOperationKind::Color){
             for(const auto& color:operation.colors){
-                params.color={float(color.brightness/100),float(color.contrast_percent/100),float(color.saturation_percent/100),0};execute();
+                params.color={float(color.brightness/100),float(color.contrast_percent/100),float(color.saturation_percent/100),0};
+                params.geometry={0,0,float(color.red_gain_percent/100),float(color.green_gain_percent/100)};
+                params.rotation={float(color.blue_gain_percent/100),0,0,0};execute();
                 if(timings)++timings->color_adjustment_count;
             }
         }else if(operation.kind==OpenGlImageOperationKind::GaussianBlur){

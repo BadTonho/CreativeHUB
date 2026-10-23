@@ -27,6 +27,12 @@ add_creative_suite_test(
     NAME creative-suite-main-editor-audio-workspace
     COMMAND creative-suite-main-editor-main-window-tests --audio-workspace-only
 )
+add_creative_suite_test(
+    NAME creative-suite-main-editor-color-workspace-integration
+    COMMAND creative-suite-main-editor-main-window-tests --color-workspace-only
+)
+set_tests_properties(creative-suite-main-editor-color-workspace-integration PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
 set_tests_properties(creative-suite-main-editor-audio-workspace PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1"
 )

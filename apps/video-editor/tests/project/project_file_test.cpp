@@ -273,6 +273,33 @@ int main(int argc, char** argv) {
             std::istreambuf_iterator<char>(saved_file),
             std::istreambuf_iterator<char>()};
         saved_file.close();
+        {
+            auto graded = loaded;
+            auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
+            require(creative_suite::effects::setParameterValue(grade, "red_gain", 135),
+                    "Primary Grade test setup must be valid.");
+            graded.timeline_tracks.front().clips.front().effects.push_back(grade);
+            const auto grade_path = directory / "primary-grade-v32.csp";
+            project::save(grade_path, graded);
+            const auto restored = project::load(grade_path);
+            require(restored.timeline_tracks.front().clips.front().effects.back() == grade,
+                    "Primary Grade must survive CSP v32 save and reopen.");
+            std::ifstream grade_file(grade_path, std::ios::binary);
+            const std::string grade_text{
+                std::istreambuf_iterator<char>(grade_file),
+                std::istreambuf_iterator<char>()};
+            auto legacy_grade = QJsonDocument::fromJson(
+                QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
+            legacy_grade.insert("version", 31);
+            writeText(grade_path, QJsonDocument(legacy_grade).toJson().toStdString());
+            try {
+                static_cast<void>(project::load(grade_path));
+                throw std::runtime_error("Primary Grade was accepted in CSP v31.");
+            } catch (const project::ProjectError& error) {
+                require(error.code() == project::ProjectErrorCode::InvalidValue,
+                        "Primary Grade in CSP v31 returned the wrong error category.");
+            }
+        }
         require(saved_json.find("media/first video.mkv") != std::string::npos,
                 "A source inside the project was not stored relatively.");
         require(saved_json.find("creative-suite-project-outside-") != std::string::npos,
@@ -288,7 +315,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 31") != std::string::npos &&
+        require(saved_json.find("\"version\": 32") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&

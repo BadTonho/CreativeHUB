@@ -10,6 +10,7 @@
 #include "ui/workspace/workspace_host.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/audio/ui/audio_workspace.h"
+#include "workspaces/color/ui/color_workspace.h"
 #include "workspaces/fusion/nodes/ui/node_canvas.h"
 #include "workspaces/render/queue/render_queue_model.h"
 #include "workspaces/render/queue/render_queue_controller.h"
@@ -252,6 +253,95 @@ bool writePngAtomically(const std::filesystem::path& path, const QImage& image) 
 
 class MainWindowIntegrationTest final {
 public:
+    static void runColorWorkspaceOnly() {
+        QStandardPaths::setTestModeEnabled(true);
+        const auto directory = uniqueTestDirectory();
+        std::filesystem::create_directories(directory);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                           QString::fromStdString((directory / "settings").string()));
+        QCoreApplication::setOrganizationName("CreativeSuiteTests");
+        QCoreApplication::setApplicationName("ColorWorkspaceIntegration");
+        QSettings().clear();
+        settings::setProjectAutosaveEnabled(false);
+        settings::setWorkspacePageTransitionsEnabled(false);
+        require(!settings::workspacePageTransitionsEnabled(),
+                "Color integration needs immediate workspace transitions.");
+        MainWindow window;
+        window.show();
+        QApplication::processEvents();
+        require(window.color_workspace_ == nullptr &&
+                window.shortcut_manager_->shortcut(QStringLiteral("workspace.switch_color")) ==
+                    QKeySequence(QStringLiteral("Alt+5")),
+                "Color must start lazy with the Alt+5 binding.");
+        auto* controller = window.edit_workspace_->controller();
+        controller->setPlaybackPresentation(false, false, true);
+        const auto track_id = window.timeline_model_.tracks().front().track_id;
+        controller->handleTimelineEffectDrop("video.background", track_id, 0);
+        require(!window.timeline_model_.tracks().front().clips.empty(),
+                "Color fixture could not create a visual clip.");
+        const auto clip_id = window.timeline_model_.tracks().front().clips.front().clip_id;
+        controller->handleTimelineClipSelectionChanged(track_id, clip_id);
+        window.refreshColorSelection();
+        const std::array<QDockWidget*, 8> docks{
+            window.bins_dock_, window.media_dock_, window.toolbox_dock_,
+            window.favorites_dock_, window.effects_dock_, window.inspector_dock_,
+            window.preview_dock_, window.timeline_dock_};
+        std::array<bool, 8> visible{};
+        for (std::size_t i = 0; i < docks.size(); ++i) visible[i] = !docks[i]->isHidden();
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Color);
+        QApplication::processEvents();
+        require(window.color_workspace_ && window.color_workspace_button_->isChecked() &&
+                window.preview_widget_->parentWidget() != nullptr &&
+                window.preview_widget_->parentWidget()->objectName() == "colorViewerContainer",
+                "Color must mount the shared Viewer on first entry.");
+        auto* clips = window.color_workspace_->findChild<QListWidget*>("colorClipStrip");
+        auto* nodes = window.color_workspace_->findChild<QListWidget*>("colorNodesList");
+        auto* add = window.color_workspace_->findChild<QPushButton*>("colorAddNodeButton");
+        require(clips && clips->count() == 1 && nodes && nodes->count() == 2 && add,
+                "Color must show the selected visual clip and serial Input/Output.");
+        add->click();
+        auto location = window.timeline_model_.locateClip(clip_id);
+        require(location && window.timeline_model_.tracks()[location->track_index]
+                    .clips[location->clip_index].effects.size() == 1 &&
+                window.timeline_model_.tracks()[location->track_index]
+                    .clips[location->clip_index].effects.front().id == "video.primary_grade",
+                "Color Add must commit to the shared clip effect stack.");
+        auto* red = window.color_workspace_->findChild<QDoubleSpinBox*>("colorParameter_red_gain");
+        require(red, "Color must expose Primary Grade red gain.");
+        red->setValue(145);
+        require(QMetaObject::invokeMethod(red, "editingFinished"),
+                "Color parameter edit must be committed.");
+        location = window.timeline_model_.locateClip(clip_id);
+        require(location && creative_suite::effects::parameterValue(
+                window.timeline_model_.tracks()[location->track_index]
+                    .clips[location->clip_index].effects.front(), "red_gain") == 145 &&
+                controller->undo().changed() && controller->redo().changed(),
+                "Color gains must use the Timeline history.");
+        const auto screenshot_path = qEnvironmentVariable("CS_COLOR_SCREENSHOT");
+        if (!screenshot_path.isEmpty()) {
+            QApplication::processEvents();
+            require(window.grab().save(screenshot_path),
+                    "Color visual review screenshot could not be saved.");
+        }
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
+        QApplication::processEvents();
+        for (std::size_t i = 0; i < docks.size(); ++i)
+            require(!docks[i]->isHidden() == visible[i],
+                    "Leaving Color must restore the Edit dock visibility.");
+        window.edit_workspace_->ui().clip_effects_list->setCurrentRow(0);
+        auto* selector = window.edit_workspace_->ui().clip_effect_parameter_selector;
+        require(selector && selector->count() == 6,
+                "Edit Inspector must expose the same Primary Grade parameters.");
+        selector->setCurrentIndex(selector->findData(QStringLiteral("red_gain")));
+        controller->applySelectedClipEffectParameter(130);
+        location = window.timeline_model_.locateClip(clip_id);
+        require(location && creative_suite::effects::parameterValue(
+                window.timeline_model_.tracks()[location->track_index]
+                    .clips[location->clip_index].effects.front(), "red_gain") == 130,
+                "Edit Inspector must write the same grade used by Color.");
+    }
+
     static void runAudioWorkspaceOnly() {
         QStandardPaths::setTestModeEnabled(true);
         const auto directory = uniqueTestDirectory();
@@ -1593,15 +1683,15 @@ public:
                             QStringLiteral("Switch to Fusion workspace")) &&
                         window.shortcut_manager_->setShortcut(
                             QStringLiteral("workspace.switch_fusion"),
-                            QKeySequence("Alt+5")) &&
+                            QKeySequence("Alt+6")) &&
                         window.fusion_workspace_button_->toolTip().contains(
-                            QStringLiteral("Alt+5")) &&
+                            QStringLiteral("Alt+6")) &&
                         window.shortcut_manager_->load() &&
                         window.shortcut_manager_->shortcut(
                             QStringLiteral("workspace.switch_fusion")) ==
-                            QKeySequence("Alt+5") &&
+                            QKeySequence("Alt+6") &&
                         window.fusion_workspace_button_->toolTip().contains(
-                            QStringLiteral("Alt+5")),
+                            QStringLiteral("Alt+6")),
                     "Workspace shortcuts must reject duplicate assignments and update tooltips after customization.");
             sendShortcutKey(
                 window.workspace_host_, Qt::Key_2, Qt::AltModifier);
@@ -1610,7 +1700,7 @@ public:
                         ui::WorkspacePageId::Edit,
                     "Changing the Fusion shortcut must release its previous key sequence.");
             sendShortcutKey(
-                window.workspace_host_, Qt::Key_5, Qt::AltModifier);
+                window.workspace_host_, Qt::Key_6, Qt::AltModifier);
             QApplication::processEvents();
             require(window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Fusion &&
@@ -1625,7 +1715,7 @@ public:
                 window.workspace_host_, Qt::Key_1, Qt::AltModifier);
             QApplication::processEvents();
             sendShortcutKey(
-                window.workspace_host_, Qt::Key_5, Qt::AltModifier);
+                window.workspace_host_, Qt::Key_6, Qt::AltModifier);
             QApplication::processEvents();
             require(window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Edit &&
@@ -2150,6 +2240,24 @@ public:
                             .clips[selected_clip_location->clip_index].effects.empty() &&
                         !window.project_dirty_,
                     "Undoing the Effects UI test must restore the clean project state.");
+            require(edit_controller->addEffectToSelectedClip(QStringLiteral("video.primary_grade")),
+                    "Edit must allow adding the Primary Grade shared with Color.");
+            auto* parameter_selector = inspector_ui.clip_effect_parameter_selector;
+            require(parameter_selector && parameter_selector->isVisible() &&
+                    parameter_selector->count() == 6,
+                    "Primary Grade must expose all six controls in the Edit Inspector.");
+            parameter_selector->setCurrentIndex(parameter_selector->findData(QStringLiteral("red_gain")));
+            edit_controller->applySelectedClipEffectParameter(142.0);
+            selected_clip_location = window.timeline_model_.locateClip(selected_clip_id);
+            require(selected_clip_location.has_value() &&
+                    creative_suite::effects::parameterValue(
+                        window.timeline_model_.tracks()[selected_clip_location->track_index]
+                            .clips[selected_clip_location->clip_index].effects.front(), "red_gain") == 142.0 &&
+                    edit_controller->undo().changed() && edit_controller->redo().changed(),
+                    "Edit and Color must edit the same Primary Grade parameter with Undo/Redo.");
+            require(edit_controller->undo().changed() && edit_controller->undo().changed() &&
+                    !window.project_dirty_,
+                    "Primary Grade cleanup must restore the saved project.");
 
             const std::array<QDockWidget*, 8> workspace_docks{
                 window.bins_dock_, window.media_dock_, window.toolbox_dock_,
@@ -2362,6 +2470,29 @@ public:
                         window.project_dirty_ == project_dirty_before_workspace_switch,
                     "Switching workspaces must preserve selection, history, and dirty state.");
             };
+            require(window.color_workspace_ == nullptr && window.color_workspace_button_ != nullptr,
+                    "Color panels must be created only on first entry.");
+            require(window.shortcut_manager_->shortcut(QStringLiteral("workspace.switch_color")) ==
+                    QKeySequence(QStringLiteral("Alt+5")),
+                    "Color must preserve Alt+5 as its default workspace shortcut.");
+            const auto visibility_before_color = dock_visibility();
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Color);
+            QApplication::processEvents();
+            require(window.color_workspace_ != nullptr && window.color_workspace_button_->isChecked() &&
+                    window.workspace_host_->currentPage() == ui::WorkspacePageId::Color &&
+                    window.color_workspace_->findChild<QListWidget*>("colorClipStrip") != nullptr &&
+                    window.color_workspace_->findChild<QListWidget*>("colorNodesList") != nullptr &&
+                    window.color_workspace_->findChild<QLabel*>("colorWaveform") != nullptr &&
+                    window.preview_widget_->parentWidget()->objectName() == "colorViewerContainer",
+                    "Color must mount the shared viewer, clip strip, nodes, and RGB waveform.");
+            for (auto* dock : workspace_docks)
+                require(!dock->isVisible(), "Color must use the central layout without Edit docks.");
+            require_workspace_state_unchanged();
+            setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
+            QApplication::processEvents();
+            require_dock_visibility(visibility_before_color,
+                "Leaving Color must restore the previous dock arrangement.");
+            require_workspace_state_unchanged();
             setWorkspacePageImmediately(window, ui::WorkspacePageId::Fusion);
             require_workspace_state_unchanged();
             QApplication::processEvents();
@@ -3725,7 +3856,7 @@ public:
                     "Favorite double click must create an independent node.");
             setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Edit);
             catalog_window.effects_list_->itemDoubleClicked(entry);
-            require(entry->isHidden() && catalog_window.effects_list_->visibleEffectCount() == 11 &&
+            require(entry->isHidden() && catalog_window.effects_list_->visibleEffectCount() == 12 &&
                     catalog_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.size() == 4 &&
                     catalog_window.effects_favorites_->findItems("Adjustment Clip", Qt::MatchExactly).size() == 1 &&
                     effects::favoriteIds().contains("fusion.rectangle_mask"),
@@ -3782,6 +3913,15 @@ public:
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
     application.setQuitOnLastWindowClosed(false);
+    if (argc == 2 && std::string(argv[1]) == "--color-workspace-only") {
+        try {
+            MainWindowIntegrationTest::runColorWorkspaceOnly();
+            return 0;
+        } catch (const std::exception& error) {
+            std::cerr << error.what() << '\n';
+            return 1;
+        }
+    }
     if (argc == 2 && std::string(argv[1]) == "--audio-workspace-only") {
         try {
             MainWindowIntegrationTest::runAudioWorkspaceOnly();

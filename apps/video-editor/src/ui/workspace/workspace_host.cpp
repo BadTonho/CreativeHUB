@@ -2,6 +2,7 @@
 #include "ui/preview/preview_widget.h"
 #include "workspaces/edit/ui/edit_workspace.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
+#include "workspaces/color/ui/color_workspace.h"
 #include "workspaces/render/ui/render_workspace.h"
 
 #include <QLayout>
@@ -120,6 +121,11 @@ void WorkspaceHost::setAudioPanels(QWidget* meter_page, QWidget* mixer_panel) {
     if (mixer_panel != nullptr) inspector_panel_->addWidget(mixer_panel);
 }
 
+void WorkspaceHost::setColorWorkspace(ColorWorkspace* workspace) {
+    color_workspace_ = workspace;
+    if (workspace) central_workspace_pages_->addWidget(workspace);
+}
+
 void WorkspaceHost::setPage(
     WorkspacePageId page, bool refresh_central_workspace) {
     if (current_page_ == page) {
@@ -163,10 +169,18 @@ void WorkspaceHost::setPage(
     if (fusion_workspace_ != nullptr) {
         fusion_workspace_->setActive(page == WorkspacePageId::Fusion);
     }
+    if (color_workspace_ != nullptr) {
+        color_workspace_->setActive(page == WorkspacePageId::Color);
+    }
     if (render_workspace_ != nullptr) {
         render_workspace_->setActive(page == WorkspacePageId::Render);
     }
     if (entering_render) {
+        if (current_page_ == WorkspacePageId::Color && color_workspace_ != nullptr &&
+            color_workspace_->takePreviewWidget() == preview_widget_ &&
+            preview_canvas_area_ != nullptr && preview_canvas_area_->layout() != nullptr) {
+            preview_canvas_area_->layout()->addWidget(preview_widget_);
+        }
         if (preview_widget_ != nullptr && preview_canvas_area_ != nullptr &&
             preview_widget_->parentWidget() == preview_canvas_area_) {
             if (auto* layout = preview_canvas_area_->layout()) {
@@ -198,6 +212,26 @@ void WorkspaceHost::setPage(
             preview_canvas_area_->layout()->addWidget(preview_widget);
             preview_widget->show();
         }
+    }
+
+    if (current_page_ == WorkspacePageId::Color && color_workspace_ != nullptr &&
+        page != WorkspacePageId::Color) {
+        if (color_workspace_->takePreviewWidget() == preview_widget_ &&
+            preview_canvas_area_ != nullptr && preview_canvas_area_->layout() != nullptr)
+            preview_canvas_area_->layout()->addWidget(preview_widget_);
+    }
+
+    if (page == WorkspacePageId::Color && color_workspace_ != nullptr) {
+        if (preview_widget_ != nullptr && preview_canvas_area_ != nullptr &&
+            preview_widget_->parentWidget() == preview_canvas_area_) {
+            if (auto* layout = preview_canvas_area_->layout()) layout->removeWidget(preview_widget_);
+        }
+        color_workspace_->setPreviewWidget(preview_widget_);
+        central_workspace_pages_->setCurrentWidget(color_workspace_);
+        if (viewer_title_ != nullptr) viewer_title_->hide();
+        current_page_ = page;
+        if (refresh_central_workspace) refreshCentralWorkspaceVisibility();
+        return;
     }
 
     central_workspace_pages_->setCurrentWidget(
@@ -232,7 +266,8 @@ void WorkspaceHost::setPage(
 void WorkspaceHost::refreshCentralWorkspaceVisibility() {
     auto* main_window = qobject_cast<QMainWindow*>(window());
     if (main_window == nullptr) return;
-    if (current_page_ == WorkspacePageId::Render ||
+    if (current_page_ == WorkspacePageId::Color ||
+        current_page_ == WorkspacePageId::Render ||
         current_page_ == WorkspacePageId::Audio) {
         setMaximumWidth(QWIDGETSIZE_MAX);
         setCentralWorkspaceVisible(true);

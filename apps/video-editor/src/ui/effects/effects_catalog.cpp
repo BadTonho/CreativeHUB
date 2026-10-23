@@ -21,6 +21,10 @@ QString translateCatalogLabel(const QString& source_text) {
     if (source_text == QStringLiteral("Brightness")) return QCoreApplication::translate("EffectsCatalog", "Brightness");
     if (source_text == QStringLiteral("Contrast")) return QCoreApplication::translate("EffectsCatalog", "Contrast");
     if (source_text == QStringLiteral("Saturation")) return QCoreApplication::translate("EffectsCatalog", "Saturation");
+    if (source_text == QStringLiteral("Primary Grade")) return QCoreApplication::translate("EffectsCatalog", "Primary Grade");
+    if (source_text == QStringLiteral("Red gain")) return QCoreApplication::translate("EffectsCatalog", "Red gain");
+    if (source_text == QStringLiteral("Green gain")) return QCoreApplication::translate("EffectsCatalog", "Green gain");
+    if (source_text == QStringLiteral("Blue gain")) return QCoreApplication::translate("EffectsCatalog", "Blue gain");
     if (source_text == QStringLiteral("Amount")) return QCoreApplication::translate("EffectsCatalog", "Amount");
     if (source_text == QStringLiteral("Gaussian Blur")) return QCoreApplication::translate("EffectsCatalog", "Gaussian Blur");
     if (source_text == QStringLiteral("Background")) return QCoreApplication::translate("EffectsCatalog", "Background");
@@ -135,7 +139,8 @@ const QVector<Definition>& definitions() {
                                                 static_cast<qsizetype>(effect.name.size()))),
                               QString::fromUtf8(effect.category_id.data(),
                                                 static_cast<qsizetype>(effect.category_id.size())),
-                              Action::VisualEffect, Action::VisualEffect});
+                              Action::VisualEffect,
+                              effect.id == "video.primary_grade" ? Action::Unavailable : Action::VisualEffect});
         }
         result.push_back({"video.gaussian_blur", translateCatalogLabel(QStringLiteral("Gaussian Blur")), "video", Action::Unavailable, Action::GaussianBlurNode});
         result.push_back({"video.background", translateCatalogLabel(QStringLiteral("Background")), "video.generators", Action::BackgroundClip, Action::BackgroundNode});

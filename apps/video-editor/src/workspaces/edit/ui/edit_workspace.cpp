@@ -398,6 +398,9 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     ui_.clip_effect_parameter_label = new QLabel(QCoreApplication::translate("EditWorkspace", "Parameter"), effect_parameter_row);
     ui_.clip_effect_parameter_label->setObjectName(
         QStringLiteral("editEffectParameterLabel"));
+    ui_.clip_effect_parameter_selector = new QComboBox(effect_parameter_row);
+    ui_.clip_effect_parameter_selector->setObjectName(QStringLiteral("editEffectParameterSelector"));
+    ui_.clip_effect_parameter_selector->setVisible(false);
     ui_.clip_effect_parameter_slider = new QSlider(Qt::Horizontal, effect_parameter_row);
     auto* effect_parameter_spin =
         new InspectorDoubleSpinBox(effect_parameter_row);
@@ -408,6 +411,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     ui_.clip_effect_parameter_slider->setEnabled(false);
     ui_.clip_effect_parameter_value->setEnabled(false);
     effect_parameter_layout->addWidget(ui_.clip_effect_parameter_label);
+    effect_parameter_layout->addWidget(ui_.clip_effect_parameter_selector);
     effect_parameter_layout->addWidget(ui_.clip_effect_parameter_slider, 1);
     effect_parameter_layout->addWidget(ui_.clip_effect_parameter_value);
     effects_layout->addWidget(effect_parameter_row);
@@ -538,6 +542,11 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
             edit_controller, &ui::EditWorkspaceController::applyTextStyle);
     connect(ui_.clip_effects_list, &QListWidget::currentRowChanged,
             edit_controller, &ui::EditWorkspaceController::selectClipEffect);
+    connect(ui_.clip_effect_parameter_selector, &QComboBox::currentIndexChanged,
+            edit_controller, [edit_controller, selector = ui_.clip_effect_parameter_selector](int index) {
+                if (index >= 0) edit_controller->selectClipEffectParameter(
+                    selector->itemData(index).toString());
+            });
     connect(ui_.clip_effects_list, &QListWidget::itemChanged,
             edit_controller, [edit_controller, list = ui_.clip_effects_list](
                                  QListWidgetItem* item) {

@@ -377,6 +377,15 @@ void testVideoDocuments(const QString& root) {
     }
     CS_TEST_CHECK(readBytes(footage) == "media bytes");
     CS_TEST_CHECK(readBytes(still) == "image bytes");
+    auto color_document = document;
+    auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "red_gain", 145.0));
+    color_document.timeline_tracks.front().clips.front().effects.push_back(grade);
+    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v32.csp");
+    project::save(fsPath(color_path), color_document);
+    const auto color_snapshot = backup(QDir(root).filePath("video-color-v32"), color_path);
+    CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)) == color_document);
+    CS_TEST_CHECK(project::load(fsPath(color_snapshot.restored)) == color_document);
     project::ProjectClip adjustment;
     adjustment.clip_id = 3;
     adjustment.kind = timeline::ClipKind::Adjustment;

@@ -1,6 +1,6 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is now v31; Gaussian Blur transfers through cscomp v3 and reuses the shared CPU/GPU effect implementation.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is now v32 for Primary Grade; Gaussian Blur was introduced in v31 and transfers through cscomp v3.
 
 ## Workspace Effects catalog
 
@@ -9,7 +9,7 @@ The app-owned Effects catalog centralizes workspace availability and creation ac
 
 ## Background Generator
 
-The Background generator is an Edit preset of the existing Fusion Composition model and renderer. Its Inspector edits existing graph nodes; optional composition names were introduced in schema v29, and the current schema is v30. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
+The Background generator is an Edit preset of the existing Fusion Composition model and renderer. Its Inspector edits existing graph nodes; optional composition names were introduced in schema v29. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks v1
 
@@ -51,6 +51,14 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
   behavioral change.
 
 ## Current product direction
+
+The Color workspace is an application-owned serial view of the existing
+ordered clip-effect stack. It has no independent graph or grade document:
+Fusion runs first, then clip effects, then the existing Timeline composition.
+The shared Primary Grade evaluator feeds CPU, OpenGL and Vulkan composition.
+Color's viewer and clip selection are shared with Edit; its panels are created
+on first entry and the prior native dock layout is restored on exit. See the
+[Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
 The Audio workspace is an application-owned view of the same timeline and
 command history as Edit. The Timeline widget switches to an audio-only

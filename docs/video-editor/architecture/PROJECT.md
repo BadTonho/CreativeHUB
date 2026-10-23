@@ -1,5 +1,16 @@
 # Project Document and Persistence
 
+## Primary Grade (version 32)
+
+CSP v32 accepts `video.primary_grade` in the existing ordered clip `effects`
+array. Its six parameters are `brightness` (neutral 0), `contrast` and
+`saturation` (neutral 100), and `red_gain`, `green_gain`, `blue_gain` (neutral
+100). Each is finite; brightness is [-100, 100] and the other values are
+[0, 200]. The existing `enabled` flag and effect order retain their meaning.
+Versions 1-31 remain readable and have no implicit Primary Grade. The Color
+node display adds no separate persisted graph. Hub backup accepts v32 and
+retains the effect stack unchanged.
+
 ## Gaussian Blur (version 31)
 
 The Fusion-only Gaussian Blur node stores `type: "gaussian_blur"` and
@@ -17,8 +28,8 @@ Fusion Composition clips may store UTF-8 `display_name`. Background presets use
 this field while retaining `kind: "fusion_composition"` and the existing graph.
 Missing/empty names reconstruct Fusion Composition. Custom names on other clip
 kinds or in older root versions are refused. Mapping, opening, autosave and
-recovery preserve names, node data and input offsets. Hub supports v31 and
-rejects future v32. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
+recovery preserve names, node data and input offsets. Hub supports v32 and
+rejects future v33. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks (version 28)
 
@@ -28,8 +39,8 @@ The `mask_keyframes` object contains five named scalar arrays with the existing
 frame/value/interpolation/easing representation. Mask connections use input 2;
 image input indices remain unchanged. Mask data is accepted only in v28 and
 later. Versions 1–27 retain their previous reader behavior. Generated composition
-input offsets, autosave and recovery remain intact. Hub supports v31 and rejects
-future v32. See [Fusion Masks](../features/FUSION_MASKS.md).
+input offsets, autosave and recovery remain intact. Hub supports v32 and rejects
+future v33. See [Fusion Masks](../features/FUSION_MASKS.md).
 
 ## Fusion Composition and generators (version 27)
 

@@ -31,6 +31,7 @@ It must change in the same commit as any shortcut change.
 | Alt + 2 | Switch to Fusion | All workspaces |
 | Alt + 3 | Switch to Render | All workspaces |
 | Alt + 4 | Switch to Audio | All workspaces |
+| Alt + 5 | Switch to Color | All workspaces |
 | Space | Play or pause the selected timeline media | Edit, Fusion and Audio |
 | Shift + Space | Open or close the workspace-aware Functions catalog | Edit and Fusion |
 | Left Arrow | Previous frame, crossing a clip boundary when applicable | Edit, Fusion and Audio |
@@ -60,7 +61,7 @@ requirement; in that mode, Alt + dragging moves clips and normal dragging
 seeks. Edge dragging trims, and the persistent Blade Tool changes a click into
 a split request. Playback shortcuts are available in Edit, Fusion and Audio and are
 disabled when no playable selected media is available. Render has no editing,
-playback, or undo shortcuts by default. The four workspace navigation shortcuts
+playback, or undo shortcuts by default. The five workspace navigation shortcuts
 remain available in Render.
 In the Selection tool, Ctrl + click adds/removes clips for Paste Attributes;
 normal click returns to a single selected clip.

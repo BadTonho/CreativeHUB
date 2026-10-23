@@ -10,7 +10,7 @@
 #include "image_document_session.h"
 #endif
 
-#include <QGuiApplication>
+#include <QApplication>
 #include <QImage>
 #include <QOffscreenSurface>
 #include <QThread>
@@ -19,6 +19,7 @@
 #include <QEventLoop>
 #include <QTimer>
 #include <QOpenGLContext>
+#include <QOpenGLWidget>
 #include <QSurfaceFormat>
 
 #include <cmath>
@@ -148,12 +149,15 @@ void adjustmentParity(QOffscreenSurface* surface, GpuFrameCompositor& gpu) {
     auto contrast = creative_suite::effects::makeDefaultInstance("video.contrast");
     auto saturation = creative_suite::effects::makeDefaultInstance("video.saturation");
     auto grayscale = creative_suite::effects::makeDefaultInstance("video.grayscale");
+    auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
     require(creative_suite::effects::setParameterValue(brightness, "amount", 18) &&
         creative_suite::effects::setParameterValue(contrast, "amount", 125) &&
         creative_suite::effects::setParameterValue(saturation, "amount", 70) &&
-        creative_suite::effects::setParameterValue(grayscale, "amount", 45),
+        creative_suite::effects::setParameterValue(grayscale, "amount", 45) &&
+        creative_suite::effects::setParameterValue(grade, "red_gain", 140) &&
+        creative_suite::effects::setParameterValue(grade, "green_gain", 85),
         "Adjustment parity effects could not be configured.");
-    std::vector<creative_suite::effects::EffectInstance> ordered{brightness, contrast, saturation};
+    std::vector<creative_suite::effects::EffectInstance> ordered{brightness, grade, contrast, saturation};
     std::vector<creative_suite::effects::EffectInstance> second_stack{grayscale};
     for (const double opacity : {0.0, 0.35, 1.0}) {
         CompositionLayer first;
@@ -411,8 +415,10 @@ void adjustmentExport(QOffscreenSurface* surface, const QString& directory,
     adjustment_clip.transform.scale = .83;
     adjustment_clip.transform.opacity = .62;
     adjustment_clip.effects = {creative_suite::effects::makeDefaultInstance("video.grayscale"),
+        creative_suite::effects::makeDefaultInstance("video.primary_grade"),
         creative_suite::effects::makeDefaultInstance("video.brightness")};
-    require(creative_suite::effects::setParameterValue(adjustment_clip.effects[1], "amount", 9),
+    require(creative_suite::effects::setParameterValue(adjustment_clip.effects[1], "red_gain", 139) &&
+        creative_suite::effects::setParameterValue(adjustment_clip.effects[2], "amount", 9),
         "Export Adjustment effect could not be configured.");
     project::ProjectTrack adjustment_track;
     adjustment_track.name = "Adjustment"; adjustment_track.track_id = 2;
@@ -444,14 +450,41 @@ void adjustmentExport(QOffscreenSurface* surface, const QString& directory,
     require(prepared == 4 && metrics.gpu_frames == 4 && metrics.cpu_frames == 0,
         "Offline export did not keep Adjustment processing on the selected GPU backend.");
 }
+
+void gradedPreviewParity(QOffscreenSurface* surface, playback::CompositionLayerSpec image) {
+    auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
+    auto brightness = creative_suite::effects::makeDefaultInstance("video.brightness");
+    require(creative_suite::effects::setParameterValue(grade, "red_gain", 137) &&
+            creative_suite::effects::setParameterValue(grade, "blue_gain", 72) &&
+            creative_suite::effects::setParameterValue(brightness, "amount", 9),
+        "Graded Preview effects could not be configured.");
+    image.effects = {grade, brightness};
+    image.keyframes = {};
+    playback::PlaybackWorker cpu, gpu;
+    playback::VideoFramePtr cpu_frame, gpu_frame;
+    QObject::connect(&cpu, &playback::PlaybackWorker::frameReady,
+        [&](playback::VideoFramePtr frame, qint64, quint64, quint64) { cpu_frame = std::move(frame); });
+    QObject::connect(&gpu, &playback::PlaybackWorker::frameReady,
+        [&](playback::VideoFramePtr frame, qint64, quint64, quint64) { gpu_frame = std::move(frame); });
+    gpu.setGpuCompositionEnabled(true, surface);
+    cpu.setComposition({image}, {}, 71);
+    gpu.setComposition({image}, {}, 71);
+    cpu.renderCompositionFrame(0, 0, 71);
+    gpu.renderCompositionFrame(0, 0, 71);
+    compare(cpu_frame, gpu_frame);
+    const auto metrics = rendering::PreviewPerformanceMetrics::instance().takeSnapshotAndReset();
+    require(metrics.gpu_composition_frames == 1 && metrics.gpu_composition_fallbacks == 0,
+        "Graded Preview silently fell back from the selected GPU backend.");
+}
 } // namespace
 
 int main(int argc, char** argv) {
     QSurfaceFormat format; format.setVersion(3, 2); format.setProfile(QSurfaceFormat::CoreProfile);
     QSurfaceFormat::setDefaultFormat(format);
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     const bool vulkan = app.arguments().contains("--vulkan");
+    const bool color_only = app.arguments().contains("--color-only");
     std::shared_ptr<VulkanDevice> vulkan_device;
     if (vulkan) {
         std::string cause; vulkan_device = VulkanDevice::create(cause);
@@ -465,6 +498,16 @@ int main(int argc, char** argv) {
             "GPU test log unavailable.");
         auto surface = OpenGlFrameCompositor::createSurface();
         if (!surface) { std::cout << "SKIP: native OpenGL unavailable.\n"; return 77; }
+        // A real viewer creates Qt's global share group before worker and export
+        // compositors request direct texture delivery.
+        QOpenGLWidget viewer;
+        viewer.resize(16, 16);
+        viewer.show();
+        app.processEvents();
+        if (!viewer.context() || !QOpenGLContext::globalShareContext()) {
+            std::cout << "SKIP: native OpenGL sharing unavailable.\n";
+            return 77;
+        }
         playback::CompositionLayerSpec image;
         image.kind = timeline::ClipKind::Image; image.segment_frame_count = 60;
         image.track_index = 0; image.clip_index = 0;
@@ -509,7 +552,8 @@ int main(int argc, char** argv) {
         bool unsupported_context = false;
         std::unique_ptr<QThread> thread(QThread::create([&] {
             try {
-                auto probe = createGpuFrameCompositor(surface.get());
+                auto probe = createGpuFrameCompositor(surface.get(), OpenGlPrecisionPolicy::Automatic,
+                    QOpenGLContext::globalShareContext());
                 const auto initial = probe->compose(16, 16, {});
                 if (initial.status == OpenGlCompositionStatus::Failed &&
                     (initial.operation == "create-context" || initial.operation == "check-context")) {
@@ -519,6 +563,12 @@ int main(int argc, char** argv) {
                 auto& metrics = rendering::PreviewPerformanceMetrics::instance();
                 metrics.setEnabled(true); metrics.reset();
                 adjustmentParity(surface.get(), *probe);
+                if (color_only) {
+                    gradedPreviewParity(surface.get(), image);
+                    adjustmentExport(surface.get(), temp.path(), image.still_frame);
+                    metrics.setEnabled(false);
+                    return;
+                }
                 playback::PlaybackWorker cpu, gpu;
                 playback::VideoFramePtr cpu_frame, gpu_frame;
                 int failures = 0, warnings = 0;
@@ -576,7 +626,9 @@ int main(int argc, char** argv) {
                 require(toggled_off && toggled_on && failures == 0 && warnings == 0,
                     "Native toggle interrupted playback.");
                 directWorker(surface.get(), image, incoming, text, published, refreshed);
-                auto graph_gpu = createGpuFrameCompositor(surface.get(), OpenGlPrecisionPolicy::Automatic, nullptr, std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,8));
+                auto graph_gpu = createGpuFrameCompositor(surface.get(), OpenGlPrecisionPolicy::Automatic,
+                    QOpenGLContext::globalShareContext(),
+                    std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,8));
                 adjustmentExport(surface.get(), temp.path(), image.still_frame);
                 fusionParity(*graph_gpu,surface.get());
                 metrics.setEnabled(false);

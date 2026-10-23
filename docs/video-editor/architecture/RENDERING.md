@@ -1,5 +1,12 @@
 # Rendering Boundary
 
+Primary Grade extends the ordered clip-effect pass with per-channel RGB gains
+after brightness, contrast and saturation. CPU, OpenGL and Vulkan apply the
+same six-parameter pass after Fusion output; each pass preserves alpha and
+rounds RGB at its boundary. Existing passes default to unit gains, retaining
+their prior pixels. Color's waveform samples the displayed Preview image at a
+bounded rate and does not enter exported pixels.
+
 [Gaussian Blur](../features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
 catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with
 Motion, persists in CSP v31 and is covered by `creative-suite-blur-interchange`.

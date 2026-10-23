@@ -4,6 +4,9 @@ The dedicated [Audio Workspace Roadmap](AUDIO_WORKSPACE_ROADMAP.md) records the
 implemented first editing/mixing stage and later audio candidates without a
 release commitment.
 
+The [Color Workspace Roadmap](COLOR_WORKSPACE_ROADMAP.md) records the first
+serial grading stage and the advanced tools deferred from it.
+
 [Gaussian Blur](features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
 catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with
 Motion, persists in CSP v31 and is covered by `creative-suite-blur-interchange`.
@@ -192,7 +195,7 @@ performance measurements, and Video Editor stability as the decision criteria.
 
 - [ ] Improve media organization, synchronization, relinking, and asset
   management.
-  - [ ] Expand clip color correction into broader grading workflows.
+  - [-] Add serial Primary Grade and RGB waveform; expand into broader grading workflows as described in the Color roadmap.
 - [ ] Expand audio editing with recording, audio-only file export, track
   automation, and advanced mixing as user workflows require.
 - [-] Rectangle/Ellipse masks implemented; advanced mask authoring and compositing remain pending.

@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 31;
+inline constexpr int current_format_version = 32;
+inline constexpr int primary_grade_format_version = 32;
 inline constexpr int composition_name_format_version = 29;
 inline constexpr int fusion_masks_format_version = 28;
 inline constexpr int fusion_composition_format_version = 27;

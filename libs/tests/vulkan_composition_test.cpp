@@ -9,6 +9,7 @@
 #include <QOpenGLContext>
 #include <QSemaphore>
 #include <thread>
+#include <array>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -81,11 +82,15 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
         require(result.status==OpenGlCompositionStatus::Complete,result.cause);parity(*cpu,*result.frame);checkMemory();
     }
     {auto empty=gpu.compose(41,29,{});require(empty.status==OpenGlCompositionStatus::Complete,empty.cause);parity(*FrameCompositor::compose(41,29,{}),*empty.frame);
-        const std::vector<effects::EffectInstance> stack{{"video.brightness",{{"amount",7}},true},{"video.saturation",{{"amount",80}},true}};
+        auto grade = effects::makeDefaultInstance("video.primary_grade");
+        require(effects::setParameterValue(grade, "red_gain", 135) &&
+            effects::setParameterValue(grade, "blue_gain", 76), "Vulkan grade setup failed.");
+        const std::vector<effects::EffectInstance> stack{{"video.brightness",{{"amount",7}},true},
+            grade,{"video.saturation",{{"amount",80}},true}};
         std::vector<CompositionLayer> layers{{&a},{&b}};layers[0].effect_stack=stack;
         auto actual=gpu.compose(61,47,layers);require(actual.status==OpenGlCompositionStatus::Complete,actual.cause);parity(*FrameCompositor::compose(61,47,layers),*actual.frame);checkMemory();}
     OpenGlImageOperation op;op.background.rgba=&b;op.kind=OpenGlImageOperationKind::Color;
-    op.colors={{13,123,77},{-7,91,118}};
+    op.colors={{13,123,77,145,82,115},{-7,91,118}};
     auto expected=b;for(const auto& color:op.colors)require(effects::applyColorAdjustment(expected,color)==effects::ProcessingResult::Completed,"CPU color failed.");
     auto texture=gpu.processImage(op);require(texture.status==OpenGlCompositionStatus::Complete,texture.cause);
     auto result=gpu.readback(texture.frame);require(bool(result.frame),result.cause);parity(expected,*result.frame);
@@ -242,6 +247,39 @@ void benchmark(const std::shared_ptr<VulkanDevice>& device) {
     }
 }
 }
+void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
+    VulkanFrameCompositor gpu(device);
+    auto source = fixture(31, 19, false);
+    auto grade = effects::makeDefaultInstance("video.primary_grade");
+    require(effects::setParameterValue(grade, "red_gain", 145) &&
+        effects::setParameterValue(grade, "green_gain", 82) &&
+        effects::setParameterValue(grade, "blue_gain", 115), "Vulkan grade fixture failed.");
+    const std::array<effects::EffectInstance, 1> stack{grade};
+    CompositionLayer layer{&source}; layer.effect_stack = stack;
+    const auto cpu = FrameCompositor::compose(source.width, source.height, {layer});
+    const auto gpu_frame = gpu.compose(source.width, source.height, {layer});
+    require(cpu && gpu_frame.frame, gpu_frame.cause);
+    parity(*cpu, *gpu_frame.frame);
+    OpenGlImageOperation operation; operation.kind = OpenGlImageOperationKind::Color;
+    operation.background.rgba = &source;
+    operation.colors = {{15, 125, 85, 145, 82, 115}};
+    auto expected = source;
+    require(effects::applyColorAdjustment(expected, operation.colors.front()) ==
+        effects::ProcessingResult::Completed, "Vulkan image grade CPU reference failed.");
+    const auto texture = gpu.processImage(operation);
+    require(bool(texture.frame), texture.cause);
+    const auto readback = gpu.readback(texture.frame);
+    require(bool(readback.frame), readback.cause);
+    parity(expected, *readback.frame);
+    operation.kind = OpenGlImageOperationKind::Adjustment;
+    operation.foreground.rgba = &source;
+    const auto adjustment = gpu.processImage(operation);
+    require(bool(adjustment.frame), adjustment.cause);
+    const auto adjustment_pixels = gpu.readback(adjustment.frame);
+    require(bool(adjustment_pixels.frame), adjustment_pixels.cause);
+    parity(expected, *adjustment_pixels.frame);
+}
+
 int main(int argc,char** argv) {
     QSurfaceFormat format;format.setVersion(3,2);format.setProfile(QSurfaceFormat::CoreProfile);QSurfaceFormat::setDefaultFormat(format);
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);QApplication app(argc,argv);
@@ -252,6 +290,8 @@ int main(int argc,char** argv) {
     const auto initialization_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-initialization).count();
     if(!device){std::cerr<<cause<<"\n";return required?1:77;}
     try{std::cout<<"device="<<device->name().toStdString()<<" initialization_ms="<<initialization_ms<<" precise_rotation="<<device->supportsPreciseRotation()<<"\n";
-        correctness(device);if(app.arguments().contains("--benchmark"))benchmark(device);return 0;
+        if (app.arguments().contains("--color-only")) primaryGradeOnly(device);
+        else correctness(device);
+        if(app.arguments().contains("--benchmark"))benchmark(device);return 0;
     }catch(const std::exception& error){std::cerr<<error.what()<<"\n";return 1;}
 }

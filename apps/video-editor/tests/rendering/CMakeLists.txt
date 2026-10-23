@@ -52,14 +52,28 @@ copy_ffmpeg_test_runtime(creative-suite-main-editor-gpu-timeline-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-gpu-timeline-tests)
 add_creative_suite_test(NAME creative-suite-main-editor-gpu-timeline
     SKIP_RETURN_CODE 77 COMMAND creative-suite-main-editor-gpu-timeline-tests)
+add_creative_suite_test(NAME creative-suite-main-editor-gpu-color
+    SKIP_RETURN_CODE 77 COMMAND creative-suite-main-editor-gpu-timeline-tests --color-only)
+add_creative_suite_test(NAME creative-suite-main-editor-vulkan-color
+    SKIP_RETURN_CODE 77 COMMAND creative-suite-main-editor-gpu-timeline-tests --color-only --vulkan)
 set_tests_properties(creative-suite-main-editor-gpu-timeline PROPERTIES
+    ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
+set_tests_properties(creative-suite-main-editor-gpu-color PROPERTIES
+    ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
+set_tests_properties(creative-suite-main-editor-vulkan-color PROPERTIES
     ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
 if(WIN32)
     set_property(TEST creative-suite-main-editor-gpu-timeline APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=windows")
+    set_property(TEST creative-suite-main-editor-gpu-color APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=windows")
+    set_property(TEST creative-suite-main-editor-vulkan-color APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=windows")
 elseif(APPLE)
     set_property(TEST creative-suite-main-editor-gpu-timeline APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+    set_property(TEST creative-suite-main-editor-gpu-color APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+    set_property(TEST creative-suite-main-editor-vulkan-color APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
 else()
     set_property(TEST creative-suite-main-editor-gpu-timeline APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    set_property(TEST creative-suite-main-editor-gpu-color APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    set_property(TEST creative-suite-main-editor-vulkan-color APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 
 add_executable(creative-suite-main-editor-transform-compositor-tests

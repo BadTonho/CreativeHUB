@@ -10,6 +10,7 @@ namespace ui {
 
 class EditWorkspace;
 class FusionWorkspace;
+class ColorWorkspace;
 class RenderWorkspace;
 
 class WorkspaceHost final : public QWidget {
@@ -33,6 +34,7 @@ public:
                  bool refresh_central_workspace = true);
     void refreshCentralWorkspaceVisibility();
     void setAudioPanels(QWidget* meter_page, QWidget* mixer_panel);
+    void setColorWorkspace(ColorWorkspace* workspace);
     [[nodiscard]] WorkspacePageId currentPage() const noexcept;
 
     [[nodiscard]] QWidget* previewWidget() const noexcept;
@@ -48,6 +50,7 @@ private:
     QWidget* preview_widget_ = nullptr;
     QWidget* preview_canvas_area_ = nullptr;
     FusionWorkspace* fusion_workspace_ = nullptr;
+    ColorWorkspace* color_workspace_ = nullptr;
     RenderWorkspace* render_workspace_ = nullptr;
     QWidget* timeline_panel_ = nullptr;
     QWidget* node_editor_panel_ = nullptr;

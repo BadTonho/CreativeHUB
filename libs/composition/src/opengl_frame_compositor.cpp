@@ -109,15 +109,15 @@ uniform float opacity;
 uniform bool axis_aligned;
 layout(std140) uniform SourceLookupX { ivec4 lookup_x[1024]; };
 layout(std140) uniform SourceLookupY { ivec4 lookup_y[1024]; };
-layout(std140) uniform ColorAdjustments { vec4 color_adjustments[256]; };
+layout(std140) uniform ColorAdjustments { vec4 color_adjustments[512]; };
 out vec4 color;
 int mappedX(int i) { return lookup_x[i / 4][i % 4]; }
 int mappedY(int i) { return lookup_y[i / 4][i % 4]; }
-vec3 adjustColor(vec3 rgb, vec4 parameters) {
+vec3 adjustColor(vec3 rgb, vec4 parameters, vec3 gains) {
     rgb += parameters.x;
     rgb = (rgb - vec3(0.5)) * parameters.y + vec3(0.5);
     float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-    rgb = vec3(luma) + (rgb - vec3(luma)) * parameters.z;
+    rgb = (vec3(luma) + (rgb - vec3(luma)) * parameters.z) * gains;
     return floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
 void main() {
@@ -144,7 +144,8 @@ void main() {
     if (source_bottom_left) pixel.y = size.y - 1 - pixel.y;
     vec4 source = texelFetch(source_image, pixel, 0);
     for (int i = 0; i < color_adjustment_count; ++i)
-        source.rgb = adjustColor(source.rgb, color_adjustments[i]);
+        source.rgb = adjustColor(source.rgb, color_adjustments[2 * i],
+                                 color_adjustments[2 * i + 1].rgb);
     color = vec4(source.rgb, source.a * opacity);
     if(blend_mode!=0) {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
@@ -191,7 +192,7 @@ uniform ivec3 glow_rgb;
 uniform GEOMETRY_VEC2 glow_strength;
 uniform int glow_mode;
 uniform int color_count;
-layout(std140) uniform ColorAdjustments { vec4 color_adjustments[256]; };
+layout(std140) uniform ColorAdjustments { vec4 color_adjustments[512]; };
 out vec4 color;
 vec4 background(ivec2 pixel) {
     if (background_bottom_left) pixel.y = textureSize(background_image, 0).y - 1 - pixel.y;
@@ -237,17 +238,19 @@ void main() {
             adjusted = ivec4(floor(foreground(source_pixel) * 255.0 + 0.5));
             vec3 rgb = vec3(adjusted.rgb) / 255.0;
             for (int i = 0; i < color_count; ++i) {
-                vec4 p = color_adjustments[i];
+                vec4 p = color_adjustments[2 * i];
                 rgb += p.x;
                 rgb = (rgb - vec3(0.5)) * p.y + vec3(0.5);
                 float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-                rgb = floor(clamp(vec3(luma) + (rgb - vec3(luma)) * p.z, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+                rgb = floor(clamp((vec3(luma) + (rgb - vec3(luma)) * p.z) *
+                    color_adjustments[2 * i + 1].rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
             }
             adjusted.rgb = ivec3(floor(rgb * 255.0 + 0.5));
         }
         ivec4 original = ivec4(floor(background(pixel) * 255.0 + 0.5));
-        vec3 mixed = vec3(original.rgb) * (1.0 - scale_opacity.y) +
-            vec3(adjusted.rgb) * scale_opacity.y;
+        float adjustment_opacity = float(scale_opacity.y);
+        vec3 mixed = vec3(original.rgb) * (1.0 - adjustment_opacity) +
+            vec3(adjusted.rgb) * adjustment_opacity;
         color = vec4(floor(mixed + 0.5) / 255.0, 1.0);
         return;
     }
@@ -311,10 +314,11 @@ void main() {
     color = background(pixel);
     if (operation == 2) {
         for (int i = 0; i < color_count; ++i) {
-            vec4 p = color_adjustments[i];
+            vec4 p = color_adjustments[2 * i];
             vec3 rgb = (color.rgb + p.x - vec3(0.5)) * p.y + vec3(0.5);
             float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-            color.rgb = floor(clamp(vec3(luma) + (rgb - vec3(luma)) * p.z, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+            color.rgb = floor(clamp((vec3(luma) + (rgb - vec3(luma)) * p.z) *
+                color_adjustments[2 * i + 1].rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
         }
         return;
     }
@@ -366,6 +370,7 @@ constexpr char effect_fragment_shader[] = R"GLSL(#version 150 core
 uniform sampler2D source_image;
 uniform int effect_kind;
 uniform vec3 color_parameters;
+uniform vec3 color_gains;
 uniform int blur_radius;
 uniform bool horizontal_pass;
 uniform bool premultiply_alpha;
@@ -375,7 +380,7 @@ vec3 adjustColor(vec3 rgb) {
     rgb += color_parameters.x;
     rgb = (rgb - vec3(0.5)) * color_parameters.y + vec3(0.5);
     float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-    rgb = vec3(luma) + (rgb - vec3(luma)) * color_parameters.z;
+    rgb = (vec3(luma) + (rgb - vec3(luma)) * color_parameters.z) * color_gains;
     return floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
 void main() {
@@ -710,7 +715,7 @@ struct OpenGlFrameCompositor::Impl {
             gl->glUniformBlockBinding(program->programId(), block, axis);
         }
         gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[2]);
-        gl->glBufferData(GL_UNIFORM_BUFFER, 256 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+        gl->glBufferData(GL_UNIFORM_BUFFER, 512 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
         const auto adjustments_block = gl->glGetUniformBlockIndex(
             program->programId(), "ColorAdjustments");
         if (adjustments_block == GL_INVALID_INDEX)
@@ -1319,18 +1324,23 @@ void main() {
             gl->glUniform2i(image_program->uniformLocation("merge_origin"), (width - fitted_width) / 2, (height - fitted_height) / 2);
             gl->glUniform2i(image_program->uniformLocation("merge_size"), fitted_width, fitted_height);
         }
-        std::array<std::array<float, 4>, 256> colors{};
+        std::array<std::array<float, 4>, 512> colors{};
         for (std::size_t i = 0; i < operation.colors.size(); ++i) {
             const auto& value = operation.colors[i];
             if (!std::isfinite(value.brightness) || value.brightness < -100 || value.brightness > 100 ||
                 !std::isfinite(value.contrast_percent) || value.contrast_percent < 0 || value.contrast_percent > 200 ||
-                !std::isfinite(value.saturation_percent) || value.saturation_percent < 0 || value.saturation_percent > 200)
+                !std::isfinite(value.saturation_percent) || value.saturation_percent < 0 || value.saturation_percent > 200 ||
+                !std::isfinite(value.red_gain_percent) || value.red_gain_percent < 0 || value.red_gain_percent > 200 ||
+                !std::isfinite(value.green_gain_percent) || value.green_gain_percent < 0 || value.green_gain_percent > 200 ||
+                !std::isfinite(value.blue_gain_percent) || value.blue_gain_percent < 0 || value.blue_gain_percent > 200)
                 return result(OpenGlCompositionStatus::Unsupported, "check-image-color", "Invalid image color parameters.");
-            colors[i] = {float(value.brightness / 100), float(value.contrast_percent / 100),
+            colors[2 * i] = {float(value.brightness / 100), float(value.contrast_percent / 100),
                 float(value.saturation_percent / 100), 0};
+            colors[2 * i + 1] = {float(value.red_gain_percent / 100),
+                float(value.green_gain_percent / 100), float(value.blue_gain_percent / 100), 0};
         }
         gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[2]);
-        gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, operation.colors.size() * sizeof(colors[0]), colors.data());
+        gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, 2 * operation.colors.size() * sizeof(colors[0]), colors.data());
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 2, lookup_buffers[2]);
         gl->glUniformBlockBinding(image_program->programId(), gl->glGetUniformBlockIndex(image_program->programId(), "ColorAdjustments"), 2);
         measured.color_adjustment_count += operation.colors.size();
@@ -1408,7 +1418,7 @@ void main() {
                 effect_scratch->height() * 4;
         bytes += raster_reserved;
         const std::uint64_t geometry = (lookup_buffers[0] ? 16384ULL : 0) +
-            (lookup_buffers[1] ? 16384ULL : 0) + (lookup_buffers[2] ? 4096ULL : 0);
+            (lookup_buffers[1] ? 16384ULL : 0) + (lookup_buffers[2] ? 8192ULL : 0);
         return {bytes, geometry, std::max(peak_known_bytes, bytes + geometry)};
     }
     void rememberResourcePeak() noexcept { peak_known_bytes = resources().peak_known_bytes; }
@@ -2141,7 +2151,10 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     !std::isfinite(adjustment.contrast_percent) ||
                     adjustment.contrast_percent < 0.0 || adjustment.contrast_percent > 200.0 ||
                     !std::isfinite(adjustment.saturation_percent) ||
-                    adjustment.saturation_percent < 0.0 || adjustment.saturation_percent > 200.0)
+                    adjustment.saturation_percent < 0.0 || adjustment.saturation_percent > 200.0 ||
+                    !std::isfinite(adjustment.red_gain_percent) || adjustment.red_gain_percent < 0.0 || adjustment.red_gain_percent > 200.0 ||
+                    !std::isfinite(adjustment.green_gain_percent) || adjustment.green_gain_percent < 0.0 || adjustment.green_gain_percent > 200.0 ||
+                    !std::isfinite(adjustment.blue_gain_percent) || adjustment.blue_gain_percent < 0.0 || adjustment.blue_gain_percent > 200.0)
                     return result(OpenGlCompositionStatus::Unsupported, "check-effects",
                         "Color adjustment parameters are outside the shared effect contract.", 0,
                         static_cast<int>(layer_index));
@@ -2158,7 +2171,10 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                         !std::isfinite(adjustment->contrast_percent) ||
                         adjustment->contrast_percent < 0.0 || adjustment->contrast_percent > 200.0 ||
                         !std::isfinite(adjustment->saturation_percent) ||
-                        adjustment->saturation_percent < 0.0 || adjustment->saturation_percent > 200.0)
+                        adjustment->saturation_percent < 0.0 || adjustment->saturation_percent > 200.0 ||
+                        !std::isfinite(adjustment->red_gain_percent) || adjustment->red_gain_percent < 0.0 || adjustment->red_gain_percent > 200.0 ||
+                        !std::isfinite(adjustment->green_gain_percent) || adjustment->green_gain_percent < 0.0 || adjustment->green_gain_percent > 200.0 ||
+                        !std::isfinite(adjustment->blue_gain_percent) || adjustment->blue_gain_percent < 0.0 || adjustment->blue_gain_percent > 200.0)
                         return result(OpenGlCompositionStatus::Unsupported, "check-effects",
                             "Color adjustment parameters are outside the shared effect contract.", 0,
                             static_cast<int>(layer_index));
@@ -2299,16 +2315,20 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             const auto color_adjustment_started = layer.gpu_color_adjustments.empty()
                 ? Clock::time_point{} : Clock::now();
             if (!layer.gpu_color_adjustments.empty()) {
-                std::array<std::array<float, 4>, 256> packed_adjustments{};
+                std::array<std::array<float, 4>, 512> packed_adjustments{};
                 for (std::size_t i = 0; i < layer.gpu_color_adjustments.size(); ++i) {
                     const auto& adjustment = layer.gpu_color_adjustments[i];
-                    packed_adjustments[i] = {
+                    packed_adjustments[2 * i] = {
                         static_cast<float>(adjustment.brightness / 100.0),
                         static_cast<float>(adjustment.contrast_percent / 100.0),
                         static_cast<float>(adjustment.saturation_percent / 100.0), 0.0F};
+                    packed_adjustments[2 * i + 1] = {
+                        static_cast<float>(adjustment.red_gain_percent / 100.0),
+                        static_cast<float>(adjustment.green_gain_percent / 100.0),
+                        static_cast<float>(adjustment.blue_gain_percent / 100.0), 0.0F};
                 }
                 const auto byte_count = static_cast<GLsizeiptr>(
-                    layer.gpu_color_adjustments.size() * sizeof(packed_adjustments[0]));
+                    2 * layer.gpu_color_adjustments.size() * sizeof(packed_adjustments[0]));
                 gl->glBindBuffer(GL_UNIFORM_BUFFER, p.lookup_buffers[2]);
                 gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, byte_count,
                     packed_adjustments.data());
@@ -2409,6 +2429,10 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                             QVector3D(static_cast<float>(adjustment->brightness / 100.0),
                                 static_cast<float>(adjustment->contrast_percent / 100.0),
                                 static_cast<float>(adjustment->saturation_percent / 100.0)));
+                        p.effect_program->setUniformValue("color_gains",
+                            QVector3D(static_cast<float>(adjustment->red_gain_percent / 100.0),
+                                static_cast<float>(adjustment->green_gain_percent / 100.0),
+                                static_cast<float>(adjustment->blue_gain_percent / 100.0)));
                         p.effect_program->setUniformValue("premultiply_alpha", false);
                         p.effect_program->setUniformValue("unpremultiply_alpha", false);
                         p.effect_program->setUniformValue("horizontal_pass", true);

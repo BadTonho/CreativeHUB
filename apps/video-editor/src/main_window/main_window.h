@@ -71,6 +71,7 @@ namespace ui {
 class FunctionPalette;
 class EditWorkspace;
 class AudioWorkspace;
+class ColorWorkspace;
 class FusionWorkspace;
 class RenderWorkspace;
 class WorkspaceHost;
@@ -191,6 +192,7 @@ private:
     void updateMediaDetails(int row);
     void refreshFusionMediaChoices();
     void refreshFusionSelection();
+    void refreshColorSelection();
     void populateMediaBrowser(
         const std::filesystem::path& selected_path = {},
         std::optional<std::string> selected_bin = std::nullopt);
@@ -382,6 +384,7 @@ private:
     ui::FunctionPalette* function_palette_ = nullptr;
     ui::EditWorkspace* edit_workspace_ = nullptr;
     ui::AudioWorkspace* audio_workspace_ = nullptr;
+    ui::ColorWorkspace* color_workspace_ = nullptr;
     ui::FusionWorkspace* fusion_workspace_ = nullptr;
     ui::RenderWorkspace* render_workspace_ = nullptr;
     ui::WorkspaceHost* workspace_host_ = nullptr;
@@ -390,6 +393,7 @@ private:
     QWidget* workspace_buttons_container_ = nullptr;
     QPushButton* edit_workspace_button_ = nullptr;
     QPushButton* fusion_workspace_button_ = nullptr;
+    QPushButton* color_workspace_button_ = nullptr;
     QPushButton* audio_workspace_button_ = nullptr;
     QPushButton* render_workspace_button_ = nullptr;
     MediaBrowserListWidget* media_list_ = nullptr;

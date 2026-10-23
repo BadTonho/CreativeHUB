@@ -51,11 +51,11 @@ int main(int argc, char* argv[]) {
                 "Text category is missing.");
         require(toolbox.currentCategoryId() == "all",
                 "Effects Toolbox must initially select All.");
-        require(effects_list.count() == 18,
+        require(effects_list.count() == 19,
                 "Effects list must contain all visual filters and existing tools.");
         require(effects_list.categoryId() == "all",
                 "Effects list must initially show All.");
-        require(effects_list.visibleEffectCount() == 11,
+        require(effects_list.visibleEffectCount() == 12,
                 "All category must show every effect.");
         require(effects_list.item(0)->data(Qt::UserRole).toString() ==
                     "video.grayscale",
@@ -101,6 +101,7 @@ int main(int argc, char* argv[]) {
         verifyDragMime("Brightness", QByteArrayLiteral("video.brightness"));
         verifyDragMime("Contrast", QByteArrayLiteral("video.contrast"));
         verifyDragMime("Saturation", QByteArrayLiteral("video.saturation"));
+        verifyDragMime("Primary Grade", QByteArrayLiteral("video.primary_grade"));
         verifyDragMime(
             "Cross Dissolve",
             QByteArrayLiteral("transitions.cross_dissolve"));
@@ -124,8 +125,8 @@ int main(int argc, char* argv[]) {
         effects_list.setCategory(toolbox.currentCategoryId());
         require(effects_list.categoryId() == "video",
                 "Effects list category did not change to Video.");
-        require(effects_list.visibleEffectCount() == 7,
-                "Video category must show the four visual filters.");
+        require(effects_list.visibleEffectCount() == 8,
+                "Video category must show the five visual filters.");
 
         require(toolbox.item(2)->text().trimmed()=="Generators","Generators subcategory is missing.");
         effects_list.setCategory("video.generators");
@@ -149,12 +150,12 @@ int main(int argc, char* argv[]) {
                 "Text category must show one effect.");
         effects_list.setCategory("unknown");
         require(effects_list.categoryId() == "all" &&
-                    effects_list.visibleEffectCount() == 11,
+                    effects_list.visibleEffectCount() == 12,
                 "Unknown categories must fall back to All.");
 
         require(effects::categories().size() == 8,
                 "Shared effect catalog contains unimplemented categories.");
-        require(effects::definitions().size() == 18,
+        require(effects::definitions().size() == 19,
                 "The Effects catalog must retain existing tools alongside visual filters.");
         QObject::connect(&toolbox, &EffectsToolboxWidget::categoryChanged,
                          &effects_list, &EffectsListWidget::setCategory);
@@ -219,7 +220,7 @@ int main(int argc, char* argv[]) {
         favorites.setWorkspace(effects::Workspace::Edit);
         toolbox.setCurrentRow(toolbox.count() - 1); // Masks disappears on returning to Edit.
         toolbox.setWorkspace(effects::Workspace::Edit);
-        require(toolbox.currentCategoryId() == "all" && effects_list.visibleEffectCount() == 11 &&
+        require(toolbox.currentCategoryId() == "all" && effects_list.visibleEffectCount() == 12 &&
                 favorites.count() == 2 && effects::favoriteIds().size() == 3,
                 "Returning to Edit must restore its catalog without losing favorites.");
         effects_list.itemDoubleClicked(ellipse);

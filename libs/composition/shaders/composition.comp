@@ -67,11 +67,11 @@ void main() {
             adjusted=imageLoad(foreground_image,samplepos).rgb;
             vec3 rgb=vec3(adjusted)/255.0;
             for(int i=0;i<p.control.y;++i) {
-                vec4 pass=adjustment_values[i];
+                vec4 pass=adjustment_values[2*i];
                 rgb+=pass.x;
                 rgb=(rgb-vec3(0.5))*pass.y+vec3(0.5);
                 float luma=dot(rgb,vec3(0.2126,0.7152,0.0722));
-                rgb=floor(clamp(vec3(luma)+(rgb-vec3(luma))*pass.z,0.0,1.0)*255.0+0.5)/255.0;
+                rgb=floor(clamp((vec3(luma)+(rgb-vec3(luma))*pass.z)*adjustment_values[2*i+1].rgb,0.0,1.0)*255.0+0.5)/255.0;
             }
             adjusted=uvec3(floor(rgb*255.0+0.5));
         }
@@ -85,7 +85,7 @@ void main() {
             vec3 rgb=vec3(c.rgb)/255.0;
             rgb+=p.color.x; rgb=(rgb-vec3(0.5))*p.color.y+vec3(0.5);
             float luma=dot(rgb,vec3(0.2126,0.7152,0.0722));
-            c.rgb=uvec3(floor(clamp(vec3(luma)+(rgb-vec3(luma))*p.color.z,0,1)*255.0+0.5));
+            c.rgb=uvec3(floor(clamp((vec3(luma)+(rgb-vec3(luma))*p.color.z)*vec3(p.extent,p.trig.x),0,1)*255.0+0.5));
         } else if(op==3) {
             ivec2 fs=imageSize(foreground_image);
             REAL scale=min(REAL(size.x)/REAL(fs.x),REAL(size.y)/REAL(fs.y));

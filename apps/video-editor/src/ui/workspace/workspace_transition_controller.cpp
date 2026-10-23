@@ -47,6 +47,11 @@ WorkspaceTransitionController::WorkspaceTransitionController(
             setPage(WorkspacePageId::Fusion);
         });
     }
+    if (selectors_.color != nullptr) {
+        connect(selectors_.color, &QPushButton::clicked, this, [this]() {
+            setPage(WorkspacePageId::Color);
+        });
+    }
     if (selectors_.render != nullptr) {
         connect(selectors_.render, &QPushButton::clicked, this, [this]() {
             setPage(WorkspacePageId::Render);
@@ -78,6 +83,8 @@ void WorkspaceTransitionController::setPage(WorkspacePageId page) {
     if (workspace_host_ == nullptr) return;
     if (page == WorkspacePageId::Audio && audio_page_preparation_handler_)
         audio_page_preparation_handler_();
+    if (page == WorkspacePageId::Color && color_page_preparation_handler_)
+        color_page_preparation_handler_();
     if (deferred_page_change_pending_) {
         if (workspace_host_->currentPage() == page) {
             queued_page_.reset();
@@ -132,6 +139,34 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
         updateSelectors(page);
         return;
     }
+    if (page == WorkspacePageId::Color &&
+        workspace_host_->currentPage() == WorkspacePageId::Render) {
+        queued_page_ = page;
+        applyPage(WorkspacePageId::Edit);
+        return;
+    }
+    if (page == WorkspacePageId::Color &&
+        workspace_host_->currentPage() == WorkspacePageId::Audio) {
+        leaveAudioLayout();
+        workspace_host_->setPage(WorkspacePageId::Edit, false);
+    }
+
+    auto* main_window = qobject_cast<QMainWindow*>(workspace_host_->window());
+    if (workspace_host_->currentPage() == WorkspacePageId::Color) {
+        workspace_host_->setPage(WorkspacePageId::Edit, false);
+        if (main_window != nullptr && !dock_layout_before_color_.isEmpty())
+            main_window->restoreState(dock_layout_before_color_, 9);
+        dock_layout_before_color_.clear();
+    }
+    if (page == WorkspacePageId::Color) {
+        if (main_window != nullptr) dock_layout_before_color_ = main_window->saveState(9);
+        workspace_host_->setPage(page, false);
+        for (auto* dock : dockWidgets()) if (dock != nullptr) dock->hide();
+        workspace_host_->refreshCentralWorkspaceVisibility();
+        updateSelectors(page);
+        if (page_changed_handler_) page_changed_handler_(page);
+        return;
+    }
 
     const bool entering_audio = page == WorkspacePageId::Audio &&
         workspace_host_->currentPage() != WorkspacePageId::Audio;
@@ -145,7 +180,6 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
         page != WorkspacePageId::Render &&
         workspace_host_->currentPage() == WorkspacePageId::Render;
     const auto docks = dockWidgets();
-    auto* main_window = qobject_cast<QMainWindow*>(workspace_host_->window());
 
     if (entering_render) {
         if (main_window != nullptr) {
@@ -308,6 +342,11 @@ void WorkspaceTransitionController::setAudioPagePreparationHandler(
     audio_page_preparation_handler_ = std::move(handler);
 }
 
+void WorkspaceTransitionController::setColorPagePreparationHandler(
+    std::function<void()> handler) {
+    color_page_preparation_handler_ = std::move(handler);
+}
+
 bool WorkspaceTransitionController::eventFilter(
     QObject* watched, QEvent* event) {
     if (event == nullptr || workspace_host_ == nullptr ||
@@ -359,7 +398,8 @@ void WorkspaceTransitionController::prepareForClose() {
     }
     queued_page_.reset();
     if (workspace_host_ != nullptr &&
-        (workspace_host_->currentPage() == WorkspacePageId::Render ||
+        (workspace_host_->currentPage() == WorkspacePageId::Color ||
+         workspace_host_->currentPage() == WorkspacePageId::Render ||
          workspace_host_->currentPage() == WorkspacePageId::Audio)) {
         preparing_for_close_ = true;
         applyPage(WorkspacePageId::Edit);
@@ -399,6 +439,10 @@ void WorkspaceTransitionController::updateSelectors(WorkspacePageId page) {
     if (selectors_.fusion != nullptr) {
         const QSignalBlocker blocker(selectors_.fusion);
         selectors_.fusion->setChecked(page == WorkspacePageId::Fusion);
+    }
+    if (selectors_.color != nullptr) {
+        const QSignalBlocker blocker(selectors_.color);
+        selectors_.color->setChecked(page == WorkspacePageId::Color);
     }
     if (selectors_.audio != nullptr) {
         const QSignalBlocker blocker(selectors_.audio);

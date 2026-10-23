@@ -26,17 +26,18 @@ int main(int argc, char* argv[]) {
         auto* layout = qobject_cast<QHBoxLayout*>(buttons_container->layout());
         require(layout != nullptr,
                 "Timeline end buttons must use a horizontal layout.");
-        require(layout->count() == 3,
-                "Timeline end buttons must contain exactly three buttons.");
+        require(layout->count() == 5,
+                "Timeline end buttons must contain five buttons.");
 
         auto* edit_button = qobject_cast<QPushButton*>(
             layout->itemAt(0)->widget());
         auto* unnamed_button = qobject_cast<QPushButton*>(
             layout->itemAt(1)->widget());
-        auto* render_button = qobject_cast<QPushButton*>(
-            layout->itemAt(2)->widget());
+        auto* color_button = qobject_cast<QPushButton*>(layout->itemAt(2)->widget());
+        auto* audio_button = qobject_cast<QPushButton*>(layout->itemAt(3)->widget());
+        auto* render_button = qobject_cast<QPushButton*>(layout->itemAt(4)->widget());
         require(edit_button != nullptr && unnamed_button != nullptr &&
-                    render_button != nullptr,
+                    color_button != nullptr && audio_button != nullptr && render_button != nullptr,
                 "Timeline end buttons must be ordered button widgets.");
         require(edit_button->objectName() == "timelineEditButton",
                 "The first timeline end button must be Edit.");
@@ -69,6 +70,13 @@ int main(int argc, char* argv[]) {
         require(unnamed_button->isCheckable() &&
                     !unnamed_button->isChecked(),
                 "The Fusion selector must start inactive.");
+        require(color_button == buttons.color && color_button->text() == "Color" &&
+                    color_button->accessibleName() == "Color workspace" &&
+                    color_button->size() == QSize(68, 22) &&
+                    color_button->isCheckable() && !color_button->isChecked(),
+                "The Color selector must be visible, accessible, compact, and inactive initially.");
+        require(audio_button == buttons.audio && audio_button->text() == "Audio",
+                "Audio follows Color in the workspace footer.");
         require(render_button->objectName() == "timelineRenderButton",
                 "The third timeline end button must be Render.");
         require(render_button == buttons.render,

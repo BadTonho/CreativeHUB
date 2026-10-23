@@ -16,12 +16,20 @@ constexpr std::array<ParameterDefinition, 1> contrast_parameters{{
     {"amount", "Contrast", 0.0, 200.0, 100.0, 1.0}}};
 constexpr std::array<ParameterDefinition, 1> saturation_parameters{{
     {"amount", "Saturation", 0.0, 200.0, 100.0, 1.0}}};
+constexpr std::array<ParameterDefinition, 6> primary_grade_parameters{{
+    {"brightness", "Brightness", -100.0, 100.0, 0.0, 1.0},
+    {"contrast", "Contrast", 0.0, 200.0, 100.0, 1.0},
+    {"saturation", "Saturation", 0.0, 200.0, 100.0, 1.0},
+    {"red_gain", "Red gain", 0.0, 200.0, 100.0, 1.0},
+    {"green_gain", "Green gain", 0.0, 200.0, 100.0, 1.0},
+    {"blue_gain", "Blue gain", 0.0, 200.0, 100.0, 1.0}}};
 
-constexpr std::array<Definition, 4> definitions{{
+constexpr std::array<Definition, 5> definitions{{
     {"video.grayscale", "Grayscale", "video", grayscale_parameters},
     {"video.brightness", "Brightness", "video", brightness_parameters},
     {"video.contrast", "Contrast", "video", contrast_parameters},
     {"video.saturation", "Saturation", "video", saturation_parameters},
+    {"video.primary_grade", "Primary Grade", "video", primary_grade_parameters},
 }};
 
 const ParameterDefinition* findParameter(
@@ -59,7 +67,10 @@ bool validColorAdjustment(const ColorAdjustmentParameters& parameters) noexcept 
         std::isfinite(parameters.contrast_percent) &&
         parameters.contrast_percent >= 0.0 && parameters.contrast_percent <= 200.0 &&
         std::isfinite(parameters.saturation_percent) &&
-        parameters.saturation_percent >= 0.0 && parameters.saturation_percent <= 200.0;
+        parameters.saturation_percent >= 0.0 && parameters.saturation_percent <= 200.0 &&
+        std::isfinite(parameters.red_gain_percent) && parameters.red_gain_percent >= 0.0 && parameters.red_gain_percent <= 200.0 &&
+        std::isfinite(parameters.green_gain_percent) && parameters.green_gain_percent >= 0.0 && parameters.green_gain_percent <= 200.0 &&
+        std::isfinite(parameters.blue_gain_percent) && parameters.blue_gain_percent >= 0.0 && parameters.blue_gain_percent <= 200.0;
 }
 
 }  // namespace
@@ -144,6 +155,14 @@ std::optional<std::vector<ColorAdjustmentParameters>> colorAdjustmentPasses(
         else if (effect.id == "video.contrast") pass.contrast_percent = amount;
         else if (effect.id == "video.saturation") pass.saturation_percent = amount;
         else if (effect.id == "video.grayscale") pass.saturation_percent = 100.0 - amount;
+        else if (effect.id == "video.primary_grade") {
+            pass.brightness = parameterValue(effect, "brightness");
+            pass.contrast_percent = parameterValue(effect, "contrast");
+            pass.saturation_percent = parameterValue(effect, "saturation");
+            pass.red_gain_percent = parameterValue(effect, "red_gain");
+            pass.green_gain_percent = parameterValue(effect, "green_gain");
+            pass.blue_gain_percent = parameterValue(effect, "blue_gain");
+        }
         else return std::nullopt;
         result.push_back(pass);
     }
@@ -167,7 +186,18 @@ bool applyStack(
                 const double red = pixel[0];
                 const double green = pixel[1];
                 const double blue = pixel[2];
-                if (id == "video.grayscale") {
+                if (id == "video.primary_grade") {
+                    const ColorAdjustmentParameters parameters{
+                        parameterValue(effect, "brightness"),
+                        parameterValue(effect, "contrast"),
+                        parameterValue(effect, "saturation"),
+                        parameterValue(effect, "red_gain"),
+                        parameterValue(effect, "green_gain"),
+                        parameterValue(effect, "blue_gain")};
+                    const auto adjusted = colorAdjustmentRgb(
+                        {red / 255.0, green / 255.0, blue / 255.0}, parameters);
+                    pixel[0] = adjusted[0]; pixel[1] = adjusted[1]; pixel[2] = adjusted[2];
+                } else if (id == "video.grayscale") {
                     const double luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
                     const double blend = amount / 100.0;
                     pixel[0] = toByte(red + (luminance - red) * blend);
@@ -203,7 +233,10 @@ ProcessingResult applyColorAdjustment(
     if (!validFrame(frame) || !validColorAdjustment(parameters))
         return ProcessingResult::InvalidInput;
     if (parameters.brightness == 0.0 && parameters.contrast_percent == 100.0 &&
-        parameters.saturation_percent == 100.0) {
+        parameters.saturation_percent == 100.0 &&
+        parameters.red_gain_percent == 100.0 &&
+        parameters.green_gain_percent == 100.0 &&
+        parameters.blue_gain_percent == 100.0) {
         return ProcessingResult::Completed;
     }
 

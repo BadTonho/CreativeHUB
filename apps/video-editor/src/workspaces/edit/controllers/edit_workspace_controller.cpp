@@ -922,6 +922,12 @@ bool EditWorkspaceController::addEffectToSelectedClip(const QString& effect_id) 
 
 void EditWorkspaceController::selectClipEffect(int index) {
     selected_effect_index_ = index;
+    selected_effect_parameter_id_ = "amount";
+    updateInspector();
+}
+
+void EditWorkspaceController::selectClipEffectParameter(const QString& id) {
+    selected_effect_parameter_id_ = id.toStdString();
     updateInspector();
 }
 
@@ -1041,7 +1047,7 @@ void EditWorkspaceController::applySelectedClipEffectParameter(double value) {
         static_cast<std::size_t>(selected_effect_index_) >= clip.effects.size()) return;
     auto effects = clip.effects;
     if (!creative_suite::effects::setParameterValue(
-            effects[static_cast<std::size_t>(selected_effect_index_)], "amount", value)) {
+            effects[static_cast<std::size_t>(selected_effect_index_)], selected_effect_parameter_id_, value)) {
         return;
     }
     try {
@@ -1896,10 +1902,34 @@ void EditWorkspaceController::updateInspector() {
             static_cast<std::size_t>(selected_effect_index_)];
         const auto* definition = creative_suite::effects::findDefinition(instance.id);
         if (definition != nullptr && !definition->parameters.empty()) {
-            selected_parameter = &definition->parameters.front();
+            const auto found = std::find_if(definition->parameters.begin(), definition->parameters.end(),
+                [this](const auto& parameter) { return parameter.id == selected_effect_parameter_id_; });
+            selected_parameter = found == definition->parameters.end()
+                ? &definition->parameters.front() : &*found;
+            selected_effect_parameter_id_ = std::string(selected_parameter->id);
             selected_parameter_value = creative_suite::effects::parameterValue(
                 instance, selected_parameter->id);
         }
+    }
+    if (ui_.clip_effect_parameter_selector != nullptr) {
+        auto* selector = ui_.clip_effect_parameter_selector;
+        const QSignalBlocker blocker(selector);
+        selector->clear();
+        if (has_selected_effect) {
+            const auto* definition = creative_suite::effects::findDefinition(
+                selected_clip->effects[static_cast<std::size_t>(selected_effect_index_)].id);
+            if (definition != nullptr) {
+                for (const auto& parameter : definition->parameters) {
+                    const auto id = QString::fromUtf8(parameter.id.data(),
+                        static_cast<qsizetype>(parameter.id.size()));
+                    selector->addItem(::effects::translateCatalogLabel(
+                        QString::fromUtf8(parameter.name.data(),
+                            static_cast<qsizetype>(parameter.name.size()))), id);
+                }
+                selector->setCurrentIndex(selector->findData(QString::fromStdString(selected_effect_parameter_id_)));
+                selector->setVisible(definition->parameters.size() > 1);
+            }
+        } else selector->setVisible(false);
     }
     if (ui_.clip_effect_up != nullptr) {
         ui_.clip_effect_up->setEnabled(has_selected_effect && selected_effect_index_ > 0);

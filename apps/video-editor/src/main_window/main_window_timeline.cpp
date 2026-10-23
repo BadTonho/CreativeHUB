@@ -331,6 +331,7 @@ void MainWindow::updatePlaybackAudioParameters() {
 }
 
 void MainWindow::updateTimelineState() {
+    if (color_workspace_ != nullptr) refreshColorSelection();
     if (audio_workspace_ != nullptr)
         audio_workspace_->refreshTracks(timeline_model_.tracks());
     if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {

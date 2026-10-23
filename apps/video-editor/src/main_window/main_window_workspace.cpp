@@ -14,6 +14,7 @@
 #include "ui/workspace/workspace_transition_controller.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/audio/ui/audio_workspace.h"
+#include "workspaces/color/ui/color_workspace.h"
 #include "workspaces/render/ui/render_workspace.h"
 
 #include <QAction>
@@ -612,6 +613,7 @@ void MainWindow::createWorkspace() {
     workspace_buttons_container_ = workspace_buttons.container;
     edit_workspace_button_ = workspace_buttons.edit;
     fusion_workspace_button_ = workspace_buttons.fusion;
+    color_workspace_button_ = workspace_buttons.color;
     audio_workspace_button_ = workspace_buttons.audio;
     render_workspace_button_ = workspace_buttons.render;
     if (auto* navigation_layout = qobject_cast<QHBoxLayout*>(
@@ -683,6 +685,7 @@ void MainWindow::createWorkspace() {
             {
                 edit_workspace_button_,
                 fusion_workspace_button_,
+                color_workspace_button_,
                 audio_workspace_button_,
                 render_workspace_button_},
             this);
@@ -695,6 +698,41 @@ void MainWindow::createWorkspace() {
         audio_workspace_->refreshTracks(timeline_model_.tracks());
         workspace_host_->setAudioPanels(
             audio_workspace_->meterPage(), audio_workspace_->mixerPanel());
+    });
+    workspace_transition_controller_->setColorPagePreparationHandler([this] {
+        if (color_workspace_ != nullptr || workspace_host_ == nullptr) return;
+        color_workspace_ = new ui::ColorWorkspace(this);
+        color_workspace_->setPlaybackHandler([this](playback::PlaybackCommand command) {
+            if (command == playback::PlaybackCommand::Play && playback_controller_ &&
+                playback_controller_->isPlaying()) command = playback::PlaybackCommand::Pause;
+            sendPlaybackCommand(command);
+        });
+        color_workspace_->setClipSelectedHandler([this](timeline::ClipId id) {
+            if (const auto location = timeline_model_.locateClip(id)) {
+                activateTimelineClipAt(location->track_index, location->clip_index,
+                                       0, false);
+                refreshColorSelection();
+            }
+        });
+        color_workspace_->setEffectsChangedHandler([this](timeline::ClipId id,
+            std::vector<creative_suite::effects::EffectInstance> effects) {
+            try {
+                const auto result = timeline_command_service_.execute(
+                    application::SetClipEffectsCommand{id, std::move(effects)});
+                if (!result.changed()) return;
+                applyTimelineEditResult(result, false);
+                updateTimelineState();
+                refreshPlaybackComposition();
+            } catch (const std::exception& error) {
+                logging::Logger::instance().log(logging::Level::Error,
+                    "color", "set_clip_effects", error.what(),
+                    {{"clip_id", std::to_string(id)}});
+                statusBar()->showMessage(QCoreApplication::translate("MainWindow", "Could not update the color grade."));
+            }
+            refreshColorSelection();
+        });
+        workspace_host_->setColorWorkspace(color_workspace_);
+        refreshColorSelection();
     });
 
     function_palette_ = new ui::FunctionPalette(this, *shortcut_manager_);
@@ -741,6 +779,60 @@ void MainWindow::refreshFusionSelection() {
     refreshEffectsContext();
 }
 
+void MainWindow::refreshColorSelection() {
+    if (color_workspace_ == nullptr) return;
+    struct OrderedClip {
+        std::int64_t start = 0;
+        std::size_t track = 0;
+        ui::ColorWorkspace::ClipItem item;
+    };
+    std::vector<OrderedClip> ordered;
+    const auto& tracks = timeline_model_.tracks();
+    for (std::size_t track_index = 0; track_index < tracks.size(); ++track_index) {
+        for (const auto& clip : tracks[track_index].clips) {
+            if (!timeline::supportsClipEffects(clip.kind)) continue;
+            QString name = QString::fromUtf8(clip.display_name.data(),
+                static_cast<qsizetype>(clip.display_name.size()));
+            if (name.isEmpty()) name = QString::fromStdString(clip.source_path.filename().string());
+            if (name.isEmpty()) name = QCoreApplication::translate("MainWindow", "Generated clip");
+            QImage thumbnail;
+            const auto media = std::find_if(media_items_.begin(), media_items_.end(),
+                [&clip](const ImportedMedia& item) {
+                    return normalizedPath(item.metadata.source_path) == normalizedPath(clip.source_path);
+                });
+            if (media != media_items_.end()) {
+                const auto& frame = media->first_frame;
+                if (frame.width > 0 && frame.height > 0 && frame.stride >= frame.width * 4 &&
+                    frame.rgba_pixels.size() >= static_cast<std::size_t>(frame.stride) * frame.height) {
+                    thumbnail = QImage(frame.rgba_pixels.data(), frame.width, frame.height,
+                        frame.stride, QImage::Format_RGBA8888).scaled(
+                            112, 63, Qt::KeepAspectRatio, Qt::FastTransformation);
+                }
+            }
+            ordered.push_back({clip.timeline_start_frame, track_index,
+                {clip.clip_id, std::move(name), std::move(thumbnail)}});
+        }
+    }
+    std::sort(ordered.begin(), ordered.end(), [](const OrderedClip& a, const OrderedClip& b) {
+        return a.start < b.start || (a.start == b.start && a.track < b.track);
+    });
+    std::vector<ui::ColorWorkspace::ClipItem> clips;
+    clips.reserve(ordered.size());
+    for (auto& item : ordered) clips.push_back(std::move(item.item));
+    timeline::ClipId selected_id = 0;
+    std::vector<creative_suite::effects::EffectInstance> effects;
+    if (active_timeline_clip_id_) {
+        if (const auto location = timeline_model_.locateClip(*active_timeline_clip_id_)) {
+            const auto& clip = tracks[location->track_index].clips[location->clip_index];
+            if (timeline::supportsClipEffects(clip.kind)) {
+                selected_id = clip.clip_id;
+                effects = clip.effects;
+            }
+        }
+    }
+    color_workspace_->setClips(std::move(clips), selected_id, std::move(effects));
+}
+
 void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
     if (workspace_transition_controller_ != nullptr) {
         workspace_transition_controller_->setPage(page);
@@ -748,6 +840,7 @@ void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
 }
 
 void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
+    if (page == ui::WorkspacePageId::Color) refreshColorSelection();
     if (playback_controller_ != nullptr) {
         playback_controller_->setAudioMeteringEnabled(
             page == ui::WorkspacePageId::Audio);
@@ -1324,6 +1417,14 @@ void MainWindow::createMenus() {
         QStringLiteral("Switch to the Fusion workspace"),
         fusion_workspace_button_,
         ui::WorkspacePageId::Fusion);
+    register_workspace_shortcut(
+        QStringLiteral("workspace.switch_color"),
+        QStringLiteral("Switch to Color workspace"),
+        QStringLiteral("workspaceSwitchColorAction"),
+        QStringLiteral("Alt+5"),
+        QStringLiteral("Switch to the Color workspace"),
+        color_workspace_button_,
+        ui::WorkspacePageId::Color);
     register_workspace_shortcut(
         QStringLiteral("workspace.switch_audio"),
         QStringLiteral("Switch to Audio workspace"),

@@ -1,13 +1,13 @@
 # Hub Project Backups
 
-Image `.cimg` v28 is now accepted, including independent Hue/Saturation Colorize values; future v29 is rejected. Glow extends native backup support to Motion v18; CSP v31 remains supported. Matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, and effect parameter keyframes are retained unchanged and existing media/Input paths are rebased. Future CSP v32 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
+Image `.cimg` v28 is accepted, including independent Hue/Saturation Colorize values; future v29 is rejected. Glow extends native backup support to Motion v18; CSP v32 adds the Video Editor Primary Grade effect. Matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, and effect parameter keyframes are retained unchanged and existing media/Input paths are rebased. Future CSP v33 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
 
 ## Video Editor v29 Background presets
 
 Named Fusion Compositions retain optional `display_name`, including Background
 presets, through snapshot and restored projects. The existing graph/media path
 adapter preserves node colors, masks and input offsets while relocating external
-Input sources. Formats 1–31 are supported; future v32 is refused. The actual
+Input sources. Formats 1–32 are supported; future v33 is refused. The actual
 Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 
 ## Video Editor v28 masks
@@ -15,7 +15,7 @@ Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 The backup adapter preserves Rectangle/Ellipse node types, geometry, curves and
 Mask input 2 alongside generators and composition input offsets. Masks carry no
 media references; external Input paths continue to be rewritten on snapshot and
-restore. Supported Video Editor schemas are 1–31; future v32 is rejected.
+restore. Supported Video Editor schemas are 1–32; future v33 is rejected.
 The Video Editor reader reopens restored fixtures in `hub-backup-format-test`.
 
 ## Video Editor v27 compositions

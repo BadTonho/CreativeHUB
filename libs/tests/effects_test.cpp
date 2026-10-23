@@ -12,6 +12,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -193,7 +194,36 @@ void verifyGlow()
     require(!validGlow(invalid_mode), "Glow rejects unknown modes");
 }
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc > 1 && std::string_view(argv[1]) == "--primary-grade-only") {
+        using namespace creative_suite::effects;
+        auto grade = makeDefaultInstance("video.primary_grade");
+        require(isValid(grade) && grade.parameters.size() == 6 &&
+                setParameterValue(grade, "red_gain", 150.0) &&
+                setParameterValue(grade, "green_gain", 50.0) &&
+                setParameterValue(grade, "blue_gain", 0.0) &&
+                !setParameterValue(grade, "blue_gain", 201.0),
+                "Primary Grade parameter contract failed");
+        auto direct = colorFrame();
+        auto prepared = direct;
+        const auto original = direct;
+        const auto passes = colorAdjustmentPasses(std::span<const EffectInstance>(&grade, 1));
+        require(passes && passes->size() == 1 &&
+                applyStack(direct, std::span<const EffectInstance>(&grade, 1)) &&
+                applyColorAdjustment(prepared, passes->front()) == ProcessingResult::Completed &&
+                direct.rgba_pixels == prepared.rgba_pixels,
+                "Primary Grade CPU stack and prepared passes disagree");
+        for (int y = 0; y < direct.height; ++y)
+            for (int x = 0; x < direct.width; ++x)
+                require(direct.rgba_pixels[std::size_t(y) * direct.stride + x * 4 + 3] ==
+                    original.rgba_pixels[std::size_t(y) * original.stride + x * 4 + 3],
+                    "Primary Grade changed alpha");
+        auto invalid = passes->front();
+        invalid.red_gain_percent = std::numeric_limits<double>::quiet_NaN();
+        require(applyColorAdjustment(prepared, invalid) == ProcessingResult::InvalidInput,
+                "Primary Grade accepted a nonfinite RGB gain");
+        return 0;
+    }
     verifyGlow();
     {
         using namespace creative_suite::effects;
@@ -495,6 +525,25 @@ int main() {
     const std::vector<EffectInstance> invalid_passes{EffectInstance{"invalid-effect", {}, true}};
     require(!colorAdjustmentPasses(invalid_passes),
         "invalid stacks cannot be prepared");
+    }
+    {
+        auto grade = makeDefaultInstance("video.primary_grade");
+        require(isValid(grade) && grade.parameters.size() == 6,
+                "Primary Grade has six persisted controls");
+        require(setParameterValue(grade, "red_gain", 150.0) &&
+                setParameterValue(grade, "green_gain", 50.0) &&
+                setParameterValue(grade, "blue_gain", 0.0) &&
+                !setParameterValue(grade, "blue_gain", 201.0),
+                "RGB gain ranges are validated");
+        auto direct = fused_original;
+        auto prepared = fused_original;
+        require(applyStack(direct, std::span<const EffectInstance>(&grade, 1)),
+                "Primary Grade applies to the effect stack");
+        const auto passes = colorAdjustmentPasses(std::span<const EffectInstance>(&grade, 1));
+        require(passes && passes->size() == 1 &&
+                applyColorAdjustment(prepared, passes->front()) == ProcessingResult::Completed &&
+                direct.rgba_pixels == prepared.rgba_pixels,
+                "Primary Grade CPU paths preserve RGB pixels and alpha identically");
     }
     return 0;
 }

@@ -154,7 +154,8 @@ GraphValidation validate(const NodeGraph& graph) {
             return {GraphError::InvalidParameter, node.id};
         if (node.type == NodeType::Output) ++output_count;
         if (node.type == NodeType::Effect &&
-            (!creative_suite::effects::isValid(node.effect) ||
+            (node.effect.id == "video.primary_grade" ||
+             !creative_suite::effects::isValid(node.effect) ||
              !validEffectParameterKeyframes(node)))
             return {GraphError::InvalidParameter, node.id};
     }

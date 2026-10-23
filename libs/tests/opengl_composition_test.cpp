@@ -387,7 +387,8 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
     auto source = fixture(23, 13, true, 7);
     auto adjusted = source;
     const std::vector<effects::ColorAdjustmentParameters> adjustments{
-        {18.0, 132.0, 74.0}, {-7.0, 83.0, 145.0}, {2.0, 105.0, 91.0}};
+        {18.0, 132.0, 74.0, 145.0, 82.0, 112.0},
+        {-7.0, 83.0, 145.0}, {2.0, 105.0, 91.0}};
     for (const auto& parameters : adjustments) {
         require(effects::applyColorAdjustment(adjusted, parameters) ==
                     effects::ProcessingResult::Completed,
@@ -415,6 +416,45 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
         [&] { return ++cancellation_checks >= 5; });
     require(cancelled.status == OpenGlCompositionStatus::Cancelled && !cancelled.frame,
         "cancelled GPU color adjustment does not publish a partial frame");
+}
+
+void primaryGradeStackParity(OpenGlFrameCompositor& gpu) {
+    auto source = fixture(93, 57, true);
+    auto brightness = effects::makeDefaultInstance("video.brightness");
+    auto contrast = effects::makeDefaultInstance("video.contrast");
+    auto grade = effects::makeDefaultInstance("video.primary_grade");
+    require(effects::setParameterValue(brightness, "amount", 19) &&
+        effects::setParameterValue(contrast, "amount", 132) &&
+        effects::setParameterValue(grade, "red_gain", 145) &&
+        effects::setParameterValue(grade, "green_gain", 82) &&
+        effects::setParameterValue(grade, "blue_gain", 112), "grade stack parameters");
+    std::vector<effects::EffectInstance> stack{brightness, grade, contrast};
+    CompositionLayer clip{&source}; clip.effect_stack = stack;
+    compare(gpu, 93, 57, {clip}, "ordered Primary Grade clip effects and alpha");
+    auto reference = source;
+    require(effects::applyStack(reference, stack), "CPU grade stack reference");
+    const auto prepared = FrameCompositor::compose(93, 57, {{&reference}});
+    const auto fallback = FrameCompositor::compose(93, 57, {clip});
+    require(prepared && fallback && prepared->rgba_pixels == fallback->rgba_pixels,
+        "CPU recovery must apply the original grade stack once");
+    effects::ColorAdjustmentParameters adjustment{15, 125, 85, 145, 82, 115};
+    auto opaque = fixture(93, 57, false);
+    auto adjusted = opaque;
+    require(effects::applyColorAdjustment(adjusted, adjustment) ==
+        effects::ProcessingResult::Completed, "CPU adjustment reference failed");
+    OpenGlImageOperation operation;
+    operation.kind = OpenGlImageOperationKind::Adjustment;
+    operation.background.rgba = &opaque;
+    operation.foreground.rgba = &opaque;
+    operation.colors = {adjustment};
+    const auto gpu_adjustment = gpu.processImage(operation);
+    require(gpu_adjustment.frame && gpu_adjustment.status == OpenGlCompositionStatus::Complete,
+        "OpenGL Primary Grade adjustment operation failed: " + gpu_adjustment.cause);
+    const auto readback = gpu.readback(gpu_adjustment.frame);
+    require(bool(readback.frame), "OpenGL Primary Grade adjustment readback failed: " + readback.cause);
+    for (std::size_t i = 0; i < adjusted.rgba_pixels.size(); ++i)
+        require(std::abs(int(adjusted.rgba_pixels[i]) - int(readback.frame->rgba_pixels[i])) <=
+            (i % 4 == 3 ? 0 : 2), "OpenGL Primary Grade adjustment parity failed");
 }
 
 void referenceBlur(media::RgbaFrame& frame, double sigma) {
@@ -815,9 +855,10 @@ int main(int argc, char** argv) {
         std::exception_ptr failure;
         bool context_unavailable = false;
         const bool measure = argc > 1 && std::string(argv[1]) == "--benchmark";
+        const bool color_only = argc > 1 && std::string(argv[1]) == "--color-only";
         // GUI-created surface; worker creates/releases everything else. Repeat
         // activation and teardown to exercise resource lifetime with native Qt.
-        for (int activation = 0; activation < 2; ++activation) {
+        for (int activation = 0; activation < (color_only ? 1 : 2); ++activation) {
             std::unique_ptr<QThread> worker(QThread::create([&] {
                 try {
                     OpenGlFrameCompositor gpu(surface.get(), OpenGlPrecisionPolicy::Automatic,
@@ -829,8 +870,14 @@ int main(int argc, char** argv) {
                     }
                     require(initial.status == OpenGlCompositionStatus::Complete,
                         "native initialization failed: " + initial.operation + ": " + initial.cause);
+                    if (color_only) {
+                        colorAdjustmentParity(gpu);
+                        primaryGradeStackParity(gpu);
+                        return;
+                    }
                     parity(gpu);
                     colorAdjustmentParity(gpu);
+                    primaryGradeStackParity(gpu);
                     trackMatteParity(gpu);
                     glowParity(gpu);
                     {
@@ -839,12 +886,16 @@ int main(int argc, char** argv) {
                         auto contrast = effects::makeDefaultInstance("video.contrast");
                         auto saturation = effects::makeDefaultInstance("video.saturation");
                         auto gray = effects::makeDefaultInstance("video.grayscale");
+                        auto grade = effects::makeDefaultInstance("video.primary_grade");
                         require(effects::setParameterValue(brightness, "amount", 19) &&
                             effects::setParameterValue(contrast, "amount", 132) &&
                             effects::setParameterValue(saturation, "amount", 143) &&
-                            effects::setParameterValue(gray, "amount", 37), "clip effect parameters");
+                            effects::setParameterValue(gray, "amount", 37) &&
+                            effects::setParameterValue(grade, "red_gain", 145) &&
+                            effects::setParameterValue(grade, "green_gain", 82) &&
+                            effects::setParameterValue(grade, "blue_gain", 112), "clip effect parameters");
                         auto disabled = brightness; disabled.enabled = false;
-                        std::vector<effects::EffectInstance> stack{brightness, contrast, disabled, saturation, gray};
+                        std::vector<effects::EffectInstance> stack{brightness, grade, contrast, disabled, saturation, gray};
                         CompositionLayer clip{&source}; clip.effect_stack = stack;
                         compare(gpu, 93, 57, {clip}, "ordered built-in clip effects and alpha");
                         auto reference = source;

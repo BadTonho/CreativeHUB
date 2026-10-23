@@ -1,5 +1,13 @@
 # Hub Regression Testing
 
+## Video Editor CSP v32 Color backup
+
+`hub-backup-format-test` saves a real CSP v32 document with a nonneutral
+Primary Grade, then uses the Video Editor reader to compare the vault snapshot
+and relocated restore with the producer document. Its version loop covers the
+older supported CSP schemas. `hub-backup-manager-test` rejects future v33.
+Manual Hub restore and reopening in the Video Editor remain pending.
+
 Current backup gates save Motion v18 and reject v19. Version-specific sections
 below retain the records and evidence from earlier deliveries.
 

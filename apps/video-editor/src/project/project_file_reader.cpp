@@ -1083,6 +1083,11 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         const auto effect_id = effect_object.value("id").toString().toUtf8();
                         effect.id.assign(effect_id.constData(),
                                          static_cast<std::size_t>(effect_id.size()));
+                        if (effect.id == "video.primary_grade" &&
+                            version < primary_grade_format_version) {
+                            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                      "Primary Grade requires project format version 32.");
+                        }
                         for (const auto& parameter_value :
                              effect_object.value("parameters").toArray()) {
                             if (!parameter_value.isObject() ||

@@ -1,5 +1,16 @@
 # UI Boundary
 
+## Color workspace
+
+The Color selector opens a central page on demand and moves the shared Viewer
+there. Its clip strip selects visual Timeline clips; the right-hand list shows
+Input, each ordered clip effect, and Output. Add, Up, Down, On/Off and Remove
+commit through the existing clip-effects Timeline command and Undo/Redo stack.
+The lower panel edits the selected effect's parameters. Edit Inspector and Color
+read and write the same effect array. An RGB waveform samples the displayed
+frame on a worker at a bounded rate. Leaving Color restores the previous dock
+arrangement. See the [Color roadmap](../COLOR_WORKSPACE_ROADMAP.md).
+
 ## Workspace Effects catalog
 
 Effects Toolbox, list and Favorites follow the active workspace. Fusion-only nodes appear under Fusion and Fusion > Masks; Background stays under Video > Generators and Text under Text. Drag chooses the position; double click creates and selects a disconnected node near the visible center. Creation is disabled without a compatible clip. Grid remains in the Node Editor toolbar. See [the catalog contract](EFFECTS.md#workspace-catalog).
@@ -161,9 +172,9 @@ All three remain independently movable, resizable, floatable, closable, and
 tabifiable. `Favorites` is intentionally empty in this prototype and has no
 favoriting behavior yet. The Toolbox contains
 the categories `All`, `Video`, `Audio`, `Transitions`, and `Text`. Selecting a
-category filters the four CPU visual filters — `Grayscale`, `Brightness`,
-`Contrast`, and `Saturation` — plus the existing `Gain`, `Cross Dissolve`,
-`Fade to Black`, `Text`, and `Adjustment Clip` entries. The four visual filters can be dragged
+category filters the visual filters `Grayscale`, `Brightness`, `Contrast`,
+`Saturation`, and `Primary Grade`, plus the existing `Gain`, `Cross Dissolve`,
+`Fade to Black`, `Text`, and `Adjustment Clip` entries. The visual filters can be dragged
 onto a video, image or adjustment clip in the Timeline. They are added in order and may be
 repeated. Selecting a visual clip exposes its effect stack, parameters, and
 reorder/remove controls in the Inspector. `Gain` remains an audio UI prototype.

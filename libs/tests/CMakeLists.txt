@@ -13,6 +13,9 @@ target_compile_features(creative-suite-effects-tests PRIVATE cxx_std_20)
 add_creative_suite_test(
     NAME creative-suite-effects
     COMMAND creative-suite-effects-tests)
+add_creative_suite_test(
+    NAME creative-suite-effects-primary-grade
+    COMMAND creative-suite-effects-tests --primary-grade-only)
 
 add_executable(creative-suite-composition-tests
     composition_test.cpp
@@ -68,12 +71,18 @@ if(TARGET creative-suite::composition-opengl)
     add_creative_suite_test(NAME creative-suite-composition-opengl
         SKIP_RETURN_CODE 77
         COMMAND creative-suite-composition-opengl-tests)
+    add_creative_suite_test(NAME creative-suite-composition-opengl-color
+        SKIP_RETURN_CODE 77
+        COMMAND creative-suite-composition-opengl-tests --color-only)
     if(WIN32)
         set_tests_properties(creative-suite-composition-opengl PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
+        set_tests_properties(creative-suite-composition-opengl-color PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
     elseif(APPLE)
         set_tests_properties(creative-suite-composition-opengl PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+        set_tests_properties(creative-suite-composition-opengl-color PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
     else()
         set_tests_properties(creative-suite-composition-opengl PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        set_tests_properties(creative-suite-composition-opengl-color PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
     if(WIN32)
         add_custom_command(TARGET creative-suite-composition-opengl-tests POST_BUILD
@@ -107,13 +116,18 @@ if(TARGET creative-suite::composition-opengl)
         creative_suite_deploy_media_runtime(creative-suite-composition-vulkan-tests)
     endif()
     add_creative_suite_test(NAME creative-suite-composition-vulkan SKIP_RETURN_CODE 77 COMMAND creative-suite-composition-vulkan-tests)
+    add_creative_suite_test(NAME creative-suite-composition-vulkan-color SKIP_RETURN_CODE 77
+        COMMAND creative-suite-composition-vulkan-tests --color-only)
     if(WIN32)
         set_tests_properties(creative-suite-composition-vulkan PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
+        set_tests_properties(creative-suite-composition-vulkan-color PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
         add_custom_command(TARGET creative-suite-composition-vulkan-tests POST_BUILD
             COMMAND "${QT_SHORTCUT_TEST_DEPLOY_TOOL}" --no-translations --no-compiler-runtime "$<TARGET_FILE:creative-suite-composition-vulkan-tests>" VERBATIM)
     elseif(APPLE)
         set_tests_properties(creative-suite-composition-vulkan PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+        set_tests_properties(creative-suite-composition-vulkan-color PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
     else()
         set_tests_properties(creative-suite-composition-vulkan PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        set_tests_properties(creative-suite-composition-vulkan-color PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
 endif()

@@ -50,6 +50,9 @@ struct ColorAdjustmentParameters {
     double brightness = 0.0;
     double contrast_percent = 100.0;
     double saturation_percent = 100.0;
+    double red_gain_percent = 100.0;
+    double green_gain_percent = 100.0;
+    double blue_gain_percent = 100.0;
 };
 
 // Encoded straight RGB evaluation; callers validate parameters. Alpha is untouched.
@@ -57,8 +60,11 @@ struct ColorAdjustmentParameters {
     std::array<double,3> rgb,const ColorAdjustmentParameters& parameters) noexcept {
     for(auto& value:rgb)value=(value+parameters.brightness/100.-.5)*(parameters.contrast_percent/100.)+.5;
     const double luma=.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];
+    const std::array<double, 3> gains{parameters.red_gain_percent,
+                                      parameters.green_gain_percent,
+                                      parameters.blue_gain_percent};
     std::array<unsigned char,3> result{};
-    for(int c=0;c<3;++c)result[c]=static_cast<unsigned char>(std::lround(std::clamp(luma+(rgb[c]-luma)*(parameters.saturation_percent/100.),0.,1.)*255.));
+    for(int c=0;c<3;++c)result[c]=static_cast<unsigned char>(std::lround(std::clamp((luma+(rgb[c]-luma)*(parameters.saturation_percent/100.))*(gains[c]/100.),0.,1.)*255.));
     return result;
 }
 

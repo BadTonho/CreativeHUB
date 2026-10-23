@@ -224,7 +224,9 @@ void editingAndPersistence(const QString& directory) {
     CS_TEST_CHECK(commands.execute(ToggleTransformKeyframeCommand{id, timeline::TransformProperty::Scale, 149}).changed());
     CS_TEST_CHECK(commands.execute(SetTransformPropertyCommand{id, timeline::TransformProperty::Scale, 149, 2}).changed());
     auto effect = creative_suite::effects::makeDefaultInstance("video.grayscale");
-    CS_TEST_CHECK(commands.execute(SetClipEffectsCommand{id, {effect}}).changed());
+    auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "red_gain", 136));
+    CS_TEST_CHECK(commands.execute(SetClipEffectsCommand{id, {effect, grade}}).changed());
     CS_TEST_CHECK(!commands.execute(SetClipNodeGraphCommand{id, fusion::nodes::makePassthroughGraph()}).changed());
     CS_TEST_CHECK(!commands.execute(SetClipAudioCommand{id, 0.5, true}).changed());
     const auto original = session.timeline().tracks()[0].clips[0];
@@ -255,6 +257,7 @@ void editingAndPersistence(const QString& directory) {
     CS_TEST_CHECK(commands.undo().changed());
     CS_TEST_CHECK(commands.execute(SplitClipCommand{id, 75}).changed());
     const auto right = session.timeline().tracks()[0].clips[1];
+    CS_TEST_CHECK(right.effects == original.effects);
     CS_TEST_CHECK(std::abs(timeline::evaluateTransform(right.transform, right.keyframes, 0).scale -
         timeline::evaluateTransform(original.transform, original.keyframes, 75).scale) < 1e-9);
     CS_TEST_CHECK(commands.undo().changed());
@@ -307,7 +310,7 @@ void editingAndPersistence(const QString& directory) {
     controller.refreshInspectorPresentation();
     CS_TEST_CHECK(controller.selectedClipSupportsEffects() && scale.isEnabled());
     controller.handleTimelineEffectDrop("video.brightness", track, 80);
-    CS_TEST_CHECK(session.timeline().tracks()[0].clips[0].effects.size() == 2);
+    CS_TEST_CHECK(session.timeline().tracks()[0].clips[0].effects.size() == 3);
     controller.copySelectedClipAttributes();
     CS_TEST_CHECK(controller.canCopySelectedClipAttributes());
     controller.handleTimelineEffectDrop("video.adjustment_clip", track, 1000);
@@ -315,7 +318,7 @@ void editingAndPersistence(const QString& directory) {
     CS_TEST_CHECK(session.timeline().tracks()[0].clips[1].timeline_duration_frames == 300);
     timeline::ClipAttributeOptions options; options.effects = true; options.transform = true;
     CS_TEST_CHECK(controller.applyCopiedClipAttributes(options).changed());
-    CS_TEST_CHECK(session.timeline().tracks()[0].clips[1].effects.size() == 2);
+    CS_TEST_CHECK(session.timeline().tracks()[0].clips[1].effects.size() == 3);
     controller.deleteActiveTimelineClip();
     CS_TEST_CHECK(session.timeline().clipCount(0) == 1);
     CS_TEST_CHECK(commands.execute(DeleteClipCommand{id}).changed());
