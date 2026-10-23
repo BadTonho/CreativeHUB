@@ -62,7 +62,13 @@ separate recovery wrapper remains at version 1 and contains a nested native
 document. Undo/Redo and configurable autosave and recovery cover the
 composition and Media Pool. Video export uses the shared FFmpeg encoder and
 keeps Opaque as the default; its per-job Transparent (alpha) profile uses only
-runtime-discovered software adapters. Audio remains outside the export path.
+runtime-discovered software adapters. **File > Export PNG Sequence...** writes
+transparent RGBA PNG frames into a new folder at the composition's canvas size
+and native frame rate. Hidden visual layers extend the sequence; Null layers do
+not. Output is staged and published only after every frame is ready. PNG files
+do not carry FPS metadata, so importers must use the composition rate. Sequence
+export does not modify the document or participate in linked publication.
+Audio remains outside video export.
 The composition workspace keeps
 the Preview central and presents the Media Pool, Inspector, Timeline, and Graph
 Editor as rearrangeable Qt dock panels. Timeline and Graph Editor share a
@@ -341,7 +347,9 @@ capabilities. Hardware codecs are excluded. Settings apply to the current job
 and are not persisted. Export jobs show progress, support cancellation, verify
 the staged file, and publish it only after successful completion; cancellation
 and failure preserve an existing destination. Audio is not exported. Linked
-Motion-to-Video Editor publication remains opaque. Gaussian Blur, Color Adjustment,
+Motion-to-Video Editor publication remains opaque. PNG sequence export always
+preserves alpha, uses composition size and FPS, and creates a new numbered
+folder without a manifest. Gaussian Blur, Color Adjustment,
 Drop Shadow and Glow stacks run before each layer's transforms in the shared
 Motion frame renderer, so preview, playback, and export evaluate the same effects. Blur
 uses a bounded three-pass box approximation to a Gaussian with premultiplied

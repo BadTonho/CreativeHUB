@@ -8,6 +8,7 @@
 #include "export/motion_video_export.h"
 #include "ui/media_pool/media_pool_widget.h"
 #include "ui/dialogs/motion_video_export_dialog.h"
+#include "ui/dialogs/motion_png_sequence_export_dialog.h"
 #include "ui/timeline/timeline_navigator.h"
 #include "settings/gpu_composition_preferences.h"
 
@@ -16,12 +17,15 @@
 #include <creative_suite/diagnostics/logger.h>
 
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QDir>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QOffscreenSurface>
 #include <QPointer>
 #include <QProgressDialog>
 #include <QStatusBar>
+#include <QStandardPaths>
 #include <QTimer>
 
 #include <algorithm>
@@ -102,7 +106,7 @@ void MainWindow::startVideoExport()
     });
 
     QPointer<MainWindow> owner(this);
-    export_worker_ = std::make_unique<MotionVideoExportWorker>(
+    export_worker_ = std::make_unique<MotionExportWorker>(
         this, std::move(snapshot), *export_settings,
         [owner](int progress) {
             if (!owner.isNull() && owner->export_progress_ != nullptr) {
@@ -112,7 +116,92 @@ void MainWindow::startVideoExport()
             }
         },
         [owner](MotionExportResult result) mutable {
-            if (!owner.isNull()) owner->finishVideoExport(std::move(result));
+            if (!owner.isNull()) owner->finishExport(std::move(result));
+        },
+        MotionExportRenderOptions{
+            gpu_composition_enabled,
+            gpu_export_surface_.get()});
+    updateDocumentState();
+    export_progress_->show();
+    export_worker_->start();
+}
+
+void MainWindow::startPngSequenceExport()
+{
+    finishPendingTransformEdit();
+    finishPendingContentEdit();
+    if (!document_ || !media_pool_ || export_worker_ || audio_keyframe_worker_) return;
+
+    QString initial_parent;
+    QString initial_name = QStringLiteral("Motion_Sequence");
+    if (document_path_) {
+        const QFileInfo document_info(detail::pathForDisplay(*document_path_));
+        initial_parent = document_info.absolutePath();
+        const auto composition_name = document_info.completeBaseName();
+        if (!composition_name.isEmpty())
+            initial_name = composition_name + QStringLiteral("_frames");
+    }
+    if (initial_parent.isEmpty() || !QFileInfo(initial_parent).isDir())
+        initial_parent = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    if (initial_parent.isEmpty() || !QFileInfo(initial_parent).isDir())
+        initial_parent = QDir::homePath();
+
+    MotionPngSequenceExportDialog dialog(initial_parent, initial_name, this);
+    if (dialog.exec() != QDialog::Accepted) return;
+    const auto settings = dialog.exportSettings();
+    if (!settings) return;
+
+    MotionExportSnapshot snapshot;
+    snapshot.canvas_size = document_->canvasSize();
+    snapshot.frame_rate = document_->frameRate();
+    snapshot.layers = document_->layers();
+    snapshot.masks = document_->masks();
+    for (const auto& layer : snapshot.layers) {
+        if (layer.kind == model::LayerKind::Image) {
+            const auto linked = linked_image_frames_.find(layer.id);
+            snapshot.still_frames.emplace(layer.id,
+                linked == linked_image_frames_.end()
+                    ? media_pool_->sharedFirstFrameForPath(layer.source_path)
+                    : linked->second);
+        }
+    }
+
+    const bool gpu_composition_enabled = motion::settings::gpuCompositionEnabled();
+    gpu_export_surface_.reset();
+    if (gpu_composition_enabled) {
+        gpu_export_surface_ =
+            creative_suite::composition::OpenGlFrameCompositor::createSurface();
+    }
+
+    export_progress_ = new QProgressDialog(
+        MotionUiTranslation::tr("Preparing PNG sequence export..."),
+        MotionUiTranslation::tr("Cancel"), 0, 100, this);
+    export_progress_->setObjectName(QStringLiteral("motion-export-progress"));
+    export_progress_->setWindowTitle(MotionUiTranslation::tr("Export PNG Sequence"));
+    export_progress_->setWindowModality(Qt::NonModal);
+    export_progress_->setAutoClose(false);
+    export_progress_->setAutoReset(false);
+    export_progress_->setValue(0);
+    connect(export_progress_, &QProgressDialog::canceled, this, [this] {
+        if (!export_worker_) return;
+        export_worker_->cancel();
+        export_progress_->setLabelText(MotionUiTranslation::tr(
+            "Canceling PNG sequence export..."));
+        export_progress_->setCancelButton(nullptr);
+    });
+
+    QPointer<MainWindow> owner(this);
+    export_worker_ = std::make_unique<MotionExportWorker>(
+        this, std::move(snapshot), *settings,
+        [owner](int progress) {
+            if (!owner.isNull() && owner->export_progress_ != nullptr) {
+                owner->export_progress_->setLabelText(
+                    MotionUiTranslation::tr("Rendering PNG frames... %1%").arg(progress));
+                owner->export_progress_->setValue(progress);
+            }
+        },
+        [owner](MotionExportResult result) mutable {
+            if (!owner.isNull()) owner->finishExport(std::move(result));
         },
         MotionExportRenderOptions{
             gpu_composition_enabled,
@@ -130,7 +219,7 @@ void MainWindow::startLinkedPublication()
         MotionUiTranslation::tr("Publishing the saved Motion composition..."), 5000);
     startVideoExport();
 }
-void MainWindow::finishVideoExport(MotionExportResult result)
+void MainWindow::finishExport(MotionExportResult result)
 {
     if (export_worker_) {
         export_worker_->wait();
@@ -143,25 +232,34 @@ void MainWindow::finishVideoExport(MotionExportResult result)
         export_progress_ = nullptr;
     }
     updateDocumentState();
-    const bool publish_again = linked_handoff_.has_value() && linked_publication_pending_;
+    const bool video_export = result.kind == MotionExportKind::Video;
+    const bool linked_video_export = video_export && linked_handoff_.has_value();
+    const bool publish_again = linked_video_export && linked_publication_pending_;
     if (result.succeeded) {
-        statusBar()->showMessage(linked_handoff_.has_value()
+        const auto output_path = pathForLog(result.output_path);
+        statusBar()->showMessage(linked_video_export
             ? MotionUiTranslation::tr("Motion render published. The Video Editor will refresh the linked item.")
-            : MotionUiTranslation::tr("Video exported to %1")
-                .arg(QString::fromUtf8(pathForLog(result.output_path))), 8000);
+            : MotionUiTranslation::tr(video_export ? "Video exported to %1" :
+                "PNG sequence exported to %1")
+                .arg(QString::fromUtf8(output_path.data(),
+                    static_cast<qsizetype>(output_path.size()))), 8000);
     } else if (result.cancelled) {
-        statusBar()->showMessage(linked_handoff_.has_value()
+        statusBar()->showMessage(linked_video_export
             ? MotionUiTranslation::tr("Publication is pending; the previous linked render remains available.")
-            : MotionUiTranslation::tr("Video export canceled."), 6000);
+            : MotionUiTranslation::tr(video_export ? "Video export canceled." :
+                "PNG sequence export canceled."), 6000);
     } else {
-        if (linked_handoff_.has_value()) {
+        if (linked_video_export) {
             statusBar()->showMessage(
                 MotionUiTranslation::tr("Publication is pending; the previous linked render remains available."), 7000);
         }
-        QMessageBox::warning(this, MotionUiTranslation::tr("Video Export Failed"),
-            linked_handoff_.has_value()
+        QMessageBox::warning(this, MotionUiTranslation::tr(video_export
+                ? "Video Export Failed" : "PNG Sequence Export Failed"),
+            linked_video_export
                 ? MotionUiTranslation::tr("The linked render could not be published. The previous render was preserved; see the Motion Studio log for details.")
-                : MotionUiTranslation::tr("The video could not be exported. See the Motion Studio log for details."));
+                : MotionUiTranslation::tr(video_export
+                    ? "The video could not be exported. See the Motion Studio log for details."
+                    : "The PNG sequence could not be exported. See the Motion Studio log for details."));
     }
     if (publish_again) QTimer::singleShot(0, this, [this] { startLinkedPublication(); });
 }

@@ -141,6 +141,14 @@ MainWindow::MainWindow(QWidget* parent,
     connect(export_video_action_, &QAction::triggered,
             this, [this] { startVideoExport(); });
 
+    export_png_sequence_action_ = file_menu->addAction(
+        MotionUiTranslation::tr("Export PNG Sequence..."));
+    export_png_sequence_action_->setObjectName(
+        QStringLiteral("motion-export-png-sequence-action"));
+    export_png_sequence_action_->setEnabled(false);
+    connect(export_png_sequence_action_, &QAction::triggered,
+            this, [this] { startPngSequenceExport(); });
+
     file_menu->addSeparator();
     import_media_action_ = file_menu->addAction(MotionUiTranslation::tr("Import Media..."));
     import_media_action_->setObjectName(QStringLiteral("motion-import-media-action"));

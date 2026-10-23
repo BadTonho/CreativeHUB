@@ -55,9 +55,10 @@ class PreviewRenderer;
 struct PreviewRequest;
 class TimelineNavigator;
 class AudioKeyframeGenerationWorker;
-class MotionVideoExportWorker;
+class MotionExportWorker;
 struct AudioKeyframeGenerationResult;
 struct MotionExportResult;
+struct MotionExportSnapshot;
 
 class MainWindow final : public QMainWindow {
     friend class PenTool;
@@ -87,9 +88,10 @@ private:
     [[nodiscard]] bool saveCompositionAs();
     [[nodiscard]] bool saveToPath(const std::filesystem::path& path);
     void startVideoExport();
+    void startPngSequenceExport();
     void startLinkedPublication();
     void finishLinkedHandoffInitialization();
-    void finishVideoExport(MotionExportResult result);
+    void finishExport(MotionExportResult result);
     void generateKeyframesFromAudio();
     void finishAudioKeyframeGeneration(AudioKeyframeGenerationResult result);
     [[nodiscard]] bool confirmReplaceDocument();
@@ -239,6 +241,7 @@ private:
     QAction* save_composition_action_ = nullptr;
     QAction* save_composition_as_action_ = nullptr;
     QAction* export_video_action_ = nullptr;
+    QAction* export_png_sequence_action_ = nullptr;
     QAction* generate_audio_keyframes_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
     QAction* new_text_layer_action_ = nullptr;
@@ -371,7 +374,7 @@ private:
     int mask_view_target_=-2;
     QProgressDialog* open_progress_ = nullptr;
     QProgressDialog* export_progress_ = nullptr;
-    std::unique_ptr<MotionVideoExportWorker> export_worker_;
+    std::unique_ptr<MotionExportWorker> export_worker_;
     QProgressDialog* audio_keyframe_progress_ = nullptr;
     std::unique_ptr<AudioKeyframeGenerationWorker> audio_keyframe_worker_;
     std::shared_ptr<std::atomic_bool> open_cancel_requested_;

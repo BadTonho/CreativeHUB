@@ -10,12 +10,14 @@
 #include <QThread>
 
 #include <atomic>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace motion::ui {
@@ -32,6 +34,11 @@ struct MotionExportSettings {
         creative_suite::media::VideoOutputProfile::Bitrate;
     std::string alpha_pixel_format_name;
     int quality_value = 32;
+};
+
+struct MotionPngSequenceSettings {
+    std::filesystem::path parent_directory;
+    std::string directory_name;
 };
 
 struct MotionExportSnapshot {
@@ -73,13 +80,14 @@ struct MotionExportRenderOptions {
         128ULL * 1024 * 1024;
     std::uint64_t fail_async_readback_collection_number_for_testing = 0;
     std::uint64_t fail_encoder_write_number_for_testing = 0;
+    std::uint64_t fail_png_write_number_for_testing = 0;
 };
 
 class MotionExportCancelled final : public std::exception {
 public:
     [[nodiscard]] const char* what() const noexcept override
     {
-        return "Motion Studio video export was canceled.";
+        return "Motion Studio export was canceled.";
     }
 };
 
@@ -100,7 +108,26 @@ public:
         MotionExportRenderOptions render_options = {});
 };
 
+class MotionPngSequenceExporter final {
+public:
+    using ProgressCallback = std::function<void(int)>;
+
+    // Publishes a new directory containing transparent RGBA PNG frames. The
+    // snapshot and media references must remain valid for this synchronous call.
+    // When GPU composition is enabled, call on a worker thread and keep the
+    // GUI-created offscreen surface alive until this call returns.
+    static void exportSequence(
+        const MotionExportSnapshot& snapshot,
+        const MotionPngSequenceSettings& settings,
+        const std::atomic_bool& cancel_requested,
+        ProgressCallback report_progress = {},
+        MotionExportRenderOptions render_options = {});
+};
+
+enum class MotionExportKind : std::uint8_t { Video, PngSequence };
+
 struct MotionExportResult {
+    MotionExportKind kind = MotionExportKind::Video;
     bool succeeded = false;
     bool cancelled = false;
     std::string error_message;
@@ -108,19 +135,26 @@ struct MotionExportResult {
     std::filesystem::path output_path;
 };
 
-class MotionVideoExportWorker final : public QThread {
+class MotionExportWorker final : public QThread {
 public:
     using ProgressHandler = std::function<void(int)>;
     using FinishedHandler = std::function<void(MotionExportResult)>;
 
-    MotionVideoExportWorker(
+    MotionExportWorker(
         QObject* receiver,
         MotionExportSnapshot snapshot,
         MotionExportSettings settings,
         ProgressHandler progress_handler,
         FinishedHandler finished_handler,
         MotionExportRenderOptions render_options = {});
-    ~MotionVideoExportWorker() override;
+    MotionExportWorker(
+        QObject* receiver,
+        MotionExportSnapshot snapshot,
+        MotionPngSequenceSettings settings,
+        ProgressHandler progress_handler,
+        FinishedHandler finished_handler,
+        MotionExportRenderOptions render_options = {});
+    ~MotionExportWorker() override;
 
     void cancel() noexcept;
     void cancelAndWait();
@@ -131,7 +165,7 @@ protected:
 private:
     QPointer<QObject> receiver_;
     MotionExportSnapshot snapshot_;
-    MotionExportSettings settings_;
+    std::variant<MotionExportSettings, MotionPngSequenceSettings> settings_;
     MotionExportRenderOptions render_options_;
     std::shared_ptr<std::atomic_bool> cancel_requested_;
     ProgressHandler progress_handler_;

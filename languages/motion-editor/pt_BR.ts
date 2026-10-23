@@ -1094,6 +1094,22 @@ Os keyframes usam os quadros da composição.</translation>
         <source>Export Video...</source>
         <translation>Exportar vídeo...</translation>
     </message>
+    <message><source>Export PNG Sequence...</source><translation>Exportar sequência PNG...</translation></message>
+    <message><source>Export PNG Sequence</source><translation>Exportar sequência PNG</translation></message>
+    <message><source>Parent folder</source><translation>Pasta pai</translation></message>
+    <message><source>New sequence folder</source><translation>Nova pasta da sequência</translation></message>
+    <message><source>Choose Parent Folder</source><translation>Escolher pasta pai</translation></message>
+    <message><source>Choose an existing parent folder.</source><translation>Escolha uma pasta pai existente.</translation></message>
+    <message><source>Enter a valid folder name without path separators or reserved characters.</source><translation>Informe um nome de pasta válido, sem separadores de caminho ou caracteres reservados.</translation></message>
+    <message><source>That folder already exists. Choose a new folder name; existing files are never replaced.</source><translation>Essa pasta já existe. Escolha outro nome; arquivos existentes nunca são substituídos.</translation></message>
+    <message><source>Exports transparent PNG frames at the composition size and frame rate. The new folder is published when every frame is ready.</source><translation>Exporta quadros PNG transparentes no tamanho e na taxa de quadros da composição. A nova pasta será publicada quando todos os quadros estiverem prontos.</translation></message>
+    <message><source>Preparing PNG sequence export...</source><translation>Preparando a exportação da sequência PNG...</translation></message>
+    <message><source>Canceling PNG sequence export...</source><translation>Cancelando a exportação da sequência PNG...</translation></message>
+    <message><source>Rendering PNG frames... %1%</source><translation>Renderizando quadros PNG... %1%</translation></message>
+    <message><source>PNG sequence exported to %1</source><translation>Sequência PNG exportada para %1</translation></message>
+    <message><source>PNG sequence export canceled.</source><translation>Exportação da sequência PNG cancelada.</translation></message>
+    <message><source>PNG Sequence Export Failed</source><translation>Falha ao exportar sequência PNG</translation></message>
+    <message><source>The PNG sequence could not be exported. See the Motion Studio log for details.</source><translation>Não foi possível exportar a sequência PNG. Consulte o log do Motion Studio para obter detalhes.</translation></message>
     <message>
         <location filename="../../apps/motion-editor/src/ui/main_window/main_window.cpp" line="143"/>
         <location filename="../../apps/motion-editor/src/ui/media_pool/media_pool_widget.cpp" line="191"/>

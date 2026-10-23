@@ -86,6 +86,13 @@ int main(int argc, char* argv[])
                "A translated placeholder was not preserved.")) {
         return 1;
     }
+    if (!check(motion::ui::MotionUiTranslation::tr("Export PNG Sequence...") ==
+                   QStringLiteral("Exportar sequência PNG...") &&
+                   motion::ui::MotionUiTranslation::tr("Parent folder") ==
+                   QStringLiteral("Pasta pai"),
+               "PNG sequence export labels use pt-BR.")) {
+        return 1;
+    }
 
     if(!check(motion::ui::MotionUiTranslation::tr("Pen")==QStringLiteral("Caneta")&&
               motion::ui::MotionUiTranslation::tr("Edit Selected Path")==QStringLiteral("Editar caminho selecionado")&&
@@ -95,6 +102,8 @@ int main(int argc, char* argv[])
         motion::ui::MainWindow window(nullptr, filesystemPath(recovery_storage.path()),
                                       "translation-test");
         const auto menus = window.menuBar()->actions();
+        const auto* sequence_export = window.findChild<QAction*>(
+            QStringLiteral("motion-export-png-sequence-action"));
         const auto* empty_state = window.findChild<QLabel*>(
             QStringLiteral("motion-empty-state"));
         if (!check(!menus.empty() && menus.front()->text() == QStringLiteral("Arquivo"),
@@ -102,6 +111,11 @@ int main(int argc, char* argv[])
             !check(empty_state != nullptr &&
                        empty_state->text() == QStringLiteral("Nenhuma composição aberta"),
                    "The Motion Studio empty-state label was not translated.")) {
+            return 1;
+        }
+        if (!check(sequence_export != nullptr &&
+                       sequence_export->text() == QStringLiteral("Exportar sequência PNG..."),
+                   "The PNG sequence menu action uses pt-BR.")) {
             return 1;
         }
     }
@@ -206,6 +220,13 @@ int main(int argc, char* argv[])
                    motion::ui::MotionUiTranslation::tr("No composition open") ==
                        QStringLiteral("No composition open"),
                "An unsupported locale must keep Motion Studio in English.")) {
+        return 1;
+    }
+    if (!check(motion::ui::MotionUiTranslation::tr("Export PNG Sequence...") ==
+                   QStringLiteral("Export PNG Sequence...") &&
+                   motion::ui::MotionUiTranslation::tr("Parent folder") ==
+                   QStringLiteral("Parent folder"),
+               "PNG sequence export labels fall back to English.")) {
         return 1;
     }
 

@@ -643,6 +643,12 @@ void MainWindow::updateDocumentState()
         export_video_action_->setEnabled(
             has_layers && !export_worker_ && !audio_keyframe_worker_);
     }
+    if (export_png_sequence_action_ != nullptr) {
+        const bool has_layers = has_document && std::any_of(document_->layers().begin(), document_->layers().end(),
+            [](const auto& layer) { return layer.kind != model::LayerKind::Null && layer.duration_frames > 0; });
+        export_png_sequence_action_->setEnabled(
+            has_layers && !export_worker_ && !audio_keyframe_worker_);
+    }
     updateHistoryActions();
     if (!has_document) {
         setWindowModified(false);

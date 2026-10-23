@@ -6,6 +6,10 @@
 #include <creative_suite/diagnostics/logger.h>
 #include <creative_suite/media/media_error.h>
 
+#include <QImage>
+#include <QImageWriter>
+#include <QString>
+
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/mathematics.h>
@@ -23,6 +27,7 @@ extern "C" {
 #include <deque>
 #include <exception>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -31,6 +36,19 @@ extern "C" {
 
 namespace motion::ui {
 namespace {
+
+class MotionPngSequenceFrameError final : public std::runtime_error {
+public:
+    MotionPngSequenceFrameError(std::string message, std::optional<int> error_code)
+        : std::runtime_error(std::move(message)), error_code_(error_code)
+    {
+    }
+
+    [[nodiscard]] std::optional<int> errorCode() const noexcept { return error_code_; }
+
+private:
+    std::optional<int> error_code_;
+};
 
 std::string pathForLog(const std::filesystem::path& path)
 {
@@ -91,6 +109,34 @@ bool verifyVideoOutput(const std::filesystem::path& path)
         : info;
     avformat_close_input(&input);
     return video >= 0;
+}
+
+std::filesystem::path sequenceStagingPath(const std::filesystem::path& target)
+{
+    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    return target.parent_path() / (".motion-sequence-rendering-" +
+        std::to_string(stamp) + "-" + std::to_string(thread_id));
+}
+
+std::string sequenceFrameName(std::int64_t frame, std::int64_t frame_count)
+{
+    const auto value = std::to_string(frame);
+    const auto last_value = std::to_string(std::max<std::int64_t>(0, frame_count - 1));
+    const auto width = std::max<std::size_t>(6, last_value.size());
+    return "frame_" + std::string(width - value.size(), '0') + value + ".png";
+}
+
+bool validSequenceDirectoryName(const std::string& name)
+{
+    if (name.empty() || name == "." || name == ".." ||
+        name.find('/') != std::string::npos || name.find('\\') != std::string::npos ||
+        name.find(':') != std::string::npos || name.back() == '.' || name.back() == ' ')
+        return false;
+    return std::none_of(name.begin(), name.end(), [](unsigned char value) {
+        return value < 32 || value == '<' || value == '>' || value == '"' ||
+            value == '|' || value == '?' || value == '*';
+    });
 }
 
 AVRational toAvRate(model::FrameRate rate)
@@ -702,7 +748,182 @@ void MotionVideoExporter::exportVideo(
     }
 }
 
-MotionVideoExportWorker::MotionVideoExportWorker(
+void MotionPngSequenceExporter::exportSequence(
+    const MotionExportSnapshot& snapshot,
+    const MotionPngSequenceSettings& settings,
+    const std::atomic_bool& cancel_requested,
+    ProgressCallback report_progress,
+    MotionExportRenderOptions render_options)
+{
+    if (snapshot.canvas_size.width <= 0 || snapshot.canvas_size.height <= 0 ||
+        snapshot.frame_rate.numerator <= 0 || snapshot.frame_rate.denominator <= 0 ||
+        std::none_of(snapshot.layers.begin(), snapshot.layers.end(), [](const auto& layer) {
+            return layer.kind != model::LayerKind::Null && layer.duration_frames > 0;
+        })) {
+        throw std::runtime_error("The composition has no renderable layers or valid settings.");
+    }
+    if (!validSequenceDirectoryName(settings.directory_name) ||
+        settings.parent_directory.empty()) {
+        throw std::runtime_error("The PNG sequence destination is invalid.");
+    }
+
+    std::error_code filesystem_error;
+    const auto parent = std::filesystem::absolute(settings.parent_directory, filesystem_error);
+    if (filesystem_error || !std::filesystem::is_directory(parent, filesystem_error) ||
+        filesystem_error) {
+        throw std::runtime_error("The PNG sequence parent folder does not exist: " +
+            pathForLog(settings.parent_directory));
+    }
+    const auto target = parent / std::filesystem::u8path(settings.directory_name);
+    if (std::filesystem::exists(target, filesystem_error) || filesystem_error) {
+        throw std::runtime_error(filesystem_error
+            ? "The PNG sequence destination could not be inspected: " + pathForLog(target)
+            : "The PNG sequence destination already exists: " + pathForLog(target));
+    }
+
+    std::int64_t duration_frames = 0;
+    for (const auto& layer : snapshot.layers) {
+        if (layer.kind == model::LayerKind::Null) continue;
+        if (layer.timeline_start_frame < 0 || layer.duration_frames <= 0 ||
+            layer.timeline_start_frame >
+                std::numeric_limits<std::int64_t>::max() - layer.duration_frames) {
+            throw std::runtime_error("A layer has invalid timing for PNG sequence export.");
+        }
+        duration_frames = std::max(
+            duration_frames, layer.timeline_start_frame + layer.duration_frames);
+    }
+    const auto frame_rate = toAvRate(snapshot.frame_rate);
+    const auto frame_count = checkedOutputFrameCount(duration_frames, frame_rate, frame_rate);
+    const auto staging = sequenceStagingPath(target);
+    if (!std::filesystem::create_directory(staging, filesystem_error) || filesystem_error) {
+        throw std::runtime_error("A temporary PNG sequence folder could not be created: " +
+            pathForLog(staging));
+    }
+
+    bool published = false;
+    try {
+        const auto mask_snapshot = std::make_shared<const std::vector<model::Mask>>(snapshot.masks);
+        const auto hierarchy = std::make_shared<const model::LayerTransformHierarchy>(
+            snapshot.canvas_size, snapshot.layers);
+        const auto matte_graph = std::make_shared<const model::TrackMatteGraph>(snapshot.layers);
+        CompositionGpuMetrics gpu_metrics;
+        CompositionFrameRenderer renderer(false, render_options.gpu_composition_enabled,
+            render_options.gpu_surface, &gpu_metrics,
+            render_options.async_readback_staging_budget_bytes_for_testing);
+        struct RendererShutdown {
+            CompositionFrameRenderer& renderer;
+            bool active = true;
+            ~RendererShutdown() { if (active) renderer.shutdown(); }
+            void shutdown() { renderer.shutdown(); active = false; }
+        } renderer_shutdown{renderer};
+
+        for (std::int64_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            checkCancelled(cancel_requested);
+            const auto frame_path = staging / sequenceFrameName(frame_index, frame_count);
+            PreviewRequest request;
+            request.canvas_size = snapshot.canvas_size;
+            request.frame_rate = snapshot.frame_rate;
+            request.black_canvas_when_empty = true;
+            request.output_alpha = creative_suite::composition::CompositionOutputAlpha::Preserve;
+            request.masks = mask_snapshot;
+            request.composition_frame = frame_index;
+            request.hierarchy = hierarchy;
+            request.track_mattes = matte_graph;
+            creative_suite::media::RgbaFramePtr frame;
+            try {
+                preparePreviewLayers(request, snapshot.layers,
+                    [&](const model::CompositionLayer& layer) {
+                        const auto still = snapshot.still_frames.find(layer.id);
+                        return still == snapshot.still_frames.end()
+                            ? creative_suite::media::RgbaFramePtr{} : still->second;
+                    }, matte_graph);
+                frame = renderer.render(request, [&cancel_requested] {
+                    return cancel_requested.load(std::memory_order_acquire);
+                }, true, PreviewRequestMode::Interactive);
+            } catch (const MotionExportCancelled&) {
+                throw;
+            } catch (const creative_suite::media::MediaError& error) {
+                throw MotionPngSequenceFrameError(
+                    "Motion Studio failed to render PNG sequence frame " +
+                        std::to_string(frame_index) + " for " + pathForLog(frame_path) + ": " +
+                        error.what(),
+                    error.error_code());
+            } catch (const std::exception& error) {
+                throw std::runtime_error("Motion Studio failed to render PNG sequence frame " +
+                    std::to_string(frame_index) + " for " + pathForLog(frame_path) + ": " +
+                    error.what());
+            }
+            checkCancelled(cancel_requested);
+            if (!frame || frame->width != snapshot.canvas_size.width ||
+                frame->height != snapshot.canvas_size.height ||
+                static_cast<std::int64_t>(frame->stride) <
+                    static_cast<std::int64_t>(frame->width) * 4) {
+                throw std::runtime_error("Motion Studio could not compose PNG sequence frame " +
+                    std::to_string(frame_index) + " for " + pathForLog(frame_path) + ".");
+            }
+            const auto required_frame_bytes = static_cast<std::uint64_t>(frame->stride) *
+                static_cast<std::uint64_t>(frame->height);
+            if (required_frame_bytes > frame->rgba_pixels.size()) {
+                throw std::runtime_error("Motion Studio returned incomplete pixels for PNG sequence frame " +
+                    std::to_string(frame_index) + " at " + pathForLog(frame_path) + ".");
+            }
+
+            if (render_options.fail_png_write_number_for_testing != 0 &&
+                static_cast<std::uint64_t>(frame_index + 1) ==
+                    render_options.fail_png_write_number_for_testing) {
+                throw std::runtime_error("Injected PNG sequence write failure for frame " +
+                    std::to_string(frame_index) + " at " + pathForLog(frame_path) + ".");
+            }
+            const QImage image(frame->rgba_pixels.data(), frame->width, frame->height,
+                frame->stride, QImage::Format_RGBA8888);
+            const auto frame_path_utf8 = pathForLog(frame_path);
+            QImageWriter writer(QString::fromUtf8(frame_path_utf8.data(),
+                static_cast<qsizetype>(frame_path_utf8.size())), QByteArrayLiteral("png"));
+            if (!writer.write(image)) {
+                throw std::runtime_error("PNG sequence frame " + std::to_string(frame_index) +
+                    " could not be written to " + pathForLog(frame_path) + ": " +
+                    writer.errorString().toStdString());
+            }
+            checkCancelled(cancel_requested);
+            if (report_progress) {
+                const auto progress = static_cast<int>(
+                    static_cast<long double>(frame_index + 1) * 99.0L /
+                    static_cast<long double>(frame_count));
+                report_progress(progress);
+            }
+        }
+        renderer_shutdown.shutdown();
+        checkCancelled(cancel_requested);
+        if (std::filesystem::exists(target, filesystem_error) || filesystem_error) {
+            throw std::runtime_error(filesystem_error
+                ? "The PNG sequence destination could not be rechecked: " + pathForLog(target)
+                : "The PNG sequence destination appeared during rendering: " + pathForLog(target));
+        }
+        std::filesystem::rename(staging, target, filesystem_error);
+        if (filesystem_error) {
+            throw std::runtime_error("The completed PNG sequence folder could not be published: " +
+                pathForLog(target) + ": " + filesystem_error.message());
+        }
+        published = true;
+        if (report_progress) report_progress(100);
+    } catch (...) {
+        if (!published) {
+            std::error_code cleanup_error;
+            std::filesystem::remove_all(staging, cleanup_error);
+            if (cleanup_error) {
+                creative_suite::diagnostics::Logger::instance().log(
+                    creative_suite::diagnostics::Level::Error,
+                    "motion_export", "cleanup_png_sequence_staging",
+                    "Motion Studio could not remove the temporary PNG sequence folder.",
+                    {{"path", pathForLog(staging)},
+                     {"error_code", cleanup_error.message()}});
+            }
+        }
+        throw;
+    }
+}
+
+MotionExportWorker::MotionExportWorker(
     QObject* receiver,
     MotionExportSnapshot snapshot,
     MotionExportSettings settings,
@@ -717,44 +938,81 @@ MotionVideoExportWorker::MotionVideoExportWorker(
       progress_handler_(std::move(progress_handler)),
       finished_handler_(std::move(finished_handler))
 {
-    setObjectName(QStringLiteral("motion-video-export-worker"));
+    setObjectName(QStringLiteral("motion-export-worker"));
 }
 
-MotionVideoExportWorker::~MotionVideoExportWorker()
+MotionExportWorker::MotionExportWorker(
+    QObject* receiver,
+    MotionExportSnapshot snapshot,
+    MotionPngSequenceSettings settings,
+    ProgressHandler progress_handler,
+    FinishedHandler finished_handler,
+    MotionExportRenderOptions render_options)
+    : receiver_(receiver),
+      snapshot_(std::move(snapshot)),
+      settings_(std::move(settings)),
+      render_options_(render_options),
+      cancel_requested_(std::make_shared<std::atomic_bool>(false)),
+      progress_handler_(std::move(progress_handler)),
+      finished_handler_(std::move(finished_handler))
+{
+    setObjectName(QStringLiteral("motion-export-worker"));
+}
+
+MotionExportWorker::~MotionExportWorker()
 {
     cancelAndWait();
 }
 
-void MotionVideoExportWorker::cancel() noexcept
+void MotionExportWorker::cancel() noexcept
 {
     cancel_requested_->store(true, std::memory_order_release);
 }
 
-void MotionVideoExportWorker::cancelAndWait()
+void MotionExportWorker::cancelAndWait()
 {
     cancel();
     if (isRunning()) wait();
 }
 
-void MotionVideoExportWorker::run()
+void MotionExportWorker::run()
 {
     MotionExportResult result;
-    result.output_path = settings_.output_path;
+    const auto* video_settings = std::get_if<MotionExportSettings>(&settings_);
+    result.kind = video_settings != nullptr
+        ? MotionExportKind::Video : MotionExportKind::PngSequence;
+    if (video_settings != nullptr) {
+        result.output_path = video_settings->output_path;
+    } else {
+        const auto& sequence = std::get<MotionPngSequenceSettings>(settings_);
+        result.output_path = sequence.parent_directory /
+            std::filesystem::u8path(sequence.directory_name);
+    }
     MotionExportPerformanceSummary performance;
     const auto worker_started = std::chrono::steady_clock::now();
     try {
-        MotionVideoExporter::exportVideo(snapshot_, settings_, *cancel_requested_,
-            [this](int progress) {
-                if (receiver_.isNull()) return;
-                const auto receiver = receiver_;
-                const auto handler = progress_handler_;
-                QMetaObject::invokeMethod(receiver.data(), [receiver, handler, progress] {
-                    if (!receiver.isNull() && handler) handler(progress);
-                }, Qt::QueuedConnection);
-            }, &performance, render_options_);
+        const auto progress_callback = [this](int progress) {
+            if (receiver_.isNull()) return;
+            const auto receiver = receiver_;
+            const auto handler = progress_handler_;
+            QMetaObject::invokeMethod(receiver.data(), [receiver, handler, progress] {
+                if (!receiver.isNull() && handler) handler(progress);
+            }, Qt::QueuedConnection);
+        };
+        if (video_settings != nullptr) {
+            MotionVideoExporter::exportVideo(snapshot_, *video_settings, *cancel_requested_,
+                progress_callback, &performance, render_options_);
+        } else {
+            MotionPngSequenceExporter::exportSequence(snapshot_,
+                std::get<MotionPngSequenceSettings>(settings_), *cancel_requested_,
+                progress_callback, render_options_);
+        }
         result.succeeded = true;
     } catch (const MotionExportCancelled&) {
         result.cancelled = true;
+    } catch (const MotionPngSequenceFrameError& error) {
+        result.error_message = error.what();
+        if (error.errorCode().has_value()) result.error_code = *error.errorCode();
     } catch (const creative_suite::media::MediaError& error) {
         result.error_message = error.what();
         if (error.error_code().has_value()) result.error_code = *error.error_code();
@@ -764,7 +1022,7 @@ void MotionVideoExportWorker::run()
     } catch (const std::exception& error) {
         result.error_message = error.what();
     } catch (...) {
-        result.error_message = "Unknown video export failure.";
+        result.error_message = "Unknown Motion export failure.";
     }
 
     if (performance.elapsed_nanoseconds == 0) {
@@ -776,11 +1034,12 @@ void MotionVideoExportWorker::run()
         1'000'000'000.0;
     const auto achieved_fps = elapsed_seconds > 0.0
         ? static_cast<double>(performance.frames_rendered) / elapsed_seconds : 0.0;
-    const auto output_fps = settings_.frame_rate.asDouble();
-    creative_suite::diagnostics::Logger::instance().log(
-        creative_suite::diagnostics::Level::Info,
-        "motion_performance", "export_summary",
-        "Motion Studio video export performance summary.",
+    if (video_settings != nullptr) {
+        const auto output_fps = video_settings->frame_rate.asDouble();
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Info,
+            "motion_performance", "export_summary",
+            "Motion Studio video export performance summary.",
         {{"schema_version", "3"},
          {"outcome", result.succeeded ? "completed" :
              (result.cancelled ? "cancelled" : "failed")},
@@ -859,18 +1118,20 @@ void MotionVideoExportWorker::run()
                  static_cast<double>(performance.write_count) / 1'000'000.0)},
          {"write_maximum_ms", std::to_string(
              static_cast<double>(performance.write_maximum_nanoseconds) / 1'000'000.0)},
-         {"output_width", std::to_string(settings_.width)},
-         {"output_height", std::to_string(settings_.height)},
-         {"output_frame_rate_numerator", std::to_string(settings_.frame_rate.numerator)},
-         {"output_frame_rate_denominator", std::to_string(settings_.frame_rate.denominator)},
+         {"output_width", std::to_string(video_settings->width)},
+         {"output_height", std::to_string(video_settings->height)},
+         {"output_frame_rate_numerator", std::to_string(video_settings->frame_rate.numerator)},
+         {"output_frame_rate_denominator", std::to_string(video_settings->frame_rate.denominator)},
          {"achieved_frames_per_second", std::to_string(achieved_fps)},
          {"realtime_factor", output_fps > 0.0
              ? std::to_string(achieved_fps / output_fps) : "N/A"}});
+    }
 
     if (!result.succeeded && !result.cancelled) {
         creative_suite::diagnostics::Logger::instance().log(
             creative_suite::diagnostics::Level::Error,
-            "motion_export", "render_video", result.error_message,
+            "motion_export", result.kind == MotionExportKind::Video
+                ? "render_video" : "render_png_sequence", result.error_message,
             {{"output_path", pathForLog(result.output_path)},
              {"error_code", result.error_code != -1
                   ? std::to_string(result.error_code) : std::string{}}});

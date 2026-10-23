@@ -1,6 +1,7 @@
 #include "ui/main_window/main_window.h"
 #include "export/motion_video_export.h"
 #include "ui/dialogs/motion_video_export_dialog.h"
+#include "ui/dialogs/motion_png_sequence_export_dialog.h"
 #include "settings/gpu_composition_preferences.h"
 
 #include <creative_suite/composition/opengl_frame_compositor.h>
@@ -14,8 +15,11 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFileInfo>
+#include <QImage>
+#include <QImageReader>
 #include <QElapsedTimer>
 #include <QLineEdit>
+#include <QLabel>
 #include <QMessageBox>
 #include <QOffscreenSurface>
 #include <QProgressDialog>
@@ -58,6 +62,7 @@ using motion::model::GlowEffect;
 using motion::model::LayerKind;
 using motion::ui::MotionExportSettings;
 using motion::ui::MotionExportSnapshot;
+using motion::ui::MotionPngSequenceSettings;
 
 void require(bool condition, const char* message)
 {
@@ -399,6 +404,8 @@ void testMainWindowExportAction(const QTemporaryDir& directory)
     require(dirty_before_export, "the text layer makes the current document dirty");
     auto* export_action = findAction(window, "motion-export-video-action");
     require(export_action->isEnabled(), "Export Video enables when a layer exists");
+    auto* sequence_action = findAction(window, "motion-export-png-sequence-action");
+    require(sequence_action->isEnabled(), "PNG sequence export enables when a visual layer exists");
 
     QTimer::singleShot(0, [&directory] {
         auto* dialog = QApplication::activeModalWidget();
@@ -427,11 +434,264 @@ void testMainWindowExportAction(const QTemporaryDir& directory)
     require(window.isWindowModified() == dirty_before_export,
             "export does not change the composition dirty state");
 
+    QTimer::singleShot(0, [&directory] {
+        auto* dialog = QApplication::activeModalWidget();
+        require(dialog != nullptr, "Export PNG Sequence opens its destination dialog");
+        auto* name = findWidget<QLineEdit>(dialog, "motion-png-sequence-directory-name");
+        require(name->text() == QStringLiteral("Motion_Sequence"),
+                "untitled compositions suggest the Motion_Sequence folder name");
+        findWidget<QLineEdit>(dialog, "motion-png-sequence-parent")
+            ->setText(directory.path());
+        name->setText(QStringLiteral("window-sequence"));
+        findWidget<QPushButton>(dialog, "motion-png-sequence-accept")->click();
+    });
+    sequence_action->trigger();
+    require(waitFor([&window] {
+                return window.findChild<QProgressDialog*>(QStringLiteral("motion-export-progress")) == nullptr;
+            }, 30000),
+            "the progress dialog closes when PNG sequence export completes");
+    const auto ui_sequence = std::filesystem::path(directory.path().toStdString()) /
+        "window-sequence";
+    require(std::filesystem::is_regular_file(ui_sequence / "frame_000000.png"),
+            "the File menu sequence action publishes a numbered PNG frame");
+    require(window.isWindowModified() == dirty_before_export,
+            "PNG sequence export does not change the composition dirty state");
+
     QTimer::singleShot(0, [] {
         auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
         if (prompt != nullptr) prompt->button(QMessageBox::Discard)->click();
     });
     window.close();
+}
+
+void testPngSequenceDialog(const QTemporaryDir& parent_directory)
+{
+    motion::ui::MotionPngSequenceExportDialog dialog(
+        parent_directory.path(), QStringLiteral("composition_frames"));
+    auto* parent = findWidget<QLineEdit>(&dialog, "motion-png-sequence-parent");
+    auto* name = findWidget<QLineEdit>(&dialog, "motion-png-sequence-directory-name");
+    auto* accept = findWidget<QPushButton>(&dialog, "motion-png-sequence-accept");
+    require(accept->isEnabled(), "a valid new sequence folder can be exported");
+    const auto settings = dialog.exportSettings();
+    require(settings.has_value() && settings->directory_name == "composition_frames",
+            "the destination dialog returns the selected parent and new folder name");
+
+    std::filesystem::create_directory(
+        std::filesystem::path(parent_directory.path().toStdString()) / "existing");
+    name->setText(QStringLiteral("existing"));
+    require(!accept->isEnabled() && !dialog.exportSettings().has_value(),
+            "the dialog refuses an existing destination folder");
+    name->setText(QStringLiteral("invalid/name"));
+    require(!accept->isEnabled(), "the dialog rejects path separators in the folder name");
+    require(findWidget<QLabel>(&dialog, "motion-png-sequence-note")->text().contains(
+                QStringLiteral("valid folder name")),
+            "the dialog explains why an invalid folder name cannot be exported");
+    parent->setText(QString{});
+    require(!accept->isEnabled(), "the dialog requires an existing parent folder");
+}
+
+MotionExportSnapshot makePngSequenceSnapshot()
+{
+    MotionExportSnapshot snapshot;
+    snapshot.canvas_size = {64, 48};
+    snapshot.frame_rate = {24, 1};
+
+    auto image = imageLayer(1, 2);
+    auto pixels = solidFrame(220, 40, 30);
+    for (std::size_t offset = 3; offset < pixels->rgba_pixels.size(); offset += 4)
+        pixels->rgba_pixels[offset] = 0;
+    for (int y = 16; y < 32; ++y) {
+        for (int x = 24; x < 40; ++x) {
+            const auto offset = static_cast<std::size_t>(y) * pixels->stride +
+                static_cast<std::size_t>(x) * 4U;
+            pixels->rgba_pixels[offset + 3] = 128;
+        }
+    }
+    snapshot.still_frames.emplace(image.id, std::move(pixels));
+    snapshot.layers.push_back(std::move(image));
+
+    CompositionLayer hidden{};
+    hidden.id = 2;
+    hidden.kind = LayerKind::Shape;
+    hidden.name = "Hidden duration tail";
+    hidden.timeline_start_frame = 4;
+    hidden.duration_frames = 1;
+    hidden.visible = false;
+    hidden.content = motion::model::defaultShapeLayerContent(snapshot.canvas_size);
+    snapshot.layers.push_back(std::move(hidden));
+
+    CompositionLayer null_layer{};
+    null_layer.id = 3;
+    null_layer.kind = LayerKind::Null;
+    null_layer.name = "Non-rendering Null";
+    null_layer.timeline_start_frame = 7;
+    null_layer.duration_frames = 9;
+    snapshot.layers.push_back(std::move(null_layer));
+    return snapshot;
+}
+
+void testPngSequenceExporter(const QTemporaryDir& parent_directory)
+{
+    const auto parent = pathFromQString(parent_directory.path());
+    const MotionPngSequenceSettings settings{parent, "transparent-frames"};
+    const auto destination = parent / "transparent-frames";
+    const auto snapshot = makePngSequenceSnapshot();
+
+    std::vector<int> progress;
+    std::atomic_bool not_canceled{false};
+    motion::ui::MotionPngSequenceExporter::exportSequence(snapshot, settings,
+        not_canceled, [&progress](int value) { progress.push_back(value); });
+    require(std::filesystem::is_directory(destination),
+            "a completed PNG sequence publishes one new folder");
+    require(!progress.empty() && progress.back() == 100,
+            "PNG sequence export reports completion progress");
+    for (int index = 0; index < 5; ++index) {
+        const auto number = std::string(6 - std::to_string(index).size(), '0') +
+            std::to_string(index);
+        const auto path = destination / ("frame_" + number + ".png");
+        require(std::filesystem::is_regular_file(path),
+                "the exported sequence uses zero-based six-digit frame names");
+        const auto encoded = path.u8string();
+        QImageReader reader(QString::fromUtf8(reinterpret_cast<const char*>(encoded.data()),
+            static_cast<qsizetype>(encoded.size())));
+        const auto image = reader.read();
+        require(!image.isNull() && image.width() == 64 && image.height() == 48,
+                "every sequence image preserves the composition dimensions");
+        if (index == 0 || index == 4) {
+            require(image.pixelColor(1, 1).alpha() == 0,
+                    "empty lead-in and hidden-only duration frames remain transparent");
+        }
+        if (index == 1) {
+            require(image.pixelColor(32, 24).alpha() == 128 &&
+                        image.pixelColor(1, 1).alpha() == 0,
+                    "partially transparent layer pixels and transparent canvas pixels survive PNG export");
+        }
+    }
+    std::size_t exported_file_count = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(destination)) {
+        if (entry.is_regular_file()) ++exported_file_count;
+    }
+    require(exported_file_count == 5,
+            "the sequence contains one PNG for each exported frame and no manifest");
+    require(!std::filesystem::exists(destination / "frame_000005.png"),
+            "Null layers do not extend the exported frame range");
+
+    const auto gpu_fallback_destination = parent / "gpu-fallback-frames";
+    motion::ui::MotionExportRenderOptions gpu_fallback_options;
+    gpu_fallback_options.gpu_composition_enabled = true;
+    std::atomic_bool gpu_fallback_not_canceled{false};
+    motion::ui::MotionPngSequenceExporter::exportSequence(snapshot,
+        MotionPngSequenceSettings{parent, "gpu-fallback-frames"},
+        gpu_fallback_not_canceled, {}, gpu_fallback_options);
+    for (int index = 0; index < 5; ++index) {
+        const auto number = std::string(6 - std::to_string(index).size(), '0') +
+            std::to_string(index);
+        const auto reference = QImage(QString::fromStdString(
+            (destination / ("frame_" + number + ".png")).string()));
+        const auto fallback = QImage(QString::fromStdString(
+            (gpu_fallback_destination / ("frame_" + number + ".png")).string()));
+        require(reference == fallback,
+                "an unavailable OpenGL surface falls back to identical CPU sequence pixels");
+    }
+
+    const auto collision = parent / "existing-sequence";
+    std::filesystem::create_directory(collision);
+    {
+        std::ofstream sentinel(collision / "keep.txt", std::ios::binary);
+        sentinel << "preserve";
+    }
+    const auto collision_sentinel = fileBytes(collision / "keep.txt");
+    bool collision_rejected = false;
+    try {
+        motion::ui::MotionPngSequenceExporter::exportSequence(snapshot,
+            MotionPngSequenceSettings{parent, "existing-sequence"}, not_canceled);
+    } catch (const std::exception&) {
+        collision_rejected = true;
+    }
+    require(collision_rejected &&
+                fileBytes(collision / "keep.txt") == collision_sentinel,
+            "an existing destination is rejected without changing its files");
+
+    const auto late_collision = parent / "late-sequence-collision";
+    std::atomic_bool late_collision_not_canceled{false};
+    bool late_collision_rejected = false;
+    std::vector<std::uint8_t> late_collision_sentinel;
+    try {
+        motion::ui::MotionPngSequenceExporter::exportSequence(snapshot,
+            MotionPngSequenceSettings{parent, "late-sequence-collision"},
+            late_collision_not_canceled, [&](int progress) {
+                if (progress == 0 || std::filesystem::exists(late_collision)) return;
+                std::filesystem::create_directory(late_collision);
+                std::ofstream sentinel(late_collision / "keep.txt", std::ios::binary);
+                sentinel << "preserve";
+                sentinel.close();
+                late_collision_sentinel = fileBytes(late_collision / "keep.txt");
+            });
+    } catch (const std::exception& error) {
+        late_collision_rejected =
+            std::string(error.what()).find("appeared during rendering") != std::string::npos;
+    }
+    require(late_collision_rejected &&
+                fileBytes(late_collision / "keep.txt") == late_collision_sentinel,
+            "a destination created while rendering is preserved and prevents publication");
+
+    const auto canceled_destination = parent / "canceled-sequence";
+    std::atomic_bool cancel_requested{false};
+    bool cancellation_reported = false;
+    try {
+        motion::ui::MotionPngSequenceExporter::exportSequence(snapshot,
+            MotionPngSequenceSettings{parent, "canceled-sequence"}, cancel_requested,
+            [&cancel_requested](int) { cancel_requested.store(true, std::memory_order_release); });
+    } catch (const motion::ui::MotionExportCancelled&) {
+        cancellation_reported = true;
+    }
+    require(cancellation_reported && !std::filesystem::exists(canceled_destination),
+            "canceling a sequence removes its staging folder and never publishes a partial sequence");
+
+    const auto failed_destination = parent / "failed-sequence";
+    motion::ui::MotionExportRenderOptions fail_write;
+    fail_write.fail_png_write_number_for_testing = 2;
+    bool write_failure_reported = false;
+    try {
+        motion::ui::MotionPngSequenceExporter::exportSequence(snapshot,
+            MotionPngSequenceSettings{parent, "failed-sequence"}, not_canceled, {}, fail_write);
+    } catch (const std::exception& error) {
+        const std::string message = error.what();
+        write_failure_reported = message.find("frame 1") != std::string::npos &&
+            message.find("frame_000001.png") != std::string::npos;
+    }
+    require(write_failure_reported && !std::filesystem::exists(failed_destination),
+            "a PNG write failure reports its frame and path and removes staging");
+
+    QObject worker_receiver;
+    std::optional<motion::ui::MotionExportResult> worker_result;
+    motion::ui::MotionExportWorker failed_sequence_worker(
+        &worker_receiver, snapshot,
+        MotionPngSequenceSettings{parent, "worker-failed-sequence"}, {},
+        [&worker_result](motion::ui::MotionExportResult result) {
+            worker_result = std::move(result);
+        }, fail_write);
+    failed_sequence_worker.start();
+    require(waitFor([&] { return worker_result.has_value(); }),
+            "a PNG sequence worker reports a failed frame write");
+    failed_sequence_worker.wait();
+    require(worker_result->kind == motion::ui::MotionExportKind::PngSequence &&
+                !worker_result->succeeded &&
+                worker_result->error_message.find("frame 1") != std::string::npos &&
+                worker_result->error_message.find("frame_000001.png") != std::string::npos,
+            "the failed sequence worker preserves the frame and path diagnostic");
+    const auto failure_log_bytes = fileBytes(
+        creative_suite::diagnostics::Logger::instance().log_path());
+    const std::string failure_log(failure_log_bytes.begin(), failure_log_bytes.end());
+    require(failure_log.find("operation=\"render_png_sequence\"") != std::string::npos &&
+                failure_log.find("worker-failed-sequence") != std::string::npos &&
+                failure_log.find("frame_000001.png") != std::string::npos,
+            "PNG sequence failures log their operation, destination and failing frame path");
+
+    for (const auto& entry : std::filesystem::directory_iterator(parent)) {
+        require(entry.path().filename().string().find(".motion-sequence-rendering-") != 0,
+                "canceled and failed sequence staging folders are removed");
+    }
 }
 
 void testSettingsDialog()
@@ -606,7 +866,7 @@ int main(int argc, char* argv[])
                 "the shared GPU composition opt-in can be enabled for preview and export");
         const motion::ui::MotionExportCancelled cancellation_exception;
         require(std::string(cancellation_exception.what()) ==
-                    "Motion Studio video export was canceled.",
+                    "Motion Studio export was canceled.",
                 "the export cancellation exception preserves its user-facing cause");
 
         testSettingsDialog();
@@ -617,6 +877,8 @@ int main(int argc, char* argv[])
         const auto log_directory = pathFromQString(temporary_directory.path()) / "diagnostics";
         require(creative_suite::diagnostics::Logger::instance().initialize(log_directory),
                 "a temporary diagnostics log can be initialized for export metrics checks");
+        testPngSequenceDialog(temporary_directory);
+        testPngSequenceExporter(temporary_directory);
         const std::filesystem::path source_video =
             std::filesystem::path(MOTION_EDITOR_EXPORT_TEST_MEDIA_DIR) / "reference.mkv";
         require(std::filesystem::is_regular_file(source_video),
@@ -745,7 +1007,7 @@ int main(int argc, char* argv[])
         std::optional<motion::ui::MotionExportResult> gpu_fallback_result;
         const auto gpu_fallback_target = outputPath(
             temporary_directory, container, "gpu-export-no-surface-fallback");
-        motion::ui::MotionVideoExportWorker gpu_fallback_worker(
+        motion::ui::MotionExportWorker gpu_fallback_worker(
             &gpu_worker_receiver, snapshot,
             settingsFor(gpu_fallback_target, container, encoder), {},
             [&gpu_fallback_result](motion::ui::MotionExportResult result) {
@@ -800,7 +1062,7 @@ int main(int argc, char* argv[])
         if (gpu_surface) {
             gpu_surface_target = outputPath(
                 temporary_directory, container, "gpu-export-surface");
-            motion::ui::MotionVideoExportWorker gpu_surface_worker(
+            motion::ui::MotionExportWorker gpu_surface_worker(
                 &gpu_worker_receiver, snapshot,
                 settingsFor(gpu_surface_target, container, encoder), {},
                 [&gpu_surface_result](motion::ui::MotionExportResult result) {
@@ -998,7 +1260,7 @@ int main(int argc, char* argv[])
 
         QObject worker_receiver;
         std::optional<motion::ui::MotionExportResult> cancelled_result;
-        motion::ui::MotionVideoExportWorker cancelled_worker(
+        motion::ui::MotionExportWorker cancelled_worker(
             &worker_receiver, snapshot,
             settingsFor(outputPath(temporary_directory, container, "worker-cancel"),
                         container, encoder),
@@ -1014,7 +1276,7 @@ int main(int argc, char* argv[])
                 "a worker cancellation has a distinct result");
 
         std::optional<motion::ui::MotionExportResult> failed_result;
-        motion::ui::MotionVideoExportWorker failed_worker(
+        motion::ui::MotionExportWorker failed_worker(
             &worker_receiver, unavailable,
             settingsFor(failure_target, container, encoder),
             {}, [&failed_result](motion::ui::MotionExportResult result) {

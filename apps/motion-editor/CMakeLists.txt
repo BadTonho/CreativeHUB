@@ -30,6 +30,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/diagnostics/performance_metrics.h
     src/export/motion_video_export.cpp
     src/export/motion_video_export.h
+    src/ui/dialogs/motion_png_sequence_export_dialog.cpp
+    src/ui/dialogs/motion_png_sequence_export_dialog.h
     src/model/composition_interchange.cpp
     src/model/composition_document.cpp
     src/model/composition_document.h

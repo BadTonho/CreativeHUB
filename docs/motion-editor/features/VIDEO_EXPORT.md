@@ -30,8 +30,9 @@ When Transparent is selected, Motion keeps the current container and encoder if
 they have a supported alpha adapter. Otherwise it chooses the first available
 combination in FFV1/Matroska, ProRes/MOV, then VP9/WebM order. The output
 extension follows the selected container. Hardware encoders, audio, animated
-codec profiles, image sequences, and transparent linked publication are outside
-this increment.
+codec profiles, and transparent linked publication are outside this increment.
+For transparent PNG image sequences, see
+[PNG sequence export](IMAGE_SEQUENCE_EXPORT.md).
 
 Cancellation and encoding errors discard the staged file and preserve an
 existing destination. Successful jobs are verified before atomic publication.
