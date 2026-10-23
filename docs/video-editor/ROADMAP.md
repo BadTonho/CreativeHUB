@@ -4,8 +4,9 @@ The dedicated [Audio Workspace Roadmap](AUDIO_WORKSPACE_ROADMAP.md) records the
 implemented first editing/mixing stage and later audio candidates without a
 release commitment.
 
-The [Color Workspace Roadmap](COLOR_WORKSPACE_ROADMAP.md) records the first
-serial grading stage and the advanced tools deferred from it.
+The [Color Workspace Roadmap](COLOR_WORKSPACE_ROADMAP.md) records the current
+graph, Gallery, and monitoring implementation, the full capability inventory,
+and the staged work planned to expand color grading.
 
 [Gaussian Blur](features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
 catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with
