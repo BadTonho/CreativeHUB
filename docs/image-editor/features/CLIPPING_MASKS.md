@@ -1,8 +1,8 @@
 # Editable clipping masks
 
 Introduced in v18 on 2026-10-20. Application versions are unchanged. Clipping
-was included in v21, which read v1-20; the current `.cimg` writer is v26 and
-reads v1-25. Recovery retains envelope v1. Native visual acceptance,
+was included in v21, which read v1-20; the current `.cimg` writer is v27 and
+reads v1-26. Recovery retains envelope v1. Native visual acceptance,
 macOS and Linux remain pending.
 
 ## Editing and stack contract
@@ -59,8 +59,8 @@ base invalidate dependent thumbnails.
 The optional layer boolean `clip_to_base` defaults false and is written when
 true. v1-17 load without this field; older-schema fields, non-booleans,
 Background/group clipping and chains lacking a sibling base are rejected.
-Invalid loads preserve the current document. Hub accepts v1-26 and preserves
-clipping metadata during media relocation and restoration; future v27 is
+Invalid loads preserve the current document. Hub accepts v1-27 and preserves
+clipping metadata during media relocation and restoration; future v28 is
 rejected. Linked PNG publication retains the existing atomic save/refresh
 protocol and does not change the Video Editor document format.
 
@@ -122,5 +122,5 @@ Clipped children now support six blend modes inside their chain; see
 Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
 see [adjustment scope and alpha contract](GRADIENT_MAP.md).
 
-Current writer: v26. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
+Current writer: v27. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
 adjustment stack contract; historical execution evidence above is unchanged.

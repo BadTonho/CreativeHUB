@@ -4,6 +4,7 @@
 #include "layer_panel.h"
 #include "levels_editor.h"
 #include <QAction>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QJsonDocument>
@@ -48,9 +49,11 @@ bool testLevelsUi(const QString& root) {
         auto* outBlack=window.findChild<QSpinBox*>("outputBlackSpin");
         auto* outWhite=window.findChild<QSpinBox*>("outputWhiteSpin");
         auto* slider=window.findChild<QSlider*>("inputBlackSlider");
+        auto* channel=window.findChild<QComboBox*>("levelsChannelCombo");
         auto* reset=window.findChild<QPushButton*>("resetLevelsButton");
-        require(histogram && black && white && gamma && outBlack && outWhite && slider && reset,
+        require(histogram && black && white && gamma && outBlack && outWhite && slider && channel && reset,
             "Levels properties");
+        require(channel->count()==4 && channel->currentIndex()==0,"Levels channel selector");
         require(black->value()==0 && white->value()==255 && gamma->value()==1. &&
             outBlack->value()==0 && outWhite->value()==255 && !reset->isEnabled(),"Levels defaults");
         for (int i=0;i<100 && histogram->bins()[40]==0;++i) QTest::qWait(10);
@@ -77,12 +80,45 @@ bool testLevelsUi(const QString& root) {
         slider->setValue(35);slider->setValue(40);
         QMetaObject::invokeMethod(slider,"sliderReleased",Qt::DirectConnection);
         undo->trigger();require(black->value()==30,"Slider gesture undo");
+        const auto combined_bins=histogram->bins();
+        channel->setCurrentIndex(1);
+        require(black->value()==0 && white->value()==255 && gamma->value()==1. &&
+            outBlack->value()==0 && outWhite->value()==255 && !reset->isEnabled(),
+            "Red Levels begin independently at identity");
+        require(histogram->bins()==combined_bins,"Channel switch changed combined histogram");
+        white->setValue(210);QMetaObject::invokeMethod(white,"editingFinished",Qt::DirectConnection);
+        require(black->maximum()==209,"Red input bounds are independent from RGB master bounds");
+        black->setValue(20);QMetaObject::invokeMethod(black,"editingFinished",Qt::DirectConnection);
+        undo->trigger();require(channel->currentIndex()==1 && black->value()==0 && white->value()==210,
+            "Per-channel edit undo keeps the selected channel");
+        redo->trigger();require(black->value()==20,"Per-channel edit redo");
+        channel->setCurrentIndex(0);require(black->value()==30,"RGB master values survive channel edits");
+        channel->setCurrentIndex(1);require(black->value()==20 && white->value()==210,
+            "Edited Red values survive channel switching");
+        reset->click();require(black->value()==0 && white->value()==255 && !reset->isEnabled(),
+            "Reset only the selected Levels channel");
+        undo->trigger();require(black->value()==20 && white->value()==210,
+            "Per-channel Reset undo");
+        channel->setCurrentIndex(3);
+        gamma->setValue(1.25);QMetaObject::invokeMethod(gamma,"editingFinished",Qt::DirectConnection);
+        require(qAbs(gamma->value()-1.25)<.001,"Blue channel gamma control");
+        undo->trigger();require(qAbs(gamma->value()-1.)<.001,"Blue gamma Undo");
+        redo->trigger();require(qAbs(gamma->value()-1.25)<.001,"Blue gamma Redo");
+        channel->setCurrentIndex(0);require(black->value()==30,"Blue edits retain RGB master values");
+        channel->setCurrentIndex(3);require(qAbs(gamma->value()-1.25)<.001,
+            "Blue gamma survives channel switching");
+        require(histogram->bins()==combined_bins,"Levels channel edits changed combined histogram");
         require(!window.findChild<QAction*>("quickExportImageAction")->isEnabled(),
             "Adjustment Quick Export restriction");
         save->trigger();
         require(fixture.openDocument(path),"Reopen Levels document");
         require(std::holds_alternative<creative_suite::effects::LevelsParameters>(
             *fixture.data().layers.back().adjustment),"Persist Levels type");
+        const auto persisted=std::get<creative_suite::effects::LevelsParameters>(
+            *fixture.data().layers.back().adjustment);
+        require(persisted.input_black==30 && persisted.channels[0].input_black==20 &&
+                persisted.channels[0].input_white==210 && persisted.channels[2].gamma==1.25,
+            "Persist RGB master and independent Red/Blue channel values");
         return true;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n'; return false;

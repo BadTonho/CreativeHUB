@@ -370,7 +370,10 @@ public:
             auto per_channel_curves = creative_suite::effects::CurvesParameters{};
             per_channel_curves.channels[0] = {{0, 255}, {255, 0}};
             QString mask_error;
-            const QColor refreshed_image_color(55, 30, 45, 255);
+            QColor refreshed_image_color;
+            auto per_channel_levels = creative_suite::effects::LevelsParameters{0, 255, 1, 0, 200};
+            per_channel_levels.channels[0] = {0, 255, 1, 8, 232};
+            per_channel_levels.channels[1] = {4, 250, 1.2, 12, 245};
             QImage imported_source(16, 16, QImage::Format_ARGB32);
             imported_source.fill(QColor(25, 40, 235));
             const QString imported_path = QString::fromStdString((directory / "imported-layer.png").string());
@@ -385,12 +388,15 @@ public:
                         !masked_image.addHueSaturationAdjustment().isEmpty() &&
                         masked_image.setHueSaturation(masked_image.selectedLayerId(), {120, 0, 0}) &&
                         !masked_image.addLevelsAdjustment().isEmpty() &&
-                        masked_image.setLevels(masked_image.selectedLayerId(), {0, 255, 1, 0, 200}) &&
+                        masked_image.setLevels(masked_image.selectedLayerId(), per_channel_levels) &&
                         !masked_image.addCurvesAdjustment().isEmpty() &&
                         masked_image.setCurves(masked_image.selectedLayerId(), per_channel_curves) &&
                         masked_image.saveDocument(QString::fromStdString(linked_document.string()), &mask_error) &&
                         masked_image.exportImage(QString::fromStdString(linked_output.string()), &mask_error),
-                    "The Image Editor could not publish its resized, masked and per-channel Curves-adjusted v26 image: " + mask_error.toStdString());
+                    "The Image Editor could not publish its resized, masked and per-channel Levels/Curves-adjusted v27 image: " + mask_error.toStdString());
+            const QImage published_image(QString::fromStdString(linked_output.string()));
+            require(!published_image.isNull(), "The v27 Image Editor PNG publication can be read.");
+            refreshed_image_color = published_image.pixelColor(0, 0);
 #else
             const QColor refreshed_image_color(25, 40, 235, 255);
             QImage next_output(24, 12, QImage::Format_ARGB32);

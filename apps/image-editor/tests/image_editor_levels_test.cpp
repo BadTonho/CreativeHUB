@@ -19,7 +19,7 @@ class LevelsTest final : public QObject {
     Q_OBJECT
 private slots:
     void numericContract() {
-        QVERIFY(validLevels({}));
+        QVERIFY(validLevels(LevelsParameters{}));
         QVERIFY(identityAdjustment(LevelsParameters{}));
         for (const auto& invalid : {LevelsParameters{255,255,1,0,255},
                 {0,0,1,0,255}, {-1,255,1,0,255}, {0,256,1,0,255},
@@ -39,6 +39,25 @@ private slots:
         }
         QCOMPARE(levelsRgb({100,101,1,20,230},{0.,100/255.,1.}),
             (std::array<unsigned char,3>{20,20,230}));
+        LevelsParameters independent;
+        independent.channels[0] = {0,255,1,255,255};
+        independent.channels[1] = {0,255,1,0,0};
+        QCOMPARE(levelsRgb(independent,{32/255.,64/255.,96/255.}),
+            (std::array<unsigned char,3>{255,0,96}));
+        LevelsParameters ordered{0,255,1,0,128};
+        ordered.channels[0] = {0,255,1,128,255};
+        QCOMPARE(levelsRgb(ordered,{64/255.,64/255.,64/255.}),
+            (std::array<unsigned char,3>{144,32,32}));
+        LevelsParameters blue_gamma;
+        blue_gamma.channels[2] = {0,255,2,0,255};
+        QCOMPARE(levelsRgb(blue_gamma,{0.,0.,64/255.}),
+            (std::array<unsigned char,3>{0,0,128}));
+        auto invalid_channel = LevelsParameters{};
+        invalid_channel.channels[2].input_white = 0;
+        QVERIFY(!validLevels(invalid_channel));
+        auto nonidentity_channel = LevelsParameters{};
+        nonidentity_channel.channels[1].output_black = 1;
+        QVERIFY(!identityAdjustment(nonidentity_channel));
         QImage neutral(2,2,QImage::Format_ARGB32);
         neutral.fill(QColor(70,120,200,91));
         const auto before = neutral;
@@ -54,6 +73,17 @@ private slots:
                 static_cast<creative_suite::composition::BlendMode>(mode), 47));
             QCOMPARE(pixels.pixelColor(0,0).alpha(),120);
         }
+        QImage channel_mapped(1,1,QImage::Format_ARGB32_Premultiplied);
+        channel_mapped.fill(QColor(30,60,90,123));
+        const auto unadjusted = channel_mapped.pixelColor(0,0);
+        auto blue_only = LevelsParameters{};
+        blue_only.channels[2] = {0,255,1,200,255};
+        QVERIFY(applyLayerAdjustment(&channel_mapped, blue_only, {},
+            creative_suite::composition::BlendMode::Normal, 100));
+        QVERIFY(std::abs(channel_mapped.pixelColor(0,0).red()-unadjusted.red())<=1);
+        QVERIFY(std::abs(channel_mapped.pixelColor(0,0).green()-unadjusted.green())<=1);
+        QCOMPARE(channel_mapped.pixelColor(0,0).alpha(),123);
+        QVERIFY(channel_mapped.pixelColor(0,0).blue() > 200);
         QImage masked(1,1,QImage::Format_ARGB32_Premultiplied);
         masked.fill(QColor(100,120,140,120));
         const auto original=masked;
@@ -148,12 +178,19 @@ private slots:
         QVERIFY(s.createCanvas({24,16},QColor(50,100,150)));
         QPainterPath selection; selection.addRect(0,0,12,16);
         const auto id=s.addLevelsAdjustment(selection);
-        QVERIFY(s.setLevels(id,{20,220,1.4,10,240}));
+        auto parameters = LevelsParameters{20,220,1.4,10,240};
+        parameters.channels[0] = {10,245,1.8,5,250};
+        parameters.channels[1] = {15,235,.8,0,230};
+        QVERIFY(s.setLevels(id,parameters));
         const auto path=dir.filePath("levels.cimg");
         QVERIFY(s.saveDocument(path));
         QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
         const auto json=QJsonDocument::fromJson(file.readAll()).object(); file.close();
-        QCOMPARE(json.value("version").toInt(),25);
+        QCOMPARE(json.value("version").toInt(),27);
+        const auto encoded_levels = json.value("layers").toArray().last().toObject()
+            .value("adjustment").toObject();
+        QVERIFY(encoded_levels.value("channels").isObject());
+        QCOMPARE(encoded_levels.value("channels").toObject().size(),3);
         ImageDocumentSession restored;
         QVERIFY(restored.openDocument(path)); QCOMPARE(restored.data(),s.data());
         RecoveryDocumentData recovery{s.data(),path,"levels"}, read;
@@ -167,7 +204,7 @@ private slots:
         QCOMPARE(QImage(dir.filePath("full.png")).convertToFormat(QImage::Format_ARGB32_Premultiplied),
             s.renderedImage().convertToFormat(QImage::Format_ARGB32_Premultiplied));
         const auto original=restored.data();
-        for (int bad=0;bad<13;++bad) {
+        for (int bad=0;bad<17;++bad) {
             auto root=json; auto layers=root.value("layers").toArray(); auto layer=layers.last().toObject();
             auto fields=layer.value("adjustment").toObject();
             switch(bad) {
@@ -184,6 +221,20 @@ private slots:
             case 10: fields.insert("output_black",.5); break;
             case 11: fields.insert("hue",10); break;
             case 12: layer.insert("kind","raster"); break;
+            case 13: root.insert("version",28); break;
+            case 14: {
+                auto channels=fields.value("channels").toObject();
+                auto red=channels.value("red").toObject(); red.insert("gamma",10.0);
+                channels.insert("red",red); fields.insert("channels",channels); break;
+            }
+            case 15: {
+                auto channels=fields.value("channels").toObject();
+                channels.remove("green"); fields.insert("channels",channels); break;
+            }
+            case 16: {
+                auto channels=fields.value("channels").toObject();
+                channels.insert("alpha",channels.value("red")); fields.insert("channels",channels); break;
+            }
             }
             layer.insert("adjustment",fields); layers[layers.size()-1]=layer; root.insert("layers",layers);
             QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));
@@ -191,11 +242,26 @@ private slots:
             QVERIFY2(!restored.openDocument(path),qPrintable(QString::number(bad)));
             QCOMPARE(restored.data(),original);
         }
-        auto prior=json; prior.insert("version",24);
-        QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));
-        QVERIFY(file.write(QJsonDocument(prior).toJson())>0); file.close();
-        QVERIFY(restored.openDocument(path));
-        QCOMPARE(restored.data(),original);
+        for (int version=24; version<=26; ++version) {
+            auto prior=json; prior.insert("version",version);
+            auto old_layers=prior.value("layers").toArray();
+            auto old_layer=old_layers.last().toObject();
+            auto old_adjustment=old_layer.value("adjustment").toObject();
+            old_adjustment.remove("channels");
+            old_layer.insert("adjustment",old_adjustment);
+            old_layers[old_layers.size()-1]=old_layer; prior.insert("layers",old_layers);
+            QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));
+            QVERIFY(file.write(QJsonDocument(prior).toJson())>0); file.close();
+            QVERIFY2(restored.openDocument(path),qPrintable(QString("Levels v%1 migration").arg(version)));
+            const auto migrated=std::get<LevelsParameters>(*findLayer(restored.data(),id)->adjustment);
+            QCOMPARE(migrated.input_black,20);
+            QCOMPARE(migrated.input_white,220);
+            QVERIFY(migrated.channels == LevelsParameters{}.channels);
+            QVERIFY(restored.saveDocument(path));
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),27);
+            file.close();
+        }
         auto old=json;
         auto layers=old.value("layers").toArray();
         auto layer=layers.last().toObject();
@@ -208,7 +274,7 @@ private slots:
         QVERIFY(restored.openDocument(path));
         QVERIFY(restored.saveDocument(path));
         QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),25);
+        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),27);
         file.close();
     }
 };

@@ -531,6 +531,12 @@ private slots:
             stage = "parameters";
             QVERIFY(s.setLevels(id,controls)); verify(true);
         }
+        stage = "per-channel parameters";
+        auto channel_levels=creative_suite::effects::LevelsParameters{20,230,1.4,10,240};
+        channel_levels.channels[0]={5,245,.8,0,255};
+        channel_levels.channels[1]={30,210,2.2,15,220};
+        channel_levels.channels[2]={50,180,1.1,25,235};
+        QVERIFY(s.setLevels(id,channel_levels)); verify(true);
         const auto work=cache.reconstructedPixels();
         for(int mode=1;mode<6;++mode) {
             stage = "mode";

@@ -68,8 +68,8 @@ existing contracts.
 
 ## Format and compatibility
 
-Introduced in v23, this kind is read by the current v26 writer alongside
-supported v1-25 documents. Store:
+Introduced in v23, this kind is read by the current v27 writer alongside
+supported v1-26 documents. Store:
 
 ```json
 {"kind":"adjustment","adjustment":{"type":"hue_saturation","hue":75,"saturation":-25,"lightness":10}}
@@ -80,7 +80,7 @@ non-numeric, missing and out-of-range controls, this kind before v23, mismatched
 adjustment fields, incompatible Background/content/outline fields and future
 schemas. Invalid Open retains the active document. Earlier binaries cannot open
 v23; there is no downgrade writer. Recovery envelope v1, application versions
-and linked PNG protocol stay unchanged. The current Hub accepts Image v1-26 and rejects v27,
+and linked PNG protocol stay unchanged. The current Hub accepts Image v1-27 and rejects v28,
 retaining all six kinds and masks while rebasing existing media paths. Actual
 Image readers verify vault and relocated restores.
 

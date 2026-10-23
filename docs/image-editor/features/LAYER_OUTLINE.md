@@ -48,7 +48,7 @@ The optional layer `outline` stores boolean `enabled`, integer `thickness`,
 RGBA `color` and `position` (`inside`/`outside`). See [format](../architecture/FORMAT.md).
 Older supported documents open without the property; older editor binaries
 reject v17. Recovery envelope v1 carries v17. Hub backup/restore accepts v17,
-rebases media paths and preserves the property; future Image v27 is rejected.
+rebases media paths and preserves the property; future Image v28 is rejected.
 Linked PNG publication uses the existing atomic save/refresh protocol.
 
 ## Regression coverage and evidence
@@ -95,5 +95,5 @@ its own color. See [clipping semantics](CLIPPING_MASKS.md).
 Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
 see [adjustment scope and alpha contract](GRADIENT_MAP.md).
 
-Current writer: v26. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
+Current writer: v27. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
 adjustment stack contract; historical execution evidence above is unchanged.

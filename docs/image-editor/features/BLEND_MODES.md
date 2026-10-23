@@ -1,7 +1,7 @@
 # Layer and group blend modes
 
 Implementation: 2026-10-20. Blend modes were introduced in v19. The current
-`.cimg` v26 writer reads v1-25. Recovery retains envelope v1; application
+`.cimg` v27 writer reads v1-26. Recovery retains envelope v1; application
 versions and linked PNG publication are unchanged.
 Native visual acceptance and macOS/Linux validation remain pending.
 
@@ -84,7 +84,7 @@ Optional `blend_mode` strings on layers/groups are `normal`, `multiply`, `screen
 `overlay`, `add`, `difference`; Normal is omitted. v1-18 load as Normal. Reject
 fields before v19, non-string/unknown values and any Background mode field.
 Invalid Open preserves the current document. History/recovery preserve modes.
-Hub accepts v1-21 and preserves properties when rebasing media; v21 is rejected.
+Hub accepts v1-27 and preserves properties when rebasing media; v28 is rejected.
 The Video consumer still reads atomic published PNG, not the native schema.
 Shared Motion/Video Normal, blend, GPU and export contracts are regression gates.
 
@@ -170,5 +170,5 @@ build/runtime acceptance stay pending in the
 Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
 see [adjustment scope and alpha contract](GRADIENT_MAP.md).
 
-Current writer: v26. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
+Current writer: v27. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
 adjustment stack contract; historical execution evidence above is unchanged.

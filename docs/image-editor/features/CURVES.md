@@ -42,7 +42,7 @@ Video/Motion effect registries and document formats do not change.
 
 ## Format and compatibility
 
-The `.cimg` v26 writer reads v1–25. A Curves adjustment stores the RGB master
+The `.cimg` v27 writer reads v1–26 and preserves the Curves v26 payload. A Curves adjustment stores the RGB master
 in `points` and all individual curves in `channels`:
 
 ```json
@@ -64,15 +64,16 @@ with the three individual curves initialized to identity. Reject Curves before
 v25, missing or extra channel/adjustment/point fields, invalid points, and
 incompatible Background/content/outline data. Failed Open preserves the active
 document. Recovery envelope v1, application version and linked PNG protocol
-remain unchanged. Earlier binaries cannot open v26; there is no downgrade
-writer. Hub accepts Image v1–26, rejects v27, and preserves all four curves,
+remain unchanged. Earlier binaries cannot open v26 Curves documents; v26
+binaries reject v27 documents and there is no downgrade writer. Hub accepts
+Image v1–27, rejects v28, and preserves all four curves,
 masks and media paths in backup and relocated restore.
 
 ## Regression and acceptance
 
 `creative-suite-image-editor-curves` covers mapping order, bounds, neutral
 bytes, alpha, masks, modes, histogram input, history, mixed stacks, v25
-migration, v26/recovery/export and cache reuse.
+migration, v27/recovery/export and cache reuse.
 `creative-suite-image-editor-curves-ui` covers channel selection, independent
 editing, point controls, selected-channel Reset, history, persistence and
 linked PNG publication. Native `gpuCurves` compares CPU/OpenGL pixels,

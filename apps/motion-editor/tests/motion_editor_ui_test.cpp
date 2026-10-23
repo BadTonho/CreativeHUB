@@ -15,6 +15,10 @@
 #include "diagnostics/performance_metrics.h"
 
 #include <creative_suite/media/media_library.h>
+#if defined(MOTION_EDITOR_TEST_IMAGE_EDITOR_LEVELS)
+#include "image_document_session.h"
+#include <creative_suite/effects/levels.h>
+#endif
 
 #include <QAction>
 #include <QCheckBox>
@@ -52,6 +56,8 @@
 #include <QCoreApplication>
 #include <QPointer>
 #include <QProgressDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QSettings>
 #include <QSpinBox>
@@ -2314,10 +2320,39 @@ int main(int argc, char* argv[])
         creative_suite::media::MediaLibrary::canonicalPath(linked_directory / "published.png"),
         creative_suite::media::MediaLibrary::canonicalPath(linked_directory / "source.png")};
     std::filesystem::copy_file(image_path, linked_image.source_snapshot_path);
+#if defined(MOTION_EDITOR_TEST_IMAGE_EDITOR_LEVELS)
+    image_editor::ImageDocumentSession levels_producer;
+    require(levels_producer.createCanvas({48, 32}, QColor(80, 100, 120, 255)),
+            "an Image Editor fixture is created for the Motion PNG consumer");
+    const auto levels_id = levels_producer.addLevelsAdjustment();
+    auto level_sets = creative_suite::effects::LevelsParameters{};
+    level_sets.channels[0] = {0, 255, 1, 200, 255};
+    level_sets.channels[1] = {0, 255, 1, 0, 30};
+    level_sets.channels[2] = {0, 255, 1, 0, 30};
+    require(levels_producer.setLevels(levels_id, level_sets),
+            "Image Editor accepts the first per-channel Levels edit");
+    require(levels_producer.saveDocument(pathToQString(linked_image.document_path)),
+            "Image Editor saves a v27 Levels document");
+    require(levels_producer.exportImage(pathToQString(linked_image.published_output_path)),
+            "Image Editor publishes the first Levels PNG");
+    QFile levels_document(pathToQString(linked_image.document_path));
+    require(levels_document.open(QIODevice::ReadOnly), "the linked Levels document can be inspected");
+    const auto levels_version = QJsonDocument::fromJson(levels_document.readAll())
+        .object().value("version").toInt();
+    levels_document.close();
+    require(levels_version == 27, "the Motion consumer fixture uses Image format v27");
+    QImage published_revision(pathToQString(linked_image.published_output_path));
+    require(!published_revision.isNull(), "the v27 producer publishes a readable PNG");
+    const auto published_levels_pixel = published_revision.pixelColor(24, 16);
+    require(published_levels_pixel.red() > 200 && published_levels_pixel.green() < 50 &&
+                published_levels_pixel.blue() < 60,
+            "the first per-channel Levels publication contains the expected red mapping");
+#else
     QImage published_revision(48, 32, QImage::Format_ARGB32);
     published_revision.fill(QColor(220, 25, 40, 255));
     require(published_revision.save(pathToQString(linked_image.published_output_path), "PNG"),
             "the first linked PNG revision is written");
+#endif
     auto* mutable_document = const_cast<motion::model::CompositionDocument*>(
         window.compositionDocument());
     require(mutable_document->setLayerLinkedImage(inserted_image_id, linked_image),
@@ -2329,9 +2364,21 @@ int main(int argc, char* argv[])
         return frame->rgba_pixels[center] > 200 && frame->rgba_pixels[center + 1] < 50 &&
                frame->rgba_pixels[center + 2] < 60;
     }), "the published PNG asynchronously replaces only the linked layer preview");
+#if defined(MOTION_EDITOR_TEST_IMAGE_EDITOR_LEVELS)
+    level_sets.channels[0] = {0, 255, 1, 15, 15};
+    level_sets.channels[1] = {0, 255, 1, 220, 220};
+    level_sets.channels[2] = {0, 255, 1, 70, 70};
+    require(levels_producer.setLevels(levels_id, level_sets),
+            "Image Editor accepts a second per-channel Levels edit");
+    require(levels_producer.saveDocument(pathToQString(linked_image.document_path)),
+            "Image Editor saves the second Levels edit");
+    require(levels_producer.exportImage(pathToQString(linked_image.published_output_path)),
+            "Image Editor republishes the second Levels PNG");
+#else
     published_revision.fill(QColor(15, 220, 70, 255));
     require(published_revision.save(pathToQString(linked_image.published_output_path), "PNG"),
             "a later linked PNG revision is written");
+#endif
     require(waitFor([&] {
         const auto frame = viewer->renderedFrame();
         if (frame == nullptr || frame->width != 640 || frame->height != 360) return false;

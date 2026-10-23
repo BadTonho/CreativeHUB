@@ -256,6 +256,24 @@ int main() {
             std::array<unsigned char,3>{32,128,224}, "Levels clips, normalizes and maps RGB channels");
         require(adjustmentRgb(LevelsParameters{0,255,2.,0,255}, {64. / 255.,0.,1.}) ==
             std::array<unsigned char,3>{128,0,255}, "Levels gamma uses reciprocal exponent in encoded sRGB");
+        LevelsParameters per_channel;
+        per_channel.channels[0] = {0,255,1,255,255};
+        per_channel.channels[1] = {0,255,1,0,0};
+        require(adjustmentRgb(per_channel, {32. / 255.,64. / 255.,96. / 255.}) ==
+            std::array<unsigned char,3>{255,0,96}, "Levels channel controls are independent");
+        LevelsParameters ordered{0,255,1,0,128};
+        ordered.channels[0] = {0,255,1,128,255};
+        require(adjustmentRgb(ordered, {64. / 255.,64. / 255.,64. / 255.}) ==
+            std::array<unsigned char,3>{144,32,32},
+            "Levels RGB master is quantized before its individual channel");
+        LevelsParameters blue_gamma;
+        blue_gamma.channels[2] = {0,255,2,0,255};
+        require(adjustmentRgb(blue_gamma, {0.,0.,64. / 255.}) ==
+            std::array<unsigned char,3>{0,0,128},
+            "Blue Levels applies its own gamma mapping");
+        LevelsParameters invalid_channel;
+        invalid_channel.channels[2].gamma = std::numeric_limits<double>::infinity();
+        require(!validAdjustment(invalid_channel), "Levels validates every channel set");
     }
     {
         using namespace creative_suite::effects;

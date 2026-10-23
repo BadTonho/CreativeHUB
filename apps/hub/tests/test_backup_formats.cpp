@@ -234,6 +234,30 @@ void testImageDocuments(const QString& root) {
             layers[layers.size()-1] = group;
             fixture.insert("layers", layers);
         }
+        if (version >= 27) {
+            auto layers = fixture.value("layers").toArray();
+            auto group = layers.last().toObject();
+            auto children = group.value("children").toArray();
+            bool found_levels = false;
+            for (qsizetype index = 0; index < children.size(); ++index) {
+                auto adjustment_layer = children.at(index).toObject();
+                auto parameters = adjustment_layer.value("adjustment").toObject();
+                if (parameters.value("type") != "levels") continue;
+                const QJsonObject identity{{"input_black", 0}, {"input_white", 255},
+                    {"gamma", 1.0}, {"output_black", 0}, {"output_white", 255}};
+                auto red = identity; red.insert("output_black", 12); red.insert("output_white", 244);
+                auto green = identity; green.insert("input_black", 8); green.insert("input_white", 248);
+                parameters.insert("channels", QJsonObject{{"red", red}, {"green", green}, {"blue", identity}});
+                adjustment_layer.insert("adjustment", parameters);
+                children[index] = adjustment_layer;
+                found_levels = true;
+                break;
+            }
+            CS_TEST_CHECK(found_levels);
+            group.insert("children", children);
+            layers[layers.size()-1] = group;
+            fixture.insert("layers", layers);
+        }
         // Use the producer's assets in every case, including legacy documents.
         const auto path = QDir(QFileInfo(assets).absolutePath()).filePath(QStringLiteral("image-v%1.cimg").arg(version));
         writeBytes(path, QJsonDocument(fixture).toJson());
@@ -256,6 +280,13 @@ void testImageDocuments(const QString& root) {
         if (version >= 11) CS_TEST_CHECK(!QImage(after.layers.at(1).operations.front().raster.source_path).isNull());
     }
     CS_TEST_CHECK(readBytes(source) == readBytes(imported));
+    auto future = encoded;
+    future.insert("version", ImageDocumentStore::kCurrentDocumentVersion + 1);
+    const auto future_path = QDir(QFileInfo(assets).absolutePath()).filePath("image-future.cimg");
+    writeBytes(future_path, QJsonDocument(future).toJson());
+    creative_suite::hub::BackupManager manager(QDir(root).filePath("image-future-vault"));
+    QString rejected_path, future_error;
+    CS_TEST_CHECK(!manager.createBackup(future_path, &rejected_path, &future_error) && !future_error.isEmpty());
 }
 #endif
 

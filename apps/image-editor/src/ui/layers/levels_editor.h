@@ -2,12 +2,14 @@
 
 #include <creative_suite/effects/adjustment.h>
 #include <QCoreApplication>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
 #include <QTimer>
@@ -61,6 +63,18 @@ public:
         setObjectName("levelsEditor");
         auto* layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
+        auto* channel_row = new QHBoxLayout;
+        channel_row->addWidget(new QLabel(trUi("Channel"), this));
+        channel_ = new QComboBox(this);
+        channel_->setObjectName("levelsChannelCombo");
+        channel_->setAccessibleName(trUi("Levels channel"));
+        channel_->addItem(trUi("RGB"));
+        channel_->addItem(trUi("Red"));
+        channel_->addItem(trUi("Green"));
+        channel_->addItem(trUi("Blue"));
+        channel_row->addWidget(channel_);
+        channel_row->addStretch(1);
+        layout->addLayout(channel_row);
         histogram_ = new LevelsHistogram(this);
         layout->addWidget(histogram_);
         const char* labels[]{"Input Black", "Input White", "Midtone Gamma", "Output Black", "Output White"};
@@ -107,15 +121,30 @@ public:
         reset_ = new QPushButton(QCoreApplication::translate("ImageEditorUI", "Reset"), this);
         reset_->setObjectName("resetLevelsButton");
         layout->addWidget(reset_);
+        connect(channel_, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this](int index) {
+                finish();
+                channel_index_ = std::clamp(index, 0, 3);
+                sync();
+            });
         connect(reset_, &QPushButton::clicked, this, [this] {
             finish();
-            if (value_ == Parameters{}) return;
-            begin(); value_ = {}; sync(); if (changed) changed(value_); finish();
+            if (activeValue() == creative_suite::effects::LevelsChannelParameters{}) return;
+            begin();
+            creative_suite::effects::setLevelsChannel(&value_, channel_index_, {});
+            sync();
+            if (changed) changed(value_);
+            finish();
         });
         sync();
     }
     void setValue(const QString& id, const Parameters& value) {
-        if (id_ != id) finish();
+        if (id_ != id) {
+            finish();
+            channel_index_ = 0;
+            const QSignalBlocker block(channel_);
+            channel_->setCurrentIndex(0);
+        }
         id_ = id; value_ = value; sync();
     }
     void setHistogram(const Bins& bins) { histogram_->setBins(bins); }
@@ -135,47 +164,59 @@ protected:
         return QWidget::eventFilter(watched, event);
     }
 private:
+    static QString trUi(const char* text) {
+        return QCoreApplication::translate("ImageEditorUI", text);
+    }
+    [[nodiscard]] creative_suite::effects::LevelsChannelParameters activeValue() const {
+        return creative_suite::effects::levelsChannel(value_, channel_index_);
+    }
     void begin() { if (!active_) { active_ = true; if (started) started(); } }
     void edit(int field, int value) {
         if (syncing_) return;
         auto next = value_;
+        auto controls = activeValue();
         switch (field) {
-        case 0: next.input_black = value; break;
-        case 1: next.input_white = value; break;
-        case 2: next.gamma = value / 100.; break;
-        case 3: next.output_black = value; break;
-        case 4: next.output_white = value; break;
+        case 0: controls.input_black = value; break;
+        case 1: controls.input_white = value; break;
+        case 2: controls.gamma = value / 100.; break;
+        case 3: controls.output_black = value; break;
+        case 4: controls.output_white = value; break;
         }
-        if (next == value_ || !creative_suite::effects::validLevels(next)) return;
+        if (controls == activeValue() || !creative_suite::effects::validLevelsControls(controls)) return;
+        creative_suite::effects::setLevelsChannel(&next, channel_index_, controls);
+        if (!creative_suite::effects::validLevels(next)) return;
         begin(); value_ = next; sync(); if (changed) changed(value_);
     }
     void sync() {
         syncing_ = true;
-        sliders_[0]->setMaximum(value_.input_white - 1);
-        sliders_[1]->setMinimum(value_.input_black + 1);
-        sliders_[3]->setMaximum(value_.output_white);
-        sliders_[4]->setMinimum(value_.output_black);
-        spins_[0]->setMaximum(value_.input_white - 1);
-        spins_[1]->setMinimum(value_.input_black + 1);
-        spins_[3]->setMaximum(value_.output_white);
-        spins_[4]->setMinimum(value_.output_black);
-        const int values[]{value_.input_black, value_.input_white,
-            int(std::lround(value_.gamma * 100)), value_.output_black, value_.output_white};
+        const auto controls = activeValue();
+        sliders_[0]->setMaximum(controls.input_white - 1);
+        sliders_[1]->setMinimum(controls.input_black + 1);
+        sliders_[3]->setMaximum(controls.output_white);
+        sliders_[4]->setMinimum(controls.output_black);
+        spins_[0]->setMaximum(controls.input_white - 1);
+        spins_[1]->setMinimum(controls.input_black + 1);
+        spins_[3]->setMaximum(controls.output_white);
+        spins_[4]->setMinimum(controls.output_black);
+        const int values[]{controls.input_black, controls.input_white,
+            int(std::lround(controls.gamma * 100)), controls.output_black, controls.output_white};
         for (int i = 0; i < 5; ++i) {
             sliders_[i]->setValue(values[i]);
             if (i != 2) spins_[i]->setValue(values[i]);
         }
-        gamma_spin_->setValue(value_.gamma);
-        reset_->setEnabled(value_ != Parameters{});
+        gamma_spin_->setValue(controls.gamma);
+        reset_->setEnabled(controls != creative_suite::effects::LevelsChannelParameters{});
         syncing_ = false;
     }
     QString id_;
     Parameters value_;
     LevelsHistogram* histogram_ = nullptr;
+    QComboBox* channel_ = nullptr;
     std::array<QSlider*, 5> sliders_{};
     std::array<QSpinBox*, 5> spins_{};
     QDoubleSpinBox* gamma_spin_ = nullptr;
     QPushButton* reset_ = nullptr;
+    int channel_index_ = 0;
     bool syncing_ = false, active_ = false;
 };
 

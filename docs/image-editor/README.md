@@ -45,11 +45,12 @@ existing mask/history/export contract; native visual/platform acceptance is pend
 
 [Global Hue/Saturation](features/HUE_SATURATION.md): integer HSL controls, chromatic thumbnails, CPU/OpenGL preview and v23 persistence/Hub compatibility.
 
-[Global Levels](features/LEVELS.md): input/output black and white, midtone gamma,
-combined input histogram, CPU/OpenGL preview and v24 persistence/Hub compatibility.
+[RGB and per-channel Levels](features/LEVELS.md): master/channel input/output
+controls, midtone gamma, combined histogram, CPU/OpenGL preview and v27
+persistence/Hub compatibility.
 [Global and per-channel Curves](features/CURVES.md): shape-preserving RGB
 master and independent channel curves, editable points, input histogram,
-CPU/OpenGL processing and v26 persistence/Hub compatibility.
+CPU/OpenGL processing and v27 persistence/Hub compatibility.
 
 [Hue/Saturation Linux profile](performance/hue-saturation-linux-2026-10-21.json):
 1080p CPU/OpenGL, zero-upload edits, capacity recovery and separate baseline failures.

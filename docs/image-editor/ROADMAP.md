@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, global Hue/Saturation, global Levels, global Curves and per-channel Curves adjustments, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, global Hue/Saturation, global and per-channel Levels, global and per-channel Curves adjustments, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,10 +41,11 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Extend Levels with individual RGB channel controls** in a separate bounded
-increment. Per-channel Curves is implemented; see its [contract](features/CURVES.md).
-Global Curves is implemented; see its [contract](features/CURVES.md).
-Global Levels is implemented; see its [contract](features/LEVELS.md).
+**Extend Hue/Saturation with Colorize** in a separate bounded increment. The
+implementation sequence is provisional; per-color-range controls remain a
+separate later increment. Levels and Curves now both provide RGB master and
+independent channels; see their [Levels](features/LEVELS.md) and
+[Curves](features/CURVES.md) contracts.
 Global Hue/Saturation is implemented; see its [contract](features/HUE_SATURATION.md).
 Exposure / Offset / Gamma is implemented; see its [contract](features/EXPOSURE_OFFSET_GAMMA.md).
 The adjustment-layer contract and Gradient Map are implemented; see
@@ -293,7 +294,8 @@ Native visual and macOS/Linux acceptance remains pending.
 - [x] Add global RGB Curves; see [contract](features/CURVES.md).
 - [x] Add individual Red, Green and Blue curves alongside the RGB master curve;
   see the [Curves contract](features/CURVES.md).
-- [ ] Add individual Levels channels in a separate bounded increment.
+- [x] Add individual Red, Green and Blue Levels alongside the RGB master;
+  see the [Levels contract](features/LEVELS.md).
 - [ ] Extend Hue/Saturation with Colorize and per-color-range controls in separate bounded increments.
 - [ ] Add color balance, Black & White channel controls, LUT loading, selective
   color, invert, posterize, and threshold.
@@ -686,11 +688,11 @@ These results do not complete the existing release/manual acceptance gates.
 
 | Behavior | Automated coverage | Acceptance |
 | --- | --- | --- |
-| RGB mapping, bounds, neutral bytes, alpha, modes, input histogram, history, v24/recovery/export/cache | `creative-suite-image-editor-levels`, shared effects | [Levels contract](features/LEVELS.md); owner visual acceptance pending. |
-| Creation, five controls, paired bounds, gestures/Reset, selection mask and histogram | `creative-suite-image-editor-levels-ui`, full UI and translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-levels-adjustments) pending. |
-| CPU/OpenGL parity, unchanged uploads, groups/clipping, cancellation/capacity, backup and linked consumers | Interactive `gpuLevels`, Hub backup format/manager and affected Video/Motion gates | Native and platform acceptance tracked separately. |
+| Master-then-channel mapping, intermediate byte rounding, independent sets, bounds, identity, alpha, modes, histogram, history, v24–26 migration, v27/recovery/export/cache | `creative-suite-image-editor-levels`, shared effects | [Levels contract](features/LEVELS.md); owner visual acceptance pending. |
+| Channel selector and switching, five controls, independent paired bounds, gestures/selected-channel Reset, Undo/Redo, persistence, selection mask and combined histogram | `creative-suite-image-editor-levels-ui`, translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#rgb-and-per-channel-levels-adjustments) pending. |
+| CPU/OpenGL parity, unchanged uploads, groups/clipping, cancellation/capacity, v27 Hub backup/restore and flattened PNG consumers | Interactive `gpuLevels`, Hub backup format/manager, Video linked-image producer/consumer and Motion linked-PNG gates | Native and platform acceptance tracked separately. |
 
-**Windows Release execution (2026-10-22):** all 17 focused CTest cases passed:
+**Prior Windows Release baseline (2026-10-22, Curves and global Levels):** all 17 focused CTest cases passed:
 shared effects; Image Editor core, image formats, full UI, translation catalog,
 Gradient Map, blend, clipping, masks, Exposure, Hue/Saturation and Levels
 (model/UI); Video Editor linked-image; and Motion Studio persistence, GPU
@@ -701,14 +703,26 @@ to its user data directory outside the workspace sandbox. Native Windows
 `gpuLevels` passed (3 QtTest cases, including setup and cleanup) with CPU/GL
 pixel parity, zero content uploads for parameter edits, and resource budget
 checks. The Release executable was built at the canonical Image Editor path.
-The [owner's manual checklist](validation/MANUAL_VALIDATION.md#global-levels-adjustments)
+The [owner's manual checklist](validation/MANUAL_VALIDATION.md#rgb-and-per-channel-levels-adjustments)
 and release/platform acceptance remain pending.
+
+**Per-channel Levels Windows Release execution (2026-10-22):** the Image
+Editor Release application, affected test targets, Video linked-image producer,
+Motion linked-PNG consumer and Hub Debug application built successfully. All
+10 selected CTest cases passed: Image Editor UI, translation catalog,
+interactive CPU/OpenGL, Levels model/UI, Curves model/UI, Video linked-image,
+Motion UI and Hub backup format. The Hub format test exercises backup of the
+v27 Levels data and rejects v28. The shared Effects suite still reaches the
+previously recorded Outer Glow assertion; the Hub backup-manager suite stops
+at its AppLocalData fixture file open because the workspace sandbox does not
+grant that path. Neither is recorded as a passing gate. Native visual and
+macOS/Linux acceptance remain pending.
 
 ## Curves regression coverage
 
 | Behavior | Automated coverage | Acceptance |
 | --- | --- | --- |
-| PCHIP mapping order, independent channels, bounds, neutral bytes, alpha, masks, modes, histogram, history, v25 migration, v26 recovery/export/cache | `creative-suite-image-editor-curves`, shared effects | [Curves contract](features/CURVES.md); owner visual acceptance pending. |
+| PCHIP mapping order, independent channels, bounds, neutral bytes, alpha, masks, modes, histogram, history, v25 migration, v27 recovery/export/cache | `creative-suite-image-editor-curves`, shared effects | [Curves contract](features/CURVES.md); owner visual acceptance pending. |
 | Channel selector, independent graph/numeric edits, add/remove, gestures/Reset-per-channel, history, selection mask and linked PNG publication | `creative-suite-image-editor-curves-ui`, full UI and translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-curves-adjustments) pending. |
 | CPU/OpenGL parity for distinct channels, unchanged content uploads, mixed stacks, clipping/groups, cancellation/capacity and handoff | Native `gpuCurves`, Hub backup gates, Video linked-image and affected Motion gates | Native and platform acceptance tracked separately. |
 

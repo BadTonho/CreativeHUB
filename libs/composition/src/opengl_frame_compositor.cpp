@@ -791,8 +791,9 @@ uniform int adjustment_kind;
 uniform vec2 brightness_contrast;
 uniform vec3 exposure_offset_gamma;
 uniform vec3 hue_saturation;
-uniform vec3 levels_input;
-uniform vec2 levels_output;
+uniform vec3 levels_input[4];
+uniform vec2 levels_output[4];
+uniform bool levels_identity;
 uniform vec4 curve_table[192];
 uniform bool curve_identity;
 uniform bool has_mask;
@@ -826,11 +827,18 @@ vec3 exposeSrgb(vec3 rgb) {
     vec3 corrected = pow(clamp(linear * exp2(exposure_offset_gamma.x) + exposure_offset_gamma.y, 0.0, 1.0), vec3(1.0 / exposure_offset_gamma.z));
     return clamp(mix(1.055 * pow(corrected, vec3(1.0 / 2.4)) - .055, corrected * 12.92, lessThanEqual(corrected, vec3(.0031308))), 0.0, 1.0);
 }
+float levelsValue(float value, int channel_set) {
+    vec3 input = levels_input[channel_set];
+    vec2 output = levels_output[channel_set];
+    float normalized = clamp((value * 255.0 - input.x) /
+        (input.y - input.x), 0.0, 1.0);
+    return (output.x + (output.y - output.x) *
+        pow(normalized, 1.0 / input.z)) / 255.0;
+}
 vec3 adjustLevels(vec3 rgb) {
-    vec3 normalized = clamp((rgb * 255.0 - levels_input.x) /
-        (levels_input.y - levels_input.x), 0.0, 1.0);
-    return (levels_output.x + (levels_output.y - levels_output.x) *
-        pow(normalized, vec3(1.0 / levels_input.z))) / 255.0;
+    vec3 master = vec3(levelsValue(rgb.r, 0), levelsValue(rgb.g, 0), levelsValue(rgb.b, 0));
+    master = floor(master * 255.0 + 0.5) / 255.0;
+    return vec3(levelsValue(master.r, 1), levelsValue(master.g, 2), levelsValue(master.b, 3));
 }
 float curveValue(float value, int channel) {
     int index = int(floor(clamp(value, 0.0, 1.0) * 255.0 + 0.5));
@@ -842,7 +850,7 @@ void main() {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
         vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
         float t=dot(cb,vec3(0.2126,0.7152,0.0722));
-        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0)) || (adjustment_kind==5 && levels_input==vec3(0,255,1) && levels_output==vec2(0,255)) || (adjustment_kind==6 && curve_identity)) && blend_mode==0){color=b;return;}
+        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0)) || (adjustment_kind==5 && levels_identity) || (adjustment_kind==6 && curve_identity)) && blend_mode==0){color=b;return;}
         vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : adjustment_kind==5 ? adjustLevels(cb) : adjustment_kind==6 ? vec3(curveValue(cb.r,0),curveValue(cb.g,1),curveValue(cb.b,2)) : gradient_stops[gradient_count-1].rgb;
         for(int i=1;adjustment_kind==1 && i<gradient_count;++i) {
             if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
@@ -998,10 +1006,19 @@ void main() {
                         tables[channel][i*4+2]/255.f,tables[channel][i*4+3]/255.f);
                 raster_program->setUniformValueArray("curve_table",packed.data(),192);
             }
-            raster_program->setUniformValue("levels_input", levels ?
-                QVector3D(float(levels->input_black), float(levels->input_white), float(levels->gamma)) : QVector3D(0,255,1));
-            raster_program->setUniformValue("levels_output", levels ?
-                QVector2D(float(levels->output_black), float(levels->output_white)) : QVector2D(0,255));
+            std::array<QVector3D, 4> levels_input{};
+            std::array<QVector2D, 4> levels_output{};
+            for (int channel = 0; channel < 4; ++channel) {
+                const auto parameters = levels ? effects::levelsChannel(*levels, channel)
+                    : effects::LevelsChannelParameters{};
+                levels_input[channel] = QVector3D(float(parameters.input_black),
+                    float(parameters.input_white), float(parameters.gamma));
+                levels_output[channel] = QVector2D(float(parameters.output_black),
+                    float(parameters.output_white));
+            }
+            raster_program->setUniformValueArray("levels_input", levels_input.data(), 4);
+            raster_program->setUniformValueArray("levels_output", levels_output.data(), 4);
+            raster_program->setUniformValue("levels_identity", !levels || effects::identityLevels(*levels));
             raster_program->setUniformValue("hue_saturation", hue ?
                 QVector3D(hue->hue / 60.f, hue->saturation / 100.f, hue->lightness / 100.f) : QVector3D{});
             raster_program->setUniformValue("exposure_offset_gamma", exposure ?

@@ -1092,10 +1092,18 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
                 encoded.insert("adjustment", QJsonObject{{"type", "exposure_offset_gamma"},
                     {"exposure", value->exposure}, {"offset", value->offset}, {"gamma", value->gamma}});
             } else if (const auto* levels = std::get_if<creative_suite::effects::LevelsParameters>(&*layer.adjustment)) {
+                const auto encode_channel = [](const creative_suite::effects::LevelsChannelParameters& value) {
+                    return QJsonObject{{"input_black", value.input_black},
+                        {"input_white", value.input_white}, {"gamma", value.gamma},
+                        {"output_black", value.output_black}, {"output_white", value.output_white}};
+                };
+                const QJsonObject channels{{"red", encode_channel(levels->channels[0])},
+                    {"green", encode_channel(levels->channels[1])},
+                    {"blue", encode_channel(levels->channels[2])}};
                 encoded.insert("adjustment", QJsonObject{{"type", "levels"},
                     {"input_black", levels->input_black}, {"input_white", levels->input_white},
                     {"gamma", levels->gamma}, {"output_black", levels->output_black},
-                    {"output_white", levels->output_white}});
+                    {"output_white", levels->output_white}, {"channels", channels}});
             } else if (const auto* curves = std::get_if<creative_suite::effects::CurvesParameters>(&*layer.adjustment)) {
                 const auto encode_points = [](const creative_suite::effects::CurvesPointList& values) {
                     QJsonArray points;
@@ -1312,8 +1320,9 @@ bool decodeDocumentJson(const QJsonObject& root,
                     assignError(error, QStringLiteral("An adjustment has incompatible Levels fields."));
                     return false;
                 }
+                const bool levels_channels = a.value("type") == "levels" && version >= 27;
                 if (a.value("type") != "curves" &&
-                    (a.contains("points") || a.contains("channels"))) {
+                    (a.contains("points") || (a.contains("channels") && !levels_channels))) {
                     assignError(error, QStringLiteral("An adjustment has incompatible Curves fields."));
                     return false;
                 }
@@ -1360,18 +1369,44 @@ bool decodeDocumentJson(const QJsonObject& root,
                     }
                     layer->adjustment = std::move(value);
                 } else if (a.value("type") == "levels") {
-                    const auto integer = [](const QJsonValue& v) {
-                        return v.isDouble() && std::isfinite(v.toDouble()) &&
-                            std::floor(v.toDouble()) == v.toDouble() && v.toDouble() >= 0 && v.toDouble() <= 255;
+                    const auto decode_controls = [](const QJsonObject& object,
+                        creative_suite::effects::LevelsChannelParameters* controls) {
+                        if (!controls || object.size() != 5) return false;
+                        const auto integer = [](const QJsonValue& v) {
+                            return v.isDouble() && std::isfinite(v.toDouble()) &&
+                                std::floor(v.toDouble()) == v.toDouble() &&
+                                v.toDouble() >= 0 && v.toDouble() <= 255;
+                        };
+                        if (!integer(object.value("input_black")) ||
+                            !integer(object.value("input_white")) ||
+                            !object.value("gamma").isDouble() ||
+                            !std::isfinite(object.value("gamma").toDouble()) ||
+                            !integer(object.value("output_black")) ||
+                            !integer(object.value("output_white"))) return false;
+                        *controls = {object.value("input_black").toInt(),
+                            object.value("input_white").toInt(), object.value("gamma").toDouble(),
+                            object.value("output_black").toInt(), object.value("output_white").toInt()};
+                        return creative_suite::effects::validLevelsControls(*controls);
                     };
-                    const creative_suite::effects::LevelsParameters value{
-                        a.value("input_black").toInt(), a.value("input_white").toInt(),
-                        a.value("gamma").toDouble(), a.value("output_black").toInt(),
-                        a.value("output_white").toInt()};
-                    if (version < 24 || kind != "adjustment" || a.size() != 6 ||
-                        !integer(a.value("input_black")) || !integer(a.value("input_white")) ||
-                        !a.value("gamma").isDouble() || !integer(a.value("output_black")) ||
-                        !integer(a.value("output_white")) || !creative_suite::effects::validLevels(value)) {
+                    creative_suite::effects::LevelsParameters value;
+                    auto master = creative_suite::effects::levelsChannel(value, 0);
+                    auto master_object = a;
+                    master_object.remove("type");
+                    master_object.remove("channels");
+                    bool valid = kind == "adjustment" && version >= 24 &&
+                        decode_controls(master_object, &master);
+                    if (valid) creative_suite::effects::setLevelsChannel(&value, 0, master);
+                    if (version >= 27) {
+                        const auto channels = a.value("channels").toObject();
+                        valid &= a.size() == 7 && a.value("channels").isObject() &&
+                            channels.size() == 3 &&
+                            decode_controls(channels.value("red").toObject(), &value.channels[0]) &&
+                            decode_controls(channels.value("green").toObject(), &value.channels[1]) &&
+                            decode_controls(channels.value("blue").toObject(), &value.channels[2]);
+                    } else {
+                        valid &= version <= 26 && a.size() == 6 && !a.contains("channels");
+                    }
+                    if (!valid || !creative_suite::effects::validLevels(value)) {
                         assignError(error, QStringLiteral("A Levels adjustment is invalid."));
                         return false;
                     }

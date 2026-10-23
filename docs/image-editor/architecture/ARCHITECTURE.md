@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 26; host links live in the Video Editor's
+  The `.cimg` schema is version 27; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -748,14 +748,15 @@ sampling. The codec writes v23 and Hub preserves all four kinds. See
 
 ## Global Levels processing
 
-The fifth typed alternative applies the same input/output point and midtone
-gamma mapping to all three encoded-sRGB channels. The shared Qt-free evaluator
-validates parameters; the Image session owns editing, masks and stack scope.
-CPU and OpenGL render at the selected layer's backdrop with unchanged alpha,
-preserving the neutral Normal byte path and cached source textures. The
-asynchronous histogram captures this backdrop before Levels and samples at
-most one million nontransparent pixels; it does not affect rendering or the
-persisted document. The codec writes v26; Hub accepts v1–26. See the
+The fifth typed alternative keeps its five existing RGB master parameters and
+adds independent Red, Green and Blue sets. The shared Qt-free evaluator
+validates all four sets, applies the master first and rounds to a byte before
+the matching individual channel. CPU and OpenGL use the same mapping at the
+selected layer's backdrop with unchanged alpha, preserving the neutral Normal
+byte path and cached source textures. The combined asynchronous histogram
+captures this backdrop before Levels and samples at most one million
+nontransparent pixels; it does not affect rendering or the persisted document.
+The codec writes v27; Hub accepts v1–27. See the
 [Levels contract](../features/LEVELS.md).
 
 ## Global Curves processing
@@ -769,8 +770,8 @@ index their corresponding table while the existing mask/blend path preserves
 alpha. No content texture is reuploaded for point edits. The Image Editor owns
 points, gestures, history, stack scope and errors. Levels and Curves share the
 asynchronous pre-adjustment histogram capture; it is neither part of the
-document nor recalculated for parameter edits. The codec writes v26 and Hub
-accepts v1–26. See the
+document nor recalculated for parameter edits. The codec writes v27 and Hub
+accepts v1–27. See the
 [Curves contract](../features/CURVES.md).
 
 Raster cache synchronization consumes QHash's erase-returned iterator because

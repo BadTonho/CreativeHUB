@@ -4,6 +4,7 @@
 <context>
     <name>ImageEditorUI</name>
     <message><source>Channel</source><translation>Canal</translation></message>
+    <message><source>Levels channel</source><translation>Canal de Níveis</translation></message>
     <message><source>Curves channel</source><translation>Canal de Curvas</translation></message>
     <message><source>RGB</source><translation>RGB</translation></message>
     <message><source>Red</source><translation>Vermelho</translation></message>

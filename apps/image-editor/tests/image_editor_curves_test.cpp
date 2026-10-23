@@ -105,7 +105,7 @@ private slots:
         const auto path=directory.filePath("curves.cimg");QVERIFY(s.saveDocument(path));
         QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));
         const auto root=QJsonDocument::fromJson(file.readAll()).object();file.close();
-        QCOMPARE(root.value("version").toInt(),26);
+        QCOMPARE(root.value("version").toInt(),27);
         const auto encoded_adjustment=root.value("layers").toArray().last().toObject().value("adjustment").toObject();
         QVERIFY(encoded_adjustment.value("channels").isObject());
         ImageDocumentSession restored;QVERIFY(restored.openDocument(path));QCOMPARE(restored.data(),s.data());
@@ -126,7 +126,7 @@ private slots:
             auto channels=adjustment.value("channels").toObject();
             switch(bad){
             case 0:modified.insert("version",25);break;
-            case 1:modified.insert("version",27);break;
+            case 1:modified.insert("version",28);break;
             case 2:adjustment.remove("points");break;
             case 3:first.insert("input",1);points[0]=first;break;
             case 4:first.insert("output",-1);points[0]=first;break;
@@ -147,6 +147,15 @@ private slots:
             QVERIFY2(!restored.openDocument(path),qPrintable(QString::number(bad)));
             QCOMPARE(restored.data(),original);
         }
+        auto curves_v26=root;curves_v26.insert("version",26);
+        QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));
+        QVERIFY(file.write(QJsonDocument(curves_v26).toJson())>0);file.close();
+        QVERIFY(restored.openDocument(path));
+        QCOMPARE(std::get<CurvesParameters>(*restored.data().layers.back().adjustment),parameters);
+        QVERIFY(restored.saveDocument(path));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),27);
+        file.close();
         auto legacy=root;auto layers=legacy.value("layers").toArray();
         auto layer=layers.last().toObject();
         auto legacy_curves=layer.value("adjustment").toObject();
@@ -162,7 +171,7 @@ private slots:
         QVERIFY(restored.saveDocument(path));
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto migrated=QJsonDocument::fromJson(file.readAll()).object();
-        QCOMPARE(migrated.value("version").toInt(),26);
+        QCOMPARE(migrated.value("version").toInt(),27);
         QVERIFY(migrated.value("layers").toArray().last().toObject()
             .value("adjustment").toObject().value("channels").isObject());
     }
