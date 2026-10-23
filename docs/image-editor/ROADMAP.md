@@ -41,9 +41,9 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Extend Hue/Saturation with Colorize** in a separate bounded increment. The
-implementation sequence is provisional; per-color-range controls remain a
-separate later increment. Levels and Curves now both provide RGB master and
+**Extend Hue/Saturation with per-color-range controls** in a separate bounded
+increment. Colorize is implemented as an independent mode; visual and platform
+acceptance remains pending. Levels and Curves now both provide RGB master and
 independent channels; see their [Levels](features/LEVELS.md) and
 [Curves](features/CURVES.md) contracts.
 Global Hue/Saturation is implemented; see its [contract](features/HUE_SATURATION.md).
@@ -680,17 +680,17 @@ These results do not complete the existing release/manual acceptance gates.
 
 | Behavior | Automated coverage | Acceptance |
 | --- | --- | --- |
-| HSL reference/gray/bounds/alpha, four-kind stacks, history, v23/recovery/export/cache and chromatic thumbnails | `creative-suite-image-editor-hue-saturation`, shared effects | [Contract and execution evidence](features/HUE_SATURATION.md); visual/platform acceptance remains separate. |
-| Menu, integer fields, gestures/Reset, masks, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI, translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-huesaturation-adjustments) pending. |
-| CPU/OpenGL parity, zero-upload edits, budgets/cancellation, handoff and restore | Interactive `gpuHueSaturation`, native shared OpenGL, Video linked-image, Hub backup gates and Motion consumers | Record native versus offscreen execution separately; compare known baseline failures. |
+| Normal and Colorize HSL reference, grayscale/chromatic pixels, endpoints, alpha, independent values, history, v27→28/recovery/export/cache and thumbnails | `creative-suite-image-editor-hue-saturation`, shared effects | [Contract and execution evidence](features/HUE_SATURATION.md); visual/platform acceptance remains separate. |
+| Menu, mode-specific ranges/values, gestures, mode-local Reset, Undo/Redo, masks, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI, translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-huesaturation-adjustments) pending. |
+| CPU/OpenGL parity, zero-upload edits, budgets/cancellation, handoff and restore | Interactive `gpuHueSaturation`, native shared OpenGL, Video linked-image, Hub v28 backup gates and Motion consumers | Record native versus offscreen execution separately; compare known baseline failures. |
 
 ## Levels regression coverage
 
 | Behavior | Automated coverage | Acceptance |
 | --- | --- | --- |
-| Master-then-channel mapping, intermediate byte rounding, independent sets, bounds, identity, alpha, modes, histogram, history, v24–26 migration, v27/recovery/export/cache | `creative-suite-image-editor-levels`, shared effects | [Levels contract](features/LEVELS.md); owner visual acceptance pending. |
+| Master-then-channel mapping, intermediate byte rounding, independent sets, bounds, identity, alpha, modes, histogram, history, v24–27 migration, v28/recovery/export/cache | `creative-suite-image-editor-levels`, shared effects | [Levels contract](features/LEVELS.md); owner visual acceptance pending. |
 | Channel selector and switching, five controls, independent paired bounds, gestures/selected-channel Reset, Undo/Redo, persistence, selection mask and combined histogram | `creative-suite-image-editor-levels-ui`, translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#rgb-and-per-channel-levels-adjustments) pending. |
-| CPU/OpenGL parity, unchanged uploads, groups/clipping, cancellation/capacity, v27 Hub backup/restore and flattened PNG consumers | Interactive `gpuLevels`, Hub backup format/manager, Video linked-image producer/consumer and Motion linked-PNG gates | Native and platform acceptance tracked separately. |
+| CPU/OpenGL parity, unchanged uploads, groups/clipping, cancellation/capacity, v28 Hub backup/restore and flattened PNG consumers | Interactive `gpuLevels`, Hub backup format/manager, Video linked-image producer/consumer and Motion linked-PNG gates | Native and platform acceptance tracked separately. |
 
 **Prior Windows Release baseline (2026-10-22, Curves and global Levels):** all 17 focused CTest cases passed:
 shared effects; Image Editor core, image formats, full UI, translation catalog,

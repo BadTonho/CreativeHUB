@@ -59,8 +59,8 @@ base invalidate dependent thumbnails.
 The optional layer boolean `clip_to_base` defaults false and is written when
 true. v1-17 load without this field; older-schema fields, non-booleans,
 Background/group clipping and chains lacking a sibling base are rejected.
-Invalid loads preserve the current document. Hub accepts v1-27 and preserves
-clipping metadata during media relocation and restoration; future v28 is
+Invalid loads preserve the current document. Hub accepts v1-28 and preserves
+clipping metadata during media relocation and restoration; future v29 is
 rejected. Linked PNG publication retains the existing atomic save/refresh
 protocol and does not change the Video Editor document format.
 

@@ -1120,7 +1120,10 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
             } else {
                 const auto& hue = std::get<creative_suite::effects::HueSaturationParameters>(*layer.adjustment);
                 encoded.insert("adjustment", QJsonObject{{"type", "hue_saturation"},
-                    {"hue", hue.hue}, {"saturation", hue.saturation}, {"lightness", hue.lightness}});
+                    {"hue", hue.hue}, {"saturation", hue.saturation}, {"lightness", hue.lightness},
+                    {"colorize", QJsonObject{{"enabled", hue.colorize_enabled},
+                        {"hue", hue.colorize.hue}, {"saturation", hue.colorize.saturation},
+                        {"lightness", hue.colorize.lightness}}}});
             }
         }
         encoded.insert("visible", layer.visible);
@@ -1416,15 +1419,32 @@ bool decodeDocumentJson(const QJsonObject& root,
                         return v.isDouble() && std::isfinite(v.toDouble()) &&
                             v.toDouble() >= -bound && v.toDouble() <= bound && std::floor(v.toDouble()) == v.toDouble();
                     };
+                    creative_suite::effects::HueSaturationParameters value;
+                    value.hue = a.value("hue").toInt();
+                    value.saturation = a.value("saturation").toInt();
+                    value.lightness = a.value("lightness").toInt();
+                    bool colorize_valid = true;
+                    if (version >= 28) {
+                        const auto colorize = a.value("colorize").toObject();
+                        colorize_valid = a.value("colorize").isObject() && colorize.size() == 4 &&
+                            colorize.value("enabled").isBool() && integer(colorize.value("hue"), 360) &&
+                            integer(colorize.value("saturation"), 100) && integer(colorize.value("lightness"), 100) &&
+                            colorize.value("hue").toInt() >= 0 && colorize.value("saturation").toInt() >= 0;
+                        if (colorize_valid) {
+                            value.colorize_enabled = colorize.value("enabled").toBool();
+                            value.colorize = {colorize.value("hue").toInt(), colorize.value("saturation").toInt(),
+                                colorize.value("lightness").toInt()};
+                        }
+                    }
                     if (version < 23 || kind != "adjustment" || !integer(a.value("hue"), 180) ||
                         !integer(a.value("saturation"), 100) || !integer(a.value("lightness"), 100) ||
+                        (version >= 28 ? a.size() != 5 : a.size() != 4) || !colorize_valid ||
                         a.contains("stops") || a.contains("brightness") || a.contains("contrast") ||
                         a.contains("exposure") || a.contains("offset") || a.contains("gamma")) {
                         assignError(error, QStringLiteral("A Hue/Saturation adjustment is invalid."));
                         return false;
                     }
-                    layer->adjustment = creative_suite::effects::HueSaturationParameters{
-                        a.value("hue").toInt(), a.value("saturation").toInt(), a.value("lightness").toInt()};
+                    layer->adjustment = value;
                 } else if (a.value("type") == "exposure_offset_gamma") {
                     const creative_suite::effects::ExposureOffsetGammaParameters parameters{
                         a.value("exposure").toDouble(), a.value("offset").toDouble(), a.value("gamma").toDouble()};

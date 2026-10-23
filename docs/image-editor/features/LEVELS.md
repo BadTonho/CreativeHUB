@@ -89,7 +89,7 @@ v27. Version 24–26 Levels migrate the existing five values to the RGB master
 and initialize all individual sets to identity. Failed Open leaves the active
 document unchanged. Recovery envelope v1, application version and linked PNG
 protocol remain unchanged. Earlier binaries cannot open v27; there is no
-downgrade writer. Hub accepts Image v1–27, rejects v28, and retains all four
+downgrade writer. Hub accepts Image v1–28, rejects v29, and retains all four
 Levels sets, adjustment masks and media paths across backup and relocation.
 Curves v26 data remains readable and unchanged.
 

@@ -26,6 +26,7 @@
     <message><source>A Levels adjustment is invalid.</source><translation>Um ajuste de Níveis é inválido.</translation></message>
     <message><source>An adjustment has incompatible Levels fields.</source><translation>Um ajuste contém campos de Níveis incompatíveis.</translation></message>
     <message><source>Hue/Saturation</source><translation>Matiz/Saturação</translation></message>
+    <message><source>Colorize</source><translation>Colorizar</translation></message>
     <message><source>Hue</source><translation>Matiz</translation></message>
     <message><source>Saturation</source><translation>Saturação</translation></message>
     <message><source>Lightness</source><translation>Luminosidade</translation></message>

@@ -5,6 +5,7 @@
 #include <QSpinBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QCheckBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QCoreApplication>
@@ -24,6 +25,15 @@ public:
         setObjectName("hueSaturationEditor");
         auto* layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
+        colorize_ = new QCheckBox(QCoreApplication::translate("ImageEditorUI", "Colorize"), this);
+        colorize_->setObjectName("colorizeCheckBox");
+        layout->addWidget(colorize_);
+        connect(colorize_, &QCheckBox::toggled, this, [this](bool enabled) {
+            if (syncing_ || value_.colorize_enabled == enabled) return;
+            finish(); begin(); value_.colorize_enabled = enabled; sync();
+            if (changed) changed(value_);
+            finish();
+        });
         const char* labels[]{QT_TRANSLATE_NOOP("ImageEditorUI", "Hue"),
             QT_TRANSLATE_NOOP("ImageEditorUI", "Saturation"), QT_TRANSLATE_NOOP("ImageEditorUI", "Lightness")};
         const char* names[]{"hue", "saturation", "lightness"};
@@ -55,8 +65,11 @@ public:
         reset_->setObjectName("resetHueSaturationButton"); layout->addWidget(reset_);
         connect(reset_, &QPushButton::clicked, this, [this] {
             finish();
-            if (value_ == Parameters{}) return;
-            begin(); value_ = {}; sync(); if (changed) changed(value_); finish();
+            auto next = value_;
+            if (next.colorize_enabled) next.colorize = {};
+            else { next.hue = 0; next.saturation = 0; next.lightness = 0; }
+            if (next == value_) return;
+            begin(); value_ = next; sync(); if (changed) changed(value_); finish();
         });
         sync();
     }
@@ -83,24 +96,35 @@ private:
     void edit(int field, int value) {
         if (syncing_) return;
         auto next = value_;
-        (field == 0 ? next.hue : field == 1 ? next.saturation : next.lightness) = value;
+        if (next.colorize_enabled)
+            (field == 0 ? next.colorize.hue : field == 1 ? next.colorize.saturation : next.colorize.lightness) = value;
+        else (field == 0 ? next.hue : field == 1 ? next.saturation : next.lightness) = value;
         if (next == value_) return;
         begin(); value_ = next; sync(); if (changed) changed(value_);
     }
     void sync() {
         syncing_ = true;
-        const int values[]{value_.hue, value_.saturation, value_.lightness};
+        const int values[]{value_.colorize_enabled ? value_.colorize.hue : value_.hue,
+            value_.colorize_enabled ? value_.colorize.saturation : value_.saturation,
+            value_.colorize_enabled ? value_.colorize.lightness : value_.lightness};
+        const int low[]{value_.colorize_enabled ? 0 : -180, value_.colorize_enabled ? 0 : -100, -100};
+        const int high[]{value_.colorize_enabled ? 360 : 180, 100, 100};
         for (int i = 0; i < 3; ++i) {
+            sliders_[i]->setRange(low[i], high[i]);
+            spins_[i]->setRange(low[i], high[i]);
             sliders_[i]->setValue(values[i]);
             spins_[i]->setValue(values[i]);
         }
-        reset_->setEnabled(value_ != Parameters{});
+        colorize_->setChecked(value_.colorize_enabled);
+        reset_->setEnabled(value_.colorize_enabled ? value_.colorize != creative_suite::effects::ColorizeParameters{} :
+            value_.hue != 0 || value_.saturation != 0 || value_.lightness != 0);
         syncing_ = false;
     }
     QString id_;
     Parameters value_;
     std::array<QSlider*, 3> sliders_{};
     std::array<QSpinBox*, 3> spins_{};
+    QCheckBox* colorize_ = nullptr;
     QPushButton* reset_ = nullptr;
     bool syncing_ = false, active_ = false;
 };

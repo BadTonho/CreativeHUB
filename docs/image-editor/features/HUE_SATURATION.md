@@ -3,8 +3,9 @@
 ## Editing contract
 
 Layers > New Adjustment Layer > Hue/Saturation creates the fourth adjustment
-kind, with global Hue, Saturation and Lightness. The Portuguese label is
-Matiz/Saturação. Colorize and per-color-range controls remain planned separately.
+kind, with normal Hue, Saturation and Lightness plus an independent Colorize
+mode. The Portuguese labels are Matiz/Saturação and Colorizar. Per-color-range
+controls remain outside this feature.
 A single selected layer, Background or group is required. Insert above the
 selected sibling or its clipping chain, retain group ownership and capture an
 area selection as the independent initial mask; otherwise initialize white.
@@ -15,8 +16,17 @@ area selection as the independent initial mask; otherwise initialize white.
 | Saturation | -100% to +100% | 0% | 1% |
 | Lightness | -100% to +100% | 0% | 1% |
 
+Colorize has separate Hue (0–360°, default 0°), Saturation (0–100%, default
+25%) and Lightness (-100–100%, default 0%) values. Switching modes preserves
+the hidden mode's values. Reset changes only the visible mode and keeps it
+active. Colorize assigns its absolute hue and saturation to every pixel,
+including gray pixels, preserves the input HSL lightness, then adjusts that
+lightness with its own Lightness control. Alpha is unchanged; saturation 0%
+produces gray and 100% uses the maximum HSL saturation available at that
+lightness. Hue 360° renders like 0°.
+
 Integer fields and sliders stay synchronized. A drag, continuous field edit,
-keyboard or wheel gesture is one Undo. Reset restores all three atomically;
+keyboard or wheel gesture is one Undo. Reset restores the three visible controls atomically;
 no-op edits preserve Redo. Finish edits on focus/layer/tab changes and existing
 document commands. Mask selection keeps owner controls visible. Opacity,
 visibility, six blend modes, clipping, stack movement and groups use existing
@@ -29,8 +39,10 @@ No shortcut is added.
 
 ## Shared calculation and ownership
 
-`effects::HueSaturationParameters` holds integer `hue`, `saturation`, `lightness`,
-all defaulting to zero. It is the fourth `effects::AdjustmentParameters` variant.
+`effects::HueSaturationParameters` holds normal integer `hue`, `saturation` and
+`lightness` controls plus an enable flag and independent `ColorizeParameters`.
+Normal values default to zero; Colorize defaults to 0°/25%/0°. It is the fourth
+`effects::AdjustmentParameters` variant.
 The new Qt-free `hue_saturation.h` validates ranges and evaluates borrowed finite,
 normalized straight encoded-sRGB channels, returning rounded RGB bytes without
 allocation, alpha processing or retained state. The Image session owns typed
@@ -43,7 +55,10 @@ extrema, delta their difference, and L=(max+min)/2. For delta>0, calculate the
 standard six-sector hue and S=delta/(1-abs(2L-1)); achromatic inputs have S=0.
 For an original chromatic input, rotate H by hue/360 with circular wrapping,
 positive red → yellow → green, and adjust S using the rule below. Original
-achromatic pixels keep S=0, including when saturation is positive.
+achromatic pixels keep S=0, including when saturation is positive in normal
+mode. Colorize instead applies its absolute hue and saturation to every pixel,
+including gray pixels, while preserving original L before applying its
+independent Colorize Lightness adjustment.
 
 For normalized S or L and signed percent a:
 
@@ -54,7 +69,8 @@ Adjust L independently, convert HSL back to RGB, clamp and round to bytes before
 the existing masked blend. Saturation -100 produces HSL gray, not Rec.709 luma;
 Lightness -100/+100 produces black/white with unchanged alpha. ±180 hue rotations
 render identically while preserving the user's signed parameter. The neutral
-0/0/0 Normal adjustment bypasses conversion and preserves the old byte path.
+0/0/0 Normal adjustment bypasses conversion and preserves the old byte path,
+even when inactive Colorize values are non-default.
 Other blend modes still apply their existing blend rule.
 
 The Video saturation evaluator keeps its Rec.709 behavior. This feature does not
@@ -68,19 +84,21 @@ existing contracts.
 
 ## Format and compatibility
 
-Introduced in v23, this kind is read by the current v27 writer alongside
-supported v1-26 documents. Store:
+Introduced in v23, this kind is read by the current v28 writer alongside
+supported v1-27 documents. Version 28 adds a required `colorize` object; older
+versions migrate to disabled Colorize with its default values. Store:
 
 ```json
-{"kind":"adjustment","adjustment":{"type":"hue_saturation","hue":75,"saturation":-25,"lightness":10}}
+{"kind":"adjustment","adjustment":{"type":"hue_saturation","hue":75,"saturation":-25,"lightness":10,"colorize":{"enabled":true,"hue":210,"saturation":65,"lightness":-12}}}
 ```
 
-All three integers are required, in the documented ranges. Reject fractional,
+The normal controls and all four Colorize fields are required in v28. Colorize
+Hue is 0–360, Saturation is 0–100 and Lightness is -100–100. Reject fractional,
 non-numeric, missing and out-of-range controls, this kind before v23, mismatched
 adjustment fields, incompatible Background/content/outline fields and future
 schemas. Invalid Open retains the active document. Earlier binaries cannot open
-v23; there is no downgrade writer. Recovery envelope v1, application versions
-and linked PNG protocol stay unchanged. The current Hub accepts Image v1-27 and rejects v28,
+v28; there is no downgrade writer. Recovery envelope v1, application versions
+and linked PNG protocol stay unchanged. The current Hub accepts Image v1-28 and rejects v29,
 retaining all six kinds and masks while rebasing existing media paths. Actual
 Image readers verify vault and relocated restores.
 
@@ -88,12 +106,12 @@ Image readers verify vault and relocated restores.
 
 | Contract | Automated gate |
 | --- | --- |
-| Independent HSL reference, RGB grid, gray/near-gray, ±180, bounds, alpha/coverage/opacity/six modes and exact identity | `creative-suite-image-editor-hue-saturation`, shared `creative-suite-effects` |
-| Four-kind stack/order, history, clipping/groups/masks, cache reuse, thumbnails, v23/recovery/migration/rejected loads and PNG/JPEG/group export | `creative-suite-image-editor-hue-saturation`, existing core/raster/mask/export suites |
-| Actual menu, selection seed, integer controls, keyboard/wheel/sliders, Reset, restrictions, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI and translation catalog |
-| Native OpenGL parity, unchanged alpha, zero-upload edits, mixed types, cancellation/budgets and 1080p | Interactive `gpuHueSaturation` / `gpuHueSaturationColorGrid`, native shared OpenGL and existing Image interactive gates |
+| Normal/Colorize HSL reference, gray/chromatic input, 0°/360°, saturation endpoints, lightness, bounds, alpha/coverage/opacity/six modes and exact identity | `creative-suite-image-editor-hue-saturation`, shared `creative-suite-effects` |
+| Adjustment stack/order, independent values, history, clipping/groups/masks, cache reuse, thumbnails, v27→28/recovery/invalid loads and PNG/JPEG/group export | `creative-suite-image-editor-hue-saturation`, existing core/raster/mask/export suites |
+| Actual menu, selection seed, mode-specific ranges/values, keyboard/wheel/sliders, mode-local Reset, Undo/Redo, restrictions, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI and translation catalog |
+| Native OpenGL parity, unchanged alpha, Colorize previews, zero-upload edits, mixed types, cancellation/budgets and 1080p | Interactive `gpuHueSaturation` / `gpuHueSaturationColorGrid`, native shared OpenGL and existing Image interactive gates |
 | Real v23 PNG producer, rotated RGB, mask alpha and isolated clip variant | `creative-suite-main-editor-linked-image`, also reused by the full Video main-window suite |
-| v1-23 backup/rebase/restore and future refusal | `hub-backup-format-test`, `hub-backup-manager-test` with the actual Image reader |
+| v1–28 backup/rebase/restore and v29 refusal | `hub-backup-format-test`, `hub-backup-manager-test` with the actual Image reader |
 | Existing shared consumers | Scoped Video adjustment/transform/project/media and Motion preview/GPU/persistence/export/UI suites |
 
 Execution evidence is recorded below. Keep native context

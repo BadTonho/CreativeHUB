@@ -447,7 +447,7 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 27; host links live in the Video Editor's
+  The `.cimg` schema is version 28; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
@@ -743,7 +743,8 @@ Image owns typed edits/history, scope, masks and persistence. CPU and OpenGL
 raster dispatch explicitly by kind; shader uniforms reuse the retained backdrop
 and content/mask caches. The neutral Normal path remains byte-exact. A chromatic
 thumbnail strip uses the same evaluator; older grayscale thumbnails retain their
-sampling. The codec writes v23 and Hub preserves all four kinds. See
+sampling. The codec writes v28 with independent Colorize values; v1–27 migrate
+to disabled defaults and Hub preserves these fields in v28 backups. See
 [contract](../features/HUE_SATURATION.md).
 
 ## Global Levels processing
@@ -756,7 +757,7 @@ selected layer's backdrop with unchanged alpha, preserving the neutral Normal
 byte path and cached source textures. The combined asynchronous histogram
 captures this backdrop before Levels and samples at most one million
 nontransparent pixels; it does not affect rendering or the persisted document.
-The codec writes v27; Hub accepts v1–27. See the
+The codec writes v28; Hub accepts v1–28. See the
 [Levels contract](../features/LEVELS.md).
 
 ## Global Curves processing
@@ -770,8 +771,8 @@ index their corresponding table while the existing mask/blend path preserves
 alpha. No content texture is reuploaded for point edits. The Image Editor owns
 points, gestures, history, stack scope and errors. Levels and Curves share the
 asynchronous pre-adjustment histogram capture; it is neither part of the
-document nor recalculated for parameter edits. The codec writes v27 and Hub
-accepts v1–27. See the
+document nor recalculated for parameter edits. The codec writes v28 and Hub
+accepts v1–28. See the
 [Curves contract](../features/CURVES.md).
 
 Raster cache synchronization consumes QHash's erase-returned iterator because

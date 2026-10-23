@@ -4,20 +4,33 @@
 #include <cmath>
 
 namespace creative_suite::effects {
+struct ColorizeParameters {
+    int hue = 0;
+    int saturation = 25;
+    int lightness = 0;
+    bool operator==(const ColorizeParameters&) const = default;
+};
 // Global encoded-sRGB HSL controls. Hue is a signed rotation in degrees;
-// saturation/lightness move toward zero or one by signed percent.
+// saturation/lightness move toward zero or one by signed percent. Colorize
+// stores an independent absolute HSL target and an enable flag.
 struct HueSaturationParameters {
     int hue = 0;
     int saturation = 0;
     int lightness = 0;
+    bool colorize_enabled = false;
+    ColorizeParameters colorize;
     bool operator==(const HueSaturationParameters&) const = default;
 };
 [[nodiscard]] inline bool validHueSaturation(const HueSaturationParameters& p) noexcept {
     return p.hue >= -180 && p.hue <= 180 && p.saturation >= -100 &&
-        p.saturation <= 100 && p.lightness >= -100 && p.lightness <= 100;
+        p.saturation <= 100 && p.lightness >= -100 && p.lightness <= 100 &&
+        p.colorize.hue >= 0 && p.colorize.hue <= 360 &&
+        p.colorize.saturation >= 0 && p.colorize.saturation <= 100 &&
+        p.colorize.lightness >= -100 && p.colorize.lightness <= 100;
 }
 // Borrowed finite straight RGB in [0,1], validated parameters; no allocation,
-// alpha processing or retained state. Saturation does not colorize gray pixels.
+// alpha processing or retained state. Normal Saturation does not colorize gray
+// pixels; the explicit Colorize mode applies its absolute target to every pixel.
 [[nodiscard]] inline std::array<unsigned char,3> hueSaturationRgb(
     const HueSaturationParameters& p, std::array<double,3> rgb) noexcept {
     const double low = std::min({rgb[0], rgb[1], rgb[2]});
@@ -28,9 +41,13 @@ struct HueSaturationParameters {
             value + (1. - value) * (amount / 100.);
     };
     const double original_lightness = (high + low) * .5;
-    const double lightness = adjust(original_lightness, p.lightness);
+    const bool colorize = p.colorize_enabled;
+    const double lightness = adjust(original_lightness, colorize ? p.colorize.lightness : p.lightness);
     double hue = 0, saturation = 0;
-    if (delta > 0) {
+    if (colorize) {
+        hue = (p.colorize.hue % 360) / 60.;
+        saturation = p.colorize.saturation / 100.;
+    } else if (delta > 0) {
         saturation = adjust(std::clamp(delta / (1. - std::abs(2. * original_lightness - 1.)), 0., 1.), p.saturation);
         hue = high == rgb[0] ? (rgb[1] - rgb[2]) / delta :
             high == rgb[1] ? (rgb[2] - rgb[0]) / delta + 2. : (rgb[0] - rgb[1]) / delta + 4.;

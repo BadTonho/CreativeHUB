@@ -84,7 +84,7 @@ Optional `blend_mode` strings on layers/groups are `normal`, `multiply`, `screen
 `overlay`, `add`, `difference`; Normal is omitted. v1-18 load as Normal. Reject
 fields before v19, non-string/unknown values and any Background mode field.
 Invalid Open preserves the current document. History/recovery preserve modes.
-Hub accepts v1-27 and preserves properties when rebasing media; v28 is rejected.
+Hub accepts v1-28 and preserves properties when rebasing media; v29 is rejected.
 The Video consumer still reads atomic published PNG, not the native schema.
 Shared Motion/Video Normal, blend, GPU and export contracts are regression gates.
 

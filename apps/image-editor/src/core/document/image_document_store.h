@@ -258,7 +258,7 @@ struct RecoveryDocumentData {
 
 class ImageDocumentStore final {
 public:
-    static constexpr int kCurrentDocumentVersion = 27;
+    static constexpr int kCurrentDocumentVersion = 28;
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr qsizetype kMaximumStrokeClipPathElements = 100'000;

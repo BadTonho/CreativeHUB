@@ -471,7 +471,7 @@ Image native v22 adds the third typed adjustment. Shared effects provide the
 validated linear-sRGB evaluator and the OpenGL raster compositor evaluates it
 on its own backdrop without readback; Image owns workflow and stack order.
 Video/Motion effects, native formats and PNG handoff remain unchanged. Hub
-accepts Image v1-27, rejects v28 and preserves all six adjustment payloads and
+accepts Image v1-28, rejects v29 and preserves all six adjustment payloads and
 masks through real-reader restoration. Existing consumers and shared regressions
 protect the additive API; native workflow acceptance remains separate. See
 [Image contract](image-editor/features/EXPOSURE_OFFSET_GAMMA.md).
@@ -493,8 +493,8 @@ Blue parameter sets alongside the existing RGB master. Shared effects applies
 the encoded-sRGB master mapping first, rounds to a byte, and then evaluates the
 matching channel set; OpenGL follows the same retained-backdrop stages. Image
 owns layer scope, histogram, masks, history and persistence. Video/Motion
-formats and linked PNG protocol remain unchanged. Hub accepts Image v1–27 and
-rejects v28, retaining all four parameter sets and masks through backup and
+formats and linked PNG protocol remain unchanged. Hub accepts Image v1–28 and
+rejects v29, retaining all four parameter sets and masks through backup and
 relocation. The Video linked-image test consumes flattened output from a v27
 Image producer; Motion keeps using the same PNG contract. See
 [contract](image-editor/features/LEVELS.md).
@@ -505,8 +505,8 @@ Image v25 introduces the sixth adjustment kind. Shared effects builds bounded
 shape-preserving encoded-sRGB lookup tables; the OpenGL raster path consumes the
 same tables as uniforms. Image owns point editing, histogram, masks, history and
 persistence. Video/Motion effect registries and native formats remain unchanged;
-linked PNG publication retains its protocol. Hub accepts Image v1–27 and
-rejects v28, preserving Curves and masks through backup and relocation. The
+linked PNG publication retains its protocol. Hub accepts Image v1–28 and
+rejects v29, preserving Curves and masks through backup and relocation. The
 Video linked-image gate consumes flattened output from a v27 Image producer. See the
 [contract](image-editor/features/CURVES.md).
 
@@ -516,8 +516,8 @@ Image v26 adds an RGB master curve followed by individual Red, Green and Blue
 curves in its application-owned adjustment payload. The shared evaluator
 composes effective channel lookup tables; CPU and OpenGL preserve alpha and
 match byte results. Version 25 documents migrate their existing curve to the
-master and initialize individual channels to identity. Hub accepts Image v1–27
-and rejects v28 while preserving all four point sets and relocated media. Video
+master and initialize individual channels to identity. Hub accepts Image v1–28
+and rejects v29 while preserving all four point sets and relocated media. Video
 and Motion continue consuming flattened PNGs under the existing publication
 protocol. See the [Curves contract](image-editor/features/CURVES.md).
 
@@ -526,7 +526,8 @@ protocol. See the [Curves contract](image-editor/features/CURVES.md).
 Image v27 stores the existing RGB Levels values as the master and adds
 independent Red, Green and Blue sets. Versions 24–26 migrate their old values
 to the master and initialize individual channels to identity; v26 Curves
-payloads remain unchanged. Hub backups retain v27 documents and reject v28.
+payloads remain unchanged. Hub backups retain v27 documents, accept through
+v28 and reject v29.
 The Video Editor linked-image regression produces the v27 Image document,
 publishes its adjusted PNG, and confirms the consumer refreshes the media and
 preview. Motion continues consuming the same flattened PNG contract without

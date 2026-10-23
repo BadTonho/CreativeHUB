@@ -7,5 +7,9 @@
         <source>Open Image</source>
         <translation>Imagem obtida</translation>
     </message>
+    <message>
+        <source>Colorize</source>
+        <translation>Colorizar</translation>
+    </message>
 </context>
 </TS>

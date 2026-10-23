@@ -191,8 +191,11 @@ void testImageDocuments(const QString& root) {
             auto children = group.value("children").toArray();
             auto adjustment = children.last().toObject();
             adjustment.insert("id", QUuid::createUuid().toString(QUuid::WithoutBraces));
-            adjustment.insert("adjustment", QJsonObject{{"type", "hue_saturation"},
-                {"hue", 75}, {"saturation", -25}, {"lightness", 10}});
+            QJsonObject hue{{"type", "hue_saturation"},
+                {"hue", 75}, {"saturation", -25}, {"lightness", 10}};
+            if (version >= 28) hue.insert("colorize", QJsonObject{{"enabled", true},
+                {"hue", 210}, {"saturation", 65}, {"lightness", -12}});
+            adjustment.insert("adjustment", hue);
             children.append(adjustment);
             group.insert("children", children);
             layers[layers.size()-1] = group;

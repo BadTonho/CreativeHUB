@@ -467,6 +467,8 @@ private slots:
         for (const auto& controls : {creative_suite::effects::HueSaturationParameters{}, {180,100,100}, {-180,-100,-100}, {0,100,0}, {0,-100,0}, {75,-25,10}}) {
             QVERIFY(s.setHueSaturation(id, controls)); verify(true);
         }
+        points.colorize_enabled=true;points.colorize={210,65,-12};QVERIFY(s.setHueSaturation(id,points));verify(true);
+        points.colorize_enabled=false;QVERIFY(s.setHueSaturation(id,points));verify(true);
         const auto work=cache.reconstructedPixels();for(int mode=1;mode<6;++mode){QVERIFY(s.setStackBlendMode(id,false,static_cast<BlendMode>(mode)));verify(true);QCOMPARE(cache.reconstructedPixels(),work);}
         points.lightness=30;QVERIFY(s.setHueSaturation(id,points));verify(true);QCOMPARE(cache.reconstructedPixels(),work);
         QVERIFY(s.setLayerOpacity(id,47));verify(true);QVERIFY(s.setLayerOpacity(id,0));verify(true);QVERIFY(s.setLayerOpacity(id,100));verify(false,160*100); // Re-admit the evicted Grayscale8 mask only.
@@ -676,6 +678,10 @@ private slots:
                 const auto read=gpu.readback(result.frame);QVERIFY(read.frame);const auto actual=QImage(read.frame->rgba_pixels.data(),read.frame->width,read.frame->height,read.frame->stride,QImage::Format_RGBA8888_Premultiplied).convertToFormat(QImage::Format_ARGB32_Premultiplied);const auto expected=baseline(s);
                 for(int y=0;y<actual.height();++y)for(int x=0;x<actual.width();++x){const auto a=actual.pixel(x,y),b=expected.pixel(x,y);QVERIFY2(std::abs(qRed(a)-qRed(b))<=2 && std::abs(qGreen(a)-qGreen(b))<=2 && std::abs(qBlue(a)-qBlue(b))<=2 && qAlpha(a)==qAlpha(b),qPrintable(QString("HSL grid %1,%2 background alpha %3 hue %4 sat %5 light %6: %7/%8").arg(x).arg(y).arg(background.alpha()).arg(controls.hue).arg(controls.saturation).arg(controls.lightness).arg(a,0,16).arg(b,0,16)));}
             }
+            auto colorized=creative_suite::effects::HueSaturationParameters{};colorized.colorize_enabled=true;colorized.colorize={360,100,15};
+            QVERIFY(s.setHueSaturation(id,colorized));const auto composed=cache.prepare(s.exportSnapshot(),QStringLiteral("hsl-colorize-%1").arg(background.alpha()));const auto result=gpu.composeRasterTexture(makeGpuRasterRequest(composed));QVERIFY2(result.status==OpenGlCompositionStatus::Complete,result.cause.c_str());
+            const auto read=gpu.readback(result.frame);QVERIFY(read.frame);const auto actual=QImage(read.frame->rgba_pixels.data(),read.frame->width,read.frame->height,read.frame->stride,QImage::Format_RGBA8888_Premultiplied).convertToFormat(QImage::Format_ARGB32_Premultiplied);const auto expected=baseline(s);
+            for(int y=0;y<actual.height();++y)for(int x=0;x<actual.width();++x){const auto a=actual.pixel(x,y),b=expected.pixel(x,y);QVERIFY2(std::abs(qRed(a)-qRed(b))<=2&&std::abs(qGreen(a)-qGreen(b))<=2&&std::abs(qBlue(a)-qBlue(b))<=2&&qAlpha(a)==qAlpha(b),qPrintable(QString("Colorize grid %1,%2 background alpha %3: %4/%5").arg(x).arg(y).arg(background.alpha()).arg(a,0,16).arg(b,0,16)));}
         }
     }
     void gpuEditableBlendObjects() {

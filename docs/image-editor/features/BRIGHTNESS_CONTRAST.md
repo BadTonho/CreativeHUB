@@ -56,7 +56,7 @@ unknown types, invalid values, Background adjustments and incompatible raster
 content/outline. Invalid Open preserves the current document. Selection mask
 encoding and recovery envelope v1 are unchanged.
 
-Hub accepts Image v1-27, refuses v28 and retains all six adjustment payloads/masks
+Hub accepts Image v1-28, refuses v29 and retains all six adjustment payloads/masks
 through backup, relocation and restoration, verified by the actual Image reader.
 Application versions and linked PNG protocol are unchanged.
 
