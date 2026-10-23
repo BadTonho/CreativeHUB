@@ -117,7 +117,11 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     node_layout->addWidget(new QLabel(QCoreApplication::translate("ColorWorkspace", "Color nodes"), node_panel));
     nodes_ = new ColorNodeCanvas(node_panel);
     node_layout->addWidget(nodes_, 1);
-    node_kind_ = new QComboBox(node_panel);
+    auto* node_action_controls = new QWidget(node_panel);
+    node_action_controls->setObjectName("colorNodeActionControls");
+    auto* node_action_layout = new QVBoxLayout(node_action_controls);
+    node_action_layout->setContentsMargins(0, 0, 0, 0);
+    node_kind_ = new QComboBox(node_action_controls);
     node_kind_->setObjectName("colorNewNodeType");
     for (const auto& effect : creative_suite::effects::builtInEffects()) {
         node_kind_->addItem(labelFor(effect.id), QString::fromUtf8(
@@ -125,10 +129,10 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     }
     const auto primary_grade = node_kind_->findData(QStringLiteral("video.primary_grade"));
     if (primary_grade >= 0) node_kind_->setCurrentIndex(primary_grade);
-    node_layout->addWidget(node_kind_);
+    node_action_layout->addWidget(node_kind_);
     auto* node_buttons = new QHBoxLayout;
-    auto make_button = [node_panel, node_buttons](const QString& label, const char* object_name) {
-        auto* button = new QPushButton(label, node_panel);
+    auto make_button = [node_action_controls, node_buttons](const QString& label, const char* object_name) {
+        auto* button = new QPushButton(label, node_action_controls);
         button->setObjectName(QString::fromLatin1(object_name));
         node_buttons->addWidget(button);
         return button;
@@ -137,7 +141,9 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     add_branch_button_ = make_button(QCoreApplication::translate("ColorWorkspace", "Add Branch"), "colorAddParallelBranchButton");
     auto* toggle = make_button(QCoreApplication::translate("ColorWorkspace", "On/Off"), "colorToggleNodeButton");
     auto* remove = make_button(QCoreApplication::translate("ColorWorkspace", "Remove"), "colorRemoveNodeButton");
-    node_layout->addLayout(node_buttons);
+    node_action_layout->addLayout(node_buttons);
+    node_action_controls->hide();
+    node_layout->addWidget(node_action_controls);
     upper->addWidget(node_panel, 2);
     root->addLayout(upper, 3);
 

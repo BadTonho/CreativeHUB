@@ -5,12 +5,13 @@
 The Color selector opens a central page on demand and moves the shared Viewer
 there. Its clip strip selects visual Timeline clips; the node canvas shows the
 per-clip correction graph. Drag nodes to arrange them, connect ports to change
-processing, middle-drag to pan, add effects or parallel branches, remove effects
-or mixers, and edit mixer weights. Removing a mixer retains its first input as
-the output path. These changes and Edit Inspector parameter/enabled-state edits
-use shared Timeline Undo/Redo. An RGB waveform samples the displayed frame on
-a worker at a bounded rate. Leaving Color restores the previous dock
-arrangement. See the
+processing, middle-drag to pan, and edit mixer weights. The effect-type selector
+and Add Effect, Add Branch, On/Off, and Remove controls are temporarily hidden
+pending relocation; their existing actions remain wired. Removing a mixer
+retains its first input as the output path. Visible graph edits and Edit
+Inspector parameter/enabled-state edits use shared Timeline Undo/Redo. An RGB
+waveform samples the displayed frame on a worker at a bounded rate. Leaving
+Color restores the previous dock arrangement. See the
 [Color roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
 The Color Gallery captures the current composed Viewer frame into an ordered

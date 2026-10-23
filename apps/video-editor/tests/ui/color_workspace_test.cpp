@@ -43,9 +43,13 @@ int main(int argc, char** argv) {
         auto* add_branch = workspace.findChild<QPushButton*>("colorAddParallelBranchButton");
         auto* toggle = workspace.findChild<QPushButton*>("colorToggleNodeButton");
         auto* remove = workspace.findChild<QPushButton*>("colorRemoveNodeButton");
+        auto* new_type = workspace.findChild<QComboBox*>("colorNewNodeType");
+        auto* action_controls = workspace.findChild<QWidget*>("colorNodeActionControls");
         auto* nodes = workspace.findChild<ui::ColorNodeCanvas*>("colorNodeCanvas");
-        require(add && add_branch && toggle && remove && nodes,
+        require(add && add_branch && toggle && remove && new_type && action_controls && nodes,
                 "Color graph controls must exist.");
+        require(action_controls->isHidden(),
+                "Color graph action controls and effect selector must be visually hidden.");
         add->click();
         const auto selected_after_add = nodes->selectedNode();
         const auto* added_node = selected_after_add
@@ -84,8 +88,6 @@ int main(int argc, char** argv) {
         remove->click();
         require(color::validate(graph) && graph.nodes.size() == 5,
                 "Removing a correction must preserve a valid connected graph.");
-        auto* new_type = workspace.findChild<QComboBox*>("colorNewNodeType");
-        require(new_type != nullptr, "Color must offer correction node types.");
         new_type->setCurrentIndex(new_type->findData(QStringLiteral("video.saturation")));
         add->click();
         require(std::any_of(graph.nodes.begin(), graph.nodes.end(), [](const auto& node) {
