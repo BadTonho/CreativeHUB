@@ -505,7 +505,7 @@ void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* s
 }
 
 creative_suite::composition::GpuFrameCompositor* PlaybackWorker::graphGpuBackend() {
-    if (!gpu_composition_enabled_ || gpu_composition_failed_ || adjustment_cpu_frame_ || (!gpu_surface_ && creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Vulkan)) return nullptr;
+    if (!gpu_composition_enabled_ || gpu_composition_failed_ || (!gpu_surface_ && creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Vulkan)) return nullptr;
     if (!gpu_graph_compositor_)
         gpu_graph_compositor_ = creative_suite::composition::createGpuFrameCompositor(gpu_surface_,
             creative_suite::composition::OpenGlPrecisionPolicy::Automatic,
@@ -2872,7 +2872,7 @@ PlaybackWorker::decodeCompositionLayers(
             decode_path = rendering::SlowFrameDecodePath::StaticFrame;
         } else if (composition.session != nullptr) {
             std::optional<media::VideoFramePtr> decoded;
-            const bool native_delivery = creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Vulkan && hardware_decoding_enabled_ && gpu_composition_enabled_ && !gpu_composition_failed_ && !adjustment_cpu_frame_;
+            const bool native_delivery = creative_suite::composition::sessionGraphicsBackend() != creative_suite::composition::GraphicsBackend::Vulkan && hardware_decoding_enabled_ && gpu_composition_enabled_ && !gpu_composition_failed_;
             const auto acceptNative = [&](const std::optional<creative_suite::media::DecodedVideoFrame>& result) {
                 if (!result) return;
                 native_frame = result->native;
@@ -3064,9 +3064,97 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
         steps.reserve(layers.size());
         for (std::size_t index = 0; index < layers.size(); ++index)
             steps.push_back({layers[index], decoded_layers[index].kind == timeline::ClipKind::Adjustment});
-        auto composed = rendering::composeAdjustmentLayers(width, height, steps, should_cancel);
+        const auto compose_on_cpu = [&]() {
+            auto composed = rendering::composeAdjustmentLayers(width, height, steps, should_cancel);
+            if (composed) metrics.recordCompositionBackend(false, {}, gpu_composition_enabled_);
+            if (timings) { timings->canvas_width = width; timings->canvas_height = height; }
+            return composed;
+        };
+        const auto recover_cpu_sources = [&]() -> std::optional<media::VideoFrame> {
+            if (!std::any_of(decoded_layers.begin(), decoded_layers.end(), [](const auto& layer) {
+                    return layer.native_frame || layer.texture_frame;
+                })) return compose_on_cpu();
+            const bool previous_failure = gpu_composition_failed_;
+            gpu_composition_failed_ = true;
+            struct RestoreFailure { bool& flag; bool previous; ~RestoreFailure() { flag = previous; } }
+                restore{gpu_composition_failed_, previous_failure};
+            auto recovered = decodeCompositionLayers(current_timeline_frame_, should_cancel);
+            if (!recovered) return {};
+            return composeCompositionLayers(*recovered, should_cancel, timings);
+        };
+        const bool gpu_adjustment_available = gpu_surface_ ||
+            creative_suite::composition::sessionGraphicsBackend() == creative_suite::composition::GraphicsBackend::Vulkan;
+        if (gpu_composition_enabled_ && !gpu_composition_failed_ && gpu_adjustment_available) {
+            OpenGlCompositionTimings gpu_timings;
+            GpuTextureCompositionResult gpu_result;
+            bool busy_cpu_fallback = false;
+            try {
+                if (!gpu_compositor_)
+                    gpu_compositor_ = createGpuFrameCompositor(gpu_surface_, OpenGlPrecisionPolicy::Automatic,
+                        gpu_share_context_ ? gpu_share_context_ : QOpenGLContext::globalShareContext(), gpu_texture_budget_);
+                if (gpu_compositor_)
+                    gpu_result = rendering::composeAdjustmentLayersGpu(width, height, steps, *gpu_compositor_,
+                        should_cancel, &gpu_timings);
+                else gpu_result = {OpenGlCompositionStatus::Failed, {}, "create-adjustment-backend",
+                    "The GPU adjustment backend is unavailable."};
+            } catch (const std::exception& error) {
+                gpu_result = {OpenGlCompositionStatus::Failed, {}, "compose-adjustment", error.what(), -1};
+            }
+            if (should_cancel() || gpu_result.status == OpenGlCompositionStatus::Cancelled) {
+                metrics.recordGpuCompositionWork(gpu_timings);
+                last_composition_cancelled_ = true;
+                return {};
+            }
+            if (gpu_result.status == OpenGlCompositionStatus::Busy) {
+                metrics.recordGpuCompositionWork(gpu_timings);
+                metrics.recordTexturePoolBusy(playing_);
+                busy_cpu_fallback = true;
+                ensureGpuMaintenance();
+            }
+            if (gpu_result.status == OpenGlCompositionStatus::Complete && gpu_result.frame) {
+                last_composition_gpu_ = true;
+                if (gpu_texture_delivery_enabled_ && !gpu_texture_delivery_failed_) {
+                    last_composition_texture_ = std::move(gpu_result.frame);
+                    metrics.recordCompositionBackend(true, gpu_timings);
+                    ensureGpuMaintenance();
+                    if (timings) { timings->canvas_width = width; timings->canvas_height = height; }
+                    return {};
+                }
+                auto readback = gpu_compositor_->readback(gpu_result.frame, should_cancel, &gpu_timings);
+                if (readback.status == OpenGlCompositionStatus::Complete && readback.frame) {
+                    metrics.recordCompositionBackend(true, gpu_timings);
+                    if (timings) { timings->canvas_width = width; timings->canvas_height = height; }
+                    return std::move(readback.frame);
+                }
+                gpu_result = {readback.status, {}, readback.operation, readback.cause, readback.error_code};
+            }
+            if (!busy_cpu_fallback) {
+                metrics.recordGpuCompositionWork(gpu_timings);
+                if (gpu_result.status == OpenGlCompositionStatus::Failed) {
+                    gpu_composition_failed_ = true;
+                    metrics.recordGpuCompositionFailure();
+                    retireGpuCompositor();
+                }
+            }
+            last_composition_gpu_ = false;
+            if (!busy_cpu_fallback) {
+                logging::Logger::instance().log(gpu_result.status == OpenGlCompositionStatus::Failed
+                        ? logging::Level::Error : logging::Level::Warning,
+                    "gpu-composition", gpu_result.operation, gpu_result.cause,
+                    {{"error_code", std::to_string(gpu_result.error_code)},
+                     {"canvas_width", std::to_string(width)}, {"canvas_height", std::to_string(height)},
+                     {"timeline_frame", std::to_string(current_timeline_frame_)},
+                     {"generation", std::to_string(generation_)}, {"fallback", "cpu-adjustment"}});
+                if (!gpu_warning_reported_ || gpu_result.status == OpenGlCompositionStatus::Failed) {
+                    gpu_warning_reported_ = true;
+                    emit compositionWarning("GPU Adjustment processing is unavailable for this frame. Using CPU.",
+                        gpu_result.error_code, generation_);
+                }
+            }
+            last_composition_busy_ = false;
+        }
+        auto composed = recover_cpu_sources();
         if (should_cancel && should_cancel()) { last_composition_cancelled_ = true; return {}; }
-        if (composed) metrics.recordCompositionBackend(false, {}, gpu_composition_enabled_);
         if (timings) { timings->canvas_width = width; timings->canvas_height = height; }
         return composed;
     }

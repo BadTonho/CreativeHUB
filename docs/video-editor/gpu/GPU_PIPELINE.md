@@ -50,6 +50,32 @@ application. It fetches each original frame index through its session, so a lost
 native transfer resource during graph evaluation also recovers software decoding.
 Standalone graph consumers can retain explicit native-frame download behavior.
 
+### Adjustment Clips
+
+The timeline stage remains application-owned. When GPU composition is enabled,
+Video composes the pending lower tracks into a texture at each active Adjustment
+Clip, then calls the shared `OpenGlImageOperationKind::Adjustment` operation. The
+operation applies the existing enabled color filters in stack order, maps the
+transformed source into the canvas, treats exposed pixels as opaque black, and
+mixes against the original canvas by clip opacity. The result is opaque RGBA,
+matching the CPU stage. Upper tracks are composed after that barrier and remain
+outside the adjustment's scope.
+
+OpenGL evaluates the operation in one fragment pass. Vulkan uses one compute
+dispatch and a small bounded storage buffer for ordered filter parameters; it
+does not allocate a frame-sized scratch chain for filters. Both backends retain
+texture/device leases under their existing budgets, with no pixel readback
+between timeline stages. The final preview can remain a direct GPU texture. The
+export path passes the same completed texture to the existing async RGBA or
+qualified native encoder delivery path.
+
+Rotation that the selected backend cannot evaluate precisely, unsupported
+effect stacks, resource pressure, and technical failures use the existing CPU
+Adjustment compositor for the same frame. Source decoding or Fusion evaluation
+is repeated through CPU recovery when the inputs only exist as native or graph
+textures. GPU composition remains opt-in and CPU remains the default. This adds
+no project setting, persisted field, or Fusion graph support inside adjustments.
+
 Fusion retains application-owned graph validation, source selection, scheduling,
 and keyframe evaluation. Shared `processImage` operations execute Input, Transform,
 Color, Effect, Merge, and Output with transparent RGBA8 intermediates. Merge uses

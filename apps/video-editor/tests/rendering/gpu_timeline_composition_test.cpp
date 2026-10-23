@@ -1,6 +1,8 @@
 #include "playback/playback_worker.h"
 #include <creative_suite/composition/vulkan_frame_compositor.h>
 #include "rendering/graph_generators.h"
+#include "rendering/adjustment_composition.h"
+#include "rendering/offline_export_renderer.h"
 #include "rendering/preview_performance_metrics.h"
 #include "logging/logger.h"
 #include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
@@ -126,6 +128,106 @@ void compare(const playback::VideoFramePtr& cpu, const playback::VideoFramePtr& 
             "Timeline CPU/GPU pixel mismatch at " + std::to_string(i));
 }
 
+void adjustmentParity(QOffscreenSurface* surface, GpuFrameCompositor& gpu) {
+    creative_suite::media::RgbaFrame lower{17, 11, 68, std::vector<std::uint8_t>(17 * 11 * 4)};
+    creative_suite::media::RgbaFrame upper{17, 11, 68, std::vector<std::uint8_t>(17 * 11 * 4)};
+    for (int y = 0; y < lower.height; ++y) for (int x = 0; x < lower.width; ++x) {
+        const auto offset = std::size_t(y * lower.stride + x * 4);
+        lower.rgba_pixels[offset] = std::uint8_t((x * 23 + y * 7) % 256);
+        lower.rgba_pixels[offset + 1] = std::uint8_t((x * 3 + y * 29) % 256);
+        lower.rgba_pixels[offset + 2] = std::uint8_t((x * 17 + y * 13) % 256);
+        lower.rgba_pixels[offset + 3] = 255;
+        upper.rgba_pixels[offset] = std::uint8_t((230 - x * 5 + y * 2) % 256);
+        upper.rgba_pixels[offset + 1] = std::uint8_t((30 + x * 9 + y * 4) % 256);
+        upper.rgba_pixels[offset + 2] = std::uint8_t((80 + x * 2 + y * 11) % 256);
+        upper.rgba_pixels[offset + 3] = 255;
+    }
+    CompositionLayer lower_layer; lower_layer.frame = &lower;
+    CompositionLayer upper_layer; upper_layer.frame = &upper;
+    auto brightness = creative_suite::effects::makeDefaultInstance("video.brightness");
+    auto contrast = creative_suite::effects::makeDefaultInstance("video.contrast");
+    auto saturation = creative_suite::effects::makeDefaultInstance("video.saturation");
+    auto grayscale = creative_suite::effects::makeDefaultInstance("video.grayscale");
+    require(creative_suite::effects::setParameterValue(brightness, "amount", 18) &&
+        creative_suite::effects::setParameterValue(contrast, "amount", 125) &&
+        creative_suite::effects::setParameterValue(saturation, "amount", 70) &&
+        creative_suite::effects::setParameterValue(grayscale, "amount", 45),
+        "Adjustment parity effects could not be configured.");
+    std::vector<creative_suite::effects::EffectInstance> ordered{brightness, contrast, saturation};
+    std::vector<creative_suite::effects::EffectInstance> second_stack{grayscale};
+    for (const double opacity : {0.0, 0.35, 1.0}) {
+        CompositionLayer first;
+        first.transform.position_x = 0.63; first.transform.position_y = 0.42;
+        first.transform.scale = 0.74; first.transform.opacity = opacity; first.effect_stack = ordered;
+        CompositionLayer second;
+        second.transform.position_x = 0.42; second.transform.position_y = 0.58;
+        second.transform.scale = 0.86; second.transform.opacity = 0.61; second.effect_stack = second_stack;
+        const std::vector<rendering::TimelineCompositionStep> steps{{lower_layer, false}, {first, true},
+            {upper_layer, false}, {second, true}};
+        const auto cpu = rendering::composeAdjustmentLayers(lower.width, lower.height, steps);
+        require(bool(cpu), "CPU Adjustment reference composition failed.");
+        OpenGlCompositionTimings timings;
+        const auto gpu_result = rendering::composeAdjustmentLayersGpu(lower.width, lower.height,
+            steps, gpu, {}, &timings);
+        require(gpu_result.status == OpenGlCompositionStatus::Complete && gpu_result.frame,
+            "GPU Adjustment operation did not complete: " + gpu_result.cause);
+        const auto readback = gpu.readback(gpu_result.frame);
+        require(readback.status == OpenGlCompositionStatus::Complete && readback.frame,
+            "GPU Adjustment parity readback failed: " + readback.cause);
+        require(cpu->rgba_pixels.size() == readback.frame->rgba_pixels.size(),
+            "CPU/GPU Adjustment outputs have different sizes.");
+        for (std::size_t i = 0; i < cpu->rgba_pixels.size(); ++i)
+            if (std::abs(int(cpu->rgba_pixels[i]) - int(readback.frame->rgba_pixels[i])) > 2)
+                require(false, "CPU/GPU Adjustment parity failed at byte " + std::to_string(i));
+    }
+    CompositionLayer canceled_adjustment;
+    canceled_adjustment.effect_stack = ordered;
+    const std::vector<rendering::TimelineCompositionStep> canceled_steps{{lower_layer, false},
+        {canceled_adjustment, true}};
+    const auto canceled = rendering::composeAdjustmentLayersGpu(lower.width, lower.height,
+        canceled_steps, gpu, [] { return true; });
+    require(canceled.status == OpenGlCompositionStatus::Cancelled && !canceled.frame,
+        "Canceled GPU Adjustment published a partial texture.");
+
+    auto rotated = CompositionLayer{};
+    rotated.transform.position_x = .54; rotated.transform.scale = .79;
+    rotated.transform.rotation_degrees = 19; rotated.transform.opacity = .47;
+    rotated.effect_stack = ordered;
+    const std::vector<rendering::TimelineCompositionStep> rotated_steps{{lower_layer, false}, {rotated, true}};
+    const auto rotated_cpu = rendering::composeAdjustmentLayers(lower.width, lower.height, rotated_steps);
+    const auto rotated_gpu = rendering::composeAdjustmentLayersGpu(lower.width, lower.height, rotated_steps, gpu);
+    require(bool(rotated_cpu), "Rotated CPU Adjustment fallback reference failed.");
+    if (rotated_gpu.status == OpenGlCompositionStatus::Complete && rotated_gpu.frame) {
+        const auto rotated_readback = gpu.readback(rotated_gpu.frame);
+        require(rotated_readback.status == OpenGlCompositionStatus::Complete && rotated_readback.frame,
+            "Supported GPU rotation readback failed.");
+        for (std::size_t i = 0; i < rotated_cpu->rgba_pixels.size(); ++i)
+            if (std::abs(int(rotated_cpu->rgba_pixels[i]) - int(rotated_readback.frame->rgba_pixels[i])) > 2)
+                require(false, "Rotated CPU/GPU Adjustment parity failed.");
+    } else {
+        require(rotated_gpu.status == OpenGlCompositionStatus::Unsupported && !rotated_gpu.frame,
+            "A failed rotated Adjustment did not return an explicit fallback status.");
+        const auto fallback = rendering::composeAdjustmentLayers(lower.width, lower.height, rotated_steps);
+        require(fallback && fallback->rgba_pixels == rotated_cpu->rgba_pixels,
+            "Unsupported GPU rotation did not retain the CPU Adjustment result.");
+    }
+
+    auto limited_budget = std::make_shared<OpenGlTexturePoolBudget>(64ULL * 1024 * 1024, 1);
+    auto limited = createGpuFrameCompositor(surface, OpenGlPrecisionPolicy::Automatic,
+        QOpenGLContext::globalShareContext(), limited_budget, gpu.backend());
+    auto limited_adjustment = rotated;
+    limited_adjustment.transform.rotation_degrees = 0;
+    const std::vector<rendering::TimelineCompositionStep> limited_steps{{lower_layer, false},
+        {limited_adjustment, true}};
+    const auto limited_result = rendering::composeAdjustmentLayersGpu(lower.width, lower.height,
+        limited_steps, *limited);
+    require((limited_result.status == OpenGlCompositionStatus::Busy ||
+        limited_result.status == OpenGlCompositionStatus::Unsupported) && !limited_result.frame,
+        "A one-target GPU budget unexpectedly published an Adjustment result.");
+    require(bool(rendering::composeAdjustmentLayers(lower.width, lower.height, limited_steps)),
+        "CPU Adjustment fallback failed after bounded GPU resource pressure.");
+}
+
 void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec image,
     playback::CompositionLayerSpec incoming, playback::CompositionLayerSpec text,
     media::VideoFramePtr published, media::VideoFramePtr refreshed) {
@@ -188,6 +290,47 @@ void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec ima
         "Direct delivery cached the previous published PNG.");
     delivered = {}; direct.setGpuCompositionEnabled(false, surface);
     QThread::msleep(6); QCoreApplication::processEvents(); ++epoch; enable();
+    auto outgoing = image; outgoing.track_index = 2; outgoing.clip_index = 0;
+    outgoing.timeline_start_frame = 0; outgoing.segment_frame_count = 60;
+    auto transitioning = incoming; transitioning.track_index = 2; transitioning.clip_index = 1;
+    transitioning.timeline_start_frame = 30; transitioning.segment_frame_count = 60;
+    auto adjustment = image; adjustment.kind = timeline::ClipKind::Adjustment;
+    adjustment.still_frame.reset(); adjustment.track_index = 1; adjustment.clip_index = 2;
+    adjustment.timeline_start_frame = 0; adjustment.segment_frame_count = 90;
+    adjustment.transform.position_x = .57; adjustment.transform.scale = .82;
+    adjustment.transform.opacity = .65;
+    adjustment.effects = {creative_suite::effects::makeDefaultInstance("video.grayscale"),
+        creative_suite::effects::makeDefaultInstance("video.brightness")};
+    require(creative_suite::effects::setParameterValue(adjustment.effects[1], "amount", 8),
+        "Preview Adjustment effect could not be configured.");
+    auto upper_text = text; upper_text.track_index = 0; upper_text.clip_index = 3;
+    const QVector<playback::CompositionTransitionSpec> adjustment_transition{{0, 0, 1, 30, 10,
+        timeline::TransitionKind::CrossDissolve}};
+    cpu.setComposition({outgoing, transitioning, adjustment, upper_text}, adjustment_transition, 34);
+    direct.setComposition({outgoing, transitioning, adjustment, upper_text}, adjustment_transition, 34);
+    cpu.renderCompositionFrame(34, 34, 34); direct.renderCompositionFrame(34, 34, 34);
+    require(delivered.gpu && !delivered.rgba,
+        "Adjustment Preview did not preserve direct GPU texture delivery.");
+    direct.recoverPreviewFrame(delivered, 34, 34, epoch);
+    compare(expected, delivered.rgba);
+    std::vector<rendering::PreviewFramePayload> held_adjustment_textures;
+    bool adjustment_busy_fell_back_to_cpu = false;
+    for (qint64 frame = 35; frame < 52; ++frame) {
+        cpu.renderCompositionFrame(frame, frame, 34);
+        direct.renderCompositionFrame(frame, frame, 34);
+        if (!delivered.gpu) {
+            require(bool(delivered.rgba), "GPU Adjustment resource pressure returned no Preview frame.");
+            compare(expected, delivered.rgba);
+            adjustment_busy_fell_back_to_cpu = true;
+            break;
+        }
+        held_adjustment_textures.push_back(delivered);
+    }
+    require(adjustment_busy_fell_back_to_cpu,
+        "GPU Adjustment Preview did not recover through CPU under bounded texture pressure.");
+    held_adjustment_textures.clear();
+    delivered = {}; direct.setGpuCompositionEnabled(false, surface);
+    QThread::msleep(6); QCoreApplication::processEvents(); ++epoch; enable();
     direct.setPreviewQuality(playback::PreviewQuality::Quarter);
     direct.setComposition({image}, {}, 33);
     std::vector<rendering::PreviewFramePayload> held;
@@ -226,6 +369,80 @@ void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec ima
     direct.renderCompositionFrame(7, 7, 33);
     require(delivered.rgba && !delivered.gpu, "Direct failure unexpectedly retried within the same activation.");
     delivered = {};
+}
+
+void adjustmentExport(QOffscreenSurface* surface, const QString& directory,
+    const media::VideoFramePtr& source_frame) {
+    const auto source_path = directory + "/gpu-adjustment-source.png";
+    QImage source_image(source_frame->rgba_pixels.data(), source_frame->width, source_frame->height,
+        source_frame->stride, QImage::Format_RGBA8888);
+    require(source_image.save(source_path), "GPU Adjustment export fixture could not be saved.");
+
+    rendering::RenderJob job;
+    job.settings.output_path = directory + "/gpu-adjustment-export.mkv";
+    job.settings.container_name = "matroska";
+    job.settings.video_encoder_name = "ffv1";
+    job.settings.width = source_frame->width;
+    job.settings.height = source_frame->height;
+    job.settings.frame_rate = 30;
+    job.settings.export_audio = false;
+    job.settings.gpu_composition_enabled = true;
+    job.settings.graphics_backend = sessionGraphicsBackend();
+    auto& document = job.project_snapshot;
+    document.canvas_width = source_frame->width;
+    document.canvas_height = source_frame->height;
+    document.timeline_frame_rate = {30, 1};
+    const auto source_file = QFileInfo(source_path).filesystemFilePath();
+    document.media.push_back({source_file, "Adjustment Fixture", "Unsorted", false, media::MediaKind::Image});
+
+    project::ProjectClip lower_clip;
+    lower_clip.kind = timeline::ClipKind::Image;
+    lower_clip.source_path = source_file;
+    lower_clip.clip_id = 10;
+    lower_clip.duration_frames = lower_clip.source_duration_frames = 4;
+    project::ProjectTrack lower_track;
+    lower_track.name = "Lower"; lower_track.track_id = 1; lower_track.clips = {lower_clip};
+
+    project::ProjectClip adjustment_clip;
+    adjustment_clip.kind = timeline::ClipKind::Adjustment;
+    adjustment_clip.clip_id = 11;
+    adjustment_clip.duration_frames = 4;
+    adjustment_clip.transform.position_x = .56;
+    adjustment_clip.transform.scale = .83;
+    adjustment_clip.transform.opacity = .62;
+    adjustment_clip.effects = {creative_suite::effects::makeDefaultInstance("video.grayscale"),
+        creative_suite::effects::makeDefaultInstance("video.brightness")};
+    require(creative_suite::effects::setParameterValue(adjustment_clip.effects[1], "amount", 9),
+        "Export Adjustment effect could not be configured.");
+    project::ProjectTrack adjustment_track;
+    adjustment_track.name = "Adjustment"; adjustment_track.track_id = 2;
+    adjustment_track.clips = {adjustment_clip};
+    document.timeline_tracks = {adjustment_track, lower_track};
+
+    CompositionLayer source_layer; source_layer.frame = source_frame.get();
+    CompositionLayer operation; operation.transform = adjustment_clip.transform;
+    operation.effect_stack = adjustment_clip.effects;
+    const std::vector<rendering::TimelineCompositionStep> steps{{source_layer, false}, {operation, true}};
+    const auto expected = rendering::composeAdjustmentLayers(source_frame->width, source_frame->height, steps);
+    require(bool(expected), "GPU Adjustment export CPU reference failed.");
+
+    std::atomic_bool canceled{false};
+    rendering::OfflineExportOptions options;
+    options.gpu_surface = surface;
+    int prepared = 0;
+    options.prepared_frame_callback = [&](const creative_suite::media::RgbaFrame& frame, std::int64_t) {
+        require(frame.rgba_pixels.size() == expected->rgba_pixels.size(),
+            "GPU Adjustment export output size changed.");
+        for (std::size_t i = 0; i < frame.rgba_pixels.size(); ++i)
+            if (std::abs(int(frame.rgba_pixels[i]) - int(expected->rgba_pixels[i])) > 2)
+                require(false, "GPU Adjustment export parity failed at byte " + std::to_string(i));
+        ++prepared;
+    };
+    rendering::OfflineExportMetrics metrics;
+    options.metrics_callback = [&](const auto& completed) { metrics = completed; };
+    rendering::OfflineExportRenderer::render(job, canceled, {}, options);
+    require(prepared == 4 && metrics.gpu_frames == 4 && metrics.cpu_frames == 0,
+        "Offline export did not keep Adjustment processing on the selected GPU backend.");
 }
 } // namespace
 
@@ -301,6 +518,7 @@ int main(int argc, char** argv) {
                 require(initial.frame.has_value(), "GPU initialization failed: " + initial.cause);
                 auto& metrics = rendering::PreviewPerformanceMetrics::instance();
                 metrics.setEnabled(true); metrics.reset();
+                adjustmentParity(surface.get(), *probe);
                 playback::PlaybackWorker cpu, gpu;
                 playback::VideoFramePtr cpu_frame, gpu_frame;
                 int failures = 0, warnings = 0;
@@ -359,6 +577,7 @@ int main(int argc, char** argv) {
                     "Native toggle interrupted playback.");
                 directWorker(surface.get(), image, incoming, text, published, refreshed);
                 auto graph_gpu = createGpuFrameCompositor(surface.get(), OpenGlPrecisionPolicy::Automatic, nullptr, std::make_shared<OpenGlTexturePoolBudget>(256ULL*1024*1024,8));
+                adjustmentExport(surface.get(), temp.path(), image.still_frame);
                 fusionParity(*graph_gpu,surface.get());
                 metrics.setEnabled(false);
             } catch (...) { failure = std::current_exception(); }

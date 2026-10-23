@@ -129,7 +129,12 @@ struct OpenGlImageInput {
     [[nodiscard]] int width() const noexcept;
     [[nodiscard]] int height() const noexcept;
 };
-enum class OpenGlImageOperationKind { Copy, Transform, Color, Merge, ApplyMask, MaskedBlend, GaussianBlur, ApplyTrackMatte, DropShadow, Glow };
+// Values through Glow are shared with existing OpenGL/Vulkan shader opcodes.
+// 10 is reserved by Vulkan presentation; Adjustment therefore uses 11.
+enum class OpenGlImageOperationKind {
+    Copy, Transform, Color, Merge, ApplyMask, MaskedBlend, GaussianBlur,
+    ApplyTrackMatte, DropShadow, Glow, Adjustment = 11
+};
 struct OpenGlImageOperation {
     OpenGlImageOperationKind kind = OpenGlImageOperationKind::Copy;
     OpenGlImageInput background;
@@ -148,6 +153,9 @@ struct OpenGlImageOperation {
     TrackMatteMode track_matte_mode = TrackMatteMode::Alpha;
     effects::DropShadowParameters drop_shadow;
     effects::GlowParameters glow;
+    // Adjustment transforms and color-corrects foreground, then interpolates
+    // it with background by transform.opacity. Exposed transformed pixels are
+    // opaque black; output is opaque RGBA. Both inputs use canvas dimensions.
 };
 
 // Optional raster contract: top-down ARGB32 premultiplied content and ARGB32

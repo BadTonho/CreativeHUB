@@ -482,7 +482,7 @@ struct VulkanDevice::Impl {
                 command.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;command.commandBufferCount=1;
                 check(vkAllocateCommandBuffers(device,&command,&c->command),"Allocate Vulkan command context.");
                 VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};check(vkCreateFence(device,&fence,nullptr,&c->fence),"Create Vulkan context fence.");
-                std::array<VkDescriptorPoolSize,2> sizes{{{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,5*256},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,256}}};
+                std::array<VkDescriptorPoolSize,3> sizes{{{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,5*256},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,256},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,256}}};
                 VkDescriptorPoolCreateInfo descriptor_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};descriptor_info.maxSets=256;descriptor_info.poolSizeCount=uint32_t(sizes.size());descriptor_info.pPoolSizes=sizes.data();
                 check(vkCreateDescriptorPool(device,&descriptor_info,nullptr,&c->descriptors),"Create Vulkan context descriptors.");
                 available=c.get();contexts.push_back(std::move(c));
@@ -592,7 +592,7 @@ struct VulkanDevice::Impl {
         Impl& p;VkBuffer buffer=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;void* data=nullptr;VkDeviceSize reserved=0;
         Buffer(Impl& owner,VkDeviceSize size,bool cpu_read=false):capacity(size),readable(cpu_read),p(owner) {
             VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};info.size=size;
-            info.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            info.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
             check(vkCreateBuffer(p.device,&info,nullptr,&buffer),"Create Vulkan transfer buffer.");
             try {
                 VkMemoryRequirements req{};vkGetBufferMemoryRequirements(p.device,buffer,&req);
@@ -728,7 +728,8 @@ struct VulkanDevice::Impl {
     }
     void dispatch(const std::shared_ptr<VulkanImage>& bg,const std::shared_ptr<VulkanImage>& fg,
         const std::shared_ptr<VulkanImage>& mask,const std::shared_ptr<VulkanImage>& output,
-        const Parameters& parameters,const std::shared_ptr<VulkanImage>& display={}) {
+        const Parameters& parameters,const std::shared_ptr<VulkanImage>& display={},
+        const std::vector<std::array<float,4>>* adjustment_values=nullptr) {
         if(current()->sets++>=256)throw Failure("The bounded Vulkan descriptor batch is full.",0,Status::Busy);
         VkDescriptorSetAllocateInfo allocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
         allocate.descriptorPool=current()->descriptors;allocate.descriptorSetCount=1;allocate.pSetLayouts=&descriptors;
@@ -741,6 +742,17 @@ struct VulkanDevice::Impl {
             writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=set;writes[i].dstBinding=i;
             writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;writes[i].pImageInfo=&image_info[i];}
         vkUpdateDescriptorSets(device,5,writes.data(),0,nullptr);
+        const auto color_bytes=std::max<std::size_t>(sizeof(std::array<float,4>),
+            adjustment_values?adjustment_values->size()*sizeof(std::array<float,4>):0);
+        auto color_buffer=buffer(color_bytes);
+        std::memset(color_buffer->data,0,color_bytes);
+        if(adjustment_values && !adjustment_values->empty())
+            std::memcpy(color_buffer->data,adjustment_values->data(),adjustment_values->size()*sizeof(std::array<float,4>));
+        current()->resources.push_back(color_buffer);
+        VkDescriptorBufferInfo buffer_info{color_buffer->buffer,0,color_bytes};
+        VkWriteDescriptorSet buffer_write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};buffer_write.dstSet=set;
+        buffer_write.dstBinding=5;buffer_write.descriptorCount=1;buffer_write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        buffer_write.pBufferInfo=&buffer_info;vkUpdateDescriptorSets(device,1,&buffer_write,0,nullptr);
         auto cmd=begin();vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline);
         vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,1,&set,0,nullptr);
         if(precise)vkCmdPushConstants(cmd,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(parameters),&parameters);
@@ -832,9 +844,10 @@ std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause,const Crea
         info.enabledExtensionCount=uint32_t(extensions.size());info.ppEnabledExtensionNames=extensions.data();info.pEnabledFeatures=&enabled;
         check(vkCreateDevice(p.physical,&info,nullptr,&p.device),"Create Vulkan device.");
         vkGetDeviceQueue(p.device,p.family,0,&p.queue);
-        std::array<VkDescriptorSetLayoutBinding,5> bindings{};
+        std::array<VkDescriptorSetLayoutBinding,6> bindings{};
         for(unsigned i=0;i<5;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_COMPUTE_BIT;}
-        VkDescriptorSetLayoutCreateInfo descriptor{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};descriptor.bindingCount=5;descriptor.pBindings=bindings.data();
+        bindings[5].binding=5;bindings[5].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;bindings[5].descriptorCount=1;bindings[5].stageFlags=VK_SHADER_STAGE_COMPUTE_BIT;
+        VkDescriptorSetLayoutCreateInfo descriptor{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};descriptor.bindingCount=uint32_t(bindings.size());descriptor.pBindings=bindings.data();
         check(vkCreateDescriptorSetLayout(p.device,&descriptor,nullptr,&p.descriptors),"Create Vulkan descriptor layout.");
         VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT,0,uint32_t(p.precise?sizeof(Parameters):64)};
         VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};layout.setLayoutCount=1;layout.pSetLayouts=&p.descriptors;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&range;
@@ -1174,7 +1187,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         auto batch=beginCommandBatch(cancel);
         auto& p=*device_->impl_;std::lock_guard lock(p.mutex);
         if(operation.source_to_canvas)throw Failure("Affine image Transform is not implemented by Vulkan.",0,Status::Unsupported);
-        if(!animation::validTransform(operation.transform) || !std::isfinite(operation.blur_radius_pixels) || operation.blur_radius_pixels<0 || operation.blur_radius_pixels>100)
+        if(!animation::validTransform(operation.transform) || !std::isfinite(operation.blur_radius_pixels) || operation.blur_radius_pixels<0 || operation.blur_radius_pixels>100 || operation.colors.size()>256)
             throw Failure("Invalid Vulkan image operation.",0,Status::Unsupported);
         if(operation.transform.rotation_degrees!=0 && !p.precise)throw Failure("Precise rotation requires shaderFloat64.",0,Status::Unsupported);
         for(const auto& color:operation.colors)
@@ -1189,8 +1202,12 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         checkCapacity(width,height);
         if(operation.kind!=OpenGlImageOperationKind::Transform && (width!=bg->width || height!=bg->height))
             throw Failure("Only Transform accepts an alternate Vulkan canvas.",0,Status::Unsupported);
-        if((operation.kind==OpenGlImageOperationKind::Merge || operation.kind==OpenGlImageOperationKind::MaskedBlend) && !fg)
+        if((operation.kind==OpenGlImageOperationKind::Merge || operation.kind==OpenGlImageOperationKind::MaskedBlend ||
+            operation.kind==OpenGlImageOperationKind::Adjustment) && !fg)
             throw Failure("The Vulkan foreground is missing.",0,Status::Unsupported);
+        if(operation.kind==OpenGlImageOperationKind::Adjustment &&
+            (bg->width!=width || bg->height!=height || !fg || fg->width!=width || fg->height!=height))
+            throw Failure("Vulkan adjustment inputs must match the output canvas.",0,Status::Unsupported);
         if(operation.kind==OpenGlImageOperationKind::ApplyMask || operation.kind==OpenGlImageOperationKind::MaskedBlend){
             if(!mask || mask->width!=width || mask->height!=height || (fg && (fg->width!=width || fg->height!=height)))
                 throw Failure("Vulkan mask dimensions do not match.",0,Status::Unsupported);
@@ -1199,8 +1216,21 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         const auto& t=operation.transform;const double angle=t.rotation_degrees*std::numbers::pi/180;
         params.geometry={width*t.position_x,height*t.position_y,bg->width*t.scale,bg->height*t.scale};
         params.rotation={std::cos(angle),std::sin(angle),t.scale,t.opacity};
+        std::vector<std::array<float,4>> adjustment_values;
+        if(operation.kind==OpenGlImageOperationKind::Adjustment){
+            adjustment_values.reserve(operation.colors.size());
+            for(const auto& color:operation.colors){
+                if(!std::isfinite(color.brightness) || color.brightness < -100 || color.brightness > 100 ||
+                    !std::isfinite(color.contrast_percent) || color.contrast_percent < 0 || color.contrast_percent > 200 ||
+                    !std::isfinite(color.saturation_percent) || color.saturation_percent < 0 || color.saturation_percent > 200)
+                    throw Failure("Invalid Vulkan adjustment parameters.",0,Status::Unsupported);
+                adjustment_values.push_back({float(color.brightness/100),float(color.contrast_percent/100),
+                    float(color.saturation_percent/100),0});
+            }
+            params.control[1]=int(adjustment_values.size());
+        }
         const auto started=Clock::now();
-        const auto execute=[&]{cancelled(cancel);auto out=p.image(device_,width,height);p.dispatch(bg,fg,mask,out,params);bg=std::move(out);p.traceMemory("effects");};
+        const auto execute=[&](const std::vector<std::array<float,4>>* values=nullptr){cancelled(cancel);auto out=p.image(device_,width,height);p.dispatch(bg,fg,mask,out,params,{},values);bg=std::move(out);p.traceMemory("effects");};
         if(operation.kind==OpenGlImageOperationKind::Color){
             for(const auto& color:operation.colors){
                 params.color={float(color.brightness/100),float(color.contrast_percent/100),float(color.saturation_percent/100),0};execute();
@@ -1210,7 +1240,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
             params.control[1]=int(std::lround(operation.blur_radius_pixels));
             if(params.control[1])for(int pass=0;pass<8;++pass){params.control[3]=pass;params.control[2]=pass%2;execute();}
             if(timings)++timings->gaussian_blur_count;
-        }else execute();
+        }else execute(operation.kind==OpenGlImageOperationKind::Adjustment?&adjustment_values:nullptr);
         cancelled(cancel);if(timings)timings->draw_submission_nanoseconds+=ns(started);
         auto frame=publish(std::move(bg));
         if(batch){auto result=batch->finish();if(result.status!=Status::Complete)throw Failure(result.cause,result.error_code,result.status);}

@@ -36,6 +36,18 @@ OpenGL consumers must reject Vulkan leases rather than treating them as GL names
 Document schemas, frame scheduling, graph topology, source clocks, and history
 remain application-owned. Motion and Image Editor continue using OpenGL directly.
 
+The shared image-operation contract includes `Adjustment` for the Video Editor
+timeline. It consumes same-size background and foreground textures, applies up to
+256 ordered color-adjustment passes while sampling through the inverse transform,
+mixes with the original by transform opacity, fills exposed pixels with opaque
+black, and writes an opaque canvas. Ordered parameters use a bounded host-visible
+storage buffer and one compute dispatch; the operation does not allocate a
+frame-sized filter chain. Rotations requiring unavailable precise shader
+arithmetic are refused as `Unsupported` so the application can recover the full
+frame through its CPU Adjustment stage. Operation textures remain ordinary
+immutable leases charged to the existing device/compositor budgets. The contract
+changes neither the project schema nor Vulkan's CPU-composition default.
+
 The application owns the Vulkan session from startup through destruction of every
 window and worker. A GUI-created QVulkanInstance supplies platform surfaces; the
 session owns its logical device, queue, pools, pipelines, and images. Command batches use reusable command/descriptor pools and completion fences;

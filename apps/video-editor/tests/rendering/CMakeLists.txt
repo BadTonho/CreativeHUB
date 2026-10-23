@@ -191,6 +191,13 @@ preserve_video_editor_test_working_directory()
 
 add_creative_suite_test(NAME creative-suite-main-editor-vulkan-timeline SKIP_RETURN_CODE 77 COMMAND creative-suite-main-editor-gpu-timeline-tests --vulkan)
 set_tests_properties(creative-suite-main-editor-vulkan-timeline PROPERTIES ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
+if(WIN32)
+    set_property(TEST creative-suite-main-editor-vulkan-timeline APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=windows")
+elseif(APPLE)
+    set_property(TEST creative-suite-main-editor-vulkan-timeline APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+else()
+    set_property(TEST creative-suite-main-editor-vulkan-timeline APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
 # Native acceptance is invoked explicitly with --vulkan; portable CI must not count a missing GPU as acceptance.
 
 foreach(kind IN ITEMS renderer-selection vulkan-preview)

@@ -148,36 +148,38 @@ clip change.
 ## Adjustment composition stages
 
 The Video Editor owns `rendering/adjustment_composition` and shares that ordered
-stage orchestration between PlaybackWorker and offline export. Ordinary layers
-remain borrowed from their owning decoder/graph sessions until composition
-returns. At each active adjustment, compose pending lower layers into RGBA,
-apply its existing effect stack in order, transform that canvas with opacity
-forced to one, and mix original and adjusted pixels using adjustment opacity.
-Exposed areas retain the current opaque black background. Continue with higher
-layers, which are outside that adjustment's scope. An adjustment with no lower
-visual content generates no image. Zero strength, or disabled/empty effects
-with neutral geometry, bypasses the stage.
+stage orchestration between PlaybackWorker and offline export. At each active
+adjustment, it composes pending lower layers, applies the existing ordered color
+filters, transforms the canvas, and mixes it with the original by adjustment
+opacity. Exposed transform areas remain opaque black. Higher layers continue
+outside that adjustment's scope. An adjustment with no lower visual content
+produces no image. Zero strength and neutral adjustments bypass the stage.
 
-Affected frames deliberately prepare media and Fusion intermediates as RGBA
-and compose on CPU outside the UI thread. This is a per-frame policy; it neither
-marks GPU failure nor emits a warning. Later unaffected frames resume their
-ordinary configured GPU path. An accelerated encoder accepts RGBA through its
-existing upload/recovery support. Lower-track transitions, text, Fusion graphs
-and linked publications retain their existing preparation semantics. Fusion on
-an adjustment itself is outside this version.
+When the existing GPU-composition option is enabled, OpenGL and Vulkan keep the
+lower composite and adjustment result as GPU textures. The shared `Adjustment`
+image operation applies the ordered filter passes, inverse transform, black
+exposed areas, and opacity mix in one operation; no pixels return to CPU between
+stages. The final texture can continue into Preview's direct texture delivery or
+the configured export readback/native encoder route. CPU remains the default.
+Unsupported transforms, backend failures, and GPU resource pressure reconstruct
+the same frame through the existing CPU compositor, including source recovery
+when a native or graph texture cannot be read by CPU code. Rotation that a
+backend cannot evaluate precisely takes this fallback. The operation stays
+inside the existing texture/device budgets and adds no setting or project field.
+Lower-track transitions, text, Fusion graphs, and linked publications retain
+their existing preparation semantics. Fusion on an adjustment itself remains
+outside this version.
 
-The stage retains only the original and adjusted canvases, plus the shared
-compositor's bounded scratch/output buffers; it does not cache each adjustment
-stage. Cancellation is checked between stages and on strength-blending rows;
-incomplete output is discarded. Shared effect/compositor calls retain their
-existing cancellation granularity. Allocation and processing failures flow to
-the existing worker/export diagnostic boundary before user feedback. Source
+Cancellation discards incomplete output. Shared effect/compositor calls retain
+their existing cancellation granularity. Allocation and processing failures
+flow through the worker/export diagnostic boundary before user feedback. Source
 buffers retain their owning sessions and are never mutated by adjustment
 application. `OfflineExportOptions::prepared_frame_callback` optionally observes
 a borrowed RGBA frame synchronously on the export worker before encoding, for
 diagnostics and pixel parity checks; native-only frames are omitted, and callback
-exceptions follow the export error boundary. Small/medium/heavy synthetic timing evidence and remaining native
-acceptance are recorded in [REGRESSION_TESTING.md](../validation/REGRESSION_TESTING.md).
+exceptions follow the export error boundary. Automated parity and remaining
+native acceptance are recorded in
+[REGRESSION_TESTING.md](../validation/REGRESSION_TESTING.md).
 
 
 ## Composition pipeline and bounded caches

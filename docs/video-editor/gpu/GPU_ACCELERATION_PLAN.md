@@ -2,7 +2,8 @@
 
 Status: **Stages 1–3 implemented as opt-in experiments on 2026-10-02;
 Windows/NVIDIA native pipeline implemented and integration verified on
-2026-10-10; human and cross-platform acceptance pending**.
+2026-10-10; Adjustment Clip GPU stages added for OpenGL and Vulkan; human and
+cross-platform acceptance pending**.
 The Windows/NVIDIA decode/effects/Fusion/encode extension is tracked in
 [the visual pipeline contract](GPU_PIPELINE.md), including implementation,
 native evidence, and remaining gates. Video Editor and Motion Studio reuse the
@@ -142,14 +143,23 @@ regressions pass, and transfer/encode costs are included in performance results.
 
 ## Stage 4 — Covered effect reuse and linked assets
 
+The existing Video Adjustment Clip contract now has an optional GPU timeline
+stage on OpenGL and Vulkan. It reuses the built-in Video color filter stack,
+applies clip transforms and opacity mixing at a lower-track composition barrier,
+and retains opaque black exposed areas. Preview and export keep intermediates as
+textures; unsupported operations and GPU failures return to the existing CPU
+stage. This adds no filter, project field, new default, or Fusion support inside
+an adjustment. See the [rendering contract](../architecture/RENDERING.md),
+[GPU pipeline](GPU_PIPELINE.md), and [Vulkan contract](VULKAN_RENDERER.md).
+
 - Reuse shared GPU effects only after the Video Editor's relevant effect feature,
   parameters, order, alpha/color semantics, and persistence are defined.
   Motion-owned Blur/Color Adjustment do not automatically become Video features.
 - Preserve current transitions and viewing effects independently of future
   color grading, masks, or additional Fusion processing. The initial CPU Fusion
   graph remains evaluated before the existing clip effects and transforms;
-  GPU acceleration for the existing graph is covered by the subsequent pipeline
-  extension; new Fusion features remain separate work.
+  GPU acceleration for the existing graph is covered by the pipeline extension;
+  new Fusion features remain separate work.
 - Cover transparent PNG consumption from Image Editor, including masked and
   transformed imported-image output, shared links, clip variants, and refresh
   after publication. Invalidate dependent CPU/GPU caches on media replacement

@@ -15,6 +15,7 @@ layout(binding=1,rgba8ui) uniform readonly uimage2D foreground_image;
 layout(binding=2,rgba8ui) uniform readonly uimage2D mask_image;
 layout(binding=3,rgba8ui) uniform writeonly uimage2D output_image;
 layout(binding=4,rgba8) uniform image2D presentation_image;
+layout(binding=5,std430) readonly buffer AdjustmentValues { vec4 adjustment_values[]; };
 layout(push_constant) uniform Parameters {
     ivec4 control; // operation, blur radius, horizontal, stage
     REAL2 center; REAL2 extent;
@@ -54,6 +55,30 @@ void main() {
         } else if(all(greaterThanEqual(samplepos,ivec2(0))) && all(lessThan(samplepos,srcsize))) {
             c=source(samplepos); c.a=uint(floor(REAL(c.a)*p.scale_opacity.y+REAL(0.5)));
         }
+    } else if(op==11) {
+        ivec2 srcsize=imageSize(foreground_image);
+        precise REAL2 delta=REAL2(pixel)+REAL(0.5)-p.center;
+        precise REAL2 local=REAL2(p.trig.x*delta.x+p.trig.y*delta.y,
+            -p.trig.y*delta.x+p.trig.x*delta.y);
+        precise REAL2 mapped=local/REAL(p.scale_opacity.x)+REAL2(srcsize)*REAL(0.5);
+        ivec2 samplepos=ivec2(floor(mapped));
+        uvec3 adjusted=uvec3(0);
+        if(all(greaterThanEqual(samplepos,ivec2(0))) && all(lessThan(samplepos,srcsize))) {
+            adjusted=imageLoad(foreground_image,samplepos).rgb;
+            vec3 rgb=vec3(adjusted)/255.0;
+            for(int i=0;i<p.control.y;++i) {
+                vec4 pass=adjustment_values[i];
+                rgb+=pass.x;
+                rgb=(rgb-vec3(0.5))*pass.y+vec3(0.5);
+                float luma=dot(rgb,vec3(0.2126,0.7152,0.0722));
+                rgb=floor(clamp(vec3(luma)+(rgb-vec3(luma))*pass.z,0.0,1.0)*255.0+0.5)/255.0;
+            }
+            adjusted=uvec3(floor(rgb*255.0+0.5));
+        }
+        uvec3 original=imageLoad(background_image,pixel).rgb;
+        vec3 mixed=vec3(original)*(1.0-float(p.scale_opacity.y))+
+            vec3(adjusted)*float(p.scale_opacity.y);
+        c=uvec4(uvec3(floor(mixed+0.5)),255u);
     } else {
         c=source(pixel);
         if(op==2) {

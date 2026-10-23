@@ -51,12 +51,17 @@ public:
     int outputWidth() const noexcept { return job_.settings.width; }
     int outputHeight() const noexcept { return job_.settings.height; }
     void setCpuSourceRecovery(bool enabled) noexcept { cpu_source_recovery_ = enabled; }
+    void reportAdjustmentFallback(const composition::OpenGlCompositionResult& result,
+        std::int64_t output_frame, std::int64_t timeline_frame) {
+        fallback(result, output_frame, timeline_frame);
+    }
     std::optional<creative_suite::media::RgbaFrame> compose(const std::vector<composition::CompositionLayer>&,
         std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,
         creative_suite::media::NativeVideoFramePool* = nullptr,
         creative_suite::media::NativeVideoFramePtr* native_output = nullptr,
         composition::GpuReadbackTicket* async_ticket = nullptr,
-        composition::VulkanNativeExportTicket* native_ticket = nullptr);
+        composition::VulkanNativeExportTicket* native_ticket = nullptr,
+        const composition::GpuTextureFramePtr& source_texture = {});
 private:
     void fallback(const composition::OpenGlCompositionResult&, std::int64_t, std::int64_t, bool rgba_recovery = false);
     const RenderJob& job_;

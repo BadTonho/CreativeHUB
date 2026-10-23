@@ -300,13 +300,6 @@ std::optional<media::VideoFrame> composeFrame(
         return clip.kind == timeline::ClipKind::Adjustment && rendering::adjustmentRequiresProcessing(
             timeline::evaluateTransform(clip.transform, clip.keyframes, local_frame), clip.effects);
     });
-    const auto previous_recovery = compositor.cpuSourceRecovery();
-    if (adjustment_cpu) compositor.setCpuSourceRecovery(true);
-    struct RestoreAdjustmentRecovery {
-        detail::ExportComposition& compositor;
-        bool previous;
-        ~RestoreAdjustmentRecovery() { compositor.setCpuSourceRecovery(previous); }
-    } restore_adjustment{compositor, previous_recovery};
     std::vector<rendering::TimelineCompositionStep> steps;
     std::vector<rendering::CompositionLayer> layers;
     std::vector<media::VideoFramePtr> decoded_frames;
@@ -498,18 +491,73 @@ std::optional<media::VideoFrame> composeFrame(
         }
         metrics.peak_prepared_source_bytes = std::max(metrics.peak_prepared_source_bytes, resident);
     }
+    creative_suite::composition::GpuTextureFramePtr adjusted_texture;
+    bool gpu_adjustment_attempted = false;
     if (adjustment_cpu) {
         native_output.reset();
-        detail::ExportTimedScope timing(metrics.composition_nanoseconds);
-        detail::ExportTimedScope cpu_timing(metrics.cpu_composition_nanoseconds);
-        auto frame = rendering::composeAdjustmentLayers(compositor.outputWidth(), compositor.outputHeight(),
-            steps, [&] { return canceled.load(); });
-        checkCanceled(canceled);
-        if (frame) { ++metrics.cpu_frames; }
-        return frame;
+        if (auto* backend = compositor.graphBackend()) {
+            gpu_adjustment_attempted = true;
+            creative_suite::composition::OpenGlCompositionTimings timings;
+            creative_suite::composition::GpuTextureCompositionResult result;
+            {
+                detail::ExportTimedScope gpu_time(metrics.gpu_composition_nanoseconds);
+                try {
+                    result = rendering::composeAdjustmentLayersGpu(compositor.outputWidth(),
+                        compositor.outputHeight(), steps, *backend,
+                        [&] { return canceled.load(); }, &timings);
+                } catch (const std::exception& error) {
+                    result = {creative_suite::composition::GpuCompositionStatus::Failed, {},
+                        "compose-adjustment-export", error.what(), -1};
+                }
+            }
+            metrics.uploaded_bytes += timings.uploaded_bytes;
+            metrics.upload_nanoseconds += timings.upload_nanoseconds;
+            metrics.draw_submission_nanoseconds += timings.draw_submission_nanoseconds;
+            metrics.native_video_imports += timings.native_video_imports;
+            metrics.native_conversion_nanoseconds += timings.native_video_conversion_nanoseconds;
+            metrics.graph_peak_gpu_bytes = std::max(metrics.graph_peak_gpu_bytes,
+                backend->resourceUsage().peak_known_bytes);
+            checkCanceled(canceled);
+            if (result.status == creative_suite::composition::GpuCompositionStatus::Cancelled)
+                throw ExportCanceled{};
+            if (result.status == creative_suite::composition::GpuCompositionStatus::Complete && result.frame) {
+                adjusted_texture = std::move(result.frame);
+            } else {
+                if (result.status == creative_suite::composition::GpuCompositionStatus::Complete)
+                    result = {creative_suite::composition::GpuCompositionStatus::Failed, {},
+                        "compose-adjustment-export", "The GPU adjustment returned no texture.", -1};
+                compositor.reportAdjustmentFallback({result.status, {}, result.operation,
+                    result.cause, result.error_code}, output_frame, timeline_frame);
+                const bool has_gpu_only_sources = std::any_of(steps.begin(), steps.end(), [](const auto& step) {
+                    return !step.adjustment && (step.layer.native_frame || step.layer.texture_frame);
+                });
+                if (has_gpu_only_sources) {
+                    const bool previous = compositor.cpuSourceRecovery();
+                    compositor.setCpuSourceRecovery(true);
+                    struct Restore { detail::ExportComposition& compositor; bool previous;
+                        ~Restore() { compositor.setCpuSourceRecovery(previous); } } restore{compositor, previous};
+                    return composeFrame(clips, transitions, timeline_frame, timeline_frame_rate,
+                        canvas_width, canvas_height, compositor, output_frame, metrics, canceled,
+                        native_pool, native_output, async_ticket, native_ticket);
+                }
+            }
+        }
+        if (!adjusted_texture) {
+            detail::ExportTimedScope timing(metrics.composition_nanoseconds);
+            detail::ExportTimedScope cpu_timing(metrics.cpu_composition_nanoseconds);
+            auto frame = rendering::composeAdjustmentLayers(compositor.outputWidth(), compositor.outputHeight(),
+                steps, [&] { return canceled.load(); });
+            checkCanceled(canceled);
+            if (frame) {
+                ++metrics.cpu_frames;
+                if (gpu_adjustment_attempted) ++metrics.fallback_frames;
+            }
+            return frame;
+        }
     }
     try {
-        return compositor.compose(layers, output_frame, timeline_frame, canceled, native_pool, &native_output, async_ticket,native_ticket);
+        return compositor.compose(layers, output_frame, timeline_frame, canceled, native_pool,
+            &native_output, async_ticket,native_ticket, adjusted_texture);
     } catch (const detail::CpuCompositionSourcesRequired&) {
         compositor.setCpuSourceRecovery(true);
         struct RestoreSourceRecovery {

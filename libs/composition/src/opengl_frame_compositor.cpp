@@ -225,6 +225,32 @@ int matteAlpha(int alpha,int numerator) {
 void main() {
     ivec2 pixel = ivec2(int(gl_FragCoord.x), canvas_height - 1 - int(gl_FragCoord.y));
     ivec2 size = textureSize(background_image, 0);
+    if (operation == 11) {
+        PRECISE GEOMETRY_VEC2 d = GEOMETRY_VEC2(pixel) + 0.5 - center;
+        PRECISE GEOMETRY_VEC2 local = GEOMETRY_VEC2(rotation_cs.x * d.x + rotation_cs.y * d.y,
+            -rotation_cs.y * d.x + rotation_cs.x * d.y);
+        PRECISE GEOMETRY_VEC2 mapped = local / scale_opacity.x + GEOMETRY_VEC2(size) * 0.5;
+        ivec2 source_pixel = ivec2(floor(mapped));
+        ivec4 adjusted = ivec4(0, 0, 0, 255);
+        if (all(greaterThanEqual(source_pixel, ivec2(0))) &&
+            all(lessThan(source_pixel, textureSize(foreground_image, 0)))) {
+            adjusted = ivec4(floor(foreground(source_pixel) * 255.0 + 0.5));
+            vec3 rgb = vec3(adjusted.rgb) / 255.0;
+            for (int i = 0; i < color_count; ++i) {
+                vec4 p = color_adjustments[i];
+                rgb += p.x;
+                rgb = (rgb - vec3(0.5)) * p.y + vec3(0.5);
+                float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+                rgb = floor(clamp(vec3(luma) + (rgb - vec3(luma)) * p.z, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+            }
+            adjusted.rgb = ivec3(floor(rgb * 255.0 + 0.5));
+        }
+        ivec4 original = ivec4(floor(background(pixel) * 255.0 + 0.5));
+        vec3 mixed = vec3(original.rgb) * (1.0 - scale_opacity.y) +
+            vec3(adjusted.rgb) * scale_opacity.y;
+        color = vec4(floor(mixed + 0.5) / 255.0, 1.0);
+        return;
+    }
     if (operation == 1) {
         PRECISE GEOMETRY_VEC2 d = GEOMETRY_VEC2(pixel) + 0.5 - center;
         PRECISE GEOMETRY_VEC2 local = GEOMETRY_VEC2(rotation_cs.x * d.x + rotation_cs.y * d.y,
@@ -1087,7 +1113,8 @@ void main() {
         if (!bounded(width, height, texture_limit) || operation.colors.size() > 256 ||
             !animation::validTransform(operation.transform))
             return result(OpenGlCompositionStatus::Unsupported, "check-image-operation", "Image geometry or effects exceed the supported contract.");
-        if (operation.kind == OpenGlImageOperationKind::Transform &&
+        if ((operation.kind == OpenGlImageOperationKind::Transform ||
+             operation.kind == OpenGlImageOperationKind::Adjustment) &&
             operation.transform.rotation_degrees != 0 && !precise_geometry)
             return result(OpenGlCompositionStatus::Unsupported, "check-precision", "Rotated intermediates require precise GPU geometry.");
         if(operation.source_to_canvas && (operation.kind!=OpenGlImageOperationKind::Transform || !precise_geometry || !validAffine(*operation.source_to_canvas)))
@@ -1116,10 +1143,12 @@ void main() {
                 measured.native_video_conversion_nanoseconds += elapsed(started);
                 rememberResourcePeak();
             } else if (input.texture) {
-                std::string cause; std::int64_t code = 0;
-                if (!input.texture->beginUse(context.get(), cause, code))
-                    return result(OpenGlCompositionStatus::Failed, "consume-image-texture", cause, code);
-                uses.frames.push_back(input.texture);
+                if (std::find(uses.frames.begin(), uses.frames.end(), input.texture) == uses.frames.end()) {
+                    std::string cause; std::int64_t code = 0;
+                    if (!input.texture->beginUse(context.get(), cause, code))
+                        return result(OpenGlCompositionStatus::Failed, "consume-image-texture", cause, code);
+                    uses.frames.push_back(input.texture);
+                }
                 gl->glBindTexture(GL_TEXTURE_2D, input.texture->texture());
             } else {
                 if (!input.rgba || !usable(CompositionLayer{input.rgba}) ||
@@ -1198,10 +1227,15 @@ void main() {
             measured.draw_submission_nanoseconds+=elapsed(started);
             rememberResourcePeak();return result(OpenGlCompositionStatus::Complete);
         }
-        if (operation.kind == OpenGlImageOperationKind::Merge || operation.kind == OpenGlImageOperationKind::MaskedBlend || operation.kind==OpenGlImageOperationKind::DropShadow || operation.kind==OpenGlImageOperationKind::Glow) {
+        if (operation.kind == OpenGlImageOperationKind::Merge || operation.kind == OpenGlImageOperationKind::MaskedBlend || operation.kind==OpenGlImageOperationKind::DropShadow || operation.kind==OpenGlImageOperationKind::Glow || operation.kind==OpenGlImageOperationKind::Adjustment) {
             bound = bind(operation.foreground, 1);
             if (bound.status != OpenGlCompositionStatus::Complete) return bound;
         }
+        if (operation.kind == OpenGlImageOperationKind::Adjustment &&
+            (operation.background.width() != width || operation.background.height() != height ||
+             operation.foreground.width() != width || operation.foreground.height() != height))
+            return result(OpenGlCompositionStatus::Unsupported, "adjustment-image-geometry",
+                "Adjustment inputs must match the output canvas.");
         if (operation.kind == OpenGlImageOperationKind::ApplyMask || operation.kind == OpenGlImageOperationKind::MaskedBlend) {
             if (operation.mask.width()!=width || operation.mask.height()!=height ||
                 (operation.kind==OpenGlImageOperationKind::MaskedBlend &&

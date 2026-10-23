@@ -61,4 +61,73 @@ std::optional<creative_suite::media::RgbaFrame> composeAdjustmentLayers(
     return should_cancel() ? std::nullopt : std::move(result);
 }
 
+creative_suite::composition::GpuTextureCompositionResult composeAdjustmentLayersGpu(
+    int width, int height, const std::vector<TimelineCompositionStep>& steps,
+    creative_suite::composition::GpuFrameCompositor& backend,
+    const creative_suite::composition::GpuFrameCompositor::CancellationPredicate& canceled,
+    creative_suite::composition::OpenGlCompositionTimings* timings) {
+    using namespace creative_suite::composition;
+    const auto was_canceled = [&] { return canceled && canceled(); };
+    const auto fail = [](OpenGlCompositionStatus status, std::string operation,
+                         std::string cause = {}, std::int64_t code = 0) {
+        return GpuTextureCompositionResult{status, {}, std::move(operation), std::move(cause), code};
+    };
+    if (width <= 0 || height <= 0)
+        return fail(OpenGlCompositionStatus::Unsupported, "adjustment-canvas", "Invalid adjustment canvas dimensions.");
+
+    std::vector<CompositionLayer> pending;
+    pending.reserve(steps.size() + 1);
+    OpenGlTextureFramePtr accumulated;
+    creative_suite::media::RgbaFrame accumulated_geometry{width, height, width * 4, {}};
+    for (const auto& step : steps) {
+        if (was_canceled()) return fail(OpenGlCompositionStatus::Cancelled, "adjustment-cancelled");
+        if (!step.adjustment) {
+            pending.push_back(step.layer);
+            continue;
+        }
+        if (pending.empty() || !adjustmentRequiresProcessing(step.layer.transform, step.layer.effect_stack))
+            continue;
+
+        auto original = backend.composeTexture(width, height, pending, canceled, timings);
+        if (original.status != OpenGlCompositionStatus::Complete || !original.frame)
+            return fail(original.status == OpenGlCompositionStatus::Complete ? OpenGlCompositionStatus::Failed : original.status,
+                original.operation.empty() ? "adjustment-lower-composition" : original.operation,
+                original.cause.empty() ? "The lower-track GPU composition returned no texture." : original.cause,
+                original.error_code);
+        const auto passes = creative_suite::effects::colorAdjustmentPasses(step.layer.effect_stack);
+        if (!passes)
+            return fail(OpenGlCompositionStatus::Unsupported, "adjustment-effects",
+                "The GPU adjustment operation does not support one of the effect-stack entries.");
+
+        OpenGlImageOperation operation;
+        operation.kind = OpenGlImageOperationKind::Adjustment;
+        operation.background.texture = original.frame;
+        operation.foreground.texture = original.frame;
+        operation.transform = step.layer.transform;
+        operation.colors = *passes;
+        auto adjusted = backend.processImage(operation, canceled, timings);
+        if (adjusted.status != OpenGlCompositionStatus::Complete || !adjusted.frame)
+            return fail(adjusted.status == OpenGlCompositionStatus::Complete ? OpenGlCompositionStatus::Failed : adjusted.status,
+                adjusted.operation.empty() ? "adjustment-image-operation" : adjusted.operation,
+                adjusted.cause.empty() ? "The GPU adjustment operation returned no texture." : adjusted.cause,
+                adjusted.error_code);
+        if (was_canceled()) return fail(OpenGlCompositionStatus::Cancelled, "adjustment-cancelled");
+
+        accumulated = std::move(adjusted.frame);
+        pending.clear();
+        CompositionLayer accumulated_layer;
+        accumulated_layer.frame = &accumulated_geometry;
+        accumulated_layer.texture_frame = accumulated;
+        pending.push_back(std::move(accumulated_layer));
+    }
+    if (was_canceled()) return fail(OpenGlCompositionStatus::Cancelled, "adjustment-cancelled");
+    if (accumulated && pending.size() == 1 && pending.front().texture_frame == accumulated)
+        return {OpenGlCompositionStatus::Complete, std::move(accumulated)};
+    auto result = backend.composeTexture(width, height, pending, canceled, timings);
+    if (result.status == OpenGlCompositionStatus::Complete && !result.frame)
+        return fail(OpenGlCompositionStatus::Failed, "adjustment-upper-composition",
+            "The upper-track GPU composition returned no texture.");
+    return result;
+}
+
 } // namespace rendering

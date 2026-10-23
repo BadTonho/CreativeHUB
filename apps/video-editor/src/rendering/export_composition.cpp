@@ -258,19 +258,25 @@ void ExportComposition::fallback(const composition::OpenGlCompositionResult& res
 std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const std::vector<composition::CompositionLayer>& layers,
     std::int64_t output_frame, std::int64_t timeline_frame, const std::atomic_bool& canceled,
     creative_suite::media::NativeVideoFramePool* native_pool,
-    creative_suite::media::NativeVideoFramePtr* native_output, composition::GpuReadbackTicket* async_ticket,composition::VulkanNativeExportTicket* native_ticket) {
+    creative_suite::media::NativeVideoFramePtr* native_output, composition::GpuReadbackTicket* async_ticket,
+    composition::VulkanNativeExportTicket* native_ticket, const composition::GpuTextureFramePtr& source_texture) {
     if (canceled.load()) throw ExportCanceled{};
     ExportTimedScope total(metrics_.composition_nanoseconds);
     if (native_output) native_output->reset();
     if(async_ticket)*async_ticket={};
     if(native_ticket)*native_ticket={};
+    creative_suite::media::RgbaFrame texture_geometry{job_.settings.width,job_.settings.height,job_.settings.width*4,{}};
+    std::vector<composition::CompositionLayer> texture_layers;
+    if(source_texture){composition::CompositionLayer layer;layer.frame=&texture_geometry;layer.texture_frame=source_texture;texture_layers.push_back(std::move(layer));}
+    const auto& submitted_layers=source_texture?texture_layers:layers;
     if(native_ticket && bridge_ && !failed_ && !cpu_source_recovery_){
         ExportTimedScope gpu_time(metrics_.gpu_composition_nanoseconds);
         composition::OpenGlCompositionTimings timing;composition::VulkanNativeExportResult submitted;
         auto target=output_pool_->acquire();if(!target)throw ExportAsyncBackpressure{};
         try{
             auto batch=async_gpu_->beginCommandBatch([&]{return canceled.load();});
-            auto source=async_gpu_->composeTexture(job_.settings.width,job_.settings.height,layers,[&]{return canceled.load();},&timing);
+            auto source=source_texture?composition::GpuTextureCompositionResult{composition::GpuCompositionStatus::Complete,source_texture}:
+                async_gpu_->composeTexture(job_.settings.width,job_.settings.height,layers,[&]{return canceled.load();},&timing);
             submitted={source.status,{}, {},source.cause,source.error_code};
             if(source.frame){
                 if(options_.fail_native_submission_for_testing && ++native_attempts_==options_.fail_native_submission_for_testing)
@@ -295,7 +301,8 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
         composition::OpenGlReadbackResult submitted;
         try {
             auto batch=async_gpu_->beginCommandBatch([&]{return canceled.load();});
-            auto texture=async_gpu_->composeTexture(job_.settings.width,job_.settings.height,layers,[&]{return canceled.load();},&timings);
+            auto texture=source_texture?composition::GpuTextureCompositionResult{composition::GpuCompositionStatus::Complete,source_texture}:
+                async_gpu_->composeTexture(job_.settings.width,job_.settings.height,layers,[&]{return canceled.load();},&timings);
             submitted={texture.status,{}, {},texture.operation,texture.cause,texture.error_code};
             if(texture.status==composition::OpenGlCompositionStatus::Complete)submitted=async_gpu_->submitAsyncReadback(texture.frame,[&]{return canceled.load();});
         }catch(const std::exception& error){submitted={composition::OpenGlCompositionStatus::Failed,{}, {},"vulkan-export-submit",error.what()};}
@@ -320,8 +327,9 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
                       "The native export GPU adapter is unavailable."}, output_frame, timeline_frame);
         } else {
         composition::OpenGlCompositionTimings timings;
-        auto texture = native_gpu_->composeTexture(job_.settings.width, job_.settings.height, layers,
-            [&] { return canceled.load(); }, &timings);
+        auto texture = source_texture?composition::GpuTextureCompositionResult{composition::GpuCompositionStatus::Complete,source_texture}:
+            native_gpu_->composeTexture(job_.settings.width, job_.settings.height, layers,
+                [&] { return canceled.load(); }, &timings);
         // Offline export can wait for released targets' GPU fences without
         // blocking the GUI or discarding the selected native encoding path.
         const auto capacity_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
@@ -334,8 +342,9 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
                 break;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            texture = native_gpu_->composeTexture(job_.settings.width, job_.settings.height, layers,
-                [&] { return canceled.load(); }, &timings);
+            texture = source_texture?composition::GpuTextureCompositionResult{composition::GpuCompositionStatus::Complete,source_texture}:
+                native_gpu_->composeTexture(job_.settings.width, job_.settings.height, layers,
+                    [&] { return canceled.load(); }, &timings);
         }
         metrics_.upload_nanoseconds += timings.upload_nanoseconds;
         metrics_.uploaded_bytes += timings.uploaded_bytes;
@@ -366,7 +375,7 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
                 if(!gpu_ && job_.settings.graphics_backend==composition::GraphicsBackend::Vulkan && !options_.gpu_factory)gpu_=std::make_unique<NativeExportGpu>(device_);
                 if (!gpu_) gpu_ = options_.gpu_factory ? options_.gpu_factory(options_.gpu_surface)
                                                        : std::make_unique<NativeExportGpu>(options_.gpu_surface, job_.settings.graphics_backend);
-                if (gpu_) result = gpu_->compose(job_.settings.width, job_.settings.height, layers,
+                if (gpu_) result = gpu_->compose(job_.settings.width, job_.settings.height, submitted_layers,
                     [&] { return canceled.load(std::memory_order_acquire); }, &timings);
                 else result = {composition::OpenGlCompositionStatus::Failed, {}, "create-export-backend", "The export GPU adapter is unavailable."};
             } catch (const std::exception& error) {
@@ -393,6 +402,7 @@ std::optional<creative_suite::media::RgbaFrame> ExportComposition::compose(const
         fallback(result, output_frame, timeline_frame);
     }
     if (canceled.load()) throw ExportCanceled{};
+    if(source_texture)throw CpuCompositionSourcesRequired{};
     if (std::any_of(layers.begin(), layers.end(), [](const auto& layer) {
             return layer.native_frame || layer.texture_frame;
         })) throw CpuCompositionSourcesRequired{};
