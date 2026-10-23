@@ -170,6 +170,12 @@ public slots:
         qint64 global_frame,
         qint64 frame_index,
         quint64 generation);
+    virtual void captureCompositionFrame(
+        quint64 request_id,
+        quint64 project_generation,
+        qint64 global_frame,
+        quint64 composition_revision,
+        quint64 generation);
     virtual void stepForward();
     virtual void stepBackward();
     virtual void seekToFrame(qint64 frame_index, quint64 generation);
@@ -191,6 +197,13 @@ signals:
     void audioLevelsReady(QVector<quint64> track_ids,
                           QVector<float> track_peaks, float master_peak,
                           quint64 generation);
+    void stillCaptureReady(
+        quint64 request_id,
+        quint64 project_generation,
+        VideoFramePtr frame,
+        qint64 timeline_frame,
+        quint64 composition_revision,
+        quint64 generation);
 
 private slots:
     void decodeTick();
@@ -234,7 +247,8 @@ private:
     [[nodiscard]] std::optional<media::VideoFrame> composeCompositionLayers(
         const std::vector<DecodedCompositionLayer>& layers,
         const media::VideoPlaybackSession::CancellationPredicate& should_cancel,
-        rendering::FrameCompositionTimings* timings = nullptr);
+        rendering::FrameCompositionTimings* timings = nullptr,
+        bool force_full_resolution = false);
     void clearCompositionCache() noexcept;
     void reportFailure(
         const media::MediaError& error,

@@ -27,6 +27,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <memory>
 
 namespace {
 
@@ -45,6 +46,18 @@ void writeBytes(const QString& path, const QByteArray& bytes) {
     CS_TEST_CHECK(opened);
     const auto written = file.write(bytes);
     CS_TEST_CHECK(written == bytes.size());
+}
+
+void copyDirectoryContents(const QString& source, const QString& target) {
+    CS_TEST_CHECK(QDir().mkpath(target));
+    const auto entries = QDir(source).entryInfoList(
+        QDir::AllEntries | QDir::NoDotAndDotDot, QDir::Name);
+    for (const auto& entry : entries) {
+        CS_TEST_CHECK(!entry.isSymLink());
+        const auto destination = QDir(target).filePath(entry.fileName());
+        if (entry.isDir()) copyDirectoryContents(entry.absoluteFilePath(), destination);
+        else CS_TEST_CHECK(QFile::copy(entry.absoluteFilePath(), destination));
+    }
 }
 
 struct Snapshot { QString vault; QString restored; };
@@ -66,6 +79,13 @@ Snapshot backup(const QString& root, const QString& source) {
     CS_TEST_CHECK(snapshotJson.value("extra_note") == originalJson.value("extra_note"));
     CS_TEST_CHECK(manager.totalBackupsCount() == 1);
     CS_TEST_CHECK(manager.totalBackupsSize() == QFileInfo(path).size());
+    const auto sourceGallery = source + QStringLiteral(".gallery");
+    if (QFileInfo::exists(sourceGallery)) {
+        CS_TEST_CHECK(QFileInfo::exists(path + QStringLiteral(".gallery")));
+        CS_TEST_CHECK(QDir(path + QStringLiteral(".gallery")).entryList(
+            QDir::Files | QDir::NoDotAndDotDot).size() ==
+            QDir(sourceGallery).entryList(QDir::Files | QDir::NoDotAndDotDot).size());
+    }
 
     // The snapshot also keeps its references when moved again for restoration.
     const QString restored = QDir(root).filePath("restored/" + QFileInfo(source).fileName());
@@ -73,6 +93,9 @@ Snapshot backup(const QString& root, const QString& source) {
     CS_TEST_CHECK(directoryCreated);
     const bool restoredCopy = QFile::copy(path, restored);
     CS_TEST_CHECK(restoredCopy);
+    if (QFileInfo::exists(path + QStringLiteral(".gallery")))
+        copyDirectoryContents(path + QStringLiteral(".gallery"),
+                              restored + QStringLiteral(".gallery"));
     return {path, restored};
 }
 
@@ -381,9 +404,14 @@ void testVideoDocuments(const QString& root) {
     auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
     CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "red_gain", 145.0));
     color_document.timeline_tracks.front().clips.front().effects.push_back(grade);
-    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v32.csp");
+    color_document.color_gallery_stills.push_back({"hub-still", "Still 1",
+        color_document.timeline_tracks.front().clips.front().clip_id, 10,
+        "hub-still.png",
+        std::make_shared<const std::vector<std::uint8_t>>(
+            std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
+    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v33.csp");
     project::save(fsPath(color_path), color_document);
-    const auto color_snapshot = backup(QDir(root).filePath("video-color-v32"), color_path);
+    const auto color_snapshot = backup(QDir(root).filePath("video-color-v33"), color_path);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)) == color_document);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.restored)) == color_document);
     project::ProjectClip adjustment;

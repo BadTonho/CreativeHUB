@@ -1393,6 +1393,82 @@ void PlaybackWorker::renderCompositionFrame(
     }
 }
 
+void PlaybackWorker::captureCompositionFrame(
+    quint64 request_id,
+    quint64 project_generation,
+    qint64 global_frame,
+    quint64 requested_revision,
+    quint64 generation) {
+    VideoFramePtr captured;
+    const auto revision = composition_revision_;
+    if (generation == generation_ && requested_revision == revision &&
+        composition_enabled_ && global_frame >= composition_start_frame_ &&
+        global_frame < composition_end_frame_) {
+        const auto seek_sequence = pending_seek_sequence_.load(std::memory_order_acquire);
+        const auto should_cancel = [this, seek_sequence]() {
+            return !isSeekCurrent(seek_sequence);
+        };
+        const auto previous_frame = current_timeline_frame_;
+        current_timeline_frame_ = global_frame;
+        struct RestoreFrame {
+            std::int64_t& destination;
+            std::int64_t value;
+            ~RestoreFrame() { destination = value; }
+        } restore_frame{current_timeline_frame_, previous_frame};
+        try {
+            auto decoded = decodeCompositionLayers(global_frame, should_cancel);
+            if (decoded && !should_cancel()) {
+                auto composed = composeCompositionLayers(*decoded, should_cancel,
+                    nullptr, true);
+                bool retry_on_cpu = last_composition_busy_;
+                if (last_composition_texture_ && gpu_compositor_ && !should_cancel()) {
+                    const auto readback = gpu_compositor_->readback(
+                        last_composition_texture_, should_cancel, nullptr);
+                    if (readback.status == creative_suite::composition::OpenGlCompositionStatus::Complete &&
+                        readback.frame) {
+                        composed = *readback.frame;
+                    } else {
+                        retry_on_cpu = !should_cancel();
+                        logging::Logger::instance().log(logging::Level::Error,
+                            "color-gallery", readback.operation, readback.cause,
+                            {{"error_code", std::to_string(readback.error_code)},
+                             {"timeline_frame", std::to_string(global_frame)},
+                             {"composition_revision", std::to_string(revision)}});
+                    }
+                }
+                last_composition_texture_.reset();
+                if (retry_on_cpu && !should_cancel()) {
+                    const bool gpu_was_enabled = gpu_composition_enabled_;
+                    gpu_composition_enabled_ = false;
+                    struct RestoreGpuComposition {
+                        bool& enabled;
+                        bool value;
+                        ~RestoreGpuComposition() { enabled = value; }
+                    } restore_gpu{gpu_composition_enabled_, gpu_was_enabled};
+                    auto cpu_layers = decodeCompositionLayers(global_frame, should_cancel);
+                    composed = cpu_layers && !should_cancel()
+                        ? composeCompositionLayers(*cpu_layers, should_cancel, nullptr, true)
+                        : std::optional<media::VideoFrame>{};
+                }
+                if (composed && !should_cancel() &&
+                    composed->width == composition_canvas_width_ &&
+                    composed->height == composition_canvas_height_) {
+                    captured = std::make_shared<const media::VideoFrame>(
+                        std::move(*composed));
+                }
+            }
+        } catch (const std::exception& error) {
+            logging::Logger::instance().log(logging::Level::Error,
+                "color-gallery", "capture_still", error.what(),
+                {{"timeline_frame", std::to_string(global_frame)},
+                 {"composition_revision", std::to_string(revision)},
+                 {"generation", std::to_string(generation)}});
+        }
+    }
+    emit stillCaptureReady(request_id, project_generation, std::move(captured),
+        global_frame, revision, generation);
+}
+
 void PlaybackWorker::stepForward() {
     pause();
     if (composition_enabled_) {
@@ -3055,7 +3131,8 @@ PlaybackWorker::decodeCompositionLayers(
 std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     const std::vector<DecodedCompositionLayer>& decoded_layers,
     const media::VideoPlaybackSession::CancellationPredicate& should_cancel,
-    rendering::FrameCompositionTimings* timings) {
+    rendering::FrameCompositionTimings* timings,
+    bool force_full_resolution) {
     using namespace creative_suite::composition;
     last_composition_gpu_ = false;
     last_composition_cancelled_ = false;
@@ -3065,7 +3142,7 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     auto adapter_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     int width = composition_canvas_width_;
     int height = composition_canvas_height_;
-    switch (preview_quality_) {
+    if (!force_full_resolution) switch (preview_quality_) {
     case PreviewQuality::Half:
         width = std::max(1, width / 2);
         height = std::max(1, height / 2);
@@ -3112,7 +3189,8 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
                 restore{gpu_composition_failed_, previous_failure};
             auto recovered = decodeCompositionLayers(current_timeline_frame_, should_cancel);
             if (!recovered) return {};
-            return composeCompositionLayers(*recovered, should_cancel, timings);
+            return composeCompositionLayers(*recovered, should_cancel, timings,
+                                            force_full_resolution);
         };
         const bool gpu_adjustment_available = gpu_surface_ ||
             creative_suite::composition::sessionGraphicsBackend() == creative_suite::composition::GraphicsBackend::Vulkan;
@@ -3307,7 +3385,8 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
         } restore{gpu_composition_failed_, previous_failure};
         auto recovered = decodeCompositionLayers(current_timeline_frame_, should_cancel);
         if (!recovered) return {};
-        return composeCompositionLayers(*recovered, should_cancel, timings);
+        return composeCompositionLayers(*recovered, should_cancel, timings,
+                                        force_full_resolution);
     }
     if (gpu_composition_enabled_ && timings) adapter_started = Clock::now();
     // Only the CPU path prepares and reports CPU text raster fast paths.

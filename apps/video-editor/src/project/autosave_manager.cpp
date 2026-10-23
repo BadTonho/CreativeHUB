@@ -354,6 +354,10 @@ void AutosaveManager::pruneDirectory(
          index < snapshots.size(); ++index) {
         std::error_code error;
         std::filesystem::remove(snapshots[index].path, error);
+        if (error) continue;
+        auto sidecar = snapshots[index].path;
+        sidecar += ".gallery";
+        std::filesystem::remove_all(sidecar, error);
     }
 }
 
@@ -367,6 +371,17 @@ void AutosaveManager::removeSnapshot(
             "Could not remove the autosave snapshot.",
             error.value(),
             snapshot_path);
+    }
+    auto sidecar = snapshot_path;
+    sidecar += ".gallery";
+    error.clear();
+    std::filesystem::remove_all(sidecar, error);
+    if (error) {
+        throw ProjectError(
+            ProjectErrorCode::Io,
+            "Could not remove the autosave snapshot's Color Gallery sidecar.",
+            error.value(),
+            sidecar);
     }
 }
 
@@ -396,6 +411,16 @@ void AutosaveManager::removeUnsavedSnapshotsForSession(
                 "Could not remove the unsaved-project autosave snapshot.",
                 error.value(),
                 snapshot.path);
+        }
+        auto sidecar = snapshot.path;
+        sidecar += ".gallery";
+        std::filesystem::remove_all(sidecar, error);
+        if (error) {
+            throw ProjectError(
+                ProjectErrorCode::Io,
+                "Could not remove the unsaved autosave Color Gallery sidecar.",
+                error.value(),
+                sidecar);
         }
     }
 }

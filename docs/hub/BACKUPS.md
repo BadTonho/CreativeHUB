@@ -1,13 +1,13 @@
 # Hub Project Backups
 
-Image `.cimg` v28 is accepted, including independent Hue/Saturation Colorize values; future v29 is rejected. Glow extends native backup support to Motion v18; CSP v32 adds the Video Editor Primary Grade effect. Matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, and effect parameter keyframes are retained unchanged and existing media/Input paths are rebased. Future CSP v33 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
+Image `.cimg` v28 is accepted, including independent Hue/Saturation Colorize values; future v29 is rejected. Glow extends native backup support to Motion v18; CSP v32 adds the Video Editor Primary Grade effect and CSP v33 adds the Color Gallery. Gallery PNG sidecars are copied beside each backup snapshot so Gallery items remain available after restore. Matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, and effect parameter keyframes are retained unchanged; external media/Input paths are rebased. Future CSP v34 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
 
 ## Video Editor v29 Background presets
 
 Named Fusion Compositions retain optional `display_name`, including Background
 presets, through snapshot and restored projects. The existing graph/media path
 adapter preserves node colors, masks and input offsets while relocating external
-Input sources. Formats 1–32 are supported; future v33 is refused. The actual
+Input sources. Formats 1–33 are supported; future v34 is refused. The actual
 Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 
 ## Video Editor v28 masks
@@ -15,7 +15,7 @@ Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 The backup adapter preserves Rectangle/Ellipse node types, geometry, curves and
 Mask input 2 alongside generators and composition input offsets. Masks carry no
 media references; external Input paths continue to be rewritten on snapshot and
-restore. Supported Video Editor schemas are 1–32; future v33 is rejected.
+restore. Supported Video Editor schemas are 1–33; future v34 is rejected.
 The Video Editor reader reopens restored fixtures in `hub-backup-format-test`.
 
 ## Video Editor v27 compositions
@@ -28,14 +28,18 @@ the actual Video Editor writer and reader.
 
 
 Status: **provisional implementation contract**. The Hub creates document
-snapshots; media files remain external references and are not bundled.
+snapshots; external media remains referenced, while Video Editor Gallery PNG
+sidecars are copied beside their CSP snapshots.
 
 ## Reference preservation
 
 Copying a project unchanged into the vault changes the directory from which
 an editor resolves relative media paths. Before publishing a snapshot, the
 Hub resolves documented relative references against the original document's
-directory and writes absolute paths into the snapshot only. The original
+directory and writes absolute paths into the snapshot only. Video Editor
+Gallery stills use leaf filenames within `<project>.csp.gallery/`; the Hub
+copies that sidecar directory beside the backup CSP file and does not rewrite
+those filenames. Other media files remain external references. The original
 document and media files remain unchanged. The format version, revision,
 editing data, and unrelated JSON fields are preserved; JSON formatting may
 change when references are rewritten. Documents with no rewritten paths retain
@@ -52,13 +56,13 @@ producer/consumer regression coverage when supported schemas gain path fields.
 | Format identifier | Supported versions | References rewritten |
 | --- | --- | --- |
 | `creative-suite-image-document` | 1–23 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
-| `creative-suite.main-editor` | 1–31 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. |
+| `creative-suite.main-editor` | 1–33 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. CSP v33 Gallery sidecar files are copied beside each backup snapshot. |
 | `creative-suite.motion-studio` | 1–18 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
 
 Video v26 adjustment clips have no source path. Their duration, effects and
 transform curves are preserved by backup and restoration. They do not cause
-media lookup or path rewriting. Versions 1–25 remain accepted, and versions
-newer than 30 are rejected until their reference contracts are supported.
+media lookup or path rewriting. Versions 1–33 are accepted, and versions
+newer than 33 are rejected until their reference contracts are supported.
 
 Image paths use the original document directory. Video and Motion paths use
 the weakly canonical original document location, matching their readers.

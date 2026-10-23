@@ -1,5 +1,6 @@
 #include "project_file_detail.h"
 
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -433,12 +434,53 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
     canvas.insert("height", document.canvas_height);
     root.insert("canvas", canvas);
     root.insert("media", media);
+    QJsonArray gallery;
+    auto gallery_directory = project_path;
+    gallery_directory += ".gallery";
+    if (!document.color_gallery_stills.empty()) {
+        std::error_code directory_error;
+        std::filesystem::create_directories(gallery_directory, directory_error);
+        if (directory_error) {
+            throw ProjectError(ProjectErrorCode::Io,
+                "Could not create the Color Gallery sidecar directory.",
+                directory_error.value(), gallery_directory);
+        }
+        const QFileInfo gallery_info(pathToQString(gallery_directory));
+        if (!gallery_info.isDir() || gallery_info.isSymLink()) {
+            throw ProjectError(ProjectErrorCode::Io,
+                "The Color Gallery sidecar path is not a regular directory.",
+                std::nullopt, gallery_directory);
+        }
+    }
+    for (const auto& still : document.color_gallery_stills) {
+        QJsonObject item;
+        item.insert("id", QString::fromUtf8(still.id.data(), static_cast<qsizetype>(still.id.size())));
+        item.insert("name", QString::fromUtf8(still.name.data(), static_cast<qsizetype>(still.name.size())));
+        item.insert("source_clip_id", static_cast<qint64>(still.source_clip_id));
+        item.insert("timeline_frame", static_cast<qint64>(still.timeline_frame));
+        item.insert("file", QString::fromUtf8(still.image_file.data(),
+                                                static_cast<qsizetype>(still.image_file.size())));
+        gallery.append(item);
+        if (!still.image_png || still.image_png->empty()) continue;
+        const auto image_path = gallery_directory / std::filesystem::path(still.image_file);
+        QSaveFile image_file(pathToQString(image_path));
+        if (!image_file.open(QIODevice::WriteOnly) ||
+            image_file.write(reinterpret_cast<const char*>(still.image_png->data()),
+                             static_cast<qint64>(still.image_png->size())) !=
+                static_cast<qint64>(still.image_png->size()) ||
+            !image_file.commit()) {
+            throw ProjectError(ProjectErrorCode::Io,
+                "Could not save a Color Gallery still image.",
+                image_file.error(), image_path);
+        }
+    }
     if (!document.bins.empty()) {
         QJsonArray bins;
         for (const auto& bin : document.bins) bins.append(QString::fromStdString(bin));
         root.insert("bins", bins);
     }
     root.insert("timeline", timeline);
+    root.insert("color_gallery", gallery);
 
     QSaveFile file(pathToQString(project_path));
     if (!file.open(QIODevice::WriteOnly)) {

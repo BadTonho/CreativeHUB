@@ -17,6 +17,7 @@
 #include <iterator>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -204,6 +205,10 @@ int main(int argc, char** argv) {
         original.timeline_tracks.push_back(
             {"Video 2", 1.0, false, {second_track_title}, {}});
         original.timeline_tracks.back().track_id = 2;
+        original.color_gallery_stills.push_back({"still-test-1", "Still 1", 1, 42,
+            "still-test-1.png",
+            std::make_shared<const std::vector<std::uint8_t>>(
+                std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
         project::save(project_path, original);
         auto negative_motion_offset = original;
         negative_motion_offset.timeline_tracks[0].clips[0].motion_link->render_start_time_us = -1;
@@ -216,6 +221,10 @@ int main(int argc, char** argv) {
 
         const auto loaded = project::load(project_path);
         require(loaded == original, "A project did not round-trip through JSON.");
+        auto gallery_sidecar = project_path;
+        gallery_sidecar += ".gallery";
+        require(std::filesystem::exists(gallery_sidecar / "still-test-1.png"),
+                "A Color Gallery still was not written to the project sidecar.");
         auto portrait_project = original;
         portrait_project.canvas_width = 1080;
         portrait_project.canvas_height = 1920;
@@ -279,11 +288,11 @@ int main(int argc, char** argv) {
             require(creative_suite::effects::setParameterValue(grade, "red_gain", 135),
                     "Primary Grade test setup must be valid.");
             graded.timeline_tracks.front().clips.front().effects.push_back(grade);
-            const auto grade_path = directory / "primary-grade-v32.csp";
+            const auto grade_path = directory / "primary-grade-v33.csp";
             project::save(grade_path, graded);
             const auto restored = project::load(grade_path);
             require(restored.timeline_tracks.front().clips.front().effects.back() == grade,
-                    "Primary Grade must survive CSP v32 save and reopen.");
+                    "Primary Grade must survive CSP v33 save and reopen.");
             std::ifstream grade_file(grade_path, std::ios::binary);
             const std::string grade_text{
                 std::istreambuf_iterator<char>(grade_file),
@@ -300,6 +309,24 @@ int main(int argc, char** argv) {
                         "Primary Grade in CSP v31 returned the wrong error category.");
             }
         }
+        {
+            auto legacy_gallery = QJsonDocument::fromJson(
+                QByteArray(saved_json.data(), static_cast<qsizetype>(saved_json.size()))).object();
+            legacy_gallery.insert("version", 32);
+            legacy_gallery.remove("color_gallery");
+            const auto legacy_gallery_path = directory / "legacy-gallery-v32.csp";
+            writeText(legacy_gallery_path,
+                      QJsonDocument(legacy_gallery).toJson().toStdString());
+            require(project::load(legacy_gallery_path).color_gallery_stills.empty(),
+                    "A pre-v33 project did not open with an empty Color Gallery.");
+
+            const auto missing_gallery_path = directory / "missing-gallery.csp";
+            std::filesystem::copy_file(project_path, missing_gallery_path);
+            const auto missing_gallery = project::load(missing_gallery_path);
+            require(missing_gallery.color_gallery_stills.size() == 1 &&
+                        missing_gallery.color_gallery_stills.front().image_unavailable,
+                    "A missing still sidecar prevented opening or lost its unavailable item.");
+        }
         require(saved_json.find("media/first video.mkv") != std::string::npos,
                 "A source inside the project was not stored relatively.");
         require(saved_json.find("creative-suite-project-outside-") != std::string::npos,
@@ -315,7 +342,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 32") != std::string::npos &&
+        require(saved_json.find("\"version\": 33") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&

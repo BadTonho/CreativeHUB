@@ -1,6 +1,6 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is now v32 for Primary Grade; Gaussian Blur was introduced in v31 and transfers through cscomp v3.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is now v33 for Color Gallery still metadata and PNG sidecars; Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
 
 ## Workspace Effects catalog
 

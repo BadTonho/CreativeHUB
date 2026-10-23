@@ -4,6 +4,7 @@
 #include "logging/logger.h"
 #include "ui/preview/preview_widget.h"
 #include "workspaces/render/ui/render_workspace.h"
+#include "workspaces/color/ui/color_workspace.h"
 #include "project/project_file.h"
 #include "settings/settings_dialog.h"
 #include "settings/user_preferences.h"
@@ -550,6 +551,8 @@ void MainWindow::clearProjectState(
     project_controller_.reset(canvas_width, canvas_height, frame_rate);
     restored_autosave_.reset();
     ++project_generation_;
+    pending_color_still_capture_.reset();
+    if (color_workspace_ != nullptr) color_workspace_->setCapturePending(false);
     clearActiveTimelineSelection();
     playback_frame_index_ = 0;
     if (editUi().timeline != nullptr) {
@@ -921,6 +924,8 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
         std::move(prepared.saved_baseline));
     restored_autosave_.reset();
     ++project_generation_;
+    pending_color_still_capture_.reset();
+    if (color_workspace_ != nullptr) color_workspace_->setCapturePending(false);
     clearActiveTimelineSelection();
     playback_frame_index_ = 0;
     if (editUi().timeline != nullptr) {

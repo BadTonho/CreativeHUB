@@ -133,6 +133,14 @@ PlaybackController::PlaybackController(
             }
             emitEvent(std::move(event));
         }, Qt::QueuedConnection);
+    QObject::connect(worker_, &PlaybackWorker::stillCaptureReady, this,
+        [this](quint64 request_id, quint64 project_generation, VideoFramePtr frame,
+               qint64 timeline_frame, quint64 composition_revision,
+               quint64 playback_generation) {
+            emitEvent(PlaybackStillCaptureEvent{request_id, project_generation,
+                std::move(frame), timeline_frame, composition_revision,
+                playback_generation});
+        }, Qt::QueuedConnection);
     worker_thread_.start();
 }
 
@@ -462,6 +470,20 @@ void PlaybackController::recoverPreviewFrame(rendering::PreviewFramePayload fram
     const auto local = session_.playheadFrame();
     queueWorker([frame = std::move(frame), generation, epoch, local](PlaybackWorker& worker) mutable {
         worker.recoverPreviewFrame(std::move(frame), local, generation, epoch);
+    }, generation);
+}
+
+void PlaybackController::captureStill(
+    quint64 request_id,
+    quint64 project_generation,
+    qint64 timeline_frame,
+    quint64 composition_revision) {
+    if (!available() || timeline_frame < 0) return;
+    const auto generation = generation_;
+    queueWorker([request_id, project_generation, timeline_frame,
+                 composition_revision, generation](PlaybackWorker& worker) {
+        worker.captureCompositionFrame(request_id, project_generation,
+            timeline_frame, composition_revision, generation);
     }, generation);
 }
 

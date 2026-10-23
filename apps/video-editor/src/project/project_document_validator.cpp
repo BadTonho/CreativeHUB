@@ -119,6 +119,18 @@ void validateDocument(const ProjectDocument& document,
         throwJson(ProjectErrorCode::InvalidValue, project_path,
                   "Project JSON contains an invalid Timeline track-group row height; expected a value from 30.0 to 180.0.");
     }
+    std::unordered_set<std::string> gallery_ids;
+    for (const auto& still : document.color_gallery_stills) {
+        const std::filesystem::path image_file(still.image_file);
+        if (still.id.empty() || still.name.empty() || still.source_clip_id == 0 ||
+            still.timeline_frame < 0 || still.image_file.empty() ||
+            image_file.filename() != image_file || image_file.extension() != ".png" ||
+            !gallery_ids.insert(still.id).second ||
+            ((!still.image_png || still.image_png->empty()) && !still.image_unavailable)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains invalid Color Gallery still metadata.");
+        }
+    }
     std::vector<std::filesystem::path> media_paths;
     for (const auto& media : document.media) {
         if (media.source_path.empty()) {

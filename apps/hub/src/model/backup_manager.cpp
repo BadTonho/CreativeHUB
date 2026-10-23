@@ -36,6 +36,48 @@ bool sameProject(const QString& storedPath, const QString& identity) {
 #endif
 }
 
+bool copyGalleryDirectory(const QString& source_path, const QString& target_path,
+                          QString* cause) {
+    const QFileInfo source_info(source_path);
+    if (!source_info.exists()) return true;
+    if (!source_info.isDir() || source_info.isSymLink()) {
+        if (cause) *cause = QStringLiteral("The Color Gallery sidecar is not a regular directory: %1")
+            .arg(source_path);
+        return false;
+    }
+    if (!QDir().mkpath(target_path)) {
+        if (cause) *cause = QStringLiteral("Could not create the backup Color Gallery directory: %1")
+            .arg(target_path);
+        return false;
+    }
+    const QDir source_dir(source_path);
+    const auto entries = source_dir.entryInfoList(
+        QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+        QDir::Name);
+    for (const auto& entry : entries) {
+        const auto destination = QDir(target_path).filePath(entry.fileName());
+        if (entry.isSymLink()) {
+            if (cause) *cause = QStringLiteral("A symlink is not allowed in a Color Gallery backup: %1")
+                .arg(entry.absoluteFilePath());
+            return false;
+        }
+        if (entry.isDir()) {
+            if (!copyGalleryDirectory(entry.absoluteFilePath(), destination, cause)) return false;
+        } else if (entry.isFile()) {
+            if (!QFile::copy(entry.absoluteFilePath(), destination)) {
+                if (cause) *cause = QStringLiteral("Could not copy a Color Gallery still into the backup: %1")
+                    .arg(entry.absoluteFilePath());
+                return false;
+            }
+        } else {
+            if (cause) *cause = QStringLiteral("Unsupported entry in a Color Gallery sidecar: %1")
+                .arg(entry.absoluteFilePath());
+            return false;
+        }
+    }
+    return true;
+}
+
 std::optional<BackupRecord> readBackupRecord(const QFileInfo& directory) {
     const QString metadataPath = QDir(directory.absoluteFilePath()).filePath(QStringLiteral("record.json"));
     const QFileInfo metadataInfo(metadataPath);
@@ -239,6 +281,11 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
         || snapshot.write(prepared) != prepared.size() || !snapshot.commit())
         return fail(QStringLiteral("Falha ao gravar o backup (código %1): %2")
             .arg(static_cast<int>(snapshot.error())).arg(snapshot.errorString()), targetPath);
+    const QString source_gallery = projectFilePath + QStringLiteral(".gallery");
+    const QString target_gallery = targetPath + QStringLiteral(".gallery");
+    QString gallery_error;
+    if (!copyGalleryDirectory(source_gallery, target_gallery, &gallery_error))
+        return fail(gallery_error, target_gallery);
     BackupRecord record;
     record.originalFilePath = projectIdentity(projectFilePath);
     record.backupFilePath = targetPath;

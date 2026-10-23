@@ -37,6 +37,10 @@ public:
     [[nodiscard]] timeline::TimelineModel& legacyTimelineForUi() noexcept;
 
     [[nodiscard]] const std::vector<ImportedMedia>& mediaItems() const noexcept;
+    [[nodiscard]] const std::vector<project::ColorGalleryStill>&
+    colorGalleryStills() const noexcept;
+    [[nodiscard]] std::vector<project::ColorGalleryStill>&
+    colorGalleryStillsForUi() noexcept;
     [[nodiscard]] const std::vector<std::string>& binPaths() const noexcept;
     [[nodiscard]] const media::MediaLibrary& mediaLibrary() const noexcept;
     [[nodiscard]] std::optional<media::LinkedImageReference> imageEditorLinkForPath(
@@ -75,6 +79,7 @@ private:
     timeline::TimelineModel timeline_;
     timeline::TimelineHistory history_;
     media::MediaLibrary media_library_;
+    std::vector<project::ColorGalleryStill> color_gallery_stills_;
     std::map<std::filesystem::path, media::LinkedImageReference> image_editor_links_;
     std::map<std::filesystem::path, media::MotionLinkReference> motion_links_;
     EditorSelection selection_;

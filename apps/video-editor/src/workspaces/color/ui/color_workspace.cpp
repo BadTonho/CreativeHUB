@@ -14,6 +14,8 @@
 #include <QPixmap>
 #include <QPointer>
 #include <QPushButton>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QSignalBlocker>
 #include <QThreadPool>
 #include <QTimer>
@@ -171,6 +173,43 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     clips_->setFixedHeight(110);
     root->addWidget(clips_);
 
+    auto* gallery_panel = new QWidget(this);
+    gallery_panel->setObjectName("colorGalleryPanel");
+    auto* gallery_layout = new QVBoxLayout(gallery_panel);
+    gallery_layout->setContentsMargins(0, 0, 0, 0);
+    auto* gallery_header = new QHBoxLayout;
+    gallery_header->addWidget(new QLabel(QCoreApplication::translate("ColorWorkspace", "Gallery"), gallery_panel));
+    gallery_header->addStretch();
+    capture_still_button_ = new QPushButton(QCoreApplication::translate("ColorWorkspace", "Capture still"), gallery_panel);
+    capture_still_button_->setObjectName("colorCaptureStillButton");
+    auto* rename_still = new QPushButton(QCoreApplication::translate("ColorWorkspace", "Rename"), gallery_panel);
+    rename_still->setObjectName("colorRenameStillButton");
+    auto* remove_still = new QPushButton(QCoreApplication::translate("ColorWorkspace", "Remove still"), gallery_panel);
+    remove_still->setObjectName("colorRemoveStillButton");
+    gallery_header->addWidget(capture_still_button_);
+    gallery_header->addWidget(rename_still);
+    gallery_header->addWidget(remove_still);
+    gallery_layout->addLayout(gallery_header);
+    stills_ = new QListWidget(gallery_panel);
+    stills_->setObjectName("colorGalleryStills");
+    stills_->setViewMode(QListView::IconMode);
+    stills_->setFlow(QListView::LeftToRight);
+    stills_->setWrapping(false);
+    stills_->setMovement(QListView::Static);
+    stills_->setIconSize(QSize(112, 63));
+    stills_->setFixedHeight(106);
+    gallery_layout->addWidget(stills_);
+    root->addWidget(gallery_panel);
+    connect(capture_still_button_, &QPushButton::clicked, this, [this] {
+        if (capture_still_handler_) capture_still_handler_();
+    });
+    connect(rename_still, &QPushButton::clicked, this, [this] { renameSelectedStill(); });
+    connect(remove_still, &QPushButton::clicked, this, [this] {
+        const auto* item = stills_->currentItem();
+        if (item && remove_still_handler_)
+            remove_still_handler_(item->data(Qt::UserRole).toString());
+    });
+
     auto* lower = new QHBoxLayout;
     controls_ = new QWidget(this);
     controls_->setObjectName("colorPrimaryControls");
@@ -283,6 +322,58 @@ void ColorWorkspace::setEffectsChangedHandler(std::function<void(timeline::ClipI
 
 void ColorWorkspace::setPlaybackHandler(std::function<void(playback::PlaybackCommand)> handler) {
     playback_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setGalleryStills(std::vector<StillItem> stills) {
+    const auto selected_id = stills_->currentItem()
+        ? stills_->currentItem()->data(Qt::UserRole).toString() : QString{};
+    const QSignalBlocker blocker(stills_);
+    stills_->clear();
+    int selected_row = -1;
+    for (const auto& still : stills) {
+        auto* item = new QListWidgetItem(still.available
+            ? still.name
+            : QCoreApplication::translate("ColorWorkspace", "%1 (Unavailable)").arg(still.name),
+            stills_);
+        item->setData(Qt::UserRole, still.id);
+        item->setToolTip(still.available
+            ? QCoreApplication::translate("ColorWorkspace", "%1 · Frame %2").arg(still.source).arg(still.frame)
+            : QCoreApplication::translate("ColorWorkspace", "Still image unavailable · %1 · Frame %2").arg(still.source).arg(still.frame));
+        if (!still.thumbnail.isNull()) item->setIcon(QIcon(QPixmap::fromImage(still.thumbnail)));
+        if (!still.available) item->setForeground(palette().brush(QPalette::Disabled, QPalette::Text));
+        item->setSizeHint(QSize(128, 92));
+        if (still.id == selected_id) selected_row = stills_->count() - 1;
+    }
+    if (selected_row >= 0) stills_->setCurrentRow(selected_row);
+}
+
+void ColorWorkspace::setCapturePending(bool pending) {
+    capture_still_button_->setEnabled(!pending);
+}
+
+void ColorWorkspace::setCaptureStillHandler(std::function<void()> handler) {
+    capture_still_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setRenameStillHandler(
+    std::function<void(const QString&, const QString&)> handler) {
+    rename_still_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setRemoveStillHandler(std::function<void(const QString&)> handler) {
+    remove_still_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::renameSelectedStill() {
+    const auto* item = stills_->currentItem();
+    if (!item || !rename_still_handler_) return;
+    bool accepted = false;
+    const auto name = QInputDialog::getText(this,
+        QCoreApplication::translate("ColorWorkspace", "Rename still"),
+        QCoreApplication::translate("ColorWorkspace", "Name"),
+        QLineEdit::Normal, item->text(), &accepted).trimmed();
+    if (accepted && !name.isEmpty())
+        rename_still_handler_(item->data(Qt::UserRole).toString(), name);
 }
 
 void ColorWorkspace::refreshNodes(int requested_row) {

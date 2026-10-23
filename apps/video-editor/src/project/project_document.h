@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -13,7 +14,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 32;
+inline constexpr int current_format_version = 33;
+inline constexpr int color_gallery_format_version = 33;
 inline constexpr int primary_grade_format_version = 32;
 inline constexpr int composition_name_format_version = 29;
 inline constexpr int fusion_masks_format_version = 28;
@@ -117,6 +119,31 @@ struct ProjectMedia {
     friend bool operator==(const ProjectMedia&, const ProjectMedia&) = default;
 };
 
+struct ColorGalleryStill {
+    std::string id;
+    std::string name;
+    timeline::ClipId source_clip_id = 0;
+    std::int64_t timeline_frame = 0;
+    // Filename within the project sidecar directory (<project>.csp.gallery).
+    std::string image_file;
+    // Loaded PNG bytes keep Save As, autosave, and recovery independent of the
+    // source project's location. Empty bytes with image_unavailable set retain
+    // a missing still as a visible placeholder.
+    std::shared_ptr<const std::vector<std::uint8_t>> image_png;
+    bool image_unavailable = false;
+
+    friend bool operator==(const ColorGalleryStill& left,
+                           const ColorGalleryStill& right) {
+        const bool same_png = left.image_png == right.image_png ||
+            (left.image_png && right.image_png && *left.image_png == *right.image_png);
+        return left.id == right.id && left.name == right.name &&
+            left.source_clip_id == right.source_clip_id &&
+            left.timeline_frame == right.timeline_frame &&
+            left.image_file == right.image_file && same_png &&
+            left.image_unavailable == right.image_unavailable;
+    }
+};
+
 struct ProjectDocument {
     int canvas_width = 1920;
     int canvas_height = 1080;
@@ -125,6 +152,7 @@ struct ProjectDocument {
     double timeline_video_row_height = timeline::kDefaultTrackRowHeight;
     double timeline_audio_row_height = timeline::kDefaultTrackRowHeight;
     std::vector<ProjectMedia> media;
+    std::vector<ColorGalleryStill> color_gallery_stills;
     std::vector<std::string> bins;
     std::vector<ProjectTrack> timeline_tracks;
     // Set by the reader for formats before v14; the project opener creates

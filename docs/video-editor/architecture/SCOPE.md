@@ -1,10 +1,11 @@
 # Current Scope and Non-goals
 
 The Color workspace provides serial nodes for existing clip effects and the
-new Primary Grade on supported visual clips, with an RGB waveform of the
-displayed frame. It shares Edit's effect stack and history, not Fusion's node
-graph. Gallery stills, branching grade nodes, calibrated scopes and advanced
-color management remain outside the first stage. See the
+new Primary Grade on supported visual clips, with an RGB waveform and a
+project-owned Gallery for full-canvas still capture, naming, provenance and
+removal. It shares Edit's effect stack and history, not Fusion's node graph.
+Gallery albums, tags, comparison views, branching grade nodes, calibrated
+scopes and advanced color management remain outside the current stage. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
 [Gaussian Blur](../features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only

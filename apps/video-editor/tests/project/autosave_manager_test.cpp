@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -28,6 +29,10 @@ project::ProjectDocument document() {
     result.bins = {"Unsorted"};
     result.timeline_tracks.push_back({"Video 1"});
     result.timeline_tracks.back().track_id = 1;
+    result.color_gallery_stills.push_back({"recovery-still", "Still 1", 1, 12,
+        "recovery-still.png",
+        std::make_shared<const std::vector<std::uint8_t>>(
+            std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
     return result;
 }
 
@@ -59,6 +64,10 @@ int main(int argc, char* argv[]) {
                 "A saved-project autosave snapshot was not created.");
         require(project::load(snapshots.front().path) == original,
                 "An autosave snapshot did not round-trip through the project format.");
+        auto snapshot_gallery = snapshots.front().path;
+        snapshot_gallery += ".gallery";
+        require(std::filesystem::exists(snapshot_gallery / "recovery-still.png"),
+                "An autosave snapshot did not preserve its Color Gallery sidecar.");
         require(readFile(project_path) == original_contents,
                 "Autosave changed the main project file.");
 

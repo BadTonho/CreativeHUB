@@ -26,6 +26,14 @@ public:
         QString name;
         QImage thumbnail;
     };
+    struct StillItem {
+        QString id;
+        QString name;
+        QString source;
+        qint64 frame = 0;
+        QImage thumbnail;
+        bool available = true;
+    };
 
     explicit ColorWorkspace(QWidget* parent = nullptr);
     void setPreviewWidget(QWidget* preview);
@@ -37,6 +45,11 @@ public:
     void setEffectsChangedHandler(std::function<void(timeline::ClipId,
         std::vector<creative_suite::effects::EffectInstance>)> handler);
     void setPlaybackHandler(std::function<void(playback::PlaybackCommand)> handler);
+    void setGalleryStills(std::vector<StillItem> stills);
+    void setCapturePending(bool pending);
+    void setCaptureStillHandler(std::function<void()> handler);
+    void setRenameStillHandler(std::function<void(const QString&, const QString&)> handler);
+    void setRemoveStillHandler(std::function<void(const QString&)> handler);
 
 private:
     void refreshNodes(int requested_row = -1);
@@ -44,10 +57,13 @@ private:
     void submit(std::vector<creative_suite::effects::EffectInstance> effects,
                 int requested_row);
     void scheduleWaveform();
+    void renameSelectedStill();
 
     QWidget* preview_container_ = nullptr;
     QWidget* preview_ = nullptr;
     QListWidget* clips_ = nullptr;
+    QListWidget* stills_ = nullptr;
+    QPushButton* capture_still_button_ = nullptr;
     QListWidget* nodes_ = nullptr;
     QWidget* controls_ = nullptr;
     QFormLayout* controls_layout_ = nullptr;
@@ -59,6 +75,9 @@ private:
     std::function<void(timeline::ClipId,
         std::vector<creative_suite::effects::EffectInstance>)> effects_changed_handler_;
     std::function<void(playback::PlaybackCommand)> playback_handler_;
+    std::function<void()> capture_still_handler_;
+    std::function<void(const QString&, const QString&)> rename_still_handler_;
+    std::function<void(const QString&)> remove_still_handler_;
     bool active_ = false;
     bool waveform_pending_ = false;
     unsigned int waveform_generation_ = 0;

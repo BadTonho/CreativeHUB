@@ -2,6 +2,7 @@
 #include "project_file_detail.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -1226,6 +1227,71 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
 
     if (version < cross_dissolve_overlap_format_version) {
         migrateLegacyCrossDissolves(document, project_path);
+    }
+    if (version >= color_gallery_format_version) {
+        const auto gallery_value = root.value("color_gallery");
+        if (!gallery_value.isArray()) {
+            throwJson(ProjectErrorCode::MissingField, project_path,
+                      "Project JSON is missing the Color Gallery array.");
+        }
+        auto gallery_directory = project_path;
+        gallery_directory += ".gallery";
+        const QFileInfo gallery_info(pathToQString(gallery_directory));
+        const bool gallery_directory_available = gallery_info.isDir() &&
+            !gallery_info.isSymLink();
+        for (const auto& value : gallery_value.toArray()) {
+            if (!value.isObject()) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Project JSON contains invalid Color Gallery metadata.");
+            }
+            const auto item = value.toObject();
+            ColorGalleryStill still;
+            still.id = requiredString(item, "id", project_path).toUtf8().toStdString();
+            still.name = requiredString(item, "name", project_path).toUtf8().toStdString();
+            const auto source_clip_id = requiredInteger(item, "source_clip_id", project_path);
+            if (source_clip_id <= 0) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Project JSON contains an invalid Color Gallery source clip.");
+            }
+            still.source_clip_id = static_cast<timeline::ClipId>(source_clip_id);
+            still.timeline_frame = requiredInteger(item, "timeline_frame", project_path);
+            still.image_file = requiredString(item, "file", project_path).toUtf8().toStdString();
+            const std::filesystem::path image_filename(still.image_file);
+            if (image_filename.empty() || image_filename.filename() != image_filename ||
+                image_filename.extension() != ".png") {
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Project JSON contains an invalid Color Gallery image filename.");
+            }
+            const auto image_path = gallery_directory / image_filename;
+            const QFileInfo image_info(pathToQString(image_path));
+            QFile image_file(pathToQString(image_path));
+            if (gallery_directory_available && !image_info.isSymLink() &&
+                image_info.exists() && image_info.isFile() &&
+                !image_file.open(QIODevice::ReadOnly)) {
+                throw ProjectError(ProjectErrorCode::Io,
+                    "Could not open a Color Gallery still image.",
+                    image_file.error(), image_path);
+            }
+            if (gallery_directory_available && !image_info.isSymLink() &&
+                image_info.isFile() &&
+                image_file.isOpen()) {
+                const auto png = image_file.readAll();
+                if (image_file.error() != QFileDevice::NoError) {
+                    throw ProjectError(ProjectErrorCode::Io,
+                        "Could not read a Color Gallery still image.",
+                        image_file.error(), image_path);
+                }
+                if (!png.isEmpty()) {
+                    auto image_png = std::make_shared<std::vector<std::uint8_t>>();
+                    image_png->assign(
+                        reinterpret_cast<const std::uint8_t*>(png.constData()),
+                        reinterpret_cast<const std::uint8_t*>(png.constData()) + png.size());
+                    still.image_png = std::move(image_png);
+                }
+            }
+            still.image_unavailable = !still.image_png || still.image_png->empty();
+            document.color_gallery_stills.push_back(std::move(still));
+        }
     }
     detail::validateDocument(document, project_path);
     return document;

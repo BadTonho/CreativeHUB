@@ -116,6 +116,14 @@ private:
         std::int64_t timeline_frame = 0;
         std::optional<timeline::TrackKind> create_track_kind;
     };
+    struct PendingColorStillCapture {
+        std::uint64_t request_id = 0;
+        std::uint64_t project_generation = 0;
+        std::int64_t timeline_frame = 0;
+        std::uint64_t composition_revision = 0;
+        std::uint64_t playback_generation = 0;
+        timeline::ClipId source_clip_id = 0;
+    };
     void createMenus();
     void createWorkspace();
     void setWorkspacePage(ui::WorkspacePageId page);
@@ -316,6 +324,11 @@ private:
     void updatePlaybackAudioParameters();
     void applyMonitorVolumePercent(int percent);
     void refreshPlaybackComposition();
+    void captureColorStill();
+    void handleColorStillCapture(const playback::PlaybackStillCaptureEvent& event);
+    void encodeColorStill(PendingColorStillCapture capture, media::VideoFramePtr frame);
+    void renameColorStill(const QString& id, const QString& name);
+    void removeColorStill(const QString& id);
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<timeline::ClipLocation>
     selectedTimelineClipLocation() const noexcept;
@@ -467,6 +480,8 @@ private:
     QProgressDialog* media_import_progress_ = nullptr;
     std::shared_ptr<std::atomic_bool> active_media_import_cancel_;
     std::uint64_t project_generation_ = 0;
+    std::uint64_t next_color_still_request_id_ = 1;
+    std::optional<PendingColorStillCapture> pending_color_still_capture_;
     std::uint64_t selection_generation_ = 0;
     std::uint64_t next_media_work_id_ = 1;
     std::uint64_t active_media_work_id_ = 0;

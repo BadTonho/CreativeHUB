@@ -127,6 +127,50 @@
         <translation>Forma de onda RGB</translation>
     </message>
     <message>
+        <source>Gallery</source>
+        <translation>Galeria</translation>
+    </message>
+    <message>
+        <source>Capture still</source>
+        <translation>Capturar still</translation>
+    </message>
+    <message>
+        <source>Rename</source>
+        <translation>Renomear</translation>
+    </message>
+    <message>
+        <source>Remove still</source>
+        <translation>Remover still</translation>
+    </message>
+    <message>
+        <source>Clip %1</source>
+        <translation>Clipe %1</translation>
+    </message>
+    <message>
+        <source>%1 · Frame %2</source>
+        <translation>%1 · Quadro %2</translation>
+    </message>
+    <message>
+        <source>Still image unavailable · %1 · Frame %2</source>
+        <translation>Imagem do still indisponível · %1 · Quadro %2</translation>
+    </message>
+    <message>
+        <source>%1 (Unavailable)</source>
+        <translation>%1 (Indisponível)</translation>
+    </message>
+    <message>
+        <source>Rename still</source>
+        <translation>Renomear still</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nome</translation>
+    </message>
+    <message>
+        <source>Still %1</source>
+        <translation>Still %1</translation>
+    </message>
+    <message>
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="253"/>
         <source>Input</source>
         <translation>Entrada</translation>
@@ -1053,6 +1097,10 @@
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source>Could not save the Color Gallery still.</source>
+        <translation>Não foi possível salvar o still da Galeria de cor.</translation>
+    </message>
     <message>
         <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="51"/>
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="416"/>

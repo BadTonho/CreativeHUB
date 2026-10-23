@@ -67,7 +67,8 @@ CSP v28 adds `rectangle_mask` / `ellipse_mask` nodes, normalized `mask` paramete
 five scalar arrays in `mask_keyframes` (`center_x`, `center_y`, `width`, `height`,
 `rotation`) and typed connections to input 2. Mask data is rejected in older
 formats. Versions 1–27 remain readable; Hub backups accept v28, preserve masks
-and relocate only external Input/media paths. Current Hub backups accept v31 presentation data, composition names and Gaussian Blur, and reject future v32.
+and relocate only external Input/media paths. Current Hub backups accept CSP
+v33, copy Color Gallery sidecars and reject future v34.
 
 Direct Viewer editing, pen/polygon masks, mask combinations, tracking and masks
 on Adjustment Clips remain outside this delivery. See [regression testing](../validation/REGRESSION_TESTING.md)

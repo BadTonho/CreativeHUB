@@ -20,10 +20,12 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QBuffer>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QEvent>
 #include <QCoreApplication>
+#include <QImage>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -45,6 +47,7 @@
 #include <QMetaObject>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QPointer>
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QScopeGuard>
@@ -59,6 +62,7 @@
 #include <QTextEdit>
 #include <QUrl>
 #include <QWidget>
+#include <QUuid>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
@@ -707,6 +711,13 @@ void MainWindow::createWorkspace() {
                 playback_controller_->isPlaying()) command = playback::PlaybackCommand::Pause;
             sendPlaybackCommand(command);
         });
+        color_workspace_->setCaptureStillHandler([this] { captureColorStill(); });
+        color_workspace_->setRenameStillHandler([this](const QString& id, const QString& name) {
+            renameColorStill(id, name);
+        });
+        color_workspace_->setRemoveStillHandler([this](const QString& id) {
+            removeColorStill(id);
+        });
         color_workspace_->setClipSelectedHandler([this](timeline::ClipId id) {
             if (const auto location = timeline_model_.locateClip(id)) {
                 activateTimelineClipAt(location->track_index, location->clip_index,
@@ -831,6 +842,183 @@ void MainWindow::refreshColorSelection() {
         }
     }
     color_workspace_->setClips(std::move(clips), selected_id, std::move(effects));
+
+    std::vector<ui::ColorWorkspace::StillItem> stills;
+    stills.reserve(editor_session_.colorGalleryStills().size());
+    for (const auto& still : editor_session_.colorGalleryStills()) {
+        QString source = QCoreApplication::translate("ColorWorkspace", "Clip %1")
+            .arg(static_cast<qulonglong>(still.source_clip_id));
+        if (const auto location = timeline_model_.locateClip(still.source_clip_id)) {
+            const auto& source_clip = tracks[location->track_index].clips[location->clip_index];
+            if (!source_clip.display_name.empty()) {
+                source = QString::fromUtf8(source_clip.display_name.data(),
+                    static_cast<qsizetype>(source_clip.display_name.size()));
+            } else if (!source_clip.source_path.empty()) {
+                source = QString::fromStdString(source_clip.source_path.filename().string());
+            }
+        }
+        QImage image;
+        if (still.image_png && !still.image_png->empty()) {
+            image.loadFromData(still.image_png->data(),
+                static_cast<int>(still.image_png->size()), "PNG");
+        }
+        const bool available = !still.image_unavailable && !image.isNull();
+        stills.push_back({
+            QString::fromUtf8(still.id.data(), static_cast<qsizetype>(still.id.size())),
+            QString::fromUtf8(still.name.data(), static_cast<qsizetype>(still.name.size())),
+            source,
+            static_cast<qint64>(still.timeline_frame),
+            image.isNull() ? QImage{} : image.scaled(112, 63, Qt::KeepAspectRatio,
+                                                      Qt::FastTransformation),
+            available});
+    }
+    color_workspace_->setGalleryStills(std::move(stills));
+}
+
+void MainWindow::captureColorStill() {
+    if (pending_color_still_capture_ || preview_widget_ == nullptr) return;
+    const auto payload = preview_widget_->currentPayload();
+    if (!payload.valid() || payload.width() <= 0 || payload.height() <= 0) return;
+    const auto frame = payload.timeline_frame;
+    const auto source_location = timeline_model_.topClipAt(frame);
+    if (!source_location) return;
+    const auto& source_clip = timeline_model_.tracks()[source_location->track_index]
+        .clips[source_location->clip_index];
+    auto request_id = next_color_still_request_id_++;
+    if (next_color_still_request_id_ == 0) next_color_still_request_id_ = 1;
+    PendingColorStillCapture capture{request_id, project_generation_, frame,
+        payload.composition_revision, payload.playback_generation,
+        source_clip.clip_id};
+    pending_color_still_capture_ = capture;
+    color_workspace_->setCapturePending(true);
+    if (payload.rgba && payload.width() == editor_session_.canvasWidth() &&
+        payload.height() == editor_session_.canvasHeight()) {
+        encodeColorStill(capture, payload.rgba);
+        return;
+    }
+    if (playback_controller_ != nullptr) {
+        playback_controller_->captureStill(request_id, project_generation_, frame,
+                                           payload.composition_revision);
+    } else {
+        pending_color_still_capture_.reset();
+        color_workspace_->setCapturePending(false);
+    }
+}
+
+void MainWindow::handleColorStillCapture(
+    const playback::PlaybackStillCaptureEvent& event) {
+    if (!pending_color_still_capture_ ||
+        pending_color_still_capture_->request_id != event.request_id) return;
+    const auto capture = *pending_color_still_capture_;
+    pending_color_still_capture_.reset();
+    if (color_workspace_ != nullptr) color_workspace_->setCapturePending(false);
+    if (!event.frame || event.project_generation != capture.project_generation ||
+        event.project_generation != project_generation_ ||
+        event.timeline_frame != capture.timeline_frame ||
+        event.composition_revision != capture.composition_revision ||
+        event.playback_generation != capture.playback_generation) return;
+    const auto current = preview_widget_ != nullptr
+        ? preview_widget_->currentPayload() : rendering::PreviewFramePayload{};
+    if (!current.valid() || current.timeline_frame != capture.timeline_frame ||
+        current.composition_revision != capture.composition_revision ||
+        current.playback_generation != capture.playback_generation ||
+        timelinePlayheadFrame() != capture.timeline_frame) return;
+    encodeColorStill(capture, event.frame);
+}
+
+void MainWindow::encodeColorStill(
+    PendingColorStillCapture capture,
+    media::VideoFramePtr frame) {
+    if (!frame || frame->width != editor_session_.canvasWidth() ||
+        frame->height != editor_session_.canvasHeight() || frame->stride < frame->width * 4 ||
+        frame->rgba_pixels.size() < static_cast<std::size_t>(frame->stride) * frame->height) {
+        pending_color_still_capture_.reset();
+        if (color_workspace_ != nullptr) color_workspace_->setCapturePending(false);
+        logging::Logger::instance().log(logging::Level::Error,
+            "color-gallery", "validate_capture_frame",
+            "The captured still did not match the project canvas RGBA contract.",
+            {{"width", frame ? std::to_string(frame->width) : "missing"},
+             {"height", frame ? std::to_string(frame->height) : "missing"},
+             {"expected_width", std::to_string(editor_session_.canvasWidth())},
+             {"expected_height", std::to_string(editor_session_.canvasHeight())}});
+        return;
+    }
+    const QImage source(reinterpret_cast<const uchar*>(frame->rgba_pixels.data()),
+        frame->width, frame->height, frame->stride, QImage::Format_RGBA8888);
+    const QPointer<MainWindow> target(this);
+    QThreadPool::globalInstance()->start([target, capture = std::move(capture),
+                                           frame = std::move(frame), source] {
+        QByteArray png;
+        QBuffer output(&png);
+        const bool encoded = output.open(QIODevice::WriteOnly) && source.save(&output, "PNG");
+        if (!target) return;
+        QMetaObject::invokeMethod(target, [target, capture, frame, png = std::move(png), encoded] {
+            if (!target || !target->pending_color_still_capture_ ||
+                target->pending_color_still_capture_->request_id != capture.request_id) return;
+            target->pending_color_still_capture_.reset();
+            if (target->color_workspace_ != nullptr)
+                target->color_workspace_->setCapturePending(false);
+            const auto current = target->preview_widget_ != nullptr
+                ? target->preview_widget_->currentPayload() : rendering::PreviewFramePayload{};
+            if (capture.project_generation != target->project_generation_ ||
+                target->timelinePlayheadFrame() != capture.timeline_frame ||
+                !current.valid() || current.timeline_frame != capture.timeline_frame ||
+                current.composition_revision != capture.composition_revision ||
+                current.playback_generation != capture.playback_generation) return;
+            if (!encoded || png.isEmpty()) {
+                logging::Logger::instance().log(logging::Level::Error,
+                    "color-gallery", "encode_still", "Could not encode a Color Gallery PNG.",
+                    {{"timeline_frame", std::to_string(capture.timeline_frame)},
+                     {"width", std::to_string(frame->width)},
+                     {"height", std::to_string(frame->height)}});
+                target->statusBar()->showMessage(QCoreApplication::translate(
+                    "MainWindow", "Could not save the Color Gallery still."), 5000);
+                return;
+            }
+            const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8();
+            project::ColorGalleryStill still;
+            still.id.assign(id.constData(), static_cast<std::size_t>(id.size()));
+            const auto name = QCoreApplication::translate("ColorWorkspace", "Still %1")
+                .arg(target->editor_session_.colorGalleryStills().size() + 1).toUtf8();
+            still.name.assign(name.constData(), static_cast<std::size_t>(name.size()));
+            still.source_clip_id = capture.source_clip_id;
+            still.timeline_frame = capture.timeline_frame;
+            still.image_file = still.id + ".png";
+            still.image_png = std::make_shared<const std::vector<std::uint8_t>>(
+                reinterpret_cast<const std::uint8_t*>(png.constData()),
+                reinterpret_cast<const std::uint8_t*>(png.constData()) + png.size());
+            target->editor_session_.colorGalleryStillsForUi().push_back(std::move(still));
+            target->updateProjectDirtyState();
+            target->refreshColorSelection();
+        }, Qt::QueuedConnection);
+    });
+}
+
+void MainWindow::renameColorStill(const QString& id, const QString& name) {
+    const auto id_utf8 = id.toUtf8();
+    const auto name_utf8 = name.trimmed().toUtf8();
+    if (name_utf8.isEmpty()) return;
+    auto& stills = editor_session_.colorGalleryStillsForUi();
+    const auto found = std::find_if(stills.begin(), stills.end(), [&id_utf8](const auto& still) {
+        return still.id == std::string(id_utf8.constData(), static_cast<std::size_t>(id_utf8.size()));
+    });
+    if (found == stills.end() || found->name == std::string(name_utf8.constData(),
+            static_cast<std::size_t>(name_utf8.size()))) return;
+    found->name.assign(name_utf8.constData(), static_cast<std::size_t>(name_utf8.size()));
+    updateProjectDirtyState();
+    refreshColorSelection();
+}
+
+void MainWindow::removeColorStill(const QString& id) {
+    const auto id_utf8 = id.toUtf8();
+    auto& stills = editor_session_.colorGalleryStillsForUi();
+    const auto found = std::find_if(stills.begin(), stills.end(), [&id_utf8](const auto& still) {
+        return still.id == std::string(id_utf8.constData(), static_cast<std::size_t>(id_utf8.size()));
+    });
+    if (found == stills.end()) return;
+    stills.erase(found);
+    updateProjectDirtyState();
+    refreshColorSelection();
 }
 
 void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {

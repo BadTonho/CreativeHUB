@@ -11,6 +11,12 @@ read and write the same effect array. An RGB waveform samples the displayed
 frame on a worker at a bounded rate. Leaving Color restores the previous dock
 arrangement. See the [Color roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
+The Color Gallery captures the current composed Viewer frame into an ordered
+list with its source clip and Timeline frame. Rename and Remove affect the
+project-owned list; selecting a still does not replace the Viewer. GPU
+readback and reduced-quality full-canvas capture run through the playback
+worker. Missing sidecar PNGs display as unavailable items.
+
 ## Workspace Effects catalog
 
 Effects Toolbox, list and Favorites follow the active workspace. Fusion-only nodes appear under Fusion and Fusion > Masks; Background stays under Video > Generators and Text under Text. Drag chooses the position; double click creates and selects a disconnected node near the visible center. Creation is disabled without a compatible clip. Grid remains in the Node Editor toolbar. See [the catalog contract](EFFECTS.md#workspace-catalog).

@@ -1495,6 +1495,66 @@ void validateCompositionPreviewQuality() {
             "Portrait Preview composition did not follow the project canvas at each quality level.");
 }
 
+void validateColorStillCapture() {
+    playback::PlaybackWorker worker;
+    auto source = std::make_shared<media::VideoFrame>();
+    source->width = 2;
+    source->height = 1;
+    source->stride = 8;
+    source->rgba_pixels = {120, 40, 20, 255, 20, 40, 120, 255};
+    playback::CompositionLayerSpec layer;
+    layer.kind = timeline::ClipKind::Image;
+    layer.still_frame = source;
+    layer.timeline_start_frame = 10;
+    layer.segment_frame_count = 4;
+    layer.track_index = 0;
+    layer.clip_index = 0;
+    worker.setCompositionCanvasSize(1920, 1080);
+    worker.setPreviewQuality(playback::PreviewQuality::Half);
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition({layer}, {}, 920);
+    quint64 revision = 0;
+    QObject::connect(&worker, &playback::PlaybackWorker::previewFrameReady,
+        [&revision](rendering::PreviewFramePayload payload, qint64, quint64, quint64) {
+            revision = payload.composition_revision;
+        });
+    worker.renderCompositionFrame(12, 2, 920);
+    require(revision != 0,
+            "Color still capture setup did not produce a source Preview frame.");
+    bool captured = false;
+    QObject::connect(&worker, &playback::PlaybackWorker::stillCaptureReady,
+        [&captured](quint64 request_id, quint64 project_generation,
+                    playback::VideoFramePtr frame, qint64 frame_number,
+                    quint64 composition_revision, quint64 generation) {
+            captured = request_id == 7 && project_generation == 44 && frame &&
+                frame->width == 1920 && frame->height == 1080 && frame_number == 12 &&
+                composition_revision == 1 && generation == 920;
+        });
+    worker.captureCompositionFrame(7, 44, 12, revision, 920);
+    require(captured,
+            "Color capture did not recompose the full-resolution CPU canvas with source frame metadata.");
+
+    bool stale_capture_empty = false;
+    QObject::connect(&worker, &playback::PlaybackWorker::stillCaptureReady,
+        [&stale_capture_empty](quint64 request_id, quint64, playback::VideoFramePtr frame,
+                               qint64, quint64, quint64) {
+            if (request_id == 8) stale_capture_empty = !frame;
+        });
+    worker.captureCompositionFrame(8, 44, 12, revision - 1, 920);
+    require(stale_capture_empty,
+            "Color capture accepted an obsolete composition revision.");
+    worker.setComposition({}, {}, 921);
+    bool no_frame_empty = false;
+    QObject::connect(&worker, &playback::PlaybackWorker::stillCaptureReady,
+        [&no_frame_empty](quint64 request_id, quint64, playback::VideoFramePtr frame,
+                          qint64, quint64, quint64) {
+            if (request_id == 9) no_frame_empty = !frame;
+        });
+    worker.captureCompositionFrame(9, 44, 12, 2, 921);
+    require(no_frame_empty,
+            "Color capture did not return an empty result when the Viewer has no frame.");
+}
+
 void validateStaticImageComposition() {
     playback::PlaybackWorker worker;
     std::vector<playback::VideoFramePtr> frames;
@@ -2154,6 +2214,18 @@ void validateGpuComposition() {
     require(snapshot.gpu_composition_failures == 1 && snapshot.gpu_composition_fallbacks == 4 &&
         snapshot.gpu_composition_frames == 3 && snapshot.composition_failures == 0,
         "Fallback metrics credited CPU frames as GPU.");
+    bool gpu_full_canvas_capture = false;
+    QObject::connect(&worker, &playback::PlaybackWorker::stillCaptureReady,
+        [&gpu_full_canvas_capture](quint64 request_id, quint64 project_generation,
+                                   playback::VideoFramePtr frame, qint64 timeline_frame,
+                                   quint64 revision, quint64 generation) {
+            gpu_full_canvas_capture = request_id == 10 && project_generation == 44 &&
+                frame && frame->width == 1920 && frame->height == 1080 &&
+                timeline_frame == 5 && revision == 2 && generation == 802;
+        });
+    worker.captureCompositionFrame(10, 44, 5, 2, 802);
+    require(gpu_full_canvas_capture,
+            "The asynchronous GPU composition capture did not produce a full-resolution canvas.");
     worker.setGpuCompositionEnabled(false, nullptr);
     metrics.setEnabled(false);
 }
@@ -2168,6 +2240,7 @@ int main(int argc, char* argv[]) {
         validateGpuComposition();
         validateTransitionPlan();
         validatePlaybackDecodeGapPolicy();
+        validateColorStillCapture();
         validateWorkerDiagnostics(application);
         validateMissingMedia(application);
         validateSeekWithoutMedia(application);

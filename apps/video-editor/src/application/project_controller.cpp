@@ -144,6 +144,7 @@ void ProjectController::reset(
     session_.timeline_.restore(std::move(empty_timeline));
     session_.history_.clear();
     session_.media_library_.clear();
+    session_.color_gallery_stills_.clear();
     session_.image_editor_links_.clear();
     session_.motion_links_.clear();
     session_.selection_ = {};
@@ -169,6 +170,7 @@ void ProjectController::commitPrepared(
     session_.timeline_.restore(std::move(timeline));
     session_.history_.clear();
     session_.media_library_ = std::move(library);
+    session_.color_gallery_stills_ = loaded_document.color_gallery_stills;
     session_.image_editor_links_ = std::move(image_editor_links);
     session_.motion_links_ = std::move(motion_links);
     session_.selection_ = {};

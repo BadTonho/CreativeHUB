@@ -5,11 +5,13 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
+#include <QInputDialog>
 #include <QLabel>
 #include <QListWidget>
 #include <QMetaObject>
 #include <QPushButton>
 #include <QThread>
+#include <QTimer>
 
 #include <creative_suite/effects/effects.h>
 
@@ -83,6 +85,43 @@ int main(int argc, char** argv) {
         auto* clip_strip = workspace.findChild<QListWidget*>("colorClipStrip");
         require(clip_strip && !clip_strip->item(0)->icon().isNull(),
                 "Color clip strip must display available media thumbnails.");
+        workspace.setGalleryStills({{"still-a", QStringLiteral("Still 1"),
+            QStringLiteral("Shot A"), 42, thumbnail, true}});
+        int capture_requests = 0;
+        QString renamed_id;
+        QString renamed_value;
+        QString removed_id;
+        workspace.setCaptureStillHandler([&] { ++capture_requests; });
+        workspace.setRenameStillHandler([&](const QString& id, const QString& name) {
+            renamed_id = id;
+            renamed_value = name;
+        });
+        workspace.setRemoveStillHandler([&](const QString& id) { removed_id = id; });
+        auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");
+        auto* rename_button = workspace.findChild<QPushButton*>("colorRenameStillButton");
+        auto* remove_button = workspace.findChild<QPushButton*>("colorRemoveStillButton");
+        auto* gallery_list = workspace.findChild<QListWidget*>("colorGalleryStills");
+        require(capture_button && rename_button && remove_button && gallery_list &&
+                    gallery_list->count() == 1 && !gallery_list->item(0)->icon().isNull(),
+                "Color Gallery must show captured stills and its actions.");
+        capture_button->click();
+        require(capture_requests == 1, "Color Gallery did not request a current-frame capture.");
+        gallery_list->setCurrentRow(0);
+        QTimer::singleShot(0, [] {
+            for (auto* widget : QApplication::topLevelWidgets()) {
+                if (auto* dialog = qobject_cast<QInputDialog*>(widget)) {
+                    dialog->setTextValue(QStringLiteral("Warm Look"));
+                    dialog->accept();
+                }
+            }
+        });
+        rename_button->click();
+        require(renamed_id == QStringLiteral("still-a") &&
+                    renamed_value == QStringLiteral("Warm Look"),
+                "Color Gallery rename did not preserve the selected still identity.");
+        remove_button->click();
+        require(removed_id == QStringLiteral("still-a"),
+                "Color Gallery removal did not target the selected still.");
         auto* viewer = new PreviewWidget(&workspace);
         auto frame = std::make_shared<media::VideoFrame>();
         frame->width = 2; frame->height = 2; frame->stride = 8;

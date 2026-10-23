@@ -18,6 +18,16 @@ const std::vector<ImportedMedia>& EditorSession::mediaItems() const noexcept {
     return media_library_.items();
 }
 
+const std::vector<project::ColorGalleryStill>&
+EditorSession::colorGalleryStills() const noexcept {
+    return color_gallery_stills_;
+}
+
+std::vector<project::ColorGalleryStill>&
+EditorSession::colorGalleryStillsForUi() noexcept {
+    return color_gallery_stills_;
+}
+
 const std::vector<std::string>& EditorSession::binPaths() const noexcept {
     return media_library_.bins();
 }

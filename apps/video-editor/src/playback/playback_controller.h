@@ -97,6 +97,15 @@ struct PlaybackCompositionWarningEvent {
 
 struct PlaybackDeliveryEpochEvent { quint64 epoch = 0; bool retry_texture_delivery = false; };
 
+struct PlaybackStillCaptureEvent {
+    quint64 request_id = 0;
+    quint64 project_generation = 0;
+    VideoFramePtr frame;
+    qint64 timeline_frame = 0;
+    quint64 composition_revision = 0;
+    quint64 playback_generation = 0;
+};
+
 struct FusionNodePreviewTarget {
     timeline::ClipId clip_id = 0;
     fusion::nodes::NodeId node_id = 0;
@@ -114,7 +123,8 @@ using PlaybackControllerEvent = std::variant<
     PlaybackAudioWarningEvent,
     PlaybackAudioLevelsEvent,
     PlaybackCompositionWarningEvent,
-    PlaybackDeliveryEpochEvent>;
+    PlaybackDeliveryEpochEvent,
+    PlaybackStillCaptureEvent>;
 
 class PlaybackController final : public QObject {
 public:
@@ -143,6 +153,11 @@ public:
     void setGpuCompositionEnabled(bool enabled);
     void setGpuTextureDeliveryAvailable(bool available);
     void recoverPreviewFrame(rendering::PreviewFramePayload frame);
+    void captureStill(
+        quint64 request_id,
+        quint64 project_generation,
+        qint64 timeline_frame,
+        quint64 composition_revision);
     [[nodiscard]] bool gpuCompositionEnabled() const noexcept { return gpu_composition_enabled_; }
     void setHardwareDecodingEnabled(bool enabled);
     [[nodiscard]] bool hardwareDecodingEnabled() const noexcept { return hardware_decoding_enabled_; }

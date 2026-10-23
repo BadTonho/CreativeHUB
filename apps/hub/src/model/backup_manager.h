@@ -30,7 +30,8 @@ public:
     void setBackupDirectory(const QString& dir);
 
     // Snapshot supported project formats with relative references resolved from
-    // the source document directory. Media is referenced, not bundled. Returns
+    // the source document directory. External media remains referenced; a
+    // Video Editor Color Gallery sidecar is copied beside the snapshot. Returns
     // no output path on failure and never replaces an existing backup.
     // Each new snapshot owns a unique vault directory and a versioned identity record.
     bool createBackup(const QString& projectFilePath, QString* outBackupPath = nullptr, QString* outError = nullptr);
