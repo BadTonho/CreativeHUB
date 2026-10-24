@@ -128,6 +128,43 @@ bool writeLegacyPrimaryGradeToFirstGraph(QJsonObject& root) {
     return true;
 }
 
+bool writeExpandedPrimaryGradeToFirstGraph(
+    QJsonObject& root,
+    creative_suite::effects::EffectInstance effect) {
+    std::erase_if(effect.parameters, [](const auto& parameter) {
+        return parameter.id.starts_with("log_");
+    });
+    auto timeline = root.value("timeline").toObject();
+    auto tracks = timeline.value("tracks").toArray();
+    if (tracks.isEmpty()) return false;
+    auto track = tracks.first().toObject();
+    auto clips = track.value("clips").toArray();
+    if (clips.isEmpty()) return false;
+    auto clip = clips.first().toObject();
+    auto graph = clip.value("color_graph").toObject();
+    auto nodes = graph.value("nodes").toArray();
+    bool replaced = false;
+    for (qsizetype index = 0; index < nodes.size(); ++index) {
+        auto node = nodes[index].toObject();
+        auto encoded_effect = node.value("effect").toObject();
+        if (encoded_effect.value("id").toString() != QStringLiteral("video.primary_grade"))
+            continue;
+        node.insert("effect", legacyEffectStackJson({effect}).first().toObject());
+        nodes[index] = node;
+        replaced = true;
+        break;
+    }
+    if (!replaced) return false;
+    graph.insert("nodes", nodes);
+    clip.insert("color_graph", graph);
+    clips[0] = clip;
+    track.insert("clips", clips);
+    tracks[0] = track;
+    timeline.insert("tracks", tracks);
+    root.insert("timeline", timeline);
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -370,7 +407,10 @@ int main(int argc, char** argv) {
                         creative_suite::effects::setParameterValue(grade, "offset_red", -8) &&
                         creative_suite::effects::setParameterValue(grade, "pivot", 43) &&
                         creative_suite::effects::setParameterValue(grade, "temperature", 21) &&
-                        creative_suite::effects::setParameterValue(grade, "tint", -12),
+                        creative_suite::effects::setParameterValue(grade, "tint", -12) &&
+                        creative_suite::effects::setParameterValue(grade, "log_shadows_red", 18) &&
+                        creative_suite::effects::setParameterValue(grade, "log_midtones_green", -11) &&
+                        creative_suite::effects::setParameterValue(grade, "log_highlights_blue", 24),
                     "Expanded Primary Grade test setup must be valid.");
             graded.timeline_tracks.front().clips.front().effects.push_back(grade);
             auto& graded_clip = graded.timeline_tracks.front().clips.front();
@@ -379,21 +419,51 @@ int main(int argc, char** argv) {
             auto branch_effect = creative_suite::effects::makeDefaultInstance("video.saturation");
             require(creative_suite::effects::setParameterValue(branch_effect, "amount", 125.0) &&
                         color::addParallelBranch(branch_graph, effect_nodes.back(), branch_effect),
-                    "Could not prepare the v35 parallel Color graph fixture.");
+                    "Could not prepare the v36 parallel Color graph fixture.");
             graded_clip.color_graph = branch_graph;
             graded_clip.effects = color::effectInstancesInOrder(branch_graph);
-            const auto grade_path = directory / "primary-grade-v35.csp";
+            const auto grade_path = directory / "primary-grade-v36.csp";
             project::save(grade_path, graded);
             const auto restored = project::load(grade_path);
             require(restored.timeline_tracks.front().clips.front().color_graph == branch_graph &&
+                        restored.color_gallery_stills == graded.color_gallery_stills &&
                         std::any_of(restored.timeline_tracks.front().clips.front().effects.begin(),
                             restored.timeline_tracks.front().clips.front().effects.end(),
                             [&](const auto& effect) { return effect == grade; }),
-                    "CSP v35 must preserve the correction graph, connections and expanded effect values.");
+                    "CSP v36 must preserve the correction graph, connections and expanded effect values.");
             std::ifstream grade_file(grade_path, std::ios::binary);
             const std::string grade_text{
                 std::istreambuf_iterator<char>(grade_file),
                 std::istreambuf_iterator<char>()};
+            auto pre_log_grade = QJsonDocument::fromJson(
+                QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
+            pre_log_grade.insert("version", 35);
+            auto disabled_pre_log_grade = grade;
+            disabled_pre_log_grade.enabled = false;
+            require(writeExpandedPrimaryGradeToFirstGraph(pre_log_grade, disabled_pre_log_grade),
+                    "Could not create a CSP v35 Primary Grade fixture.");
+            const auto pre_log_path = directory / "primary-grade-v35.csp";
+            writeText(pre_log_path, QJsonDocument(pre_log_grade).toJson().toStdString());
+            const auto migrated_v35 = project::load(pre_log_path);
+            const auto migrated_v35_effects =
+                migrated_v35.timeline_tracks.front().clips.front().effects;
+            const auto migrated_v35_grade = std::find_if(migrated_v35_effects.begin(),
+                migrated_v35_effects.end(), [](const auto& effect) {
+                    return effect.id == "video.primary_grade";
+                });
+            require(migrated_v35_grade != migrated_v35_effects.end() &&
+                        !migrated_v35_grade->enabled &&
+                        creative_suite::effects::parameterValue(*migrated_v35_grade,
+                            "log_shadows_red") == 0.0 &&
+                        creative_suite::effects::parameterValue(*migrated_v35_grade,
+                            "log_midtones_green") == 0.0 &&
+                        creative_suite::effects::parameterValue(*migrated_v35_grade,
+                            "log_highlights_blue") == 0.0 &&
+                        creative_suite::effects::parameterValue(*migrated_v35_grade,
+                            "red_gain") == 135.0 &&
+                        creative_suite::effects::parameterValue(*migrated_v35_grade,
+                            "gamma_blue") == 125.0,
+                    "CSP v35 must migrate its expanded Primary Grade values and initialize Log neutrally.");
             auto legacy_grade = QJsonDocument::fromJson(
                 QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
             legacy_grade.insert("version", 31);
@@ -501,7 +571,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 35") != std::string::npos &&
+        require(saved_json.find("\"version\": 36") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -1346,10 +1416,10 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
-            R"({"format":"creative-suite.main-editor","version":99,"media":[],"timeline":{"clips":[]}})");
+            R"({"format":"creative-suite.main-editor","version":37,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
-            throw std::runtime_error("An unsupported version was accepted.");
+            throw std::runtime_error("CSP v37 was accepted by the v36 reader.");
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::UnsupportedVersion,
                     "Unsupported version returned the wrong error category.");

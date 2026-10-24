@@ -71,8 +71,38 @@ creative_suite::effects::EffectInstance migratePrimaryGrade(
     int version,
     const std::filesystem::path& project_path) {
     using namespace creative_suite::effects;
-    if (version >= primary_grade_controls_format_version ||
+    if (version >= primary_grade_log_controls_format_version ||
         effect.id != "video.primary_grade") return effect;
+
+    if (version >= primary_grade_controls_format_version) {
+        constexpr std::array<std::string_view, 17> expanded_ids{
+            "lift_red", "lift_green", "lift_blue",
+            "gamma_red", "gamma_green", "gamma_blue",
+            "red_gain", "green_gain", "blue_gain",
+            "offset_red", "offset_green", "offset_blue",
+            "contrast", "saturation", "pivot", "temperature", "tint"};
+        if (effect.parameters.size() != expanded_ids.size())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "A version 35 Primary Grade contains an invalid parameter set.");
+        auto migrated = makeDefaultInstance("video.primary_grade");
+        migrated.enabled = effect.enabled;
+        std::unordered_set<std::string_view> seen;
+        for (const auto& parameter : effect.parameters) {
+            if (std::find(expanded_ids.begin(), expanded_ids.end(), parameter.id) ==
+                    expanded_ids.end() ||
+                !seen.insert(parameter.id).second ||
+                !setParameterValue(migrated, parameter.id, parameter.value)) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A version 35 Primary Grade contains an invalid parameter.");
+            }
+        }
+        for (const auto id : expanded_ids) {
+            if (!seen.contains(id))
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A version 35 Primary Grade is missing a parameter.");
+        }
+        return migrated;
+    }
 
     constexpr std::array<std::string_view, 6> legacy_ids{
         "brightness", "contrast", "saturation", "red_gain", "green_gain", "blue_gain"};

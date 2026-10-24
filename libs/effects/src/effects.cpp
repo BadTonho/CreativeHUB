@@ -16,7 +16,7 @@ constexpr std::array<ParameterDefinition, 1> contrast_parameters{{
     {"amount", "Contrast", 0.0, 200.0, 100.0, 1.0}}};
 constexpr std::array<ParameterDefinition, 1> saturation_parameters{{
     {"amount", "Saturation", 0.0, 200.0, 100.0, 1.0}}};
-constexpr std::array<ParameterDefinition, 17> primary_grade_parameters{{
+constexpr std::array<ParameterDefinition, 26> primary_grade_parameters{{
     {"lift_red", "Lift red", -100.0, 100.0, 0.0, 1.0},
     {"lift_green", "Lift green", -100.0, 100.0, 0.0, 1.0},
     {"lift_blue", "Lift blue", -100.0, 100.0, 0.0, 1.0},
@@ -33,7 +33,16 @@ constexpr std::array<ParameterDefinition, 17> primary_grade_parameters{{
     {"saturation", "Saturation", 0.0, 200.0, 100.0, 1.0},
     {"pivot", "Pivot", 0.0, 100.0, 50.0, 1.0},
     {"temperature", "Temperature", -100.0, 100.0, 0.0, 1.0},
-    {"tint", "Tint", -100.0, 100.0, 0.0, 1.0}}};
+    {"tint", "Tint", -100.0, 100.0, 0.0, 1.0},
+    {"log_shadows_red", "Log shadows red", -100.0, 100.0, 0.0, 1.0},
+    {"log_shadows_green", "Log shadows green", -100.0, 100.0, 0.0, 1.0},
+    {"log_shadows_blue", "Log shadows blue", -100.0, 100.0, 0.0, 1.0},
+    {"log_midtones_red", "Log midtones red", -100.0, 100.0, 0.0, 1.0},
+    {"log_midtones_green", "Log midtones green", -100.0, 100.0, 0.0, 1.0},
+    {"log_midtones_blue", "Log midtones blue", -100.0, 100.0, 0.0, 1.0},
+    {"log_highlights_red", "Log highlights red", -100.0, 100.0, 0.0, 1.0},
+    {"log_highlights_green", "Log highlights green", -100.0, 100.0, 0.0, 1.0},
+    {"log_highlights_blue", "Log highlights blue", -100.0, 100.0, 0.0, 1.0}}};
 
 constexpr std::array<Definition, 5> definitions{{
     {"video.grayscale", "Grayscale", "video", grayscale_parameters},
@@ -93,7 +102,16 @@ bool validColorAdjustment(const ColorAdjustmentParameters& parameters) noexcept 
         std::isfinite(parameters.offset_blue) && parameters.offset_blue >= -100.0 && parameters.offset_blue <= 100.0 &&
         std::isfinite(parameters.pivot_percent) && parameters.pivot_percent >= 0.0 && parameters.pivot_percent <= 100.0 &&
         std::isfinite(parameters.temperature) && parameters.temperature >= -100.0 && parameters.temperature <= 100.0 &&
-        std::isfinite(parameters.tint) && parameters.tint >= -100.0 && parameters.tint <= 100.0;
+        std::isfinite(parameters.tint) && parameters.tint >= -100.0 && parameters.tint <= 100.0 &&
+        std::isfinite(parameters.log_shadows_red) && parameters.log_shadows_red >= -100.0 && parameters.log_shadows_red <= 100.0 &&
+        std::isfinite(parameters.log_shadows_green) && parameters.log_shadows_green >= -100.0 && parameters.log_shadows_green <= 100.0 &&
+        std::isfinite(parameters.log_shadows_blue) && parameters.log_shadows_blue >= -100.0 && parameters.log_shadows_blue <= 100.0 &&
+        std::isfinite(parameters.log_midtones_red) && parameters.log_midtones_red >= -100.0 && parameters.log_midtones_red <= 100.0 &&
+        std::isfinite(parameters.log_midtones_green) && parameters.log_midtones_green >= -100.0 && parameters.log_midtones_green <= 100.0 &&
+        std::isfinite(parameters.log_midtones_blue) && parameters.log_midtones_blue >= -100.0 && parameters.log_midtones_blue <= 100.0 &&
+        std::isfinite(parameters.log_highlights_red) && parameters.log_highlights_red >= -100.0 && parameters.log_highlights_red <= 100.0 &&
+        std::isfinite(parameters.log_highlights_green) && parameters.log_highlights_green >= -100.0 && parameters.log_highlights_green <= 100.0 &&
+        std::isfinite(parameters.log_highlights_blue) && parameters.log_highlights_blue >= -100.0 && parameters.log_highlights_blue <= 100.0;
 }
 
 ColorAdjustmentParameters primaryGradeParameters(const EffectInstance& effect) noexcept {
@@ -115,6 +133,15 @@ ColorAdjustmentParameters primaryGradeParameters(const EffectInstance& effect) n
     parameters.pivot_percent = parameterValue(effect, "pivot");
     parameters.temperature = parameterValue(effect, "temperature");
     parameters.tint = parameterValue(effect, "tint");
+    parameters.log_shadows_red = parameterValue(effect, "log_shadows_red");
+    parameters.log_shadows_green = parameterValue(effect, "log_shadows_green");
+    parameters.log_shadows_blue = parameterValue(effect, "log_shadows_blue");
+    parameters.log_midtones_red = parameterValue(effect, "log_midtones_red");
+    parameters.log_midtones_green = parameterValue(effect, "log_midtones_green");
+    parameters.log_midtones_blue = parameterValue(effect, "log_midtones_blue");
+    parameters.log_highlights_red = parameterValue(effect, "log_highlights_red");
+    parameters.log_highlights_green = parameterValue(effect, "log_highlights_green");
+    parameters.log_highlights_blue = parameterValue(effect, "log_highlights_blue");
     return parameters;
 }
 
@@ -279,7 +306,12 @@ ProcessingResult applyColorAdjustment(
         parameters.gamma_green == 100.0 && parameters.gamma_blue == 100.0 &&
         parameters.offset_red == 0.0 && parameters.offset_green == 0.0 &&
         parameters.offset_blue == 0.0 && parameters.pivot_percent == 50.0 &&
-        parameters.temperature == 0.0 && parameters.tint == 0.0) {
+        parameters.temperature == 0.0 && parameters.tint == 0.0 &&
+        parameters.log_shadows_red == 0.0 && parameters.log_shadows_green == 0.0 &&
+        parameters.log_shadows_blue == 0.0 && parameters.log_midtones_red == 0.0 &&
+        parameters.log_midtones_green == 0.0 && parameters.log_midtones_blue == 0.0 &&
+        parameters.log_highlights_red == 0.0 && parameters.log_highlights_green == 0.0 &&
+        parameters.log_highlights_blue == 0.0) {
         return ProcessingResult::Completed;
     }
 

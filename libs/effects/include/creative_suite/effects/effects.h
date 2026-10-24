@@ -67,6 +67,15 @@ struct ColorAdjustmentParameters {
     double pivot_percent = 50.0;
     double temperature = 0.0;
     double tint = 0.0;
+    double log_shadows_red = 0.0;
+    double log_shadows_green = 0.0;
+    double log_shadows_blue = 0.0;
+    double log_midtones_red = 0.0;
+    double log_midtones_green = 0.0;
+    double log_midtones_blue = 0.0;
+    double log_highlights_red = 0.0;
+    double log_highlights_green = 0.0;
+    double log_highlights_blue = 0.0;
 };
 
 [[nodiscard]] bool isValidColorAdjustment(
@@ -92,7 +101,9 @@ struct ColorAdjustmentParameters {
 
 // Encoded straight RGB evaluation; callers validate parameters. The order is
 // offset/contrast/relative temperature and tint, shadow-weighted lift, gamma,
-// Rec. 709 saturation, and per-channel gain. Alpha is untouched by callers.
+// Rec. 709 saturation, per-channel gain, then separate log tonal offsets.
+// Log ranges use soft Rec. 709 luma weights on the corrected encoded RGB.
+// Alpha is untouched by callers.
 [[nodiscard]] inline std::array<unsigned char,3> colorAdjustmentRgb(
     std::array<double,3> rgb,const ColorAdjustmentParameters& parameters) noexcept {
     const auto affine = colorAdjustmentAffine(parameters);
@@ -115,8 +126,36 @@ struct ColorAdjustmentParameters {
     const std::array<double, 3> gains{parameters.red_gain_percent,
                                       parameters.green_gain_percent,
                                       parameters.blue_gain_percent};
+    for (int channel = 0; channel < 3; ++channel) {
+        rgb[channel] = (luma + (rgb[channel] - luma) *
+            (parameters.saturation_percent / 100.)) * (gains[channel] / 100.);
+    }
+    const double log_luma = std::clamp(
+        .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2], 0.0, 1.0);
+    const auto smoothstep = [](double edge0, double edge1, double value) {
+        const double t = std::clamp((value - edge0) / (edge1 - edge0), 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
+    };
+    const double shadows = 1.0 - smoothstep(.20, .45, log_luma);
+    const double highlights = smoothstep(.55, .80, log_luma);
+    const double midtones = std::clamp(1.0 - shadows - highlights, 0.0, 1.0);
+    const std::array<double, 3> log_shadows{
+        parameters.log_shadows_red, parameters.log_shadows_green,
+        parameters.log_shadows_blue};
+    const std::array<double, 3> log_midtones{
+        parameters.log_midtones_red, parameters.log_midtones_green,
+        parameters.log_midtones_blue};
+    const std::array<double, 3> log_highlights{
+        parameters.log_highlights_red, parameters.log_highlights_green,
+        parameters.log_highlights_blue};
     std::array<unsigned char,3> result{};
-    for(int c=0;c<3;++c)result[c]=static_cast<unsigned char>(std::lround(std::clamp((luma+(rgb[c]-luma)*(parameters.saturation_percent/100.))*(gains[c]/100.),0.,1.)*255.));
+    for (int channel = 0; channel < 3; ++channel) {
+        rgb[channel] += (log_shadows[channel] * shadows +
+            log_midtones[channel] * midtones +
+            log_highlights[channel] * highlights) / 100.0;
+        result[channel] = static_cast<unsigned char>(std::lround(
+            std::clamp(rgb[channel], 0.0, 1.0) * 255.0));
+    }
     return result;
 }
 

@@ -23,7 +23,7 @@ layout(push_constant) uniform Parameters {
     vec4 color;
 } p;
 vec3 adjustColor(vec3 rgb, int index) {
-    int base = index * 4;
+    int base = index * 7;
     vec4 affine = adjustment_values[base];
     vec4 lift_saturation = adjustment_values[base + 1];
     vec4 gamma_gain_red = adjustment_values[base + 2];
@@ -39,6 +39,13 @@ vec3 adjustColor(vec3 rgb, int index) {
     float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
     rgb = (vec3(luma) + (rgb - vec3(luma)) * lift_saturation.w) *
         vec3(gamma_gain_red.w, gain_green_blue.xy);
+    float log_luma = clamp(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    float shadows = 1.0 - smoothstep(0.20, 0.45, log_luma);
+    float highlights = smoothstep(0.55, 0.80, log_luma);
+    float midtones = clamp(1.0 - shadows - highlights, 0.0, 1.0);
+    rgb += adjustment_values[base + 4].rgb * shadows +
+        adjustment_values[base + 5].rgb * midtones +
+        adjustment_values[base + 6].rgb * highlights;
     return floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
 uvec4 source(ivec2 pos) { return imageLoad(background_image,pos); }

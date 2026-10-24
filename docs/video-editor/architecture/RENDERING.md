@@ -6,8 +6,11 @@ Serial graphs use the CPU/OpenGL/Vulkan ordered-effect path and preserve the
 existing Primary Grade alpha and rounding behavior. Branched graphs evaluate
 their connected nodes once on RGBA frames and combine mixer inputs with a
 normalized weighted average; this currently uses the CPU evaluator. Color
-scopes sample the composed frame after correction and do not enter exported
-pixels. CPU scopes consume the existing RGBA buffer. GPU scopes request one
+scopes offer RGB Waveform, RGB Parade, Vectorscope, and RGB Histogram. They
+sample the composed frame after correction and do not enter exported pixels.
+The Vectorscope plots Rec. 709-derived Cb/Cr with a neutral center and hue
+references. The Histogram overlays 256 bins per RGB channel, normalized by the
+largest count for each channel. CPU scopes consume the existing RGBA buffer. GPU scopes request one
 asynchronous RGBA readback at a time on the playback worker, within a 64 MiB
 staging limit; the interface never captures the Preview widget or waits for the
 GPU. Request identity includes project generation, composition revision and

@@ -80,6 +80,7 @@ private:
     QPushButton* add_branch_button_ = nullptr;
     QWidget* controls_ = nullptr;
     QFormLayout* controls_layout_ = nullptr;
+    QComboBox* primary_grade_mode_ = nullptr;
     QLabel* waveform_ = nullptr;
     QComboBox* scope_mode_ = nullptr;
     QTimer* waveform_timer_ = nullptr;

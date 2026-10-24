@@ -39,9 +39,9 @@ CSP v31 adds `type: gaussian_blur` and a `gaussian_blur` object containing
 versions, non-finite/out-of-range radii, misplaced Blur data and animated effect
 parameters are refused. Project save/open, autosave/recovery, duplication,
 cuts/trims and FPS changes preserve the node; FPS does not rescale pixel radius.
-Motion stays at native v8. Hub accepts CSP 1–35/Motion 1–8, relocates existing
+Motion stays at native v8. Hub accepts CSP 1–36/Motion 1–8, relocates existing
 media/Input paths, copies project Gallery sidecars, and rejects future
-CSP35/Motion9.
+CSP37/Motion9.
 
 [Composition interchange](../../COMPOSITION_INTERCHANGE.md) transfers Blur as
 an editable ordered stage through cscomp v3. Source/color/Blur/Transform

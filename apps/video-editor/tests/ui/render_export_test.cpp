@@ -76,6 +76,12 @@ public:
         auto result = gpu_->compose(width, height, layers, cancel, timings);
         if (result.status != creative_suite::composition::OpenGlCompositionStatus::Complete)
             std::cerr << "Native export adapter: " << result.operation << ": " << result.cause << '\n';
+        if (result.status == creative_suite::composition::OpenGlCompositionStatus::Unsupported) {
+            for (const auto& layer : layers) for (const auto& effect : layer.effect_stack)
+                std::cerr << "Unsupported effect fixture: id=" << effect.id
+                          << " parameters=" << effect.parameters.size()
+                          << " valid=" << creative_suite::effects::isValid(effect) << '\n';
+        }
         if (result.frame && compare_before_encoding) {
             auto cpu_layers = layers;
             std::vector<media::VideoFramePtr> recovered_sources;
@@ -131,7 +137,15 @@ void renderJob(const rendering::RenderJob& job, const std::atomic_bool& canceled
         catch (...) { failure = std::current_exception(); }
     };
     if (native_gpu_mode) { std::thread worker(run); worker.join(); } else run();
-    if (failure) std::rethrow_exception(failure);
+    if (failure) {
+        try {
+            std::rethrow_exception(failure);
+        } catch (const rendering::ExportCanceled&) {
+            throw;
+        } catch (const std::exception& error) {
+            throw std::runtime_error("Render job " + std::to_string(job.id) + ": " + error.what());
+        }
+    }
     if (native_gpu_mode && job.settings.gpu_composition_enabled)
     {
         if (last_metrics.cpu_frames || !last_metrics.readback_bytes)
@@ -622,10 +636,23 @@ void validateVisualEffectExport(
                 (*disabled_frame)->rgba_pixels == (*baseline_frame)->rgba_pixels,
             "Offline export changed the frame for a disabled visual effect.");
 
+    const auto log_target = root / ("visual-effects-log." + extension);
+    auto log_job = makeImageJob(output, image_path, log_target, 115, 2);
+    auto log_grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
+    require(creative_suite::effects::setParameterValue(log_grade, "log_shadows_red", 10.0),
+            "Could not prepare the Primary Grade Log export fixture.");
+    log_job.project_snapshot.timeline_tracks.front().clips.front().effects = {log_grade};
+    renderJob(log_job, canceled);
+    auto log_decoder = media::VideoPlaybackSession::open(log_target);
+    const auto log_frame = log_decoder->decode_next_frame();
+    require(log_frame.has_value() && *log_frame != nullptr &&
+                (*log_frame)->rgba_pixels[offset] > (*baseline_frame)->rgba_pixels[offset] + 5,
+            "Offline export did not apply the Primary Grade Log correction.");
+
     const auto parallel_target = root / ("visual-effects-parallel." + extension);
     auto parallel_job = makeImageJob(output, image_path, parallel_target, 114, 2);
     auto branch_effect = creative_suite::effects::makeDefaultInstance("video.brightness");
-    require(creative_suite::effects::setParameterValue(branch_effect, "amount", 20.0),
+    require(creative_suite::effects::setParameterValue(branch_effect, "amount", 10.0),
             "Could not prepare the parallel Color export fixture.");
     auto parallel_graph = color::makePassthroughGraph();
     require(color::addParallelBranch(parallel_graph, 1, branch_effect),

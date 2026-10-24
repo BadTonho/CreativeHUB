@@ -214,7 +214,7 @@ int main(int argc, char** argv) {
                     !setParameterValue(above_maximum, parameter.id, parameter.maximum + 1.0),
                 "Primary Grade control bounds changed");
         }
-        require(isValid(grade) && grade.parameters.size() == 17 &&
+        require(isValid(grade) && grade.parameters.size() == 26 &&
                 setParameterValue(grade, "red_gain", 150.0) &&
                 setParameterValue(grade, "green_gain", 50.0) &&
                 setParameterValue(grade, "blue_gain", 0.0) &&
@@ -224,7 +224,10 @@ int main(int argc, char** argv) {
                 setParameterValue(grade, "offset_blue", 100.0) &&
                 setParameterValue(grade, "pivot", 0.0) &&
                 setParameterValue(grade, "temperature", -100.0) &&
-                setParameterValue(grade, "tint", 100.0),
+                setParameterValue(grade, "tint", 100.0) &&
+                setParameterValue(grade, "log_shadows_red", -100.0) &&
+                setParameterValue(grade, "log_midtones_green", 100.0) &&
+                setParameterValue(grade, "log_highlights_blue", 100.0),
                 "Primary Grade parameter contract failed");
         auto direct = colorFrame();
         auto prepared = direct;
@@ -245,6 +248,28 @@ int main(int argc, char** argv) {
         require(applyStack(neutral_frame, std::span<const EffectInstance>(&neutral, 1)) &&
                     neutral_frame.rgba_pixels == original.rgba_pixels,
                 "Neutral Primary Grade changed RGB, alpha, or row padding.");
+        auto tonal_probe = [](double value, const ColorAdjustmentParameters& parameters) {
+            return colorAdjustmentRgb({value, value, value}, parameters);
+        };
+        ColorAdjustmentParameters shadow_log;
+        shadow_log.log_shadows_red = 100.0;
+        ColorAdjustmentParameters midtone_log;
+        midtone_log.log_midtones_green = 100.0;
+        ColorAdjustmentParameters highlight_log;
+        highlight_log.log_highlights_blue = 100.0;
+        const auto neutral_shadow = tonal_probe(.1, {});
+        const auto corrected_shadow = tonal_probe(.1, shadow_log);
+        const auto neutral_midtones = tonal_probe(.5, {});
+        const auto corrected_midtones = tonal_probe(.5, midtone_log);
+        const auto neutral_highlights = tonal_probe(.9, {});
+        const auto corrected_highlights = tonal_probe(.9, highlight_log);
+        require(corrected_shadow[0] > neutral_shadow[0] &&
+                    corrected_shadow[1] == neutral_shadow[1] &&
+                    corrected_midtones[1] > neutral_midtones[1] &&
+                    corrected_midtones[0] == neutral_midtones[0] &&
+                    corrected_highlights[2] > neutral_highlights[2] &&
+                    corrected_highlights[0] == neutral_highlights[0],
+                "Log controls must affect their matching soft tonal range and RGB channel.");
         ColorAdjustmentParameters legacy{18.0, 132.0, 74.0, 145.0, 82.0, 112.0};
         auto previous_motion_result = original;
         auto current_motion_result = original;
@@ -417,7 +442,7 @@ int main(int argc, char** argv) {
     }
     verifySharedBlur();
     using namespace creative_suite::effects;
-    require(builtInEffects().size() == 4, "The built-in visual effect catalog is incomplete.");
+    require(builtInEffects().size() == 5, "The built-in visual effect catalog is incomplete.");
     auto original = frame();
     const auto neutral = std::vector<EffectInstance>{
         makeDefaultInstance("video.brightness"),
@@ -566,17 +591,18 @@ int main(int argc, char** argv) {
                 incomplete_frame.rgba_pixels == incomplete_before,
             "incomplete frame storage is rejected without mutation");
     {
-    auto brightness = makeDefaultInstance("video.brightness");
-    auto grayscale = makeDefaultInstance("video.grayscale");
-    auto contrast = makeDefaultInstance("video.contrast");
-    auto saturation = makeDefaultInstance("video.saturation");
-    require(setParameterValue(brightness, "amount", 17.0) &&
-        setParameterValue(grayscale, "amount", 37.0) &&
-        setParameterValue(contrast, "amount", 123.0) &&
-        setParameterValue(saturation, "amount", 141.0), "pass fixture parameters");
-    auto disabled = brightness;
+    auto pass_brightness = makeDefaultInstance("video.brightness");
+    auto pass_grayscale = makeDefaultInstance("video.grayscale");
+    auto pass_contrast = makeDefaultInstance("video.contrast");
+    auto pass_saturation = makeDefaultInstance("video.saturation");
+    require(setParameterValue(pass_brightness, "amount", 17.0) &&
+        setParameterValue(pass_grayscale, "amount", 37.0) &&
+        setParameterValue(pass_contrast, "amount", 123.0) &&
+        setParameterValue(pass_saturation, "amount", 141.0), "pass fixture parameters");
+    auto disabled = pass_brightness;
     disabled.enabled = false;
-    const std::vector<EffectInstance> ordered{brightness, grayscale, disabled, contrast, saturation};
+    const std::vector<EffectInstance> ordered{
+        pass_brightness, pass_grayscale, disabled, pass_contrast, pass_saturation};
     const auto passes = colorAdjustmentPasses(ordered);
     require(passes && passes->size() == 4, "pass preparation preserves order and skips disabled effects");
     auto direct_stack = fused_original;
@@ -593,8 +619,8 @@ int main(int argc, char** argv) {
     }
     {
         auto grade = makeDefaultInstance("video.primary_grade");
-        require(isValid(grade) && grade.parameters.size() == 6,
-                "Primary Grade has six persisted controls");
+        require(isValid(grade) && grade.parameters.size() == 26,
+                "Primary Grade has 26 persisted controls");
         require(setParameterValue(grade, "red_gain", 150.0) &&
                 setParameterValue(grade, "green_gain", 50.0) &&
                 setParameterValue(grade, "blue_gain", 0.0) &&

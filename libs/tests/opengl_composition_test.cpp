@@ -404,6 +404,8 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
     expanded.saturation_percent = 126.0;
     expanded.red_gain_percent = 116.0; expanded.green_gain_percent = 91.0;
     expanded.blue_gain_percent = 137.0;
+    expanded.log_shadows_red = 38.0; expanded.log_shadows_green = -12.0;
+    expanded.log_midtones_blue = 24.0; expanded.log_highlights_red = -31.0;
     auto all_controls = adjustments;
     all_controls.push_back(expanded);
     for (const auto& parameters : all_controls) {
@@ -444,7 +446,10 @@ void primaryGradeStackParity(OpenGlFrameCompositor& gpu) {
         effects::setParameterValue(contrast, "amount", 132) &&
         effects::setParameterValue(grade, "red_gain", 145) &&
         effects::setParameterValue(grade, "green_gain", 82) &&
-        effects::setParameterValue(grade, "blue_gain", 112), "grade stack parameters");
+        effects::setParameterValue(grade, "blue_gain", 112) &&
+        effects::setParameterValue(grade, "log_shadows_red", 26) &&
+        effects::setParameterValue(grade, "log_midtones_green", -17) &&
+        effects::setParameterValue(grade, "log_highlights_blue", 31), "grade stack parameters");
     std::vector<effects::EffectInstance> stack{brightness, grade, contrast};
     CompositionLayer clip{&source}; clip.effect_stack = stack;
     compare(gpu, 93, 57, {clip}, "ordered Primary Grade clip effects and alpha");
@@ -455,15 +460,24 @@ void primaryGradeStackParity(OpenGlFrameCompositor& gpu) {
     require(prepared && fallback && prepared->rgba_pixels == fallback->rgba_pixels,
         "CPU recovery must apply the original grade stack once");
     effects::ColorAdjustmentParameters adjustment{15, 125, 85, 145, 82, 115};
+    adjustment.log_shadows_red = 26;
+    adjustment.log_midtones_green = -17;
+    adjustment.log_highlights_blue = 31;
+    auto next_adjustment = adjustment;
+    next_adjustment.log_shadows_blue = -34;
+    next_adjustment.log_midtones_red = 19;
+    next_adjustment.log_highlights_green = 28;
     auto opaque = fixture(93, 57, false);
     auto adjusted = opaque;
     require(effects::applyColorAdjustment(adjusted, adjustment) ==
+        effects::ProcessingResult::Completed &&
+        effects::applyColorAdjustment(adjusted, next_adjustment) ==
         effects::ProcessingResult::Completed, "CPU adjustment reference failed");
     OpenGlImageOperation operation;
     operation.kind = OpenGlImageOperationKind::Adjustment;
     operation.background.rgba = &opaque;
     operation.foreground.rgba = &opaque;
-    operation.colors = {adjustment};
+    operation.colors = {adjustment, next_adjustment};
     const auto gpu_adjustment = gpu.processImage(operation);
     require(gpu_adjustment.frame && gpu_adjustment.status == OpenGlCompositionStatus::Complete,
         "OpenGL Primary Grade adjustment operation failed: " + gpu_adjustment.cause);

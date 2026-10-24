@@ -12,12 +12,14 @@
 #include <QMouseEvent>
 #include <QMetaObject>
 #include <QPushButton>
+#include <QSlider>
 #include <QThread>
 #include <QTimer>
 
 #include <creative_suite/effects/effects.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <stdexcept>
 
@@ -92,6 +94,74 @@ int main(int argc, char** argv) {
         QApplication::sendEvent(gain_disk, &release);
         require(grade_batches_started == 2 && grade_batches_finished == 2 && edits >= 3,
                 "Dragging a color wheel must send continuous edits inside one batch.");
+        auto* grade_mode = workspace.findChild<QComboBox*>("colorPrimaryGradeMode");
+        require(grade_mode && grade_mode->count() == 3 &&
+                    grade_mode->currentData().toString() == QStringLiteral("wheels") &&
+                    !grade_mode->isHidden(),
+                "Primary Grade must default to the local Wheels presentation.");
+        const auto edits_before_mode_switch = edits;
+        grade_mode->setCurrentIndex(grade_mode->findData(QStringLiteral("bars")));
+        require(edits == edits_before_mode_switch,
+                "Changing the Primary Grade presentation must not edit the project.");
+        auto* gain_bar_green = workspace.findChild<QDoubleSpinBox*>(
+            "colorBars_gain_g_value");
+        auto* gain_bar_slider = workspace.findChild<QSlider*>("colorBars_gain_r_slider");
+        require(gain_bar_green && gain_bar_slider && !gain_bar_green->isHidden(),
+                "Bars must expose editable RGB fields and channel sliders.");
+        gain_bar_green->setValue(125);
+        require(QMetaObject::invokeMethod(gain_bar_green, "editingFinished"),
+                "Bars channel edit must be committed.");
+        const auto* bars_node = nodes->selectedNode()
+            ? color::findNode(graph, *nodes->selectedNode()) : nullptr;
+        require(bars_node && bars_node->effect &&
+                    creative_suite::effects::parameterValue(*bars_node->effect,
+                        "green_gain") == 125.0 &&
+                    grade_batches_started == 3 && grade_batches_finished == 3,
+                "Bars must edit the same Primary Grade parameters and shared history.");
+        const auto batch_start = grade_batches_started;
+        const auto batch_end = grade_batches_finished;
+        const auto old_master = gain_bar_slider->value();
+        require(QMetaObject::invokeMethod(gain_bar_slider, "sliderPressed"),
+                "Bars drag must start a shared edit batch.");
+        gain_bar_slider->setValue(old_master + 120);
+        require(QMetaObject::invokeMethod(gain_bar_slider, "sliderReleased"),
+                "Bars drag must finish a shared edit batch.");
+        require(grade_batches_started == batch_start + 1 &&
+                    grade_batches_finished == batch_end + 1,
+                "A Bars drag must create one shared Undo/Redo edit batch.");
+        const auto edits_before_log_mode = edits;
+        grade_mode->setCurrentIndex(grade_mode->findData(QStringLiteral("log")));
+        require(edits == edits_before_log_mode,
+                "Changing to Log mode must not create a correction edit.");
+        auto* log_shadow_red = workspace.findChild<QDoubleSpinBox*>(
+            "colorWheel_log_shadows_r_value");
+        auto* log_mid_green = workspace.findChild<QDoubleSpinBox*>(
+            "colorWheel_log_midtones_g_value");
+        auto* log_high_blue = workspace.findChild<QDoubleSpinBox*>(
+            "colorWheel_log_highlights_b_value");
+        require(log_shadow_red && log_mid_green && log_high_blue &&
+                    !log_shadow_red->isHidden(),
+                "Log must expose independent Shadows, Midtones and Highlights controls.");
+        log_shadow_red->setValue(30);
+        require(QMetaObject::invokeMethod(log_shadow_red, "editingFinished"),
+                "Log Shadows edit must be committed.");
+        log_mid_green->setValue(-20);
+        require(QMetaObject::invokeMethod(log_mid_green, "editingFinished"),
+                "Log Midtones edit must be committed.");
+        log_high_blue->setValue(15);
+        require(QMetaObject::invokeMethod(log_high_blue, "editingFinished"),
+                "Log Highlights edit must be committed.");
+        const auto* log_node = nodes->selectedNode()
+            ? color::findNode(graph, *nodes->selectedNode()) : nullptr;
+        require(log_node && log_node->effect &&
+                    creative_suite::effects::parameterValue(*log_node->effect,
+                        "log_shadows_red") == 30.0 &&
+                    creative_suite::effects::parameterValue(*log_node->effect,
+                        "log_midtones_green") == -20.0 &&
+                    creative_suite::effects::parameterValue(*log_node->effect,
+                        "log_highlights_blue") == 15.0 &&
+                    edits > edits_before_mode_switch,
+                "Log values must persist on the selected shared Primary Grade node.");
         add_branch->click();
         require(color::validate(graph) &&
                     std::count_if(graph.nodes.begin(), graph.nodes.end(), [](const auto& node) {
@@ -177,16 +247,27 @@ int main(int argc, char** argv) {
         require(!waveform->pixmap().isNull() && waveform->pixmap().size() == QSize(480, 256),
                 "Waveform must process the composed RGBA frame asynchronously at bounded resolution.");
         auto* scope_mode = workspace.findChild<QComboBox*>("colorScopeMode");
-        require(scope_mode && scope_mode->count() == 2 &&
-                    scope_mode->itemData(1).toString() == QStringLiteral("parade"),
-                "Scopes must offer RGB waveform and RGB Parade modes.");
-        scope_mode->setCurrentIndex(1);
-        timeout.restart();
-        while (waveform->pixmap().isNull() && timeout.elapsed() < 2000) {
-            application.processEvents();
-            QThread::msleep(10);
+        const std::array<QString, 4> scope_modes{QStringLiteral("waveform"),
+            QStringLiteral("parade"), QStringLiteral("vectorscope"),
+            QStringLiteral("histogram")};
+        const auto edits_before_scopes = edits;
+        require(scope_mode && scope_mode->count() == 4,
+                "Scopes must provide Waveform, Parade, Vectorscope and RGB Histogram.");
+        for (const auto& mode : scope_modes) {
+            const auto item = scope_mode->findData(mode);
+            require(item >= 0, "A documented Color scope mode is missing.");
+            scope_mode->setCurrentIndex(item);
+            timeout.restart();
+            while (waveform->pixmap().isNull() && timeout.elapsed() < 2000) {
+                application.processEvents();
+                QThread::msleep(10);
+            }
+            require(!waveform->pixmap().isNull() &&
+                        waveform->pixmap().size() == QSize(480, 256),
+                    "Each Color scope mode must render the current composed frame.");
         }
-        require(!waveform->pixmap().isNull(), "RGB Parade must render the current frame.");
+        require(edits == edits_before_scopes,
+                "Changing the scope display mode must not edit the project.");
         viewer->setFrame(rendering::PreviewFramePayload{});
         timeout.restart();
         while (waveform->text() != QStringLiteral("No frame") && timeout.elapsed() < 500) {

@@ -1,6 +1,6 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v35: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, and v35 expands Primary Grade while migrating older values. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v36: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, and v36 adds independent Log controls. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
 
 Color owns a graph model and evaluator separate from Fusion. The render order
 is Fusion graph evaluation, Color graph evaluation, then clip transform and
@@ -61,10 +61,13 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 
 The Color workspace owns a per-clip correction graph with Input, effect,
 Parallel Mixer and Output nodes. Its connections define processing, and the
-graph is saved in CSP v35. Serial graphs use the existing GPU effect pipeline
+graph is saved in CSP v36. Serial graphs use the existing GPU effect pipeline
 when available; branched graphs use Color's CPU RGBA evaluator after Fusion.
 Edit Inspector edits the same effect nodes' parameters and enabled state, while
-Color owns topology and layout. Both workspaces use shared Timeline history.
+Color owns topology and layout. Primary Grade offers Wheels and Bars views over
+shared Lift/Gamma/Gain/Offset values plus independent Log tonal controls. The
+page includes Waveform, Parade, Vectorscope, and RGB Histogram scopes. Both
+workspaces use shared Timeline history.
 Color's viewer and clip selection are shared with Edit; its panels are created
 on first entry and the prior native dock layout is restored on exit. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).

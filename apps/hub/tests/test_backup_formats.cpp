@@ -409,6 +409,9 @@ void testVideoDocuments(const QString& root) {
     CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "pivot", 43.0));
     CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "temperature", 21.0));
     CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "tint", -12.0));
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "log_shadows_red", 26.0));
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "log_midtones_green", -17.0));
+    CS_TEST_CHECK(creative_suite::effects::setParameterValue(grade, "log_highlights_blue", 31.0));
     color_document.timeline_tracks.front().clips.front().effects.push_back(grade);
     auto color_graph = color::fromEffectStack(
         color_document.timeline_tracks.front().clips.front().effects);
@@ -425,13 +428,25 @@ void testVideoDocuments(const QString& root) {
         "hub-still.png",
         std::make_shared<const std::vector<std::uint8_t>>(
             std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
-    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v35.csp");
+    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v36.csp");
     project::save(fsPath(color_path), color_document);
-    const auto color_snapshot = backup(QDir(root).filePath("video-color-v35"), color_path);
+    const auto color_snapshot = backup(QDir(root).filePath("video-color-v36"), color_path);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)) == color_document);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.restored)) == color_document);
     CS_TEST_CHECK(QFileInfo::exists(color_snapshot.vault + QStringLiteral(".gallery/hub-still.png")));
     CS_TEST_CHECK(QFileInfo::exists(color_snapshot.restored + QStringLiteral(".gallery/hub-still.png")));
+    auto future_video = QJsonDocument::fromJson(readBytes(color_path)).object();
+    future_video.insert("version", project::current_format_version + 1);
+    const auto future_video_path = QDir(QFileInfo(assets).absolutePath())
+        .filePath("video-future-v37.csp");
+    writeBytes(future_video_path, QJsonDocument(future_video).toJson());
+    creative_suite::hub::BackupManager future_video_manager(
+        QDir(root).filePath("video-future-vault"));
+    QString rejected_video_path;
+    QString future_video_error;
+    CS_TEST_CHECK(!future_video_manager.createBackup(
+        future_video_path, &rejected_video_path, &future_video_error) &&
+        !future_video_error.isEmpty());
     project::ProjectClip adjustment;
     adjustment.clip_id = 3;
     adjustment.kind = timeline::ClipKind::Adjustment;

@@ -1255,9 +1255,18 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
                 float(100.0 / color.gamma_blue), float(color.red_gain_percent / 100.0)});
             adjustment_values.push_back({float(color.green_gain_percent / 100.0),
                 float(color.blue_gain_percent / 100.0), 0.0F, 0.0F});
+            adjustment_values.push_back({float(color.log_shadows_red / 100.0),
+                float(color.log_shadows_green / 100.0),
+                float(color.log_shadows_blue / 100.0), 0.0F});
+            adjustment_values.push_back({float(color.log_midtones_red / 100.0),
+                float(color.log_midtones_green / 100.0),
+                float(color.log_midtones_blue / 100.0), 0.0F});
+            adjustment_values.push_back({float(color.log_highlights_red / 100.0),
+                float(color.log_highlights_green / 100.0),
+                float(color.log_highlights_blue / 100.0), 0.0F});
         };
         if(operation.kind==OpenGlImageOperationKind::Adjustment){
-            adjustment_values.reserve(4 * operation.colors.size());
+            adjustment_values.reserve(7 * operation.colors.size());
             for(const auto& color:operation.colors){
                 append_color(color);
             }

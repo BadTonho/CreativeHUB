@@ -11,6 +11,7 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVersionFunctionsFactory>
 #include <QVector3D>
+#include <QVector4D>
 #include <QThread>
 #include <QMatrix3x3>
 #include <QSysInfo>
@@ -110,6 +111,7 @@ uniform bool axis_aligned;
 layout(std140) uniform SourceLookupX { ivec4 lookup_x[1024]; };
 layout(std140) uniform SourceLookupY { ivec4 lookup_y[1024]; };
 layout(std140) uniform ColorAdjustments { vec4 color_adjustments[1024]; };
+layout(std140) uniform LogAdjustments { vec4 log_adjustments[768]; };
 out vec4 color;
 int mappedX(int i) { return lookup_x[i / 4][i % 4]; }
 int mappedY(int i) { return lookup_y[i / 4][i % 4]; }
@@ -130,6 +132,14 @@ vec3 adjustColor(vec3 rgb, int index) {
     float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
     rgb = (vec3(luma) + (rgb - vec3(luma)) * lift_saturation.w) *
         vec3(gamma_gain_red.w, gain_green_blue.xy);
+    float log_luma = clamp(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    float shadows = 1.0 - smoothstep(0.20, 0.45, log_luma);
+    float highlights = smoothstep(0.55, 0.80, log_luma);
+    float midtones = clamp(1.0 - shadows - highlights, 0.0, 1.0);
+    int log_base = index * 3;
+    rgb += log_adjustments[log_base].rgb * shadows +
+        log_adjustments[log_base + 1].rgb * midtones +
+        log_adjustments[log_base + 2].rgb * highlights;
     return floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
 void main() {
@@ -204,6 +214,7 @@ uniform GEOMETRY_VEC2 glow_strength;
 uniform int glow_mode;
 uniform int color_count;
 layout(std140) uniform ColorAdjustments { vec4 color_adjustments[1024]; };
+layout(std140) uniform LogAdjustments { vec4 log_adjustments[768]; };
 out vec4 color;
 vec3 adjustColor(vec3 rgb, int index) {
     int base = index * 4;
@@ -222,6 +233,14 @@ vec3 adjustColor(vec3 rgb, int index) {
     float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
     rgb = (vec3(luma) + (rgb - vec3(luma)) * lift_saturation.w) *
         vec3(gamma_gain_red.w, gain_green_blue.xy);
+    float log_luma = clamp(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    float shadows = 1.0 - smoothstep(0.20, 0.45, log_luma);
+    float highlights = smoothstep(0.55, 0.80, log_luma);
+    float midtones = clamp(1.0 - shadows - highlights, 0.0, 1.0);
+    int log_base = index * 3;
+    rgb += log_adjustments[log_base].rgb * shadows +
+        log_adjustments[log_base + 1].rgb * midtones +
+        log_adjustments[log_base + 2].rgb * highlights;
     return floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
 vec4 background(ivec2 pixel) {
@@ -388,18 +407,35 @@ void main() {
 constexpr char effect_fragment_shader[] = R"GLSL(#version 150 core
 uniform sampler2D source_image;
 uniform int effect_kind;
-uniform vec3 color_parameters;
-uniform vec3 color_gains;
+uniform vec4 color_affine;
+uniform vec4 lift_saturation;
+uniform vec4 gamma_gain_red;
+uniform vec4 gain_green_blue;
+uniform vec3 log_shadows;
+uniform vec3 log_midtones;
+uniform vec3 log_highlights;
 uniform int blur_radius;
 uniform bool horizontal_pass;
 uniform bool premultiply_alpha;
 uniform bool unpremultiply_alpha;
 out vec4 color;
 vec3 adjustColor(vec3 rgb) {
-    rgb += color_parameters.x;
-    rgb = (rgb - vec3(0.5)) * color_parameters.y + vec3(0.5);
+    rgb = rgb * color_affine.x + color_affine.yzw;
+    float shadow_luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+    float shadow_amount = clamp(1.0 - shadow_luma, 0.0, 1.0);
+    rgb += lift_saturation.rgb * shadow_amount * shadow_amount;
+    if (gamma_gain_red.x != 1.0) rgb.r = pow(max(rgb.r, 0.0), gamma_gain_red.x);
+    if (gamma_gain_red.y != 1.0) rgb.g = pow(max(rgb.g, 0.0), gamma_gain_red.y);
+    if (gamma_gain_red.z != 1.0) rgb.b = pow(max(rgb.b, 0.0), gamma_gain_red.z);
     float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-    rgb = (vec3(luma) + (rgb - vec3(luma)) * color_parameters.z) * color_gains;
+    rgb = (vec3(luma) + (rgb - vec3(luma)) * lift_saturation.w) *
+        vec3(gamma_gain_red.w, gain_green_blue.xy);
+    float log_luma = clamp(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    float shadows = 1.0 - smoothstep(0.20, 0.45, log_luma);
+    float highlights = smoothstep(0.55, 0.80, log_luma);
+    float midtones = clamp(1.0 - shadows - highlights, 0.0, 1.0);
+    rgb += log_shadows * shadows + log_midtones * midtones +
+        log_highlights * highlights;
     return floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
 void main() {
@@ -567,7 +603,7 @@ struct OpenGlFrameCompositor::Impl {
     GLuint texture = 0;
     GLuint effect_source_fbo = 0;
     GLuint vao = 0;
-    GLuint lookup_buffers[3]{};
+    GLuint lookup_buffers[4]{};
     std::uint64_t peak_known_bytes = 0;
     std::vector<GLint> source_lookup;
     int source_width = 0;
@@ -641,7 +677,7 @@ struct OpenGlFrameCompositor::Impl {
             if (effect_source_fbo) gl->glDeleteFramebuffers(1, &effect_source_fbo);
             if (texture) gl->glDeleteTextures(1, &texture);
             if (vao) gl->glDeleteVertexArrays(1, &vao);
-            gl->glDeleteBuffers(3, lookup_buffers);
+            gl->glDeleteBuffers(4, lookup_buffers);
             for (auto& slot : readback_slots) {
                 if (slot.fence) gl->glDeleteSync(slot.fence);
                 if (slot.buffer) gl->glDeleteBuffers(1, &slot.buffer);
@@ -722,10 +758,10 @@ struct OpenGlFrameCompositor::Impl {
         GLint block_size = 0, fragment_blocks = 0;
         gl->glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &block_size);
         gl->glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &fragment_blocks);
-        if (block_size < 16384 || fragment_blocks < 3)
+        if (block_size < 16384 || fragment_blocks < 4)
             return result(OpenGlCompositionStatus::Failed, "check-uniform-limits",
-                "Two 16 KiB geometry blocks and one color adjustment block are required.");
-        gl->glGenBuffers(3, lookup_buffers);
+                "Two geometry blocks and color plus Log adjustment blocks are required.");
+        gl->glGenBuffers(4, lookup_buffers);
         for (unsigned axis = 0; axis < 2; ++axis) {
             gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[axis]);
             gl->glBufferData(GL_UNIFORM_BUFFER, 16384, nullptr, GL_DYNAMIC_DRAW);
@@ -741,6 +777,15 @@ struct OpenGlFrameCompositor::Impl {
             return result(OpenGlCompositionStatus::Failed, "compile-shaders",
                 "The color adjustment shader block is unavailable.");
         gl->glUniformBlockBinding(program->programId(), adjustments_block, 2);
+        const auto log_adjustments_block = gl->glGetUniformBlockIndex(
+            program->programId(), "LogAdjustments");
+        if (log_adjustments_block == GL_INVALID_INDEX)
+            return result(OpenGlCompositionStatus::Failed, "compile-shaders",
+                "The Log adjustment shader block is unavailable.");
+        gl->glUniformBlockBinding(program->programId(), log_adjustments_block, 3);
+        gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[3]);
+        gl->glBufferData(GL_UNIFORM_BUFFER, 768 * 4 * sizeof(float), nullptr,
+            GL_DYNAMIC_DRAW);
         rememberResourcePeak();
         return result(OpenGlCompositionStatus::Complete);
     }
@@ -1344,6 +1389,7 @@ void main() {
             gl->glUniform2i(image_program->uniformLocation("merge_size"), fitted_width, fitted_height);
         }
         std::array<std::array<float, 4>, 1024> colors{};
+        std::array<std::array<float, 4>, 768> log_colors{};
         for (std::size_t i = 0; i < operation.colors.size(); ++i) {
             const auto& value = operation.colors[i];
             if (!effects::isValidColorAdjustment(value))
@@ -1356,11 +1402,26 @@ void main() {
                 float(100.0 / value.gamma_blue), float(value.red_gain_percent / 100.0)};
             colors[4 * i + 3] = {float(value.green_gain_percent / 100.0),
                 float(value.blue_gain_percent / 100.0), 0.0F, 0.0F};
+            log_colors[3 * i] = {float(value.log_shadows_red / 100.0),
+                float(value.log_shadows_green / 100.0),
+                float(value.log_shadows_blue / 100.0), 0.0F};
+            log_colors[3 * i + 1] = {float(value.log_midtones_red / 100.0),
+                float(value.log_midtones_green / 100.0),
+                float(value.log_midtones_blue / 100.0), 0.0F};
+            log_colors[3 * i + 2] = {float(value.log_highlights_red / 100.0),
+                float(value.log_highlights_green / 100.0),
+                float(value.log_highlights_blue / 100.0), 0.0F};
         }
         gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[2]);
         gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, 4 * operation.colors.size() * sizeof(colors[0]), colors.data());
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 2, lookup_buffers[2]);
         gl->glUniformBlockBinding(image_program->programId(), gl->glGetUniformBlockIndex(image_program->programId(), "ColorAdjustments"), 2);
+        gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[3]);
+        gl->glBufferSubData(GL_UNIFORM_BUFFER, 0,
+            3 * operation.colors.size() * sizeof(log_colors[0]), log_colors.data());
+        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 3, lookup_buffers[3]);
+        gl->glUniformBlockBinding(image_program->programId(),
+            gl->glGetUniformBlockIndex(image_program->programId(), "LogAdjustments"), 3);
         measured.color_adjustment_count += operation.colors.size();
         gl->glDrawArrays(GL_TRIANGLES, 0, 3);
         measured.draw_submission_nanoseconds += elapsed(started);
@@ -1436,7 +1497,8 @@ void main() {
                 effect_scratch->height() * 4;
         bytes += raster_reserved;
         const std::uint64_t geometry = (lookup_buffers[0] ? 16384ULL : 0) +
-            (lookup_buffers[1] ? 16384ULL : 0) + (lookup_buffers[2] ? 16384ULL : 0);
+            (lookup_buffers[1] ? 16384ULL : 0) + (lookup_buffers[2] ? 16384ULL : 0) +
+            (lookup_buffers[3] ? 12288ULL : 0);
         return {bytes, geometry, std::max(peak_known_bytes, bytes + geometry)};
     }
     void rememberResourcePeak() noexcept { peak_known_bytes = resources().peak_known_bytes; }
@@ -2308,6 +2370,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 0, p.lookup_buffers[0]);
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 1, p.lookup_buffers[1]);
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 2, p.lookup_buffers[2]);
+        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 3, p.lookup_buffers[3]);
         p.program->setUniformValue("source_image", 0);
         p.program->setUniformValue("backdrop_image",1);
         p.program->setUniformValue("canvas_height", static_cast<float>(height));
@@ -2352,6 +2415,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                 ? Clock::time_point{} : Clock::now();
             if (!layer.gpu_color_adjustments.empty()) {
                 std::array<std::array<float, 4>, 1024> packed_adjustments{};
+                std::array<std::array<float, 4>, 768> packed_log_adjustments{};
                 for (std::size_t i = 0; i < layer.gpu_color_adjustments.size(); ++i) {
                     const auto& adjustment = layer.gpu_color_adjustments[i];
                     const auto affine = effects::colorAdjustmentAffine(adjustment);
@@ -2365,12 +2429,29 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                         float(adjustment.red_gain_percent / 100.0)};
                     packed_adjustments[4 * i + 3] = {float(adjustment.green_gain_percent / 100.0),
                         float(adjustment.blue_gain_percent / 100.0), 0.0F, 0.0F};
+                    packed_log_adjustments[3 * i] = {
+                        float(adjustment.log_shadows_red / 100.0),
+                        float(adjustment.log_shadows_green / 100.0),
+                        float(adjustment.log_shadows_blue / 100.0), 0.0F};
+                    packed_log_adjustments[3 * i + 1] = {
+                        float(adjustment.log_midtones_red / 100.0),
+                        float(adjustment.log_midtones_green / 100.0),
+                        float(adjustment.log_midtones_blue / 100.0), 0.0F};
+                    packed_log_adjustments[3 * i + 2] = {
+                        float(adjustment.log_highlights_red / 100.0),
+                        float(adjustment.log_highlights_green / 100.0),
+                        float(adjustment.log_highlights_blue / 100.0), 0.0F};
                 }
                 const auto byte_count = static_cast<GLsizeiptr>(
                     4 * layer.gpu_color_adjustments.size() * sizeof(packed_adjustments[0]));
                 gl->glBindBuffer(GL_UNIFORM_BUFFER, p.lookup_buffers[2]);
                 gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, byte_count,
                     packed_adjustments.data());
+                gl->glBindBuffer(GL_UNIFORM_BUFFER, p.lookup_buffers[3]);
+                const auto log_byte_count = static_cast<GLsizeiptr>(
+                    3 * layer.gpu_color_adjustments.size() * sizeof(packed_log_adjustments[0]));
+                gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, log_byte_count,
+                    packed_log_adjustments.data());
                 measured.uploaded_bytes += static_cast<std::uint64_t>(byte_count);
                 measured.color_adjustment_count += layer.gpu_color_adjustments.size();
             }
@@ -2463,15 +2544,36 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     const auto effect_started = Clock::now();
                     if (const auto* adjustment =
                             std::get_if<effects::ColorAdjustmentParameters>(&effect)) {
+                        const auto affine = effects::colorAdjustmentAffine(*adjustment);
                         p.effect_program->setUniformValue("effect_kind", 0);
-                        p.effect_program->setUniformValue("color_parameters",
-                            QVector3D(static_cast<float>(adjustment->brightness / 100.0),
-                                static_cast<float>(adjustment->contrast_percent / 100.0),
-                                static_cast<float>(adjustment->saturation_percent / 100.0)));
-                        p.effect_program->setUniformValue("color_gains",
-                            QVector3D(static_cast<float>(adjustment->red_gain_percent / 100.0),
-                                static_cast<float>(adjustment->green_gain_percent / 100.0),
-                                static_cast<float>(adjustment->blue_gain_percent / 100.0)));
+                        p.effect_program->setUniformValue("color_affine", QVector4D(
+                            float(affine[0]), float(affine[1]), float(affine[2]),
+                            float(affine[3])));
+                        p.effect_program->setUniformValue("lift_saturation", QVector4D(
+                            float(adjustment->lift_red / 100.0),
+                            float(adjustment->lift_green / 100.0),
+                            float(adjustment->lift_blue / 100.0),
+                            float(adjustment->saturation_percent / 100.0)));
+                        p.effect_program->setUniformValue("gamma_gain_red", QVector4D(
+                            float(100.0 / adjustment->gamma_red),
+                            float(100.0 / adjustment->gamma_green),
+                            float(100.0 / adjustment->gamma_blue),
+                            float(adjustment->red_gain_percent / 100.0)));
+                        p.effect_program->setUniformValue("gain_green_blue", QVector4D(
+                            float(adjustment->green_gain_percent / 100.0),
+                            float(adjustment->blue_gain_percent / 100.0), 0.0F, 0.0F));
+                        p.effect_program->setUniformValue("log_shadows", QVector3D(
+                            float(adjustment->log_shadows_red / 100.0),
+                            float(adjustment->log_shadows_green / 100.0),
+                            float(adjustment->log_shadows_blue / 100.0)));
+                        p.effect_program->setUniformValue("log_midtones", QVector3D(
+                            float(adjustment->log_midtones_red / 100.0),
+                            float(adjustment->log_midtones_green / 100.0),
+                            float(adjustment->log_midtones_blue / 100.0)));
+                        p.effect_program->setUniformValue("log_highlights", QVector3D(
+                            float(adjustment->log_highlights_red / 100.0),
+                            float(adjustment->log_highlights_green / 100.0),
+                            float(adjustment->log_highlights_blue / 100.0)));
                         p.effect_program->setUniformValue("premultiply_alpha", false);
                         p.effect_program->setUniformValue("unpremultiply_alpha", false);
                         p.effect_program->setUniformValue("horizontal_pass", true);

@@ -344,7 +344,7 @@ public:
                     "Leaving Color must restore the Edit dock visibility.");
         window.edit_workspace_->ui().clip_effects_list->setCurrentRow(0);
         auto* selector = window.edit_workspace_->ui().clip_effect_parameter_selector;
-        require(selector && selector->count() == 17,
+        require(selector && selector->count() == 26,
                 "Edit Inspector must expose the same Primary Grade parameters.");
         selector->setCurrentIndex(selector->findData(QStringLiteral("red_gain")));
         controller->applySelectedClipEffectParameter(130);
@@ -2280,7 +2280,7 @@ public:
                     "The Color workspace did not create the node shared with Edit.");
             auto* parameter_selector = inspector_ui.clip_effect_parameter_selector;
             require(parameter_selector && parameter_selector->isVisible() &&
-                    parameter_selector->count() == 17,
+                    parameter_selector->count() == 26,
                     "Edit Inspector must expose every shared Primary Grade control.");
             parameter_selector->setCurrentIndex(parameter_selector->findData(QStringLiteral("red_gain")));
             edit_controller->applySelectedClipEffectParameter(142.0);

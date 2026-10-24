@@ -309,11 +309,13 @@ std::optional<media::VideoFrame> composeFrame(
     std::vector<rendering::TimelineCompositionStep> steps;
     std::vector<rendering::CompositionLayer> layers;
     std::vector<media::VideoFramePtr> decoded_frames;
+    std::vector<std::vector<creative_suite::effects::EffectInstance>> effect_stack_storage;
     {
         detail::ExportTimedScope preparation(metrics.preparation_nanoseconds);
 
         decoded_frames.reserve(requests.size());
         layers.reserve(requests.size());
+        effect_stack_storage.reserve(requests.size());
         for (const auto& request : requests) {
             checkCanceled(canceled);
             auto& render_clip = clips[request.clip_index];
@@ -330,7 +332,7 @@ std::optional<media::VideoFrame> composeFrame(
                 color::fromEffectStack(clip.effects));
             const auto linear_effects = color::linearEffectStack(color_graph);
             const bool color_cpu_graph = !linear_effects.has_value();
-            const auto effect_stack = linear_effects.value_or(
+            auto effect_stack = linear_effects.value_or(
                 std::vector<creative_suite::effects::EffectInstance>{});
 
             if (clip.kind == timeline::ClipKind::Adjustment) {
@@ -338,7 +340,6 @@ std::optional<media::VideoFrame> composeFrame(
                         transform, effect_stack, &color_graph)) {
                     rendering::CompositionLayer operation;
                     operation.transform = transform;
-                    operation.effect_stack = effect_stack;
                     steps.push_back({operation, true, color_graph});
                 }
                 continue;
@@ -504,7 +505,8 @@ std::optional<media::VideoFrame> composeFrame(
             // until after the compositor consumes all layers for this output frame.
             decoded_frames.push_back(source_frame);
             layers.push_back({source_frame.get(), transform, {}});
-            layers.back().effect_stack = effect_stack;
+            effect_stack_storage.push_back(std::move(effect_stack));
+            layers.back().effect_stack = effect_stack_storage.back();
             layers.back().native_frame = std::move(native_frame);
             layers.back().texture_frame = std::move(graph_texture);
             steps.push_back({layers.back(), false});

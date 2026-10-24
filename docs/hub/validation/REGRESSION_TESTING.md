@@ -1,12 +1,12 @@
 # Hub Regression Testing
 
-## Video Editor CSP v35 Color, Gallery and Primary Grade backup
+## Video Editor CSP v36 Color, Gallery and Primary Grade backup
 
-`hub-backup-format-test` saves a real CSP v35 document with a branched Color
-graph, expanded Primary Grade values and a Gallery PNG sidecar, then uses the Video Editor reader to compare
+`hub-backup-format-test` saves a real CSP v36 document with a branched Color
+graph, expanded Primary Grade and Log values, and a Gallery PNG sidecar, then uses the Video Editor reader to compare
 the vault snapshot and relocated restore with the producer document. Its version
 loop covers the older supported CSP schemas. `hub-backup-manager-test` rejects
-future v36. Focused Release regression execution and native Hub restore/reopen
+future v37. Focused Release regression execution and native Hub restore/reopen
 acceptance are tracked separately below.
 
 Current backup gates save Motion v18 and reject v19. Version-specific sections
@@ -26,7 +26,7 @@ Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
 `hub-backup-format-test`. `hub-backup-manager-test` rejects CSP34/Motion19.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v18 Glow, Drop Shadow, Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v36/v19 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v18 Glow, Drop Shadow, Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v37/v19 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Motion v13 blend-mode backup coverage
 

@@ -149,6 +149,38 @@
         <translation>Parada RGB</translation>
     </message>
     <message>
+        <source>Wheels</source>
+        <translation>Rodas</translation>
+    </message>
+    <message>
+        <source>Bars</source>
+        <translation>Barras</translation>
+    </message>
+    <message>
+        <source>Log</source>
+        <translation>Log</translation>
+    </message>
+    <message>
+        <source>Shadows</source>
+        <translation>Sombras</translation>
+    </message>
+    <message>
+        <source>Midtones</source>
+        <translation>Tons médios</translation>
+    </message>
+    <message>
+        <source>Highlights</source>
+        <translation>Realces</translation>
+    </message>
+    <message>
+        <source>Vectorscope</source>
+        <translation>Vetorscópio</translation>
+    </message>
+    <message>
+        <source>RGB Histogram</source>
+        <translation>Histograma RGB</translation>
+    </message>
+    <message>
         <source>No frame</source>
         <translation>Sem quadro</translation>
     </message>

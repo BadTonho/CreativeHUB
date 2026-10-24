@@ -154,13 +154,14 @@ Color evaluator. Disabled instances pass their input through; active instances
 retain graph-defined order. Filter parameters, enabled states, connections,
 mixer weights and positions are Timeline project data; caches and temporary
 preview state are not added by this library. The Video Editor persists graphs
-in CSP v35 as described in [PROJECT.md](PROJECT.md). Versions 1–34 migrate
+in CSP v36 as described in [PROJECT.md](PROJECT.md). Versions 1–35 migrate
 ordered effect stacks into serial graphs.
 
 `applyColorAdjustment()` is a fused processing entry point for Color
 Adjustment. It applies normalized RGB offset, contrast around the configured
 pivot, relative temperature/tint, shadow-weighted per-channel Lift,
-per-channel Gamma, Rec. 709 saturation and per-channel Gain in one pixel pass.
+per-channel Gamma, Rec. 709 saturation and per-channel Gain, followed by
+independent Log Shadows, Midtones, and Highlights adjustments in one pixel pass.
 Color values are normalized encoded RGB; temperature and tint do not represent
 Kelvin or physical color science. The expanded `video.primary_grade` defaults
 are neutral and preserve the existing RGB output. This preserves Motion
@@ -172,6 +173,13 @@ processing, and checks cancellation before each row. It returns Completed,
 Cancelled, or InvalidInput. Cancellation may leave earlier rows changed, so
 callers must discard a cancelled frame. Exceptions raised by the cancellation
 callback propagate to the caller.
+
+The nine Log parameters are per-channel offsets in [-100, 100], neutral at 0.
+They operate on the already corrected normalized RGB signal, without camera-log
+decoding. Rec. 709 luma selects soft shadow, midtone, and highlight weights;
+the weights affect only their corresponding RGB triplets. CPU, OpenGL, and
+Vulkan apply the same order and preserve alpha. Neutral Log values preserve the
+existing Primary Grade result.
 
 ## Verification
 

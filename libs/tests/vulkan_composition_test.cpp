@@ -266,7 +266,10 @@ void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
         effects::setParameterValue(grade, "contrast", 127) &&
         effects::setParameterValue(grade, "pivot", 43) &&
         effects::setParameterValue(grade, "temperature", 34) &&
-        effects::setParameterValue(grade, "tint", -19), "Vulkan grade fixture failed.");
+        effects::setParameterValue(grade, "tint", -19) &&
+        effects::setParameterValue(grade, "log_shadows_red", 38) &&
+        effects::setParameterValue(grade, "log_midtones_green", -22) &&
+        effects::setParameterValue(grade, "log_highlights_blue", 17), "Vulkan grade fixture failed.");
     const std::array<effects::EffectInstance, 1> stack{grade};
     CompositionLayer layer{&source}; layer.effect_stack = stack;
     const auto cpu = FrameCompositor::compose(source.width, source.height, {layer});
@@ -280,10 +283,17 @@ void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
     expanded.gamma_red = 72; expanded.gamma_green = 138; expanded.gamma_blue = 221;
     expanded.offset_red = 6; expanded.offset_green = -9; expanded.offset_blue = 13;
     expanded.pivot_percent = 43; expanded.temperature = 34; expanded.tint = -19;
-    operation.colors = {expanded};
+    expanded.log_shadows_red = 38; expanded.log_midtones_green = -22;
+    expanded.log_highlights_blue = 17;
+    auto second_expanded = expanded;
+    second_expanded.log_shadows_blue = -33;
+    second_expanded.log_midtones_red = 18;
+    second_expanded.log_highlights_green = 27;
+    operation.colors = {expanded, second_expanded};
     auto expected = source;
-    require(effects::applyColorAdjustment(expected, operation.colors.front()) ==
-        effects::ProcessingResult::Completed, "Vulkan image grade CPU reference failed.");
+    for (const auto& parameters : operation.colors)
+        require(effects::applyColorAdjustment(expected, parameters) ==
+            effects::ProcessingResult::Completed, "Vulkan image grade CPU reference failed.");
     const auto texture = gpu.processImage(operation);
     require(bool(texture.frame), texture.cause);
     const auto readback = gpu.readback(texture.frame);
